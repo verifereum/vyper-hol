@@ -228,21 +228,6 @@ QED
 
 
 
-Theorem ld_block_events_unfold:
-  !fuel C owner bb s inst.
-    get_instruction bb s.vs_inst_idx = SOME inst ==>
-    gas_events_block fuel C owner bb s =
-    gas_events_step fuel C owner inst s ++
-    (case step_inst fuel C inst s of
-       OK s' => if is_terminator inst.inst_opcode then []
-                else gas_events_block fuel C owner bb
-                       (s' with vs_inst_idx := SUC s.vs_inst_idx)
-     | _ => [])
-Proof
-  rpt strip_tac >> CONV_TAC (LHS_CONV (REWR_CONV gas_events_block_def)) >>
-  simp[]
-QED
-
 Theorem ld_block_events_step_stop:
   get_instruction bb s.vs_inst_idx = SOME inst /\
   (!v. step_inst fuel C inst s = OK v ==> is_terminator inst.inst_opcode) ==>

@@ -152,9 +152,9 @@ Resume ld_runner_exec_clause_events_fuel[step_prefix]:
      impl_tac >- decide_tac >> simp[]) >>
   qexistsl_tac [`fn'`, `bb'`] >> simp[] >>
   qspecl_then [`fuel`,`C'`,`fn.fn_name`,`bb'`,`t`,`i`] mp_tac
-    ld_block_events_unfold >>
+    gas_events_block_at >>
   qspecl_then [`fuel`,`C`,`fn.fn_name`,`bb`,`s`,`i`] mp_tac
-    ld_block_events_unfold >>
+    gas_events_block_at >>
   simp[] >> rpt (disch_then SUBST1_TAC) >>
   irule ld_take_append_eq >> simp[]
 QED

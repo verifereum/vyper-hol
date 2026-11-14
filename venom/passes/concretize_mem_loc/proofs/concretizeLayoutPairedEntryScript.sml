@@ -1,5 +1,5 @@
 Theory concretizeLayoutPairedEntry
-Ancestors concretizeStepStructure concretizeLayoutBlockPairing concretizeLayoutSelectedBaseInterface
+Ancestors concretizeLayoutCutSafe concretizeStepStructure concretizeLayoutBlockPairing concretizeLayoutSelectedBaseInterface
   concretizeLayoutPhaseCompose concretizeLayoutPhaseNop frameFiniteExecution
   concretizeLayoutPhaseOrigin concretizeLayoutAlignedControl frameControlAgreement
   concretizeLayoutPhaseAllocation concretizeMemLocDefs passSharedDefs finite_map
@@ -123,7 +123,7 @@ Proof
 QED
 
 Theorem layout_paired_nop_next:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C qe /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_paired_ordinary D lo vs0 C C' q0 es qs qe

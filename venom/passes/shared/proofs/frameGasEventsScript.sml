@@ -90,22 +90,6 @@ Proof
 QED
 
 (* One-step unfoldings at a known instruction or block. *)
-Theorem gas_events_block_at:
-  get_instruction bb s.vs_inst_idx = SOME i ==>
-  gas_events_block k C owner bb s =
-    gas_events_step k C owner i s ++
-    case step_inst k C i s of
-      OK p =>
-        if is_terminator i.inst_opcode then []
-        else gas_events_block k C owner bb
-               (p with vs_inst_idx := SUC s.vs_inst_idx)
-    | _ => []
-Proof
-  strip_tac >>
-  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [gas_events_block_def])) >>
-  simp[]
-QED
-
 Theorem run_blocks_at:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   eval_phis s bb.bb_instructions = OK phi ==>
