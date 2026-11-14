@@ -956,7 +956,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem target_memory_array_path_fields[local]:
+Theorem target_memory_array_path_fields:
   compile_array_subscript base_op idx_op dyn cnt ws esz sgn
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\

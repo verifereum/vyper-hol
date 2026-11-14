@@ -112,6 +112,45 @@ Proof
   strip_tac >> drule idx_in_range_integer >> simp[]
 QED
 
+Theorem array_element_step_offset:
+  array_index (ArrayTV etv bd) av i = SOME v /\
+  val_wf (ArrayTV etv bd) (ArrayV av) ==>
+  mem_step_offset (ArrayTV etv bd) (ValueSubscript (IntV i)) =
+    SOME ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+          Num i * type_memory_size etv, etv)
+Proof
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[loweringPostsTheory.mem_step_offset_def, array_index_def, val_wf_def,
+      listTheory.oEL_THM, AllCaseEqs()]
+QED
+
+Theorem array_element_place_ptr:
+  expr_body_pre cenv cx env obj es /\ eval_expr cx obj es = (INL r,t) /\
+  expr_type obj = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  ee.scopes = t.scopes /\ ee.immutables = t.immutables /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  select_result cx (ArrayT et bd) r (ValueSubscript (IntV i)) ee = (INL child,ee) /\
+  array_index (ArrayTV etv bd) av i = SOME v /\
+  val_wf (ArrayTV etv bd) (ArrayV av) /\
+  vv_place_ptr cenv cx ee q r (LocatedValue ann p) /\
+  eval_operand p.ptr_operand q = SOME w /\
+  j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
+  eval_operand dst q = SOME (w + n2w j) ==>
+  vv_place_ptr cenv cx ee q child (LocatedValue et (mk_ptr dst p.ptr_location))
+Proof
+  strip_tac >> qpat_x_assum `j = _` SUBST_ALL_TAC >>
+  drule_all exprSimSourceTheory.expr_body_pre_eval_result >> strip_tac >>
+  drule_all array_element_step_offset >> strip_tac >>
+  qspecl_then [`cenv`,`cx`,`env`,`t`,`r`,`ArrayT et bd`,`ArrayTV etv bd`,`p`,
+               `ValueSubscript (IntV i)`,
+               `(case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv`,
+               `etv`,`ee`,`child`,`ee`,`q`,`ann`,`w`,`dst`,`et`]
+    mp_tac exprSimHashTheory.vv_place_ptr_select_step >>
+  impl_tac >- (gvs[] >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem framed_array_element_summary_family:
   expr_body_pre cenv cx env obj es /\
   eval_expr cx obj es = (INL r,t) /\
@@ -153,6 +192,9 @@ Proof
      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
        (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
     (rpt strip_tac >> qpat_x_assum `!H. P H ==> _` drule >> strip_tac >>
+     `vv_place_ptr cenv cx ee q r (LocatedValue ann p)` by
+       fs[loweringPostsTheory.vv_post_def] >>
+     drule_all array_element_place_ptr >> strip_tac >>
      drule_all vv_post_array_element >> simp[]) >>
   irule select_result_counted_summary >> simp[] >>
   qexists_tac `OK q` >> simp[] >>
