@@ -93,8 +93,9 @@ Proof
          (fn eq => mp_tac (MATCH_MP vyperStorageTraceTheory.storage_trace_frame_prefix
                              (CONJ frame eq)))) >>
      simp[]) >>
-  `MEM (StorageRoot tr offset tv0) ee.storage_trace` by simp[MEM_APPEND] >>
-  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >> strip_tac >>
+  `MEM (StorageRoot tr offset tv0) ee.storage_trace` by simp[listTheory.MEM_APPEND] >>
+  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
