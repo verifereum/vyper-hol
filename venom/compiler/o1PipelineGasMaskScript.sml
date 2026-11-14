@@ -866,7 +866,7 @@ QED
 
 (* ===== The pipeline ===== *)
 
-Theorem o1_walk_stages[local]:
+Theorem o1_walk_stages:
   fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
   unit.cu_context.ctx_entry = SOME entry /\
   reachable_fcg_acyclic unit.cu_context fcg /\
