@@ -8,7 +8,7 @@
  *)
 Theory concretizeStageFramePtr
 Ancestors
-  concretizePtrDallocaRuntimeHistory
+  concretizePtrDallocaRuntimeHistory concretizePtrDallocaGhostHistory
   concretizeStageStatic concretizePtrDallocaHistoricalPersistent
   concretizePtrDallocaHistoricalMemory concretizePtrDallocaHistoricalRead
   concretizePtrDallocaMemorySteps concretizePtrDallocaStageCoverage

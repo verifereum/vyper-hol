@@ -90,6 +90,18 @@ Proof
   ho_match_mp_tac ptr_tagged_chrono_step_ind >> simp[ptr_observe_def]
 QED
 
+Theorem ptr_tagged_chrono_step_nop:
+  !C token a b PT TG saved PT' TG' saved'.
+  ptr_tagged_chrono_step C token a b PT TG saved PT' TG' saved' ==>
+  a.po_inst.inst_opcode = NOP /\ a.po_inst.inst_outputs = [] ==>
+  PT' = PT /\ TG' = TG /\ saved' = saved
+Proof
+  ho_match_mp_tac ptr_tagged_chrono_step_ind >>
+  simp[ptr_observe_def, is_terminator_def] >> rpt strip_tac >>
+  gvs[is_terminator_def, ptr_tagged_step_def, step_prov_def, set_prov_def,
+      DRESTRICT_UNIV, step_inst_non_invoke, step_inst_base_def]
+QED
+
 Theorem ptr_tagged_chrono_step_total:
   !C a b. ptr_chrono_step C a b ==>
   !token PT TG saved.
