@@ -5,7 +5,8 @@ Ancestors
   dftGasRequestRel dftContractGas dftGasOracleFromList dftGasOracleToList
   dftGasOracleSim dftGasOracleDefs o1RequestContract o1PassContract o1PassLift
   unitShapeDefs dftRunRel dftDefs dftScheduleOrder dftWf venomExecSemantics
-  venomState list venomRetProps passSimulationDefs venomInst o1StaticAbortDefs
+  venomState list venomRetProps passSimulationDefs venomInst
+  o1StaticAbortDefs dftGasToListAbort
 
 Theorem dft_ctx_sim_rq_gas_static_forward:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
