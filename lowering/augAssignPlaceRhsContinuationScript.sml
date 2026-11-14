@@ -134,7 +134,7 @@ Proof
                    (INST_TYPE [alpha |-> ``:unit``]
                       vyperStorageFootprintTheory.valid_horizon_frame)) >>
          impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
-         first_assum ACCEPT_TAC) >>
+         simp[]) >>
       `stmt_state_rel H ctx func cenv cx ee t` by
         (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
                           stmt_state_rel H _ _ _ _ ee t /\ _`
