@@ -1,6 +1,7 @@
 (* Relocation-aware argument-vector transport. *)
 Theory o1LowerDloadInvokeArguments
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointCall o1LowerDloadJointScalar o1LowerDloadEnvironment
   o1LowerDloadJointRelation o1LowerDloadOccurrence ptrDiscipline
   venomExecSemantics venomState venomInst unitShapeDefs list finite_map pred_set
@@ -29,7 +30,7 @@ QED
 
 Theorem ld_joint_invoke_arguments:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ inst.inst_opcode = INVOKE /\
   decode_invoke inst = SOME (nm,ops) /\ eval_operands ops s = SOME args ==>
   ?args'. eval_operands ops t = SOME args' /\ LENGTH args = LENGTH ops /\
@@ -42,7 +43,7 @@ Proof
     gvs[decode_invoke_def, AllCaseEqs()] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `!op. MEM op ops ==> op_taint tn op = {}` by
     (gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. MEM (Var v) ops ==> MEM v (fn_ir_vars fn)` by
@@ -57,7 +58,7 @@ QED
 
 Theorem ld_joint_boundary_call_invariant:
   ld_joint_boundary vs C C' lo D stk PG G tn caller callinst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok caller /\
   active_inst caller callinst s /\ callinst.inst_opcode = INVOKE /\
   decode_invoke callinst = SOME (nm,ops) /\

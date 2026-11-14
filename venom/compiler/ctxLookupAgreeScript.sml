@@ -18,7 +18,7 @@ Theory ctxLookupAgree
 Ancestors
   venomExecSemantics venomInst venomState contextRawReachable
   contextCodegenRel unitMemInv fcgPruning fcgDefs fcgAnalysisProps
-  fcgCorrectnessProof venomWf list ctxLookupAgreeHelpers
+  fcgCorrectnessProof venomWf list ctxLookupAgreeHelpers gasEvents
 
 (* ===== Agreement ===== *)
 
@@ -79,6 +79,91 @@ Proof
   qexists_tac `inst_calls_within R` >> gvs[fn_calls_within_def] >>
   first_assum ACCEPT_TAC
 QED
+
+(* The recorder follows the same retained functions and continuation states,
+   including prefixes that end in Error. *)
+Theorem gas_events_defs_ctx_agree:
+  (!fuel ctx owner inst s. !R ctx'.
+    ctx_agree R ctx ctx' /\ inst_calls_within R inst ==>
+    gas_events_step fuel ctx owner inst s = gas_events_step fuel ctx' owner inst s) /\
+  (!fuel ctx owner bb s. !R ctx'.
+    ctx_agree R ctx ctx' /\ EVERY (inst_calls_within R) bb.bb_instructions ==>
+    gas_events_block fuel ctx owner bb s = gas_events_block fuel ctx' owner bb s) /\
+  (!fuel ctx fn s. !R ctx'.
+    ctx_agree R ctx ctx' /\ fn_calls_within R fn ==>
+    gas_events_blocks fuel ctx fn s = gas_events_blocks fuel ctx' fn s)
+Proof
+  ho_match_mp_tac gas_events_defs_ind >> rpt conj_tac
+  >- suspend "step"
+  >- suspend "block"
+  >> suspend "run"
+QED
+
+Resume gas_events_defs_ctx_agree[step]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [gas_events_step_def])) >>
+  Cases_on `inst.inst_opcode = GAS` >- simp[] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- suspend "invoke" >> simp[]
+QED
+
+Resume gas_events_defs_ctx_agree[invoke]:
+  simp[] >> Cases_on `decode_invoke inst` >- simp[] >>
+  rename1 `decode_invoke inst = SOME decoded` >> PairCases_on `decoded` >>
+  rename1 `decode_invoke inst = SOME (nm,ops)` >>
+  `lookup_function nm ctx.ctx_functions = lookup_function nm ctx'.ctx_functions /\
+   (!fn. lookup_function nm ctx.ctx_functions = SOME fn ==>
+     fn_calls_within R fn)` by
+    metis_tac[ctx_agree_invoke, fn_calls_within_def] >>
+  simp[] >> Cases_on `lookup_function nm ctx'.ctx_functions` >- simp[] >>
+  rename1 `lookup_function nm ctx'.ctx_functions = SOME callee` >>
+  Cases_on `eval_operands ops s` >- simp[] >>
+  rename1 `eval_operands ops s = SOME args` >>
+  Cases_on `setup_callee callee args s` >- simp[] >>
+  rename1 `setup_callee callee args s = SOME cs` >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume gas_events_defs_ctx_agree[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [gas_events_block_def])) >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >- simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `inst_calls_within R inst` by metis_tac[EVERY_get_instruction] >>
+  `step_inst fuel ctx inst s = step_inst fuel ctx' inst s`
+    by metis_tac[run_defs_ctx_agree] >>
+  `gas_events_step fuel ctx owner inst s = gas_events_step fuel ctx' owner inst s`
+    by metis_tac[] >>
+  simp[] >> Cases_on `step_inst fuel ctx' inst s` >> simp[] >>
+  IF_CASES_TAC >> simp[] >> first_x_assum irule >> simp[] >>
+  qexists_tac `R` >> simp[]
+QED
+
+Resume gas_events_defs_ctx_agree[run]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [gas_events_blocks_def])) >>
+  Cases_on `fuel` >- simp[] >> rename1 `SUC n` >> simp[] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >- simp[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `EVERY (inst_calls_within R) bb.bb_instructions`
+    by metis_tac[fn_calls_within_def, EVERY_fn_lookup_block] >>
+  Cases_on `eval_phis s bb.bb_instructions` >> simp[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+  `exec_block n ctx bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+   exec_block n ctx' bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+    by metis_tac[run_defs_ctx_agree] >>
+  `gas_events_block n ctx fn.fn_name bb
+     (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+   gas_events_block n ctx' fn.fn_name bb
+     (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+    by metis_tac[] >>
+  simp[] >>
+  Cases_on `exec_block n ctx' bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  simp[] >> IF_CASES_TAC >> simp[] >> first_x_assum irule >> simp[] >>
+  qexists_tac `R` >> simp[]
+QED
+
+Finalise gas_events_defs_ctx_agree
 
 Theorem run_context_ctx_agree:
   ctx_agree R ctx ctx' /\ ctx'.ctx_entry = ctx.ctx_entry /\

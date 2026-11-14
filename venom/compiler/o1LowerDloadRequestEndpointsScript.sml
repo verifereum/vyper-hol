@@ -5,7 +5,7 @@ Ancestors
   o1LowerDloadJointRelation o1LowerDloadAbortResult
   o1LowerDloadExceptional o1LowerDloadJointIdentity o1LowerDloadUnchangedFetch
   ptrDiscipline venomExecSemantics venomState opcodeClass list
-  dftGasRequestObservation
+  o1SafeUpto dftGasRequestObservation
 
 Theorem ld_joint_requests:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
@@ -30,6 +30,10 @@ Theorem ld_runner_abort_endpoint_requests:
     LIST_REL (request_agree_except D) s1.vs_requests t1.vs_requests
 Proof
   strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    simp[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
   `?t1. step_inst fuel C' inst t = Abort reason t1` by
     (Cases_on `inst.inst_opcode = REVERT`
      >- metis_tac[ld_joint_revert_result] >>

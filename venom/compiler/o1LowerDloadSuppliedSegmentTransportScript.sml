@@ -1,5 +1,6 @@
 Theory o1LowerDloadSuppliedSegmentTransport
 Ancestors
+  o1SafeUpto
   o1LowerDloadSuppliedSegmentExec o1LowerDloadSuppliedSegmentControl
   o1LowerDloadSuppliedSegmentInputs o1LowerDloadSuppliedSegmentEnvironment
   o1LowerDloadScratchExtension o1LowerDloadScratchMemory
@@ -11,7 +12,7 @@ Ancestors
 
 Theorem ld_joint_dloadbytes_destination:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dst;src;sz] /\
   eval_operand dst s = SOME p /\ eval_operand src s = SOME x /\
@@ -24,11 +25,11 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn dst = {}` by
     metis_tac[ld_data_load_inputs_untainted, MEM] >>
   `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
-  drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
+  drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >>
   simp[mem_write_ops_def, source_memory_write_ranges_def,
        fixed_source_write_range_def, sized_source_write_range_def, eval_operand_def] >>
   metis_tac[]
@@ -36,7 +37,7 @@ QED
 
 Theorem ld_joint_supply_dloadbytes_transport:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dst;src;sz] /\
   inst.inst_outputs = [] /\ step_inst fuel C inst s = OK s1 /\
@@ -61,7 +62,7 @@ Proof
   drule_all ld_joint_dloadbytes_destination >>
   disch_then (qx_choose_then `q` assume_tac) >>
   `eval_operand src t = SOME x /\ eval_operand sz t = SOME z` by
-    (drule ld_joint_dloadbytes_inputs_clean >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_dloadbytes_inputs_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[] >> metis_tac[]) >>
   `s.vs_data_section = t.vs_data_section` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s1 = write_memory_with_expansion (w2n p)
@@ -104,7 +105,7 @@ QED
 
 Theorem ld_joint_supply_dload_transport:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
   inst.inst_outputs = [out] /\ step_inst fuel C inst s = OK s1 /\
@@ -140,7 +141,7 @@ Theorem ld_joint_supply_dload_transport:
 Proof
   strip_tac >> (
   `eval_operand off t = SOME x` by
-    (drule ld_joint_dload_inputs_clean >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_dload_inputs_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[] >> metis_tac[]) >>
   `s.vs_data_section = t.vs_data_section` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s1 = update_var out (word_of_bytes T (0w:bytes32)

@@ -1,6 +1,7 @@
 (* Terminal observations at a joint source instruction boundary. *)
 Theory o1LowerDloadHaltResult
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointRangeCopy o1LowerDloadShared o1LowerDloadJointRelation
   o1LowerDloadOccurrence ptrDiscipline venomExecSemantics opcodeClass
   venomState pred_set list o1LowerDloadJointScalar pointerConfinedDefs
@@ -22,7 +23,7 @@ QED
 
 Theorem ld_joint_halt_taint_within:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ taint_within D C vs /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\ gas_cut ncut vs s /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
   step_inst fuel C inst s = Halt s1 ==>
   (step_taint inst s s1 tn).t_stor SUBSET
@@ -35,14 +36,14 @@ Theorem ld_joint_halt_taint_within:
   ret_taint tn inst s SUBSET D.d_ret s1.vs_returndata
 Proof
   strip_tac >>
-  `final_taint vs C s1 (step_taint inst s s1 tn) (ret_taint tn inst s)` by
-    (irule ld_joint_final_taint >> metis_tac[]) >>
-  fs[taint_within_def] >> metis_tac[]
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  fs[taint_within_upto_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_stop_sink_result:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ taint_within D C vs /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\ gas_cut ncut vs s /\
   active_inst fn inst s /\
   (inst.inst_opcode = STOP \/ inst.inst_opcode = SINK) /\
   step_inst fuel C inst s = Halt s1 ==>
@@ -68,13 +69,13 @@ QED
 
 Theorem ld_joint_selfdestruct_operand[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = SELFDESTRUCT ==>
   !op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t
 Proof
   rpt strip_tac >> drule (cj 3 ld_joint_scalar_operands_clean) >>
-  disch_then (qspec_then `op` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`ncut`, `op`] mp_tac) >> simp[] >>
   simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def,
        retpc_use_ok_def] >>
   (impl_tac >- (rpt strip_tac >> gvs[taint_ok_def] >> metis_tac[])) >>
@@ -83,7 +84,7 @@ QED
 
 Theorem ld_joint_return_length[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURN /\ inst.inst_operands = [addr;sz] ==>
   eval_operand sz s = eval_operand sz t
@@ -91,17 +92,17 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn sz = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
-  drule ld_joint_nonaddress_operand >> disch_then irule >>
+  drule ld_joint_nonaddress_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
   gvs[is_pointer_preserving_op_def, retpc_use_ok_def] >>
   Cases_on `addr = sz` >> simp[mem_read_ops_def, mem_write_ops_def]
 QED
 
 Theorem ld_joint_return_slice[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = RETURN /\ inst.inst_operands = [addr;sz] /\
   eval_operand addr s = SOME p /\ eval_operand sz s = SOME len ==>
@@ -115,14 +116,14 @@ Proof
     (irule ld_joint_return_length >> metis_tac[]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn addr = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `?q. eval_operand addr t = SOME q /\
     (w2n len=0 \/ (w2n p=w2n q /\ w2n p+w2n len<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n len<=z /\
        w2n p=b+j /\ w2n q=c+j))` by
-    (drule ld_joint_read_operand_range >>
+    (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
      disch_then (qspecl_then [`p`,
        `<|iao_ofst := addr; iao_size := SOME sz; iao_max_size := SOME sz|>`,
        `addr`, `w2n len`] mp_tac) >>
@@ -138,7 +139,7 @@ QED
 
 Theorem ld_joint_return_result:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\ taint_within D C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ taint_within_upto D ncut C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = RETURN /\ step_inst fuel C inst s = Halt s1 ==>
   ?t1. step_inst fuel C' inst t = Halt t1 /\
@@ -215,7 +216,7 @@ QED
 
 Theorem ld_joint_selfdestruct_result:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\ taint_within D C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ taint_within_upto D ncut C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = SELFDESTRUCT /\ step_inst fuel C inst s = Halt s1 ==>
   ?t1. step_inst fuel C' inst t = Halt t1 /\
@@ -238,7 +239,7 @@ QED
 Theorem ld_joint_halt_result:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  ptr_discipline lo C vs /\ taint_within D C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ taint_within_upto D ncut C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx = SOME inst) /\
