@@ -83,8 +83,9 @@ Theorem tuple_place_load_zero_path:
       tuple_place_snapshot cenv cx es lo sb.cs_next_id tys ltys ltvs w t
 Proof
   rpt gen_tac >> strip_tac >>
-  irule tuple_place_load_snapshot_path >>
-  simp[wordsTheory.w2n_lt, tuple_place_snapshot_zero] >>
-  conj_tac >- (qexists `bop` >> simp[]) >>
-  qexists `tenv` >> simp[]
+  qspecl_then [`H`, `ltys`, `ltvs`, `vals`, `tenv`, `cenv`, `bop`, `sa`, `elems`,
+               `sb`, `s`, `w`, `ctx`, `func`, `cx`, `es`, `lo`, `tys`]
+    mp_tac tuple_place_load_snapshot_path >>
+  impl_tac >- fs[wordsTheory.w2n_lt, tuple_place_snapshot_zero] >>
+  strip_tac >> fs[] >> qexists `t` >> fs[]
 QED
