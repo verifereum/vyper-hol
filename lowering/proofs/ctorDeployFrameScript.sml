@@ -193,7 +193,7 @@ Proof
   rw[add_frame_gas_def] >> BasicProvers.every_case_tac >> gvs[]
 QED
 
-Theorem shadow_root_add_frame_gas[local]:
+Theorem shadow_root_add_frame_gas:
   es.contexts = [(c, rb)] ==>
   shadow_root (add_frame_gas g es) = add_frame_gas g (shadow_root es)
 Proof

@@ -190,10 +190,8 @@ Proof
   qexistsl_tac [`raw_reachable vs`, `vs`] >> simp[]
 QED
 
-(* PLANNED ADMISSION: the constructor's Venom run does not depend on
-   vs_outcomes, at any fuel.  The constructor is call-free, so its unit never
-   reads them; the same fact as e2eDeployAsmOptTheory.deploy_unit_outcomes_free,
-   in the form S6b's uniform fuel needs. *)
+(* The constructor's call-free entry never reads vs_outcomes, so replacing
+   those outcomes preserves termination at the same fuel. *)
 Theorem deploy_unit_run_outcomes_free:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx
    fuel vs os.
@@ -204,17 +202,15 @@ Theorem deploy_unit_run_outcomes_free:
     (terminates (run_context fuel dunit.cu_context (vs with vs_outcomes := os)) <=>
      terminates (run_context fuel dunit.cu_context vs))
 Proof
-  cheat
-QED
-
-Theorem shadow_root_add_frame_gas_single[local]:
-  es.contexts = [(c, rb)] ==>
-  shadow_root (add_frame_gas g es) = add_frame_gas g (shadow_root es)
-Proof
-  rw[shadow_root_def, add_frame_gas_def, shadow_root_contexts_def,
-     vfmContextTheory.execution_state_component_equality] >>
-  simp[vfmContextTheory.context_component_equality,
-       vfmContextTheory.message_parameters_component_equality]
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  drule_all deployOutcomesFreeDeployTheory.deploy_entry_excludes_outcomes >>
+  strip_tac >>
+  drule_all deployOutcomesFreeTransportTheory.run_context_entry_outcomes_replace >>
+  disch_then (qspecl_then [`fuel`, `vs`, `os`] SUBST1_TAC) >>
+  Cases_on `run_context fuel dunit.cu_context vs` >>
+  simp[terminates_def, dftCommutationTheory.map_result_state_def]
 QED
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
@@ -302,7 +298,7 @@ Proof
              ctxt.msgParams.outputTo = Code tx.target /\ wf_state es1` by
     fs[deploy_state_rel_def] >>
   `shadow_root es1 = add_frame_gas g' (shadow_root es)` by
-    (simp[Abbr`es1`] >> irule shadow_root_add_frame_gas_single >> fs[]) >>
+    (simp[Abbr`es1`] >> irule shadow_root_add_frame_gas >> fs[]) >>
   `wf_state (shadow_root es1)` by simp[shadow_root_wf_state] >>
   `g' <= frame_gas_left (shadow_root es1)` by
     metis_tac[wf_state_frame_gas_left, shadow_root_wf_state] >>
