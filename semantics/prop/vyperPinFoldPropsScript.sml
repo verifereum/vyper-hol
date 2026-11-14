@@ -1,6 +1,6 @@
 Theory vyperPinFoldProps
 Ancestors
-  vyperPinFold vyperConstEval vyperEvalPureExpr vyperContext vyperState vyperValue vyperAST
+  vyperOriginFold vyperPinFold vyperConstEval vyperEvalPureExpr vyperContext vyperState vyperValue vyperAST
   vyperValueOperation vyperTypeExprSoundness
 
 Theorem pin_constant_literal_evaluate:
@@ -300,6 +300,86 @@ Proof
   strip_tac >>
   `pin_literal_tree (pin_fold_expr e)` by simp[pin_literal_tree_def] >>
   drule pin_fold_expr_tree_pure >>
+  disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+  gvs[eval_pure_expr_def] >>
+  irule eval_pure_expr_to_eval_expr_some >> simp[]
+QED
+
+Theorem origin_fold_values_types[local]:
+  MAP expr_type (origin_fold_values es) = MAP expr_type es
+Proof
+  Induct_on `es` >> simp[origin_fold_value_def]
+QED
+
+Theorem origin_fold_values_length[local]:
+  LENGTH (origin_fold_values es) = LENGTH es
+Proof
+  Induct_on `es` >> simp[origin_fold_value_def]
+QED
+
+Theorem origin_fold_builtin_tree[local]:
+  pin_literal_tree (origin_fold_builtin ty b es) ==>
+  origin_fold_builtin ty b es = pin_fold_builtin ty b es
+Proof
+  Cases_on `b` >>
+  rw[origin_fold_builtin_def] >>
+  Cases_on `es` >> gvs[pin_literal_tree_def] >>
+  qmatch_goalsub_rename_tac `pin_fold_builtin ty _ (first::remaining)` >>
+  Cases_on `first` >> gvs[pin_literal_tree_def] >>
+  qmatch_goalsub_rename_tac
+    `pin_fold_builtin ty _ (Literal _ first_literal::remaining)` >>
+  Cases_on `first_literal` >> gvs[pin_literal_tree_def] >>
+  Cases_on `remaining` >> gvs[pin_literal_tree_def] >>
+  qmatch_goalsub_rename_tac
+    `pin_fold_builtin ty _ (Literal _ (IntL _)::second::rest)` >>
+  Cases_on `second` >> gvs[pin_literal_tree_def] >>
+  qmatch_goalsub_rename_tac
+    `pin_fold_builtin ty _ (Literal _ (IntL _)::Literal _ second_literal::rest)` >>
+  Cases_on `second_literal` >> gvs[pin_literal_tree_def] >>
+  Cases_on `rest` >> gvs[pin_literal_tree_def]
+QED
+
+Theorem origin_fold_value_tree_pure_mutual[local]:
+  (!e. pin_literal_tree (origin_fold_value e) ==>
+    ?v. eval_pure_expr cx st e = SOME (Value v) /\
+        eval_pure_expr cx st (origin_fold_value e) = SOME (Value v)) /\
+  (!es. pin_literal_trees (origin_fold_values es) ==>
+    eval_pure_exprs cx st es = eval_pure_exprs cx st (origin_fold_values es))
+Proof
+  ho_match_mp_tac origin_fold_value_ind >>
+  rpt conj_tac >> rpt gen_tac
+  >- (simp[origin_fold_value_def] >> rpt strip_tac >>
+      drule origin_fold_builtin_tree >> strip_tac >> gvs[] >>
+      qspecl_then [`ty`, `b`, `origin_fold_values es`]
+        strip_assume_tac pin_fold_builtin_cases
+      >- (gvs[] >> drule pin_literal_tree_pure >>
+          disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+          Cases_on `b` >> gvs[pin_literal_tree_def] >>
+          Cases_on `o'` >> gvs[pin_literal_tree_def] >>
+          gvs[eval_pure_expr_def, builtin_args_length_ok_def,
+              origin_fold_values_types, origin_fold_values_length]) >>
+      gvs[pin_literal_tree_def] >>
+      qexists_tac `evaluate_literal l` >>
+      reverse conj_tac >- simp[eval_pure_expr_def] >>
+      irule pin_fold_builtin_literal_pure >>
+      qexists_tac `origin_fold_values es` >>
+      simp[origin_fold_values_types] >>
+      metis_tac[pin_literal_values_trees, pin_literal_values_pure])
+  >- (simp[origin_fold_value_def] >> metis_tac[pin_fold_type_builtin_tree_pure])
+  >- (simp[origin_fold_value_def] >> metis_tac[pin_fold_type_builtin_tree_pure])
+  >- (simp[origin_fold_value_def] >> metis_tac[pin_fold_type_builtin_tree_pure]) >>
+  simp[origin_fold_value_def, pin_literal_tree_def, eval_pure_expr_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+
+Theorem origin_fold_value_literal_sound:
+  origin_fold_value e = Literal ty l ==>
+  eval_expr cx e st = (INL (Value (evaluate_literal l)), st)
+Proof
+  strip_tac >>
+  `pin_literal_tree (origin_fold_value e)` by simp[pin_literal_tree_def] >>
+  drule (CONJUNCT1 origin_fold_value_tree_pure_mutual) >>
   disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
   gvs[eval_pure_expr_def] >>
   irule eval_pure_expr_to_eval_expr_some >> simp[]
