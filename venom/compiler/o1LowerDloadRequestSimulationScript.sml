@@ -25,7 +25,7 @@ val ldRequestRunClosedStatic = list_mk_forall
   (free_vars ldRequestRunStatic, ldRequestRunStatic);
 
 Theorem lower_dload_stage_abort_rq_conditional_static:
-  ^ldRequestRunClosed ==>
+  ^ldRequestRunClosedStatic ==>
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
     dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\

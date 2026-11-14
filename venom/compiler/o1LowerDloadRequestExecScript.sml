@@ -44,7 +44,7 @@ val ldRequestExecClauseStatic = fst (dest_conj (snd (dest_conj (fst (dest_imp
   (concl ld_request_runner_induction_static))))));
 
 Theorem ld_request_runner_exec_conditional_static:
-  ^ldAbortEndpoint /\ ^ldForwardEndpoint ==> ^ldRequestExecClause
+  ^ldAbortEndpoint /\ ^ldForwardEndpoint ==> ^ldRequestExecClauseStatic
 Proof
   strip_tac >>
   qabbrev_tac `RR = ^ldRequestPacket` >>

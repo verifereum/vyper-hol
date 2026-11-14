@@ -122,6 +122,7 @@ Proof
   strip_tac >>
   mp_tac (BETA_RULE ld_owned_forwarding_static) >>
   (impl_tac >- (
+    conj_tac >- asm_rewrite_tac [] >>
     qexistsl_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`t0`,`A`,`frames`,`N`,`X`,`p`,`h`] >>
     gvs[o1_run_state_ok_def] >> metis_tac[])) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_then ACCEPT_TAC
