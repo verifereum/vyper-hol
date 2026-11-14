@@ -174,7 +174,7 @@ Resume runtime_sym_type_builtin_body[decode]:
   pairarg_tac >>
   qpat_assum `unwrap_value _ _ _ = _` (fn th => simp[NoAsms, th]) >>
   qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory decoded_pair` >>
-  Cases_on `decoded_pair` >> simp[as_ptr_val_def] >>
+  Cases_on `decoded_pair` >> simp[NoAsms, as_ptr_val_def] >>
   disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
   qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]) >>
   `EVERY runtime_sym_inst (state_insts st1) /\ runtime_sym_value data_vv` by
