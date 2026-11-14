@@ -5,6 +5,12 @@ Ancestors
   list finite_map freshWrites gasSummaryComposePtr fragGasPathPtr
   vyperInterpreter vyperState gasCount
 
+Theorem ghost_kept_at_refl:
+  ghost_kept_at lo cenv es sa G tn s G tn
+Proof
+  simp[ghost_kept_at_def]
+QED
+
 Theorem ghost_kept_refl:
   ghost_kept cenv es sa G tn s G tn
 Proof
@@ -96,6 +102,55 @@ Theorem ghost_kept_wb_trans:
 Proof
   strip_tac >> drule_all wb_frame_local_regions >> strip_tac >>
   irule ghost_kept_trans >>
+  gvs[wb_frame_def] >> metis_tac[]
+QED
+
+(* ghost_kept_trans at a low-memory bound lo. *)
+Theorem ghost_kept_at_trans:
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept_at lo cenv es1 sm G1 tn1 s1 G2 tn2 /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s1.vs_allocas aid = SOME b) /\
+  (!n b sz. local_region cenv es1.scopes s1 n b sz <=>
+            local_region cenv es.scopes s0 n b sz) ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2
+Proof
+  simp[ghost_kept_at_def] >> rpt strip_tac
+  >- (`not_fresh_at sm x` by (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[])
+  >- (`not_fresh_at sm x` by (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[])
+  >- (`i IN tn1.t_mem` suffices_by
+        (strip_tac >>
+         qpat_x_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+           (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then ACCEPT_TAC) >>
+      qpat_x_assum `!aid off sz i. FLOOKUP s1.vs_allocas aid = _ /\ _ ==> _` irule >>
+      conj_tac >- (qexistsl_tac [`aid`,`off`,`sz`] >> simp[] >> metis_tac[]) >> simp[])
+  >- (`i IN tn1.t_mem` suffices_by
+        (strip_tac >>
+         qpat_x_assum `!n b sz i. local_region cenv es.scopes s0 n b sz /\ _ ==> _`
+           (qspecl_then [`n`,`b`,`sz`,`i`] mp_tac) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then ACCEPT_TAC) >>
+      qpat_x_assum `!n b sz i. local_region cenv es1.scopes s1 n b sz /\ _ ==> _` irule >>
+      conj_tac >- simp[] >> qexistsl_tac [`b`,`n`,`sz`] >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ghost_kept_at_wb_trans:
+  !lo cenv es sa G0 tn0 s0 G1 tn1 es1 sm G2 tn2 s1 H ctx func cx es'.
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept_at lo cenv es1 sm G1 tn1 s1 G2 tn2 /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\ wb_frame cenv es es' sa s0 s1 ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all wb_frame_local_regions >> strip_tac >>
+  irule ghost_kept_at_trans >>
+  qexistsl_tac [`G1`,`es1`,`s1`,`sm`,`tn1`] >> simp[] >>
   gvs[wb_frame_def] >> metis_tac[]
 QED
 
