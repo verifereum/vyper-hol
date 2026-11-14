@@ -233,6 +233,7 @@ Theorem bytestring_external_output_full_resources:
     (?aw. eval_operand addr s = SOME aw) /\ op_taint tn addr = {} /\
     (!x. addr = Var x ==> not_fresh_at sa x))) /\
   (!v wd. v.vs_accounts = s.vs_accounts /\ v.vs_call_ctx = s.vs_call_ctx /\
+    v.vs_code = s.vs_code /\
     eval_operand data v = SOME wd /\ eval_operand start v = SOME wa /\
     eval_operand cnt v = SOME (n2w n) /\
     (opc = EXTCODECOPY ==> eval_operand addr v = eval_operand addr s) ==>
@@ -306,6 +307,7 @@ Proof
   qpat_assum `out = Var root` SUBST_ALL_TAC >>
   qpat_assum `data = Var dst` SUBST_ALL_TAC >>
   `v.vs_accounts = s.vs_accounts /\ v.vs_call_ctx = s.vs_call_ctx /\
+   v.vs_code = s.vs_code /\
    v.vs_labels = s.vs_labels /\ v.vs_memory = s.vs_memory /\
    v.vs_transient = s.vs_transient /\ v.vs_immutables = s.vs_immutables` by
     (qpat_assum `v with <|vs_vars := _;vs_allocas := _;
