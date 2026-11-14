@@ -1,11 +1,12 @@
 (* Supply alignment of finite unchanged suffix segments. *)
 Theory o1LowerDloadForwardAbort
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointAssign o1LowerDloadAvailableSuffix o1ContractLowerDload
   lowerDloadDefs contextCodegenRel venomExecSemantics venomExecProps
   o1LowerDloadJointRelation o1LowerDloadExceptional o1LowerDloadJointScalar
   o1LowerDloadJointRangeCopy o1PassContract unitShapeDefs venomWf
-  o1LowerDloadOccurrence o1LowerDloadEnvironment venomInst list
+  o1LowerDloadOccurrence o1LowerDloadEnvironment venomInst list gasEvents
 
 Theorem ld_supply_insts_unchanged_segment:
   !segment u.
@@ -137,6 +138,38 @@ Proof
   fs[arithmeticTheory.ADD_COMM] >> metis_tac[]
 QED
 
+(* The aligned forward interval is COPY, assignments, then REVERT. *)
+Theorem ld_forward_interval_events:
+  revert_forward_pair bb p j /\
+  (!k. k <= j - p ==> get_instruction bb (p+k) =
+                          get_instruction bb' (t.vs_inst_idx+k)) ==>
+  gas_events_block fuel C owner bb' t = []
+Proof
+  strip_tac >>
+  qpat_x_assum `revert_forward_pair _ _ _`
+    (strip_assume_tac o REWRITE_RULE [revert_forward_pair_def]) >>
+  rename1 `copy_inst.inst_opcode = RETURNDATACOPY` >>
+  rename1 `revert_inst.inst_opcode = REVERT` >>
+  `get_instruction bb' t.vs_inst_idx = SOME copy_inst` by
+    metis_tac[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ZERO_LESS_EQ] >>
+  simp[Once gas_events_block_def, gas_events_step_def, is_terminator_def] >>
+  Cases_on `step_inst fuel C copy_inst t` >> simp[] >>
+  irule ld_assign_suffix_events >>
+  qexistsl_tac [`j - SUC p`, `revert_inst`] >> simp[] >>
+  reverse conj_tac
+  >- (`p + SUC (j - SUC p) = j /\ SUC (j - SUC p) <= j-p /\
+       t.vs_inst_idx + SUC (j - SUC p) = j + SUC t.vs_inst_idx - SUC p`
+        by decide_tac >>
+      qpat_x_assum `!k. k <= _ ==> _`
+        (qspec_then `SUC (j - SUC p)` assume_tac) >> metis_tac[]) >>
+  rpt strip_tac >>
+  `SUC k <= j-p /\ p < p + SUC k /\ p + SUC k < j` by decide_tac >>
+  `get_instruction bb (p + SUC k) = SOME ii` by
+    (qpat_x_assum `!k. k <= _ ==> _` (qspec_then `SUC k` mp_tac) >>
+     gvs[arithmeticTheory.ADD_CLAUSES]) >>
+  metis_tac[]
+QED
+
 (* The COPY discards the memory relation; only the finite suffix is aligned. *)
 Theorem ld_available_forward_abort:
   s.vs_labels = t.vs_labels /\
@@ -204,13 +237,15 @@ QED
 Theorem ld_joint_forward_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = Abort reason s1 ==>
   ?fn' bb' t1. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
-    exec_block fuel C' bb' t = Abort reason t1
+    exec_block fuel C' bb' t = Abort reason t1 /\
+    gas_events_block fuel C fn.fn_name bb s = [] /\
+    gas_events_block fuel C' fn'.fn_name bb' t = []
 Proof
   strip_tac >>
   `MEM fn C.ctx_functions` by
@@ -234,9 +269,9 @@ Proof
   `?dst src sz. inst.inst_operands = [dst;src;sz]` by
     metis_tac[revert_forward_pair_def, optionTheory.SOME_11] >>
   `eval_operand src s = eval_operand src t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
   `eval_operand sz s = eval_operand sz t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
   qhdtm_assum `ld_joint_boundary`
     (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
   qhdtm_assum `ld_joint_frame`
@@ -246,6 +281,12 @@ Proof
        (strip_assume_tac o REWRITE_RULE [ld_joint_control_def]) >>
      drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
   drule_all ld_joint_control_forward_fetch >> strip_tac >>
+  `gas_events_block fuel C fn.fn_name bb s = []` by
+    (irule ld_forward_interval_events >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `gas_events_block fuel C' fn'.fn_name bb' t = []` by
+    (irule ld_forward_interval_events >>
+     goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`fn'`,`bb'`] >> simp[] >>
   irule ld_available_forward_abort >>
   qexistsl_tac [`C`, `{v | MEM v (fn_ir_vars fn)}`, `bb`, `dst`, `inst`,

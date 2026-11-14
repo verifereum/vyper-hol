@@ -5,20 +5,6 @@ Ancestors
   vyperScopePreservation vyperStatePreservation vyperPlaceFrames
   vyperCallFrame vyperCallOutcomeFrame vyperCreateFrame rich_list abiEncodeArgsScopes
 
-Theorem nonmutating_exprs_every[local]:
-  !es cenv. ~exprs_can_mutate cenv es <=>
-    EVERY (\e. ~expr_can_mutate cenv e) es
-Proof
-  Induct >> simp[expr_can_mutate_def]
-QED
-
-Theorem nonmutating_named_map[local]:
-  !kes cenv. named_exprs_can_mutate cenv kes =
-    exprs_can_mutate cenv (MAP SND kes)
-Proof
-  Induct >> simp[expr_can_mutate_def, pairTheory.FORALL_PROD]
-QED
-
 Theorem nonmutating_scopes_mutual[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\

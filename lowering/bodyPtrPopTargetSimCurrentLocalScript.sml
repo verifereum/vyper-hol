@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimCurrentLocal
 Ancestors
+  targetPlaceSim
   bodyPtrPopTargetSimBoundary bodyPtrPopTargetDefs bodyPtrDefs
   stmtSimAugAssign exprSimHypsDefs exprSimProps bodySimAugPlaceLoad
   vyperTypeEnv vyperTypeInvariants vyperPlaceStatePreservation
@@ -22,7 +23,7 @@ Theorem target_current_local_path_ptr:
          val_in_memory ptv v (w2n w + off) mem)
 Proof
   strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `entry.type = tv` by metis_tac[optionTheory.SOME_11] >> simp[] >>
   `value_has_type tv entry.value /\ well_formed_type_value tv` by
     (gvs[expr_sim_inv_def, state_well_typed_def] >>

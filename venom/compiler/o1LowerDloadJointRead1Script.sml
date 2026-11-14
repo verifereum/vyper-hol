@@ -1,6 +1,7 @@
 (* Environmental read1 observations ignore storage differences. *)
 Theory o1LowerDloadJointRead1
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointRead0 o1LowerDloadJointScalar o1LowerDloadJointAssign
   o1LowerDloadShared o1LowerDloadJointRelation o1LowerDloadOccurrence
   o1LowerDloadEnvironment ptrDiscipline venomExecSemantics venomState
@@ -35,7 +36,7 @@ QED
 
 Theorem ld_joint_read1_operands_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode
     [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD] ==>
@@ -50,7 +51,7 @@ QED
 
 Theorem ld_joint_read1_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode
     [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD] /\
@@ -86,7 +87,7 @@ QED
 Theorem ld_joint_read1_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode
     [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD] /\
   step_inst fuel C inst s = OK s1 /\

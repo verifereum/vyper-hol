@@ -149,7 +149,7 @@ Proof
   fs[wordsTheory.dimword_def] >> intLib.ARITH_TAC
 QED
 
-Theorem store_slots_bytes_count_path[local]:
+Theorem store_slots_bytes_count_path:
   compile_bytestring_word_count src sa = (cnt,sm) /\
   eval_operand src s = SOME sw /\
   mem_word_at (w2n sw) s.vs_memory = n2w L /\

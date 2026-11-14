@@ -31,6 +31,16 @@ Proof
        ignore_bind_def, check_def, assert_def, return_def]
 QED
 
+Theorem append_storage_static:
+  cx.txn.is_static /\
+  w2n (lookup_storage slot (get_storage cx es tr)) < cap ==>
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
+    (INR (Error (RuntimeError "write in static context")), es)
+Proof
+  strip_tac >> simp[append_storage_writes, ignore_bind_def, bind_def,
+                    write_storage_slot_eq]
+QED
+
 Theorem append_storage_word_success:
   ~cx.txn.is_static /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\
@@ -359,6 +369,59 @@ Proof
   POP_ASSUM_LIST (K ALL_TAC) >>
   Cases_on `tr` >> pure_rewrite_tac [COND_CLAUSES] >>
   metis_tac[append_storage_store_frame]
+QED
+
+Theorem compile_dynarray_append_word_static:
+  compile_dynarray_append cenv bop vop 1 1 dt st cap T
+    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
+  eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
+  fresh_vars_wrt s0 ss /\ ss.vs_call_ctx.cc_static /\
+  cap < dimword (:256) /\
+  w2n (if tr then tload slot ss else sload slot ss) < cap ==>
+  ?g. run_inst_seq (emitted_insts s0 s9) ss = Abort ExHalt_abort g
+Proof
+  pure_rewrite_tac [compile_dynarray_append_word_parts] >> strip_tac >>
+  drule_all append_storage_guard_run >> strip_tac >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s0 s3) ss = OK ss3` >>
+  `eval_operand bop ss3 = SOME slot /\ eval_operand vop ss3 = SOME w` by
+    metis_tac[] >>
+  drule_all append_storage_address_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s3 s6) ss3 = OK ss6` >>
+  `eval_operand vop ss6 = SOME w` by metis_tac[] >>
+  `ss6.vs_call_ctx.cc_static` by
+    (qpat_x_assum `state_frame ss6 = state_frame ss3`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     qpat_x_assum `state_frame ss3 = state_frame ss`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     simp[state_frame_def]) >>
+  `run_inst_seq (emitted_insts s6 s7) ss6 =
+    Abort ExHalt_abort (halt_state (set_returndata [] ss6))` by
+    (`emitted_insts s6 s7 =
+       [mk_inst s6.cs_next_id (if tr then TSTORE else SSTORE) [pop;vop] []]` by
+       (qspecl_then [`if tr then TSTORE else SSTORE`, `[pop;vop]`, `s6`, `s7`]
+          mp_tac emitted_insts_emit_void >> simp[]) >>
+     Cases_on `tr` >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+          eval_operands_def]) >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends s0 s3 /\ inst_extends s3 s6 /\ inst_extends s7 s9` by
+    metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts s6 s9) ss6 =
+   run_inst_seq (emitted_insts s6 s7) ss6` by
+    (irule run_inst_seq_emit_extend_err >> simp[]) >>
+  `inst_extends s6 s9` by
+    (irule inst_extends_trans >> qexists_tac `s7` >> simp[]) >>
+  `run_inst_seq (emitted_insts s3 s9) ss3 =
+   run_inst_seq (emitted_insts s6 s9) ss6` by
+    (irule run_inst_seq_emit_extend >> simp[]) >>
+  `inst_extends s3 s9` by
+    (irule inst_extends_trans >> qexists_tac `s6` >> simp[]) >>
+  `run_inst_seq (emitted_insts s0 s9) ss =
+   run_inst_seq (emitted_insts s3 s9) ss3` by
+    (irule run_inst_seq_emit_extend >> simp[]) >>
+  qexists_tac `halt_state (set_returndata [] ss6)` >>
+  simp[]
 QED
 
 Theorem compile_dynarray_append_word_abort:
