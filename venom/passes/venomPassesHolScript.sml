@@ -52,3 +52,5 @@ Ancestors
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
+  (* explicit-stack guarded prefixes *)
+  guardedFrameOutcomes
