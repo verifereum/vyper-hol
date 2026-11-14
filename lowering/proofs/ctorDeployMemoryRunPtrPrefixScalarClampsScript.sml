@@ -59,7 +59,7 @@ Theorem prefix_scalar_pure_dispatch[local]:
   step_inst_base (mk_inst iid EQ ops outs) s =
     exec_pure2 (\a b. bool_to_word (a = b)) (mk_inst iid EQ ops outs) s
 Proof
-  pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
+  simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem prefix_scalar_shift_ptr:
