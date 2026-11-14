@@ -1670,7 +1670,7 @@ Proof
       (mcopy (w2n dw) (w2n aw) (w2n nw) s) = G /\
    (step_taint (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;count_op] []) s
       (mcopy (w2n dw) (w2n aw) (w2n nw) s) tn).t_var = tn.t_var` by
-    metis_tac[typedCopyPtrTheory.mcopy_operand_ghost_frame] >>
+    metis_tac[fragExecPtrTheory.mcopy_operand_ghost_frame] >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ _ un (OK t)` >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,

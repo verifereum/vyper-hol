@@ -1,8 +1,3 @@
-(* r10 (4182 worker 14:20): r9 + word-agreement premise. Without it, an IntCall annotated
-   with an aggregate whose declared return is a word MLOADs a word op that
-   expr_store_bound at expr_type e cannot bound. Consumers discharge it from expr_body_pre
-   by the contrapositive of exprSimIfExpWidenedPhysicalType.post_value_type_nonword. *)
-(* r9 (argon via origin 12:32): store bounds back at expr_type e; rt/rty stay at post_value_type. *)
 (* The shared joint unwrap_value step of the full family, at every finite
    horizon valid for the read's trace: one no-GAS origin/pointer path to one
    endpoint chosen before the horizon, with the memory posts and the
@@ -23,7 +18,6 @@ val PIECE_TAC = fn th =>
 
 Theorem unwrap_value_origin_ptr:
   compile_expr cenv ty e sa = (vv,sm) /\
-  (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
   unwrap_value cenv vv sb = (op,sc) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -42,7 +36,7 @@ Theorem unwrap_value_origin_ptr:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-  vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -71,7 +65,7 @@ Theorem unwrap_value_origin_ptr:
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-    expr_store_bound cx (expr_type e) v op z /\
+    expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
     z.vs_inst_idx = LENGTH sc.cs_current_insts /\
     alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\

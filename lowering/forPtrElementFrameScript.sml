@@ -31,7 +31,7 @@ Proof
     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
     (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   gvs[inst_seq_ptr_def] >>
-  simp[SRULE [] (cj 5 typedCopyPtrTheory.mcopy_operand_ghost_frame),
+  simp[SRULE [] (cj 5 fragExecPtrTheory.mcopy_operand_ghost_frame),
        eval_operand_def] >>
   rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[] >> decide_tac
 QED

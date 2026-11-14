@@ -76,7 +76,7 @@ Theorem intcall_return_full:
        (\H res ee G tn t'. ?tv. res = INL tv /\
          vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
            es0 sa sm s0 ee tv vv t' /\
-         vv_store_bound cx (expr_type (Call ann (IntCall (NONE,name)) es dflt))
+         vv_store_bound cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
            (lowered_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
            ee tv vv t' /\
          t'.vs_current_bb = sm.cs_current_bb /\
@@ -125,7 +125,7 @@ Theorem intcall_return_full:
            expr_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
              es0 sa sb s0 ee v op t' /\
            expr_store_bound cx
-             (expr_type (Call ann (IntCall (NONE,name)) es dflt)) v op t' /\
+             (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) v op t' /\
            t'.vs_current_bb = sb.cs_current_bb /\
            t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
            alloca_history func t' /\ s0.vs_alloca_next <= t'.vs_alloca_next /\

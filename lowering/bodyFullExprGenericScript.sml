@@ -41,7 +41,7 @@ QED
    type's region below the frontier. *)
 Theorem expr_vv_sim_stack_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
-    (~is_word_type (expr_type e) ==>
+    (~is_word_type (post_value_type cenv e) ==>
      !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
              SOME tvt ==>
            type_memory_size tvt = 0) /\
