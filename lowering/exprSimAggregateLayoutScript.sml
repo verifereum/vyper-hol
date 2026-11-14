@@ -30,6 +30,7 @@ Ancestors
   structFieldsProps vyperTypeSystem valueEncoding valueEncodingProps compileEnv
   exprSimHyps exprSimBufferEmpty vyperValue list pair finite_map vfmConstants
   exprCallbackContracts exprLowering exprSimWordBuiltins
+  vyperTypeEnv vyperTypeArgFits vyperTypeInvariants
 
 (* A variable's type takes memory: it takes a storage slot
    (assignable_type_slot_size_pos), so it takes memory. *)
@@ -48,6 +49,72 @@ Proof
   metis_tac[assignable_type_slot_size_pos]
 QED
 
+
+(* Assignment typing gives positive storage for each destination local. *)
+Theorem assign_local_memory_bytes_pos:
+  !cenv cx env es ret_ty id e env' ty.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    0 < type_memory_bytes cenv ty
+Proof
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `assignable_type env.type_defs ty` by
+    (gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+     Cases_on `type_place_target env (NameTarget id)` >> gvs[] >>
+     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+     gvs[vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type]) >>
+  irule expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
+Theorem assign_tuple_locals_bytes_pos:
+  !cenv cx env es ret_ty ids e env'.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty
+      (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
+      SOME env' ==>
+    EVERY (\id. !ty. FLOOKUP env.var_types id = SOME ty ==>
+                     0 < type_memory_bytes cenv ty) ids
+Proof
+  rpt strip_tac >>
+  `?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty)
+           (MAP (BaseTarget o NameTarget) ids) tys /\
+         assignable_type env.type_defs (TupleT tys)` by
+    (gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
+         AllCaseEqs()] >> metis_tac[]) >>
+  `EVERY (assignable_type env.type_defs) tys` by fs[assignable_type_def, EVERY_MEM] >>
+  rw[EVERY_EL] >>
+  `n < LENGTH tys /\
+   well_typed_atarget env (BaseTarget (NameTarget (EL n ids))) (EL n tys)` by
+    (fs[LIST_REL_EL_EQN] >> first_x_assum (qspec_then `n` mp_tac) >>
+     simp[EL_MAP]) >>
+  `ty = EL n tys` by
+    gvs[well_typed_atarget_def, well_typed_target_def, vyperTypeEnvTheory.type_place_target_NameTarget,
+        AllCaseEqs()] >>
+  `assignable_type env.type_defs ty` by metis_tac[EVERY_EL] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  irule expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
+Theorem annassign_memory_bytes_pos_ptr:
+  !cenv cx env es ret_ty id typ e env'.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' ==>
+    0 < type_memory_bytes cenv typ
+Proof
+  rpt strip_tac >>
+  `assignable_type env.type_defs typ` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  irule expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
 
 Theorem type_memory_size_aligned:
   (!tv. type_memory_size tv MOD 32 = 0) /\

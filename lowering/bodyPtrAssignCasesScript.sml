@@ -15,7 +15,7 @@ Ancestors
   assignBasePtrWordBody assignBasePtrLocalBody assignBasePtrLocalBodyFacts
   assignBasePtrTopWordBody assignBasePtrStorageBody
   assignBasePtrAttrLocal assignBasePtrAttrStorage
-  annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts
+  annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts exprSimAggregateLayout
   assignTuplePtrBodyLocals assignTuplePtrBodyTargets
   bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph vyperTypeSystem memoryLocalRhsProps list

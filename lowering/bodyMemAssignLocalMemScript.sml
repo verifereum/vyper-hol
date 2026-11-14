@@ -75,26 +75,6 @@ Proof
   qexists_tac `[]` >> simp[]
 QED
 
-Theorem assign_local_memory_bytes_pos[local]:
-  !cenv cx env es ret_ty id e env' ty.
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
-    FLOOKUP env.var_types id = SOME ty ==>
-    0 < type_memory_bytes cenv ty
-Proof
-  rpt strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  `assignable_type env.type_defs ty` by
-    (gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-     Cases_on `type_place_target env (NameTarget id)` >> gvs[] >>
-     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
-     gvs[vyperTypeEnvTheory.type_place_target_NameTarget] >>
-     metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type]) >>
-  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
-  metis_tac[]
-QED
-
 Theorem assign_local_memory_type_cases[local]:
   !cenv e ty.
     (expr_type e = ty \/ lowered_value_type cenv e = ty \/

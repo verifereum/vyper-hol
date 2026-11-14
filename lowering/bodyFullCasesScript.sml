@@ -9,11 +9,12 @@
 Theory bodyFullCases
 Ancestors
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
-  bodyFullAppend annAssignPtrFacts bodyFullIfExp
+  bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
-  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
-  gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
-  exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
+  bodyFullBuiltinWord bodyFullExprGeneric
+  gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  exprSimHyps exprSimAggregateLayout bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
@@ -80,14 +81,16 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases),
+   by its fragment in bodyFullAssertReason. *)
 Theorem body_assert_reason_case_full:
   !cx e se.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assert e (AssertReason se))
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_assert_reason_frag_full >> metis_tac[]
 QED
 
 (* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -119,7 +122,7 @@ Proof
   >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
               0 < type_memory_bytes cenv ty` by
         (rpt strip_tac >> gvs[] >>
-         metis_tac[bodySimStmtCasesTheory.assign_local_memory_bytes_pos]) >>
+         metis_tac[exprSimAggregateLayoutTheory.assign_local_memory_bytes_pos]) >>
       Cases_on `(lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
@@ -147,7 +150,9 @@ Proof
               supported_storage_field_write tops nsid fld /\
               type_place_target env t = SOME (Type fty) /\ is_word_type fty`
   >- (gvs[] >> irule body_assign_attr_storage_full >> metis_tac[]) >>
-  irule body_assign_other_full >> simp[] >> metis_tac[]
+  irule body_assign_other_full >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]
 QED
 
 (* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
@@ -184,11 +189,11 @@ Proof
   irule body_assign_tuple_other_full >> metis_tac[]
 QED
 
-(* Admitted: the joint twin of body_attribute_case_ptr_at (bodyPtrExprCases). *)
+(* Attribute's joint leaf is proved in bodyFullAttribute. *)
 Theorem body_attribute_case_full:
   !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullAttributeTheory.attribute_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_augassign_case_ptr_at (bodyPtrAssignCases). *)
@@ -278,7 +283,11 @@ Theorem word_builtin_expr_full_ok:
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule word_builtin_sim_full >> metis_tac[expr_vv_sim_stack_full]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* Admitted: the joint twin of bodyPtrHashBuiltins's hash_builtin_expr_ptr_ok. *)
@@ -296,7 +305,13 @@ Theorem bytestring_builtin_expr_full_ok:
   !cx ty bt es.
     ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
      (?n. bt = Uint2Str n)) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    (builtin_args_length_ok bt (LENGTH es) ==>
+      case code_slice_source bt es of
+        NONE => body_exprs_full_ok cx es
+      | SOME (code_ty,addr) =>
+          body_exprs_full_ok cx (TL es) /\
+          (!s tail_vs t. eval_exprs cx (TL es) s = (INL tail_vs,t) ==>
+            body_exprs_full_ok cx [addr])) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
   cheat
@@ -326,9 +341,27 @@ QED
 (* A builtin, split by family as body_builtin_case_ptr does. *)
 Theorem body_builtin_case_full:
   !cx ty bt es.
+    (!s'' x t v code_ty addr tail_s tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
+       v = (code_ty,addr) /\
+       eval_exprs cx (TL es) tail_s = (INL tail_vs,t') ==>
+       body_exprs_full_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
+       v = (code_ty,addr) ==>
+       body_exprs_full_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,t) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+       bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
+       body_exprs_full_ok cx es) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==>
        body_exprs_full_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -338,9 +371,16 @@ Theorem body_builtin_case_full:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Env MsgGas` >- simp[body_msg_gas_full_case] >>
+  reverse (Cases_on `code_slice_source bt es`)
+  >- (rename1 `code_slice_source bt es = SOME src` >>
+      Cases_on `src` >> gvs[code_slice_source_SOME] >>
+      irule bytestring_builtin_expr_full_ok >>
+      gvs[code_slice_source_def, type_check_def, assert_def,
+          builtin_args_length_ok_def] >> metis_tac[]) >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
    body_exprs_full_ok cx es` by
-    (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
+    (strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+     metis_tac[type_check_def, assert_def]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>
@@ -411,12 +451,12 @@ Theorem body_extcall_case_full:
     (!s'' target t nargs s'3' results t'.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) /\
-       eval_expr_results cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
+       eval_exprs cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
        body_exprs_full_ok cx (DROP (1 + nargs) es)) /\
     (!s'' target t nargs.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) ==>
-       body_results_full_ok cx (TAKE nargs (DROP 1 es))) /\
+       body_exprs_full_ok cx (TAKE nargs (DROP 1 es))) /\
     body_exprs_full_ok cx (TAKE 1 es) ==>
     body_expr_full_ok cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
@@ -424,7 +464,8 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_for_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
+   by its fragment in bodyFullFor. *)
 Theorem body_for_case_full:
   !cx id typ it n body.
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
@@ -441,7 +482,8 @@ Theorem body_for_case_full:
        body_iterator_full_ok cx it) ==>
     body_stmt_full_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_for_frag_full >> metis_tac[]
 QED
 
 (* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
@@ -472,10 +514,10 @@ QED
 (* Admitted: the joint twin of body_intcall_case_ptr_at (bodyPtrIntCallCase). *)
 Theorem body_intcall_case_full:
   !cx v16 src_id_opt fn es v17.
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
-         sstup2 ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7'
-         prev t'5' s'8' dflt_vs t'6' s'9' vs t'7' all_tenv s'10' env t'8'
-         s'11' rtv t'9' is_view s'12' x'' t'10' s'13' cxf t'11'.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
+         t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
+         t'8' is_view s'11' x'' t'9' s'12' cxf t'10'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'3' = (INL ts,t') /\
@@ -487,23 +529,24 @@ Theorem body_intcall_case_full:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_expr_results cx es s'6' = (INL results,t'4') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
        needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
-       finally do set_scopes [FEMPTY]; eval_exprs cxd needed_dflts od
+       finally
+         (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd needed_dflts))
          (set_scopes prev) s'8' = (INL dflt_vs,t'6') /\
-       read_results cx results s'9' = (INL vs,t'7') /\ all_tenv = get_tenv cx /\
+       all_tenv = get_tenv cx /\
        lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
-         "IntCall bind_arguments" s'10' = (INL env,t'8') /\
-       lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'11' =
-       (INL rtv,t'9') /\ (is_view <=> is_view_mut mut) /\
-       lock_if_nr cx nr is_view s'12' = (INL x'',t'10') /\
-       push_function (src_id_opt,fn) env cx s'13' = (INL cxf,t'11') ==>
+         "IntCall bind_arguments" s'9' = (INL env,t'7') /\
+       lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'10' =
+       (INL rtv,t'8') /\ (is_view <=> is_view_mut mut) /\
+       lock_if_nr cx nr is_view s'11' = (INL x'',t'9') /\
+       push_function (src_id_opt,fn) env cx s'12' = (INL cxf,t'10') ==>
        body_stmts_full_ok cxf body') /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
-         sstup2 ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7'
-         prev t'5' s'8' x'' t'6'.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
+         t'5' s'8' x'' t'6'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'3' = (INL ts,t') /\
@@ -515,14 +558,14 @@ Theorem body_intcall_case_full:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_expr_results cx es s'6' = (INL results,t'4') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
        needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
        set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
        body_exprs_full_ok cxd needed_dflts) /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
-         sstup2 ret body' s'5' x' t'3'.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'3' = (INL ts,t') /\
@@ -534,17 +577,27 @@ Theorem body_intcall_case_full:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') ==>
-       body_results_full_ok cx es) ==>
+       body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)
+(* The joint twin of body_log_case_ptr_at (bodyPtrLogCases),
+   by its scalar/aggregate leaves in bodyFullLog. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  `supported_log tops id es` by
+    (qpat_assum `supported_stmt _ _ _`
+       (ACCEPT_TAC o SIMP_RULE bool_ss [supported_stmt_def])) >>
+  `?fields. supported_event_fields tops id = SOME fields` by
+    (qpat_x_assum `supported_log _ _ _` mp_tac >>
+     rewrite_tac[supported_log_def] >> CASE_TAC >> simp[]) >>
+  Cases_on `EVERY supported_scalar_type (MAP (SND o FST) fields)`
+  >- (irule compile_log_frag_full >> metis_tac[]) >>
+  irule body_log_aggregate_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
@@ -568,11 +621,13 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases),
+   by its fragment in bodyFullRaiseReason. *)
 Theorem body_raise_reason_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Raise (RaiseReason e))
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_raise_reason_frag_full >> metis_tac[]
 QED
 
 (* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -600,12 +655,20 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raw_log_case_ptr_at (bodyPtrCallCases). *)
+(* RawLog composes its topic and data children at one joint midpoint. *)
 Theorem body_raw_log_case_full:
   !cx v20 es v21.
     body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v20 RawLog es v21)
 Proof
-  cheat
+  rpt strip_tac >> irule raw_log_expr_full_ok >> simp[] >> conj_tac
+  >- (rpt gen_tac >>
+      irule (gas_shadow_compiles_multi_exprs
+             |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+      MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
+  rpt gen_tac >>
+  irule (gas_shadow_compiles_lower_value
+         |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+  MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)
 QED
 
 (* RawRevert, by raw_revert_expr_full_ok; its lower_value shadow-compile
@@ -707,7 +770,12 @@ QED
 (* Admitted: the joint twin of body_subscript_case_ptr_at (bodyPtrExprCases). *)
 Theorem body_subscript_case_full:
   !cx v8 e1 e2.
-    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_full_ok cx e2) /\
+    (!s'' res t s'3' res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s'3' = (INL res',t') ==>
+       body_expr_full_ok cx e2) /\
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (Subscript v8 e1 e2)
 Proof

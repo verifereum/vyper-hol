@@ -106,20 +106,6 @@ Proof
   fs[body_expr_ptr_ok_def] >> metis_tac[]
 QED
 
-Theorem annassign_memory_bytes_pos_ptr:
-  !cenv cx env es ret_ty id typ e env'.
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' ==>
-    0 < type_memory_bytes cenv typ
-Proof
-  rpt strip_tac >>
-  `assignable_type env.type_defs typ` by gvs[type_stmt_def, AllCaseEqs()] >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
-  metis_tac[]
-QED
-
 Theorem annassign_ih_ptr:
   !cx id typ e env ret_ty env' cenv es.
     (!tenv s'' tyv t.
