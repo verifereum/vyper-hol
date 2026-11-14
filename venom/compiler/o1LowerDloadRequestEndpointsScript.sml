@@ -4,22 +4,8 @@ Ancestors
   o1LowerDloadRunnerEndpoints o1LowerDloadShared
   o1LowerDloadJointRelation o1LowerDloadAbortResult
   o1LowerDloadExceptional o1LowerDloadJointIdentity o1LowerDloadUnchangedFetch
-  ptrDiscipline venomExecSemantics venomState opcodeClass list o1SafeUpto
-
-Theorem step_inst_abort_requests:
-  step_inst fuel C inst s = Abort reason s1 /\
-  inst.inst_opcode <> INVOKE ==> s1.vs_requests = s.vs_requests
-Proof
-  strip_tac >>
-  drule step_inst_abort_opcodes >> strip_tac >>
-  gvs[step_inst_non_invoke] >>
-  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-  simp[exec_create_abort_iff, AllCaseEqs(), halt_state_def,
-       set_returndata_def, exec_write2_def, eval_operands_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[exec_ext_call_def, AllCaseEqs()] >> pairarg_tac >> gvs[]
-QED
+  ptrDiscipline venomExecSemantics venomState opcodeClass list
+  o1SafeUpto dftGasRequestObservation
 
 Theorem ld_joint_requests:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
