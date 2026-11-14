@@ -11,12 +11,12 @@ Theorem extcall_vv_full_ok:
     (!s'' target t nargs s'3' results t'.
        eval_exprs cx (TAKE 1 args) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) /\
-       eval_expr_results cx (TAKE nargs (DROP 1 args)) s'3' = (INL results,t') ==>
+       eval_exprs cx (TAKE nargs (DROP 1 args)) s'3' = (INL results,t') ==>
        body_exprs_full_ok cx (DROP (1 + nargs) args)) /\
     (!s'' target t nargs.
        eval_exprs cx (TAKE 1 args) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) ==>
-       body_results_full_ok cx (TAKE nargs (DROP 1 args))) /\
+       body_exprs_full_ok cx (TAKE nargs (DROP 1 args))) /\
     body_exprs_full_ok cx (TAKE 1 args) /\
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env

@@ -82,8 +82,9 @@ Theorem extcall_return_full:
        w2n ro + cap <= b + sz /\
        (!i. w2n ro <= i /\ i < w2n ro + MIN cap (LENGTH returnData) ==>
             i NOTIN tn.t_mem)) ==>
-    gas_outcome_full (DF, lo, explicit, ctx, func, PG) (cx_tops cx) cx st0
-      (case (if returnData = [] then default_opt else NONE) of
+    ?res r G' tn'.
+      (!tail.
+        (case (if returnData = [] then default_opt else NONE) of
          SOME default_v =>
            do accounts' <- get_accounts;
               check (skip \/ ext_call_has_code target accounts')
@@ -94,28 +95,32 @@ Theorem extcall_return_full:
            do ret_val <- lift_sum_runtime
                 (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
               return (Value ret_val)
-           od) (ee, t, G, tn)
-      (\H res ee' G' tn' t'. ?tv. res = INL tv /\
+           od) (ee with gas_obs := tail) =
+          (res, ee with gas_obs := tail)) /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+          (t, G, tn) [] (r, G', tn') /\
+        ((?t'. r = OK t' /\ ?tv. res = INL tv /\
          vv_post H ctx func cenv cx
            (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-              args dflt) es sa sb s0 ee' tv vv t' /\
+              args dflt) es sa sb s0 (ee with gas_obs := []) tv vv t' /\
          vv_store_bound cx
            (expr_type
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
                  args dflt))
            (lowered_value_type cenv
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-                 args dflt)) ee' tv vv t' /\
+                 args dflt)) (ee with gas_obs := []) tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
          alloca_history func t' /\ s0.vs_alloca_next <= t'.vs_alloca_next /\
-         ghost_inv_at (DF H) lo d cenv cx ee' G' tn' t' /\
+         ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G' tn' t' /\
          ptr_vv_ok cx
            (post_value_type cenv
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-                 args dflt)) tv vv ee' G' tn' t' /\
+                 args dflt)) tv vv (ee with gas_obs := []) G' tn' t' /\
          (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-          ?val. read_result cx tv ee' = (INL val, ee') /\
+          ?val. read_result cx tv (ee with gas_obs := []) = (INL val, (ee with gas_obs := [])) /\
                 !rt w. evaluate_type (get_tenv cx)
                          (post_value_type cenv
                             (Call ann (ExtCall is_static skip
@@ -136,8 +141,8 @@ Theorem extcall_return_full:
             ptr_buf_ok cenv
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
                  args dflt) p.ptr_operand G' t') /\
-         ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
-      (\H res ee gt r. expr_exit res r)
+         ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
+         (exit_result r /\ expr_exit res r)))
 Proof
   cheat
 QED

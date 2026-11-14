@@ -32,13 +32,13 @@ Theorem extcall_request_full:
     (!s'' target t nargs s'3' results t'.
        eval_exprs cx (TAKE 1 args) s'' = (INL target,t) /\
        nargs = LENGTH arg_types /\
-       eval_expr_results cx (TAKE nargs (DROP 1 args)) s'3' =
+       eval_exprs cx (TAKE nargs (DROP 1 args)) s'3' =
          (INL results,t') ==>
        body_exprs_full_ok cx (DROP (1 + nargs) args)) /\
     (!s'' target t nargs.
        eval_exprs cx (TAKE 1 args) s'' = (INL target,t) /\
        nargs = LENGTH arg_types ==>
-       body_results_full_ok cx (TAKE nargs (DROP 1 args))) /\
+       body_exprs_full_ok cx (TAKE nargs (DROP 1 args))) /\
     body_exprs_full_ok cx (TAKE 1 args) ==>
     !st0 sa sb shadow_sa shadow_sb vv s0 G0 tn0 Q.
       compile_expr cenv ty
