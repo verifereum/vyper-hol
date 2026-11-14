@@ -576,9 +576,19 @@ Resume rest_word_membership_tail_dynamic_full[runtime_prefix_operand]:
     (qspecl_then [`sm`, `sh`, `Gh H'`, `Th H'`] mp_tac) >>
   simp[] >> strip_tac >>
   Cases_on `vv_location vv`
-  >- (fs[] >> metis_tac[]) >>
+  >- (qpat_x_assum `_ \/ _ ==> ?w. eval_operand _ u = _ /\ op_taint (Tu H') _ = _ /\ _` mp_tac >>
+      simp[] >> metis_tac[]) >>
   rename1 `vv_location vv = SOME vl` >>
-  Cases_on `vl` >> fs[] >> metis_tac[]
+  Cases_on `vl`
+  >- (qpat_x_assum `_ \/ _ ==> ?w. eval_operand _ u = _ /\ op_taint (Tu H') _ = _ /\ _` mp_tac >>
+      simp[] >> metis_tac[])
+  >- (qpat_x_assum `!tr. _ = SOME (if tr then _ else _) ==> ?w. eval_operand _ u = _ /\ op_taint (Tu H') _ = _ /\ _`
+        (qspec_then `F` mp_tac) >> simp[] >> metis_tac[])
+  >- (qpat_x_assum `!tr. _ = SOME (if tr then _ else _) ==> ?w. eval_operand _ u = _ /\ op_taint (Tu H') _ = _ /\ _`
+        (qspec_then `T` mp_tac) >> simp[] >> metis_tac[])
+  >- (qpat_x_assum `~cenv.ce_is_ctor /\ _ ==> ?w. eval_operand _ u = _ /\ op_taint (Tu H') _ = _ /\ _` mp_tac >>
+      simp[] >> metis_tac[]) >>
+  qpat_x_assum `loc = case _ of NONE => _ | SOME l => l` mp_tac >> simp[]
 QED
 
 Resume rest_word_membership_tail_dynamic_full[runtime_read]:
