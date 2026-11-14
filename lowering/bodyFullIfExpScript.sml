@@ -19,7 +19,7 @@ Ancestors
   bodyFullIfExpArm bodyFullIfExpWiden bodyFullIfExpWidenCall
   bodyFullIfExpFinish bodyFullIfExpShadow bodyFullAllocGeneric typedCopyOriginPtr
   bodyFullOfVV bodyFullUnwrap bodyFullPreds
-  bodySimFull gasOutcomeFullCompose gasOutcomeFull gasShadowCompile
+  bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile
   gasShadowCompileHelpers exprSimMemorySource exprSimIfExp exprSimDefs
   exprSimMemDefs bodyPtrDefs loweringPosts exprLowering exprLoweringProps
   typedCopyDomain vyperTypeSystem compileEnv context vyperAST
@@ -841,87 +841,7 @@ Proof
   qexistsl_tac [`cop`,`sj`,`sn`] >> simp[] >>
   fs[expr_post_def, expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
      valueEncodingTheory.typed_val_to_w256_def,
-     valueEncodingTheory.val_to_w256_def] >>
-  FAIL_TAC "operand"
-QED
-
-Theorem ifexp_origin_path_zero_prefix[local]:
-  gas_origin_ptr_path cfg st [] (OK s1,G1,tn1) /\
-  gas_origin_ptr_path cfg (s1,G1,tn1) marks out ==>
-  gas_origin_ptr_path cfg st marks out
-Proof
-  PairCases_on `out` >> strip_tac >>
-  qpat_x_assum `gas_origin_ptr_path _ _ [] _`
-    (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
-  simp[] >> disch_then drule >> simp[]
-QED
-
-Theorem ifexp_exempt_zero_prefix[local]:
-  gas_path_mem ctx func s0 0 (OK s1) /\
-  gas_exempt_cert T tops (ctx,func) source (es,s1) marks (err,ee) (leaf,finish_state) ==>
-  gas_exempt_cert T tops (ctx,func) source (es,s0) marks (err,ee) (leaf,finish_state)
-Proof
-  strip_tac >>
-  `gas_marked_exec T (ctx,func) (return ()) (es,s0) [] (INL ()) es (OK s1)` by
-    simp[gasSummaryTheory.gas_marked_exec_def, return_def, fragGasModeTheory.gas_marked_path_def] >>
-  drule gasExemptCertTheory.gas_exempt_cert_start_gas_obs >>
-  disch_then (qspec_then `[]` assume_tac) >> fs[] >>
-  drule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
-  disch_then (qspecl_then [`tops`, `\u. source`] mp_tac) >>
-  simp[bind_return] >> disch_then irule >> simp[]
-QED
-
-Theorem ifexp_outcome_zero_prefix_guarded[local]:
-  storage_trace_frame source /\ storage_trace_domain cx st0 es.storage_trace /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
-      (s0,G0,tn0) [] (OK s1,G1,tn1)) /\
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
-    (es,s1,G1,tn1) Q R ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
-    (es,s0,G0,tn0) Q R
-Proof
-  strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `gas_path_mem ctx func s0 0 (OK s1)` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
-       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-     drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
-     drule fragGasOriginTheory.gas_origin_path_erase >>
-     simp[fragGasModeTheory.gas_marked_path_def]) >>
-  `s1.vs_gas_readings = s0.vs_gas_readings` by
-    (drule fragGasPathMemTheory.gas_path_mem_ok_suffix >> simp[]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
-  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
-  >- (disj1_tac >> conj_tac >- gvs[gasStorageTheory.gas_bad_storage_at_def] >>
-      qexistsl_tac [`H`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      `valid_horizon cx st0 H es.storage_trace` by
-        (qpat_x_assum `storage_trace_domain _ _ _ ==> _` irule >> first_assum ACCEPT_TAC) >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
-        (qspec_then `H` mp_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-      drule (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_focus_rules) >> disch_then drule >> simp[])
-  >- (disj2_tac >> disj1_tac >>
-      qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >> gvs[] >> rpt strip_tac >>
-      `valid_horizon cx st0 H es.storage_trace` by
-        (qpat_assum `!tail. source _ = _` (qspec_then `[]` assume_tac) >>
-         drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >> strip_tac >>
-         gvs[] >> drule gasOutcomeFullTheory.valid_horizon_append >> simp[]) >>
-      res_tac >> simp[] >> metis_tac[ifexp_origin_path_zero_prefix]) >>
-  disj2_tac >> disj2_tac >>
-  qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
-  conj_tac >- (irule ifexp_exempt_zero_prefix >> metis_tac[]) >>
-  qexists_tac `H` >> conj_tac >- first_assum ACCEPT_TAC >>
-  `valid_horizon cx st0 H es.storage_trace` by
-    (qpat_x_assum `storage_trace_domain _ _ _ ==> _` irule >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
-    (qspec_then `H` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  drule (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_focus_rules) >> disch_then drule >> simp[]
+     valueEncodingTheory.val_to_w256_def]
 QED
 
 Theorem ifexp_ghost_inv_at_jump[local]:
@@ -1222,7 +1142,7 @@ Proof
      (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
      (mid,z,G1,tn1)
      finalQ finalR` suffices_by (Cases_on `sel` >> simp[]) >>
-  irule ifexp_outcome_zero_prefix_guarded >>
+  irule gas_outcome_full_zero_prefix_guarded >>
   conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind,
     vyperStorageTraceTheory.evaluate_storage_trace_frame,
     vyperStorageTraceTheory.storage_trace_frame_conditional_result] >>
