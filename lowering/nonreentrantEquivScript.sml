@@ -31,6 +31,19 @@ Proof
        evaluation_state_component_equality]
 QED
 
+Theorem lock_if_nr_success_not_static:
+  lock_if_nr cx nr iv es = (INL (),locked) ==>
+  (nr /\ ~iv ==> ~cx.txn.is_static)
+Proof
+  Cases_on `nr` >> Cases_on `iv` >> Cases_on `cx.txn.is_static` >> simp[] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  simp[lock_if_nr_def, acquire_nonreentrant_lock_execution,
+       check_not_static_def, vyperStateTheory.check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def] >> rw[]
+QED
+
 Theorem release_nonreentrant_lock_execution:
   release_nonreentrant_lock addr key vs =
     (INL (), vs with <| storage_trace := vs.storage_trace ++ [StorageLock key];
