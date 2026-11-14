@@ -94,7 +94,7 @@ Proof
   rewrite_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem type_place_target_attribute_prefix[local]:
+Theorem type_place_target_attribute_prefix:
   !attrs env tgt vt.
     type_place_target env
       (FOLDL (\t a. AttributeTarget t a) tgt attrs) = SOME vt ==>
