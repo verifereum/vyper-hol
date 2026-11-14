@@ -168,3 +168,93 @@ Proof
   irule rb_ignore >> conj_tac >- simp[rb_data_label_fold] >>
   irule rb_create_bucket_blocks >> simp[rb_group_into_buckets]
 QED
+
+Theorem rb_compile_abi_arg_ptr_guard:
+  rb_operand_ok src /\ rb_operand_ok parent ==>
+  rb_step (K T) (compile_abi_arg_ptr_guard opc src parent)
+Proof
+  strip_tac >> rewrite_tac[compile_abi_arg_ptr_guard_def] >>
+  IF_CASES_TAC >> simp[rb_step_return] >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  simp[rb_emit_void]
+QED
+
+Theorem rb_var_location_decode_operand:
+  rb_location_ok loc /\ var_location_decode_operand loc = SOME dst ==>
+  rb_operand_ok dst
+Proof
+  Cases_on `loc` >> simp[var_location_decode_operand_def, rb_location_ok_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem rb_compile_entry_checks:
+  rb_step (K T) (compile_entry_checks min_cds payable)
+Proof
+  rewrite_tac[compile_entry_checks_def] >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      simp[rb_emit_void]) >>
+  IF_CASES_TAC >> simp[rb_step_return] >>
+  ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  simp[rb_emit_void]
+QED
+
+Theorem rb_compile_guarded_body:
+  rb_stmt_contract /\ rb_env_ok ce ==>
+  rb_step (K T) (compile_guarded_body ce nr key trans view stmts ret)
+Proof
+  strip_tac >> rewrite_tac[compile_guarded_body_def] >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_lock, rb_step_return]) >>
+  irule rb_ignore >> conj_tac
+  >- gvs[rb_stmt_contract_def, rb_loop_ok_def] >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_step_def, comp_get_def] >>
+  gen_tac >> strip_tac >> IF_CASES_TAC >> simp[rb_step_return] >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
+  Cases_on `ret` >> simp[rb_emit_inst]
+QED
+
+Theorem rb_compile_fallback_body:
+  rb_stmt_contract /\ rb_env_ok ce ==>
+  rb_step (K T) (compile_fallback_body ce payable nr key trans view stmts ret)
+Proof
+  strip_tac >> rewrite_tac[compile_fallback_body_def] >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      simp[rb_emit_void]) >>
+  simp[rb_compile_guarded_body]
+QED
+
+Theorem rb_compile_internal_param_decls:
+  !params idx. rb_step (\r. EVERY (\(name,stk,op). rb_operand_ok op) (FST r))
+    (compile_internal_param_decls params idx)
+Proof
+  Induct >> simp[compile_internal_param_decls_def, rb_step_return] >>
+  PairCases >> gen_tac >> rewrite_tac[compile_internal_param_decls_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >>
+  qexists_tac `\r. EVERY (\(name,stk,op). rb_operand_ok op) (FST r)` >>
+  BETA_TAC >> reverse conj_tac >- simp[] >>
+  gen_tac >> strip_tac >> irule rb_step_return >> gvs[]
+QED
+
+Theorem rb_materialize_internal_params:
+  !params ce. rb_env_ok ce /\
+    EVERY (\(name,stk,op). rb_operand_ok op) params ==>
+    rb_step rb_env_ok (materialize_internal_params ce params)
+Proof
+  Induct >> simp[materialize_internal_params_def, rb_step_return] >>
+  PairCases >> gen_tac >> strip_tac >>
+  rewrite_tac[materialize_internal_params_def] >> BETA_TAC >>
+  reverse (Cases_on `h1`) >> simp[]
+  >- (first_x_assum irule >> gvs[rb_env_bind_local, rb_location_ok_def]) >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
+  rename1 `_ = SOME loc` >> Cases_on `loc` >> simp[] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- gvs[rb_emit_void] >>
+  first_x_assum irule >> gvs[rb_env_bind_local, rb_location_ok_def]
+QED
