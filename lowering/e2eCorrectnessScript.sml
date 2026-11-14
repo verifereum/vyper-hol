@@ -1139,9 +1139,9 @@ Theorem vyper_call_correct:
        calldata_dispatch tops
          (buffer_to_list (FST (HD es.contexts)).msgParams.data) =
          SOME (f, vals) ==>
-       ?mut args ret body.
+       ?mut args dflts ret body.
          vyperInterpreter$lookup_function NONE f External tops =
-           SOME (mut, F, args, [], ret, body))
+           SOME (mut, F, args, dflts, ret, body))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\

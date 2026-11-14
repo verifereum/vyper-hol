@@ -10,14 +10,38 @@ Ancestors
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
    __default__ fallback and noncanonical encodings.  Nonreentrant functions
-   and functions with default arguments stay excluded for now. *)
+   stay excluded for now. *)
 Definition dispatched_vyper_call_def:
   dispatched_vyper_call tops tx calldata ret <=>
     calldata_dispatch tops calldata = SOME (tx.function_name, tx.args) /\
-    ?mut args body.
+    ?mut args dflts body.
       vyperInterpreter$lookup_function NONE tx.function_name External tops =
-        SOME (mut, F, args, [], ret, body)
+        SOME (mut, F, args, dflts, ret, body)
 End
+
+(* A supported program declares no default arguments, so every external
+   entry it exposes (functions and public getters) has none. *)
+Theorem supported_program_external_dflts_nil:
+  !tops f mut nr args dflts ret body.
+    supported_program tops /\
+    vyperInterpreter$lookup_function NONE f External tops =
+      SOME (mut, nr, args, dflts, ret, body) ==>
+    dflts = []
+Proof
+  rpt strip_tac >>
+  drule vyperTypeContractGetterTheory.lookup_function_External_cases >>
+  strip_tac
+  >- (drule_all supportedProgramTheory.supported_program_declaration >>
+      simp[supportedDeclsTheory.supported_function_header_contract,
+           listTheory.NULL_EQ]) >>
+  Cases_on `decl` >>
+  gvs[vyperTypeContractGetterTheory.external_getter_tuple_def,
+      AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypeContractGetterTheory.external_getter_tuple_def,
+      vyperGetterTheory.getter_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[])
+QED
 
 (* S1 *)
 Theorem lower_vyper_runtime_unit_correct_dispatched:
