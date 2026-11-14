@@ -801,6 +801,7 @@ Theorem store_var_frag:
   !ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
+    ~s1.vs_call_ctx.cc_static /\
     stmt_state_rel ctx func cenv cx es'
       (if tr then tstore a w s1 else sstore a w s1) ==>
     frag_exec ctx st st' (\t. t = s1)
@@ -842,8 +843,9 @@ Theorem assign_attr_storage_word_suffix[local]:
   ?res ee' r.
     (!tail. k raw (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
     gas_marked_path F ctx func s 0 r /\
-    ?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
-      (ee' with gas_obs := []) t'
+    ((?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
+      (ee' with gas_obs := []) t') \/
+     (exit_result r /\ expr_exit res r))
 Proof
   strip_tac >>
   drule_all assign_attr_add_marked >> strip_tac >>
@@ -876,10 +878,23 @@ Proof
      disch_then ACCEPT_TAC) >>
   `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (`u.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      drule_all storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      `res = INR (Error (RuntimeError "write in static context")) /\ ee' = ee` by
+        fs[write_storage_slot_eq] >>
+      qexistsl_tac [`res`, `ee'`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] u))`] >>
+      simp[expr_exit_def, exit_result_def] >>
+      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_marked_exec_def] >> strip_tac >>
+      metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `~u.vs_call_ctx.cc_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
+       loweringStateRelDefsTheory.state_rel_def, call_ctx_rel_def] >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)
@@ -906,7 +921,7 @@ Proof
     `OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)
       with vs_inst_idx := SUC u.vs_inst_idx)`] >>
-  simp[] >> conj_tac
+  simp[exit_result_def, expr_exit_def] >> conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >>
       metis_tac[gas_marked_path_then,ADD_CLAUSES]) >>
@@ -1012,7 +1027,7 @@ Proof
     write_place cx p v od`]
     assign_attr_storage_word_suffix)) >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
-  qexistsl_tac [`res`,`ee'`,`r`] >> simp[]
+  qexistsl_tac [`res`,`ee'`,`r`] >> simp[stmt_exit_def] >> metis_tac[]
 QED
 
 (* compile_assign_attr_storage_case for an e with no internal call. *)

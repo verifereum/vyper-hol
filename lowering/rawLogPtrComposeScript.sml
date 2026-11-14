@@ -7,6 +7,7 @@ Ancestors
   bodyPtrDefs compileEnv exprLoweringProps list finite_map venomState
   exprSimRawLog venomInst venomExecSemantics words emitHelper context
   emitHelperProps exprSimStack exprSimDefs exprSimHash rich_list exprSimSend
+  logEmitStep loweringStateRelDefs
 
 Theorem raw_log_tail_summary_ptr:
   dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
@@ -77,10 +78,21 @@ Theorem raw_log_run_suffix_frame:
   wb_frame cenv es0
     (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
 Proof
-  strip_tac >> drule_all raw_log_core_frame >> strip_tac >>
-  qpat_assum `run_inst_seq prefix s = OK mid` (mp_then Any mp_tac run_inst_seq_append) >>
-  disch_then (qspec_then `[inst]` mp_tac) >>
-  simp[run_inst_seq_def] >> strip_tac >> gvs[]
+  strip_tac >>
+  `run_inst_seq [inst] mid = OK t` by
+    (qpat_assum `run_inst_seq prefix s = OK mid`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `[inst]` mp_tac) >> simp[]) >>
+  `step_inst_base inst mid = OK t` by
+    (Cases_on `step_inst_base inst mid` >> gvs[run_inst_seq_def]) >>
+  `~mid.vs_call_ctx.cc_static` by
+    (CCONTR_TAC >> fs[] >>
+     `step_inst_base inst mid =
+       Abort ExHalt_abort (halt_state (set_returndata [] mid))` by
+       (irule log_emit_static_step >> simp[] >> metis_tac[]) >> gvs[]) >>
+  `~cx.txn.is_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  drule_all raw_log_core_frame >> strip_tac >> gvs[]
 QED
 
 Theorem emitted_insts_final_emit:

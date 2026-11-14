@@ -221,7 +221,9 @@ Proof
     qpat_assum `type_memory_size tv = type_memory_bytes ce ty`
       (fn th => pure_rewrite_tac [GSYM th]) >> decide_tac)) >> strip_tac >>
   `abi_decoder_budget first last b cap actual` by
-    fs[abi_scratch_effect_def, Excl "enc_def"] >>
+    (qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ actual`
+      (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+       PURE_REWRITE_RULE [abi_scratch_effect_def])) >>
   drule (calldata_pos abi_scratch_decoder_loop_slot_separation) >>
   disch_then (qspec_then `site` mp_tac) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>

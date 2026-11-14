@@ -1,6 +1,7 @@
 (* A clean scalar load at an arbitrary live local path. *)
 Theory augAssignPtrMemoryLoad
 Ancestors
+  targetPlaceSim
   bodyPtrPopNestedLiveHandoff bodyPtrPopTargetSimCurrentLocal
   bodyPtrPopTargetDefs bodyPtrDefs bodySimAugPlaceLoad
   assignTuplePtrLoadStep augAssignPtrLoad exprSimSource stmtSimAugAssign
@@ -26,7 +27,7 @@ Theorem target_memory_word_inputs_ptr:
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem)
 Proof
   strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME root_ty` by
     (gvs[expr_sim_inv_def] >> metis_tac[]) >>
   `evaluate_type (get_tenv cx) root_ty = SOME entry.type` by metis_tac[] >>
@@ -78,7 +79,7 @@ Theorem augassign_memory_load_clean_frame_ptr:
       op_taint tm (Var rp) = op_taint tn (Var rp))
 Proof
   strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `evaluate_subscripts entry.type entry.value path = INL cur` by
     (`ISL (evaluate_subscripts entry.type entry.value path)` by metis_tac[] >>
      Cases_on `evaluate_subscripts entry.type entry.value path` >>

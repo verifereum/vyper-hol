@@ -4,16 +4,6 @@ Ancestors
   notMutateExprScopes stmtLowering exprLowering vyperInterpreter vyperState vyperMisc stmtSimAugAssignPlaceMemory
 Libs monadsyntax
 
-Theorem assign_place_target_induct[local]:
-  !P. (!id. P (NameTarget id)) /\ (!nsid. P (TopLevelNameTarget nsid)) /\
-      (!bt e. P bt ==> P (SubscriptTarget bt e)) /\
-      (!bt s. P bt ==> P (AttributeTarget bt s)) ==> !bt. P bt
-Proof
-  rpt strip_tac >>
-  `(!e:expr. T) /\ !bt. P bt` suffices_by simp[] >>
-  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >> simp[]
-QED
-
 Theorem assign_place_pure_base_memory_live:
   !bt cenv cx s id path ee.
     ~expr_can_mutate cenv (target_to_expr bt) /\
@@ -21,7 +11,7 @@ Theorem assign_place_pure_base_memory_live:
     ?entry v. lookup_scopes id ee.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL v
 Proof
-  recInduct assign_place_target_induct >> rpt conj_tac >> rpt gen_tac
+  recInduct targetPlaceSimCasesBaseTheory.base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
   >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
            type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
       rpt strip_tac >> rename1 `IS_SOME (lookup_scopes name st.scopes)` >>

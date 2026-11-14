@@ -117,7 +117,10 @@ Proof
      asm_rewrite_tac[] >>
      qpat_assum `window_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [window_members_inv_def] >> metis_tac[]) >>
-  qexists_tac `r` >> fs[Abbr `t`] >> metis_tac[]
+  `t.vs_memory = r.vs_memory` by simp_tac (srw_ss()) [Abbr `t`] >>
+  qexists_tac `r` >>
+  qpat_x_assum `Abbrev (t = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem abi_encode_member_dynamic_concrete:
@@ -221,7 +224,8 @@ Proof
   `SUM (MAP abi_member_head_size (TAKE k ats)) +
    LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
     (drule_all window_members_inv_output_bounds >> strip_tac >>
-     `~is_dynamic (EL k ats)` by metis_tac[window_members_inv_source] >> gvs[] >> decide_tac) >>
+     `~is_dynamic (EL k ats)` by metis_tac[window_members_inv_source] >>
+     metis_tac[LESS_EQ_TRANS]) >>
   `EXISTS (\(_,_,_,dyn). dyn) infos ==>
     mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k))` by
     (strip_tac >>
@@ -233,7 +237,9 @@ Proof
        (drule_all window_member_static_cursor_frame >> simp[]) >>
      `~is_dynamic (EL k ats)` by metis_tac[window_members_inv_source] >>
      `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by
-       fs[window_members_inv_def, window_member_prefix_def] >>
+       (qpat_assum `window_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp_tac bool_ss [window_members_inv_def, window_member_prefix_def] >>
+        metis_tac[]) >>
      drule_all window_member_tail_step >>
      fs[window_members_inv_def]) >>
   `window_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
