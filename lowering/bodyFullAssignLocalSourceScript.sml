@@ -3,7 +3,7 @@ Theory bodyFullAssignLocalSource
 Ancestors
   gasOutcomeFull gasOutcomeFullCompose stmtSimAssignSource gasExemptCert
   gasStorage vyperStorageTrace vyperStorageFootprint vyperState
-  vyperInterpreter venomState fragExec
+  vyperInterpreter venomState fragExec fragGasOriginPtr list
 
 Theorem body_assign_local_word_full_source:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
@@ -61,3 +61,47 @@ Resume body_assign_local_word_full_source[normal]:
 QED
 
 Finalise body_assign_local_word_full_source
+
+Theorem body_assign_local_word_full_normal:
+  gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
+    (stmt_res_ok lctx) es /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (INL v, ee with gas_obs := tail)) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  find_containing_scope id ee.scopes = SOME (pre,sc,entry,rest) /\
+  entry.assignable /\ ~t.vs_halted /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s0,G0,tn0) marks (OK s,G,tn) /\
+    gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G,tf) /\
+    Q H (INL ())
+      ((ee with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
+        with gas_obs := []) G tf t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
+    (es,s0,G0,tn0) Q R
+Proof
+  strip_tac >>
+  `!tail. write_place cx (MemoryPlace id []) v (ee with gas_obs := tail) =
+    (INL (), (ee with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
+      with gas_obs := tail)` by
+    (drule_all assign_local_continuation_all_tails >> strip_tac >> gvs[]) >>
+  irule gas_outcome_full_intro >>
+  qexistsl_tac [`G`,`ee with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest`,
+    `marks`,`OK t`,`INL ()`,`tf`] >>
+  conj_tac
+  >- (drule assign_local_admissible_run >> strip_tac >> gen_tac >>
+      simp[Once bind_def]) >>
+  simp[] >> gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  conj_tac
+  >- (`gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G,tf)` by
+        (drule (cj 2 gas_origin_ptr_path_rules) >>
+         disch_then (qspec_then `[]` mp_tac) >>
+         simp[gas_origin_ptr_path_rules]) >>
+      qpat_x_assum `gas_origin_ptr_path _ (s0,_,_) _ _`
+        (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+      simp[] >> disch_then drule >> simp[]) >>
+  gvs[evaluation_state_fupdcanon]
+QED
