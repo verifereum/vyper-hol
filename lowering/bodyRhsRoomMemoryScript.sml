@@ -224,9 +224,8 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
-          drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem_room >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-          impl_tac >- simp[] >> strip_tac >>
+          drule_all (INST_TYPE [alpha |-> ``:256``]
+            unwrap_value_marked_read_mem_room) >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           `!H. valid_horizon cx st0 H es_end.storage_trace ==>
              expr_post H ctx func cenv cx e es sa sb s0
@@ -240,6 +239,7 @@ Proof
              qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u2`
                (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                   exprSimUnwrapTheory.expr_post_fields_transport) th)) >>
+             conj_tac >- first_assum ACCEPT_TAC >>
              qexists_tac `t1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           conj_tac
@@ -249,7 +249,7 @@ Proof
           disj1_tac >> qexists_tac `u2` >> conj_tac >- simp[] >>
           qx_gen_tac `H` >> strip_tac >> qexists_tac `v` >>
           `valid_horizon cx st0 H es_end.storage_trace` by fs[] >>
-          rpt conj_tac >> metis_tac[]) >>
+          fs[arithmeticTheory.ADD_COMM] >> rpt conj_tac >> metis_tac[]) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
         (assume_tac o SIMP_RULE (srw_ss()) []) >>
       `expr_exit res r` by metis_tac[] >>
