@@ -7,7 +7,7 @@ Ancestors
   vyperTypeABI abiDecoderMembers abiDecoderCoherence
   abiDecoderMemberInfos abiValidMember abiValidMembers abiDecoderContract
   abiDecoderComplexHead abiDecoderComplexGuard abiDecoderComplexExecute
-  abiDecodePtrComplexHeader abiDecoderReentryPointer abiDecoderReentry
+  abiDecodePtrPrims abiDecoderReentryPointer abiDecoderReentry
   abiDecoderAppend abiDecoderRange abiEncoder emitHelperProps exprLoweringProps
   supportedTypes vyperABI contractABI compileEnv exprLowering venomState
   venomExecSemantics words list rich_list arithmetic pair

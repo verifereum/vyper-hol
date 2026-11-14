@@ -1,6 +1,6 @@
 Theory abiDecodePtrComplexOutcomeAbort
 Ancestors
-  abiDecodePtrComplexAbort abiDecodePtrComplexHeader abiDecodePtrFlatRun abiDecodePtrFlatLayout
+  abiDecodePtrComplexAbort abiDecodePtrComplexHeader abiDecodePtrPrims abiDecodePtrFlatRun abiDecodePtrFlatLayout
   instSeqComposePtr bodyPtrBopScalarSeq
   abiDecodePtrRejectCode abiDecoderVarSequence
   emitHelper freshWrites fragExec exprSimAccounts venomInst instIdxIndep

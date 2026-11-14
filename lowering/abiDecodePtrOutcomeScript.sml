@@ -5,7 +5,7 @@ Ancestors
   abiDecodePtrRejectSequence abiDecodePtrReentry abiDecoderVarExtend
   abiDecodePtrRejectChecks abiDecoderVarSequence exprSimProps
   abiDecodePtrMemberInterface abiDecodePtrObservationTransport abiDecodePtrReentryObservations
-  abiDecodePtrComplexHeader abiDecodePtrFlatLayout abiDecodePtrRejectCode
+  abiDecodePtrPrims abiDecodePtrFlatLayout abiDecodePtrRejectCode
   abiEncoder emitHelper context abiDecodePtrNormalizedCompose abiDecoderMemberInfos
   abiDecodePtrEntry exprSimHash abiDecoderContract
   words arithmetic abiDecoderReentry abiBuiltinDecodeHeader loweringHalt execEquivParamDefs

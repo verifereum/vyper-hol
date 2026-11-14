@@ -1,7 +1,7 @@
 Theory abiDecodePtrNormalizedSuccess
 Ancestors
   loweringStateRelDefs
-  abiDecodePtrSourceOutcome abiDecodePtrComplexHeader abiDecodePtrFlatValue
+  abiDecodePtrSourceOutcome abiDecodePtrComplexHeader abiDecodePtrPrims abiDecodePtrFlatValue
   abiDecodePtrCallerMetadata abiDecodePtrMemberInterface abiDecodePtrFlatLayout
   bodyPtrBopHashSuffix bodyPtrBopScalarSeq fragExec fragGasSeqPtr fragGasPathPtr
   abiDecodePtrOpcode exprSimAbiDecodeResourceMutual stmtReasonLitFragMemory

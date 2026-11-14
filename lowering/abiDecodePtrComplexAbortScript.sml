@@ -1,6 +1,6 @@
 Theory abiDecodePtrComplexAbort
 Ancestors
-  abiDecodePtrComplexHeader abiDecodePtrScalarAbort
+  abiDecodePtrPrims abiDecodePtrScalarAbort
   bodyPtrHashBuiltinsShaTail bodyPtrBopScalarSeq
   abiDecodePtrMemberInterface exprLoweringProps
   stmtReasonLitFragMemory emitHelperProps ptrDiscipline words pred_set list
