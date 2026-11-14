@@ -23,13 +23,17 @@ Proof
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       strip_tac >> gvs[target_indices_def] >>
       imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-      imp_res_tac aug_place_supported_expr_scopes >> gvs[] >> metis_tac[])
+      imp_res_tac aug_place_supported_expr_scopes >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
+      gvs[] >> metis_tac[])
   >> (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
       simp[vyperASTTheory.expr_size_def] >> strip_tac >> rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       strip_tac >> gvs[target_indices_def] >>
-      imp_res_tac extend_place_state >> gvs[] >> metis_tac[])
+      imp_res_tac extend_place_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
+      gvs[] >> metis_tac[])
 QED
 
 Theorem tuple_place_supported_target_borrow_bytes:
