@@ -1433,7 +1433,13 @@ Resume typed_copy_origin_ptr_index_loop[body]:
        loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
   `!p. not_fresh_at sa p ==>
     lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-    op_taint tnf (Var p) = op_taint tn (Var p)` by metis_tac[] >>
+    op_taint tnf (Var p) = op_taint tn (Var p)` by
+    (qpat_assum `!p. not_fresh_at sa p ==> FLOOKUP Gq p = _ /\ _` mp_tac >>
+     qpat_assum `!p. not_fresh_at sa p ==> lookup_var p q = _` mp_tac >>
+     qpat_assum `!p. p <> x /\ p <> y ==> _` mp_tac >>
+     qpat_assum `!p. not_fresh_at sth p ==> p <> x /\ p <> y` mp_tac >>
+     qpat_assum `!p. not_fresh_at sa p ==> not_fresh_at sth p /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `lookup_var counter t = SOME (n2w j) /\ FLOOKUP Gf counter = NONE /\
    op_taint tnf (Var counter) = {}` by metis_tac[] >>
   `ptr_covers Gf tnf xs t (N * type_memory_size stv) /\
