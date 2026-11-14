@@ -82,7 +82,7 @@ Proof
   `!op. MEM op h.inst_operands ==> ?v. eval_operand op s = SOME v` by
     metis_tac[inv_remaining_head_operands, IS_SOME_EXISTS] >>
   `?u. ev_step orc p d fuel ctx h s = OK u` by
-    metis_tac[inv_crossed_predecessor_total] >>
+    metis_tac[inv_crossed_predecessor_total_observation] >>
   `dft_remaining_inv fn bb (pre ++ y::post)
       (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule (SRULE [] (Q.INST [`pre` |-> `[]`] inv_remaining_ev_step)) >>
