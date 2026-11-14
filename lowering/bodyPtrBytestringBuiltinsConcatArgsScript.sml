@@ -222,9 +222,12 @@ Resume concat_args_sim_ptr[head]:
      rpt (pop_assum kall_tac) >> simp[value_runtime_typed_def]) >>
   `body_exprs_ptr_ok cx args` by
     (qpat_x_assum `bind _ _ _ = (INL v,ee)` mp_tac >>
-     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all concat_head_arm_ptr >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+     simp[bind_def, AllCaseEqs()] >>
+     qpat_assum `(?s tv t s1 v t1. _) ==> body_exprs_ptr_ok cx args` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  mp_tac (Q.INST [`es1` |-> `ee`] (SPEC_ALL concat_head_arm_ptr)) >>
+  impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  strip_tac >>
   suspend "tail"
 QED
 
@@ -275,10 +278,17 @@ Resume concat_args_sim_ptr[compose]:
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (qpat_assum `ci_mono sa s1` mp_tac >> qpat_assum `ci_mono s1 s2` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[ci_mono_def]) >>
-  simp[] >>
+  simp[IgnAsm `!p n. _ ==> mem_bytes_at p n t2.vs_memory = _`,
+       IgnAsm `!name lb lsz. local_region _ _ _ _ _ _ ==> _`,
+       IgnAsm `!inst b sz. _`, IgnAsm `!e' st. _`] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `res = INL vs` SUBST1_TAC >>
-  qexists_tac `v::vs` >> simp[] >>
+  qexists_tac `v::vs` >>
+  simp[IgnAsm `!p n. _ ==> mem_bytes_at p n t2.vs_memory = _`,
+       IgnAsm `!aid p n. _ ==> mem_bytes_at p n t'.vs_memory = _`,
+       IgnAsm `!name lb lsz. local_region _ _ _ _ _ _ ==> _`,
+       IgnAsm `!inst b sz. _`, IgnAsm `!e' st. _`,
+       IgnAsm `EVERY _ args ==> _`] >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def] >>

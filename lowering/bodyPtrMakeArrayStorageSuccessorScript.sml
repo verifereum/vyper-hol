@@ -136,7 +136,12 @@ Resume storage_copy_body_ptr_step[path]:
   qexistsl_tac [`Gs`, `ss`, `ts`] >> simp[]
 QED
 Resume storage_copy_body_ptr_step[frame]:
-  gvs[storage_body_frame_def] >> metis_tac[]
+  qpat_assum `storage_body_frame _ G tn s Gl tl sl` mp_tac >>
+  qpat_assum `storage_body_frame _ Gl tl sl Gd td sd` mp_tac >>
+  qpat_assum `storage_body_frame _ Gd td sd Gs ts ss` mp_tac >>
+  qpat_assum `storage_body_frame _ Gs ts ss Gf tf sf` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[storage_body_frame_def] >> metis_tac[]
 QED
 Resume storage_copy_body_ptr_step[allocas]:
   drule storage_body_frame_static >> simp[]

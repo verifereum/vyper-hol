@@ -627,7 +627,6 @@ Resume make_ssa_current_fn_fn_bisim[assemble]:
 QED
 Finalise make_ssa_current_fn_fn_bisim
 
-
 (* The forward half at the input's fuel: the output finishes on the fuel
    the input took. *)
 Theorem make_ssa_current_fn_fn_bisim_fuel:

@@ -6,7 +6,8 @@ Ancestors
   vyperTypeSystem vyperTyping vyperAST list finite_map loweringPosts
   exprSimProps vyperTypeEnv vyperTypeInvariants vyperPlaceStatePreservation
   stmtSimAugAssign targetPlaceLive exprSimPopNestedBase vyperPureExpr
-  vyperStorageBackend
+  vyperStorageBackend targetLocalLive vyperStorageWritePreservation
+  vyperStoragePlaceProvenance vyperPlaceStoragePreservation accountsRelProps
 
 Theorem target_base_memory_root_ptr:
   !bt cx s id path st.
@@ -28,15 +29,18 @@ Proof
 QED
 
 Theorem target_current_local_resolution_ptr:
-  (!id. target_root (SubscriptTarget bt e) = NameTarget id ==>
-    local_target_live cx id (SubscriptTarget bt e)) /\
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  type_place_target env bt = SOME bvt /\
   eval_base_place cx bt es = (INL (PlaceR (MemoryPlace id path)),em) /\
   bind (eval_expr cx e) (read_result cx) em = (INL v,ef) /\
   lookup_scopes id ef.scopes = SOME entry ==>
   ISL (evaluate_subscripts entry.type entry.value path)
 Proof
   strip_tac >> drule target_base_memory_root_ptr >> strip_tac >>
-  fs[target_root_def, local_target_live_def] >> metis_tac[]
+  `bind (eval_expr cx e) (read_result cx) (em with gas_obs := em.gas_obs) =
+     (INL v,ef)` by simp[] >>
+  drule_all local_subscript_index_live >> simp[] >>
+  strip_tac >> simp[]
 QED
 
 Theorem target_readable_local_type_ptr:
@@ -62,8 +66,8 @@ Theorem target_index_local_source_ptr:
   expr_sim_inv cenv cx env em /\
   place_readable cx em (PlaceR (MemoryPlace id path)) /\
   expr_sim_inv cenv cx env ef /\
-  (!id. target_root (SubscriptTarget bt e) = NameTarget id ==>
-    local_target_live cx id (SubscriptTarget bt e)) /\
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  type_place_target env bt = SOME bvt /\
   eval_base_place cx bt es = (INL (PlaceR (MemoryPlace id path)),em) /\
   bind (eval_expr cx e) (read_result cx) em = (INL v,ef) /\
   place_ptr_rel cenv cx u (PlaceR (MemoryPlace id path)) a loc (Type aty) ==>
@@ -88,24 +92,20 @@ Proof
 QED
 
 Theorem target_index_pure_storage_source_ptr:
-  contract_storage_well_formed cx es /\
-  EVERY pure_expr (target_indices bt) /\ pure_expr e /\
+  storage_layout_safe cx /\ contract_storage_well_formed cx ef /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),em) /\
   bind (eval_expr cx e) (read_result cx) em = (INL v,ef) ==>
-  ef = es /\
   slots_in_range (get_storage cx ef tr) (w2n slot) tv /\
   storage_read_live cx tr (get_storage cx ef tr) slot tv
 Proof
-  strip_tac >>
-  `em = es` by metis_tac[nested_pop_eval_base_pure_state] >>
-  qpat_x_assum `em = es` SUBST_ALL_TAC >>
-  `ef = es` by
-    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
-     simp[bind_def, AllCaseEqs()] >> strip_tac >>
-     drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
-     metis_tac[read_result_state]) >> gvs[] >>
-  drule_all nested_pop_eval_base_slots >>
-  drule_all nested_pop_eval_base_live >>
-  simp[nested_pop_result_slots_def, nested_pop_result_live_def,
-       get_storage_backend_eq]
+  strip_tac >> Cases_on `type_slot_size tv = 0`
+  >- (conj_tac
+      >- metis_tac[zero_slot_size_slots_in_range] >>
+      mp_tac (Q.ISPEC `slot:bytes32` wordsTheory.w2n_lt) >>
+      simp[loweringStateRelDefsTheory.storage_read_live_def]) >>
+  `0 < type_slot_size tv` by decide_tac >>
+  drule eval_base_place_region >> simp[storage_result_region_def] >> strip_tac >>
+  conj_tac
+  >- (irule storage_place_region_slots_in_range >> metis_tac[]) >>
+  irule storage_place_region_read_live >> metis_tac[]
 QED
