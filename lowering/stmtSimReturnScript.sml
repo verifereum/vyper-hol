@@ -773,7 +773,9 @@ QED
    no GAS mark, and no variable taint. *)
 Theorem return_unlock_origin_ptr:
   compile_return_unlock cenv sa = ((),su) /\ fn_has_code sa su func /\
-  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ allocas_from lo s /\
+  ~s.vs_halted /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
   ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -891,7 +893,9 @@ Theorem compile_return_none_int_origin_ptr:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
   compile_stmt cenv lctx ty (Return NONE) sa = ((), sb) /\
   fn_has_code sa sb func /\ ret_pc_ok cenv sa s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static /\ allocas_from lo s /\
+  ~ctx_has_dalloca ctx /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
   op_taint tn (Var rpc) = {} /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -937,7 +941,9 @@ Theorem compile_return_none_int_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func
    cx lctx cenv ty ret_tv es rpc slot_size.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
-    cenv.ce_returns_count = 0 ==>
+    cenv.ce_returns_count = 0 /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
     stmt_frag_full
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx
@@ -961,7 +967,9 @@ Proof
                           func, PG) (s0, G0, tn0) [] (r, G', tn')` by
     (Cases_on `?H. valid_horizon cx st0 H es.storage_trace` >> gvs[] >>
      first_assum (drule_then strip_assume_tac) >>
-     `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+     `(FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+       ~s0.vs_call_ctx.cc_static` by
+       fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
      `allocas_from lo s0 /\ op_taint tn0 (Var rpc) = {}` by
        fs[ghost_inv_at_def] >>
      drule_all compile_return_none_int_origin_ptr >>
@@ -991,7 +999,9 @@ QED
 Theorem internal_frame_ret_none_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ret_tv rpc slot_size.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
-    cenv.ce_returns_count = 0 ==>
+    cenv.ce_returns_count = 0 /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
     frame_ret_ok_full
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r) cenv NoneT
@@ -1116,7 +1126,9 @@ Theorem return_word_suffix_origin_ptr[local]:
   fn_has_code sm su func /\ fn_has_code su sb func /\
   eval_operand op s = SOME w /\ lookup_var rpc s = SOME pc /\
   op_taint tn op = {} /\ op_taint tn (Var rpc) = {} /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static /\ allocas_from lo s /\
+  ~ctx_has_dalloca ctx /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -1156,6 +1168,8 @@ Theorem compile_return_word_int_frag_full:
    rpc slot_size.
    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
    cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+     ~cx.txn.is_static) /\
    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
    expr_sim_inv cenv cx env es /\
    stmt_exprs_ok cenv (Return (SOME e)) /\
@@ -1249,8 +1263,10 @@ Proof
   `lookup_var rpc t = SOME pc` by metis_tac[expr_post_def] >>
   `op_taint tn1 shadow_op = {} /\ op_taint tn1 (Var rpc) = {}` by
     metis_tac[ptr_val_ok_def, ghost_inv_at_def] >>
-  `~t.vs_call_ctx.cc_static /\ allocas_from lo t` by
-    fs[expr_post_def, stmt_state_rel_def, state_rel_def, ghost_inv_at_def] >>
+  `((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+     ~t.vs_call_ctx.cc_static) /\ allocas_from lo t` by
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+       ghost_inv_at_def] >>
   drule_all return_word_suffix_origin_ptr >>
   disch_then (strip_assume_tac o
     Q.INST [`tn` |-> `tn1`, `G` |-> `G1`,
@@ -1285,7 +1301,9 @@ Theorem internal_frame_ret_word_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ty tv rpc slot_size.
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
     cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
-    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
+    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
     frame_ret_ok_full
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv ty
