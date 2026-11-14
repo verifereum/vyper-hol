@@ -14,7 +14,7 @@ Theorem concat_prefix_full:
   compile_alloc_buffer 64 s2 = (ob,s3) /\
   emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = (u,s4) /\
   fn_has_code sa s4 func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ 32 < bsz /\ bsz < dimword (:256) /\
+  local_ptrs_reserved cenv sa /\ 32 <= bsz /\ bsz < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   return_buf_frame d cenv sa s /\

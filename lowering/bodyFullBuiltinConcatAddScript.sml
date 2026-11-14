@@ -120,7 +120,7 @@ Theorem concat_data_add_fresh_full:
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   lookup_var bv s = SOME bw /\ ptr_covers G tn bv s bsz /\
   not_fresh_at sc bv /\
-  32 < bsz /\ w2n bw+32 < dimword (:256) /\
+  32 <= bsz /\ w2n bw+32 < dimword (:256) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) ==>
   ?dp t G' tn'.
