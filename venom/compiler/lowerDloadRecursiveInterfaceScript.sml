@@ -6385,13 +6385,18 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem ld_recursive_member_next_clause[local]:
+val ld_member_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_next_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_next_goal``;
+
+Theorem ld_recursive_member_next_clause_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_member_next_header)
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >> rule_assum_tac BETA_RULE >>
+  qpat_x_assum `o1_initial_state_ok vs0 /\ _` strip_assume_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
     (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
   CONV_TAC ld_member_beta_conv >>
@@ -6415,12 +6420,11 @@ Proof
   qexistsl [`gb`, `copypos`, `endpos`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume ld_recursive_member_next_clause[complete]:
+Resume ld_recursive_member_next_clause_static[complete]:
   `ptr_discipline lo CS vs0` by
     (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
-     qpat_assum `o1_run_state_ok vs0` mp_tac >>
      qpat_assum `lo = vs0.vs_alloca_next` SUBST1_TAC >>
-     metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline]) >>
+     metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline_static]) >>
   `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
     (qpat_assum `ptr_discipline lo CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
@@ -6430,14 +6434,18 @@ Resume ld_recursive_member_next_clause[complete]:
      POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
   drule ld_recursive_combined_opcode_split >>
   disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
-  >- (irule ld_recursive_combined_bytes_next >>
+  >- (irule (CONV_RULE (ONCE_DEPTH_CONV
+        (REWR_CONV (BETA_CONV ``^ld_static_run vs0``)))
+        ld_recursive_combined_bytes_next_static) >>
       rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
   disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
-  >- (irule ld_recursive_combined_load_next >>
+  >- (irule (CONV_RULE (ONCE_DEPTH_CONV
+        (REWR_CONV (BETA_CONV ``^ld_static_run vs0``)))
+        ld_recursive_combined_load_next_static) >>
       rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
   suspend "nonmacro"
 QED
-Resume ld_recursive_member_next_clause[nonmacro]:
+Resume ld_recursive_member_next_clause_static[nonmacro]:
   `fmp_free_ctx CS` by
     (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
@@ -6451,7 +6459,16 @@ Resume ld_recursive_member_next_clause[nonmacro]:
   irule ld_recursive_combined_alloca_next >>
   rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC
 QED
-Finalise ld_recursive_member_next_clause
+Finalise ld_recursive_member_next_clause_static
+
+Theorem ld_recursive_member_next_clause[local]:
+  ^ld_member_next_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_member_next_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
 
 (* Curry the complete witness as one premise; matching must not flatten its
    saved certificates into a global premise search. *)
