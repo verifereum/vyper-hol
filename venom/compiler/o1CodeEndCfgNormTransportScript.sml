@@ -113,20 +113,26 @@ Theorem cfg_iter_codecopy_back[local]:
     eval_operand (Var x) u = eval_operand (Var x) v /\
     execution_frame u = execution_frame v
 Proof
-  Induct_on `n` >> rpt gen_tac >> strip_tac
-  >- (gvs[cfg_norm_iter_supply_def] >> metis_tac[]) >>
-  Cases_on `cfg_norm_round_supply s f` >>
-  rename1 `cfg_norm_round_supply s f = (mid,round_tail)` >>
-  PairCases_on `round_tail` >>
-  rename1 `cfg_norm_round_supply s f = (mid,changed,s1)` >>
-  `supply_norm_inv s1 mid /\ EVERY label_positions_ok (fn_insts mid) /\
-   fn_entry_label mid = fn_entry_label f` by metis_tac[supply_round_semantics] >>
-  Cases_on `changed` >> gvs[cfg_norm_iter_supply_def]
-  >- (rpt strip_tac >>
-      `fn_entry_state mid s0` by gvs[fn_entry_state_def] >>
-      first_x_assum drule_all >> strip_tac >>
-      drule_all cfg_round_codecopy_back >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >> drule_all cfg_round_codecopy_back >> simp[]
+  mp_tac (Q.INST [`R` |-> `\f g.
+    fn_entry_label g = fn_entry_label f /\
+    !s0 C j v x. fn_entry_state f s0 /\
+      frame_reach C g s0 j v /\ j.inst_opcode = CODECOPY /\
+      MEM (Var x) j.inst_operands /\ code_end_var g x ==>
+      ?u. frame_reach C f s0 j u /\ code_end_var f x /\
+        eval_operand (Var x) u = eval_operand (Var x) v /\
+        execution_frame u = execution_frame v`]
+    supply_iter_relation) >> BETA_TAC >> impl_tac
+  >- (rpt conj_tac
+      >- metis_tac[]
+      >- (rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+          rpt gen_tac >> strip_tac >>
+          `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
+          metis_tac[]) >>
+      rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[supply_round_semantics] >>
+      rpt gen_tac >> strip_tac >>
+      drule_all cfg_round_codecopy_back >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem cfg_fn_codecopy_back[local]:

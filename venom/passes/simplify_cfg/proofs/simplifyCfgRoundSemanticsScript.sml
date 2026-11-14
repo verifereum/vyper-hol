@@ -39,6 +39,29 @@ Proof
   metis_tac[scfg_collapse_contract_trans]
 QED
 
+Theorem scfg_iter_relation:
+  (!fn. scfg_static fn ==> R fn fn) /\
+  (!f g h. R f g /\ R g h ==> R f h) /\
+  (!fn. scfg_static fn ==> R fn (FST (simplify_cfg_round_with_labels fn))) ==>
+  !n fn. scfg_static fn ==> R fn (FST (simplify_cfg_iter_with_labels n fn))
+Proof
+  strip_tac >> Induct
+  >- (simp[simplify_cfg_iter_with_labels_def] >> metis_tac[]) >>
+  gen_tac >> disch_tac >>
+  Cases_on `simplify_cfg_round_with_labels fn` >>
+  rename1 `simplify_cfg_round_with_labels fn = (mid,changed)` >>
+  Cases_on `mid.fn_blocks = fn.fn_blocks`
+  >- (simp[simplify_cfg_iter_with_labels_def] >> metis_tac[]) >>
+  `scfg_collapse_contract fn mid` by
+    metis_tac[scfg_round_contract, pairTheory.FST] >>
+  `scfg_static mid` by
+    metis_tac[scfg_collapse_contract_def, scfg_normalized_static] >>
+  `R fn mid` by metis_tac[pairTheory.FST] >>
+  first_x_assum drule >>
+  Cases_on `simplify_cfg_iter_with_labels n mid` >>
+  gvs[simplify_cfg_iter_with_labels_def] >> metis_tac[]
+QED
+
 Theorem scfg_iter_contract:
   !n fn. scfg_static fn ==>
     scfg_static (FST (simplify_cfg_iter_with_labels n fn)) /\
@@ -46,28 +69,19 @@ Theorem scfg_iter_contract:
     fn_bisim fn (FST (simplify_cfg_iter_with_labels n fn)) /\
     !C. frame_sim L C C fn (FST (simplify_cfg_iter_with_labels n fn))
 Proof
-  Induct
-  >- (simp[simplify_cfg_iter_with_labels_def, fn_bisim_refl] >>
-      rpt strip_tac >> irule frame_sim_ctx_bisim >>
-      metis_tac[ctx_bisim_refl, scfg_static_inst_wf]) >>
-  gen_tac >> disch_tac >> suspend "step"
+  mp_tac (Q.INST [`R` |-> `\f g. scfg_static g /\
+    fn_entry_label g = fn_entry_label f /\ fn_bisim f g /\
+    !C. frame_sim L C C f g`] scfg_iter_relation) >>
+  BETA_TAC >> impl_tac
+  >- (rpt conj_tac
+      >- (simp[fn_bisim_refl] >> rpt strip_tac >>
+          irule frame_sim_ctx_bisim >>
+          metis_tac[ctx_bisim_refl, scfg_static_inst_wf])
+      >- metis_tac[fn_bisim_trans, frame_sim_trans] >>
+      metis_tac[scfg_round_contract, scfg_collapse_contract_def,
+                scfg_normalized_static]) >>
+  simp[]
 QED
-
-Resume scfg_iter_contract[step]:
-  Cases_on `simplify_cfg_round_with_labels fn` >>
-  `scfg_collapse_contract fn q` by metis_tac[scfg_round_contract, pairTheory.FST] >>
-  Cases_on `q.fn_blocks = fn.fn_blocks`
-  >- (simp[simplify_cfg_iter_with_labels_def, fn_bisim_refl] >>
-      gen_tac >> irule frame_sim_ctx_bisim >>
-      metis_tac[ctx_bisim_refl, scfg_static_inst_wf]) >>
-  `scfg_static q` by
-    metis_tac[scfg_collapse_contract_def, scfg_normalized_static] >>
-  first_x_assum drule >> strip_tac >>
-  Cases_on `simplify_cfg_iter_with_labels n q` >>
-  gvs[simplify_cfg_iter_with_labels_def, scfg_collapse_contract_def] >>
-  metis_tac[fn_bisim_trans, frame_sim_trans]
-QED
-Finalise scfg_iter_contract
 
 Theorem scfg_round_fuel_from_steps:
   (!fn. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn ==>

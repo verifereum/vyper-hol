@@ -68,26 +68,22 @@ Theorem o1_code_end_iter_reach_back:
     ~is_terminator j.inst_opcode ==>
     ?s. frame_reach C fn s0 j s /\ scfg_payload s t
 Proof
-  disch_tac >> Induct
-  >- (simp[simplify_cfg_iter_with_labels_def] >> metis_tac[scfg_payload_refl]) >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `simplify_cfg_round_with_labels fn` >>
-  rename1 `simplify_cfg_round_with_labels fn = (collapsed_fn,round_changed)` >>
-  Cases_on `collapsed_fn.fn_blocks = fn.fn_blocks`
-  >- (gvs[simplify_cfg_iter_with_labels_def] >>
-      metis_tac[scfg_payload_refl]) >>
-  `scfg_collapse_contract fn collapsed_fn` by
-    metis_tac[scfg_round_contract, pairTheory.FST] >>
-  `scfg_static collapsed_fn /\ fn_entry_state collapsed_fn s0` by
-    metis_tac[scfg_collapse_contract_def, scfg_normalized_static,
-              fn_entry_state_def] >>
-  `frame_reach C (FST (simplify_cfg_iter_with_labels n collapsed_fn)) s0 j t` by
-    (Cases_on `simplify_cfg_iter_with_labels n collapsed_fn` >>
-     gvs[simplify_cfg_iter_with_labels_def]) >>
-  `?u. frame_reach C collapsed_fn s0 j u /\ scfg_payload u t` by
-    (first_x_assum irule >> simp[]) >>
-  `?s. frame_reach C fn s0 j s /\ scfg_payload s u` by
-    (irule o1_code_end_round_reach_back >> simp[] >>
-     metis_tac[pairTheory.FST]) >>
-  metis_tac[scfg_payload_trans]
+  disch_tac >>
+  mp_tac (Q.INST [`R` |-> `\f g.
+    fn_entry_label g = fn_entry_label f /\
+    !C s0 j t. fn_entry_state f s0 /\ frame_reach C g s0 j t /\
+      j.inst_opcode <> ASSIGN /\ j.inst_opcode <> PHI /\
+      ~is_terminator j.inst_opcode ==>
+      ?s. frame_reach C f s0 j s /\ scfg_payload s t`]
+    scfg_iter_relation) >> BETA_TAC >> impl_tac
+  >- (rpt conj_tac
+      >- metis_tac[scfg_payload_refl]
+      >- (rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+          rpt gen_tac >> strip_tac >>
+          `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
+          metis_tac[scfg_payload_trans]) >>
+      rpt strip_tac
+      >- metis_tac[scfg_round_contract, scfg_collapse_contract_def] >>
+      irule o1_code_end_round_reach_back >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
