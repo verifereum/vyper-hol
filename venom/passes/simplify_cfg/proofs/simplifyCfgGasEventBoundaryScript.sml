@@ -135,69 +135,22 @@ Theorem scfg_gas_events_step_transport:
     (!u. step_inst n C i s = OK u ==>
       ?v. step_inst m D i t = OK v /\ scfg_payload u v)
 Proof
-  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
-  >- suspend "invoke" >>
-  qexistsl_tac [`n`, `[]`] >> simp[gas_events_step_def] >>
-  `scfg_result (step_inst n C i s) (step_inst n C i t)` by
+  strip_tac >>
+  drule_all gas_events_step_same_caller >>
+  disch_then (qspecl_then [`s`, `owner`, `i`] strip_assume_tac) >>
+  qexistsl_tac [`m`, `extra`] >>
+  `gas_events_step m D owner i t = gas_events_step m D owner i s` by
+    metis_tac[scfg_payload_gas_events_step] >>
+  `scfg_result (step_inst m D i s) (step_inst m D i t)` by
     metis_tac[scfg_payload_step] >>
-  `step_inst n D i t = step_inst n C i t` by simp[step_inst_non_invoke] >>
   qpat_x_assum `!nm f g cs. _` kall_tac >>
   qpat_x_assum `!nm. OPTREL _ _ _` kall_tac >>
-  Cases_on `step_inst n C i s` >> Cases_on `step_inst n C i t` >>
-  gvs[scfg_result_def, terminates_def] >>
-  simp_tac pure_ss [frame_result_rel_def, pairTheory.pair_case_def,
-    exec_result_case_def] >> metis_tac[scfg_payload_frame]
+  Cases_on `step_inst n C i s` >>
+  Cases_on `step_inst m D i s` >>
+  Cases_on `step_inst m D i t` >>
+  gvs[terminates_def, step_result_rel_def, scfg_result_def, frame_result_rel_def] >>
+  metis_tac[scfg_payload_frame]
 QED
-
-Resume scfg_gas_events_step_transport[invoke]:
-  Cases_on `decode_invoke i`
-  >- (qexistsl_tac [`n`, `[]`] >>
-      simp[gas_events_step_def, step_inst_def, terminates_def]) >>
-  PairCases_on `x` >>
-  Cases_on `lookup_function x0 C.ctx_functions`
-  >- (qpat_x_assum `!nm. OPTREL _ _ _` (qspec_then `x0` mp_tac) >>
-      Cases_on `lookup_function x0 D.ctx_functions` >> simp[] >>
-      qexistsl_tac [`n`, `[]`] >>
-      simp[gas_events_step_def, step_inst_def, terminates_def]) >>
-  rename1 `lookup_function x0 C.ctx_functions = SOME f` >>
-  `?g. lookup_function x0 D.ctx_functions = SOME g /\
-       fn_entry_label g = fn_entry_label f` by
-    (qpat_x_assum `!nm. OPTREL _ _ _` (qspec_then `x0` mp_tac) >>
-     Cases_on `lookup_function x0 D.ctx_functions` >> simp[]) >>
-  `eval_operands x1 t = eval_operands x1 s` by metis_tac[scfg_payload_operands] >>
-  Cases_on `eval_operands x1 s`
-  >- (qexistsl_tac [`n`, `[]`] >>
-      simp[gas_events_step_def, step_inst_def, terminates_def]) >>
-  rename1 `eval_operands x1 s = SOME args` >>
-  `setup_callee g args t = setup_callee f args s` by
-    metis_tac[setup_callee_execution_frame, scfg_payload_frame] >>
-  Cases_on `setup_callee f args s`
-  >- (qexistsl_tac [`n`, `[]`] >>
-      simp[gas_events_step_def, step_inst_def, terminates_def]) >>
-  rename1 `setup_callee f args s = SOME cs` >>
-  `fn_entry_state f cs` by metis_tac[setup_callee_fn_entry_state] >>
-  qpat_x_assum `!nm f g cs. _` drule >>
-  disch_then drule >> disch_then drule >> strip_tac >>
-  qexistsl_tac [`m`, `extra`] >>
-  simp[gas_events_step_def, step_inst_def] >>
-  suspend "consume"
-QED
-
-Resume scfg_gas_events_step_transport[consume]:
-  Cases_on `run_blocks n C f cs` >> gvs[terminates_def] >>
-  Cases_on `run_blocks m D g cs` >>
-  full_simp_tac pure_ss [frame_result_rel_def, pairTheory.pair_case_def,
-    exec_result_case_def] >>
-  simp[] >>
-  drule execution_frame_merge_callee >>
-  disch_then (qspec_then `s` assume_tac) >>
-  qpat_x_assum `scfg_payload s t` mp_tac >>
-  rewrite_tac[scfg_payload_def] >> disch_then SUBST1_TAC >>
-  simp[scfg_ctrl_merge_callee, scfg_ctrl_adopt_return, scfg_ctrl_bind_outputs] >>
-  Cases_on `bind_outputs i.inst_outputs i'.iret_values
-    (adopt_return_fmp i' (merge_callee_state s v))` >> simp[scfg_ctrl_def]
-QED
-Finalise scfg_gas_events_step_transport
 
 Theorem scfg_chain_gas_exec_nonleft_distance[local]:
   !d fn a b C s0 s t bb bt k owner.
