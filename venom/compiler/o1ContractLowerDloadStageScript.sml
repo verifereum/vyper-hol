@@ -328,7 +328,8 @@ Theorem lower_dload_run_contract:
 Proof
   simp[o1_run_contract_def, o1_stage_contract_def] >>
   rpt gen_tac >> strip_tac >>
-  match_mp_tac o1_static_stage_lower_dload >> fs[o1_run_state_ok_def]
+  match_mp_tac (SIMP_RULE (srw_ss()) [] o1_static_stage_lower_dload) >>
+  fs[o1_run_state_ok_def]
 QED
 
 (* One run takes function row 1 to row 2: it keeps a valid MakeSSA
