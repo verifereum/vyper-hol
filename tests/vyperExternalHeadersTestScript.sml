@@ -242,9 +242,11 @@ in
     (if in_deploy then "deploy" else "runtime") ^ "_rejected", checked))
 end) [false,true];
 
-(* The pin annotates the small AsWei operand as int8 even though its folded
-   result is uint256. Admission of the expression class does not require
-   changing the separate builtin typing rule. *)
+(* Vyper accepts the small AsWei default below and annotates its operand as
+   int8, but the unfurled frontend currently fails the separate Uint-only
+   builtin typing rule. Frontend folding owns that existing rejection.
+   The complete fixture above uses an unsigned literal; this witness checks
+   admission of the small expression class without a typing workaround. *)
 Theorem runtime_constant_mixed_folded_default:
   runtime_constant_expr []
     (Builtin (BaseT (UintT 256)) (Bop Add)
