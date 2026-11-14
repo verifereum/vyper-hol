@@ -19,7 +19,7 @@ Ancestors
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
-  runtimeLabelReadiness o1LabelReadiness
+  runtimeLabelReadiness o1LabelReadiness runtimeLabelEntry o1LabelStages
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
   (* passes: FMP lowering composition, memory merging *)
