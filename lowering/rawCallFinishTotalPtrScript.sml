@@ -700,8 +700,8 @@ Theorem raw_call_positive_nonreverting_finish_outcome:
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all raw_call_positive_nonreverting_finish >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  strip_tac >> mp_tac (SPEC_ALL raw_call_positive_nonreverting_finish) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value (ArrayV (TupleV [BoolV outcome.co_success;
