@@ -5,7 +5,7 @@ Ancestors
   bodyFullTargetArrayScalar bodyFullTargetAttribute targetSubscriptMemory
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
-  targetSubscriptSplit
+  targetSubscriptSplit bodyPtrBopInMemoryContents
 
 Definition array_tail_packet_def:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
@@ -79,4 +79,18 @@ Proof
   Cases_on `FST rb` >> gvs[eval_operand_def, target_ptr_ok_def,
     op_taint_def, op_prov_def, ghost_kept_at_def, expr_post_def] >>
   metis_tac[]
+QED
+
+(* Diagnostic: robust root layout supplies a clean current nested header. *)
+Theorem array_tail_robust_path_header_clean[local]:
+  !path tv a vs off mem k etv cap tn.
+    value_has_type tv a /\ well_formed_type_value tv /\
+    (!m. mem_agree_outside tn.t_mem mem m ==> val_in_memory tv a off m) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\
+    mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic cap)) ==>
+    mem_word_taint tn.t_mem (off + k) = {}
+Proof
+  rpt strip_tac >> irule dynarray_memory_header_clean >>
+  qexistsl_tac [`cap`, `mem`, `etv`, `vs`] >>
+  metis_tac[mem_path_offset_current_value]
 QED
