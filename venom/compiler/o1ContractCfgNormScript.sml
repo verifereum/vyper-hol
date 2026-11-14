@@ -1627,6 +1627,78 @@ Proof
             cfg_norm_function_supply_frame_sim_rf]
 QED
 
+Theorem frame_sim_rf_observation_mem_inv_lowered_abort:
+  ctx_bisim C C' /\
+  LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
+    fn_entry_label fn' = fn_entry_label fn /\
+    frame_sim vs.vs_labels C C' fn fn' /\
+    frame_sim_rf_observation in_static_abort_prefix vs.vs_labels C C' fn fn')
+    C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  mem_inv (\ctx fn inst s.
+    in_static_abort_prefix fn s \/ lowered_mem_fact eom ctx fn inst s) C vs ==>
+  mem_inv (\ctx fn inst s.
+    in_static_abort_prefix fn s \/ lowered_mem_fact eom ctx fn inst s) C' vs
+Proof
+  strip_tac >>
+  `!nm fn fn'. lookup_function nm C.ctx_functions = SOME fn /\
+               lookup_function nm C'.ctx_functions = SOME fn' ==>
+     frame_sim_rf_observation in_static_abort_prefix vs.vs_labels C C' fn fn'` by
+    (rpt strip_tac >> drule list_rel_lookup_function >> simp[] >>
+     disch_then (qspec_then `nm` mp_tac) >> simp[]) >>
+  `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
+     fn_entry_label fn' = fn_entry_label fn /\
+     frame_sim vs.vs_labels C C' fn fn') C.ctx_functions C'.ctx_functions` by
+    (irule listTheory.LIST_REL_mono >>
+     goal_assum (first_assum o mp_then Any mp_tac) >> simp[]) >>
+  fs[mem_inv_raw_reachable] >> conj_tac
+  >- (drule list_rel_lookup_function >> simp[] >>
+      disch_then (qspec_then `name` mp_tac) >>
+      Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
+      strip_tac >> metis_tac[]) >>
+  rpt strip_tac >>
+  Cases_on `inst_mem_ranges inst s = [] \/ in_revert_forward fn' s`
+  >- gvs[lowered_mem_fact_def, lowered_mem_ok_def] >>
+  drule_all frame_sim_raw_origins >> strip_tac >>
+  qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
+  rw[frame_origin_def] >> rename1 `fn_entry_state src s0` >>
+  `frame_sim_rf_observation in_static_abort_prefix vs.vs_labels C C' src fn'`
+    by metis_tac[] >>
+  fs[frame_sim_rf_observation_def] >>
+  first_x_assum (qspecl_then [`s0`, `inst`, `s`] mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `frame_reach C src s0 src_inst src_state` >>
+  `raw_reachable vs C src src_inst src_state` by
+    metis_tac[frame_reach_raw_reachable] >>
+  `in_static_abort_prefix src src_state \/
+   lowered_mem_fact eom C src src_inst src_state` by metis_tac[] >>
+  metis_tac[mem_corr_closed_rf_lowered_mem_fact, mem_corr_closed_rf_transfer]
+QED
+
+(* The abort implication belongs to the same rf witness as mem_corr. *)
+Theorem cfg_norm_stage_mem_inv_lowered_abort:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  mem_inv (\ctx fn inst s.
+    in_static_abort_prefix fn s \/ lowered_mem_fact eom ctx fn inst s) C vs ==>
+  mem_inv (\ctx fn inst s.
+    in_static_abort_prefix fn s \/ lowered_mem_fact eom ctx fn inst s) C' vs
+Proof
+  strip_tac >>
+  `ctx_bisim C C'` by (irule cfg_norm_stage_bisim >> metis_tac[]) >>
+  drule cfg_norm_stage_functions >> strip_tac >>
+  irule frame_sim_rf_observation_mem_inv_lowered_abort >> simp[] >>
+  qexists_tac `C` >> simp[] >>
+  gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule cfg_norm_function_supply_identity >> strip_tac >> simp[] >>
+  `MEM (EL n C.ctx_functions) C.ctx_functions` by simp[listTheory.EL_MEM] >>
+  drule_all cfg_norm_stage_fn_ok >> strip_tac >>
+  metis_tac[cfg_norm_function_supply_frame_sim,
+            cfg_norm_function_supply_frame_sim_rf_observation]
+QED
+
 (* ===== CFGNormalization's fuel bound ===== *)
 
 Theorem le_exp2_mult[local]:
