@@ -22,6 +22,8 @@ roots = [
   "lowering/whitelist/whitelistLogWidenScript.sml",
   # shared target source facts for the joint body
   "lowering/targetPtrFactsScript.sml",
+  # joint target simulation awaiting body assembly
+  "lowering/bodyFullTargetScript.sml",
   # joint-body decoder and encoder providers awaiting their call/return leaves
   "lowering/extcallReturnCompletedCutScript.sml",
   "lowering/extcallReturnCountedRejectScript.sml",
