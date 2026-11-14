@@ -5,6 +5,7 @@
 Theory bodyIntCallFamStmtMutationAssign
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationEffectful
+  bodyIntCallFamStmtMutationAssignValueStore
 
 Theorem intcall_assign_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
