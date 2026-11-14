@@ -1369,7 +1369,7 @@ Theorem bound_labels_create_blueprint_check:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_create_blueprint_check target offset s))))
 Proof
-  strip_tac >> simp[compile_create_blueprint_check_def] >>
+  strip_tac >> Cases_on `offset` >> simp[compile_create_blueprint_check_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_check_create_result, bound_labels_alloc_buffer,
     bound_labels_alloc_dynamic, bound_labels_copy_memory_dynamic,

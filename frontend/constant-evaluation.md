@@ -73,7 +73,9 @@ what the interpreter would run.
    bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
    endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
-   tuple indices, exponents and `method_id` (`fold_constant`).
+   tuple indices, exponents, blueprint `code_offset` and `method_id`
+   (`fold_constant`). Blueprint offsets that fold use the compiler's literal
+   `SUB`/`SGT` check; runtime offsets use unsigned `GT` before subtraction.
 4. A position whose value must be known at compile time but does not
    evaluate is rejected, never given a default: a declaration with such an
    annotation bound or `range` bound fails validation (`bound_resolved`,

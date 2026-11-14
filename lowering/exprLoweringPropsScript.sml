@@ -4149,7 +4149,8 @@ Theorem ci_mono_compile_create_blueprint_check:
   ∀target offset sa.
     ci_mono sa (SND (compile_create_blueprint_check target offset sa))
 Proof
-  rpt gen_tac >> simp[compile_create_blueprint_check_def] >> ci_mono_create_tac []
+  rpt gen_tac >> Cases_on `offset` >>
+  simp[compile_create_blueprint_check_def] >> ci_mono_create_tac []
 QED
 
 Theorem ci_mono_compile_create_blueprint_append[local]:

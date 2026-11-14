@@ -465,7 +465,8 @@ Theorem fuel_ok_compile_create_blueprint_check:
   !target_op code_offset_op Wv E.
     fuel_ok Wv {} E (compile_create_blueprint_check target_op code_offset_op)
 Proof
-  rpt gen_tac >> simp_tac std_ss [compile_create_blueprint_check_def] >>
+  rpt gen_tac >> Cases_on `code_offset_op` >>
+  simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any] >>
   simp[is_terminator_def]
 QED

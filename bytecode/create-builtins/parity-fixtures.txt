@@ -10,3 +10,5 @@ cp04_forwarder_alias
 cb01_blueprint
 cb04_blueprint_offset_salt_value
 cb03_blueprint_rawargs
+cb08_blueprint_runtime_offset
+cb09_blueprint_folded_offset

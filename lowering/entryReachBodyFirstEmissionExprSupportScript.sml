@@ -1282,7 +1282,8 @@ Theorem first_emission_create_blueprint_check[local]:
     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  rpt gen_tac >> rewrite_tac[builtinCreateTheory.compile_create_blueprint_check_def] >>
+  rpt gen_tac >> Cases_on `offset` >>
+  simp_tac (srw_ss()) [builtinCreateTheory.compile_create_blueprint_check_def] >>
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- (rpt strip_tac >> drule_at Any

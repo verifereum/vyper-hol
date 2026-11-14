@@ -396,8 +396,8 @@ Definition make_builtin_call_def:
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      let code_offset_e = kwarg_expr "code_offset" kwargs
-        (Literal (BaseT (UintT 256)) (IntL 3)) in
+      let code_offset_e = fold_constant (kwarg_expr "code_offset" kwargs
+        (Literal (BaseT (UintT 256)) (IntL 3))) in
       Call ty (CreateTarget (CreateFromBlueprint raw_args_flag) (IS_SOME salt_opt) rof
         (create_keyword_order (CreateFromBlueprint raw_args_flag)
           (IS_SOME salt_opt) (LENGTH args) kwargs))

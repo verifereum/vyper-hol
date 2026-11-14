@@ -78,6 +78,7 @@ Theorem alloc_run_compile_create_blueprint_check:
   alloc_run fresh_outputs (compile_create_blueprint_check target off)
     (\v s. fresh_outputs s)
 Proof
+  Cases_on `off` >>
   simp[compile_create_blueprint_check_def, comp_ignore_bind_def] >>
   ntac 4 (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
     reverse conj_tac

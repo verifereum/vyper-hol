@@ -53,3 +53,19 @@ Theorem cb03_blueprint_rawargs_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation cb03_blueprint_rawargs))) >> EVAL_TAC
 QED
+
+val cb08_blueprint_runtime_offset = memoryStoreWitnessLib.evaluate fixture_root "cb08_blueprint_runtime_offset"
+Theorem cb08_blueprint_runtime_offset_matches_python_oracle:
+  ^(#term cb08_blueprint_runtime_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb08_blueprint_runtime_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb08_blueprint_runtime_offset))) >> EVAL_TAC
+QED
+
+val cb09_blueprint_folded_offset = memoryStoreWitnessLib.evaluate fixture_root "cb09_blueprint_folded_offset"
+Theorem cb09_blueprint_folded_offset_matches_python_oracle:
+  ^(#term cb09_blueprint_folded_offset) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "cb09_blueprint_folded_offset")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation cb09_blueprint_folded_offset))) >> EVAL_TAC
+QED

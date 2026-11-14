@@ -5171,7 +5171,8 @@ Theorem ctor_create_blueprint_check_first_emission_strong:
       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  ntac 2 gen_tac >> rewrite_tac[compile_create_blueprint_check_def] >>
+  ntac 2 gen_tac >> Cases_on `offset` >>
+  simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
       goal_assum $ drule_at Any >> simp[]) >>
