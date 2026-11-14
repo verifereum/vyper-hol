@@ -590,7 +590,7 @@ QED
 
 Finalise ld_historical_combined_entry_clause_static
 
-Theorem ld_historical_combined_entry_clause[local]:
+Theorem ld_historical_combined_entry_clause:
   ^ld_historical_entry_header
 Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -2452,7 +2452,7 @@ QED
 
 Finalise ld_recursive_bytes_next_witness_static
 
-Theorem ld_recursive_bytes_next_witness[local]:
+Theorem ld_recursive_bytes_next_witness:
   ^ld_bytes_witness_header
 Proof
   rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -3372,7 +3372,7 @@ QED
 
 Finalise ld_recursive_geometry_load_next_witness_static
 
-Theorem ld_recursive_geometry_load_next_witness[local]:
+Theorem ld_recursive_geometry_load_next_witness:
   ^ld_geometry_load_witness_header
 Proof
   rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -3861,7 +3861,7 @@ QED
 
 Finalise ld_recursive_guarded_call_clause_static
 
-Theorem ld_recursive_guarded_call_clause[local]:
+Theorem ld_recursive_guarded_call_clause:
   ^ld_guarded_call_header
 Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -6461,7 +6461,7 @@ Resume ld_recursive_member_next_clause_static[nonmacro]:
 QED
 Finalise ld_recursive_member_next_clause_static
 
-Theorem ld_recursive_member_next_clause[local]:
+Theorem ld_recursive_member_next_clause:
   ^ld_member_next_header
 Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
