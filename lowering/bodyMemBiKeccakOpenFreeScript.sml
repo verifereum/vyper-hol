@@ -96,7 +96,8 @@ Proof
   rpt gen_tac >> simp[run_inst_seq_def] >> strip_tac >>
   Cases_on `step_inst_base h s` >> gvs[] >>
   rename1 `step_inst_base h s = OK mid` >>
-  drule_all keccak_ops_step_fields >> strip_tac >>
+  drule_at (Pat `step_inst_base _ _ = _`) keccak_ops_step_fields >>
+  simp[] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >> simp[]
 QED
 
@@ -118,7 +119,7 @@ Proof
       compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
       fresh_var_def, emit_def] >>
-  simp[emitted_insts_def, DROP_APPEND, mk_inst_def]
+  simp[emitted_insts_def, DROP_APPEND, mk_inst_def, arithmeticTheory.SUB_PLUS]
 QED
 
 Theorem keccak_typed_suffix_counted_open_free:
