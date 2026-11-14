@@ -148,3 +148,347 @@ Resume rb_compile_type_builtin_dispatch_body[encode_tuple]:
   irule rb_as_ptr_val >> irule rb_lower_abi_encode >> simp[rb_abi_encode]
 QED
 Finalise rb_compile_type_builtin_dispatch_body
+
+Theorem rb_compile_builtin_dispatch_body:
+  rb_env_ok ce /\
+  (!env ty e. rb_env_ok env ==> rb_step rb_value_ok (cfn env ty e)) ==>
+  rb_step rb_value_ok
+    (compile_builtin_dispatch_body cfn ce ret_ty ty bi args)
+Proof
+  strip_tac >> Cases_on `bi` >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  pure_rewrite_tac[compile_builtin_dispatch_body_def, LET_THM] >>
+  BETA_TAC >> simp_tac (srw_ss()) []
+  >~ [`compile_builtin_calldatasize`] >- (irule rb_as_stack_val >> simp[rb_compile_builtin_calldatasize])
+  >~ [`compile_env_var`] >- (irule rb_as_stack_val >> simp[rb_compile_env_var])
+  >~ [`compile_acc`] >- (irule rb_as_stack_val >> simp[rb_compile_acc])
+  >~ [`compile_neg`] >- suspend "neg"
+  >~ [`compile_builtin_abs`] >- suspend "abs"
+  >~ [`compile_blockhash`] >- suspend "blockhash"
+  >~ [`compile_blobhash`] >- suspend "blobhash"
+  >~ [`compile_floor`] >- suspend "floor"
+  >~ [`compile_ceil`] >- suspend "ceil"
+  >~ [`compile_uint2str`] >- suspend "uint2str"
+  >~ [`compile_slice_calldata`] >- suspend "calldata"
+  >~ [`compile_addmod`] >- suspend "addmod"
+  >~ [`compile_mulmod`] >- suspend "mulmod"
+  >~ [`compile_pow_mod256`] >- suspend "pow"
+  >~ [`compile_ecrecover`] >- suspend "ecrecover"
+  >~ [`compile_ecadd_points`] >- suspend "ecadd"
+  >~ [`compile_ecmul_point`] >- suspend "ecmul"
+  >~ [`compile_concat`] >- suspend "concat"
+  >~ [`compile_slice_code`] >- suspend "slice"
+  >~ [`compile_keccak256_bytes`] >- suspend "keccak"
+  >~ [`compile_sha256_bytes`] >- suspend "sha"
+  >~ [`compile_method_id_runtime`] >- suspend "method"
+  >~ [`compile_as_wei_value_int`] >- suspend "wei"
+  >~ [`compile_invert`] >- suspend "not"
+  >~ [`compile_builtin_len`] >- suspend "len"
+  >~ [`compile_make_tuple`] >- suspend "array"
+  >> suspend "bop"
+QED
+
+Resume rb_compile_builtin_dispatch_body[neg]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_neg]
+QED
+Resume rb_compile_builtin_dispatch_body[abs]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_builtin_abs]
+QED
+Resume rb_compile_builtin_dispatch_body[blockhash]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_blockhash]
+QED
+Resume rb_compile_builtin_dispatch_body[blobhash]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_blobhash]
+QED
+Resume rb_compile_builtin_dispatch_body[floor]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_floor]
+QED
+Resume rb_compile_builtin_dispatch_body[ceil]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_ceil]
+QED
+Resume rb_compile_builtin_dispatch_body[uint2str]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_ptr_val >> simp[rb_compile_uint2str]
+QED
+Resume rb_compile_builtin_dispatch_body[calldata]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_ptr_val >> simp[rb_compile_slice_calldata, rb_operand_ok_def]
+QED
+
+Resume rb_compile_builtin_dispatch_body[addmod]:
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_stack_val >> simp[rb_compile_addmod]
+QED
+Resume rb_compile_builtin_dispatch_body[mulmod]:
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_stack_val >> simp[rb_compile_mulmod]
+QED
+Resume rb_compile_builtin_dispatch_body[pow]:
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_stack_val >> simp[rb_compile_pow_mod256]
+QED
+Resume rb_compile_builtin_dispatch_body[ecrecover]:
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_stack_val >> simp[rb_compile_ecrecover]
+QED
+Resume rb_compile_builtin_dispatch_body[not]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> Cases_on `expr_type (HD args) = BaseT BoolT` >> simp[] >>
+  irule rb_as_stack_val >> simp[rb_emit_op, rb_compile_invert]
+QED
+Resume rb_compile_builtin_dispatch_body[wei]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> Cases_on `is_decimal_type (expr_type (HD args))` >> simp[] >>
+  irule rb_as_stack_val >> simp[rb_compile_as_wei_value_decimal, rb_compile_as_wei_value_int]
+QED
+Resume rb_compile_builtin_dispatch_body[len]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[]) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >>
+  irule rb_compile_builtin_len >>
+  gvs[rb_env_ok_def, rb_value_operand]
+QED
+Resume rb_compile_builtin_dispatch_body[ecadd]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_unwrap_value]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_unwrap_value]) >>
+  gen_tac >> strip_tac >> irule rb_as_ptr_val >> simp[rb_compile_ecadd_points]
+QED
+Resume rb_compile_builtin_dispatch_body[ecmul]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[]) >>
+  gen_tac >> strip_tac >>
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_unwrap_value, rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_ptr_val >> simp[rb_compile_ecmul_point]
+QED
+Resume rb_compile_builtin_dispatch_body[keccak]:
+  Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[] >>
+  rpt CASE_TAC >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >>
+  simp[rb_compile_keccak256_bytes, rb_compile_keccak256_bytesm, rb_compile_keccak256_word]
+QED
+Resume rb_compile_builtin_dispatch_body[sha]:
+  Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[] >>
+  rpt CASE_TAC >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >>
+  simp[rb_compile_sha256_bytes, rb_compile_sha256_bytesm, rb_compile_sha256_word]
+QED
+Resume rb_compile_builtin_dispatch_body[method]:
+  Cases_on `method_id_literal (HD args)` >> simp[]
+  >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+        (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+      (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+      gen_tac >> strip_tac >> Cases_on `ret_ty = BaseT (BytesT (Fixed 4))` >> simp[]
+      >- (irule rb_as_stack_val >> simp[rb_compile_method_id_runtime]) >>
+      irule rb_as_ptr_val >> simp[rb_compile_method_id_runtime]) >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_literal_vv]
+QED
+Resume rb_compile_builtin_dispatch_body[array]:
+  Cases_on `o'` >> simp[] >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_buffer_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_alloc_buffer])) >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >> irule rb_as_ptr_val >>
+  simp[rb_compile_make_tuple, rb_compile_make_array]
+QED
+Resume rb_compile_builtin_dispatch_body[concat]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_buffer_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_alloc_buffer]) >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_op, rb_operand_ok_def]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_buffer_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_alloc_buffer]) >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_void, rb_operand_ok_def]) >>
+  gen_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_concat]) >>
+  gen_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_op]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_void]) >>
+  simp[rb_step_def, rb_value_ok_def, rb_base_ptr, rb_buffer_ok_def]
+QED
+Resume rb_compile_builtin_dispatch_body[slice]:
+  Cases_on `is_self_code (HD args)` >> simp[] >- suspend "slice_code" >>
+  Cases_on `is_extcode (HD args)` >> simp[] >- suspend "slice_ext" >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value]) >>
+  gen_tac >> strip_tac >> Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[]
+  >- suspend "slice_bytes" >> suspend "slice_fixed"
+QED
+Resume rb_compile_builtin_dispatch_body[slice_code]:
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_ptr_val >> simp[rb_compile_slice_code]
+QED
+Resume rb_compile_builtin_dispatch_body[slice_ext]:
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_ptr_val >> simp[rb_compile_slice_extcode]
+QED
+Resume rb_compile_builtin_dispatch_body[slice_bytes]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)`
+      (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_bytestring_src]) >>
+  gen_tac >> PairCases_on `x` >> simp[] >> strip_tac >>
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_ptr_val >> simp[rb_compile_slice_data]
+QED
+Resume rb_compile_builtin_dispatch_body[slice_fixed]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_buffer_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_alloc_buffer]) >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_void]) >>
+  gen_tac >>
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_ptr_val >> simp[rb_compile_slice_data, rb_operand_ok_def]
+QED
+Resume rb_compile_builtin_dispatch_body[bop]:
+  qmatch_goalsub_abbrev_tac `if membership then _ else _` >>
+  Cases_on `membership` >> simp[] >- suspend "membership" >>
+  qmatch_goalsub_abbrev_tac `if hashing then _ else _` >>
+  Cases_on `hashing` >> simp[] >- suspend "hashing" >>
+  rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_as_stack_val >> simp[rb_compile_binop]
+QED
+Resume rb_compile_builtin_dispatch_body[membership]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value]) >>
+  gen_tac >> strip_tac >> rpt CASE_TAC
+  >>~- ([`compile_multi_exprs`], suspend "membership_list") >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_compile_var_array_membership]
+QED
+Resume rb_compile_builtin_dispatch_body[membership_list]:
+  markerLib.RESUME_TAC >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `EVERY rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_multi_exprs])) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >>
+  simp[rb_compile_list_membership_in, rb_compile_list_membership_notin]
+QED
+
+Theorem rb_literal_or_bytestring_hash[local]:
+  rb_env_ok ce /\
+  (!env ty e. rb_env_ok env ==> rb_step rb_value_ok (cfn env ty e)) ==>
+  rb_step rb_operand_ok (\st.
+    case bytestring_literal_hash e of
+      SOME h => (Lit h, st)
+    | NONE => let (v,s) = lower_value cfn ce ty e st in compile_bytestring_hash v s)
+Proof
+  strip_tac >> Cases_on `bytestring_literal_hash e` >> simp[]
+  >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+        (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+      conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value]) >>
+      gen_tac >> strip_tac >>
+      CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_bytestring_hash]) >>
+  simp[rb_step_def, rb_operand_ok_def]
+QED
+Resume rb_compile_builtin_dispatch_body[hashing]:
+  ntac 2 (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (irule (SIMP_RULE (srw_ss()) [LET_THM] rb_literal_or_bytestring_hash) >> simp[])) >>
+    gen_tac >> strip_tac) >>
+  Cases_on `b = Eq` >> simp[]
+  >- (irule rb_as_stack_val >> simp[rb_emit_op]) >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_op]) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_emit_op]
+QED
+Finalise rb_compile_builtin_dispatch_body
