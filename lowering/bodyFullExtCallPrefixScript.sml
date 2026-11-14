@@ -6,7 +6,8 @@ Ancestors
   ptrSafeRun memSafeRun venomInst venomState venomExecSemantics
   emitHelper emitHelperProps exprLoweringProps compileEnv fragExec exprSafeOperand
   instMemFrontier unitTransformDefs codegenRel contextCodegenRel loweringStateRelDefs
-  pred_set finite_map exprSimAccounts
+  pred_set finite_map exprSimAccounts bodyFullGhostFrame exprSimHashBoundary
+  exprSimExtCallCase
 
 Theorem extcall_extcodesize_exact_edge:
   emit_op EXTCODESIZE [addr] a = (op,b) /\ fn_has_code a b func /\
@@ -123,11 +124,9 @@ Theorem extcall_check_success_path:
         with vs_inst_idx := s.vs_inst_idx + 2),
        G \\ out, tn with t_var := tn.t_var |+ (out,{}))
 Proof
-  strip_tac >>
-  qpat_x_assum `compile_extcodesize_check _ _ = _` mp_tac >>
+  strip_tac >> qpat_x_assum `compile_extcodesize_check _ _ = _` mp_tac >>
   simp[exprLoweringTheory.compile_extcodesize_check_def, comp_bind_def] >>
-  pairarg_tac >> strip_tac >> gvs[] >>
-  rename1 `emit_op EXTCODESIZE [addr] a = (sz,sm)` >>
+  pairarg_tac >> strip_tac >> gvs[] >> rename1 `emit_op EXTCODESIZE [addr] a = (sz,sm)` >>
   `cs_extends a sm /\ cs_extends sm b` by
     (conj_tac >- metis_tac[emit_op_extends_next_var] >>
      irule cs_extends_emit_inst >>
@@ -136,8 +135,7 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   drule_all extcall_extcodesize_exact_edge >>
   disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >> gvs[] >>
-  qexists_tac `out` >> simp[] >> gen_tac >>
-  first_x_assum (qspecl_then [`D`,`lo`] mp_tac) >>
+  qexists_tac `out` >> simp[] >> gen_tac >> first_x_assum (qspecl_then [`D`,`lo`] mp_tac) >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
     set_var_taint_def, out_taint_def, mem_taint_def, step_writes_def, imm_taint_def,
     new_site_bytes_def, written_taint_def, source_memory_write_ranges_def,
@@ -160,20 +158,98 @@ Proof
   `<|t_mem := tn.t_mem; t_var := tn.t_var |+ (out,{});
       t_stor := tn.t_stor; t_trans := tn.t_trans; t_imm := tn.t_imm|> =
     tn with t_var := tn.t_var |+ (out,{})` by simp[taint_component_equality] >>
-  fs[] >>
-  gvs[GSYM fmap_domsub] >>
+  fs[] >> gvs[GSYM fmap_domsub] >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s,G,tn) []
     (OK (v with vs_inst_idx := SUC v.vs_inst_idx),G \\ out,
       tn with t_var := tn.t_var |+ (out,{}))` by
-    (`~(v with vs_inst_idx := SUC v.vs_inst_idx).vs_halted` by
-       simp[Abbr `v`] >>
-     drule (cj 1 gas_origin_ptr_path_rules) >>
-     disch_then (qspecl_then [`D`,`lo`,`explicit`,`ctx`,`func`,`PG`,
-       `G \\ out`,`tn with t_var := tn.t_var |+ (out,{})`] assume_tac) >>
+    (`gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (v with vs_inst_idx := SUC v.vs_inst_idx,G \\ out,
+        tn with t_var := tn.t_var |+ (out,{})) []
+       (OK (v with vs_inst_idx := SUC v.vs_inst_idx),G \\ out,
+        tn with t_var := tn.t_var |+ (out,{}))` by
+       (irule (cj 1 gas_origin_ptr_path_rules) >> simp[Abbr `v`]) >>
      qpat_x_assum `fn_has_code a b func` kall_tac >>
      qpat_x_assum `Abbrev _` kall_tac >>
      metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]) >>
   gvs[Abbr `v`, update_var_def, arithmeticTheory.ADD1,
       arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem extcall_fresh_scalar_ghost_frame:
+  ghost_inv_at D lo d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\ ~not_fresh_at sa out ==>
+  ghost_inv_at D lo d cenv cx es (G \\ out)
+    (tn with t_var := tn.t_var |+ (out,{}))
+    (update_var out w s with vs_inst_idx := idx)
+Proof
+  strip_tac >> irule ghost_inv_at_exterior_frame >>
+  qexistsl_tac [`G`,`es`,`s`,`sa`,`tn`] >>
+  simp[update_var_def] >> rpt strip_tac >>
+  `x <> out` by metis_tac[] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE, op_taint_def,
+       fmap_domsub, FLOOKUP_DRESTRICT]
+QED
+
+Theorem extcall_request_fresh_scalar:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee s /\ ~not_fresh_at sp out /\
+  sp.cs_next_var <= sb.cs_next_var /\ sp.cs_next_id <= sb.cs_next_id /\
+  sb.cs_current_bb = sp.cs_current_bb ==>
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sb stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee
+    (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `local_ptrs_reserved cenv sp /\ sa.cs_next_var <= sp.cs_next_var /\
+   EVERY (safe_operand sp) [addr;value;gas;buf;off;len;default_op]` by
+    fs[extcall_request_ready_def] >>
+  `!x. not_fresh_at sp x ==> lookup_var x (update_var out w s) = lookup_var x s` by
+    (rpt strip_tac >> `x <> out` by metis_tac[] >>
+     simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `!op. safe_operand sp op ==> eval_operand op (update_var out w s) = eval_operand op s` by
+    (Cases >> simp[safe_operand_def, eval_operand_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee (update_var out w s)` by
+    (rpt strip_tac >> irule hash_readonly_state_rel >>
+     qexistsl_tac [`s`,`sp`] >> simp[update_var_def] >>
+     fs[extcall_request_ready_def]) >>
+  `!scopes n b sz. local_region cenv scopes (update_var out w s) n b sz <=>
+     local_region cenv scopes s n b sz` by
+    (simp[local_region_def] >> rpt gen_tac >>
+     `!p k. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) k) ==> p <> out` by
+       (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  fs[extcall_request_ready_def] >>
+  simp[extcall_request_ready_def, stmt_state_rel_inst_idx] >>
+  conj_tac >-
+    (fs[loweringPostsTheory.wb_frame_def] >>
+     simp[loweringPostsTheory.wb_frame_def, update_var_def] >>
+     conj_tac >- (rpt strip_tac >>
+       `not_fresh_at sp x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+       `x <> out` by metis_tac[] >> fs[lookup_var_def, FLOOKUP_UPDATE]) >>
+     conj_tac >- metis_tac[] >>
+     irule exprSimPropsTheory.locals_kept_mem_tail >>
+     qexists_tac `s` >> simp[]) >>
+  `local_ptrs_reserved cenv sb /\
+   EVERY (safe_operand sb) [addr;value;gas;buf;off;len;default_op]` by
+    (simp[] >> metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+                         exprSafeOperandTheory.safe_operand_mono]) >>
+  fs[read_memory_def] >>
+  simp[] >>
+  conj_tac >-
+    (conj_tac >- (qexistsl_tac [`live`,`buf_size`] >> simp[]) >>
+     `!n b sz. local_region cenv ee.scopes
+        (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts) n b sz <=>
+        local_region cenv ee.scopes (update_var out w s) n b sz` by
+       simp[NoAsms, local_region_def, lookup_var_def] >> simp[] >> metis_tac[]) >>
+  fs[extcall_default_ready_def, loweringPostsTheory.expr_val_rel_def] >>
+  simp[extcall_default_ready_def, loweringPostsTheory.expr_val_rel_def, eval_operand_def,
+       lookup_var_def, update_var_def, read_memory_def] >>
+  metis_tac[]
 QED
