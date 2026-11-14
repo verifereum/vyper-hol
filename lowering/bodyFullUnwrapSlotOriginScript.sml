@@ -9,7 +9,7 @@ Ancestors
   emitHelper loweringStateRelDefs exprPtrUnwrapFrames ptrDiscipline
   exprPtrUnwrapSingleSegment rich_list venomExecSemantics exprPtrUnwrapEnsureSingle
   exprSimStorageCopy slotCopyExecution copyExecution
-  fragGasSeqAbort allocaHistory bodyBinopFragMemory
+  fragGasSeqAbort allocaHistory allocaHistoryFragment
   exprSimPtrTopLevelStorageCopy abiBufferAllocationCode fragExec
 
 
@@ -323,7 +323,7 @@ Resume unwrap_ensure_slot_origin_execution[single_history]:
      simp[NoAsms, mstore_def, write_memory_with_expansion_def, update_var_def]) >>
   `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sm sb)` by
     (Cases_on `loc=LocStorage` >> gvs[mk_inst_def]) >>
-  drule_all alloca_history_no_alloca_slice >>
+  drule_all allocaHistoryFragmentTheory.alloca_history_no_alloca_slice >>
   `a.vs_inst_idx + LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts` by
     (`isPREFIX sm.cs_current_insts sb.cs_current_insts` by metis_tac[pairTheory.PAIR_EQ] >>
      qpat_x_assum `a.vs_inst_idx = LENGTH sm.cs_current_insts` mp_tac >>
