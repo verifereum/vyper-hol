@@ -1,7 +1,7 @@
 (* Zero-high-bound member-address setup. *)
 Theory ctorDeployMemoryRunPtrPrefixMemberSetup
 Ancestors
-  loweringStateRelDefs
+  fragGasSeqPtr fragGasOriginPtrLoop bodyPtrPrecompileBuiltinsSeq loweringStateRelDefs
   exprSimUnwrap slotCopyExecution compileEnv
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence ctorDeployMemoryRunPtrPrefixCopyRun
@@ -95,24 +95,12 @@ Theorem prefix_member_add_block:
    ptr_safe_block D lo fuel ctx fn PG G tn bb s)
 Proof
   strip_tac >>
-  `step_inst fuel ctx (mk_inst iid ADD [a;c] [x]) s =
-     OK (update_var x (u+v) s)` by
-    (simp[step_inst_non_invoke, mk_inst_def] >>
-     pure_rewrite_tac[GSYM mk_inst_def] >>
-     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
-  `~is_terminator (mk_inst iid ADD [a;c] [x]).inst_opcode` by simp[mk_inst_def, is_terminator_def] >>
-  drule_all ptr_safe_block_step >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid ADD [a;c] [x]) s` by
-    (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
-  `ghost_step fuel ctx PG G tn (mk_inst iid ADD [a;c] [x]) s =
-     (set_prov G [x] (first_prov G [a;c]),
-      tn with t_var := tn.t_var |+ (x,{}))` by
-    (`step_taint (mk_inst iid ADD [a;c] [x]) s (update_var x (u+v) s) tn =
-        tn with t_var := tn.t_var |+ (x,{})` by
-       (irule prefix_member_add_taint >> simp[]) >>
-     pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
-     irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
-  simp[]
+  mp_tac (Q.INST [`opc` |-> `ADD`, `b` |-> `c`, `f` |-> `fuel`]
+    prefix_bool_body_arith_certificate) >>
+  simp[LET_THM, prefix_member_add_taint] >> strip_tac >>
+  `~is_terminator (mk_inst iid ADD [a;c] [x]).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all ptr_safe_block_step >> simp[]
 QED
 
 Theorem prefix_member_dload_block:
@@ -160,7 +148,10 @@ Theorem prefix_member_static_pair:
          SOME (mk_inst (iid+1) ADD [Var dst;Lit vo] [y]) ==>
        ptr_safe_block D lo fuel ctx fn PG H qt bb
          (t with vs_inst_idx := s.vs_inst_idx+2) ==>
-       ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+       ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn
+       [mk_inst iid ADD [src;off] [x];
+        mk_inst (iid+1) ADD [Var dst;Lit vo] [y]] s H qt)
 Proof
   strip_tac >>
   qabbrev_tac `s1 = update_var x (a+ao) s` >>
@@ -179,12 +170,83 @@ Proof
      Cases_on `first_prov G [src;off]` >>
      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def,
          eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  `eval_operand (Lit vo) s1 = SOME vo /\ op_taint q1 (Lit vo) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst iid ADD [src;off] [x]) s = OK s1 /\
    step_inst_base (mk_inst (iid+1) ADD [Var dst;Lit vo] [y]) s1 = OK s2` by
-    (unabbrev_all_tac >> conj_tac >> irule slotCopyExecutionTheory.slot_copy_step_add >>
-     simp[eval_operand_def]) >>
+    (unabbrev_all_tac >> conj_tac >>
+     irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn
+     [mk_inst iid ADD [src;off] [x];
+      mk_inst (iid+1) ADD [Var dst;Lit vo] [y]] s G2 q2` by
+    (gen_tac >>
+     `s with vs_inst_idx := s.vs_inst_idx = s /\
+      s1 with vs_inst_idx := s.vs_inst_idx = s1` by
+       simp[Abbr `s1`, update_var_def, venom_state_component_equality] >>
+     `allocas_from lo (s1 with vs_inst_idx := s.vs_inst_idx+1)` by
+       (qpat_x_assum `allocas_from lo s1` mp_tac >> simp[allocas_from_def]) >>
+     (* Both ADD transitions use the shared execution/pointer/ghost certificate. *)
+     `step_inst 0 ctx (mk_inst iid ADD [src;off] [x]) s = OK s1 /\
+      ptr_safe_step D' lo 0 ctx fn PG G tn (mk_inst iid ADD [src;off] [x]) s /\
+      ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;off] [x]) s = (G1,q1)` by
+       (conj_tac
+        >- (simp[Abbr `s1`] >>
+            irule (cj 2 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+        conj_tac
+        >- (irule (cj 3 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+        `step_taint (mk_inst iid ADD [src;off] [x]) s (update_var x (a+ao) s) tn = q1` by
+          (simp[Abbr `q1`, prefix_member_add_taint]) >>
+        pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
+        qunabbrev_tac `G1` >>
+        irule (cj 4 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+     `step_inst 0 ctx (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1) =
+        OK (s2 with vs_inst_idx := s.vs_inst_idx+1) /\
+      ptr_safe_step D' lo 0 ctx fn PG G1 q1 (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1) /\
+      ghost_step 0 ctx PG G1 q1 (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1) = (G2,q2)` by
+       (conj_tac
+        >- (simp[Abbr `s2`, GSYM instIdxIndepTheory.update_var_idx] >>
+            irule (cj 2 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >>
+            simp[instIdxIndepTheory.eval_op_inst_idx, SF SFY_ss]) >>
+        conj_tac
+        >- (irule (cj 3 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >>
+            simp[instIdxIndepTheory.eval_op_inst_idx, SF SFY_ss]) >>
+        `step_taint (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+           (s1 with vs_inst_idx := s.vs_inst_idx+1)
+           (update_var y (d+vo) (s1 with vs_inst_idx := s.vs_inst_idx+1)) q1 = q2` by
+          simp[Abbr `q2`, prefix_member_add_taint] >>
+        `first_prov G1 [Var dst;Lit vo] = SOME (b,sz)` by
+          simp[first_prov_def, op_prov_def] >>
+        qunabbrev_tac `G2` >>
+        qpat_x_assum `first_prov G1 _ = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+        qpat_x_assum `step_taint _ _ _ q1 = q2` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+        irule (cj 4 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >>
+        simp[instIdxIndepTheory.eval_op_inst_idx, SF SFY_ss]) >>
+     qabbrev_tac `xs = [mk_inst iid ADD [src;off] [x];
+                        mk_inst (iid+1) ADD [Var dst;Lit vo] [y]]` >>
+     qspecl_then [`xs`,`s`,`\j. EL j [s;s1;s2]`,`\j. EL j [G;G1;G2]`,
+                  `\j. EL j [tn;q1;q2]`]
+       (MATCH_MP_TAC o SRULE [] o Q.SPEC `[]` o Q.GEN `ys`)
+       prefix_trace_inst_seq_ptr >>
+     qunabbrev_tac `xs` >> rpt conj_tac
+     >- simp[mk_inst_def]
+     >- (simp[] >> gen_tac >> strip_tac >>
+         `j = 0 \/ j = 1` by decide_tac >>
+         pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC >> simp[]) >>
+     simp[inst_seq_ptr_def]) >>
   qexistsl_tac [`G2`,`q2`] >>
+  qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (fn th => pure_rewrite_tac[th, AND_CLAUSES, FORALL_SIMP]) >>
   simp[Abbr `G2`, Abbr `q2`, Abbr `q1`, Abbr `s2`, Abbr `s1`,
        set_prov_def, FLOOKUP_UPDATE, op_taint_def, eval_operand_def,
        lookup_var_def, update_var_def] >>
@@ -223,7 +285,10 @@ Theorem prefix_member_offset_pair:
        get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (iid+1) DLOAD [Var x] [y]) ==>
        ptr_safe_block D lo fuel ctx fn PG H qt bb
          (t with vs_inst_idx := s.vs_inst_idx+2) ==>
-       ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+       ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn
+       [mk_inst iid ADD [src;Lit ao] [x];
+        mk_inst (iid+1) DLOAD [Var x] [y]] s H qt)
 Proof
   strip_tac >>
   qabbrev_tac `s1 = update_var x (a+ao) s` >>
@@ -231,8 +296,12 @@ Proof
   qabbrev_tac `s2 = update_var y w s1` >>
   qabbrev_tac `G1 = set_prov G [x] (first_prov G [src;Lit ao])` >>
   qabbrev_tac `q1 = tn with t_var := tn.t_var |+ (x,{})` >>
+  `eval_operand (Lit ao) s = SOME ao /\ op_taint tn (Lit ao) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
-    (simp[Abbr `s1`] >> irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
+    (simp[Abbr `s1`] >>
+     irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
   `eval_operand (Var x) s1 = SOME (a+ao) /\
    op_taint q1 (Var x) = {} /\ allocas_from lo s1` by
     (simp[Abbr `s1`, Abbr `q1`, eval_operand_def, lookup_var_def, update_var_def,
@@ -250,7 +319,63 @@ Proof
    (?w. eval_operand (Var y) t = SOME w)` by
     simp[Abbr `s2`, Abbr `s1`, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn
+     [mk_inst iid ADD [src;Lit ao] [x];
+      mk_inst (iid+1) DLOAD [Var x] [y]] s
+     (DRESTRICT G1 (COMPL {y})) (q1 with t_var := q1.t_var |+ (y,{}))` by
+    (gen_tac >>
+     `s with vs_inst_idx := s.vs_inst_idx = s /\
+      s1 with vs_inst_idx := s.vs_inst_idx = s1` by
+       simp[Abbr `s1`, update_var_def, venom_state_component_equality] >>
+     (* ADD at s *)
+     `step_inst 0 ctx (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
+       (simp[Abbr `s1`] >>
+        irule (cj 2 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+     `ptr_safe_step D' lo 0 ctx fn PG G tn (mk_inst iid ADD [src;Lit ao] [x]) s` by
+       (irule (cj 3 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+     `ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;Lit ao] [x]) s = (G1,q1)` by
+       (`step_taint (mk_inst iid ADD [src;Lit ao] [x]) s (update_var x (a+ao) s) tn = q1` by
+          (simp[Abbr `q1`, Abbr `s1`] >> irule prefix_member_add_taint >> simp[]) >>
+        pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
+        qunabbrev_tac `G1` >>
+        irule (cj 4 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+     (* DLOAD at idx+1 *)
+     `step_inst 0 ctx (mk_inst (iid+1) DLOAD [Var x] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1) =
+        OK (s2 with vs_inst_idx := s.vs_inst_idx+1) /\
+      ghost_step 0 ctx PG G1 q1 (mk_inst (iid+1) DLOAD [Var x] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1) =
+        (DRESTRICT G1 (COMPL {y}), q1 with t_var := q1.t_var |+ (y,{})) /\
+      ptr_safe_step D' lo 0 ctx fn PG G1 q1 (mk_inst (iid+1) DLOAD [Var x] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1)` by
+       (`eval_operand (Var x) (s1 with vs_inst_idx := s.vs_inst_idx+1) = SOME (a+ao) /\
+         abi_decode_load DLOAD (a+ao) (s1 with vs_inst_idx := s.vs_inst_idx+1) = w /\
+         allocas_from lo (s1 with vs_inst_idx := s.vs_inst_idx+1)` by
+          (qpat_x_assum `allocas_from lo s1` mp_tac >>
+           simp[instIdxIndepTheory.eval_op_inst_idx, allocas_from_def, Abbr `w`,
+                abi_decode_load_def, abi_decode_source_def]) >>
+        qunabbrev_tac `s2` >>
+        drule_all prefix_member_dload_pair >>
+        simp[LET_THM, instIdxIndepTheory.update_var_idx]) >>
+     qabbrev_tac `xs = [mk_inst iid ADD [src;Lit ao] [x];
+                        mk_inst (iid+1) DLOAD [Var x] [y]]` >>
+     qspecl_then [`xs`,`s`,`\j. EL j [s;s1;s2]`,
+                  `\j. EL j [G;G1;DRESTRICT G1 (COMPL {y})]`,
+                  `\j. EL j [tn;q1;q1 with t_var := q1.t_var |+ (y,{})]`]
+       (MATCH_MP_TAC o SRULE [] o Q.SPEC `[]` o Q.GEN `ys`)
+       prefix_trace_inst_seq_ptr >>
+     qunabbrev_tac `xs` >> rpt conj_tac
+     >- simp[mk_inst_def]
+     >- (simp[] >> gen_tac >> strip_tac >>
+         `j = 0 \/ j = 1` by decide_tac >>
+         pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC >> simp[]) >>
+     simp[inst_seq_ptr_def]) >>
   qexistsl_tac [`DRESTRICT G1 (COMPL {y})`,`q1 with t_var := q1.t_var |+ (y,{})`] >>
+  qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (fn th => pure_rewrite_tac[th, AND_CLAUSES, FORALL_SIMP]) >>
   simp[Abbr `q1`, op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   conj_tac >-
     (rpt strip_tac >> simp[Abbr `G1`] >>
@@ -288,7 +413,8 @@ Theorem prefix_member_setup_static_pair:
           get_instruction bb (s.vs_inst_idx+j) = SOME (EL j (emitted_insts st middle))) ==>
        ptr_safe_block D lo fuel ctx fn PG H qt bb
          (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st middle)) ==>
-       ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+       ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >> drule prefix_member_setup_code >> simp[] >> strip_tac >> gvs[] >>
   `dst <> "%" ++ toString st.cs_next_var /\
@@ -341,7 +467,8 @@ Theorem prefix_member_setup_dynamic_pair:
           get_instruction bb (s.vs_inst_idx+j) = SOME (EL j (emitted_insts st middle))) ==>
        ptr_safe_block D lo fuel ctx fn PG H qt bb
          (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st middle)) ==>
-       ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+       ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >> drule prefix_member_setup_code >> simp[] >> strip_tac >> gvs[] >>
   qabbrev_tac `x = "%" ++ toString st.cs_next_var` >>
@@ -381,7 +508,26 @@ Proof
   drule_at (Pat `run_inst_seq _ _ = _`) prefix_member_static_pair >>
   disch_then drule_all >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn
+     [mk_inst st.cs_next_id ADD [src;Lit (n2w ao)] [x];
+      mk_inst (st.cs_next_id+1) DLOAD [Var x] [y];
+      mk_inst (st.cs_next_id+2) ADD [src;Var y] [z];
+      mk_inst (st.cs_next_id+3) ADD [Var dst;Lit (n2w vo)] [w]] s H' qt'` by
+    (gen_tac >>
+     `!l1 l2 l3 l4:instruction. [l1;l2;l3;l4] = [l1;l2] ++ [l3;l4]` by simp[] >>
+     pop_assum (fn th => once_rewrite_tac[th]) >>
+     `EVERY (\i. ~is_terminator i.inst_opcode)
+        [mk_inst st.cs_next_id ADD [src;Lit (n2w ao)] [x];
+         mk_inst (st.cs_next_id+1) DLOAD [Var x] [y]]` by
+       simp[mk_inst_def, is_terminator_def] >>
+     drule_all inst_seq_ptr_append >>
+     disch_then (fn th => once_rewrite_tac[th]) >>
+     qexistsl_tac [`H`,`qt`] >> conj_tac >- simp[] >>
+     qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ H qt _ _ _ _` mp_tac >>
+     simp[Abbr `u2`, GSYM ADD_ASSOC]) >>
   qexistsl_tac [`H'`,`qt'`] >>
+  qpat_assum `!D'. inst_seq_ptr _ _ _ _ _ G tn _ s H' qt'`
+    (fn th => pure_rewrite_tac[th, AND_CLAUSES, FORALL_SIMP]) >>
   fs[Abbr `z`, Abbr `w`] >>
   conj_tac >-
     (rpt strip_tac >>
@@ -429,7 +575,8 @@ Theorem prefix_member_setup_ghost:
           get_instruction bb (s.vs_inst_idx+j) = SOME (EL j (emitted_insts st middle))) ==>
        ptr_safe_block D lo fuel ctx fn PG H qt bb
          (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st middle)) ==>
-       ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+       ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >> Cases_on `dyn`
   >- (irule prefix_member_setup_dynamic_pair >> metis_tac[]) >>
@@ -488,7 +635,8 @@ Theorem prefix_member_setup_pair:
           get_instruction bb (s.vs_inst_idx+j) = SOME (EL j (emitted_insts st middle))) ==>
        ptr_safe_block D lo fuel ctx fn PG H qt bb
          (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st middle)) ==>
-       ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+       ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>

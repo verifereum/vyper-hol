@@ -1,9 +1,9 @@
 (* Finite pure clamp instruction interfaces. *)
 Theory ctorDeployMemoryRunPtrPrefixScalarClamps
 Ancestors
-  loweringStateRelDefs
+  fragGasSeqPtr fragGasOriginPtrLoop loweringStateRelDefs
   emitHelperProps venomExecProofs exprSimUnwrap instIdxIndep slotCopyExecution compileEnv
-  ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
+  ctorDeployMemoryRunPtrPrefixScalarPackage
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSteps
   abiEncoder emitHelper exprLoweringProps
   venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
@@ -253,6 +253,130 @@ QED
 
 
 
+(* Indexed transition evidence, including the reverting ASSERT branch. *)
+Theorem prefix_scalar_shift_clamp_certificate[local]:
+  eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  a = (if left then word_lsl w (w2n n) else word_lsr w (w2n n)) /\
+  i = mk_inst iid (if left then SHL else SHR) [Lit n;Var v] [y] /\
+  j = mk_inst (iid+1) ISZERO [Var y] [z] /\
+  c = mk_inst (iid+2) ASSERT [Var z] [] /\
+  s1 = update_var y a s /\ t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx /\
+  s2 = update_var z (bool_to_word (a = 0w)) t1 /\
+  t2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx) /\
+  G1 = DRESTRICT G (COMPL {y}) /\ G2 = DRESTRICT G1 (COMPL {z}) /\
+  tn1 = step_taint i s s1 tn /\ tn2 = step_taint j t1 s2 tn1 ==>
+  step_inst fuel ctx i s = OK s1 /\
+  step_inst fuel ctx j t1 = OK s2 /\
+  ghost_step fuel ctx PG G tn i s = (G1,tn1) /\
+  ghost_step fuel ctx PG G1 tn1 j t1 = (G2,tn2) /\
+  ptr_safe_step D lo fuel ctx fn PG G tn i s /\
+  ptr_safe_step D lo fuel ctx fn PG G1 tn1 j t1 /\
+  ptr_safe_step D lo fuel ctx fn PG G2 tn2 c t2 /\
+  step_inst fuel ctx c t2 = (if a = 0w then OK t2
+    else Abort Revert_abort (revert_state (set_returndata [] t2))) /\
+  ghost_step fuel ctx PG G2 tn2 c t2 = (G2,tn2) /\
+  op_taint tn1 (Var y) = {} /\ op_taint tn2 (Var z) = {}
+Proof
+  strip_tac >>
+  `eval_operand (Var y) t1 = SOME a /\
+   eval_operand (Var z) t2 = SOME (bool_to_word (a = 0w))` by
+    simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `allocas_from lo t1 /\ allocas_from lo t2` by
+    (fs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `op_taint tn1 (Var y) = {} /\ op_taint tn2 (Var z) = {}` by
+    (Cases_on `left` >> fs[prefix_scalar_shift_clean, prefix_guard_output_taint]) >>
+  `step_inst fuel ctx i s = OK s1` by
+    (Cases_on `left` >> fs[step_inst_non_invoke] >>
+     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL,
+               venomStateTheory.eval_operand_def]) >>
+  `step_inst fuel ctx j t1 = OK s2` by
+    (fs[step_inst_non_invoke] >>
+     irule emitHelperPropsTheory.step_ISZERO >>
+     fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ghost_step fuel ctx PG G tn i s = (G1,tn1)` by
+    (Cases_on `left` >> fs[prefix_scalar_shift_ghost]) >>
+  `ghost_step fuel ctx PG G1 tn1 j t1 = (G2,tn2)` by
+    (simp[] >> once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
+     irule prefix_iszero_ghost_step >>
+     gvs[step_inst_non_invoke, emitHelperPropsTheory.step_ISZERO]) >>
+  `ptr_safe_step D lo fuel ctx fn PG G tn i s` by
+    (simp[] >> irule prefix_scalar_shift_ptr >>
+     simp[] >> Cases_on `left` >> simp[]) >>
+  `step_inst fuel ctx c t2 = (if a = 0w then OK t2
+    else Abort Revert_abort (revert_state (set_returndata [] t2)))` by
+    (simp[step_inst_non_invoke] >>
+     qpat_assum `eval_operand (Var z) t2 = SOME _`
+       (mp_then Any (qspec_then `iid+2` mp_tac)
+         (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def]
+           venomExecProofsTheory.step_assert_behavior)) >>
+     Cases_on `a = 0w` >> gvs[bool_to_word_def]) >>
+  gvs[prefix_iszero_ptr_step, prefix_assert_ptr_step, prefix_assert_ghost_step]
+QED
+
+Theorem prefix_scalar_signed_clamp_certificate[local]:
+  eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
+  v <> y /\ FLOOKUP G v = NONE /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  i = mk_inst iid SIGNEXTEND [Lit n;Var v] [y] /\
+  j = mk_inst (iid+1) EQ [Var v;Var y] [z] /\
+  c = mk_inst (iid+2) ASSERT [Var z] [] /\
+  s1 = update_var y (sign_extend n w) s /\
+  t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx /\
+  s2 = update_var z (bool_to_word (w = sign_extend n w)) t1 /\
+  t2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx) /\
+  G1 = DRESTRICT G (COMPL {y}) /\ G2 = DRESTRICT G1 (COMPL {z}) /\
+  tn1 = step_taint i s s1 tn /\ tn2 = step_taint j t1 s2 tn1 ==>
+  step_inst fuel ctx i s = OK s1 /\
+  step_inst fuel ctx j t1 = OK s2 /\
+  ghost_step fuel ctx PG G tn i s = (G1,tn1) /\
+  ghost_step fuel ctx PG G1 tn1 j t1 = (G2,tn2) /\
+  ptr_safe_step D lo fuel ctx fn PG G tn i s /\
+  ptr_safe_step D lo fuel ctx fn PG G1 tn1 j t1 /\
+  ptr_safe_step D lo fuel ctx fn PG G2 tn2 c t2 /\
+  step_inst fuel ctx c t2 = (if w = sign_extend n w then OK t2
+    else Abort Revert_abort (revert_state (set_returndata [] t2))) /\
+  ghost_step fuel ctx PG G2 tn2 c t2 = (G2,tn2) /\
+  op_taint tn1 (Var y) = {} /\ op_taint tn2 (Var z) = {}
+Proof
+  strip_tac >>
+  `eval_operand (Var v) t1 = SOME w /\
+   eval_operand (Var y) t1 = SOME (sign_extend n w) /\
+   eval_operand (Var z) t2 = SOME (bool_to_word (w = sign_extend n w))` by
+    gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `allocas_from lo t1 /\ allocas_from lo t2` by
+    (fs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `op_taint tn1 (Var y) = {}` by fs[prefix_scalar_shift_clean] >>
+  `op_taint tn1 (Var v) = {}` by
+    (fs[op_taint_def] >>
+     simp[op_taint_def, step_taint_def, set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE]) >>
+  `op_taint tn2 (Var z) = {}` by gvs[prefix_scalar_eq_clean] >>
+  `step_inst fuel ctx i s = OK s1` by
+    (simp[step_inst_non_invoke] >>
+     metis_tac[emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
+  `step_inst fuel ctx j t1 = OK s2` by
+    (simp[step_inst_non_invoke] >> irule emitHelperPropsTheory.step_EQ >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ghost_step fuel ctx PG G tn i s = (G1,tn1)` by
+    fs[prefix_scalar_shift_ghost] >>
+  `ghost_step fuel ctx PG G1 tn1 j t1 = (G2,tn2)` by
+    (simp[] >> once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
+     irule prefix_scalar_eq_ghost >> gvs[]) >>
+  `ptr_safe_step D lo fuel ctx fn PG G tn i s` by
+    simp[prefix_scalar_shift_ptr] >>
+  `ptr_safe_step D lo fuel ctx fn PG G1 tn1 j t1` by
+    (simp[] >> irule prefix_scalar_eq_ptr >> simp[FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+  `step_inst fuel ctx c t2 = (if w = sign_extend n w then OK t2
+    else Abort Revert_abort (revert_state (set_returndata [] t2)))` by
+    (simp[step_inst_non_invoke] >>
+     qpat_assum `eval_operand (Var z) t2 = SOME _`
+       (mp_then Any (qspec_then `iid+2` mp_tac)
+         (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def]
+           venomExecProofsTheory.step_assert_behavior)) >>
+     Cases_on `w = sign_extend n w` >> simp[bool_to_word_def]) >>
+  gvs[prefix_assert_ptr_step, prefix_assert_ghost_step]
+QED
+
 Theorem prefix_scalar_shift_clamp_continuation:
   eval_operand (Var v) s = SOME w /\ op_taint tn (Var v) = {} /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
@@ -285,46 +409,29 @@ Proof
   qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
   qmatch_goalsub_abbrev_tac `step_taint j t1 s2 tn1` >>
   qabbrev_tac `t2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
-  `eval_operand (Var y) t1 = SOME a` by
-    simp[Abbr `t1`, Abbr `s1`, eval_operand_def, lookup_var_def,
-         update_var_def, FLOOKUP_UPDATE] >>
-  `eval_operand (Var z) t2 = SOME (bool_to_word (a = 0w))` by
-    simp[Abbr `t2`, Abbr `s2`, eval_operand_def, lookup_var_def,
-         update_var_def, FLOOKUP_UPDATE] >>
-  `allocas_from lo t1 /\ allocas_from lo t2` by
-    (gvs[Abbr `t1`, Abbr `s1`, Abbr `t2`, Abbr `s2`,
-         allocas_from_def, update_var_def] >> metis_tac[]) >>
-  `op_taint tn1 (Var y) = {}` by
-    (Cases_on `left` >> simp[Abbr `tn1`, Abbr `i`, prefix_scalar_shift_clean]) >>
-  `op_taint (step_taint j t1 s2 tn1) (Var z) = {}` by
-    simp[Abbr `j`, prefix_guard_output_taint] >>
+  `step_inst fuel ctx i s = OK s1 /\
+   step_inst fuel ctx j t1 = OK s2 /\
+   ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1) /\
+   ghost_step fuel ctx PG (DRESTRICT G (COMPL {y})) tn1 j t1 =
+     (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1) /\
+   ptr_safe_step D lo fuel ctx fn PG G tn i s /\
+   ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y})) tn1 j t1 /\
+   ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
+     (step_taint j t1 s2 tn1) (mk_inst (iid+2) ASSERT [Var z] []) t2 /\
+   step_inst fuel ctx (mk_inst (iid+2) ASSERT [Var z] []) t2 =
+     (if a = 0w then OK t2
+      else Abort Revert_abort (revert_state (set_returndata [] t2))) /\
+   ghost_step fuel ctx PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
+     (step_taint j t1 s2 tn1) (mk_inst (iid+2) ASSERT [Var z] []) t2 =
+     (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1) /\
+   op_taint tn1 (Var y) = {} /\ op_taint (step_taint j t1 s2 tn1) (Var z) = {}` by
+    (once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
+     irule prefix_scalar_shift_clamp_certificate >>
+     simp[Abbr `a`, Abbr `i`, Abbr `j`, Abbr `s1`, Abbr `t1`, Abbr `s2`, Abbr `t2`, Abbr `tn1`] >>
+     qexistsl [`iid`,`left`,`n`,`v`,`w`] >> simp[]) >>
   `i.inst_opcode <> INVOKE /\ j.inst_opcode <> INVOKE /\
    ~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode` by
     (Cases_on `left` >> simp[Abbr `i`, Abbr `j`, mk_inst_def, is_terminator_def]) >>
-  `step_inst fuel ctx i s = OK s1` by
-    (simp[step_inst_non_invoke] >>
-     Cases_on `left` >> simp[Abbr `i`, Abbr `s1`, Abbr `a`] >>
-     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
-  `step_inst fuel ctx j t1 = OK s2` by
-    (simp[step_inst_non_invoke] >>
-     simp[Abbr `j`, Abbr `s2`, emitHelperPropsTheory.step_ISZERO]) >>
-  `ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1)` by
-    (Cases_on `left` >>
-     qpat_assum `eval_operand (Var v) s = SOME w`
-       (mp_then Any mp_tac prefix_scalar_shift_ghost) >>
-     simp[Abbr `i`, Abbr `s1`, Abbr `tn1`, Abbr `a`]) >>
-  `ghost_step fuel ctx PG (DRESTRICT G (COMPL {y})) tn1 j t1 =
-     (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1)` by
-    (simp[Abbr `j`] >> once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
-     irule prefix_iszero_ghost_step >>
-     simp[Abbr `s2`, emitHelperPropsTheory.step_ISZERO]) >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn i s` by
-    (simp[Abbr `i`] >> irule prefix_scalar_shift_ptr >>
-     simp[] >> Cases_on `left` >> simp[]) >>
-  `ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y})) tn1 j t1 /\
-   ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
-     (step_taint j t1 s2 tn1) (mk_inst (iid+2) ASSERT [Var z] []) t2` by
-    simp[Abbr `j`, prefix_iszero_ptr_step, prefix_assert_ptr_step] >>
   strip_tac >> once_rewrite_tac[ptr_safe_block_def] >>
   simp[is_terminator_def] >>
   qpat_x_assum `Abbrev (t1 = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
@@ -334,11 +441,6 @@ Proof
     (qpat_assum `_ with vs_inst_idx := _ = t1` (SUBST1_TAC o SYM) >>
      simp[Abbr `t2`]) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[is_terminator_def] >>
-  qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any (qspec_then `iid+2` assume_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
-  qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any mp_tac prefix_assert_ghost_step) >>
-  disch_then (qspec_then `iid+2` assume_tac) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[] >>
   simp[step_inst_non_invoke, mk_inst_def, is_terminator_def] >>
   Cases_on `a = 0w` >> gvs[bool_to_word_def, Abbr `t2`]
@@ -376,50 +478,29 @@ Proof
   qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
   qmatch_goalsub_abbrev_tac `step_taint j t1 s2 tn1` >>
   qabbrev_tac `t2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
-  `eval_operand (Var v) t1 = SOME w /\
-   eval_operand (Var y) t1 = SOME (sign_extend n w)` by
-    (gvs[Abbr `t1`, Abbr `s1`, eval_operand_def, lookup_var_def,
-         update_var_def, FLOOKUP_UPDATE]) >>
-  `eval_operand (Var z) t2 = SOME (bool_to_word (w = sign_extend n w))` by
-    simp[Abbr `t2`, Abbr `s2`, eval_operand_def, lookup_var_def,
-         update_var_def, FLOOKUP_UPDATE] >>
-  `allocas_from lo t1 /\ allocas_from lo t2` by
-    (gvs[Abbr `t1`, Abbr `s1`, Abbr `t2`, Abbr `s2`,
-         allocas_from_def, update_var_def] >> metis_tac[]) >>
-  `op_taint tn1 (Var y) = {}` by
-    simp[Abbr `tn1`, Abbr `i`, prefix_scalar_shift_clean] >>
-  `op_taint tn1 (Var v) = {}` by
-    (fs[op_taint_def] >>
-     simp[Abbr `tn1`, Abbr `i`, op_taint_def, step_taint_def,
-          set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE]) >>
-  `op_taint (step_taint j t1 s2 tn1) (Var z) = {}` by
-    simp[Abbr `j`, prefix_scalar_eq_clean] >>
+  `step_inst fuel ctx i s = OK s1 /\
+   step_inst fuel ctx j t1 = OK s2 /\
+   ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1) /\
+   ghost_step fuel ctx PG (DRESTRICT G (COMPL {y})) tn1 j t1 =
+     (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1) /\
+   ptr_safe_step D lo fuel ctx fn PG G tn i s /\
+   ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y})) tn1 j t1 /\
+   ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
+     (step_taint j t1 s2 tn1) (mk_inst (iid+2) ASSERT [Var z] []) t2 /\
+   step_inst fuel ctx (mk_inst (iid+2) ASSERT [Var z] []) t2 =
+     (if w = sign_extend n w then OK t2
+      else Abort Revert_abort (revert_state (set_returndata [] t2))) /\
+   ghost_step fuel ctx PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
+     (step_taint j t1 s2 tn1) (mk_inst (iid+2) ASSERT [Var z] []) t2 =
+     (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1) /\
+   op_taint tn1 (Var y) = {} /\ op_taint (step_taint j t1 s2 tn1) (Var z) = {}` by
+    (once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
+     irule prefix_scalar_signed_clamp_certificate >>
+     simp[Abbr `i`, Abbr `j`, Abbr `s1`, Abbr `t1`, Abbr `s2`, Abbr `t2`, Abbr `tn1`] >>
+     qexistsl [`iid`,`v`] >> simp[]) >>
   `i.inst_opcode <> INVOKE /\ j.inst_opcode <> INVOKE /\
    ~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode` by
     simp[Abbr `i`, Abbr `j`, mk_inst_def, is_terminator_def] >>
-  `step_inst fuel ctx i s = OK s1` by
-    (simp[step_inst_non_invoke, Abbr `i`, Abbr `s1`] >>
-     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
-  `step_inst fuel ctx j t1 = OK s2` by
-    (simp[step_inst_non_invoke, Abbr `j`, Abbr `s2`] >>
-     irule emitHelperPropsTheory.step_EQ >> simp[]) >>
-  `ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1)` by
-    (qpat_assum `eval_operand (Var v) s = SOME w`
-       (mp_then Any mp_tac prefix_scalar_shift_ghost) >>
-     simp[Abbr `i`, Abbr `s1`, Abbr `tn1`]) >>
-  `ghost_step fuel ctx PG (DRESTRICT G (COMPL {y})) tn1 j t1 =
-     (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1)` by
-    (simp[Abbr `j`, Abbr `s2`] >>
-     once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
-     irule prefix_scalar_eq_ghost >> simp[]) >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn i s` by
-    simp[Abbr `i`, prefix_scalar_shift_ptr] >>
-  `ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y})) tn1 j t1` by
-    (simp[Abbr `j`] >> irule prefix_scalar_eq_ptr >>
-     simp[FLOOKUP_DRESTRICT] >> metis_tac[]) >>
-  `ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
-     (step_taint j t1 s2 tn1) (mk_inst (iid+2) ASSERT [Var z] []) t2` by
-    simp[prefix_assert_ptr_step] >>
   strip_tac >> once_rewrite_tac[ptr_safe_block_def] >>
   simp[is_terminator_def] >>
   qpat_x_assum `Abbrev (t1 = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
@@ -429,11 +510,6 @@ Proof
     (qpat_assum `_ with vs_inst_idx := _ = t1` (SUBST1_TAC o SYM) >>
      simp[Abbr `t2`]) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[is_terminator_def] >>
-  qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any (qspec_then `iid+2` assume_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
-  qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any mp_tac prefix_assert_ghost_step) >>
-  disch_then (qspec_then `iid+2` assume_tac) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[] >>
   simp[step_inst_non_invoke, mk_inst_def, is_terminator_def] >>
   Cases_on `w = sign_extend n w` >> gvs[bool_to_word_def, Abbr `t2`]
@@ -738,7 +814,8 @@ Theorem prefix_scalar_word_success:
       FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (end with vs_inst_idx := s.vs_inst_idx+5)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn xs s H qt)
 Proof
   strip_tac >>
   qabbrev_tac `w = word_of_bytes T (0w:bytes32)
@@ -779,6 +856,109 @@ Proof
     (simp[Abbr `qt`, Abbr `q2`, Abbr `q1`, Abbr `q0`, Abbr `u`,
           Abbr `t`, Abbr `r`, Abbr `l`] >>
      irule (SRULE [LET_THM] prefix_scalar_word_frames) >> simp[]) >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn xs s H qt` by
+    (gen_tac >>
+     qabbrev_tac `jj = mk_inst (iid+1)
+       (if signed then SIGNEXTEND else if left then SHL else SHR) [Lit n;Var x] [y]` >>
+     qabbrev_tac `hh = if signed then mk_inst (iid+2) EQ [Var x;Var y] [z]
+       else mk_inst (iid+2) ISZERO [Var y] [z]` >>
+     qabbrev_tac `G1 = DRESTRICT G (COMPL {x})` >>
+     qabbrev_tac `G2 = DRESTRICT G1 (COMPL {y})` >>
+     `dst <> x /\ dst <> y /\ dst <> z` by
+       (qpat_x_assum `x <> dst` mp_tac >> qpat_x_assum `y <> dst` mp_tac >>
+        qpat_x_assum `z <> dst` mp_tac >> rpt (pop_assum kall_tac) >> metis_tac[]) >>
+     `s with vs_inst_idx := s.vs_inst_idx = s /\
+      l with vs_inst_idx := s.vs_inst_idx = l` by
+       simp[Abbr `l`, update_var_def, venom_state_component_equality] >>
+     `!k. allocas_from lo (l with vs_inst_idx := k) /\
+          allocas_from lo (r with vs_inst_idx := k) /\
+          allocas_from lo (t with vs_inst_idx := k)` by
+       (qpat_x_assum `allocas_from lo s` mp_tac >>
+        simp[allocas_from_def, Abbr `t`, Abbr `r`, Abbr `l`, update_var_def]) >>
+     `eval_operand (Var x) l = SOME w /\ eval_operand (Var x) r = SOME w /\
+      eval_operand (Var y) r = SOME shifted /\
+      eval_operand (Var z) t = SOME (bool_to_word valid) /\
+      eval_operand (Var x) t = SOME w /\ eval_operand (Var dst) t = SOME p` by
+       (qpat_x_assum `eval_operand (Var dst) s = _` mp_tac >>
+        simp[Abbr `t`, Abbr `r`, Abbr `l`, eval_operand_def, lookup_var_def,
+             update_var_def, FLOOKUP_UPDATE]) >>
+     `op_taint q0 (Var x) = {} /\ op_taint q0 (Var dst) = {}` by
+       simp[Abbr `q0`, prefix_dload_output_taint, prefix_guard_taint_other] >>
+     `op_taint q1 (Var x) = {} /\ op_taint q1 (Var dst) = {}` by
+       (Cases_on `signed` >> Cases_on `left` >>
+        simp[Abbr `q1`, Abbr `jj`, prefix_guard_taint_other]) >>
+     `op_taint q2 (Var x) = {} /\ op_taint q2 (Var dst) = {}` by
+       (Cases_on `signed` >>
+        simp[Abbr `q2`, Abbr `hh`, prefix_guard_taint_other]) >>
+     (* DLOAD at s *)
+     `step_inst 0 ctx (mk_inst iid DLOAD [src] [x]) s = OK l` by
+       (simp[step_inst_non_invoke, Abbr `l`, Abbr `w`] >>
+        irule exprSimUnwrapTheory.step_DLOAD >> simp[]) >>
+     `ptr_safe_step D' lo 0 ctx fn PG G tn (mk_inst iid DLOAD [src] [x]) s` by
+       (irule prefix_dload_ptr_step >> simp[]) >>
+     `ghost_step 0 ctx PG G tn (mk_inst iid DLOAD [src] [x]) s =
+        (G1, q0)` by
+       (qspecl_then [`iid`,`src`,`x`,`s`,`a`,`ctx`,`PG`,`G`,`tn`,`0`] mp_tac
+          prefix_dload_ghost_step >>
+        simp[LET_THM, Abbr `q0`, Abbr `l`, Abbr `w`, Abbr `G1`]) >>
+     (* The very same indexed clamp evidence used by the continuations. *)
+     `step_inst 0 ctx jj (l with vs_inst_idx := s.vs_inst_idx+1) =
+        OK (r with vs_inst_idx := s.vs_inst_idx+1) /\
+      step_inst 0 ctx hh (r with vs_inst_idx := s.vs_inst_idx+2) =
+        OK (t with vs_inst_idx := s.vs_inst_idx+2) /\
+      ghost_step 0 ctx PG G1 q0 jj (l with vs_inst_idx := s.vs_inst_idx+1) = (G2,q1) /\
+      ghost_step 0 ctx PG G2 q1 hh (r with vs_inst_idx := s.vs_inst_idx+2) = (H,q2) /\
+      ptr_safe_step D' lo 0 ctx fn PG G1 q0 jj (l with vs_inst_idx := s.vs_inst_idx+1) /\
+      ptr_safe_step D' lo 0 ctx fn PG G2 q1 hh (r with vs_inst_idx := s.vs_inst_idx+2) /\
+      ptr_safe_step D' lo 0 ctx fn PG H q2 (mk_inst (iid+3) ASSERT [Var z] [])
+        (t with vs_inst_idx := s.vs_inst_idx+3) /\
+      step_inst 0 ctx (mk_inst (iid+3) ASSERT [Var z] [])
+        (t with vs_inst_idx := s.vs_inst_idx+3) =
+        (if valid then OK (t with vs_inst_idx := s.vs_inst_idx+3)
+         else Abort Revert_abort (revert_state
+           (set_returndata [] (t with vs_inst_idx := s.vs_inst_idx+3)))) /\
+      ghost_step 0 ctx PG H q2 (mk_inst (iid+3) ASSERT [Var z] [])
+        (t with vs_inst_idx := s.vs_inst_idx+3) = (H,q2) /\
+      op_taint q1 (Var y) = {} /\ op_taint q2 (Var z) = {}` by
+       (Cases_on `signed`
+        >- (simp[NoAsms, Abbr `jj`, Abbr `hh`, Abbr `valid`, Abbr `shifted`] >>
+            irule prefix_scalar_signed_clamp_certificate >>
+            simp[Abbr `q1`, Abbr `q2`, Abbr `G2`, Abbr `H`, Abbr `G1`,
+                 Abbr `r`, Abbr `t`,
+                 GSYM update_var_idx, eval_op_inst_idx, FLOOKUP_DRESTRICT,
+                 arithmeticTheory.ADD1] >>
+            conj_tac >- (qexistsl [`iid+1`,`x`] >> simp[]) >> fs[]) >>
+        simp[NoAsms, Abbr `jj`, Abbr `hh`, Abbr `valid`, Abbr `shifted`] >>
+        irule prefix_scalar_shift_clamp_certificate >>
+        simp[Abbr `q1`, Abbr `q2`, Abbr `G2`, Abbr `H`, Abbr `G1`,
+             Abbr `r`, Abbr `t`,
+             GSYM update_var_idx, eval_op_inst_idx, arithmeticTheory.ADD1] >>
+        conj_tac >- (qexistsl [`iid+1`,`left`,`n`,`x`,`w`] >> simp[]) >> fs[]) >>
+     (* store at idx+4 *)
+     `step_inst 0 ctx (mk_inst (iid+4) MSTORE [Var dst;Var x] [])
+        (t with vs_inst_idx := s.vs_inst_idx+4) =
+        OK (u with vs_inst_idx := s.vs_inst_idx+4)` by
+       (simp[step_inst_non_invoke, Abbr `u`, GSYM mstore_idx] >>
+        irule slot_copy_step_store >> simp[eval_op_inst_idx]) >>
+     `ptr_safe_step D' lo 0 ctx fn PG H q2 (mk_inst (iid+4) MSTORE [Var dst;Var x] [])
+        (t with vs_inst_idx := s.vs_inst_idx+4)` by
+       (irule prefix_mstore_ptr_step >>
+        simp[eval_op_inst_idx, Abbr `H`, Abbr `G2`, Abbr `G1`, FLOOKUP_DRESTRICT,
+             IN_COMPL]) >>
+     `ghost_step 0 ctx PG H q2 (mk_inst (iid+4) MSTORE [Var dst;Var x] [])
+        (t with vs_inst_idx := s.vs_inst_idx+4) = (H, qt)` by
+       (simp[Abbr `qt`] >> irule prefix_mstore_ghost_step >> simp[]) >>
+     qspecl_then [`xs`,`s`,`\j. EL j [s;l;r;t;t;u]`,
+       `\j. EL j [G;G1;G2;H;H;H]`,
+       `\j. EL j [tn;q0;q1;q2;q2;qt]`]
+       (MATCH_MP_TAC o SRULE [] o Q.SPEC `[]` o Q.GEN `ys`)
+       prefix_trace_inst_seq_ptr >>
+     qpat_x_assum `xs = _` SUBST_ALL_TAC >> rpt conj_tac
+     >- (Cases_on `signed` >> Cases_on `left` >> simp[Abbr `jj`, Abbr `hh`])
+     >- (simp[] >> gen_tac >> strip_tac >>
+         `j = 0 \/ j = 1 \/ j = 2 \/ j = 3 \/ j = 4` by decide_tac >>
+         pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC >> simp[]) >>
+     simp[inst_seq_ptr_def]) >>
   qexistsl [`H`,`qt`] >> asm_rewrite_tac[] >>
   conj_tac >- simp[Abbr `H`, FLOOKUP_DRESTRICT] >>
   strip_tac >> gen_tac >>
@@ -841,7 +1021,8 @@ Theorem prefix_scalar_checked_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)

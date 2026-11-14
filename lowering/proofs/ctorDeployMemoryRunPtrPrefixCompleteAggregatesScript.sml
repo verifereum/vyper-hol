@@ -71,8 +71,9 @@ val CshiftMode = ``\checked ty tv.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_tuple_complete_mode_contract:
+  LIST_REL ((^CshiftMode) checked) tys tvs ==>
+    ((^CshiftMode) checked) (TupleT tys) (TupleTV tvs)
 Proof
   strip_tac >> drule prefix_members_complete_mode >>
   disch_then (mk_asm "members") >>
@@ -102,19 +103,14 @@ Proof
   strip_tac >> qexistsl_tac [`actual`,`H`,`qt`,`B`] >>
   asm_simp_tac bool_ss [val_in_memory_tuple]
 QED
-*)
-Theorem prefix_tuple_complete_mode_contract:
-  LIST_REL ((^CshiftMode) checked) tys tvs ==>
-    ((^CshiftMode) checked) (TupleT tys) (TupleTV tvs)
-Proof
-  cheat
-QED
 
 val CshiftMode_desc =
   ``(\env sf. (^CshiftMode) checked) (env \\ nsid) (sf \\ nsid_to_string nsid)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_struct_complete_mode_contract:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  LIST_REL (^CshiftMode_desc) (MAP SND args) tvs ==>
+  ((^CshiftMode) checked) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `LENGTH tvs = LENGTH args` by (drule LIST_REL_LENGTH >> simp[]) >>
@@ -160,17 +156,10 @@ Proof
   asm_simp_tac bool_ss [val_in_memory_struct] >>
   metis_tac[]
 QED
-*)
-Theorem prefix_struct_complete_mode_contract:
-  FLOOKUP env nsid = SOME (StructArgs args) /\
-  LIST_REL (^CshiftMode_desc) (MAP SND args) tvs ==>
-  ((^CshiftMode) checked) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
-Proof
-  cheat
-QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_fixed_array_complete_mode_contract:
+  ((^CshiftMode) checked) ty tv ==>
+  ((^CshiftMode) checked) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
 Proof
   strip_tac >>
   `!count. LIST_REL ((^CshiftMode) checked) (REPLICATE count ty)
@@ -211,13 +200,6 @@ Proof
   conj_tac >- simp[Once type_memory_bytes_def] >>
   rpt strip_tac >> irule abi_decoder_fixed_array_memory >> simp[]
 QED
-*)
-Theorem prefix_fixed_array_complete_mode_contract:
-  ((^CshiftMode) checked) ty tv ==>
-  ((^CshiftMode) checked) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
-Proof
-  cheat
-QED
 
 val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
 val CshiftChecked = ``(^CshiftMode) T``;
@@ -234,17 +216,11 @@ Proof
   simp_tac bool_ss []
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  simp_tac bool_ss [prefix_tuple_complete_mode_contract]
-QED
-*)
 Theorem prefix_tuple_complete_checked_contract:
   LIST_REL (^CshiftChecked) tys tvs ==>
     (^CshiftChecked) (TupleT tys) (TupleTV tvs)
 Proof
-  cheat
+  simp_tac bool_ss [prefix_tuple_complete_mode_contract]
 QED
 
 Theorem prefix_struct_complete_code_contract:
@@ -256,18 +232,12 @@ Proof
   simp_tac bool_ss []
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  simp_tac bool_ss [prefix_struct_complete_mode_contract]
-QED
-*)
 Theorem prefix_struct_complete_checked_contract:
   FLOOKUP env nsid = SOME (StructArgs args) /\
   LIST_REL (^CshiftChecked_desc) (MAP SND args) tvs ==>
   (^CshiftChecked) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
 Proof
-  cheat
+  simp_tac bool_ss [prefix_struct_complete_mode_contract]
 QED
 
 Theorem prefix_fixed_array_complete_code_contract:
@@ -278,16 +248,10 @@ Proof
   simp_tac bool_ss []
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  mp_tac (Q.INST [`checked` |-> `T`] prefix_fixed_array_complete_mode_contract) >>
-  simp_tac bool_ss []
-QED
-*)
 Theorem prefix_fixed_array_complete_checked_contract:
   (^CshiftChecked) ty tv ==>
   (^CshiftChecked) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
 Proof
-  cheat
+  mp_tac (Q.INST [`checked` |-> `T`] prefix_fixed_array_complete_mode_contract) >>
+  simp_tac bool_ss []
 QED
