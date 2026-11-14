@@ -3,16 +3,6 @@ Ancestors
   o1PassContract cfgNormDefs cfgTransform o1ContractCfgNormStep
   unitShapeDefs irSupply venomInst list rich_list venomPassDispatcher
 
-Theorem update_phi_ops_label_absent[local]:
-  !old new repls ops l.
-  ~MEM (Label l) ops /\ new <> l ==>
-  ~MEM (Label l) (update_phi_ops old new repls ops)
-Proof
-  recInduct update_phi_ops_ind >>
-  rw[update_phi_ops_def] >>
-  gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
 (* Both block names and operands avoid the forbidden symbol. *)
 Definition cfg_label_absent_def:
   cfg_label_absent l fn <=>
@@ -39,7 +29,7 @@ Theorem update_phis_label_absent[local]:
 Proof
   simp[update_phis_for_split_def, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
   rpt strip_tac >> Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
-  metis_tac[update_phi_ops_label_absent]
+  metis_tac[cfgNormSupplySimTheory.supply_update_phi_ops_label_origin]
 QED
 
 Theorem forwarding_label_absent[local]:
