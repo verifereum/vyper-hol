@@ -40,7 +40,8 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
-  venomRunBounded unitMemInv
+  venomRunBounded unitMemInv o1OpcodeAbsence
+  loweringRuntimeNoCreate venomPipelineDriverProps
   asmOptimizer callTrace
   e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
@@ -120,7 +121,7 @@ End
 
 (* ===== The call cases ===== *)
 
-(* PLANNED ADMISSION: the runtime unit S7g runs reaches no oversized CREATE.
+(* The runtime unit S7g runs reaches no oversized CREATE.
    supported_program's body_stmt_safe excludes CreateTarget, so the lowering
    emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
    holds at every state. *)
@@ -132,7 +133,22 @@ Theorem o1_runtime_unit_create_size_ok:
     ==>
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >> match_mp_tac mem_inv_create_size_ok_no_create >>
+  conj_tac
+  >- (qpat_x_assum `o1PipelineCorrect$o1_pipeline _ _ = _` mp_tac >>
+      simp[o1PipelineCorrectTheory.o1_pipeline_def] >>
+      disch_then (assume_tac o MATCH_MP run_venom_pipeline_success_unit_wf) >>
+      fs[venomCompilerWfTheory.unit_wf_def]) >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
+    lower_vyper_runtime_unit_no_create >>
+  impl_tac >- fs[] >> disch_tac >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (qspecl_then [`rpolicy`, `unit`, `out`, `CREATE`] mp_tac
+        o1_pipeline_opcode_absence >>
+      impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]) >>
+  qspecl_then [`rpolicy`, `unit`, `out`, `CREATE2`] mp_tac
+    o1_pipeline_opcode_absence >>
+  impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]
 QED
 
 (* vyper_call_correct's hypotheses.  The two that range over the call

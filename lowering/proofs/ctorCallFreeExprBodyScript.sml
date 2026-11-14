@@ -5,33 +5,140 @@ Ancestors
   ctorCallFreeRules ctorCallFreeCallbacks e2eDeployDefs supportedExprTraverse
   exprSimHypsDefs
 
-Theorem call_free_ifexp_body[local]:
-  (!st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
+Theorem opcode_every_ifexp_body[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  (
+  (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
       (state_insts (SND (lower_value cfn cenv (BaseT BoolT) cond_e st)))) /\
   (!et st. MEM et [then_e;else_e] ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn cenv ty et st)))) /\
-  (!rty aty vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
+  (!rty aty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_ifexp_arm cenv rty aty vv st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr_body cfn bfn tfn cenv ty
         (IfExp ety cond_e then_e else_e) st)))
+  )
 Proof
+  strip_tac >>
   strip_tac >> gen_tac >> strip_tac >> simp[compile_expr_body_def] >>
   rpt (pairarg_tac >> gvs[]) >> IF_CASES_TAC >> simp[] >>
-  `JNZ <> RETURNDATACOPY /\ JNZ <> INVOKE /\ JNZ <> CREATE /\ JNZ <> CREATE2 /\
-   JMP <> RETURNDATACOPY /\ JMP <> INVOKE /\ JMP <> CREATE /\ JMP <> CREATE2 /\
-   ASSIGN <> RETURNDATACOPY /\ ASSIGN <> INVOKE /\ ASSIGN <> CREATE /\ ASSIGN <> CREATE2` by simp[] >>
+  `P JNZ /\
+   P JMP /\
+   P ASSIGN` by simp[] >>
   metis_tac[every_state_insts_fresh_var, every_state_insts_fresh_label,
-    every_state_insts_new_block, call_free_emit_inst, SND]
+    every_state_insts_new_block, opcode_every_emit_inst, SND]
 QED
 
 (* Direct helper contracts are guarded by the actual parent constructor;
    callers obtain them from the child-restricted callback interfaces. *)
+Theorem opcode_every_expr_body:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  (
+  (!rty lit st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_literal_vv rty lit st)))) /\
+  (!rty name st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_name_vv cenv rty name st)))) /\
+  (!vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (unwrap_value cenv vv st)))) /\
+  (!sz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_alloc_buffer sz st)))) /\
+  (!rty aty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_ifexp_arm cenv rty aty vv st)))) /\
+  (!ptr ws sz ctor imm loc st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_dynarray_pop ptr ws sz ctor imm loc st)))) /\
+  (!rty aty a bty b mty m st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_addmod_names cenv rty aty a bty b mty m st)))) /\
+  (!rty aty a bty b mty m st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_mulmod_names cenv rty aty a bty b mty m st)))) /\
+  (!rty aty a bty b st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_powmod256_names cenv rty aty a bty b st)))) ==>
+  !e.
+  ~supported_expr_exists R e /\ ~supported_expr_exists root2 e /\
+  (!child ety st. expr_size child < expr_size e /\
+      ~supported_expr_exists R child /\ ~supported_expr_exists root2 child ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (cfn cenv ety child st)))) /\
+  (!ann bi args st. e = Builtin ann bi args ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (bfn cenv ann ty bi args st)))) /\
+  (!ann tb rty args st. e = TypeBuiltin ann tb rty args ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (tfn cenv ann ty tb rty args st)))) /\
+  (!ann base_e idx_e st. e = Subscript ann base_e idx_e ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_subscript cfn cenv ann ty base_e idx_e st)))) /\
+  (!ann base_e fname st. e = Attribute ann base_e fname ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_attribute cfn cenv ann ty base_e fname st)))) /\
+  (!ann name fields buf off st. e = StructLit ann name fields ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_struct_lit cfn cenv (StructT name) fields buf off st)))) /\
+  (!ann target st. e = Pop ann target ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_get_target_ptr cfn cenv target st)))) /\
+  (!ann target args d st. e = Call ann target args d ==>
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_call cfn cenv ann ty target args d st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_expr_body cfn bfn tfn cenv ty e st)))
+  )
+Proof
+  strip_tac >>
+  `P INVALID` by simp[] >>
+  strip_tac >> gen_tac >> strip_tac >>
+  Cases_on `e` >> gvs[supported_expr_exists_def, expr_call_root_def] >>
+  all_tac >~ [`compile_expr_body _ _ _ _ _ (Call ann target args d)`] >-
+    simp[compile_expr_body_def, expr_type_def] >>
+  all_tac >~ [`compile_expr_body _ _ _ _ _ (IfExp ann cond_e then_e else_e)`] >-
+    (ho_match_mp_tac (UNDISCH opcode_every_ifexp_body) >> simp[] >> conj_tac >-
+       (ho_match_mp_tac every_state_insts_lower_value >> simp[] >>
+        first_x_assum irule >> simp[]) >>
+     rpt strip_tac >> gvs[] >> first_x_assum irule >> simp[]) >>
+  all_tac >~ [`compile_expr_body _ _ _ _ _ (Builtin ann bi args)`] >-
+    (Cases_on `names_builtin bi args` >-
+       (qpat_x_assum `names_builtin bi args` mp_tac >>
+        map_every qid_spec_tac [`args`,`bi`] >>
+        recInduct names_builtin_ind >>
+        simp[names_builtin_def, compile_expr_body_def, expr_type_def]) >>
+     simp[compile_expr_body_builtin_dispatch]) >>
+  all_tac >~ [`compile_expr_body _ _ _ _ _ (Pop ann target)`] >-
+    (simp[compile_expr_body_def] >> rpt strip_tac >>
+     rpt (pairarg_tac >> gvs[]) >> metis_tac[SND]) >>
+  simp[compile_expr_body_def, expr_type_def] >~ [`FLOOKUP cenv.ce_module_vars nsid`] >-
+    (rpt gen_tac >> CASE_TAC >> gvs[] >-
+       (rpt (pairarg_tac >> gvs[]) >> `P INVALID` by simp[] >>
+        metis_tac[SRULE [] (Q.INST [`opc` |-> `INVALID`] opcode_every_emit_inst), SND]) >>
+     CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+     `P INVALID` by simp[] >>
+     metis_tac[SRULE [] (Q.INST [`opc` |-> `INVALID`] opcode_every_emit_inst), SND]) >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[SND]
+QED
+
 Theorem call_free_expr_body:
   (!rty lit st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
@@ -96,26 +203,8 @@ Theorem call_free_expr_body:
       (state_insts (SND (compile_expr_body cfn bfn tfn cenv ty e st)))
 Proof
   strip_tac >> gen_tac >> strip_tac >>
-  Cases_on `e` >> gvs[supported_expr_exists_def, expr_call_root_def] >>
-  all_tac >~ [`compile_expr_body _ _ _ _ _ (IfExp ann cond_e then_e else_e)`] >-
-    (ho_match_mp_tac call_free_ifexp_body >> simp[] >> conj_tac >-
-       (ho_match_mp_tac every_state_insts_lower_value >> simp[] >>
-        first_x_assum irule >> simp[]) >>
-     rpt strip_tac >> gvs[] >> first_x_assum irule >> simp[]) >>
-  all_tac >~ [`compile_expr_body _ _ _ _ _ (Builtin ann bi args)`] >-
-    (Cases_on `names_builtin bi args` >-
-       (qpat_x_assum `names_builtin bi args` mp_tac >>
-        map_every qid_spec_tac [`args`,`bi`] >>
-        recInduct names_builtin_ind >>
-        simp[names_builtin_def, compile_expr_body_def, expr_type_def]) >>
-     simp[compile_expr_body_builtin_dispatch]) >>
-  all_tac >~ [`compile_expr_body _ _ _ _ _ (Pop ann target)`] >-
-    (simp[compile_expr_body_def] >> rpt strip_tac >>
-     rpt (pairarg_tac >> gvs[]) >> metis_tac[SND]) >>
-  simp[compile_expr_body_def, expr_type_def] >~ [`FLOOKUP cenv.ce_module_vars nsid`] >-
-    (rpt gen_tac >> CASE_TAC >> gvs[] >-
-       (rpt (pairarg_tac >> gvs[]) >> metis_tac[SRULE [] (Q.INST [`opc` |-> `INVALID`] call_free_emit_inst), SND]) >>
-     CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-     metis_tac[SRULE [] (Q.INST [`opc` |-> `INVALID`] call_free_emit_inst), SND]) >>
-  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[SND]
+  `!ann target args d. e <> Call ann target args d` by
+    (rpt strip_tac >> gvs[supported_expr_exists_def, expr_call_root_def]) >>
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] opcode_every_expr_body) >>
+  simp[] >> disch_then (qspec_then `e` mp_tac) >> simp[]
 QED

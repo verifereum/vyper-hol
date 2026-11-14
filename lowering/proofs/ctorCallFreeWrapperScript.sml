@@ -3,7 +3,7 @@ Theory ctorCallFreeWrapper
 Ancestors
   ctorCallFreeABIDecode ctorCallFreeStmtReturns ctorCallFreeEntry
   ctorDeployLoweringCode ctorDeployLoweringCodeShape ctorUnitShape
-  ctorCallFreeValues moduleLowering compileEnv context emitHelper
+  loweringFunctionOpcodes ctorCallFreeValues moduleLowering compileEnv context emitHelper
   loweringShapeDefs vyperCompiler compileVyper list venomInst ctorCallFreeRules
 
 Theorem call_free_fixed_region[local]:
@@ -11,9 +11,7 @@ Theorem call_free_fixed_region[local]:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_fixed_region_with_id sz st)))
 Proof
-  simp[compile_fixed_region_with_id_def, comp_bind_def, comp_ignore_bind_def,
-    comp_return_def, fresh_id_def, fresh_var_def, emit_def,
-    state_insts_def, all_blocks_def, mk_inst_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_fixed_region) >> simp[]
 QED
 
 Theorem call_free_nonreentrant_lock[local]:
@@ -21,12 +19,7 @@ Theorem call_free_nonreentrant_lock[local]:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_nonreentrant_lock key trans view st)))
 Proof
-  qid_spec_tac `st` >> simp[compile_nonreentrant_lock_def] >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
-      every_state_insts_return])])
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_nonreentrant_lock) >> simp[]
 QED
 
 Theorem call_free_constructor_epilogue[local]:
@@ -48,23 +41,7 @@ Theorem call_free_decode_args[local]:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_decode_args ce args off DLOAD hi base st)))
 Proof
-  Induct >> simp[compile_decode_args_def, every_state_insts_return] >>
-  qx_gen_tac `arg` >> PairCases_on `arg` >> rpt gen_tac >> qid_spec_tac `st` >>
-  simp[compile_decode_args_def] >>
-  rpt (FIRST [IF_CASES_TAC >> gvs[],
-    ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
-      call_free_abi_clamp, call_free_abi_decode_opcode, every_state_insts_return])]) >>
-  BasicProvers.TOP_CASE_TAC >>
-  gvs[every_state_insts_return, call_free_emit_void] >>
-  BasicProvers.TOP_CASE_TAC >>
-  gvs[every_state_insts_return, call_free_emit_void] >>
-  qid_spec_tac `st` >>
-  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
-    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_abi_decode_opcode,
-      compile_abi_arg_ptr_guard_def, every_state_insts_return])])
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `opc` |-> `DLOAD`] opcode_every_decode_args) >> simp[]
 QED
 
 Theorem call_free_register_constructor_args[local]:

@@ -132,6 +132,16 @@ Proof
   simp[state_insts_def, all_blocks_def]
 QED
 
+Theorem opcode_every_emit_inst:
+  P opc /\
+  EVERY (\i. P i.inst_opcode)
+        (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+        (state_insts (SND (emit_inst opc ops outs st)))
+Proof
+  strip_tac >> irule every_state_insts_emit_inst >> simp[mk_inst_def]
+QED
+
 Theorem call_free_emit_inst:
   opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2 /\
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
@@ -139,7 +149,17 @@ Theorem call_free_emit_inst:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
         (state_insts (SND (emit_inst opc ops outs st)))
 Proof
-  strip_tac >> irule every_state_insts_emit_inst >> simp[mk_inst_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_emit_inst) >> simp[]
+QED
+
+Theorem opcode_every_emit_void:
+  P opc /\
+  EVERY (\i. P i.inst_opcode)
+        (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+        (state_insts (SND (emit_void opc ops st)))
+Proof
+  strip_tac >> irule every_state_insts_emit_void >> simp[mk_inst_def]
 QED
 
 Theorem call_free_emit_void:
@@ -149,7 +169,29 @@ Theorem call_free_emit_void:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
         (state_insts (SND (emit_void opc ops st)))
 Proof
-  strip_tac >> irule every_state_insts_emit_void >> simp[mk_inst_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_emit_void) >> simp[]
+QED
+
+Theorem opcode_every_emit_op:
+  P opc /\
+  EVERY (\i. P i.inst_opcode)
+        (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+        (state_insts (SND (emit_op opc ops st)))
+Proof
+  strip_tac >> irule every_state_insts_emit_op >> simp[mk_inst_def]
+QED
+
+Theorem every_state_insts_emit_multi_op:
+  (!id outs. P (mk_inst id opc ops outs)) ==>
+  !st. EVERY P (state_insts st) ==>
+    EVERY P (state_insts (SND (emit_multi_op opc ops n st)))
+Proof
+  strip_tac >> simp[emit_multi_op_def] >>
+  ho_match_mp_tac every_state_insts_bind >>
+  simp[every_state_insts_fresh_vars] >> gen_tac >>
+  ho_match_mp_tac every_state_insts_ignore_bind >>
+  simp[every_state_insts_emit_inst, every_state_insts_return]
 QED
 
 Theorem call_free_emit_op:
@@ -159,5 +201,5 @@ Theorem call_free_emit_op:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
         (state_insts (SND (emit_op opc ops st)))
 Proof
-  strip_tac >> irule every_state_insts_emit_op >> simp[mk_inst_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_emit_op) >> simp[]
 QED
