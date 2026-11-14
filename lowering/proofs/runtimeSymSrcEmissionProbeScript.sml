@@ -20,18 +20,6 @@ Proof
        FLAT_APPEND, APPEND_ASSOC]
 QED
 
-Theorem runtime_sym_split_blocks:
-  !blocks label pre post.
-    split_blocks_at label blocks = SOME (pre,post) ==>
-    blocks = pre ++ post
-Proof
-  Induct >> simp[split_blocks_at_def] >> rpt gen_tac >>
-  Cases_on `h.bb_label = label` >> simp[] >>
-  Cases_on `split_blocks_at label blocks` >> simp[] >>
-  PairCases_on `x` >> simp[] >> rpt strip_tac >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem runtime_sym_package_blocks:
   !descs blocks entry functions.
     package_internal_blocks descs blocks = SOME (entry,functions) /\
@@ -46,7 +34,7 @@ Proof
   PairCases_on `x` >> simp[] >>
   Cases_on `package_internal_blocks descs x1` >> simp[] >>
   PairCases_on `x` >> simp[] >> rpt strip_tac >> gvs[] >>
-  drule runtime_sym_split_blocks >> strip_tac >> gvs[] >>
+  drule split_blocks_at_partition >> strip_tac >> gvs[] >>
   fs[MAP_APPEND, FLAT_APPEND, EVERY_APPEND] >>
   first_x_assum drule_all >>
   simp[mk_internal_function_def, mk_raw_function_def, fn_insts_def, EVERY_fn_insts_blocks, EVERY_FLAT, EVERY_MAP]
