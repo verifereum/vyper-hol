@@ -144,3 +144,21 @@ Proof
   gvs[expr_body_pre_def] >> metis_tac[]
 QED
 
+
+Theorem extcall_request_remaining_source:
+  expr_body_pre ce cx env
+    (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) es /\
+  DROP 1 args = done ++ e::tail /\ expr_sim_inv ce cx env st ==>
+  expr_body_pre ce cx env e st /\ ~expr_has_effect e /\
+  ~exprs_can_mutate ce tail
+Proof
+  strip_tac >>
+  drule extcall_request_source_boundary >> strip_tac >>
+  drule extcall_request_tail_effect_free >>
+  simp[EVERY_APPEND] >> strip_tac >>
+  `MEM e args` by
+    (qsuff_tac `MEM e (DROP 1 args)` >- (strip_tac >> drule MEM_DROP_IMP >> simp[]) >> simp[]) >>
+  simp[] >>
+  irule (cj 2 extrequest_snapshot_nonmutating) >>
+  gvs[EVERY_MEM, EXISTS_MEM]
+QED
