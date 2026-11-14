@@ -705,16 +705,67 @@ Proof
   rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
   qpat_x_assum `!i. i < 9 ==> _` kall_tac >>
   qpat_x_assum `get_instruction _ _ = _` kall_tac >>
-  simp[Abbr `post`, Abbr `u9`, Abbr `u8`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
-       Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, update_var_def,
-       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, mload_def,
-       vars_kept_def] >>
-  conj_tac
-  >- (rpt strip_tac >>
+  `u9.vs_current_bb = s.vs_current_bb /\
+   u9.vs_inst_idx = s.vs_inst_idx + 9` by
+    (simp[Abbr `u9`, update_var_def] >>
+    simp[Abbr `u8`, update_var_def] >>
+    simp[Abbr `u7`, update_var_def] >>
+    simp[Abbr `u6`, update_var_def] >>
+    simp[Abbr `u5`, update_var_def] >>
+    simp[Abbr `u4`, update_var_def] >>
+    simp[Abbr `u3`, update_var_def] >>
+    simp[Abbr `u2`, update_var_def] >>
+    simp[Abbr `u1`, update_var_def]) >>
+  `u9.vs_memory = s.vs_memory /\ u9.vs_labels = s.vs_labels` by
+    (simp[Abbr `u9`, update_var_def] >>
+    simp[Abbr `u8`, update_var_def] >>
+    simp[Abbr `u7`, update_var_def] >>
+    simp[Abbr `u6`, update_var_def] >>
+    simp[Abbr `u5`, update_var_def] >>
+    simp[Abbr `u4`, update_var_def] >>
+    simp[Abbr `u3`, update_var_def] >>
+    simp[Abbr `u2`, update_var_def] >>
+    simp[Abbr `u1`, update_var_def]) >>
+  `!x. lookup_var x u9 =
+    if x8 = x then SOME w8 else if x7 = x then SOME w7 else
+    if x6 = x then SOME w6 else if x5 = x then SOME w5 else
+    if x4 = x then SOME w4 else if x3 = x then SOME w3 else
+    if x2 = x then SOME w2 else if x1 = x then SOME w else
+    if x0 = x then SOME (mload (w2n a) s) else lookup_var x s` by
+    (simp[Abbr `u9`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u8`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u7`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u6`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u5`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u4`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u3`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u2`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[Abbr `u1`, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE]) >>
+  qpat_x_assum `Abbrev (u9 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u8 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u7 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u6 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u5 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u4 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u3 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u2 = _)` kall_tac >>
+  qpat_x_assum `Abbrev (u1 = _)` kall_tac >>
+  simp[Abbr `post`] >> rpt conj_tac
+  >~ [`vars_kept N {} s u9`]
+  >- (simp[vars_kept_def] >> rpt strip_tac >>
       `x <> x0 /\ x <> x1 /\ x <> x2 /\ x <> x3 /\ x <> x4 /\
        x <> x5 /\ x <> x6 /\ x <> x7 /\ x <> x8` by metis_tac[] >> simp[]) >>
-  Cases_on `ip` >>
-  gvs[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  simp[eval_operand_def, mload_def] >>
+  Cases_on `ip` >> gvs[eval_operand_def]
 QED
 
 (* suffix_semantics: the last store dominates every prior memory write. *)
