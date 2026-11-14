@@ -63,11 +63,16 @@ Proof
   rpt gen_tac >> strip_tac >> simp[ptr_mem_ok_def] >> rpt strip_tac >>
   `val_wf tv v /\ ?w0. eval_operand op s = SOME w0` by
     (gvs[expr_val_at_def] >> metis_tac[]) >>
+  `dynarray_free tv` by metis_tac[] >>
+  `mem_bytes_at (w2n w0) (val_footprint tv v) s'.vs_memory =
+     mem_bytes_at (w2n w0) (val_footprint tv v) s.vs_memory /\
+   !i. i < val_footprint tv v /\ w2n w0 + i IN tn'.t_mem ==>
+       w2n w0 + i IN tn.t_mem` by
+    metis_tac[saved_operand_footprint_window] >>
   `eval_operand op s' = SOME w0` by
     (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sb`, `s`] >>
      gvs[expr_post_def]) >>
-  gvs[] >>
-  drule_all saved_operand_footprint_window >> strip_tac
+  gvs[]
   >~ [`val_in_memory _ _ _ _`]
   >- (irule robust_val_in_memory_decreasing_taint_transport >> simp[] >>
       qexistsl_tac [`s.vs_memory`, `s'.vs_memory`, `val_footprint tv v`,
