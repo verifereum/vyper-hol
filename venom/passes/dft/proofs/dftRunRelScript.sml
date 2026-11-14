@@ -1718,7 +1718,7 @@ Proof
   >> qexists_tac `[]` >> simp[]
 QED
 
-Theorem dft_gas_free_external_replay_both[local]:
+Theorem dft_gas_free_external_replay_both:
   dft_gas_swap_pair x y /\ x.inst_opcode <> GAS /\
   is_ext_call_op y.inst_opcode /\ step_inst fuel C y s = OK t ==>
   (!r. step_inst fuel C x s = OK r ==>
