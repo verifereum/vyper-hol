@@ -63,18 +63,6 @@ Proof
   Cases_on `x` >> simp[FLOOKUP_UPDATE] >> rw[] >> res_tac >> simp[]
 QED
 
-(* asm_inst_size_def alone names asmIR's datatype size function. *)
-Theorem asm_inst_size_le_encode[local]:
-  (!name. inst = AsmOp name ==> IS_SOME (evm_opcode_byte name)) ==>
-  asm_inst_size inst <= LENGTH (encode_inst offsets inst)
-Proof
-  Cases_on `inst` >>
-  simp[encode_inst_def, symbolResolveTheory.asm_inst_size_def]
-  >- (strip_tac >> Cases_on `evm_opcode_byte s` >> gvs[])
-  >- (Cases_on `l` >> simp[encode_inst_def]) >>
-  rpt CASE_TAC >> rw[pad_bytes_def, symbol_size_def]
-QED
-
 (* ===== No SOPushOfst without OFFSET ===== *)
 
 Theorem do_swap_no_push_ofst:
