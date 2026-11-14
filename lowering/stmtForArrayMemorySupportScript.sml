@@ -8,13 +8,7 @@ Theorem gas_outcome_start_gas_obs:
   gas_outcome memory tops (ctx,func) cx st0 source (es,s0) Q R ==>
   gas_outcome memory tops (ctx,func) cx st0 source (es with gas_obs := gs,s0) Q R
 Proof
-  pure_rewrite_tac [gas_outcome_def] >> strip_tac >> qexists `marks`
-  >- (disj1_tac >> fs[gas_bad_storage_at_def])
-  >- (disj2_tac >> disj1_tac >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-      simp[gas_summary_at_def, gas_marked_exec_def]) >>
-  disj2_tac >> disj2_tac >> drule gas_exempt_cert_start_gas_obs >>
-  disch_then (qspec_then `gs` mp_tac) >> simp[] >> metis_tac[]
+  MATCH_ACCEPT_TAC gasOutcomeTheory.gas_outcome_start_gas_obs
 QED
 
 Theorem stmt_frag_mem_start_gas_obs:
