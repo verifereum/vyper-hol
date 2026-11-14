@@ -12,23 +12,22 @@ Ancestors
 (* Retain the fresh buffer ownership for consumers that keep the value live. *)
 Theorem compile_make_array_body_value_owned:
   !ctx func cenv cx ann et bd args env ty es sa vv sb s0.
-    let e = Builtin ann (MakeArray (SOME et) bd) args in
-      exprs_case F ctx func cenv cx args /\
-      acyclic_struct_metadata cenv.ce_struct_fields /\
-      expr_body_pre cenv cx env e es /\ compile_expr cenv ty e sa = (vv,sb) /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\
-      gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-      s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-        (\res ee s. ?rv. res = INL rv /\
-          vv_post ctx func cenv cx e es sa sb s0 ee rv vv s /\
-          (!v. rv = Value v ==> vv_own cenv cx (expr_type e) sa sb ee rv vv s) /\
-          s.vs_current_bb = sb.cs_current_bb /\
-          s.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+    exprs_case F ctx func cenv cx args /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    expr_body_pre cenv cx env (Builtin ann (MakeArray (SOME et) bd) args) es /\ compile_expr cenv ty (Builtin ann (MakeArray (SOME et) bd) args) sa = (vv,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    gas_admissible (eval_expr cx (Builtin ann (MakeArray (SOME et) bd) args)) expr_vv_res_ok es /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (Builtin ann (MakeArray (SOME et) bd) args)) (es,s0)
+      (\res ee s. ?rv. res = INL rv /\
+        vv_post ctx func cenv cx (Builtin ann (MakeArray (SOME et) bd) args) es sa sb s0 ee rv vv s /\
+        (!v. rv = Value v ==> vv_own cenv cx (expr_type (Builtin ann (MakeArray (SOME et) bd) args)) sa sb ee rv vv s) /\
+        s.vs_current_bb = sb.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `MakeArray (SOME et) bnd` >>
@@ -290,7 +289,7 @@ Resume compile_make_array_body_vv_case[tuple_post]:
 QED
 
 Resume compile_make_array_body_vv_case[array_case]:
-  drule_all (SIMP_RULE std_ss [LET_THM] compile_make_array_body_value_owned) >>
+  drule_all compile_make_array_body_value_owned >>
   strip_tac >> irule counted_outcome_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> metis_tac[]
 QED
