@@ -294,7 +294,7 @@ QED
 
 (* Admissibility rules out type/value mismatches; a word type's memory
    representation is its typed word encoding, including zero padding. *)
-Theorem immutable_word_mem_word_at[local]:
+Theorem immutable_word_mem_word_at:
   !tenv t tv v off mem.
     evaluate_type tenv t = SOME tv /\ is_word_type t /\
     immutable_value_admissible tv v /\ val_in_memory tv v off mem ==>
