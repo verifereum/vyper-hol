@@ -22,28 +22,28 @@ QED
 
 Resume rb_compile_stage_intcall_args[stack]:
   markerLib.RESUME_TAC >>
-  (irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (first_x_assum irule >> simp[]) >>
    simp[rb_step_return])
 QED
 
 Resume rb_compile_stage_intcall_args[memory]:
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_emit_void] >> IF_CASES_TAC >>
       simp[rb_compile_store_memory] >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >>
       simp[rb_compile_store_bytestring, rb_step_return]) >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
   simp[rb_step_return]
 QED
@@ -54,7 +54,7 @@ Theorem rb_lower_value:
   rb_step rb_operand_ok (lower_value cfn ce ty e)
 Proof
   strip_tac >> pure_rewrite_tac[lower_value_def] >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >>
   BETA_TAC >> simp[rb_unwrap_value]
 QED
 
@@ -63,9 +63,9 @@ Theorem rb_lower_value_with_loc:
   rb_step (rb_operand_ok o FST) (lower_value_with_loc cfn ce ty e)
 Proof
   strip_tac >> pure_rewrite_tac[lower_value_with_loc_def] >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >>
   BETA_TAC >> simp[rb_unwrap_value, rb_step_return]
 QED
 
@@ -75,9 +75,9 @@ Theorem rb_compile_multi_exprs:
   rb_step (EVERY rb_operand_ok) (compile_multi_exprs cfn ce es)
 Proof
   Induct >> simp[compile_multi_exprs_def, rb_step_return] >> rpt strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
   simp[rb_step_return]
 QED
@@ -87,7 +87,7 @@ Theorem rb_compile_attribute:
   rb_step rb_value_ok (compile_attribute cfn ce ret_ty ty e fld)
 Proof
   strip_tac >> pure_rewrite_tac[compile_attribute_def] >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   irule rb_bind_emit_op >> BETA_TAC >>
@@ -102,10 +102,10 @@ Proof
   Induct >> simp[compile_make_tuple_def, rb_step_return] >> rpt strip_tac >>
   Cases_on `tys` >> simp[compile_make_tuple_def, rb_step_return] >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_store_memory] >>
   first_x_assum irule >> simp[] >> metis_tac[]
@@ -119,10 +119,10 @@ Theorem rb_compile_make_array_elems:
 Proof
   Induct >> simp[compile_make_array_elems_def, rb_step_return] >> rpt strip_tac >>
   pure_rewrite_tac[compile_make_array_elems_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_store_memory] >>
   first_x_assum irule >> simp[] >> metis_tac[]
@@ -146,11 +146,11 @@ Theorem rb_compile_struct_lit:
 Proof
   Induct >> simp[compile_struct_lit_def, rb_step_return] >> rpt strip_tac >>
   PairCases_on `h` >> pure_rewrite_tac[compile_struct_lit_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> qexists_tac `h0` >> simp[]) >>
   gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_store_memory] >>
   first_x_assum irule >> simp[] >> metis_tac[]
@@ -178,14 +178,14 @@ Proof
   Cases_on `infos` >> simp[compile_concat_def, rb_step_return] >>
   PairCases_on `h'` >> simp[compile_concat_def] >>
   Cases_on `h'0` >> simp[]
-  >- (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  >- (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
       rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
       first_x_assum irule >> simp[]) >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
   rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
@@ -199,10 +199,10 @@ Theorem rb_compile_materialize_vv:
   rb_step rb_operand_ok (compile_materialize_vv ce ty vv)
 Proof
   strip_tac >> pure_rewrite_tac[compile_materialize_vv_def] >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_store_memory, rb_step_return]
 QED
@@ -213,10 +213,10 @@ Theorem rb_compile_ifexp_arm:
 Proof
   strip_tac >> pure_rewrite_tac[compile_ifexp_arm_def] >>
   IF_CASES_TAC >- simp[rb_unwrap_value] >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_store_memory, rb_step_return]
 QED
@@ -227,10 +227,10 @@ Theorem rb_compile_snapshot_vv:
 Proof
   strip_tac >> pure_rewrite_tac[compile_snapshot_vv_def] >>
   IF_CASES_TAC
-  >- (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  >- (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       simp[rb_unwrap_value, rb_step_return, rb_value_ok_def]) >>
   Cases_on `copy` >> simp[rb_step_return] >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_materialize_vv, rb_step_return, rb_value_ok_def, rb_mk_ptr]
 QED
 
@@ -240,13 +240,13 @@ Theorem rb_compile_abi_encode_args:
   rb_step (EVERY rb_operand_ok) (compile_abi_encode_args cfn ce es)
 Proof
   Induct >> simp[compile_abi_encode_args_def, rb_step_return] >> rpt strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_materialize_vv, rb_unwrap_value]) >>
   gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
   simp[rb_step_return]
 QED
@@ -258,9 +258,9 @@ Theorem rb_compile_subscript:
   rb_step rb_value_ok (compile_subscript cfn ce ret_ty ty be ie)
 Proof
   strip_tac >> pure_rewrite_tac[compile_subscript_def] >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_snapshot_vv, rb_step_return]) >>
   gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -270,29 +270,29 @@ Proof
       >~ [`compile_tuple_subscript _ _`] >- suspend "tuple"
       >~ [`compile_tuple_subscript _ _`] >- suspend "tuple"
       >> suspend "array") >>
-  simp[] >> irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[] >> irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_keccak256_key, rb_step_return]) >>
   gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_mapping_subscript, rb_value_operand, rb_step_return,
        rb_value_ok_def, rb_mk_ptr]
 QED
 
 Resume rb_compile_subscript[tuple]:
   markerLib.RESUME_TAC >>
-  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    simp[rb_compile_tuple_subscript, rb_value_operand, rb_step_return,
         rb_value_ok_def, rb_mk_ptr])
 QED
 
 Resume rb_compile_subscript[array]:
   markerLib.RESUME_TAC >>
-  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    conj_tac >- simp[rb_step_return, rb_value_ok_def, rb_mk_ptr] >>
    irule rb_compile_array_subscript >> simp[rb_value_operand] >>
    gen_tac >> strip_tac >> irule rb_compile_ptr_load >> gvs[rb_env_ok_def])
@@ -318,12 +318,12 @@ Theorem rb_compile_ext_call_args:
 Proof
   Induct >> simp[compile_ext_call_args_def, rb_step_return] >> rpt strip_tac >>
   Cases_on `tys` >> simp[compile_ext_call_args_def, rb_step_return] >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_snapshot_vv, rb_ext_call_arg_value] >>
   gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
   simp[rb_step_return]
 QED
@@ -335,11 +335,11 @@ Proof
   strip_tac >> pure_rewrite_tac[compile_ext_call_kwarg_def] >>
   IF_CASES_TAC
   >- (pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-      irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+      irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       simp[rb_compile_materialize_vv, rb_step_return]) >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_lower_value, rb_step_return]
 QED
 
@@ -353,10 +353,10 @@ Theorem rb_compile_ext_call_kwargs:
 Proof
   Induct >> simp[compile_ext_call_kwargs_def, rb_step_return] >> rpt strip_tac >>
   Cases_on `ks` >> simp[compile_ext_call_kwargs_def, rb_step_return] >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_ext_call_kwarg] >>
   Cases >> simp[] >> strip_tac >>
-  irule rb_step_bind >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >>
   qexists_tac `\p. OPTION_ALL rb_operand_ok (FST p) /\
                    OPTION_ALL rb_operand_ok (FST (SND p)) /\
                    OPTION_ALL (rb_operand_ok o FST) (SND (SND p))` >> BETA_TAC >>
@@ -371,7 +371,7 @@ Theorem rb_compile_create_salt:
   rb_step (OPTION_ALL rb_operand_ok) (compile_create_salt cfn ce salt)
 Proof
   Cases >> simp[compile_create_salt_def, rb_step_return] >> rpt strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_lower_value, rb_step_return]
 QED
 
@@ -381,9 +381,9 @@ Theorem rb_compile_create_ctor_tuple:
   rb_step rb_operand_ok (compile_create_ctor_tuple cfn ce args)
 Proof
   strip_tac >> pure_rewrite_tac[compile_create_ctor_tuple_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_multi_vvs] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_extcall_store_values, rb_every_zip_fst, rb_step_return]
@@ -403,19 +403,19 @@ Proof
   >- (Cases_on `args` >> simp[]
       >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]) >>
       Cases_on `t` >> simp[]
-      >- (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      >- (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
           reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
           irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
           irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]) >>
   Cases_on `args = []` >> simp[rb_step_return] >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_step_return]
 QED
 
@@ -424,7 +424,7 @@ Theorem rb_compile_create_snapshot:
   rb_step rb_operand_ok (compile_create_snapshot ce vv ty)
 Proof
   strip_tac >> pure_rewrite_tac[compile_create_snapshot_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- simp[rb_step_return] >>
@@ -455,30 +455,30 @@ Theorem rb_compile_raw_create:
   rb_step rb_operand_ok (compile_raw_create cfn ce be ve args salt_e rof)
 Proof
   strip_tac >> pure_rewrite_tac[compile_raw_create_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_create_snapshot] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >>
   qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
   reverse conj_tac
   >- (Cases_on `args = []` >> simp[rb_step_return] >>
-      irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+      irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_copy_memory_dynamic] >>
-      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
   Cases >> simp[] >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_create_salt, rb_compile_create_dispatch] >>
   Cases >> simp[rb_compile_create_dispatch]
 QED
@@ -491,10 +491,10 @@ Proof
   Induct >> simp[compile_extcall_store_args_def, rb_step_return] >>
   rpt gen_tac >> strip_tac >> Cases_on `tys` >>
   (pure_rewrite_tac[compile_extcall_store_args_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_lower_value >> simp[]) >>
   gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (IF_CASES_TAC >> simp[rb_step_return, rb_emit_op]) >>
   gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac
   >- (first_x_assum irule >> simp[]) >>
@@ -517,9 +517,9 @@ Proof
   Cases_on `ck` >> simp[]
   >~ [`compile_raw_create _ _ _ _ _ _ _`]
   >- suspend "raw" >>
-  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac)
   >~ [`compile_create_proxy_buf _`] >- suspend "proxy"
   >~ [`compile_create_copy _ _ _ _`] >- suspend "copy" >>
@@ -535,32 +535,32 @@ QED
 
 Resume rb_compile_create_call[proxy]:
   Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_compile_create_proxy_buf] >>
    gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
    Cases >> simp[rb_compile_create_dispatch])
 QED
 Resume rb_compile_create_call[copy]:
   Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  (irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
    Cases >> simp[rb_compile_create_copy])
 QED
 Resume rb_compile_create_call[blueprint]:
   Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  (irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
    Cases >> simp[] >>
    (rpt strip_tac >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_lower_value >> gvs[] >> Cases_on `t` >> gvs[]) >>
    gen_tac >> strip_tac >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- simp[rb_compile_create_blueprint_check] >>
    gen_tac >> strip_tac >>
-   irule rb_step_bind >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >>
    qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
    reverse conj_tac
    >- (irule rb_compile_create_blueprint_args >> simp[] >>
@@ -594,7 +594,7 @@ Resume rb_compile_get_target_ptr[top]:
   Cases_on `x` >> simp[rb_step_return]
 QED
 Resume rb_compile_get_target_ptr[subscript]:
-  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[] >> rpt strip_tac >>
     first_x_assum irule >> simp[] >> decide_tac) >>
   gen_tac >> simp[] >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
@@ -605,28 +605,28 @@ Resume rb_compile_get_target_ptr[subscript]:
   suspend "array"
 QED
 Resume rb_compile_get_target_ptr[attribute]:
-  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[] >> rpt strip_tac >>
     first_x_assum irule >> simp[] >> decide_tac) >>
   gen_tac >> simp[] >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]
 QED
 Resume rb_compile_get_target_ptr[map]:
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_lower_value >> simp[] >> first_x_assum irule >> simp[]) >>
   gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (IF_CASES_TAC >> simp[rb_compile_keccak256_key, rb_step_return]) >>
   gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_mapping_subscript, rb_step_return]
 QED
 Resume rb_compile_get_target_ptr[array]:
   markerLib.RESUME_TAC >>
-  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  (irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_lower_value >> simp[] >> first_x_assum irule >> simp[]) >>
    gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   irule (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind) >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
    reverse conj_tac >- (irule rb_compile_array_subscript >> simp[] >>
      rpt strip_tac >> irule rb_compile_ptr_load >> gvs[rb_env_ok_def]) >>
    simp[rb_step_return])
@@ -643,7 +643,7 @@ Proof
   pure_rewrite_tac[compile_acc_def] >> simp[ETA_AX, rb_lower_value]
   >~ [`emit_inst INVALID [] [] _`]
   >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [comp_bind_def, LET_THM, SF ETA_ss]
-        (Q.INST [`P` |-> `K T`] rb_step_bind)) >> BETA_TAC >>
+        (Q.INST [`P` |-> `K T`] (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind))) >> BETA_TAC >>
       conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
         irule rb_emit_inst >> simp[]) >>
       pure_rewrite_tac[GSYM comp_return_def] >>
@@ -653,13 +653,13 @@ Proof
   >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
       irule rb_lower_value >> simp[]) >>
   (ho_match_mp_tac (SIMP_RULE (srw_ss()) [comp_bind_def, LET_THM, SF ETA_ss]
-      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_bind))) >> BETA_TAC >>
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
    conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
      irule rb_lower_value >> simp[]) >> gen_tac >> strip_tac >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    simp[rb_emit_op] >>
    ho_match_mp_tac (SIMP_RULE (srw_ss()) [comp_bind_def, LET_THM, SF ETA_ss]
-      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_bind))) >> BETA_TAC >>
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
    simp[rb_emit_op] >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    irule rb_emit_op >> simp[])
