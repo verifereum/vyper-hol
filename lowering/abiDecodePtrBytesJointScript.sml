@@ -8,6 +8,47 @@ Ancestors
   entryDecoderHistoryFrame emitHelperProps exprLoweringProps bodyPtrDefs ptrDiscipline
   venomState venomExecSemantics venomInst contractABI words list rich_list arithmetic
 
+Theorem abi_decode_bytes_joint_code:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecBytestring n) sa = ((),sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+      i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb) /\
+    EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts sa sb) /\
+    s.vs_inst_idx+LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_bytes_position_shape >> strip_tac >>
+  drule_all abi_decoder_bytes_reentry_code >> strip_tac >>
+  `isPREFIX sa.cs_current_insts sb.cs_current_insts` by
+    fs[inst_extends_def] >>
+  drule_all entry_straight_line_code_slice >> strip_tac >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+    (rewrite_tac[EVERY_MEM] >> qx_gen_tac `i` >> strip_tac >>
+     `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+       ~is_alloca_op i.inst_opcode` by
+       (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) _`
+          (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
+     `abi_decoder_reentry_opcode i.inst_opcode` by
+       (qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _`
+          (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
+     `i.inst_opcode <> ALLOCA` by
+       (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
+     `i.inst_opcode <> GAS` by
+       (CCONTR_TAC >> gvs[abi_decoder_reentry_opcode_def]) >> simp[]) >>
+  `s.vs_inst_idx+LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    fs[inst_extends_def] >>
+  qexists_tac `bb` >> simp[]
+QED
+
 Theorem abi_decode_bytes_success_joint:
   compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
     (DecBytestring n) sa = ((),sb) /\ hi <> Lit 0w /\
@@ -55,31 +96,7 @@ Proof
        d_imm := K {}; d_ret := K {} |>`]) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `inst_seq_ptr _ 0 ctx func PG G tn _ s G' tn'` >>
-  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_bytes_position_shape >> strip_tac >>
-  drule_all abi_decoder_bytes_reentry_code >> strip_tac >>
-  `isPREFIX sa.cs_current_insts sb.cs_current_insts` by
-    fs[inst_extends_def] >>
-  drule_all entry_straight_line_code_slice >> strip_tac >>
-  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
-    simp[IS_PREFIX_APPEND] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb)` by
-    (rewrite_tac[EVERY_MEM] >> qx_gen_tac `i` >> strip_tac >>
-     `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-       ~is_alloca_op i.inst_opcode` by
-       (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) _`
-          (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
-     `abi_decoder_reentry_opcode i.inst_opcode` by
-       (qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _`
-          (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
-     `i.inst_opcode <> ALLOCA` by
-       (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
-     `i.inst_opcode <> GAS` by
-       (CCONTR_TAC >> gvs[abi_decoder_reentry_opcode_def]) >> simp[]) >>
-  `s.vs_inst_idx+LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
-    fs[inst_extends_def] >>
+  drule_all abi_decode_bytes_joint_code >> strip_tac >>
   `!explicit. gas_origin_ptr_path
     (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
      lo,explicit,ctx,func,PG) (s,G,tn) []
