@@ -481,6 +481,11 @@ Theorem ircf_witness_safe_entry:
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "main";
                    vs_inst_idx := 0 |>))
 Proof
+  `lookup_function "callee" ircf_witness_ctx.ctx_functions =
+    SOME ircf_witness_callee` by
+    simp[lookup_function_def, ircf_witness_ctx_def,
+         ircf_witness_callee_def, ircf_witness_main_def,
+         mk_raw_function_def] >>
   qexists_tac `init_venom_state "main"` >>
   simp[init_venom_state_def] >>
   rewrite_tac[GSYM init_venom_state_def] >>
@@ -542,7 +547,7 @@ Resume ircf_witness_safe_entry[callee_safe]:
           FLOOKUP_UPDATE] >>
       rpt strip_tac >> Cases_on `op` >>
       simp[op_taint_def, FLOOKUP_UPDATE] >> rpt IF_CASES_TAC >> simp[]) >>
-  simp[decode_invoke_def, lookup_function_def, ircf_witness_ctx_def,
+  asm_simp_tac (srw_ss()) [decode_invoke_def,
        ircf_witness_callee_def, mk_raw_function_def, FIND_thm,
        eval_operands_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        setup_callee_def, op_prov_def] >>
@@ -626,8 +631,8 @@ Resume ircf_witness_safe_entry[callee_safe]:
 QED
 
 Resume ircf_witness_safe_entry[caller_rest]:
-  simp[step_inst_def, decode_invoke_def, lookup_function_def,
-       ircf_witness_ctx_def, ircf_witness_callee_def,
+  asm_simp_tac (srw_ss()) [step_inst_def, decode_invoke_def,
+       ircf_witness_callee_def,
        mk_raw_function_def, FIND_thm, eval_operands_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, setup_callee_def] >>
   simp[Once run_blocks_def, lookup_block_def, FIND_thm,
@@ -648,7 +653,7 @@ Resume ircf_witness_safe_entry[caller_rest]:
   simp[step_inst_def, step_inst_base_def, eval_operands_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[bind_outputs_def, merge_callee_state_def, is_terminator_def] >>
-  simp[ghost_step_def, decode_invoke_def, lookup_function_def,
+  asm_simp_tac (srw_ss()) [ghost_step_def, decode_invoke_def,
        FIND_thm, eval_operands_def, eval_operand_def, lookup_var_def,
        FLOOKUP_UPDATE, setup_callee_def, op_prov_def] >>
   simp[Once ghost_blocks_def, lookup_block_def, FIND_thm,
