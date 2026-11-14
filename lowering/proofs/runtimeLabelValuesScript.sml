@@ -130,3 +130,44 @@ Proof
   Cases_on `p` >> simp[]
 QED
 
+Theorem rb_compile_scaled_addr:
+  rb_operand_ok src ==>
+  rb_step rb_operand_ok
+    (if scale = 1 then emit_op ADD [src; Var idx]
+     else comp_bind (emit_op MUL [Var idx; Lit (n2w scale)])
+                    (\scaled. emit_op ADD [src; scaled]))
+Proof
+  strip_tac >> Cases_on `scale = 1` >> simp[rb_emit_op] >>
+  irule rb_bind_emit_op >> simp[rb_emit_op]
+QED
+
+Theorem rb_compile_word_copy_loop_base:
+  rb_operand_ok src /\ rb_operand_ok dst /\ rb_operand_ok count_op /\
+  (case imm of NONE => T | SOME region => rb_operand_ok region) ==>
+  rb_step (K T)
+    (compile_word_copy_loop_base src dst count_op loadloc storeloc ctor imm)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_word_copy_loop_base_def, LET_THM] >> BETA_TAC >>
+  ntac 3 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> disch_tac) >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  irule rb_bind_emit_op >> BETA_TAC >>
+  (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_scaled_addr]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_bind_ptr_load >> simp[] >> gen_tac >> disch_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_scaled_addr]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_ignore >> (conj_tac >- simp[rb_compile_ptr_store]) >>
+  irule rb_bind_emit_op >> BETA_TAC >>
+  (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  simp[rb_new_block]
+QED
