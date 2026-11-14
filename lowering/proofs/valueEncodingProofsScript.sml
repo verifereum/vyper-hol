@@ -1526,3 +1526,98 @@ Proof
       qpat_x_assum `!i k. _ ==> mem_bytes_at _ _ _ = _`
         (qspec_then `0` mp_tac) >> simp[])
 QED
+
+(* Zero-layout values occupy no memory, for any backing memory. *)
+Theorem return_zero_default_mutual:
+  (!tv. type_memory_size tv = 0 ==>
+    value_has_type tv (default_value tv) /\ val_wf tv (default_value tv) /\
+    !p mem. val_in_memory tv (default_value tv) p mem) /\
+  (!ts. type_memory_size_list ts = 0 ==>
+    values_have_types ts (MAP default_value ts) /\
+    tuple_val_wf (MAP default_value ts) ts /\
+    !p mem. tuple_in_memory (MAP default_value ts) ts p mem) /\
+  (!fs. type_memory_size_fields fs = 0 ==>
+    struct_has_type fs (MAP (\(n,t). (n,default_value t)) fs) /\
+    fields_val_wf (MAP (\(n,t). (n,default_value t)) fs) fs /\
+    !p mem. fields_in_memory (MAP (\(n,t). (n,default_value t)) fs) fs p mem)
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  simp[type_memory_size_def, default_value_def,
+    default_value_tuple_MAP, default_value_struct_MAP,
+    value_has_type_def, val_wf_def, val_in_memory_def]
+QED
+
+Theorem return_zero_default:
+  type_memory_size tv = 0 ==>
+  value_has_type tv (default_value tv) /\ val_wf tv (default_value tv) /\
+  !p mem. val_in_memory tv (default_value tv) p mem
+Proof
+  metis_tac[return_zero_default_mutual]
+QED
+
+Theorem return_zero_kvs_memory[local]:
+  (!v. val_wf tv v ==> !p mem. val_in_memory tv v p mem) ==>
+  !kvs n. kvs_val_wf kvs tv n ==> !p mem. kvs_in_memory kvs p tv mem
+Proof
+  strip_tac >> Induct >> simp[val_wf_def, val_in_memory_def] >>
+  Cases_on `h` >> simp[val_wf_def, val_in_memory_def] >> metis_tac[]
+QED
+
+Theorem return_zero_bound_kvs[local]:
+  kvs_val_wf kvs tv 0 ==> kvs = []
+Proof
+  Cases_on `kvs` >> simp[val_wf_def] >> Cases_on `h` >> simp[val_wf_def]
+QED
+
+Theorem return_zero_wf_memory_mutual:
+  (!tv. !v. type_memory_size tv = 0 /\ val_wf tv v ==>
+    !p mem. val_in_memory tv v p mem) /\
+  (!ts. !vs. type_memory_size_list ts = 0 /\ tuple_val_wf vs ts ==>
+    !p mem. tuple_in_memory vs ts p mem) /\
+  (!fs. !vs. type_memory_size_fields fs = 0 /\ fields_val_wf vs fs ==>
+    !p mem. fields_in_memory vs fs p mem)
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  simp[type_memory_size_def] >>
+  conj_tac
+  >- (Cases >> simp[val_wf_def, val_in_memory_def, type_memory_size_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >> simp[val_wf_def]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >> Cases >>
+      simp[val_wf_def, val_in_memory_def, type_memory_size_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      simp[val_wf_def, val_in_memory_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      `type_memory_size (ArrayTV tv (Fixed n)) = 0` by
+        (fs[type_memory_size_def]) >>
+      Cases_on `v` >> gvs[val_wf_def, val_in_memory_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      gvs[val_wf_def, val_in_memory_def]
+      >- (drule return_zero_bound_kvs >> simp[val_in_memory_def]) >>
+      drule return_zero_kvs_memory >> disch_then drule >>
+      metis_tac[return_zero_default]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >> Cases >>
+      simp[val_wf_def, val_in_memory_def, type_memory_size_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      simp[val_wf_def, val_in_memory_def] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases >> simp[val_wf_def, val_in_memory_def]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases >>
+      simp[val_wf_def, val_in_memory_def] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases >> simp[val_wf_def, val_in_memory_def] >>
+      Cases_on `h` >> simp[val_wf_def, val_in_memory_def]) >>
+  rpt gen_tac >> strip_tac >> Cases >>
+  simp[val_wf_def, val_in_memory_def] >>
+  Cases_on `h` >> simp[val_wf_def, val_in_memory_def] >> metis_tac[]
+QED
+
+Theorem return_zero_wf_memory:
+  type_memory_size tv = 0 /\ val_wf tv v ==>
+  !p mem. val_in_memory tv v p mem
+Proof
+  metis_tac[return_zero_wf_memory_mutual]
+QED

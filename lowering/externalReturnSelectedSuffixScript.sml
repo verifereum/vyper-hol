@@ -6,7 +6,7 @@ Ancestors externalReturnSelectedResources externalReturnSiteSemantics
   valueCopyBytes valueTypingMemoryProps exprSimProps stmtSimReturn
   externalReturnConsumerProbe externalReturnCopyAlloc externalReturnSuffixResult
   externalReturnBufferlessAlloc externalReturnIntcallMetadata vyperTypeSystem
-  externalReturnBufferlessNormalize vyperTypeContract supportedDecls supportedProgram
+  valueEncodingProofs vyperTypeContract supportedDecls supportedProgram
   vyperInterpreter entryStateRel
 
 Theorem selected_arg_fits_trans_mutual[local]:
