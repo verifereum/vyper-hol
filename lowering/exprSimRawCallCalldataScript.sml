@@ -760,7 +760,7 @@ Proof
   qexists_tac `t` >> conj_tac
   >- (qpat_x_assum `t = _` kall_tac >>
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
-      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> fs[] >>
+      Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
       simp[step_inst_base_def]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
@@ -4713,7 +4713,8 @@ Theorem calldata_raw_call_gas_obs:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `flags.rcf_is_static /\ amount <> 0`
-  >- fs[eval_raw_call_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
+  >- fs[eval_raw_call_def, type_check_def, assert_def, ignore_bind_def,
+        bind_def, raise_def] >>
   Cases_on `cx.txn.is_static /\ amount <> 0`
   >- (fs[] >> simp[raw_call_static_value_abort]) >>
   `cx.txn.is_static ==> amount = 0` by fs[] >>
