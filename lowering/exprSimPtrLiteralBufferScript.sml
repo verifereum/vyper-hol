@@ -747,7 +747,7 @@ Theorem literal_ptr_nonmemory_step[local]:
   (i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE) /\
   step_inst_base i s = OK t ==>
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
-  t.vs_transient = s.vs_transient
+  t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac
@@ -769,7 +769,7 @@ Theorem literal_ptr_nonmemory_seq[local]:
     EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE) code /\
     run_inst_seq code s = OK t ==>
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
-    t.vs_transient = s.vs_transient
+    t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables
 Proof
   Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
   rename1 `run_inst_seq code _ = _` >>
@@ -814,6 +814,19 @@ Theorem literal_bytelike_ptr_nonmemory_frame:
 Proof
   strip_tac >> drule literal_ptr_bytelike_shape >> strip_tac >>
   drule literal_ptr_chunks_nonmemory_shape >> strip_tac >>
-  irule literal_ptr_nonmemory_seq >> qexists_tac `emitted_insts sa sb` >>
-  simp[mk_inst_def]
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE)
+    (emitted_insts sa sb)` by simp[mk_inst_def] >>
+  drule_all literal_ptr_nonmemory_seq >> simp[]
+QED
+
+Theorem literal_bytelike_ptr_immutables_frame:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t.vs_immutables = s.vs_immutables
+Proof
+  strip_tac >> drule literal_ptr_bytelike_shape >> strip_tac >>
+  drule literal_ptr_chunks_nonmemory_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE)
+    (emitted_insts sa sb)` by simp[mk_inst_def] >>
+  drule_all literal_ptr_nonmemory_seq >> simp[]
 QED
