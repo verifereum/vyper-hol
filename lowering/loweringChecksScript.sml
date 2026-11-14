@@ -22,6 +22,8 @@ Ancestors
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest
+  (* external-call positional snapshot interfaces *)
+  exprExtRequestSnapshotStore
   (* compiled creation code *)
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
   (* tests of the bytecode evaluation library the native runner shares *)
