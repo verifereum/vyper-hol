@@ -38,7 +38,7 @@ Ancestors
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
-  builtinStrings builtinSystem
+  builtinStrings builtinSystem vyperPinFold
 Libs
   monadsyntax
 
