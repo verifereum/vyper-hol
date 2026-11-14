@@ -23,7 +23,7 @@ Ancestors
   bodyIntCallPostProvenanceConditionalJoin
   bodyIntCallPostProvenanceSelectors
   bodyIntCallPostProvenanceOtherSelectors bodyIntCallPostProvenanceSelectorCases
-  bodyIntCallPostProvenanceCaptured
+  bodyIntCallPostProvenanceCaptured bodyIntCallPostProvenanceNonplace
 
 Theorem vv_post_intcall_provenance:
   vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
@@ -55,15 +55,10 @@ Proof
   metis_tac[]
 QED
 
-(* Held (argon, s1-calls branch): the cases vv_post_intcall_provenance
-   leaves out, an effect-free argument whose value is a code pointer
-   (an immutable or a selection from one) or whose type contains a
-   dynamic array.  Its run's success post also gives the argument's
-   provenance: a borrowed local or immutable selection is a sub_layout of
-   that variable's value, and anything else lies in its own ALLOCAs.  Only
-   the frozen lowering's evaluate-all-then-stage order needs this; on
-   trunk, eager staging of each memory argument (vyper-hol#1217) retires
-   it. *)
+(* The cases vv_post_intcall_provenance leaves out: code pointers and
+   types containing dynamic arrays.  Structural provenance of the raw
+   compile_expr result supplies the enriched success post, independently
+   of subsequent internal-call argument staging. *)
 Theorem intcall_arg_provenance_held:
   body_inv tops ctx cenv cx /\ body_expr_ok cx e /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
@@ -85,5 +80,6 @@ Theorem intcall_arg_provenance_held:
        intcall_vv_provenance cenv cx (expr_type e) sa sb ee tv vv t)
     (\res ee r. expr_exit res r)
 Proof
-  cheat
+  strip_tac >> irule intcall_effect_free_provenance_outcome >>
+  metis_tac[]
 QED
