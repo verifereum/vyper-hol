@@ -399,7 +399,7 @@ Proof
   gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]
 QED
 
-Theorem stmt_post_storage_trace[local]:
+Theorem stmt_post_storage_trace:
   stmt_post H ctx func cx lctx old c sa sf es0 s0 res
     (ee with storage_trace := obs) t =
   stmt_post H ctx func cx lctx old c sa sf es0 s0 res ee t
