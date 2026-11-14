@@ -517,7 +517,9 @@ Theorem attr_add_path_frame:
       vv_post ctx func cenv cx e es sa sn s0 es' tv vv t' /\
       eval_operand (vv_operand vv) t' = SOME w /\
       eval_operand dst t' = SOME (w + n2w off) /\
-      (t' with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|>) = t
+      (t' with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|>) = t /\
+      eval_operand (vv_operand vv) t = SOME w /\
+      (!x. not_fresh_at sm x ==> lookup_var x t' = lookup_var x t)
 Proof
   rpt strip_tac >>
   `?w. eval_operand (vv_operand vv) t = SOME w` by
@@ -531,15 +533,19 @@ Proof
    LENGTH sn.cs_current_insts = SUC (LENGTH sm.cs_current_insts)` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
-  qexistsl_tac [`update_var (STRING #"%" (toString sm.cs_next_var))
-                   (w + n2w off) t with vs_inst_idx := SUC t.vs_inst_idx`,
-                `w`] >>
+  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var))
+                   (w + n2w off) t with vs_inst_idx := SUC t.vs_inst_idx` >>
   simp[attr_eval_inst_idx] >> conj_tac
   >- (qpat_x_assum `emit_op ADD _ _ = _` assume_tac >>
       drule emit_op_zero_path >> simp[is_terminator_def] >>
       disch_then irule >> simp[] >> gen_tac >>
       irule step_ADD >> simp[eval_operand_def]) >>
-  simp[] >> simp[update_var_def, venom_state_component_equality]
+  simp[] >> simp[update_var_def, venom_state_component_equality,
+                 lookup_var_def] >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString sm.cs_next_var)` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  simp[FLOOKUP_UPDATE]
 QED
 
 Theorem attr_source:
