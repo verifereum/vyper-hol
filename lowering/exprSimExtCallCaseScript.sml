@@ -676,6 +676,24 @@ Proof
        exprSimWordArgsTheory.eval_exprs_nil, return_def]
 QED
 
+(* Each induction step exposes exactly the evaluation/snapshot/suffix cuts;
+   in particular the head is compiled at its source type, not its ABI type. *)
+Theorem extcall_request_positional_cut[local]:
+  compile_ext_call_args compile_expr ce kws
+    (MAP (lowered_value_type ce) (e::es)) (e::es) sa = (vals,sb) ==>
+  ?vv sm snap sh rest.
+    compile_expr ce (expr_type e) e sa = (vv,sm) /\
+    compile_snapshot_vv ce (exprs_can_mutate ce (es ++ kws))
+      (ext_call_arg_value (lowered_value_type ce e) vv) sm = (snap,sh) /\
+    compile_ext_call_args compile_expr ce kws
+      (MAP (lowered_value_type ce) es) es sh = (rest,sb) /\
+    vals = snap::rest
+Proof
+  simp[compile_ext_call_args_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[]
+QED
+
+
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
    opts args dflt ty es st0 sa sb vv s0 Q.
