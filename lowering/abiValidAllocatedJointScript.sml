@@ -1,0 +1,231 @@
+(* Joint coherent decoding and member traversal on one operational path. *)
+Theory abiValidAllocatedJoint
+Ancestors
+ abiValidAllocatedMembersJoint abiValidAllocatedMemberEntry abiValidMembers
+ abiValidAllocatedMembers abiValidAllocatedContract abiValidAllocatedSource
+ abiDecoderMemberCons abiDecoderMemberInfos abiDecoderMemberSetup
+ abiDecoderCoherence abiDecoderContract abiDecoderReentry abiMalformedRecursiveInterface
+ abiMalformedSiteFrame decoderGhostFramePtr bodyPtrDefs ptrDiscipline
+ exprSimProps exprLoweringProps valueEncodingTyping valueEncodingDefs valueEncoding
+ abiEncoder compileEnv loweringStateRelDefs venomState vyperABI contractABI finite_map pred_set list arithmetic
+
+val C = ``\ty tv.
+ !v ctx func cenv cx es st en source hi pos output B L xs p d dstid live ceiling s H0.
+ abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
+  st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s ==>
+ !G tn PG lo.
+ ~ctx_has_dalloca ctx /\
+abi_decode_ptr_window G tn s source (n2w B) L /\
+ptr_covers G tn output s (type_memory_bytes ce ty) /\
+op_prov G pos = NONE /\ op_prov G hi = NONE /\
+op_taint tn pos = {} /\ op_taint tn hi = {} /\
+allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s
+==>
+?u G' tn'.
+  abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
+    d (type_memory_bytes ce ty) s u /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_immutables = s.vs_immutables /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK u,G',tn')) /\
+  ptr_covers G' tn' output u (type_memory_bytes ce ty) /\
+  abi_decode_ptr_window G' tn' u source (n2w B) L /\
+  (!mem. mem_agree_outside tn'.t_mem u.vs_memory mem ==>
+     val_in_memory tv v d mem) /\
+  (!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+     FLOOKUP G' x = FLOOKUP G x /\
+     op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  tn'.t_imm = tn.t_imm /\
+  (!a. ~(d <= a /\ a < d+type_memory_bytes ce ty) /\
+       ~abi_malformed_site_range
+          (abi_malformed_scratch_sites st en func) s u a 1 ==>
+       (a IN tn'.t_mem <=> a IN tn.t_mem)) /\
+  alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next``;
+
+val M = ``\tys tvs.
+ !vs ctx func cenv cx es st en source hi pos output B L xs p d outsz ao vo dstid live ceiling s H0.
+ abi_valid_allocated_members_entry H0 ce env sf tys tvs vs ctx func cenv cx es
+   st en (Var source) hi pos (Var output) B L xs p d outsz ao vo dstid live ceiling s ==>
+ !G tn PG lo.
+ ~ctx_has_dalloca ctx /\
+ abi_decode_ptr_window G tn s source (n2w B) L /\
+ ptr_covers G tn output s outsz /\
+ op_prov G pos = NONE /\ op_prov G hi = NONE /\
+ op_taint tn pos = {} /\ op_taint tn hi = {} /\
+ allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
+ ?u G' tn'.
+ abi_valid_allocated_members_post tvs vs ctx func cenv cx es st en ceiling dstid
+   (d+vo) (type_memory_size_list tvs) s u /\
+ u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+ u.vs_call_ctx = s.vs_call_ctx /\ u.vs_immutables = s.vs_immutables /\
+ (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+   (s,G,tn) [] (OK u,G',tn')) /\
+ ptr_covers G' tn' output u outsz /\
+ abi_decode_ptr_window G' tn' u source (n2w B) L /\
+ (!mem. mem_agree_outside tn'.t_mem u.vs_memory mem ==>
+   tuple_in_memory vs tvs (d+vo) mem) /\
+ (!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+   FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+ (!a. ~(d+vo <= a /\ a < d+vo+type_memory_size_list tvs) /\
+   ~abi_malformed_site_range (abi_malformed_scratch_sites st en func) s u a 1 ==>
+   (a IN tn'.t_mem <=> a IN tn.t_mem)) /\
+ alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next``;
+
+Theorem abi_valid_allocated_joint_members_nil[local]:
+ (^M) [] []
+Proof
+ BETA_TAC >> rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+ `vs = []` by fs[abi_valid_allocated_members_entry_def,
+   Once abi_to_vyper_def, abi_decode_members_def] >> gvs[] >>
+ mp_tac (abi_valid_allocated_members_nil_joint |> Q.INST
+   [`H` |-> `H0`, `base_op` |-> `Var source`, `dst` |-> `Var output`, `src` |-> `pos`]) >>
+ (impl_tac >- simp[]) >> strip_tac >>
+ qexistsl_tac [`s`, `G`, `tn`] >> simp[val_in_memory_def, type_memory_size_def]
+QED
+
+Theorem abi_valid_allocated_joint_members_cons[local]:
+ (^C) ty tv /\ (^M) tys tvs ==> (^M) (ty::tys) (tv::tvs)
+Proof
+ disch_then (CONJUNCTS_THEN2 (mk_asm "child") (mk_asm "tail")) >>
+ BETA_TAC >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
+ disch_then (map_every assume_tac o CONJUNCTS) >>
+ `compile_abi_decode_complex_elems (Var output) pos MLOAD (Var source) hi
+    (abi_decoder_member_infos sf ce (ty::tys)) ao vo st = ((),en)` by
+   fs[abi_valid_allocated_members_entry_def] >>
+ drule abi_decoder_member_cons_trace >> strip_tac >>
+ mp_tac (abi_valid_allocated_members_head_entry_joint |> Q.INST
+   [`H` |-> `H0`, `src` |-> `pos`]) >>
+ (impl_tac >- asm_simp_tac bool_ss []) >>
+ disch_then (qx_choose_then `v` (qx_choose_then `rest`
+   (qx_choose_then `prepared` (qx_choose_then `out`
+     (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac)))))) >>
+ qpat_x_assum `vs = v::rest` SUBST_ALL_TAC >>
+ asm "child" (mp_tac o BETA_RULE) >>
+ disch_then drule >>
+ disch_then (qspecl_then [`G1`, `tn1`, `PG`, `lo`] mp_tac) >>
+ (impl_tac >- simp[]) >>
+ disch_then (qx_choose_then `after_head`
+   (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac))) >>
+ `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+ `fn_has_code st en func` by fs[abi_valid_allocated_members_entry_def] >>
+ drule_all abi_decoder_member_cons_code >> strip_tac >>
+ drule_all abi_valid_allocated_members_tail_entry >> strip_tac >>
+ `abi_decoder_operand_live st.cs_next_var (Var output) /\
+  abi_decoder_operand_live st.cs_next_var pos /\
+  abi_decoder_operand_live st.cs_next_var hi` by
+   (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
+    fs[abi_valid_allocated_members_entry_def, abi_malformed_entry_def, EVERY_DEF]) >>
+ `abi_decoder_operand_live middle.cs_next_var (Var output) /\
+  abi_decoder_operand_live middle.cs_next_var pos /\
+  abi_decoder_operand_live middle.cs_next_var hi` by
+   (rpt conj_tac >> irule abi_decoder_operand_live_mono >>
+    qexists_tac `st.cs_next_var` >> simp[]) >>
+ `lookup_var output after_head = lookup_var output prepared` by
+   (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
+    `not_fresh_at st output` by
+      fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+    `lookup_var output after_head = lookup_var output s` by
+      fs[abi_valid_allocated_members_entry_def, abi_malformed_entry_def, eval_operand_def] >>
+    qpat_assum `!x. not_fresh_at st x ==> _ /\ _ /\ _`
+      (qspec_then `output` mp_tac) >> simp[]) >>
+ `ptr_covers G2 tn2 output after_head outsz` by
+   (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
+    irule ptr_covers_frame >> qexistsl_tac [`G1`, `prepared`, `tn1`] >>
+    simp[] >> metis_tac[]) >>
+ `op_prov G2 pos = NONE /\ op_prov G2 hi = NONE /\
+  op_taint tn2 pos = {} /\ op_taint tn2 hi = {}` by
+   (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
+    Cases_on `pos` >> Cases_on `hi` >>
+    fs[op_prov_def, op_taint_def, abi_decoder_operand_live_def,
+       abi_decoder_older_vars_def, not_fresh_at_def] >> metis_tac[]) >>
+ asm "tail" (mp_tac o BETA_RULE) >> disch_then drule >>
+ disch_then (qspecl_then [`G2`, `tn2`, `PG`, `lo`] mp_tac) >>
+ (impl_tac >- simp[]) >>
+ disch_then (qx_choose_then `actual`
+   (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac))) >>
+ asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
+ `abi_decoder_coherent ce env sf ty tv` by
+   fs[abi_valid_allocated_members_entry_def, LIST_REL_CONS1] >>
+ drule abi_decoder_coherent_header >> strip_tac >>
+ `type_memory_bytes ce ty = type_memory_size tv` by fs[abi_decoder_header_def] >>
+ `val_wf tv v` by
+   (irule (cj 1 value_has_type_val_wf) >>
+    irule (cj 1 vyperTypeABITheory.abi_to_vyper_well_typed) >>
+    fs[abi_decoder_header_def, abi_valid_allocated_entry_def] >> metis_tac[]) >>
+ `val_footprint tv v <= type_memory_bytes ce ty` by metis_tac[val_footprint_le] >>
+ `abi_malformed_destination func cenv es.scopes dstid (d+vo)
+    (type_memory_bytes ce ty) after_head /\
+  dstid NOTIN abi_malformed_scratch_sites end_st en func` by
+   (fs[abi_valid_allocated_members_entry_def, abi_malformed_entry_def] >>
+    irule abi_malformed_destination_subrange >>
+    qexistsl_tac [`d`, `outsz`] >> simp[] >> fs[type_memory_size_def] >> decide_tac) >>
+ drule_all abi_valid_allocated_members_cons_joint_post >> strip_tac >>
+ `abi_malformed_scratch_sites middle end_st func SUBSET
+    abi_malformed_scratch_sites st en func /\
+  abi_malformed_scratch_sites end_st en func SUBSET
+    abi_malformed_scratch_sites st en func` by
+   (conj_tac >> irule abi_malformed_scratch_sites_nested >> decide_tac) >>
+ `alloca_inv after_head /\ s.vs_alloca_next <= after_head.vs_alloca_next /\
+  after_head.vs_alloca_next <= actual.vs_alloca_next /\
+  (!id b sz. FLOOKUP after_head.vs_allocas id = SOME (b,sz) ==>
+    FLOOKUP s.vs_allocas id = SOME (b,sz) \/ s.vs_alloca_next <= b)` by
+   (fs[abi_valid_allocated_post_def, abi_valid_allocated_members_post_def] >>
+    imp_res_tac abi_malformed_resource_post_alloca_inv >>
+    fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
+ `!a. ~(d+vo <= a /\ a < d+vo+type_memory_size_list (tv::tvs)) /\
+    ~abi_malformed_site_range (abi_malformed_scratch_sites st en func)
+      s after_head a 1 ==> (a IN tn2.t_mem <=> a IN tn.t_mem)` by
+   (rpt strip_tac >>
+    `~(d+vo <= a /\ a < d+vo+type_memory_bytes ce ty)` by
+      (fs[type_memory_size_def] >> decide_tac) >>
+    `~abi_malformed_site_range (abi_malformed_scratch_sites middle end_st func)
+       prepared after_head a 1` by
+      (fs[abi_malformed_site_range_def, SUBSET_DEF] >> metis_tac[]) >>
+    metis_tac[]) >>
+ `!a. ~(d+vo <= a /\ a < d+vo+type_memory_size_list (tv::tvs)) /\
+    ~abi_malformed_site_range (abi_malformed_scratch_sites st en func)
+      after_head actual a 1 ==> (a IN tn3.t_mem <=> a IN tn2.t_mem)` by
+   (rpt strip_tac >>
+    `~(d+(vo+type_memory_bytes ce ty) <= a /\
+       a < d+(vo+type_memory_bytes ce ty)+type_memory_size_list tvs)` by
+      (fs[type_memory_size_def] >> decide_tac) >>
+    `~abi_malformed_site_range (abi_malformed_scratch_sites end_st en func)
+       after_head actual a 1` by
+      (fs[abi_malformed_site_range_def, SUBSET_DEF] >> metis_tac[]) >>
+    metis_tac[]) >>
+ mp_tac (abi_valid_allocated_taint_frame_trans |> Q.INST
+   [`d` |-> `d+vo`, `n` |-> `type_memory_size_list (tv::tvs)`,
+    `sites` |-> `abi_malformed_scratch_sites st en func`,
+    `t` |-> `after_head`, `u` |-> `actual`, `dirty0` |-> `tn.t_mem`,
+    `dirty1` |-> `tn2.t_mem`, `dirty2` |-> `tn3.t_mem`]) >>
+ (impl_tac >- asm_simp_tac bool_ss []) >> disch_tac >>
+ `!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+    FLOOKUP G3 x = FLOOKUP G x /\ op_taint tn3 (Var x) = op_taint tn (Var x)` by
+   (rpt strip_tac >>
+    `abi_decoder_operand_live middle.cs_next_var (Var x) /\
+     abi_decoder_operand_live end_st.cs_next_var (Var x)` by
+      (`st.cs_next_var <= end_st.cs_next_var` by decide_tac >>
+       conj_tac >> irule abi_decoder_operand_live_mono >>
+       qexists_tac `st.cs_next_var` >> simp[]) >>
+    `not_fresh_at st x` by
+      fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+    metis_tac[]) >>
+ qexistsl_tac [`actual`, `G3`, `tn3`] >> asm_simp_tac bool_ss []
+QED
+
+Theorem abi_valid_allocated_joint_members:
+ !tys tvs. LIST_REL (^C) tys tvs ==> (^M) tys tvs
+Proof
+ Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
+ simp_tac bool_ss [LIST_REL_def, abi_valid_allocated_joint_members_nil] >> strip_tac >>
+ rename1 `head_ty::tys` >> rename1 `(head_tv:type_value)::tail_tvs` >>
+ mp_tac (abi_valid_allocated_joint_members_cons |> Q.INST
+   [`ty` |-> `head_ty`, `tv` |-> `head_tv`, `tvs` |-> `tail_tvs`]) >>
+ (impl_tac >-
+   (conj_tac >- (BETA_TAC >> fs[] >> first_assum ACCEPT_TAC) >>
+    first_x_assum irule >> simp[])) >>
+ simp[]
+QED
+
