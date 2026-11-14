@@ -151,12 +151,7 @@ Proof
   qabbrev_tac `vs = opt_entry_state prog prog' cplan es` >>
   `vs.vs_code = assemble prog ++ vs.vs_data_section` by
     simp[Abbr `vs`, opt_entry_state_def, entry_venom_state_frame_fields] >>
-  `LENGTH vs.vs_code <= dimword (:256) DIV 2` by
-    fs[code_layout_valid_def] >>
-  `0 < LENGTH (assemble prog)` by (Cases_on `assemble prog` >> fs[]) >>
-  qpat_x_assum `LENGTH vs.vs_code <= _` mp_tac >>
-  qpat_x_assum `vs.vs_code = _` SUBST1_TAC >>
-  simp[] >> decide_tac
+  drule_all code_layout_valid_data_section_bound >> simp[]
 QED
 
 (* opt_entry_state reads everything but the code and the layout from es. *)

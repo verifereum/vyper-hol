@@ -2,16 +2,6 @@ Theory bodyPtrStructLitOwnershipExtraction
 Ancestors bodyPtrStructLitCompilerOwnership vyperCompiler loweringShapeDefs list
   venomInst unitShapeDefs
 
-Theorem split_blocks_at_partition:
-  !blocks label prefix suffix.
-    split_blocks_at label blocks = SOME (prefix,suffix) ==>
-    blocks = prefix ++ suffix
-Proof
-  Induct >> simp[split_blocks_at_def] >> rpt gen_tac >>
-  IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem package_internal_blocks_subset:
   !descriptors blocks entry_blocks functions.
     package_internal_blocks descriptors blocks = SOME (entry_blocks,functions) ==>
