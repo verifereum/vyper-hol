@@ -4,6 +4,7 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
+  bodyFullRawCallPositiveFinish
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
