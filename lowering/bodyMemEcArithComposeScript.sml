@@ -12,7 +12,7 @@ Ancestors
 fun conj_assum_thm_tac ttac (g as (asl, w)) =
   let fun conjs th =
         if boolSyntax.is_conj (Thm.concl th)
-        then conjs (Drule.CONJUNCT1 th) @ conjs (Drule.CONJUNCT2 th)
+        then conjs (CONJUNCT1 th) @ conjs (CONJUNCT2 th)
         else [th]
   in Tactical.FIRST_ASSUM
        (fn th => Tactical.FIRST (map ttac (conjs th))) g end;
@@ -55,8 +55,9 @@ Proof
             (qx_gen_tac `H` >> strip_tac >>
              qpat_assum `!H'. valid_horizon cx st0 H' mid.storage_trace ==>
                               ?v. _`
-               (qspec_then `H` mp_tac) >>
-             (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+               (qspec_then `H` (fn th =>
+                 qpat_assum `valid_horizon cx st0 H mid.storage_trace`
+                   (ACCEPT_TAC o SIMP_RULE (srw_ss()) [] o MATCH_MP th)))) >>
           qexists_tac `v` >> conj_tac >- REFL_TAC >>
           qpat_x_assum `!marks v ee t. _`
             (qspecl_then [`marks`, `v`, `mid with gas_obs := []`, `t`]
@@ -72,8 +73,10 @@ Proof
                >- (simp[] >> first_assum ACCEPT_TAC))) >>
           strip_tac >> first_assum ACCEPT_TAC)
       >- (qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-            (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-          (impl_tac >- first_assum ACCEPT_TAC) >> simp[]))
+            (qspec_then `storage_trace_horizon mid.storage_trace` (fn th =>
+              qpat_assum `valid_horizon cx st0
+                (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+                (CONTR_TAC o SIMP_RULE (srw_ss()) [] o MATCH_MP th)))))
   >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >> metis_tac[])
   >- first_assum ACCEPT_TAC
 QED
@@ -213,13 +216,21 @@ Resume ec_mem_operands_then[first_success]:
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es1 t /\
        storage_well_formed_on cx es1 (FST H)` by
-    (qx_gen_tac `H` >> strip_tac >> res_tac >>
-     conj_tac >>
-     first_assum (fn th =>
-       let val r = REWRITE_RULE [expr_post_def] th in
-         ACCEPT_TAC (CONJUNCT1 r) ORELSE
-         ACCEPT_TAC (CONJUNCT1 (CONJUNCT2 r))
-       end)) >>
+    (qx_gen_tac `H` >> strip_tac >>
+     qpat_assum `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
+       expr_post H' ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
+       (qspec_then `H` (fn th =>
+         qpat_assum `valid_horizon cx st0 H es1.storage_trace` (fn valid =>
+           let val r = REWRITE_RULE [loweringPostsTheory.expr_post_def]
+                 (CONJUNCT1 (MATCH_MP th valid)) in
+             ACCEPT_TAC (CONJ (CONJUNCT1 r) (CONJUNCT1 (CONJUNCT2 r)))
+           end)))) >>
+  qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+    expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
+    (qspec_then `storage_trace_horizon es1.storage_trace` (fn th =>
+      qpat_assum `storage_trace_domain cx st0 es1.storage_trace`
+        (strip_assume_tac o MATCH_MP th o
+          REWRITE_RULE [storage_trace_domain_def]))) >>
   match_mp_tac
     (Q.SPEC `\H v2 ee u. expr_post H ctx func cenv cx b es1 s1 sm t ee v2 q u /\
        expr_store_bound cx (expr_type b) v2 q u /\
@@ -231,7 +242,8 @@ Resume ec_mem_operands_then[first_success]:
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ b _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
       disch_then irule >> simp[] >>
-      metis_tac[expr_body_pre_gas_admissible])
+      qpat_assum `expr_body_pre cenv cx env b es1`
+        (ACCEPT_TAC o MATCH_MP expr_body_pre_gas_admissible))
   >- first_assum ACCEPT_TAC
   >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC)
   >- suspend "second_success"
@@ -277,18 +289,36 @@ Resume ec_mem_operands_then[second_success]:
     (qx_gen_tac `H` >> strip_tac >>
      `valid_horizon cx st0 H es1.storage_trace` by
        first_assum (drule_then ACCEPT_TAC) >>
-     res_tac >>
+     qpat_assum `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
+       expr_post H' ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
+       (qspec_then `H` (fn th =>
+         qpat_assum `valid_horizon cx st0 H es1.storage_trace`
+           (strip_assume_tac o MATCH_MP th))) >>
+     qpat_assum `!H'. valid_horizon cx st0 H' es2.storage_trace ==>
+       expr_post H' ctx func cenv cx b es1 s1 sm t es2 v2 q u /\ _`
+       (qspec_then `H` (fn th =>
+         qpat_assum `valid_horizon cx st0 H es2.storage_trace`
+           (strip_assume_tac o MATCH_MP th))) >>
      conj_tac >- conj_assum_tac >>
      conj_tac >- conj_assum_tac >>
      first_assum (fn th =>
-       ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_post_def] th)))) >>
+       ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [loweringPostsTheory.expr_post_def] th)))) >>
   `?H0. valid_horizon cx st0 H0 es2.storage_trace` by
     (qexists_tac `storage_trace_horizon es2.storage_trace` >>
      first_assum (fn th =>
        ACCEPT_TAC (REWRITE_RULE [storage_trace_domain_def] th))) >>
   `valid_horizon cx st0 H0 es1.storage_trace` by
     first_assum (drule_then ACCEPT_TAC) >>
-  res_tac >>
+  qpat_assum `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
+    expr_post H' ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
+    (qspec_then `H0` (fn th =>
+      qpat_assum `valid_horizon cx st0 H0 es1.storage_trace`
+        (strip_assume_tac o MATCH_MP th))) >>
+  qpat_assum `!H'. valid_horizon cx st0 H' es2.storage_trace ==>
+    expr_post H' ctx func cenv cx b es1 s1 sm t es2 v2 q u /\ _`
+    (qspec_then `H0` (fn th =>
+      qpat_assum `valid_horizon cx st0 H0 es2.storage_trace`
+        (strip_assume_tac o MATCH_MP th))) >>
   qspecl_then [`H0`, `func`, `cenv`, `cx`, `a`, `b`, `es`, `es1`, `es2`, `sa`,
                `s1`, `sm`, `s0`, `t`, `u`, `v1`, `v2`, `p`, `q`, `ctx`] mp_tac
     (Q.GEN `H` exprSimOperandsTheory.expr_post_operand_word) >>
