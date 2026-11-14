@@ -43,7 +43,8 @@ Theorem codegen_asm_run_call:
            as'.as_requests = call_requests es) /\
         (!n as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
          (entry_asm_state vs es) = AsmRevert as' ==>
-           ?lgs. frame_outcome es r es' (SOME Reverted) as'.as_returndata lgs) /\
+           (?lgs. frame_outcome es r es' (SOME Reverted) as'.as_returndata lgs) /\
+           frame_inst_raises es Reverted Revert) /\
         (!n as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
          (entry_asm_state vs es) = AsmFault as' ==>
            ?exc lgs. exc <> Reverted /\

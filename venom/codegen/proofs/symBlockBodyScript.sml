@@ -16,7 +16,7 @@ Ancestors
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs
   venomExecSemantics venomState venomInst fnPlanLineageEntryProduction
 
-(* block_body_frame_sim's conclusion (fnBlockBodySteps' body_result) with
+(* block_body_frame_sim's conclusion (fnBlockBodySteps' body_result_simple) with
    the symbolic run from ss over the same n steps: it ends where the
    concrete run halts, reverts or faults, and at an internal return it is
    OK, related, and holds the returned values as words above srest, with
@@ -387,7 +387,7 @@ Proof
 QED
 
 Theorem sym_body_invoke_step:
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -441,7 +441,7 @@ Proof
     ["codegen_context_obligations", "codegen_assembly"]
     fnBlockBodyClassesTheory.body_callee_placed) >> simp[] >> strip_tac >>
   leaf_matches 3 mp_tac (anchored_leaf_core false
-    ["codegen_context_obligations", "codegen_assembly", "gen_fn_sim_at"]
+    ["codegen_context_obligations", "codegen_assembly", "gen_fn_sim_at_simple"]
     fnBlockBodyClassesTheory.body_callee_sim) >> simp[] >>
   (impl_tac >- gvs[]) >> strip_tac >>
   leaf_matches 9 mp_tac (anchored_leaf
@@ -766,7 +766,7 @@ Proof
 QED
 
 Theorem sym_body_jump_continue:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -815,7 +815,7 @@ Proof
 QED
 
 Theorem sym_body_jmp_prefix:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -937,7 +937,7 @@ Proof
 QED
 
 Theorem sym_body_jnz_prefix:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1001,7 +1001,7 @@ Proof
 QED
 
 Theorem sym_body_jmp_step:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1021,7 +1021,7 @@ Proof
 QED
 
 Theorem sym_body_jnz_step:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1041,7 +1041,7 @@ Proof
 QED
 
 Theorem sym_body_nonterm_prefix:
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1114,7 +1114,7 @@ Proof
 QED
 
 Theorem sym_body_terminator:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1138,7 +1138,7 @@ Proof
 QED
 
 Theorem sym_body_nonok:
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1203,7 +1203,7 @@ Theorem sym_body_nonterm_result:
   (!m. m < d ==>
     !k prefix_ops rest_ops ps vs as ss.
       m = LENGTH bb.bb_instructions - k /\
-      gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+      gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
       sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
       body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
         growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -1216,8 +1216,8 @@ Theorem sym_body_nonterm_result:
       sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
         as ss (block_rest fuel ctx fn bb vs)) /\
   d = LENGTH bb.bb_instructions - k /\
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1247,7 +1247,7 @@ QED
 Theorem sym_body_run:
   !d k prefix_ops rest_ops ps vs as ss.
     d = LENGTH bb.bb_instructions - k /\
-    gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+    gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
     sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -1284,7 +1284,7 @@ Theorem sym_block_body_frame_sim:
    spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
    ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
    rest mem0 env ret srest labs0 ss.
-    gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+    gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
     sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
     body_inv rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs

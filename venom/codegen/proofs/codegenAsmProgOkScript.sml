@@ -3,11 +3,12 @@
  *
  * TOP-LEVEL:
  *   codegen_assembly_frame_prog_ok
+ *   codegen_assembly_no_returndatacopy
  *)
 
 Theory codegenAsmProgOk
 Ancestors
-  asmFrameRel codegenEncodingWf codegen unitShapeDefs asmWf asmSem
+  asmFrameRel codegenEncodingWf codegenNoReturndatacopy codegen unitShapeDefs asmWf asmSem
   symbolResolve stackPlanGen stackPlanOps stackPlanTypes asmIR list rich_list
   arithmetic finite_map planExec venomInst pair
 
@@ -31,6 +32,37 @@ Proof
        is_data_inst_def] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
   Cases_on `di` >> simp[is_data_inst_def]
+QED
+
+(* Execution preserves the provenance of the forbidden opcode. *)
+Theorem exec_stack_op_returndatacopy[local]:
+  MEM (AsmOp "RETURNDATACOPY") (exec_stack_op fmp op) <=>
+  op = SOEmit "RETURNDATACOPY"
+Proof
+  Cases_on `op` >>
+  simp[exec_stack_op_def, MEM_REPLICATE]
+  >- (rename1 `SOPush operand` >> Cases_on `operand` >>
+      simp[exec_stack_op_def]) >>
+  pure_rewrite_tac[swap_name_def, dup_name_def] >>
+  rpt (IF_CASES_TAC >- EVAL_TAC) >> EVAL_TAC
+QED
+
+Theorem execute_plan_returndatacopy[local]:
+  MEM (AsmOp "RETURNDATACOPY") (execute_plan fmp ops) <=>
+  MEM (SOEmit "RETURNDATACOPY") ops
+Proof
+  simp[execute_plan_def, MEM_FLAT, MEM_MAP, PULL_EXISTS,
+       exec_stack_op_returndatacopy]
+QED
+
+Theorem data_suffix_no_returndatacopy[local]:
+  ~MEM (AsmOp "RETURNDATACOPY")
+    (data_segment_asm segs ++ [AsmDataHeader "code_end"])
+Proof
+  mp_tac data_suffix_all_data >>
+  simp[EVERY_MEM, is_data_inst_def] >> strip_tac >>
+  first_x_assum (qspec_then `AsmOp "RETURNDATACOPY"` mp_tac) >>
+  simp[is_data_inst_def]
 QED
 
 Theorem data_suffix_prefix_indices[local]:
@@ -71,4 +103,24 @@ Proof
   gvs[context_plan_ops_def, execute_plan_def, MAP_APPEND, FLAT_APPEND,
       revert_postamble_def, exec_stack_op_def] >>
   simp[assemble_def, pairTheory.UNCURRY, MAP_APPEND, FLAT_APPEND, encode_inst_def]
+QED
+
+(* Codegen emits AsmOp "RETURNDATACOPY" only for a Venom RETURNDATACOPY:
+   the other ops it emits are stack, jump and fixed helper opcodes. *)
+Theorem codegen_assembly_no_returndatacopy:
+  !rpolicy unit prog.
+    codegen_assembly rpolicy unit = SOME prog /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\
+               MEM inst (fn_insts fn) ==>
+               inst.inst_opcode <> RETURNDATACOPY)
+    ==>
+    ~MEM (AsmOp "RETURNDATACOPY") prog
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_all generate_context_plan_no_returndatacopy >> strip_tac >>
+  qspec_then `unit.cu_data_segment` mp_tac
+    (Q.GEN `segs` data_suffix_no_returndatacopy) >>
+  simp[MEM_APPEND, execute_plan_returndatacopy]
 QED

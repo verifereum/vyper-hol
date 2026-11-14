@@ -255,7 +255,7 @@ Proof
   metis_tac[well_typed_expr_raw_shape]
 QED
 
-Theorem type_stmt_raw_shape[local]:
+Theorem type_stmt_raw_shape:
   (!env ret s env1. type_stmt env ret s = SOME env1 ==>
      ~supported_stmt_expr_exists expr_raw_shape_root s ==>
      ~supported_stmt_expr_exists expr_shape_root s) /\
@@ -484,7 +484,7 @@ Proof
   metis_tac[supported_expr_exists_mono]
 QED
 
-Theorem supported_stmt_expr_exists_mono[local]:
+Theorem supported_stmt_expr_exists_mono:
   (!p s. !q. (!x. p x ==> q x) /\ supported_stmt_expr_exists p s ==>
      supported_stmt_expr_exists q s) /\
   (!p ss. !q. (!x. p x ==> q x) /\ supported_stmts_expr_exists p ss ==>
