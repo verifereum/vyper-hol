@@ -7,16 +7,6 @@ Ancestors bodyPtrSignedConvertSourceTyping bodyPtrSignedConvertFrame
   exprSimProps loweringShapeDefs
 Libs monadsyntax
 
-Theorem zero_convert_child_post:
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v1 x s /\
-  is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv /\
-  typed_val_to_w256 tv v = 0w ==>
-  expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa s1 s0
-    ee v (Lit 0w) s
-Proof
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       expr_type_def, eval_operand_def] >> metis_tac[]
-QED
 
 (* Zero-capacity dispatch is independent of the scalar target's signedness. *)
 Theorem zero_scalar_continuation:
