@@ -33,6 +33,9 @@ Proof
      Cases_on `tr` >> simp[state_frame_def, sstore_def, tstore_def,
        LET_THM, venom_state_component_equality]) >>
   qmatch_asmsub_abbrev_tac `state_frame u = state_frame su` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_append_storage_word >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' su` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ es' _` mp_tac >>

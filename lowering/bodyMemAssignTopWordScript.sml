@@ -152,6 +152,9 @@ Proof
       drule_all storage_dead_update_word_region >> strip_tac >>
       Cases_on `write_storage_slot cx tr (n2w slot) tvt v ee` >>
       rename1 `_ = (res, ee')` >>
+      `~cx.txn.is_static` by
+        fs[exprLoweringPropsTheory.stmt_state_rel_def,
+           loweringStateRelDefsTheory.state_rel_def] >>
       drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
       `ee'.gas_obs = [] /\ ee'.scopes = ee.scopes` by
         (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
