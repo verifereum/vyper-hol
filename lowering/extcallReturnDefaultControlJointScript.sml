@@ -1,7 +1,7 @@
 (* Joint routing edges for the default-return shell. *)
 Theory extcallReturnDefaultControlJoint
 Ancestors
-  extcallReturnDefaultWordJoint extcallReturnDefaultRouting fragGasCopyLoop
+  extcallReturnDefaultWordJoint extcallReturnDefaultRouting fragGasCopyLoop extCallCodeCheck
   externalEntryProps context emitHelper emitHelperProps fragExec fragExecPtr venomMemDefs venomState venomInst
   venomExecSemantics ptrDiscipline compileEnv ptrSafeRun contextCodegenRel codegenRel
   exprLoweringProps list fragGasSeqPtr fragExecMem bodyPtrDefs
@@ -635,3 +635,124 @@ Resume return_default_codesize_joint[ptr]:
     run_inst_seq_def] >> simp[GSYM mk_inst_def]
 QED
 Finalise return_default_codesize_joint
+
+Theorem return_default_assert_success_joint:
+  emit_void ASSERT [arg] a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand arg s = SOME w /\ w <> 0w /\ op_taint tn arg = {} ==>
+  !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (s with vs_inst_idx := LENGTH b.cs_current_insts),G,tn)
+Proof
+  strip_tac >> gen_tac >>
+  `b.cs_current_bb = a.cs_current_bb /\
+    b.cs_current_insts = a.cs_current_insts ++ [mk_inst a.cs_next_id ASSERT [arg] []]` by
+    gvs[emit_void_def, emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  `step_inst_base (mk_inst a.cs_next_id ASSERT [arg] []) s = OK s` by
+    simp[step_ASSERT_ok] >>
+  irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`[mk_inst a.cs_next_id ASSERT [arg] []]`, `a`] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  conj_tac >- suspend "mem" >>
+  simp[run_inst_seq_def, GSYM mk_inst_def, inst_seq_ptr_def] >>
+  conj_tac >- suspend "mem2" >>
+  simp[step_prov_def, out_prov_def, set_prov_def,
+    step_taint_def, out_taint_def, set_var_taint_def, mem_taint_def,
+    new_site_bytes_def, step_writes_def, written_taint_def, adopt_reset_def,
+    store_taint_def, imm_taint_def, range_bytes_def, mk_inst_def,
+    finite_mapTheory.FLOOKUP_DEF] >>
+  suspend "ptr"
+QED
+Resume return_default_assert_success_joint[mem]:
+  simp[run_inst_seq_mem_ok_def,
+    unitTransformDefsTheory.inst_mem_below_frontier_def,
+    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    run_inst_seq_def] >> simp[GSYM mk_inst_def]
+QED
+Resume return_default_assert_success_joint[mem2]:
+  simp[run_inst_seq_mem_ok_def,
+    unitTransformDefsTheory.inst_mem_below_frontier_def,
+    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    run_inst_seq_def] >> simp[GSYM mk_inst_def]
+QED
+Resume return_default_assert_success_joint[ptr]:
+  simp[finite_mapTheory.DRESTRICT_UNIV, source_memory_write_ranges_def,
+    taint_component_equality] >>
+  conj_tac >- (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    mk_inst_def, GSYM op_taint_def] >>
+    rpt strip_tac >> gvs[GSYM mk_inst_def, step_inst_non_invoke]) >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+Finalise return_default_assert_success_joint
+
+Theorem return_default_check_joint:
+  compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ op_taint tn addr = {} ==>
+  ?u G1 tn1.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      ((if (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code):bytes32) = 0w
+        then Abort Revert_abort (revert_state (set_returndata [] u))
+        else OK (u with vs_inst_idx := LENGTH b.cs_current_insts)),G1,tn1)) /\
+    u = (update_var (STRING #"%" (toString a.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s)
+      with vs_inst_idx := LENGTH a.cs_current_insts + 1 /\
+    G1 = DRESTRICT G (COMPL {STRING #"%" (toString a.cs_next_var)}) /\
+    tn1 = tn with t_var := tn.t_var |+ (STRING #"%" (toString a.cs_next_var),{})
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_extcodesize_check _ _ = _` mp_tac >>
+  simp[exprLoweringTheory.compile_extcodesize_check_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_op EXTCODESIZE [addr] a = (op,m)` >>
+  `cs_extends a m /\ cs_extends m b` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code a m func /\ fn_has_code m b func` by
+    (conj_tac >> irule fn_has_code_mid >> simp[cs_extends_refl] >>
+     qexistsl_tac [`b`, `a`] >> simp[cs_extends_refl]) >>
+  drule_all return_default_codesize_joint >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  `m.cs_current_bb = a.cs_current_bb /\
+    LENGTH m.cs_current_insts = LENGTH a.cs_current_insts + 1` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  gen_tac >> suspend "compose"
+QED
+Resume return_default_check_joint[compose]:
+  `~u.vs_halted /\ allocas_from lo u /\
+    u.vs_current_bb = m.cs_current_bb /\
+    u.vs_inst_idx = LENGTH m.cs_current_insts` by
+    (gvs[update_var_def, allocas_from_def] >> metis_tac[]) >>
+  Cases_on `(n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code):bytes32) = 0w`
+  >- (`gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G1,tn1) []
+        (Abort Revert_abort (revert_state (set_returndata [] u)),G1,tn1)` by
+        (irule return_default_assert_reject_joint >>
+         simp[] >> qexistsl_tac [`m`, `op`, `b`] >>
+         gvs[eval_operand_def]) >>
+      qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _`
+        (qspec_then `D` assume_tac) >>
+      qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+        (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+      disch_then assume_tac >> gvs[] >>
+      `((n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)):bytes32) = 0w` by
+        gvs[wordsTheory.n2w_11] >>
+      simp[] >> metis_tac[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G1,tn1) []
+    (OK (u with vs_inst_idx := LENGTH b.cs_current_insts),G1,tn1)` by
+    (irule return_default_assert_success_joint >> simp[] >>
+     qexistsl_tac [`m`, `op`, `n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)`] >>
+     gvs[eval_operand_def]) >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _`
+    (qspec_then `D` assume_tac) >>
+  qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+    (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  disch_then assume_tac >> gvs[wordsTheory.n2w_11] >> metis_tac[]
+QED
+Finalise return_default_check_joint
