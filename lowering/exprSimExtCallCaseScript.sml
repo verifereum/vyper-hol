@@ -33,6 +33,12 @@ Theory exprSimExtCallCase
 Ancestors
   list rich_list loweringPosts supportedExprTraverse exprSimHypsDefs exprSimHyps vyperAST
   vyperInterpreter vyperState exprSimDefs
+  vyperStorageTrace vyperStorageFootprint gasStorage gasOutcome gasSummary
+  gasSummaryCompose aggregateCountedOutcome
+  extcallReturnCallerSuccess extcallReturnCallerReject extCallCodeCheck
+  extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
+  extcallReturnDefaultDecode extcallReturnDefaultOwnership extcallReturnDefaultIntervals
+  extcallReturnInterface extcallReturnDefaultTypes
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -125,11 +131,13 @@ Definition extcall_request_ready_def:
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee t) /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
     accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id /\
     local_ptrs_reserved cenv sp /\
     EVERY (safe_operand sp)
@@ -178,9 +186,12 @@ Definition extcall_returned_def:
   extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap
       target has_default default_op default_ty default_opt returnData ee t <=>
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee t) /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
+    accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\
     local_ptrs_reserved cenv sr /\
     EVERY (safe_operand sr) [addr_op; buf_op; default_op] /\
@@ -306,12 +317,9 @@ Theorem extcall_request_setup:
              then TupleT [ret_type] else ret_type))
          target value_opt calldata has_default default_op default_ty
          (ext_call_kwarg EKDefault opts (DROP (LENGTH arg_types) rest)) ee t ==>
-       ?marks. gas_summary_at F (ctx,func) marks
+       gas_outcome F (cx_tops cx) (ctx,func) cx st0
          (eval_ext_call cx is_static skip (fname,arg_types,ret_type) opts
-            (target_v :: rest)) (ee,t)
-         (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
-            Q H res ee t)
-         (\res ee r. expr_exit res r)) ==>
+            (target_v :: rest)) (ee,t) Q (\H res ee r. expr_exit res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (eval_expr cx
          (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
@@ -356,12 +364,16 @@ Theorem extcall_call_step:
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t /\
+    (!returnData. storage_trace_frame (k returnData)) /\
     (!returnData ee' t'.
        extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
-         has_default default_op default_ty default_opt returnData ee' t' ==>
-       ?marks. gas_summary_at F (ctx,func) marks (k returnData) (ee',t') Q
+         has_default default_op default_ty default_opt returnData ee' t' /\
+       storage_trace_domain cx st0 ee'.storage_trace ==>
+       ?marks. gas_summary_at F (ctx,func) marks (k returnData) (ee',t')
+                 (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+                    Q H res ee t)
                  (\res ee r. expr_exit res r)) ==>
-    ?marks. gas_summary_at F (ctx,func) marks
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (do accounts <- get_accounts;
           check (ext_call_precheck_ok skip ret_type target accounts)
                 "ExtCall target has no code";
@@ -369,7 +381,7 @@ Theorem extcall_call_step:
           returnData <- eval_ext_call_effects cx target calldata value_opt'
                           gas accounts;
           k returnData
-       od) (ee,t) Q (\res ee r. expr_exit res r)
+       od) (ee,t) Q (\H res ee r. expr_exit res r)
 Proof
   cheat
 QED
@@ -409,6 +421,8 @@ Theorem extcall_return_values:
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    storage_trace_domain cx st0 ee.storage_trace /\
     extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
     ?marks. gas_summary_at F (ctx,func) marks
@@ -540,6 +554,13 @@ Proof
   qpat_assum `comp_ignore_bind _ _ _ = _` (irule_at Any) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt (pop_assum kall_tac) >> gen_tac >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >>
+      irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_state_reads, storage_trace_frame_lifts,
+           storage_trace_frame_ignore_bind, storage_trace_frame_checks,
+           storage_trace_frame_return]) >>
   rpt strip_tac >>
   BETA_TAC >> irule extcall_return_values >>
   qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>

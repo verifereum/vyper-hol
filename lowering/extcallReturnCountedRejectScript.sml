@@ -9,8 +9,8 @@ Ancestors
   exprLoweringProps exprSimAbiGasBridge abiEncoderObserver fragExec fragGasMode compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics localPtrsProps list finite_map words
 
-(* The corresponding success-side fact is local to its theory. *)
-Theorem return_reject_stmt_control[local]:
+(* Relabelling an entry does not change its resources. *)
+Theorem return_reject_stmt_control:
   stmt_state_rel H ctx func ce cx es (s with vs_current_bb := b) =
   stmt_state_rel H ctx func ce cx es s
 Proof
@@ -27,7 +27,7 @@ Proof
        pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
-Theorem return_reject_entry_control[local]:
+Theorem return_reject_entry_control:
   abi_malformed_entry H ctx func ce cx es st sites dstid live
     base_op hi src dst B len xs p d n s ==>
   abi_malformed_entry H ctx func ce cx es (start_relabel L ids st)
@@ -41,14 +41,6 @@ Proof
      local_ptrs_reserved_def, not_fresh_at_def,
      abi_malformed_allocated_window_def, abi_malformed_destination_def,
      return_reject_stmt_control] >> metis_tac[]
-QED
-
-Theorem return_reject_sites[local]:
-  abi_malformed_scratch_sites (start_relabel L ids st)
-    (start_swap st L ids en) func = abi_malformed_scratch_sites st en func
-Proof
-  simp[abi_malformed_scratch_sites_def, start_relabel_def, start_swap_def] >>
-  IF_CASES_TAC >> simp[]
 QED
 
 Theorem return_capped_observer_reject:
@@ -85,7 +77,7 @@ Proof
   strip_tac >>
   `abi_malformed_scratch_sites (start_relabel L ids st)
       (start_swap st L ids en) obs = abi_malformed_scratch_sites st en func` by
-    (simp[return_reject_sites] >>
+    (simp[abi_malformed_scratch_sites_relabel] >>
      drule return_observer_alloca_structure >> simp[]) >>
   drule_all return_observer_input_entry >> strip_tac >>
   drule return_reject_entry_control >>
