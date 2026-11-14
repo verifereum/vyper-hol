@@ -3,7 +3,7 @@ Theory stmtSimAssignTupleTargets
 Ancestors
   exprSimDefs exprSimProps exprSimStack exprOperandVar loweringPosts stmtSimDefs stmtSimProps
   stmtSimForced gasSummaryCompose fragGasMode
-  tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
+  tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleTargetStoreAbort tupleAssignPrefix
   tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple 
    exprLowering exprLoweringProps fragExec loweringSlice compileEnv loweringStateRelDefs freshWrites
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding stmtLowering
