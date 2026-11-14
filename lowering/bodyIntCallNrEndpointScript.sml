@@ -1,6 +1,7 @@
 Theory bodyIntCallNrEndpoint
 Ancestors
   bodyIntCallNrCompiler bodyIntCallNrVoid bodyIntCallNrMemory bodyIntCallNrStack
+  bodyIntCallNRMetadata
   bodyIntCallSeamDefs bodyIntCallMetadata bodyIntCallSource bodyIntCallWidenedPost
   bodySim supportedNames supportedProgram memoryLocalRhsProps compileVyper
   compileEnv exprLoweringProps loweringPosts bodyIntCallRestoreResults exprLowering
@@ -8,21 +9,6 @@ Ancestors
   venomExecSemantics venomState vyperState vyperImmutableAccessFrame
   vyperTypeEvalSoundness bodyIntCallReturnSource bodyIntCallCompletedFacts
 Libs monadsyntax
-
-Theorem nr_declared_return_type:
-  body_inv tops ctx ce cx /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
-  ce.ce_func_return_type (nsid_to_string (NONE,name)) = ret
-Proof
-  strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    (fs[body_inv_def] >> drule supported_program_names >>
-     simp[supported_declaration_names_def]) >>
-  `build_func_return_type tops name = ret` by
-    (irule build_func_return_type_distinct >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  fs[body_inv_def, nsid_to_string_def]
-QED
 
 Theorem nr_allocated_call_post:
   ce.ce_func_return_type (nsid_to_string (NONE,name)) = cty /\
@@ -137,7 +123,7 @@ Theorem intcall_nr_return_endpoint:
 Proof
   strip_tac >>
   `ce.ce_func_return_type (nsid_to_string (NONE,name)) = ret` by
-    (drule_all nr_declared_return_type >> simp[]) >>
+    (drule_all body_internal_decl_return_type_generic >> simp[]) >>
   `nret = returns_stack_count
     (\n. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields n)) ret` by
     (drule_all body_internal_decl_return_count >> simp[]) >>
