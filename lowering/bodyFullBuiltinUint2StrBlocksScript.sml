@@ -7,6 +7,10 @@ Ancestors
   bodyPtrBytestringBuiltinsUintGhost ptrSafeRun venomExecSemantics venomInst
   exprLoweringProps emitHelperProps codegenRel contextCodegenRel bodyFullUnwrapRun
   exprSimPtrLiteralOps bodyPtrBytestringBuiltinsUintArithmetic
+  bodyMemBiUint2StrBlocks bodyFullGhostFrame fragGasOriginPtrLoop bodyFullUnwrapSlotPost
+
+val _ = temp_delsimps ["copy_allocas_update", "copy_allocas_inst_idx",
+                        "copy_update_inst_idx", "copy_mstore_inst_idx"];
 
 Theorem u2s_clean_store_ghost_at:
   ghost_inv_at D lo d cenv cx es G tn s /\
@@ -339,3 +343,132 @@ Resume u2s_body_pointer_sequence[tail]:
 QED
 
 Finalise u2s_body_pointer_sequence
+
+Theorem u2s_body_joint_step:
+  valid_horizon cx st0 H0 es.storage_trace /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
+  not_local_ptr cenv es.scopes q /\ n+32 <= sz /\
+  b+sz < dimword(:256) /\ lo <= b /\ ~ctx_has_dalloca ctx /\
+  u2s_digits a b n X x str s /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==> u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
+       ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
+  ghost_kept_at lo cenv es a G0 tn0 s0 G tn /\
+  FLOOKUP G p = SOME (b,sz) /\ lookup_var p s = SOME (n2w b) /\
+  op_taint tn (Var p) = {} /\
+  (!k. k < 2 ==> FLOOKUP G (u2s_var a k) = NONE /\
+                   op_taint tn (Var (u2s_var a k)) = {}) /\
+  (!j. b+n+32-LENGTH str <= j /\ j < b+n+32 ==> j NOTIN tn.t_mem) /\
+  0 < x /\ LENGTH str < n /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 2) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|> /\
+  s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 ==>
+  ?t G' tn'.
+    (!H. valid_horizon cx st0 H es.storage_trace ==> gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+       (s,G,tn) [] (OK t,G',tn')) /\
+    u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==> u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
+         ghost_inv_at (DF H) lo d cenv cx es G' tn' t) /\
+    ghost_kept_at lo cenv es a G0 tn0 s0 G' tn' /\
+    FLOOKUP G' p = SOME (b,sz) /\ lookup_var p t = SOME (n2w b) /\
+    op_taint tn' (Var p) = {} /\
+    (!k. k < 2 ==> FLOOKUP G' (u2s_var a k) = NONE /\
+                     op_taint tn' (Var (u2s_var a k)) = {}) /\
+    LENGTH (CHR (48+x MOD 10)::str) <= n /\
+    (!j. b+n+32-LENGTH (CHR (48+x MOD 10)::str) <= j /\ j < b+n+32 ==>
+         j NOTIN tn'.t_mem) /\
+    t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  `u2s_safe H0 ctx fn cenv cx es a (Var p) b sz inst sr s` by metis_tac[] >>
+  drule u2s_body_iteration >> simp[] >> disch_then drule_all >> strip_tac >>
+  rename1 `run_inst_seq (TAKE 9 (u2s_body a (Var p) n)) s = OK t` >>
+  `ghost_inv_at (DF H0) lo d cenv cx es G tn s` by metis_tac[] >>
+  `allocas_from lo s` by fs[ghost_inv_at_def] >>
+  `?G' tn'.
+    (!D. inst_seq_ptr D lo ctx fn PG G tn (TAKE 9 (u2s_body a (Var p) n)) s G' tn') /\
+    (!r. not_fresh_at a r ==> FLOOKUP G' r = FLOOKUP G r /\
+                            op_taint tn' (Var r) = op_taint tn (Var r)) /\
+    FLOOKUP G' p = SOME (b,sz) /\ op_taint tn' (Var p) = {} /\
+    (!k. k < 2 ==> FLOOKUP G' (u2s_var a k) = NONE /\
+                   op_taint tn' (Var (u2s_var a k)) = {}) /\
+    tn'.t_mem = tn.t_mem DIFF {j | b+n-LENGTH str <= j /\ j < b+n-LENGTH str+32} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm` by
+    (irule u2s_body_pointer_sequence >> fs[u2s_digits_def] >>
+     qexists_tac `x` >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t` by
+    (rpt strip_tac >>
+     `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s` by metis_tac[] >>
+     drule u2s_body_iteration >> simp[] >> disch_then drule_all >>
+     strip_tac >> gvs[]) >>
+  `run_inst_seq_mem_ok (TAKE 9 (u2s_body a (Var p) n)) s` by
+    (irule u2s_body_mem_ok >>
+     fs[u2s_digits_def, u2s_safe_def] >>
+     simp[venomStateTheory.eval_operand_def] >>
+     `b+sz <= s.vs_alloca_next` by
+       (fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+           venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+     `n2w b + n2w n - n2w (LENGTH str) = (n2w (b+n-LENGTH str):bytes32)` by
+       (irule (cj 4 u2s_word_arithmetic) >> simp[] >> metis_tac[]) >>
+     simp[] >> decide_tac) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+          (OK (t with vs_inst_idx := 9),G',tn')` by
+    (gen_tac >>
+     qspecl_then [`TAKE 9 (u2s_body a (Var p) n)`, `s`, `t`]
+       mp_tac run_inst_seq_gas_origin_ptr_path >>
+     disch_then (qspecl_then [`G`, `tn`, `G'`, `tn'`] mp_tac) >>
+     disch_then (qspecl_then [`ctx`, `fn`,
+       `<|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|>`] mp_tac) >>
+     simp[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+     metis_tac[]) >>
+  `allocas_from lo t` by
+    (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
+     ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>
+     simp[] >> metis_tac[]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (t with vs_inst_idx := 9,G',tn') []
+       (OK (jump_to (u2s_label a 1) t),G',tn')` by
+    (gen_tac >>
+     `jump_to (u2s_label a 1) (t with vs_inst_idx := 9) =
+      jump_to (u2s_label a 1) t` by simp[jump_to_def] >>
+     pop_assum (fn th => once_rewrite_tac [GSYM th]) >>
+     irule jmp_origin_ptr_path >>
+     simp[u2s_body_def, u2s_inst_def, mk_inst_def, get_instruction_def,
+          allocas_from_def] >> fs[allocas_from_def]) >>
+  qexistsl_tac [`jump_to (u2s_label a 1) t`, `G'`, `tn'`] >>
+  conj_tac >- metis_tac[gas_origin_ptr_path_trans] >>
+  conj_tac >- (fs[u2s_digits_def, jump_to_def, lookup_var_def] >>
+    `b+(n+32)-SUC (LENGTH str) = b+n-SUC (LENGTH str)+32` by decide_tac >>
+    metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac
+      >- metis_tac[u2s_safe_jump]
+      >> `ghost_inv_at (DF H) lo d cenv cx es G tn s` by metis_tac[]
+      >> irule unwrap_slot_copy_ghost_inv_at
+      >> conj_tac
+      >- (fs[u2s_safe_def, u2s_frame_def, venom_state_component_equality,
+             ghost_inv_at_def, jump_to_def] >> metis_tac[])
+      >> conj_tac >- (fs[allocas_from_def, jump_to_def] >> metis_tac[])
+      >> conj_tac
+      >- (fs[ghost_inv_at_def, stor_taint_ok_at_def, u2s_safe_def,
+             u2s_frame_def, venom_state_component_equality, jump_to_def])
+      >> qexistsl_tac [`G`, `fn`, `sz`, `s`, `a`, `b`, `tn`]
+      >> fs[u2s_safe_def, u2s_frame_def, jump_to_def, lookup_var_def,
+            stmt_state_rel_def]
+      >> conj_tac >- metis_tac[]
+      >> conj_tac >- metis_tac[arithmeticTheory.ADD_COMM]
+      >> fs[state_rel_def]) >>
+  conj_tac
+  >- (irule ghost_kept_at_clean_suffix >>
+      qexistsl_tac [`G`, `tn`] >> simp[] >> metis_tac[]) >>
+  simp[jump_to_def, lookup_var_def, eval_operand_def] >>
+  conj_tac >- (fs[u2s_safe_def, eval_operand_def, lookup_var_def]) >>
+  rpt strip_tac >>
+  Cases_on `b+n+32-LENGTH str <= j`
+  >- (disj1_tac >> first_x_assum irule >> decide_tac) >>
+  decide_tac
+QED
