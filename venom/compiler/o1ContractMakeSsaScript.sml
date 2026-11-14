@@ -197,44 +197,63 @@ QED
 
 (* Row 0 (the walk's source invariant) to row 1 (the source invariant,
    with MakeSSA's input rows for its second run). *)
-Theorem make_ssa_run_contract_1:
-  o1_run_contract rpolicy D 0
+Theorem o1_static_stage_make_ssa_1:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 0 o1_fn_passes) (o1_walk_view rpolicy 0) C C' /\
+    o1_pre 0 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 0 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 0 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 0) C' vs
 Proof
   `EL 0 o1_fn_passes = CFP_Simple VP_MakeSSA` by simp[o1_fn_passes_def] >>
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def,
-       pass_fuel_def] >>
+  simp[o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   `EVERY make_ssa_input_ok C.ctx_functions /\ o1_src_inv D C vs` by
     fs[o1_walk_src_inv_def] >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+    gvs[o1_initial_state_ok_def] >>
   conj_tac >- metis_tac[make_ssa_stage_sim_fuel] >>
   `mem_inv raw_mem_ok C' vs` by
     (irule make_ssa_stage_mem_inv >> fs[o1_src_inv_def] >>
      metis_tac[mem_corr_closed_rf_raw_mem_ok]) >>
-  `taint_within D C' vs` by metis_tac[make_ssa_stage_taint] >>
-  drule_all make_ssa_stage_src_rows >> strip_tac >>
+  `taint_within D C' vs` by metis_tac[make_ssa_stage_taint_initial] >>
+  drule_all make_ssa_stage_src_rows_initial >> strip_tac >>
   `EVERY make_ssa_input_ok C'.ctx_functions` by
     metis_tac[make_ssa_stage_input_ok] >>
   `EVERY ssa_form C'.ctx_functions` by
     metis_tac[make_ssa_stage_wf_ssa, wf_ssa_def, EVERY_MEM] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
-    (irule make_ssa_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
+    (irule make_ssa_stage_ptr_initial >> simp[o1_src_inv_def] >> metis_tac[]) >>
   `C'.ctx_global_reserved = C.ctx_global_reserved` by fs[ctx_pass_stage_def] >>
   fs[fixed_region_reserved_def] >> metis_tac[]
 QED
 
+Theorem make_ssa_run_contract_1:
+  o1_run_contract rpolicy D 0
+Proof
+  rewrite_tac[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`C`, `C'`, `vs`] o1_static_stage_make_ssa_1) >>
+  gvs[o1_run_state_ok_def]
+QED
+
 (* Row 4 (the lowered memory fact) to row 5 (it, and SSA). *)
-Theorem make_ssa_run_contract_2:
-  o1_run_contract rpolicy D 4
+Theorem o1_static_stage_make_ssa_2:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 4 o1_fn_passes) (o1_walk_view rpolicy 4) C C' /\
+    o1_pre 4 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 4 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 4 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 4) C' vs
 Proof
   `EL 4 o1_fn_passes = CFP_Simple VP_MakeSSA` by simp[o1_fn_passes_def] >>
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def,
-       pass_fuel_def] >>
+  simp[o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+    gvs[o1_initial_state_ok_def] >>
   conj_tac >- metis_tac[make_ssa_stage_sim_fuel] >>
   simp[o1_ssa_inv_def] >> conj_tac
   >- (gvs[o1_lowered_inv_def] >> qexists_tac `eom` >>
@@ -242,6 +261,15 @@ Proof
       irule make_ssa_stage_mem_inv >>
       metis_tac[mem_corr_closed_rf_static_mem_ok]) >>
   metis_tac[make_ssa_stage_wf_ssa]
+QED
+
+Theorem make_ssa_run_contract_2:
+  o1_run_contract rpolicy D 4
+Proof
+  rewrite_tac[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`C`, `C'`, `vs`] o1_static_stage_make_ssa_2) >>
+  gvs[o1_run_state_ok_def]
 QED
 
 Theorem o1_contract_make_ssa_1:

@@ -9,17 +9,18 @@ Ancestors
   o1PassContract ptrDiscipline unitMemInv venomPassSchedule list makeSsaCurrentLockstep
   makeSsaCurrentSim o1ContractMakeSsaReplay o1PassLift o1FrameLockstep unitTransformDefs
 
-Theorem make_ssa_stage_taint:
+Theorem make_ssa_stage_taint_initial:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\
     o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
     callee_first names C.ctx_functions ==>
     taint_within D C' vs
 Proof
   rpt strip_tac >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+    gvs[o1_initial_state_ok_def] >>
   `taint_within D C vs` by gvs[o1_src_inv_def] >>
   `C'.ctx_entry = C.ctx_entry /\
    LIST_REL (\fn fn'. ?t t'.
@@ -64,4 +65,16 @@ Proof
      qexists `make_ssa_pos (EL n C.ctx_functions) (EL n C'.ctx_functions)` >>
      irule make_ssa_current_fn_frame_lockstep >> metis_tac[]) >>
   drule_all taint_within_lockstep >> simp[]
+QED
+
+Theorem make_ssa_stage_taint:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+    callee_first names C.ctx_functions ==>
+    taint_within D C' vs
+Proof
+  rw[o1_run_state_ok_def] >>
+  drule_all make_ssa_stage_taint_initial >> simp[]
 QED
