@@ -3,7 +3,7 @@ Ancestors
   o1ContractSue o1LabelFlowSueNegative o1LabelFlowLateSue singleUseExpansionSupplySim
   singleUseExpansionSupplyProofs singleUseExpansionDefs o1PassContract
   codegenSymRel irSupply venomInst venomFnScheduleRunner venomFnInstsProofs list
-  o1PassLift o1ContractCfgNorm
+  o1PassLift o1ContractCfgNorm lowerDloadSourceInterface
 
 Theorem sue_project_supply[local]:
   ir_supply_inst_ok si /\ ir_supply_covers_fn si f /\
@@ -51,18 +51,6 @@ Proof
   qexists_tac `cs` >> metis_tac[]
 QED
 
-Theorem sue_original_output_var[local]:
-  MEM i (fn_insts f) /\ MEM v i.inst_outputs ==> MEM v (fn_ir_vars f)
-Proof
-  strip_tac >>
-  `?bb. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions` by
-    metis_tac[fn_insts_def, mem_fn_insts_blocks_rev] >>
-  simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-  qexists_tac `block_ir_vars bb` >> conj_tac >- metis_tac[] >>
-  simp[block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-  qexists_tac `inst_ir_vars i` >> simp[inst_ir_vars_def] >> metis_tac[]
-QED
-
 Theorem sue_project_fresh_assign[local]:
   a.inst_outputs = [v] /\ ~MEM v (fn_ir_vars f) /\
   ((a.inst_opcode = ASSIGN /\ ?w. a.inst_outputs = [w] /\
@@ -76,7 +64,7 @@ Theorem sue_project_fresh_assign[local]:
   MAP (\op. case op of Var x => project x | other => other)
     a.inst_operands = [project v]
 Proof
-  strip_tac >> gvs[] >> metis_tac[sue_original_output_var, MEM]
+  strip_tac >> gvs[] >> metis_tac[ld_original_output_support, MEM]
 QED
 
 Theorem sue_project_segment[local]:

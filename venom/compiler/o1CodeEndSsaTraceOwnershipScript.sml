@@ -96,7 +96,9 @@ Proof
   drule (cj 1 current_tree_trace_projection) >> strip_tac >>
   rpt (pairarg_tac >> gvs[]) >>
   drule (cj 2 current_tree_trace_projection) >> strip_tac >> gvs[] >>
-  `ctrs1' = ctrs1 /\ s1' = s1 /\ bbs1' = bbs1` by
+  rename1 `visit_blocks _ _ _ _ _ _ = ((visit_ct,visit_supply,visit_bbs),_)` >>
+  rename1 `rename_current_blocks _ _ _ _ _ = (trace_ct,trace_supply,trace_bbs)` >>
+  `visit_ct = trace_ct /\ visit_supply = trace_supply /\ visit_bbs = trace_bbs` by
     metis_tac[cj 1 visit_erasure, FST, PAIR_EQ] >> gvs[] >>
   conj_tac >> metis_tac[]
 QED
