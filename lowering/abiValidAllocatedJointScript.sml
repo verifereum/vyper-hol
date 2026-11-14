@@ -10,7 +10,7 @@ Ancestors
  abiDecoderMemberCons abiDecoderMemberInfos abiDecoderMemberSetup
  abiDecoderCoherence abiDecoderContract abiDecoderReentry abiMalformedRecursiveInterface
  abiMalformedSiteFrame decoderGhostFramePtr bodyPtrDefs ptrDiscipline
- exprSimProps exprLoweringProps valueEncodingProps valueEncodingTyping valueEncodingDefs valueEncoding
+ exprSimProps exprLoweringProps valueEncodingProps valueEncodingTyping valueEncodingDefs valueEncoding valueEncodingProofs
  abiEncoder abiDecodeRanges compileEnv loweringStateRelDefs venomState vyperABI vyperValue
  contractABI finite_map pred_set list rich_list arithmetic
 
@@ -433,4 +433,63 @@ Proof
     fs[abi_valid_allocated_members_post_def]) >>
  qexistsl_tac [`u`, `G'`, `tn'`] >>
  fs[abi_valid_allocated_post_def, abi_valid_allocated_members_post_def] >> first_assum ACCEPT_TAC
+QED
+Theorem abi_valid_allocated_joint_struct:
+ FLOOKUP env nsid = SOME (StructArgs args) /\
+ FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
+ MAP (\(name,ty,sz). (name,ty)) fields = args /\
+ LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
+   (MAP SND args) tvs /\
+ LIST_REL (^(C |> subst [``env:nsid |-> type_args`` |-> ``(env:nsid |-> type_args) \\ nsid``,
+   ``sf:string |-> (string # vyperAST$type # num) list`` |->
+     ``(sf:string |-> (string # vyperAST$type # num) list) \\ nsid_to_string nsid``]))
+   (MAP SND args) tvs ==>
+ (^C) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
+Proof
+ disch_then (CONJUNCTS_THEN2 assume_tac
+   (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+     (CONJUNCTS_THEN2 assume_tac (mk_asm "children"))))) >>
+ `LENGTH tvs = LENGTH args` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+ `LENGTH (MAP FST args) = LENGTH tvs` by simp[] >>
+ `MAP (FST o SND) fields = MAP SND args` by
+   (qpat_x_assum `MAP _ fields = args` (SUBST1_TAC o SYM) >>
+    simp[MAP_MAP_o, combinTheory.o_DEF] >>
+    irule MAP_CONG >> simp[pairTheory.FORALL_PROD]) >>
+ BETA_TAC >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+ qhdtm_assum `abi_valid_allocated_entry`
+   (strip_assume_tac o PURE_REWRITE_RULE [abi_valid_allocated_entry_def]) >>
+ drule abi_decoder_coherent_header >> strip_tac >>
+ `type_memory_bytes ce (StructT nsid) = type_memory_size_list tvs` by
+   (`type_memory_size_fields (ZIP (MAP FST args,tvs)) = type_memory_size_list tvs` by
+      (irule type_memory_size_fields_zip >> simp[]) >>
+    fs[abi_decoder_header_def, type_memory_size_def]) >>
+ `vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))
+    (DROP p xs) (DROP p xs)` by
+   (fs[vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
+    gvs[Once vyper_decode_valid_enc_def]) >>
+ `dec (vyper_to_abi_type env (StructT nsid)) (DROP p xs) = ListV
+    (abi_decode_members (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args)) (DROP p xs) (DROP p xs))` by
+   simp[vyper_to_abi_type_def, vyper_to_abi_types_MAP, Once dec_def, abi_decode_members_value] >>
+ qpat_assum `dec (vyper_to_abi_type env (StructT nsid)) _ = _`
+   (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+ drule abi_decoder_struct_values >> strip_tac >>
+ qpat_x_assum `v = StructV _` SUBST_ALL_TAC >>
+ drule_all abi_decoder_struct_conversion >> strip_tac >>
+ `compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi
+    (DecComplex (EXISTS (is_abi_dynamic ce.ce_struct_fields) (MAP SND args))
+      (abi_decoder_member_infos (sf \\ nsid_to_string nsid) ce (MAP SND args))) st = ((),en)` by
+   (drule abi_decoder_struct_infos >> disch_then (qspec_then `ce` mp_tac) >>
+    simp[] >> strip_tac >> gvs[]) >>
+ mp_tac (abi_valid_allocated_joint_complex |> Q.INST
+   [`env` |-> `env \\ nsid`, `sf` |-> `sf \\ nsid_to_string nsid`,
+    `tys` |-> `MAP SND (args:(string # vyperAST$type) list)`,
+    `vs` |-> `MAP SND (fields':(string # vyperValue$value) list)`,
+    `dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields)
+      (MAP SND (args:(string # vyperAST$type) list))`]) >>
+ (impl_tac >- (conj_tac >- asm "children" ACCEPT_TAC >> fs[])) >>
+ disch_then (qx_choose_then `u`
+   (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac))) >>
+ asm_x "children" kall_tac >> qexistsl_tac [`u`, `G'`, `tn'`] >>
+ fs[abi_valid_allocated_post_def, abi_valid_allocated_members_post_def,
+    val_in_memory_def, fields_in_memory_tuple, MAP_ZIP] >> metis_tac[]
 QED
