@@ -106,3 +106,31 @@ Proof
       drule mem_bytes_at_agree_window >> simp[]) >>
   simp[mem_bytes_at_def]
 QED
+
+Theorem extcall_capture_located_at_frame:
+  !ce cx ty sa sb sc es ee raw tag p s u.
+    vv_at ce cx ty sa sb es raw (LocatedValue tag p) s /\
+    FST (read_result cx raw ee) = FST (read_result cx raw es) /\
+    (!w. eval_operand p.ptr_operand s = SOME w ==>
+         eval_operand p.ptr_operand u = SOME w) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+               FLOOKUP u.vs_allocas aid = SOME row) /\
+    (!n b sz. local_region ce ee.scopes u n b sz <=>
+               local_region ce es.scopes s n b sz) /\
+    sb.cs_next_id <= sc.cs_next_id ==>
+    vv_at ce cx ty sa sc ee raw (LocatedValue tag p) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (gvs[vv_at_def] >> rpt strip_tac >>
+      `read_result cx raw es = (INL v,es)` by
+        (Cases_on `read_result cx raw es` >>
+         imp_res_tac vyperStateTheory.read_result_state >> gvs[]) >>
+      first_x_assum drule >> disch_then drule >> strip_tac >>
+      qexists_tac `w` >> simp[]
+      >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
+          simp[] >> metis_tac[]) >>
+      disj2_tac >> disj1_tac >>
+      qexistsl_tac [`n`, `b`, `sz`] >> simp[]) >>
+  gvs[vv_at_def]
+QED
