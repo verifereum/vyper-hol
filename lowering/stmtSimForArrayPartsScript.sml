@@ -369,6 +369,102 @@ QED
 
 (* Static producer: the body remains opaque and the entry's old instructions
    are retained. Layout/type and runtime facts belong to the consumer. *)
+Theorem compile_for_array_memory_parts:
+  expr_type e = ArrayT et (Fixed n) /\
+  compile_expr cenv (ArrayT et (Fixed n)) e origin = (av,st) /\
+  vv_location av = SOME LocMemory /\ vv_operand av = arr_op /\
+  compile_stmt cenv lctx ty
+    (For id et (Array e) n stmts) origin =
+    ((),st') /\ cenv.ce_alloca_locals /\ fn_has_code st st' func /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
+                cs_extends sa sb) ==>
+  ?bc p idx dv ov ep nv entry cond bod incr exit sa sb0 sb1 sj.
+    p = STRING #"%" (toString st.cs_next_var) /\
+    idx = STRING #"%" (toString (st.cs_next_var + 1)) /\
+    dv = STRING #"%" (toString (st.cs_next_var + 2)) /\
+    ov = STRING #"%" (toString (st.cs_next_var + 3)) /\
+    ep = STRING #"%" (toString (st.cs_next_var + 4)) /\
+    nv = STRING #"%" (toString sj.cs_next_var) /\
+    declare_local cenv id et st =
+      (bc, st with cs_next_var := st.cs_next_var + 1) /\
+    FLOOKUP bc.ce_vars id =
+      SOME (PtrVar (Var p) (type_memory_bytes cenv et)) /\
+    sa.cs_current_bb = bod /\
+    sa.cs_current_insts =
+      [mk_inst (st.cs_next_id + 6) MUL
+         [Var idx; Lit (n2w (elem_size_in_location cenv LocMemory et))] [ov];
+       mk_inst (st.cs_next_id + 7) ADD [arr_op; Var ov] [ep]] /\
+    sa.cs_next_var = st.cs_next_var + 5 /\
+    sa.cs_next_id = st.cs_next_id + 8 /\ sa.cs_next_id <= sb0.cs_next_id /\
+    compile_iter_elem_copy cenv (Var ep) (Var p)
+      (elem_size_in_location cenv LocMemory et) LocMemory F et et sa = ((),sb0) /\
+    sb0.cs_current_bb = bod /\ same_blocks sa sb0 /\
+    sb0.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb0 /\
+    ~block_is_terminated sb0 /\ sa.cs_next_var <= sb0.cs_next_var /\
+    compile_stmts bc (InLoop exit incr) ty stmts sb0 = ((),sb1) /\
+    emit_jmp_if_not_terminated incr sb1 = ((),sj) /\
+    sj.cs_next_var = sb1.cs_next_var /\
+    (~block_is_terminated sb1 ==>
+      sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+      sj.cs_current_insts = sb1.cs_current_insts ++
+        [mk_inst sb1.cs_next_id JMP [Label incr] []]) /\
+    cs_extends st sa /\ cs_extends sa sb0 /\ cs_extends sb0 sb1 /\
+    cs_extends sb1 sj /\ cs_extends sj st' /\
+    fn_has_code st sa func /\ fn_has_code sa sb0 func /\
+    fn_has_code sb0 sb1 func /\ fn_has_code sb1 sj func /\
+    fn_has_code sj st' func /\
+    lookup_block st.cs_current_bb func.fn_blocks =
+      SOME <|bb_label := st.cs_current_bb;
+             bb_instructions := st.cs_current_insts ++
+               [mk_inst st.cs_next_id ALLOCA
+                  [Lit (n2w (type_memory_bytes cenv et))] [p];
+                mk_inst (st.cs_next_id + 1) JMP [Label entry] []]|> /\
+    lookup_block entry func.fn_blocks =
+      SOME <|bb_label := entry; bb_instructions :=
+        [mk_inst (st.cs_next_id + 2) ASSIGN [Lit 0w] [idx];
+         mk_inst (st.cs_next_id + 3) JMP [Label cond] []]|> /\
+    lookup_block cond func.fn_blocks =
+      SOME <|bb_label := cond; bb_instructions :=
+        [mk_inst (st.cs_next_id + 4) EQ [Var idx; Lit (n2w n)] [dv];
+         mk_inst (st.cs_next_id + 5) JNZ [Var dv; Label exit; Label bod] []]|> /\
+    lookup_block incr func.fn_blocks =
+      SOME <|bb_label := incr; bb_instructions :=
+        [mk_inst sj.cs_next_id ADD [Var idx; Lit 1w] [nv];
+         mk_inst (sj.cs_next_id + 1) ASSIGN [Var nv] [idx];
+         mk_inst (sj.cs_next_id + 2) JMP [Label cond] []]|> /\
+    st'.cs_current_bb = exit /\ st'.cs_current_insts = []
+Proof
+  strip_tac >>
+  drule_at (Pat `compile_stmt _ _ _ _ _ = _`) compile_for_array_memory_stages >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >>
+  strip_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
+  dxrule_all compile_for_array_prefix >> strip_tac >>
+  dxrule compile_for_array_suffix >> strip_tac >>
+  `cs_extends st sa` by (irule array_prefix_extends >> simp[] >> metis_tac[]) >>
+  `~block_is_terminated sa` by
+    simp[block_is_terminated_def, mk_inst_def, is_terminator_def] >>
+  qpat_x_assum `_ sa = ((),sb0)` mp_tac >>
+  simp[] >> strip_tac >>
+  drule_all array_iter_copy_static >> strip_tac >>
+  drule array_body_backedge >> strip_tac >>
+  `cs_extends sb0 sb1` by metis_tac[] >>
+  drule_all array_stages_code >> strip_tac >>
+  qexistsl_tac [`entry`, `cond`, `incr`, `sa`, `sb0`, `sb1`, `sj`] >>
+  fs[] >>
+  rpt conj_tac
+  >- fs[same_blocks_def]
+  >- (irule array_emitted_block_lookup >>
+      simp[] >> qexistsl_tac [`TAKE 3 sa.cs_blocks`, `st`, `sa`] >> simp[])
+  >- (irule array_emitted_block_lookup >>
+      simp[] >> qexistsl_tac [`TAKE 3 sa.cs_blocks`, `st`, `sa`] >> simp[])
+  >- (irule array_emitted_block_lookup >>
+      simp[] >> qexistsl_tac [`TAKE 3 sa.cs_blocks`, `st`, `sa`] >> simp[])
+  >> irule array_emitted_block_lookup >>
+  simp[] >> qexistsl_tac [`TAKE 2 st'.cs_blocks`, `sj`, `st'`] >> simp[]
+QED
+
 Theorem compile_for_array_parts:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
   compile_stmt cenv lctx ty
@@ -437,32 +533,10 @@ Proof
      (Name (ArrayT et (Fixed n)) name) st =
      (LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory),st)` by
     metis_tac[compile_array_name] >>
-  drule_at (Pat `compile_stmt _ _ _ _ _ = _`) compile_for_array_memory_stages >>
-  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  mp_tac (Q.INST
+    [`e` |-> `Name (ArrayT et (Fixed n)) name`, `origin` |-> `st`,
+     `av` |-> `LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory)`]
+    compile_for_array_memory_parts) >>
   simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >>
-  strip_tac >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
-  dxrule_all compile_for_array_prefix >> strip_tac >>
-  dxrule compile_for_array_suffix >> strip_tac >>
-  `cs_extends st sa` by (irule array_prefix_extends >> simp[] >> metis_tac[]) >>
-  `~block_is_terminated sa` by
-    simp[block_is_terminated_def, mk_inst_def, is_terminator_def] >>
-  qpat_x_assum `_ sa = ((),sb0)` mp_tac >>
-  simp[] >> strip_tac >>
-  drule_all array_iter_copy_static >> strip_tac >>
-  drule array_body_backedge >> strip_tac >>
-  `cs_extends sb0 sb1` by metis_tac[] >>
-  drule_all array_stages_code >> strip_tac >>
-  qexistsl_tac [`entry`, `cond`, `incr`, `sa`, `sb0`, `sb1`, `sj`] >>
-  fs[] >>
-  rpt conj_tac
-  >- fs[same_blocks_def]
-  >- (irule array_emitted_block_lookup >>
-      simp[] >> qexistsl_tac [`TAKE 3 sa.cs_blocks`, `st`, `sa`] >> simp[])
-  >- (irule array_emitted_block_lookup >>
-      simp[] >> qexistsl_tac [`TAKE 3 sa.cs_blocks`, `st`, `sa`] >> simp[])
-  >- (irule array_emitted_block_lookup >>
-      simp[] >> qexistsl_tac [`TAKE 3 sa.cs_blocks`, `st`, `sa`] >> simp[])
-  >> irule array_emitted_block_lookup >>
-  simp[] >> qexistsl_tac [`TAKE 2 st'.cs_blocks`, `sj`, `st'`] >> simp[]
+  disch_then irule >> first_assum ACCEPT_TAC
 QED

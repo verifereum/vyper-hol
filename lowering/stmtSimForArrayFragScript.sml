@@ -42,7 +42,7 @@ QED
 
 Theorem array_register_frame[local]:
   local_ptrs_reserved cenv st /\
-  FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
+  (!x. arr_op = Var x ==> not_fresh_at st x) /\
   sa.cs_next_var = st.cs_next_var + 5 /\
   st.cs_next_var + 5 <= sj.cs_next_var /\
   p = STRING #"%" (toString st.cs_next_var) /\
@@ -65,8 +65,6 @@ Proof
          not_local_ptr cenv scs nv` by
     (gen_tac >> rpt conj_tac >> simp[] >>
      irule local_ptrs_reserved_fresh >> qexists_tac `st` >> simp[]) >>
-  `!x. arr_op = Var x ==> not_fresh_at st x` by
-    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   simp[] >> rpt strip_tac >>
   first_x_assum drule >>
   simp[not_fresh_at_def] >> rpt strip_tac >>
@@ -81,6 +79,57 @@ Proof
   strip_tac >> irule lookup_block_fn_insts >>
   goal_assum (drule_at Any) >>
   simp[]
+QED
+
+Theorem compile_for_array_memory_code:
+  expr_type e = ArrayT et (Fixed n) /\
+  compile_expr cenv (ArrayT et (Fixed n)) e origin = (av,st) /\
+  vv_location av = SOME LocMemory /\ vv_operand av = arr_op /\
+  (!x. arr_op = Var x ==> not_fresh_at st x) /\
+  compile_stmt cenv lctx ty
+    (For id et (Array e) n stmts) origin =
+    ((),st') /\ cenv.ce_alloca_locals /\ fn_has_code st st' func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv st /\
+  (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
+                cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+  type_memory_bytes cenv et = type_memory_size tv /\
+  type_memory_bytes cenv et + 64 < dimword (:256) ==>
+  ?bc p idx dv ov ep nv entry cond bod incr exit sa sb0 sb1 sj ainst.
+    array_for_code func cenv bc ty stmts id et tv n
+      (type_memory_bytes cenv et) arr_op p (type_memory_bytes cenv et)
+      ainst idx dv ov ep nv cond exit bod incr
+      (st.cs_next_id + 4) (st.cs_next_id + 5)
+      (st.cs_next_id + 6) (st.cs_next_id + 7)
+      sj.cs_next_id (sj.cs_next_id + 1) (sj.cs_next_id + 2) sa sb0 sb1 sj /\
+    ainst = mk_inst st.cs_next_id ALLOCA
+      [Lit (n2w (type_memory_bytes cenv et))] [p] /\
+    lookup_block st.cs_current_bb func.fn_blocks =
+      SOME <|bb_label := st.cs_current_bb;
+             bb_instructions := st.cs_current_insts ++
+               [ainst; mk_inst (st.cs_next_id + 1) JMP [Label entry] []]|> /\
+    lookup_block entry func.fn_blocks =
+      SOME <|bb_label := entry; bb_instructions :=
+        [mk_inst (st.cs_next_id + 2) ASSIGN [Lit 0w] [idx];
+         mk_inst (st.cs_next_id + 3) JMP [Label cond] []]|> /\
+    st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
+    cs_extends st sa
+Proof
+  strip_tac >>
+  `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
+                cs_extends sa sb` by metis_tac[] >>
+  drule_all compile_for_array_memory_parts >> strip_tac >>
+  drule_all declare_local_ptr >> strip_tac >>
+  `st.cs_next_var + 5 <= sj.cs_next_var` by
+    (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
+  drule_all array_register_frame >> strip_tac >>
+  `st.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
+  drule_all array_declared_reserved >> strip_tac >>
+  drule array_start_alloca_member >> strip_tac >>
+  qexistsl_tac [`bc`, `p`, `idx`, `dv`, `ov`, `ep`, `nv`, `entry`, `cond`,
+               `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`, `sj`] >>
+  fs[array_for_code_def, elem_size_in_location_def, is_slot_addressed_def,
+     mk_inst_def] >> gvs[]
 QED
 
 Theorem compile_for_array_code:
@@ -115,20 +164,19 @@ Theorem compile_for_array_code:
     cs_extends st sa
 Proof
   strip_tac >>
-  `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
-                cs_extends sa sb` by metis_tac[] >>
-  drule_all compile_for_array_parts >> strip_tac >>
-  drule_all declare_local_ptr >> strip_tac >>
-  `st.cs_next_var + 5 <= sj.cs_next_var` by
-    (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
-  drule_all array_register_frame >> strip_tac >>
-  `st.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
-  drule_all array_declared_reserved >> strip_tac >>
-  drule array_start_alloca_member >> strip_tac >>
-  qexistsl_tac [`bc`, `p`, `idx`, `dv`, `ov`, `ep`, `nv`, `entry`, `cond`,
-               `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`, `sj`] >>
-  fs[array_for_code_def, elem_size_in_location_def, is_slot_addressed_def,
-     mk_inst_def] >> gvs[]
+  `!x. arr_op = Var x ==> not_fresh_at st x` by
+    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `compile_expr cenv (ArrayT et (Fixed n))
+     (Name (ArrayT et (Fixed n)) name) st =
+     (LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory),st)` by
+    metis_tac[compile_array_name] >>
+  mp_tac (Q.INST
+    [`e` |-> `Name (ArrayT et (Fixed n)) name`, `origin` |-> `st`,
+     `av` |-> `LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory)`]
+    compile_for_array_memory_code) >>
+  simp[vyperASTTheory.expr_type_def, contextTheory.vv_location_def,
+       contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+  disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Allocation changes exactly its output register, whether reused or fresh. *)
@@ -449,6 +497,8 @@ Proof
   drule_all compile_for_array_parts >> strip_tac >>
   `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id` by
     (conj_tac >- simp[] >> decide_tac) >>
+  `!x. arr_op = Var x ==> not_fresh_at st x` by
+    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   drule_all declare_local_ptr >> strip_tac >>
   `st.cs_next_var + 5 <= sj.cs_next_var` by
     (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
