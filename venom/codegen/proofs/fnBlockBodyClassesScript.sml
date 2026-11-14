@@ -2297,7 +2297,8 @@ Proof
   disch_then (qspecl_then [`a`, `t`] mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `exec_block fuel ctx bb vs = _` (fn th => REWRITE_TAC [th]) >>
-  MATCH_ACCEPT_TAC body_result_abort
+  disch_then (qx_choosel_then [`n`, `out`] strip_assume_tac) >>
+  irule body_result_abort >> qexistsl_tac [`n`, `out`] >> simp[]
 QED
 
 Theorem body_revert_step:

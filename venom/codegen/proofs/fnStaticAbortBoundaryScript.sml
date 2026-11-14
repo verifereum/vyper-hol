@@ -254,6 +254,7 @@ Theorem body_result_abort_from_strict:
   body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest ast res ==>
   body_result_abort lo o2pc prog cpl ctx fn mem0 pc_ret rest ast res
 Proof
-  simp[body_result_simple_def, body_result_def, cost_le_def, body_result_abort_def, venom_asm_terminal_rel_def] >>
+  simp[body_result_simple_def, body_result_def, fnSimSpecTheory.cost_le_def,
+       body_result_abort_def, venom_asm_terminal_rel_def] >>
   metis_tac[]
 QED
