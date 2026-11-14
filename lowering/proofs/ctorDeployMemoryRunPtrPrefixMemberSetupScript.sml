@@ -206,7 +206,7 @@ Proof
        (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
      `ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;off] [x]) s = (G1,q1)` by
        (`step_taint (mk_inst iid ADD [src;off] [x]) s (update_var x (a+ao) s) tn = q1` by
-          (simp[Abbr `q1`] >> irule prefix_member_add_taint >> simp[]) >>
+          (simp[Abbr `q1`, Abbr `s1`] >> irule prefix_member_add_taint >> simp[]) >>
         pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
         qunabbrev_tac `G1` >>
         irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
@@ -227,7 +227,8 @@ Proof
        (`step_taint (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
            (s1 with vs_inst_idx := s.vs_inst_idx+1)
            (update_var y (d+vo) (s1 with vs_inst_idx := s.vs_inst_idx+1)) q1 = q2` by
-          (simp[Abbr `q2`] >> irule prefix_member_add_taint >> simp[]) >>
+          (simp[Abbr `q2`, Abbr `s2`, instIdxIndepTheory.update_var_idx] >>
+           irule prefix_member_add_taint >> simp[]) >>
         `first_prov G1 [Var dst;Lit vo] = SOME (b,sz)` by
           simp[first_prov_def, op_prov_def] >>
         qunabbrev_tac `G2` >>
@@ -336,7 +337,7 @@ Proof
        (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
      `ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;Lit ao] [x]) s = (G1,q1)` by
        (`step_taint (mk_inst iid ADD [src;Lit ao] [x]) s (update_var x (a+ao) s) tn = q1` by
-          (simp[Abbr `q1`] >> irule prefix_member_add_taint >> simp[]) >>
+          (simp[Abbr `q1`, Abbr `s1`] >> irule prefix_member_add_taint >> simp[]) >>
         pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
         qunabbrev_tac `G1` >>
         irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
@@ -356,12 +357,8 @@ Proof
            simp[instIdxIndepTheory.eval_op_inst_idx, allocas_from_def, Abbr `w`,
                 abi_decode_load_def, abi_decode_source_def]) >>
         qunabbrev_tac `s2` >>
-        qpat_x_assum `op_taint q1 (Var x) = {}` mp_tac >>
-        qpat_x_assum `~ctx_has_dalloca ctx` mp_tac >>
-        qpat_x_assum `eval_operand (Var x) (s1 with vs_inst_idx := _) = _ /\ _` mp_tac >>
-        rpt (pop_assum kall_tac) >> rpt strip_tac >>
         drule_all prefix_member_dload_pair >>
-        simp[instIdxIndepTheory.update_var_idx]) >>
+        simp[LET_THM, instIdxIndepTheory.update_var_idx]) >>
      qabbrev_tac `xs = [mk_inst iid ADD [src;Lit ao] [x];
                         mk_inst (iid+1) DLOAD [Var x] [y]]` >>
      qspecl_then [`xs`,`s`,`\j. EL j [s;s1;s2]`,
@@ -528,7 +525,7 @@ Proof
      qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ H qt _ _ _ _` mp_tac >>
      simp[Abbr `u2`, GSYM ADD_ASSOC]) >>
   qexistsl_tac [`H'`,`qt'`] >>
-  qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ G tn _ s H' qt'`
+  qpat_assum `!D'. inst_seq_ptr _ _ _ _ _ G tn _ s H' qt'`
     (fn th => pure_rewrite_tac[th, AND_CLAUSES, FORALL_SIMP]) >>
   fs[Abbr `z`, Abbr `w`] >>
   conj_tac >-

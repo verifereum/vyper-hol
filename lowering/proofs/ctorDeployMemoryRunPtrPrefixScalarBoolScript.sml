@@ -107,9 +107,10 @@ Proof
      `step_inst 0 ctx (mk_inst (st.cs_next_id+1) SHR [Lit 1w;Var x] [y])
         (l with vs_inst_idx := s.vs_inst_idx+1) =
         OK (r with vs_inst_idx := s.vs_inst_idx+1)` by
-       simp[step_inst_non_invoke, Abbr `r`, GSYM update_var_idx,
-            emitHelperPropsTheory.eval_operand_lit, eval_op_inst_idx,
-            Q.SPECL [`Lit 1w`,`Var x`,`1w`,`w`] emitHelperPropsTheory.step_SHR] >>
+       (simp[step_inst_non_invoke, Abbr `r`, GSYM update_var_idx] >>
+        irule (SRULE [] (Q.SPECL [`Lit 1w`,`Var x`,`1w`,`w`]
+          emitHelperPropsTheory.step_SHR)) >>
+        simp[emitHelperPropsTheory.eval_operand_lit, eval_op_inst_idx]) >>
      `ptr_safe_step D' lo 0 ctx fn PG G1 q0
         (mk_inst (st.cs_next_id+1) SHR [Lit 1w;Var x] [y])
         (l with vs_inst_idx := s.vs_inst_idx+1)` by
@@ -124,8 +125,8 @@ Proof
      `step_inst_base (mk_inst (st.cs_next_id+2) ISZERO [Var y] [z])
         (r with vs_inst_idx := s.vs_inst_idx+2) =
         OK (pre with vs_inst_idx := s.vs_inst_idx+2)` by
-       simp[Abbr `pre`, GSYM update_var_idx, eval_op_inst_idx,
-            Q.SPECL [`Var y`,`word_lsr w 1`] emitHelperPropsTheory.step_ISZERO] >>
+       (simp[Abbr `pre`, GSYM update_var_idx] >>
+        irule emitHelperPropsTheory.step_ISZERO >> simp[eval_op_inst_idx]) >>
      `step_inst 0 ctx (mk_inst (st.cs_next_id+2) ISZERO [Var y] [z])
         (r with vs_inst_idx := s.vs_inst_idx+2) =
         OK (pre with vs_inst_idx := s.vs_inst_idx+2)` by
@@ -159,7 +160,7 @@ Proof
      `step_inst 0 ctx (mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] [])
         (pre with vs_inst_idx := s.vs_inst_idx+4) =
         OK (end with vs_inst_idx := s.vs_inst_idx+4)` by
-       (simp[step_inst_non_invoke, Abbr `end`, GSYM mstore_idx] >>
+       (simp[step_inst_non_invoke, Abbr `u`, Abbr `v`, Abbr `end`, GSYM mstore_idx] >>
         irule slotCopyExecutionTheory.slot_copy_step_store >> simp[eval_op_inst_idx]) >>
      `ptr_safe_step D' lo 0 ctx fn PG H qt0
         (mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] [])
@@ -179,7 +180,8 @@ Proof
      >- simp[]
      >- (simp[] >> gen_tac >> strip_tac >>
          `j = 0 \/ j = 1 \/ j = 2 \/ j = 3 \/ j = 4` by decide_tac >>
-         pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC >> simp[]) >>
+         pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC >>
+         simp[Abbr `u`, Abbr `v`]) >>
      simp[inst_seq_ptr_def]) >>
   qexistsl [`H`,`qt`] >> asm_rewrite_tac[] >>
   conj_tac
