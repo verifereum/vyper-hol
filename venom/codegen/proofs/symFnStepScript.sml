@@ -743,7 +743,7 @@ QED
 Finalise sym_block_step_prefix
 
 Theorem sym_fn_entry_block_step:
-  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
          sym_fn_sim_at (SUC fuel)
 Proof
@@ -894,7 +894,7 @@ QED
 Finalise sym_fn_entry_block_step
 
 Theorem sym_fn_block_frame_step:
-  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
          sym_fn_frame_sim_at (SUC fuel)
 Proof
@@ -947,11 +947,12 @@ QED
 Finalise sym_fn_block_frame_step
 
 Theorem sym_fn_sims_all:
-  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel
 Proof
   Induct
-  >- (simp[gen_fn_sim_at_def, gen_fn_frame_sim_at_def, sym_fn_sim_at_def,
+  >- (simp[gen_fn_sim_at_simple_def, gen_fn_frame_sim_at_simple_def,
+           gen_fn_sim_at_def, gen_fn_frame_sim_at_def, sym_fn_sim_at_def,
            sym_fn_frame_sim_at_def] >>
       rpt strip_tac >> gvs[Once run_blocks_def]) >>
   metis_tac[fn_entry_block_step, fn_block_frame_step,

@@ -979,6 +979,12 @@ Definition asm_block_at_def:
     ∀j. j < LENGTH asm_insts ⇒ EL (pc + j) prog = EL j asm_insts
 End
 
+Theorem asm_block_at_length:
+  asm_block_at prog pc code ==> LENGTH code <= LENGTH prog
+Proof
+  simp[asm_block_at_def]
+QED
+
 (* ===== Fuel-Based Execution ===== *)
 
 Definition run_asm_aux_def:

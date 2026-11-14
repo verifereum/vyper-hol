@@ -12,6 +12,8 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
+val () = cv_auto_trans fold_pin_constant_def;
+val () = cv_auto_trans pin_fold_value_def;
 val () = cv_auto_trans interface_constructor_result_def;
 val () = cv_auto_trans translate_module_call_def;
 val () = cv_auto_trans translate_call_def;

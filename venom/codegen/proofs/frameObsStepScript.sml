@@ -7,7 +7,8 @@
  * TOP-LEVEL:
  *   frame_obs_plain_step, frame_obs_gas_step, frame_obs_call_same_depth,
  *   frame_obs_call_enter, frame_obs_terminal - call_trace/gas_readings
- *   run_call_same_depth_step, run_call_enter_return,
+ *   run_call_same_depth_step, run_call_enter_return, run_call_inl_rtc,
+ *   run_call_enter_return_rtc,
  *   run_call_terminal_step - run_call
  *)
 
@@ -192,6 +193,60 @@ Proof
   `LENGTH es.contexts <= LENGTH es1.contexts` by simp[] >>
   drule_all run_call_child_continuation >> disch_then SUBST1_TAC >>
   simp[run_call_def, arithmeticTheory.GREATER_EQ]
+QED
+
+(* A call frame's run that returns to its caller passes through its
+   states at its depth or deeper, one INL step at a time. *)
+Theorem run_call_inl_rtc:
+  run_call v = SOME (INL (), t) ==>
+  RTC (\a b. LENGTH a.contexts >= LENGTH v.contexts /\
+             step a = (INL (), b)) v t
+Proof
+  strip_tac >> drule run_call_finite_trace >> strip_tac >>
+  rename1 `FUNPOW _ n _ = (INL (), t)` >>
+  qabbrev_tac `R = \a b. LENGTH a.contexts >= LENGTH v.contexts /\
+                         step a = (INL (), b)` >>
+  `!k. k <= n ==>
+       ?st. FUNPOW (step o SND) k (INL (), v) = (INL (), st) /\ RTC R v st`
+    suffices_by
+      (disch_then (qspec_then `n` mp_tac) >> simp[] >> strip_tac >> gvs[]) >>
+  Induct >- simp[relationTheory.RTC_REFL] >>
+  strip_tac >>
+  `?st. FUNPOW (step o SND) k (INL (), v) = (INL (), st) /\ RTC R v st` by
+    simp[] >>
+  `k < n` by decide_tac >>
+  `LENGTH v.contexts <= LENGTH st.contexts` by
+    (qpat_assum `FUNPOW _ k _ = _` (fn th =>
+       qpat_assum `!k. k < n ==> _` (qspec_then `k` mp_tac) >>
+       rewrite_tac[th]) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  `ISL (FST (FUNPOW (step o SND) (SUC k) (INL (), v))) \/
+   FUNPOW (step o SND) (SUC k) (INL (), v) = (INL (), t)` by
+    (Cases_on `SUC k = n` >- gvs[] >>
+     `SUC k < n` by decide_tac >>
+     disj1_tac >>
+     qpat_assum `!k. k < n ==> _` (qspec_then `SUC k` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  qpat_x_assum `!k. k < n ==> _` kall_tac >>
+  gvs[arithmeticTheory.FUNPOW_SUC] >>
+  Cases_on `step st` >> rename1 `step st = (q, st')` >>
+  Cases_on `q` >> gvs[] >>
+  irule (cj 2 relationTheory.RTC_RULES_RIGHT1) >>
+  qexists_tac `st` >> simp[Abbr `R`]
+QED
+
+(* Entering a call and returning from it, as steps of the caller's frame. *)
+Theorem run_call_enter_return_rtc:
+  step es = (INL (), es1) /\ LENGTH es1.contexts = SUC (LENGTH es.contexts) /\
+  run_call es1 = SOME (INL (), es2) ==>
+  RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
+             step a = (INL (), b)) es es2
+Proof
+  strip_tac >> drule run_call_inl_rtc >> strip_tac >>
+  irule (cj 2 relationTheory.RTC_RULES) >>
+  qexists_tac `es1` >> simp[] >>
+  irule relationTheory.RTC_MONOTONE >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem run_call_terminal_step:
