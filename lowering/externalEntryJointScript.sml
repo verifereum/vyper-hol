@@ -54,8 +54,8 @@ Proof
      simp[fresh_label_def, initial_compile_state_def, LET_THM] >>
      strip_tac >> gvs[]) >>
   drule_all linear_dispatch_entry_no_phi >> strip_tac >>
-  simp[] >> qexistsl_tac [`func`, `bb`] >>
-  gvs[fn_entry_label_def, entry_block_def, NULL_EQ]
+  simp[] >> qexists_tac `bb` >>
+  gvs[fn_entry_label_def, entry_block_def, listTheory.NULL_EQ]
 QED
 
 (* Helper: facts at the end s0 of a zero-GAS memory-checked path from the
@@ -174,7 +174,7 @@ Proof
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all runtime_entry_function_no_phi >> strip_tac >>
   drule_all external_entry_reaches_registration_ptr >> strip_tac >>
-  drule_all register_positional_args_ptr >>
+  drule_all (INST_TYPE [beta |-> ``:256``] register_positional_args_ptr) >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
   `gas_path_mem unit.cu_context func
      (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
@@ -182,21 +182,16 @@ Proof
     (irule gas_path_mem_then >> qexists_tac `s1` >> simp[]) >>
   fs[] >>
   drule_all entry_path_endpoint_facts >> strip_tac >>
-  qexistsl_tac [`lbl`, `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`,
-    `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`, `st'`, `func`, `s0`, `G0`, `tn0`] >>
+  qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `s0`, `G0`, `tn0`] >>
   simp[return_buf_frame_def] >>
   conj_tac >-
     (rpt strip_tac >> irule entry_context_continuation >> simp[] >>
-     qexists_tac `bb` >> simp[]) >>
+     qexistsl_tac [`fuel`, `s0`] >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `IEC = initial_evaluation_context am.sources am.layouts tx NONE` >>
-  first_x_assum (qspec_then `H` strip_assume_tac) >>
+  qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ /\ ghost_inv _ _ _ _ _ _ _ _`
+    (qspec_then `H` strip_assume_tac) >>
   simp[GSYM ghost_inv_cx_dead] >>
-  conj_tac >-
-    (strip_tac >>
-     qpat_x_assum `!D. (!fuel. ptr_safe_run D 0 fuel _ _ [] G1 tn1 s1) ==> _` irule >>
-     qpat_x_assum `!D. (!fuel. ptr_safe_run D 0 fuel _ _ [] G0 tn0 s0) ==> _` irule >>
-     simp[]) >>
   gen_tac >>
   qpat_x_assum `!D explicit. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
     (qspecl_then [`cx_dead H IEC`, `explicit`] assume_tac) >>
