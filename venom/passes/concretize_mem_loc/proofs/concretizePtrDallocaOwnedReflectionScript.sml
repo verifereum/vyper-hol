@@ -85,35 +85,6 @@ Proof
   simp[Abbr `bp`, Abbr `mems`] >> metis_tac[]
 QED
 
-Theorem ptr_dalloca_owned_demand:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
-  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\
-  FLOOKUP TG v = SOME (token,aid) /\
-  FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
-  FLOOKUP births (token,aid) = SOME (b,sz) /\
-  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\ k < sz /\
-  b+k NOTIN endpoint.po_taint.t_mem /\
-  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
-  endpoint.po_inst.inst_opcode <> ASSIGN /\
-  MEM (Var v) endpoint.po_inst.inst_operands /\
-  (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) ==>
-  (?P d fn bp mems observed s out w.
-    ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
-      PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
-      rpolicy s out names w) \/ dyn_floor C vs <= b+k
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
-  drule_all ptr_dalloca_owned_demand_memory >> simp[]
-QED
-
 (* The writer contract is conditional: the history join discharges it using
    the simultaneous earlier-index reflection clauses. It is not a stage
    precondition. Quantifying all analysis witnesses avoids exposing choices

@@ -175,20 +175,3 @@ Proof
   >- (fs[key_taint_def, SUBSET_DEF] >> metis_tac[]) >>
   fs[key_taint_def, SUBSET_DEF] >> metis_tac[]
 QED
-
-Theorem ptr_dalloca_scalar_read_masks:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
-  ~in_revert_forward a.po_fn a.po_state /\
-  (!i. i < lo ==> i IN at.po_taint.t_mem ==> i IN a.po_taint.t_mem) /\
-  at.po_taint.t_stor SUBSET a.po_taint.t_stor /\
-  at.po_taint.t_trans SUBSET a.po_taint.t_trans /\
-  MEM a.po_inst.inst_opcode [ILOAD;SLOAD;TLOAD] /\ ptr_chrono_step C' at zt ==>
-  out_taint at.po_taint at.po_inst at.po_state SUBSET
-    out_taint a.po_taint a.po_inst a.po_state
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule ptr_paired_prefix_memory >> strip_tac >>
-  drule_all ptr_dalloca_scalar_read_masks_memory >> simp[]
-QED

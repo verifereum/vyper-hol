@@ -175,32 +175,6 @@ Proof
   drule_all ptr_paired_historical_owned_write_exclusion_memory >> simp[]
 QED
 
-Theorem ptr_dalloca_suffix_nonwrites:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
-    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
-    rpolicy s out names w /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
-  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
-  q < LENGTH done /\ EL q done = w ==>
-  !r. SUC q <= r /\ r < LENGTH ht-1 ==>
-    pa+k NOTIN range_bytes
-      (step_writes (EL r ht).po_inst (EL r ht).po_state
-        (EL (SUC r) ht).po_state)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
-  rpt gen_tac >> strip_tac >> drule_all ptr_dalloca_suffix_nonwrites_memory >> simp[]
-QED
-
 Theorem ptr_dalloca_history_content_fmp_floor:
   ptr_observation_reachable vs C a /\
   ptr_history_content a.po_taint a.po_state t /\
