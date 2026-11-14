@@ -1,6 +1,7 @@
 (* Deployment boundary for the optimizer's shadow transaction. *)
 Theory asmOptCodeDeploy
 Ancestors
+  o1CodeEndOffset
   asmOptCodeCommon e2eDeployAsmOpt e2eSelfCodeFree ctorDeployDefs
   e2eDeployDefs vyperInterpreter
   supportedDecls vyperTypeEntryReadiness vyperTypeContractSoundness

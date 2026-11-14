@@ -56,9 +56,7 @@ End
 Definition sval_conc_def:
   sval_conc lo (Val w) = SOME w ∧
   sval_conc lo (Lab l d) =
-    if sym_delta_ok d then
-      OPTION_MAP (λoff. (n2w (off + d) : bytes32)) (FLOOKUP lo l)
-    else NONE
+    OPTION_MAP (λoff. (n2w (off + d) : bytes32)) (FLOOKUP lo l)
 End
 
 (* The concrete state cs against the symbolic state ss of program p: the
@@ -1350,11 +1348,10 @@ Proof
 QED
 
 Theorem sval_conc_add[local]:
-  sval_conc lo (Lab l d) = SOME a ∧ sym_delta_ok (d + w2n w) ⇒
+  sval_conc lo (Lab l d) = SOME a ⇒
   sval_conc lo (Lab l (d + w2n w)) = SOME (a + w)
 Proof
   simp[sval_conc_def] >>
-  Cases_on `sym_delta_ok d` >> simp[] >>
   Cases_on `FLOOKUP lo l` >> simp[] >>
   rpt strip_tac >> gvs[] >>
   simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n,
@@ -1600,7 +1597,7 @@ QED
    concrete address off + d doesn't wrap. *)
 Theorem sym_codecopy_address[local]:
   asm_static_wf p /\ asm_data_env_ok p env code /\
-  sym_data_label p env l /\
+  sym_data_label p env l /\ sym_delta_ok d /\
   sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w ==>
   ?off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
         env ' l = DROP off code /\ w2n w = off + d
@@ -1748,6 +1745,7 @@ Proof
   Cases_on `a` >> Cases_on `b` >> Cases_on `c` >>
   gvs[sym_codecopy_def, asm_sym_step_rel_def] >>
   reverse IF_CASES_TAC >- simp[asm_sym_step_rel_def] >>
+  fs[] >>
   `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
   drule_all sym_codecopy_address >> strip_tac >>
   gvs[sval_conc_def] >>
@@ -2020,7 +2018,7 @@ Proof
   >- (`∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off`
         by metis_tac[asm_label_ref_defined] >>
       simp[sym_push_lab_def] >>
-      IF_CASES_TAC >> simp[asm_sym_step_rel_def] >>
+      simp[asm_sym_step_rel_def] >>
       irule asm_sym_rel_next >> simp[sval_conc_def] >>
       fs[asm_sym_rel_def]) >>
   gvs[sym_lift_def, asm_sym_step_rel_def, asm_next_def, asm_sym_rel_def,
