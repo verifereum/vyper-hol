@@ -210,7 +210,7 @@ Proof
   qpat_x_assum `dft_blocks_gas_prefix ==> _` kall_tac >>
   qpat_x_assum `!gobs tail D. _` (qspecl_then [`gobs`, `tail`, `D`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
-  strip_tac >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
   qexistsl [`fn0`, `lbl0`] >> simp[] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> qexists_tac `extra` >>
   `vs_out with <|vs_prev_bb := NONE; vs_current_bb := lbl0; vs_inst_idx := 0;
