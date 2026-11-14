@@ -147,6 +147,7 @@ Proof
   `LENGTH inst'.inst_outputs = 1` by fs[current_last_output_slots_def] >>
   Cases_on `inst'.inst_outputs` >> gvs[]
   >- metis_tac[current_exec_update_last_slots] >>
+  pure_once_rewrite_tac[GSYM gasOracleReplayTheory.gas_update_var] >>
   irule current_exec_update_last_slots >>
   qexists_tac `sg` >> simp[] >>
   fs[state_rel_def, execution_frame_def, vars_rel_def, lookup_var_def]

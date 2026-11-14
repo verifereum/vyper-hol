@@ -130,6 +130,8 @@ Proof
        t with vs_gas_readings := [] = t` by
         simp[venom_state_component_equality] >>
       qexistsl [`0w`,`[]`] >> simp[] >>
+      pure_once_rewrite_tac[GSYM gasOracleReplayTheory.gas_update_var] >>
+      asm_rewrite_tac[] >>
       irule ld_env_clean_update >>
       simp[occurrence_out_def, out_prov_def] >>
       irule ld_out_taint_default >> simp[]) >>
@@ -147,6 +149,7 @@ Proof
            adopt_reset_def, imm_taint_def, new_site_bytes_def,
            written_taint_def, step_writes_def,
            codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] ) >>
+  pure_once_rewrite_tac[GSYM gasOracleReplayTheory.gas_update_var] >>
   asm_rewrite_tac[] >> irule ld_env_clean_update >>
   simp[occurrence_out_def, out_prov_def] >>
   irule ld_out_taint_default >> simp[]
@@ -187,6 +190,7 @@ Proof
      simp[occurrence_sites_step_def] >> gvs[]) >>
   qexists `update_var out x (t with vs_gas_readings := rs)` >> simp[] >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
+  fs[gasOracleReplayTheory.gas_update_var] >>
   irule ld_joint_var_update_next >> simp[] >>
   conj_tac >- (qexistsl [`out`,`rs`,`x`,`x`] >> simp[]) >>
   qexistsl [`G`,`H`,`tn`] >> simp[] >>

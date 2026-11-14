@@ -196,7 +196,9 @@ Proof
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
   `s1.vs_call_ctx = s.vs_call_ctx /\ s1.vs_halted = s.vs_halted` by
     metis_tac[ld_enters_block_call_ctx, ld_enters_block_halted] >>
-  Cases_on `fuel` >- gvs[venomExecProofsTheory.run_blocks_zero_error, Once gas_events_blocks_def, terminates_def] >>
+  Cases_on `fuel`
+  >- (gvs[venomExecProofsTheory.run_blocks_zero_error, terminates_def] >>
+      simp[Once gas_events_blocks_def] >> gvs[]) >>
   qpat_assum `enters_block fn s s1`
     (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
   qpat_assum `enters_block fn' t0 t1`
