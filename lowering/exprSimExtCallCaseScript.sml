@@ -1262,6 +1262,7 @@ Proof
            val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
       qpat_x_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
       simp[wb_frame_def] >> metis_tac[]) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [LET_THM]) >>
   Cases_on `has_default`
   >- (Cases_on `returnData = []`
       >- metis_tac[extcall_return_values_default_empty] >>
