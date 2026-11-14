@@ -798,7 +798,7 @@ Resume revert_reason_suffix_checks[padding_post]:
        (Q.INST [`id` |-> `id+14`, `capbytes` |-> `ms`,
           `R` |-> `contractABI$ceil32 L`, `a` |-> `P+32w`] zero_pad_copy_checks)) >>
      (qpat_x_assum `Abbrev (rnd = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     gnvs[ASCIInumbersTheory.toString_inj]) >>
+      simp_tac (srw_ss()) [ASCIInumbersTheory.toString_inj] >> gnvs[]) >>
      qexistsl [`L`, `P`, `ms`] >>
      gnvs[Abbr `s9d`, Abbr `s9c`, lookup_var_def] >>
      `w2n (P+32w:bytes32) = w2n P+32` by
