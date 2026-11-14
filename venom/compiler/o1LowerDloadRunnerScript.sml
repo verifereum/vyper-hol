@@ -426,3 +426,165 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   MATCH_ACCEPT_TAC ld_runner_run_clause_fuel
 QED
+
+(* Observe the selected result without changing the existing runner packets. *)
+val ldEmptyObservation = ``!se. r = Abort Revert_abort se /\
+  se.vs_returndata = [] ==> ?te. r' = Abort Revert_abort te /\
+  te.vs_returndata = []``;
+fun ldObserveSelected tm =
+  if is_exists tm then
+    let val (v,b) = dest_exists tm in
+      if fst (dest_var v) = "r'" then
+        mk_exists (v, mk_conj (b, ldEmptyObservation))
+      else mk_exists (v, ldObserveSelected b)
+    end
+  else if is_abs tm then
+    let val (v,b) = dest_abs tm in mk_abs (v, ldObserveSelected b) end
+  else if is_comb tm then
+    let val (f,x) = dest_comb tm in
+      mk_comb (ldObserveSelected f, ldObserveSelected x) end
+  else tm;
+val ldIndFuelObserved = ldObserveSelected ldIndFuel;
+val ldClausesFuelObserved = strip_conj (fst (dest_imp ldIndFuelObserved));
+
+Theorem ld_runner_run_clause_fuel_revert_empty_conditional:
+  ^(List.nth(ldClausesFuelObserved,2))
+Proof
+  qabbrev_tac `RR = ^ldR` >> qabbrev_tac `AA = ^ldA` >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  `occ_frame_reachable vs C stk PG G tn fn i s1 n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `wf_function fn` by
+    (drule occ_frame_reachable_annotation >> strip_tac >>
+     fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
+  `active_inst fn i s1` by
+    (drule occ_frame_reachable_projection >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `s1.vs_call_ctx = s.vs_call_ctx /\ s1.vs_halted = s.vs_halted` by
+    metis_tac[ld_enters_block_call_ctx, ld_enters_block_halted] >>
+  Cases_on `fuel` >- fs[Once run_blocks_def, terminates_def] >>
+  qpat_assum `enters_block fn s s1`
+    (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
+  qpat_assum `enters_block fn' t0 t1`
+    (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
+  gvs[] >>
+  `s_phi.vs_current_bb = s.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  `s_phi'.vs_current_bb = t0.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  `get_instruction bb (phi_prefix_length bb.bb_instructions) = SOME i` by
+    (qpat_x_assum `active_inst fn i _` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb''` by
+       (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+     gvs[get_instruction_def]) >>
+  qmatch_goalsub_abbrev_tac `run_blocks (SUC k) C fn s` >>
+  qmatch_asmsub_abbrev_tac `terminates (run_blocks (SUC k) C fn s)` >>
+  qmatch_asmsub_abbrev_tac `enters_block fn s sin` >>
+  `terminates (exec_block k C bb sin)` by
+    (qpat_x_assum `terminates (run_blocks _ _ _ _)` mp_tac >>
+     simp[Once run_blocks_def, Abbr `sin`] >>
+     Cases_on `exec_block k C bb
+       (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+     simp[terminates_def]) >>
+  `lookup_block sin.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb sin.vs_inst_idx = SOME i` by simp[Abbr `sin`] >>
+  gvs[] >> first_x_assum (drule_all_then strip_assume_tac) >>
+  gvs[] >>
+  qpat_x_assum `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `active_inst _ _ _` kall_tac >>
+  qmatch_asmsub_abbrev_tac `RR stk PG fn a U HP ts A0 br bt` >>
+  Cases_on `br`
+  >- suspend "branch"
+  >- suspend "halt"
+  >- suspend "abort"
+  >- suspend "return"
+  >> fs[terminates_def]
+QED
+
+Resume ld_runner_run_clause_fuel_revert_empty_conditional[halt]:
+  `?te. bt = Halt te` by fs[Abbr `RR`] >>
+  qpat_x_assum `Abbrev (Halt v = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `exec_block k C' bb'
+      (s_phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = Halt te` by
+    fs[Abbr `bt`] >>
+  simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
+  gvs[Abbr `sin`] >> simp[Once run_blocks_def]
+QED
+Resume ld_runner_run_clause_fuel_revert_empty_conditional[abort]:
+  `?te. bt = Abort a' te` by fs[Abbr `RR`] >>
+  qpat_x_assum `Abbrev (Abort _ _ = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `exec_block k C' bb'
+      (s_phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = Abort a' te` by
+    fs[Abbr `bt`] >>
+  simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
+  gvs[Abbr `sin`] >> simp[Once run_blocks_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `Abort _ _ = _` (assume_tac o SYM) >>
+  simp[Once run_blocks_def]
+QED
+Resume ld_runner_run_clause_fuel_revert_empty_conditional[return]:
+  `?jr tr. bt = IntRet jr tr` by
+    (fs[Abbr `RR`] >> metis_tac[]) >>
+  qpat_x_assum `Abbrev (IntRet _ _ = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `exec_block k C' bb'
+      (s_phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = IntRet jr tr` by
+    fs[Abbr `bt`] >>
+  simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
+  gvs[Abbr `sin`] >> simp[Once run_blocks_def]
+QED
+Resume ld_runner_run_clause_fuel_revert_empty_conditional[branch]:
+  qpat_x_assum `Abbrev (OK v = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `~v.vs_halted` by metis_tac[exec_block_OK_not_halted] >>
+  `terminates (run_blocks k C fn v)` by
+    (qpat_x_assum `terminates (run_blocks (SUC k) C fn s)` mp_tac >>
+     simp[Once run_blocks_def]) >>
+  qpat_assum `Abbrev (RR = _)` (fn rr =>
+    qpat_assum `RR _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss())
+        [REWRITE_RULE [markerTheory.Abbrev_def] rr])) >>
+  `MEM bi.inst_opcode [JMP; JNZ; DJMP]` by simp[] >>
+  `?sn. enters_block fn v sn` by
+    (Cases_on `k` >- fs[Once run_blocks_def, terminates_def] >>
+     Cases_on `lookup_block v.vs_current_bb fn.fn_blocks`
+     >- fs[Once run_blocks_def, terminates_def] >>
+     rename1 `lookup_block v.vs_current_bb fn.fn_blocks = SOME dest` >>
+     `(?p. eval_phis v dest.bb_instructions = OK p) \/
+      (?e. eval_phis v dest.bb_instructions = Error e)` by
+       metis_tac[eval_phis_ok_or_error_defs] >>
+     fs[Once run_blocks_def, terminates_def] >>
+     simp[enters_block_def] >> metis_tac[]) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_branch_endpoint_consume) >>
+  strip_tac >> gvs[] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `~te.vs_halted` by metis_tac[exec_block_OK_not_halted] >>
+  `run_blocks (SUC k) C fn s = run_blocks k C fn v` by
+    (qpat_assum `run_block_non_phis k C bb sin = OK v`
+       (mp_tac o SIMP_RULE (srw_ss()) [Abbr `sin`]) >>
+     simp[Once run_blocks_def]) >>
+  `run_blocks (SUC k) C' fn' t0 = run_blocks k C' fn' te` by
+    simp[Once run_blocks_def] >>
+  simp[]
+QED
+Finalise ld_runner_run_clause_fuel_revert_empty_conditional
+
+Theorem ld_runner_conditional_induction_fuel_revert_empty:
+  ^(mk_imp(list_mk_conj [List.nth(ldClausesFuelObserved,0),
+                         List.nth(ldClausesFuelObserved,1)],
+           snd(dest_imp ldIndFuelObserved)))
+Proof
+  strip_tac >> irule run_defs_ind >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  MATCH_ACCEPT_TAC ld_runner_run_clause_fuel_revert_empty_conditional
+QED

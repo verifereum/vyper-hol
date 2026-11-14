@@ -82,3 +82,32 @@ Proof
   simp[ctx_sim_fuel_def] >> rpt strip_tac >>
   irule layout_stage_terminating_context_fuel >> metis_tac[]
 QED
+
+(* Empty reverting returndata on the same-fuel selected context run. *)
+Theorem concretize_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  run_context fuel C vs = Abort Revert_abort post /\ post.vs_returndata = [] ==>
+  ?tpost. run_context fuel C' vs = Abort Revert_abort tpost /\
+    dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs) /\
+    tpost.vs_returndata = []
+Proof
+  strip_tac >>
+  `dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs)` by
+    (irule layout_stage_terminating_context_fuel >>
+     simp[passSimulationDefsTheory.terminates_def] >> metis_tac[]) >>
+  `?tpost. run_context fuel C' vs = Abort Revert_abort tpost` by
+    (Cases_on `run_context fuel C' vs` >>
+     gvs[dead_result_rel_def]) >>
+  qexists `tpost` >> simp[] >>
+  irule layout_stage_context_revert_empty >> metis_tac[]
+QED

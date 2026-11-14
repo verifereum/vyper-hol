@@ -159,6 +159,16 @@ Proof
   pop_assum (SUBST1_TAC o SYM) >> simp[merge_callee_state_def]
 QED
 
+Theorem frame_result_rel_revert_empty:
+  frame_result_rel (Abort Revert_abort s) r' /\ s.vs_returndata = [] ==>
+  ?t. r' = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  Cases_on `r'` >>
+  simp[frame_result_rel_def, execution_frame_eq_reconstruct] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `_ = s` (SUBST_ALL_TAC o SYM) >> gvs[]
+QED
+
 Theorem frame_result_rel_unit:
   frame_result_rel r r' /\ (!v t. r <> IntRet v t) ==> unit_result_rel r r'
 Proof
@@ -1253,13 +1263,13 @@ Proof
 QED
 
 (* The context-level fuel bound: run_context on lift_fuel fm fuel. *)
-Theorem fn_bisim_fuel_run_context:
+Theorem fn_bisim_fuel_run_context_frame:
   LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
   (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
   (!fuel v t. run_context fuel C vs <> IntRet v t) /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   terminates (run_context fuel C vs) ==>
-  dead_result_rel D (run_context fuel C vs)
+  frame_result_rel (run_context fuel C vs)
     (run_context (lift_fuel fm fuel) C' vs)
 Proof
   strip_tac >>
@@ -1279,7 +1289,20 @@ Proof
     `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
     `fuel`] mp_tac) >>
   simp[passSimulationDefsTheory.terminates_def] >> strip_tac >>
-  simp[run_function_def] >>
+  simp[run_function_def]
+QED
+
+Theorem fn_bisim_fuel_run_context:
+  LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
+  (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
+  (!fuel v t. run_context fuel C vs <> IntRet v t) /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  terminates (run_context fuel C vs) ==>
+  dead_result_rel D (run_context fuel C vs)
+    (run_context (lift_fuel fm fuel) C' vs)
+Proof
+  strip_tac >>
   irule unit_result_rel_dead_result_rel >>
-  irule frame_result_rel_unit >> simp[]
+  irule frame_result_rel_unit >> simp[] >>
+  irule fn_bisim_fuel_run_context_frame >> simp[]
 QED

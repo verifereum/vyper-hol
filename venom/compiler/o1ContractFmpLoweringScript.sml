@@ -236,6 +236,22 @@ Proof
   metis_tac[mem_inv_seal_eq]
 QED
 
+Theorem fmp_lowering_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+    C.ctx_functions /\
+  callee_first names C.ctx_functions /\
+  mem_inv (static_mem_ok eom) C vs /\
+  run_context fuel C vs = Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context fuel C' vs = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  strip_tac >> drule_all fmp_lowering_stage_seal_only >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem o1_ctx_shape_entry_no_return[local]:
   o1_ctx_shape ctx /\ ctx.ctx_entry = SOME name /\
   lookup_function name ctx.ctx_functions = SOME fn ==>

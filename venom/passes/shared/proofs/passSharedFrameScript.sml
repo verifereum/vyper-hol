@@ -1745,3 +1745,18 @@ Proof
               commute_base_case) >>
       simp[]))
 QED
+
+Theorem step_inst_base_nonrevert_revert_empty:
+  inst.inst_opcode <> REVERT /\
+  step_inst_base inst s = Abort Revert_abort post ==>
+  post.vs_returndata = []
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (qpat_x_assum `is_terminator _` mp_tac >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+      step_inst_base_opcode_tac >>
+      gvs[AllCaseEqs(), halt_state_def, set_returndata_def] >>
+      rpt strip_tac >> pairarg_tac >> gvs[]) >>
+  metis_tac[step_inst_base_abort_returndata]
+QED

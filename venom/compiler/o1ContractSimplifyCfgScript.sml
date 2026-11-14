@@ -278,6 +278,33 @@ Proof
   simp[lift_fuel_I]
 QED
 
+
+Theorem simplify_cfg_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs /\
+  run_context fuel C vs = Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context fuel C' vs = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  strip_tac >>
+  `LIST_REL (fn_bisim_fuel I) C.ctx_functions C'.ctx_functions` by
+    (drule simplify_cfg_stage_functions >> strip_tac >>
+     simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt strip_tac >>
+     simp[EL_MAP] >> irule simplify_cfg_fn_correct_fuel >>
+     gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def, MEM_EL]) >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    metis_tac[o1_ctx_shape_no_intret] >>
+  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  `frame_result_rel (run_context fuel C vs) (run_context fuel C' vs)` by
+    (mp_tac (Q.INST [`fm` |-> `I`] fn_bisim_fuel_run_context_frame) >>
+     simp[lift_fuel_I, passSimulationDefsTheory.terminates_def]) >>
+  gvs[] >> drule_all frame_result_rel_revert_empty >> simp[]
+QED
+
 (* The raw memory fact exempts revert-forward pairs, so it transfers through
    frame_sim and frame_sim_rf together. *)
 Theorem simplify_cfg_stage_mem_inv_rf:

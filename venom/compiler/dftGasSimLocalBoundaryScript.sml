@@ -11,6 +11,17 @@ Proof
   simp[ev_step_def, step_inst_def]
 QED
 
+Theorem ev_step_noninvoke_abort_empty:
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  ev_step orc p d fuel C i s = Abort a t ==>
+  t.vs_returndata = []
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = GAS`
+  >- gvs[ev_step_def, ev_gas_def, AllCaseEqs()] >>
+  gvs[ev_step_ordinary, step_inst_non_invoke] >>
+  drule_all passSharedFrameTheory.step_inst_base_abort_returndata >> simp[]
+QED
+
 Theorem ev_step_gas_shape:
   i.inst_opcode = GAS /\ inst_wf i ==>
   ?out. i.inst_outputs = [out] /\

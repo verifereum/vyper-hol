@@ -127,6 +127,36 @@ Proof
   simp[lift_fuel_I]
 QED
 
+
+Theorem make_ssa_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  run_context fuel C vs = Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context fuel C' vs = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  strip_tac >>
+  `LIST_REL (fn_bisim_fuel I) C.ctx_functions C'.ctx_functions` by
+    (drule make_ssa_stage_length >> strip_tac >>
+     simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     drule_all make_ssa_stage_el >> strip_tac >>
+     irule make_ssa_current_fn_fn_bisim_fuel >> gvs[make_ssa_input_ok_def] >>
+     metis_tac[]) >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
+     `MEM fn C.ctx_functions /\ fn.fn_name = name` by
+       metis_tac[lookup_function_MEM,
+                 ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
+     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM,
+         entry_fn_no_return_def] >> metis_tac[]) >>
+  `frame_result_rel (run_context fuel C vs) (run_context fuel C' vs)` by
+    (mp_tac (Q.INST [`fm` |-> `I`] fn_bisim_fuel_run_context_frame) >>
+     simp[lift_fuel_I, passSimulationDefsTheory.terminates_def]) >>
+  gvs[] >> drule_all frame_result_rel_revert_empty >> simp[]
+QED
+
 (* Every memory fact that exempts revert forwarding carries over. *)
 Theorem make_ssa_stage_mem_inv:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\

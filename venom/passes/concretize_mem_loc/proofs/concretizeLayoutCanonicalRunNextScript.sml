@@ -9,21 +9,28 @@ Ancestors concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   arithmetic frameFiniteExecution unitShapeDefs
   passSharedDefs venomExecSemantics venomExecProofs venomWf venomInst list
 
-Theorem layout_canonical_run_block_entry:
+Theorem layout_canonical_run_block_entry_prefix:
   layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
   EVERY wf_function C.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   eval_phis s bb.bb_instructions = OK phi /\
   decoration_entry fn (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) q ==>
-  ?bb' phi'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  ?bb' phi' a. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     eval_phis t bb'.bb_instructions = OK phi' /\
     layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb
+      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
+      (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) /\
+    layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend q n bb
+      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
+      (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) (INL a) /\
+    layout_paired_prefix_alias bb
       (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
       (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
 Proof
   strip_tac >> drule layout_canonical_run_phi >>
   disch_then (qspec_then `ARB` strip_assume_tac) >> gvs[] >>
   rename1 `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb'` >>
+  rename1 `eval_phis t bb'.bb_instructions = OK phi'` >>
   fs[layout_canonical_run_def] >>
   rename1 `layout_driver_row C' fn fn' positions` >>
   `bb_well_formed bb` by
@@ -43,15 +50,38 @@ Proof
      simp[concretize_positions_blocks, lookup_block_map_proof,
           concretize_positions_block_label] >>
      gvs[]) >>
-  simp[layout_canonical_EB_def] >> qexists `INL b` >>
-  simp[layout_canonical_block_witness_def] >>
-  (conj_tac >- fs[layout_canonical_entry_def, layout_canonical_ready_def]) >>
-  qexistsl [`fn`, `fn'`, `layout.cl_positions`] >>
-  gvs[layout_canonical_entry_def, layout_canonical_ready_def,
-      layout_scoped_phi_link_def, layout_phase_begins_def,
-      layout_phase_origin_def, layout_paired_ordinary_def,
-      layout_driver_row_def] >>
-  imp_res_tac eval_phis_preserves_current_bb >> gvs[] >> metis_tac[]
+  `MEM bb fn.fn_blocks` by
+    (fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
+  `layout_driver_row C' fn fn' layout.cl_positions` by
+    (simp[layout_driver_row_def] >> metis_tac[]) >>
+  `layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend q n bb
+    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
+    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) (INL b) /\
+   layout_paired_prefix_alias bb
+    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
+    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)` by
+    (irule layout_canonical_prefix_initialize >>
+     gvs[layout_canonical_entry_def, layout_canonical_ready_def,
+         layout_scoped_phi_link_def, layout_phase_begins_def,
+         layout_phase_origin_def, layout_block_pair_def] >>
+     imp_res_tac eval_phis_preserves_current_bb >> gvs[] >> metis_tac[]) >>
+  qexists `b` >> simp[layout_canonical_EB_def] >>
+  metis_tac[]
+QED
+
+Theorem layout_canonical_run_block_entry:
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
+  EVERY wf_function C.ctx_functions /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK phi /\
+  decoration_entry fn (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) q ==>
+  ?bb' phi'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    eval_phis t bb'.bb_instructions = OK phi' /\
+    layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb
+      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
+      (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+Proof
+  metis_tac[layout_canonical_run_block_entry_prefix]
 QED
 
 Theorem layout_canonical_jump_continue[local]:
