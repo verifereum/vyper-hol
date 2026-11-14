@@ -15,20 +15,6 @@ Ancestors
 Libs
   fragFuelLib
 
-Theorem fuel_ok_compile_expr_cb[local]:
-  !cenv ty e Wv E. fuel_ok Wv {} E (compile_expr cenv ty e)
-Proof
-  rpt gen_tac >> mp_tac fuel_ok_compile_expr >> simp[]
-QED
-
-Theorem fuel_ok_compile_get_target_ptr_ce[local]:
-  !cenv bt Wv E.
-    fuel_ok Wv {} E (compile_get_target_ptr compile_expr cenv bt)
-Proof
-  rpt gen_tac >> irule fuel_ok_compile_get_target_ptr >>
-  simp[fuel_ok_compile_expr_cb]
-QED
-
 Theorem fuel_ok_stmt_annassign[local]:
   !cenv lctx ty id vtyp e Wv E.
     cenv_ptrs_in Wv cenv ==>
@@ -69,12 +55,6 @@ Proof
              fuel_ok_compile_tuple_unpack]
 QED
 
-Theorem comp_bind_return_l[local]:
-  !x f. comp_bind (comp_return x) f = f x
-Proof
-  rw[FUN_EQ_THM, comp_bind_def, comp_return_def]
-QED
-
 Theorem fuel_ok_stmt_augassign[local]:
   !cenv lctx ty tty bt bop e Wv E.
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (AugAssign tty bt bop e))
@@ -83,7 +63,7 @@ Proof
   fuel_auto [fuel_ok_compile_get_target_ptr_ce] >>
   BasicProvers.TOP_CASE_TAC
   >- (irule fuel_ok_emit_void_any >> simp[]) >>
-  BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) [comp_bind_return_l] >>
+  BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) [comp_bind_return] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
              fuel_ok_lower_value_compile_expr, fuel_ok_compile_binop] >>
   simp[is_terminator_def]

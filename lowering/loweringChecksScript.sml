@@ -1,8 +1,8 @@
 (* Concrete checks of the lowering and the compiler, as one build root:
    interface contracts on concrete inputs, compiled creation code, and
-   regressions of the compiler's allocation and evaluation order. Bytecode
-   parity with the pinned Python compiler is the native runner's job
-   (bytecode/native/). *)
+   regressions of the compiler's allocation and evaluation order. Raw-system
+   and creation manifests have kernel-checked Python bytecode parity here;
+   other parity suites use the native runner (bytecode/native/). *)
 Theory loweringChecks
 Ancestors
   (* allocation limits, conversions, concat buffers, shared callee memory *)
@@ -13,6 +13,8 @@ Ancestors
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrder evalCompilerSourceShape evalCompilerPopSubscriptOverlap
   evalCompilerSiblingScopeTypes
+  (* exact Python parity for every retained raw-system and creation fixture *)
+  evalCompilerRawSystem evalCompilerCreateBuiltins
   (* branch_opt's output checker on a sample of the parity fixtures'
      compiled functions *)
   branchOptCheckCorpus
