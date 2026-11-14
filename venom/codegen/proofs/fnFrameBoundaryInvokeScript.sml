@@ -704,6 +704,36 @@ Proof
        asm_step_memory_def, asm_jump_def, wordsTheory.w2n_n2w, asm_steps_def]
 QED
 
+Theorem invoke_callee_static_facts:
+  !ctx cp fn inst vs nm arg_ops callee args cvs.
+  codegen_context_obligations (\_ _ _ _. F) ctx cp /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands arg_ops vs = SOME args /\ setup_callee callee args vs = SOME cvs ==>
+  callee.fn_name = nm /\ MEM callee ctx.ctx_functions /\
+  MEM callee.fn_name (fcg_analyze ctx).fcg_reachable
+Proof
+  rpt gen_tac >> strip_tac >>
+  `callee.fn_name = nm /\ MEM callee ctx.ctx_functions` by
+    (`!fns nm callee. lookup_function nm fns = SOME callee ==>
+        callee.fn_name = nm /\ MEM callee fns` by
+       (Induct >> simp[lookup_function_def, FIND_thm] >>
+        rpt gen_tac >> IF_CASES_TAC >> gvs[lookup_function_def] >>
+        metis_tac[]) >> metis_tac[]) >> simp[] >>
+  `fn_directly_calls ctx fn.fn_name nm` by
+    (irule invoke_direct_call >>
+     gvs[codegen_context_obligations_def] >> metis_tac[]) >>
+  `wf_invoke_targets ctx` by
+    (irule invoke_lowered_targets_wf >> gvs[codegen_context_obligations_def]) >>
+  `ctx_wf ctx` by gvs[codegen_context_obligations_def] >>
+  `?entry. ctx.ctx_entry = SOME entry` by
+    gvs[ctx_wf_def, ctx_has_entry_def] >>
+  fs[GSYM fcg_is_reachable_def] >>
+  irule fcg_reachable_direct_callee >> simp[] >> metis_tac[]
+QED
+
 Theorem invoke_callee_entry_facts:
   !Inv ctx cp fn inst vs nm arg_ops callee args cvs.
   codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
@@ -718,27 +748,13 @@ Theorem invoke_callee_entry_facts:
   MEM callee.fn_name (fcg_analyze ctx).fcg_reachable
 Proof
   rpt gen_tac >> strip_tac >>
-  `callee.fn_name = nm /\ MEM callee ctx.ctx_functions` by
-    (`!fns nm callee. lookup_function nm fns = SOME callee ==>
-        callee.fn_name = nm /\ MEM callee fns` by
-       (Induct >> simp[lookup_function_def, FIND_thm] >>
-        rpt gen_tac >> IF_CASES_TAC >> gvs[lookup_function_def] >>
-        metis_tac[]) >> metis_tac[]) >> simp[] >>
-  conj_tac
-  >- (gvs[reachability_closed_def] >>
-      first_x_assum irule >>
-      qexistsl [`args`, `fn`, `inst`, `callee.fn_name`, `arg_ops`, `vs`] >>
-      simp[decode_invoke_def]) >>
-  `fn_directly_calls ctx fn.fn_name nm` by
-    (irule invoke_direct_call >>
-     gvs[codegen_context_obligations_def] >> metis_tac[]) >>
-  `wf_invoke_targets ctx` by
-    (irule invoke_lowered_targets_wf >> gvs[codegen_context_obligations_def]) >>
-  `ctx_wf ctx` by gvs[codegen_context_obligations_def] >>
-  `?entry. ctx.ctx_entry = SOME entry` by
-    gvs[ctx_wf_def, ctx_has_entry_def] >>
-  fs[GSYM fcg_is_reachable_def] >>
-  irule fcg_reachable_direct_callee >> simp[] >> metis_tac[]
+  rename1 `codegen_context_obligations Inv ctx cplan` >>
+  `codegen_context_obligations (\_ _ _ _. F) ctx cplan` by
+    fs[codegen_context_obligations_def, codegen_memory_obligations_def] >>
+  drule_all invoke_callee_static_facts >> strip_tac >> simp[] >>
+  gvs[reachability_closed_def] >> first_x_assum irule >>
+  qexistsl [`args`, `fn`, `inst`, `callee.fn_name`, `arg_ops`, `vs`] >>
+  simp[decode_invoke_def]
 QED
 
 Theorem invoke_setup_entry_rel:
