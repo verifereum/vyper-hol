@@ -21,6 +21,8 @@ Ancestors
   vyperLoweringHol
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
+  staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
+  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
