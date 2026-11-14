@@ -370,6 +370,59 @@ Proof
   qexistsl_tac [`x`,`H`,`u`] >> gvs[lookup_var_def]
 QED
 
+Theorem member_navigation_emit_pointer_pc_uniform_origin:
+  emit_op ADD [Var root; offset] sa = (out,sb) /\
+  lookup_var root s = SOME a /\ ptr_covers G tn root s cap /\
+  eval_operand offset s = SOME (n2w off) /\
+  op_taint tn offset = {} /\ op_prov G offset = NONE /\
+  off + n <= cap /\ w2n a + off < dimword(:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb ==>
+  ?x H u. out = Var x /\
+    lookup_var x t = SOME (n2w (w2n a + off)) /\ ptr_covers H u x t n /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_allocas = s.vs_allocas /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
+      FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
+    (!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lower fuel ctx func PG G tn
+      (s with vs_inst_idx := LENGTH sa.cs_current_insts)) /\
+    (~s.vs_halted ==> !D explicit.
+      gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+        (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  strip_tac >>
+  `run_inst_seq (emitted_insts sa sb)
+      (s with vs_inst_idx := LENGTH sa.cs_current_insts) =
+      OK (t with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+    (drule emit_op_run_pc >> simp[is_terminator_def] >>
+     disch_then (qspecl_then [`s`,`LENGTH sa.cs_current_insts`] mp_tac) >>
+     simp[exec_result_map_def]) >>
+  `allocas_from lower (s with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+    (fs[allocas_from_def] >> metis_tac[]) >>
+  `lookup_var root (s with vs_inst_idx := LENGTH sa.cs_current_insts) = SOME a /\
+   ptr_covers G tn root (s with vs_inst_idx := LENGTH sa.cs_current_insts) cap /\
+   eval_operand offset (s with vs_inst_idx := LENGTH sa.cs_current_insts) = SOME (n2w off)` by
+    (gvs[ptr_covers_def, lookup_var_def] >> Cases_on `offset` >> gvs[eval_operand_def, lookup_var_def]) >>
+  `(s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_current_bb = sa.cs_current_bb /\
+   (s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_inst_idx = LENGTH sa.cs_current_insts` by simp[] >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK t` kall_tac >>
+  drule_all (Q.INST
+    [`s` |-> `s with vs_inst_idx := LENGTH sa.cs_current_insts`,
+     `t` |-> `t with vs_inst_idx := LENGTH sa.cs_current_insts`]
+    (SPEC_ALL emit_ptr_offset_endpoint_ptr_origin_core)) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`]
+    (qx_choose_then `HG` (qx_choose_then `u` (qx_choose_then `q` strip_assume_tac)))) >>
+  qexistsl_tac [`q`,`HG`,`u`] >>
+  gvs[ptr_covers_def,lookup_var_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem member_navigation_emit_pointer_pc_uniform:
   emit_op ADD [Var root; offset] sa = (out,sb) /\
   lookup_var root s = SOME a /\ ptr_covers G tn root s cap /\
@@ -392,24 +445,9 @@ Theorem member_navigation_emit_pointer_pc_uniform:
      !fuel. ptr_safe_run D lower fuel ctx func PG G tn
       (s with vs_inst_idx := LENGTH sa.cs_current_insts))
 Proof
-  strip_tac >>
-  `run_inst_seq (emitted_insts sa sb)
-      (s with vs_inst_idx := LENGTH sa.cs_current_insts) =
-      OK (t with vs_inst_idx := LENGTH sa.cs_current_insts)` by
-    (drule emit_op_run_pc >> simp[is_terminator_def] >>
-     disch_then (qspecl_then [`s`,`LENGTH sa.cs_current_insts`] mp_tac) >>
-     simp[exec_result_map_def]) >>
-  `allocas_from lower (s with vs_inst_idx := LENGTH sa.cs_current_insts)` by
-    (fs[allocas_from_def] >> metis_tac[]) >>
-  `lookup_var root (s with vs_inst_idx := LENGTH sa.cs_current_insts) = SOME a /\
-   ptr_covers G tn root (s with vs_inst_idx := LENGTH sa.cs_current_insts) cap /\
-   eval_operand offset (s with vs_inst_idx := LENGTH sa.cs_current_insts) = SOME (n2w off)` by
-    (gvs[ptr_covers_def, lookup_var_def] >> Cases_on `offset` >> gvs[eval_operand_def, lookup_var_def]) >>
-  `(s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_current_bb = sa.cs_current_bb /\
-   (s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_inst_idx = LENGTH sa.cs_current_insts` by simp[] >>
-  drule_all member_navigation_emit_pointer_uniform >>
-  disch_then (qspec_then `PG` (qx_choose_then `x` strip_assume_tac)) >>
-  qexistsl_tac [`x`,`H`,`u`] >> gvs[ptr_covers_def, lookup_var_def]
+  strip_tac >> drule_all member_navigation_emit_pointer_pc_uniform_origin >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`x`,`H`,`u`] >> simp[]
 QED
 
 Theorem member_navigation_add_origin_pc[local]:
@@ -699,7 +737,7 @@ Proof
   qexistsl_tac [`H`,`u`] >> simp[]
 QED
 
-Theorem calldata_member_setup_endpoint_ptr_uniform:
+Theorem calldata_member_setup_endpoint_ptr_uniform_origin:
   abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo sa = (ops,sb) /\
   lookup_var root s = SOME a /\ not_fresh_at sa root /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
@@ -716,7 +754,11 @@ Theorem calldata_member_setup_endpoint_ptr_uniform:
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
     FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
   (!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-   !fuel. ptr_safe_run D lower fuel ctx func PG G tn (s with vs_inst_idx := LENGTH sa.cs_current_insts))
+   !fuel. ptr_safe_run D lower fuel ctx func PG G tn (s with vs_inst_idx := LENGTH sa.cs_current_insts)) /\
+  (~s.vs_halted ==> !D explicit.
+    gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+      (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
 Proof
   strip_tac >>
   qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -741,7 +783,7 @@ Proof
   `?prepared. run_inst_seq (emitted_insts sa mid) s = OK prepared /\
               run_inst_seq (emitted_insts mid sb) prepared = OK t` by
     (irule run_inst_seq_append_ok >> gvs[]) >>
-  drule_all member_navigation_source_endpoint_uniform >>
+  drule_all member_navigation_source_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `op_taint u1 ep = {}` >> rename1 `op_prov H1 ep = NONE` >>
   `lookup_var root prepared = SOME a /\ ptr_covers H1 u1 root prepared cap` by
@@ -752,7 +794,7 @@ Proof
    op_taint u1 (Lit (n2w vo)) = {} /\ op_prov H1 (Lit (n2w vo)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
   `vo + n <= cap /\ w2n a + vo < dimword(:256)` by decide_tac >>
-  drule_all member_navigation_emit_pointer_pc_uniform >>
+  drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> not_fresh_at mid x` by
     (drule (calldata_pos abi_decoder_member_pointer_counters) >> strip_tac >>
@@ -762,7 +804,48 @@ Proof
      Cases_on `ep` >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `op_taint u ep = {} /\ op_prov H ep = NONE` by
     (Cases_on `ep` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  `~s.vs_halted ==> !D explicit.
+    gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+      (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)` by
+    (strip_tac >> rpt gen_tac >>
+     `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+       (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
+       (OK (prepared with vs_inst_idx := LENGTH mid.cs_current_insts),H1,u1)` by
+       metis_tac[] >>
+     `~prepared.vs_halted` by
+       (drule gas_origin_ptr_path_projections >> strip_tac >>
+        drule gas_path_ptr_ok_not_halted >> simp[]) >>
+     `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+       (prepared with vs_inst_idx := LENGTH mid.cs_current_insts,H1,u1) []
+       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)` by
+       metis_tac[] >>
+     metis_tac[gas_origin_ptr_path_append,APPEND]) >>
   qexistsl_tac [`H`,`u`,`x`] >> simp[ADD_COMM] >> metis_tac[]
+QED
+
+Theorem calldata_member_setup_endpoint_ptr_uniform:
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo sa = (ops,sb) /\
+  lookup_var root s = SOME a /\ not_fresh_at sa root /\
+  (!q. src = Var q ==> not_fresh_at sa q) /\
+  ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+  vo + n <= cap /\ w2n a + vo < dimword(:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb ==>
+  ?H u q. SND ops = Var q /\
+  lookup_var q t = SOME (n2w (w2n a + vo)) /\ ptr_covers H u q t n /\
+  op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
+  t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\ t.vs_allocas = s.vs_allocas /\
+  u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+    FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+  (!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+   !fuel. ptr_safe_run D lower fuel ctx func PG G tn (s with vs_inst_idx := LENGTH sa.cs_current_insts))
+Proof
+  strip_tac >> drule_all calldata_member_setup_endpoint_ptr_uniform_origin >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`,`q`] >> simp[]
 QED
 
 (* Compatibility projections of the uniform endpoints. *)
