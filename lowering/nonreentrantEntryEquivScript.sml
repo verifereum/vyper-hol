@@ -4,6 +4,7 @@
 Theory nonreentrantEntryEquiv
 Ancestors
   loweringStateRelDefs e2eDefs nonreentrantEquiv transientLockFrameProps
+  nonreentrantEntryPath
   vyperTypeContract vyperInterpreter vyperState
   compileEnv context venomState exprLoweringProps vyperStorageFootprint
 
