@@ -6,17 +6,6 @@ Ancestors
 Libs
   stepInstBaseLib
 
-Theorem step_inst_base_abort_requests:
-  step_inst_base i s = Abort a t ==> t.vs_requests = s.vs_requests
-Proof
-  strip_tac >> drule step_inst_base_abort_opcodes >> strip_tac >>
-  with_opcode_clause gvs >>
-  gvs[AllCaseEqs(), exec_create_abort_iff, halt_state_def,
-      set_returndata_def, revert_state_def, exec_write2_def,
-      exec_ext_call_def]
-QED
-
-
 Theorem step_inst_base_requests_prefix:
   step_inst_base i s = OK t ==> s.vs_requests <<= t.vs_requests
 Proof
@@ -33,7 +22,8 @@ Theorem step_inst_abort_requests:
   i.inst_opcode <> INVOKE /\ step_inst fuel C i s = Abort a t ==>
   t.vs_requests = s.vs_requests
 Proof
-  strip_tac >> gvs[step_inst_non_invoke] >> metis_tac[step_inst_base_abort_requests]
+  strip_tac >> gvs[step_inst_non_invoke] >>
+  metis_tac[passSharedFrameTheory.step_inst_base_abort_requests]
 QED
 
 Theorem step_inst_requests_prefix:

@@ -1,6 +1,7 @@
 (* Supported local memory branch; the widened aggregate call stays residual. *)
 Theory assignBasePtrLocalBody
-Ancestors assignBasePtrLocalBodyFacts assignBasePtrLocalFragment
+Ancestors
+  targetPlaceSim assignBasePtrLocalBodyFacts assignBasePtrLocalFragment
   assignBasePtrLocalEmptyFragment bodyPtrPreds bodyPtrDefs bodySim
   memoryLocalRhsProps exprSimAggregateLayout vyperTypeArgFits
   exprSimHyps exprSimHypsDefs exprSimDefs loweringPosts stmtSimAugAssign

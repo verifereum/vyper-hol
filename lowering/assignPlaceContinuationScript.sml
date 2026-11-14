@@ -8,27 +8,8 @@ Ancestors
   stmtLoweringMono stmtSimDeclCompose targetPlaceSimDefs targetPlaceSim loweringPosts
   compileEnv stmtSimDefs vyperExprNoControl
   exprSimHypsDefs exprLowering vyperStoragePlaceProvenance bodySimAugPlaceLoad
-  supportedExprTraverse vyperTypeCallGraph immutableDeployPhysicalSource placeStoreStaticExit
+  supportedExprTraverse vyperTypeCallGraph tuplePlaceTargetGas immutableDeployPhysicalSource placeStoreStaticExit
 Libs monadsyntax
-
-(* Collect the static supported-callee facts from each target index. *)
-Theorem target_indices_pre_static:
-  !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
-  ~supported_target_exists expr_evm_run_root bt /\
-  EVERY (\c. FST c = NONE /\
-             ?tops. supported_program tops /\
-                    get_module_code cx NONE = SOME tops /\
-                    IS_SOME (supported_function_decl tops c Internal))
-    (int_calls_target bt)
-Proof
-  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  simp[target_indices_pre_def, supported_expr_exists_def,
-       int_calls_expr_def] >>
-  strip_tac >> rename1 `target_indices_pre cenv cx env tgt` >>
-  first_x_assum (qspec_then `tgt` mp_tac) >>
-  simp[vyperASTTheory.expr_size_def] >> strip_tac >> fs[] >>
-  res_tac >> fs[expr_body_pre_def, expr_has_evm_run_def]
-QED
 
 Theorem assign_place_pure_continuation:
   ~expr_can_mutate cenv (target_to_expr bt) /\

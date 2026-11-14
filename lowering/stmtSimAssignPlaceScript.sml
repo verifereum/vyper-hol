@@ -172,7 +172,7 @@ Proof
         fs[body_inv_def] >>
       `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
       `EVERY (\c. FST c = NONE) (int_calls_target bt)` by
-        (drule_all assignPlaceContinuationTheory.target_indices_pre_static >>
+        (drule_all tuplePlaceTargetGasTheory.target_indices_pre_static >>
          simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
       irule compile_assign_place_case >> simp[] >> metis_tac[]) >>
   irule assign_place_nonmutating_widened_case >> metis_tac[]

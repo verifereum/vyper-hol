@@ -13,6 +13,7 @@
  *)
 Theory bodyPtrAssignResidual
 Ancestors
+  targetPlaceSim
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map
@@ -106,7 +107,7 @@ Theorem body_assign_widened_aggregate_call_ptr:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all assign_base_local_rhs_pre >> strip_tac >>
-  drule_all expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
   drule_all widened_assignment_internal_call >> strip_tac >>

@@ -32,7 +32,7 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 
-Theorem walk_bind[local]:
+Theorem walk_bind:
   state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) f /\
   (!v. state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (g v)) ==>
   state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)

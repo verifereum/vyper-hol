@@ -44,7 +44,7 @@ non-exempt branch:
   S7, using SAME Inv -> frame-aware EVM correspondence/resource alternatives
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
-  -> vyper_call_correct (eight public premises; inherits exactly S1-S7)
+  -> vyper_call_correct (seven public premises; inherits exactly S1-S7)
 exempt branch: actual total run + exact decoder exemption, not invented safety
 ```
 
@@ -55,14 +55,14 @@ Memory/shape/policy/labels/initial state are **not extra public hypotheses**.
 
 ## All public hypotheses and producers
 
-The exact [eight-premise schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
-is `e2eCorrectness.vyper_call_correct`.
+The call boundary below has no separate immutable restriction. The
+[dated audit](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
+preserves its historical schema.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
 | compiler returns `(deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
 | `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
-| `immutable_free_program tops` | computational boundary | Excludes runtime immutables from the current call theorem. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |

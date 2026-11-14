@@ -3,6 +3,7 @@
    (S1's body_assign_local_memory). *)
 Theory bodyMemAssignLocalMem
 Ancestors
+  targetPlaceSim
   supportedExprTraverse allocLimits allocLimitsProps
   bodyMemoryPreds bodySim bodyExprPreFacts memoryLocalRhsProps
   bodyRhsRoomMemory exprSimAggregateLayout vyperTypeArgFits
@@ -843,7 +844,7 @@ Proof
    cenv.ce_func_return_type = build_func_return_type tops /\
    get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
   drule_all body_assign_local_rhs_pre >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
