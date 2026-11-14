@@ -33,9 +33,9 @@ Theorem compile_internal_word_return_intret_mem:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   expr_val_rel cx ty v op s /\ eval_operand rpc s = SOME pc /\
-  stmt_state_rel ctx func cenv cx (es with scopes := []) s ==>
+  stmt_state_rel H ctx func cenv cx (es with scopes := []) s ==>
   ?n r. gas_path_mem ctx func s n r /\
-    intret_q func cenv cx tv v (es with scopes := []) r
+    intret_q H func cenv cx tv v (es with scopes := []) r
 Proof
   strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
