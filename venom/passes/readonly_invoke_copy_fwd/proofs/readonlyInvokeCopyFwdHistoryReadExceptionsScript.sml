@@ -102,12 +102,7 @@ Proof
     (`FINITE {icf_assign_root (dfg_build_function original) {} dst}` by simp[] >>
      drule_all mssa_derived_definition >>
      gvs[icf_is_alloca_def, is_pointer_preserving_op_def]) >>
-  `!fn x v. ircf_alias fn x v ==>
-     (!ii. MEM ii (fn_insts fn) /\ MEM (Var x) ii.inst_operands ==>
-        ~is_pointer_preserving_op ii.inst_opcode) ==> v = x` by
-    (ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >> gvs[] >>
-     metis_tac[is_pointer_preserving_op_def]) >>
-  `dst = sv` by metis_tac[ircf_assign_root_alias] >>
+  `dst = sv` by metis_tac[ircf_assign_root_alias, ircf_isolated_assign_alias] >>
   `b < LENGTH original.fn_blocks /\
    ricf_block_edit (EL b original.fn_blocks) current` by
     (irule ricf_located_event_source_block >> metis_tac[]) >>

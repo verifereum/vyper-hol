@@ -1469,3 +1469,12 @@ Proof
       fs[LAST_EL] >> simp[rich_listTheory.EL_PRE_LENGTH]) >>
   metis_tac[]
 QED
+
+Theorem ircf_isolated_assign_alias:
+  !fn root v. ircf_alias fn root v ==>
+  (!inst. MEM inst (fn_insts fn) /\ MEM (Var root) inst.inst_operands ==>
+    ~is_pointer_preserving_op inst.inst_opcode) ==> v = root
+Proof
+  ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >> gvs[] >>
+  metis_tac[pointerConfinedDefsTheory.is_pointer_preserving_op_def]
+QED

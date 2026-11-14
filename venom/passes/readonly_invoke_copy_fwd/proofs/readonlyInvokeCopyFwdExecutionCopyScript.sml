@@ -1,6 +1,7 @@
 Theory readonlyInvokeCopyFwdExecutionCopy
 Ancestors
-  readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdCopyFrontier
+  readonlyInvokeCopyFwdCopyFrontier
+  readonlyInvokeCopyFwdExecution
   readonlyInvokeCopyFwdOpaque readonlyInvokeCopyFwdHeterogeneousSupport
   readonlyInvokeCopyFwdHeterogeneousMapOrigins frameViewFacts frameRel
   readonlyInvokeCopyFwdMemory readonlyInvokeCopyFwdOperationalSupport
@@ -43,7 +44,7 @@ Proof
    (ricf_opaque_view fn PG G t).vs_memory = t.vs_memory` by
     simp[ricf_opaque_view_def] >>
   simp[] >>
-  match_mp_tac (ricf_frame_source_mcopy_frontier |> Q.INST [`tn` |-> `tn`]) >>
+  match_mp_tac (ricf_frame_source_mcopy |> Q.INST [`tn` |-> `tn`]) >>
   asm_simp_tac (srw_ss()) [ADD_COMM] >> metis_tac[ADD_COMM]
 QED
 

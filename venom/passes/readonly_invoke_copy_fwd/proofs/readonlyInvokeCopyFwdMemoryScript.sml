@@ -116,7 +116,7 @@ QED
    not activate a translation in the caller's local-value map. *)
 Theorem ricf_frame_source_mcopy:
   ricf_frame_agree D X sites PG G tn s t /\
-  {i | db <= i /\ i < db+len} SUBSET X /\
+  {i | db <= i /\ i < db+len /\ i < s.vs_alloca_next} SUBSET X /\
   (db+len <= sb \/ sb+len <= db) /\
   (!q. q < len /\ sb+q NOTIN tn.t_mem ==>
     read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) /\
@@ -129,17 +129,32 @@ Theorem ricf_frame_source_mcopy:
   ricf_frame_agree D X sites PG G tn' (mcopy db sb len s) t
 Proof
   strip_tac >>
-  `ircf_cross tn' (ricf_site_triples sites UNION {(db,sb,len)})
-     (mcopy db sb len s) t` by
-    (irule ricf_cross_activate_copy >>
+  `ircf_cross tn' (ricf_site_triples sites) (mcopy db sb len s) t` by
+    (irule ricf_cross_source_mcopy_frame >>
      fs[ricf_frame_agree_def] >> metis_tac[]) >>
   `taint_agree D X tn' (mcopy db sb len s)
      (t with <| vs_vars := s.vs_vars; vs_params := s.vs_params |>)` by
     (qpat_x_assum `tn' = _` SUBST1_TAC >>
-     irule taint_agree_source_mcopy >> fs[ricf_frame_agree_def]) >>
-  `ircf_cross tn' (ricf_site_triples sites) (mcopy db sb len s) t` by
-    (qpat_x_assum `ircf_cross tn' _ _ _` mp_tac >>
-     simp[ircf_cross_def] >> metis_tac[]) >>
+     `mcopy db sb len s = s with vs_memory := (mcopy db sb len s).vs_memory` by
+       simp[mcopy_def, write_memory_with_expansion_def] >>
+     pop_assum SUBST1_TAC >>
+     `taint_agree D X
+       (tn with t_mem := (tn.t_mem DIFF {i | db <= i /\ i < db+len}) UNION
+                         {db+q | q < len /\ sb+q IN tn.t_mem})
+       (s with vs_memory := (mcopy db sb len s).vs_memory)
+       ((t with <| vs_vars := s.vs_vars; vs_params := s.vs_params |>)
+          with vs_memory := t.vs_memory)` suffices_by
+       (simp[taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def] >>
+        metis_tac[]) >>
+     irule taint_agree_memory_update >>
+     reverse conj_tac >- fs[ricf_frame_agree_def] >>
+     rpt strip_tac >>
+     `~(db <= i /\ i < db+len)` by
+       (fs[SUBSET_DEF] >> metis_tac[]) >>
+     `i NOTIN tn.t_mem` by gvs[] >>
+     simp[mcopy_def, regularCallEmitSimTheory.read_byte_write_memory_with_expansion,
+          GSYM read_memory_def, ld_read_memory_length] >>
+     fs[ricf_frame_agree_def, taint_agree_def] >> metis_tac[]) >>
   qpat_x_assum `tn' = _` SUBST_ALL_TAC >>
   fs[ricf_frame_agree_def, mcopy_def, write_memory_with_expansion_def,
      op_taint_def]
@@ -154,9 +169,9 @@ QED
 
 Theorem ricf_live_stack_source_mcopy:
   ricf_live_stack_agree D ids tn maps stk targets s t /\
-  (!j. j < LENGTH stk ==>
-    {i | db <= i /\ i < db+len} SUBSET
-      ircf_dead ids (EL j stk).cf_state (DROP (SUC j) stk)) /\
+  (!j i. j < LENGTH stk /\ db <= i /\ i < db+len /\
+    i < (EL j stk).cf_state.vs_alloca_next ==>
+    i IN ircf_dead ids (EL j stk).cf_state (DROP (SUC j) stk)) /\
   (db+len <= sb \/ sb+len <= db) /\
   (!q. q < len /\ sb+q NOTIN tn.t_mem ==>
     read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) /\
@@ -173,7 +188,8 @@ Proof
   strip_tac >> asm_rewrite_tac[] >> gen_tac >> strip_tac >>
   match_mp_tac (ricf_frame_source_mcopy |> Q.INST
     [`tn` |-> `tn with t_var := (EL j stk).cf_tvar`]) >>
-  asm_simp_tac (srw_ss()) [GSYM merge_callee_state_def] >>
+  asm_simp_tac (srw_ss()) [GSYM merge_callee_state_def,
+    merge_callee_state_def, SUBSET_DEF] >>
   metis_tac[]
 QED
 
@@ -203,9 +219,9 @@ QED
 Theorem ricf_cert_activate_copy:
   ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
   {i | db <= i /\ i < db+len} SUBSET ircf_dead ids s stk /\
-  (!j. j < LENGTH stk ==>
-    {i | db <= i /\ i < db+len} SUBSET
-      ircf_dead ids (EL j stk).cf_state (DROP (SUC j) stk)) /\
+  (!j i. j < LENGTH stk /\ db <= i /\ i < db+len /\
+    i < (EL j stk).cf_state.vs_alloca_next ==>
+    i IN ircf_dead ids (EL j stk).cf_state (DROP (SUC j) stk)) /\
   (db+len <= sb \/ sb+len <= db) /\
   (!q. q < len /\ sb+q NOTIN tn0.t_mem ==>
     read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) /\
@@ -234,10 +250,10 @@ Proof
   `ricf_frame_agree D (ircf_dead ids s stk) sites
      (ricf_complete_params PG s.vs_params) G0 un (mcopy db sb len s) t` by
     (match_mp_tac (ricf_frame_source_mcopy |> Q.INST [`tn` |-> `tn0`]) >>
-     fs[ricf_cert_core_def, ricf_live_boundary_core_def] >> metis_tac[]) >>
+     fs[ricf_cert_core_def, ricf_live_boundary_core_def, SUBSET_DEF] >> metis_tac[]) >>
   `ricf_live_stack_agree D ids un maps stk targets (mcopy db sb len s) t` by
     (match_mp_tac (ricf_live_stack_source_mcopy |> Q.INST [`tn` |-> `tn0`]) >>
-     fs[ricf_cert_core_def, ricf_live_boundary_core_def] >> metis_tac[]) >>
+     fs[ricf_cert_core_def, ricf_live_boundary_core_def, SUBSET_DEF] >> metis_tac[]) >>
   qpat_x_assum `un = _` SUBST_ALL_TAC >>
   fs[ricf_cert_core_def, ricf_live_boundary_core_def,
      ircf_dead_def, entry_prov_def, entry_taint_vars_def,

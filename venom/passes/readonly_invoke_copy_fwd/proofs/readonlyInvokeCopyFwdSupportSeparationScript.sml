@@ -27,15 +27,6 @@ Proof
   metis_tac[ricf_logged_trace_nonempty_original]
 QED
 
-Theorem ricf_isolated_assign_alias:
-  !fn root v. ircf_alias fn root v ==>
-  (!inst. MEM inst (fn_insts fn) /\ MEM (Var root) inst.inst_operands ==>
-    ~is_pointer_preserving_op inst.inst_opcode) ==> v = root
-Proof
-  ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >> gvs[] >>
-  metis_tac[pointerConfinedDefsTheory.is_pointer_preserving_op_def]
-QED
-
 Theorem ricf_source_copy_not_destination:
   ricf_src_alloca fn /\ MEM bb fn.fn_blocks /\ k < LENGTH bb.bb_instructions /\
   (EL k bb.bb_instructions).inst_opcode = MCOPY /\
@@ -49,7 +40,7 @@ Proof
   `!inst. MEM inst (fn_insts fn) /\ MEM (Var sv) inst.inst_operands ==>
      ~is_pointer_preserving_op inst.inst_opcode` by
     metis_tac[ricf_source_copy_isolated] >>
-  `d = sv` by metis_tac[ricf_isolated_assign_alias] >> gvs[] >>
+  `d = sv` by metis_tac[ircf_isolated_assign_alias] >> gvs[] >>
   fs[ricf_src_alloca_def] >>
   first_x_assum (qspecl_then [`bb`,`k`] mp_tac) >> simp[] >>
   metis_tac[listTheory.MEM, listTheory.HD]

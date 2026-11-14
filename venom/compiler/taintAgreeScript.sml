@@ -18,7 +18,7 @@
 
 Theory taintAgree
 Ancestors
-  o1LowerDloadJointExternal
+  o1LowerDloadJointExternal lowerDloadPtrTaintBounds
   o1LowerDloadConcreteExternal o1LowerDloadExternalEffects o1LowerDloadExternalOracle
   o1LowerDloadPrecompileEffects extCallOracle
   o1LowerDloadHaltResult o1LowerDloadJointStorageWrite o1LowerDloadStackFrontier
@@ -50,106 +50,6 @@ Theorem taint_agree_hidden_mono:
   taint_agree D X tn s t /\ X SUBSET Y ==> taint_agree D Y tn s t
 Proof
   rw[taint_agree_def] >> fs[SUBSET_DEF] >> metis_tac[]
-QED
-
-Definition var_taint_bounded_def:
-  var_taint_bounded (tv : (string, num set) fmap) <=>
-    !v m j. FLOOKUP tv v = SOME m /\ j IN m ==> j < 32
-End
-
-Theorem var_taint_bounded_empty[simp]:
-  var_taint_bounded FEMPTY
-Proof
-  simp[var_taint_bounded_def]
-QED
-
-Theorem var_taint_bounded_restrict:
-  var_taint_bounded tv ==> var_taint_bounded (DRESTRICT tv A)
-Proof
-  simp[var_taint_bounded_def, FLOOKUP_DRESTRICT] >> metis_tac[]
-QED
-
-Theorem var_taint_bounded_set:
-  var_taint_bounded tv /\ (!j. j IN m ==> j < 32) ==>
-  var_taint_bounded (set_var_taint tv outs m)
-Proof
-  strip_tac >> Cases_on `outs` >> simp[set_var_taint_def]
-  >- (irule var_taint_bounded_restrict >> simp[]) >>
-  Cases_on `t` >> simp[set_var_taint_def]
-  >- (rw[var_taint_bounded_def, FLOOKUP_UPDATE] >>
-      Cases_on `h = v` >> gvs[var_taint_bounded_def] >> metis_tac[]) >>
-  irule var_taint_bounded_restrict >> simp[]
-QED
-
-Theorem var_taint_bounded_operand:
-  var_taint_bounded tn.t_var /\ j IN op_taint tn op ==> j < 32
-Proof
-  Cases_on `op` >> simp[op_taint_def] >>
-  Cases_on `FLOOKUP tn.t_var s` >> simp[var_taint_bounded_def] >> metis_tac[]
-QED
-
-Theorem var_taint_bounded_out:
-  var_taint_bounded tn.t_var /\ j IN out_taint tn inst s ==> j < 32
-Proof
-  Cases_on `inst.inst_operands` >> simp[out_taint_def] >>
-  Cases_on `t` >> simp[out_taint_def]
-  >- (Cases_on `eval_operand h s` >> simp[] >>
-      rpt (IF_CASES_TAC >> simp[]) >>
-      simp[mem_word_taint_def, key_taint_def] >>
-      metis_tac[var_taint_bounded_operand]) >>
-  Cases_on `t'` >> simp[out_taint_def] >>
-  Cases_on `eval_operand h s` >> simp[] >>
-  IF_CASES_TAC >> simp[] >>
-  simp[shift_taint_def] >> rpt (IF_CASES_TAC >> simp[]) >>
-  rpt strip_tac >> gvs[] >> metis_tac[var_taint_bounded_operand]
-QED
-
-Theorem var_taint_bounded_step:
-  var_taint_bounded tn.t_var ==>
-  var_taint_bounded (step_taint inst s s' tn).t_var
-Proof
-  simp[step_taint_def] >> strip_tac >>
-  irule var_taint_bounded_set >> simp[] >>
-  metis_tac[var_taint_bounded_out]
-QED
-
-Theorem var_taint_bounded_phis:
-  !ins. var_taint_bounded tn.t_var ==>
-    var_taint_bounded (phis_taint prev tn ins)
-Proof
-  Induct >> simp[phis_taint_def] >> rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  irule var_taint_bounded_set >> simp[] >>
-  Cases_on `prev` >> simp[phi_taint_def] >>
-  Cases_on `resolve_phi x h.inst_operands` >> simp[] >>
-  metis_tac[var_taint_bounded_operand]
-QED
-
-Theorem var_taint_bounded_entry:
-  var_taint_bounded tn.t_var ==>
-  var_taint_bounded (entry_taint_vars fn s tn).t_var
-Proof
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
-  simp[entry_taint_vars_def, var_taint_bounded_phis]
-QED
-
-Theorem frame_reachable_var_taint_bounded:
-  !vs C stk PG G tn fn inst s.
-    frame_reachable vs C stk PG G tn fn inst s ==>
-    var_taint_bounded tn.t_var /\
-    EVERY (\f. var_taint_bounded f.cf_tvar) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >>
-  gvs[entry_taint_def, var_taint_bounded_step,
-      var_taint_bounded_entry, var_taint_bounded_restrict]
-QED
-
-Theorem frame_reachable_op_taint_bounded:
-  frame_reachable vs C stk PG G tn fn inst s /\
-  j IN op_taint tn op ==> j < 32
-Proof
-  metis_tac[frame_reachable_var_taint_bounded, var_taint_bounded_operand]
 QED
 
 Theorem step_inst_base_OK_fmp_frame:
@@ -2088,16 +1988,7 @@ Proof
   simp[GSYM read_memory_def] >>
   gvs[] >>
   `!ev. step_taint inst s (s with vs_logs := s.vs_logs ++ [ev]) tn = tn` by
-    (simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
-          imm_taint_def, adopt_reset_def, new_site_bytes_def,
-          set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
-          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, DRESTRICT_UNIV,
-          taint_component_equality] >>
-     Cases_on `REVERSE tops` >> simp[written_taint_def] >>
-     rename1 `REVERSE tops = h::tl` >>
-     Cases_on `tl` >> simp[written_taint_def] >>
-     rename1 `REVERSE tops = h::h2::tail` >>
-     Cases_on `tail` >> simp[]) >>
+    simp[ptrDisciplineTheory.step_taint_log_logs] >>
   simp[] >> irule taint_agree_logs_append >> simp[]
 QED
 

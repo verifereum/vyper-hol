@@ -1183,7 +1183,8 @@ Proof
   strip_tac >> irule ircf_cross_base_frame >>
   conj_tac
   >- (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_projection >>
-      strip_tac >> metis_tac[frame_reachable_op_taint_bounded]) >>
+      strip_tac >> metis_tac[SIMP_RULE (srw_ss()) [SUBSET_DEF]
+        lowerDloadPtrTaintBoundsTheory.dload_reachable_op_taint_bound]) >>
   simp[IgnAsm `gam = _`] >> qexistsl_tac [`t`, `ti`] >>
   simp[IgnAsm `gam = _`] >> rpt gen_tac >> strip_tac >>
   `db+k NOTIN new_site_bytes s s' /\ sb+k NOTIN new_site_bytes s s' /\

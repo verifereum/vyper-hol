@@ -18,9 +18,9 @@ Theorem ricf_cert_forwarded_copy_step:
   db = w2n dst /\ sb = w2n src /\ len = w2n sz /\
   db+len <= dimword (:256) /\ sb+len <= dimword (:256) /\
   {i | db <= i /\ i < db+len} SUBSET ircf_dead ids s stk /\
-  (!j. j < LENGTH stk ==>
-    {i | db <= i /\ i < db+len} SUBSET
-      ircf_dead ids (EL j stk).cf_state (DROP (SUC j) stk)) /\
+  (!j i. j < LENGTH stk /\ db <= i /\ i < db+len /\
+    i < (EL j stk).cf_state.vs_alloca_next ==>
+    i IN ircf_dead ids (EL j stk).cf_state (DROP (SUC j) stk)) /\
   (db+len <= sb \/ sb+len <= db) /\
   (!q. q < len /\ sb+q NOTIN tn0.t_mem ==>
     read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) /\

@@ -1,7 +1,7 @@
 (* Actual empty erased copies retain all relational and history indices. *)
 Theory readonlyInvokeCopyFwdOperationalZeroCopy
 Ancestors
-  readonlyInvokeCopyFwdHistoryAvailability readonlyInvokeCopyFwdCopyFrontier
+  readonlyInvokeCopyFwdHistoryAvailability readonlyInvokeCopyFwdMemory
   readonlyInvokeCopyFwdCopyAnnotations readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdGlobalSupport readonlyInvokeCopyFwdOperationalSupport
   readonlyInvokeCopyFwdRel internalReturnCopyFwdSim
@@ -19,7 +19,7 @@ Proof
     (if s.vs_prev_bb = NONE then tn0 else entry_taint_vars fn s tn0)
     fn sites maps targets G0 tn0 (cur UNION {(db,sb,0)}) curs
     (mcopy db sb 0 s) t` by
-    (irule ricf_cert_activate_copy_frontier >>
+    (irule ricf_cert_activate_copy >>
      simp[SUBSET_DEF, EXTENSION] >> metis_tac[arithmeticTheory.LESS_EQ_CASES]) >>
   `tn = if s.vs_prev_bb = NONE then tn0 else entry_taint_vars fn s tn0` by
     fs[ricf_cert_core_def, ricf_live_boundary_core_def] >>

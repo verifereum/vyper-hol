@@ -385,34 +385,27 @@ Proof
   metis_tac[optionTheory.SOME_11]
 QED
 
-Theorem ricf_call_eval_operands_indexed[local]:
-  !ops s args. eval_operands ops s = SOME args ==>
-  LENGTH args = LENGTH ops /\
-  !j. j < LENGTH ops ==> eval_operand (EL j ops) s = SOME (EL j args)
-Proof
-  Induct >> simp[eval_operands_def, AllCaseEqs()] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  first_x_assum drule >> strip_tac >> simp[] >> Cases >> simp[]
-QED
-
 Theorem ricf_call_argument_list[local]:
-  eval_operands ops s = SOME args /\ LENGTH ops' = LENGTH ops /\
-  (!j. j < LENGTH ops ==>
-    ?y. eval_operand (EL j ops') t = SOME y /\
-      ricf_opaque_value_agree callsites (op_prov G (EL j ops)) {} (EL j args) y) ==>
-  ?args'. eval_operands ops' t = SOME args' /\
-    ricf_opaque_params_agree callsites (MAP (op_prov G) ops) args args'
+  !ops ops' args.
+    eval_operands ops s = SOME args /\ LENGTH ops' = LENGTH ops /\
+    (!j x. j < LENGTH ops /\ eval_operand (EL j ops) s = SOME x ==>
+      ?y. eval_operand (EL j ops') t = SOME y /\
+        ricf_opaque_value_agree callsites (op_prov G (EL j ops)) {} x y) ==>
+    ?args'. eval_operands ops' t = SOME args' /\
+      ricf_opaque_params_agree callsites (MAP (op_prov G) ops) args args'
 Proof
-  strip_tac >> drule ricf_call_eval_operands_indexed >> strip_tac >>
-  `IS_SOME (eval_operands ops' t)` by
-    (simp[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> rpt strip_tac >>
-     metis_tac[MEM_EL, optionTheory.IS_SOME_EXISTS]) >>
-  `?args'. eval_operands ops' t = SOME args'` by fs[optionTheory.IS_SOME_EXISTS] >>
-  drule ricf_call_eval_operands_indexed >> strip_tac >>
-  qexists_tac `args'` >> simp[ricf_opaque_params_agree_def, EL_MAP] >>
-  rpt strip_tac >>
-  qpat_x_assum `!j. j < LENGTH ops ==> ?y. _` (qspec_then `j` mp_tac) >>
-  simp[] >> strip_tac >> metis_tac[optionTheory.SOME_11]
+  Induct >- simp[eval_operands_def, ricf_opaque_params_agree_def] >>
+  gen_tac >> Cases >- simp[] >> rpt gen_tac >>
+  simp[eval_operands_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `?y. eval_operand h' t = SOME y /\
+     ricf_opaque_value_agree callsites (op_prov G h) {} v y` by
+    (first_x_assum (qspecl_then [`0`,`v`] mp_tac) >> simp[]) >>
+  `?ys. eval_operands t' t = SOME ys /\
+     ricf_opaque_params_agree callsites (MAP (op_prov G) ops) vs ys` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum (qspecl_then [`SUC j`,`x`] mp_tac) >> simp[]) >>
+  qexists_tac `y::ys` >> gvs[ricf_opaque_params_agree_def] >>
+  Cases >> simp[]
 QED
 
 Theorem ricf_call_actual_argument_values:
@@ -464,7 +457,6 @@ Proof
      (impl_tac >- metis_tac[]) >> metis_tac[]) >>
   `(EL s.vs_inst_idx (EL cb mid.fn_blocks).bb_instructions).inst_operands =
     Label nm::ops'` by fs[decode_invoke_def, AllCaseEqs()] >>
-  drule ricf_call_eval_operands_indexed >> strip_tac >>
   `?args'. eval_operands ops' t = SOME args' /\
     ricf_opaque_params_agree
       (FOLDR (\q m.
@@ -476,7 +468,7 @@ Proof
      (impl_tac >-
        (simp[] >> rpt strip_tac >>
         mp_tac (SPEC_ALL ricf_call_final_operand_values |>
-          Q.INST [`j` |-> `SUC j`,`x` |-> `EL j args`]) >>
+          Q.INST [`j` |-> `SUC j`]) >>
         (impl_tac >- (simp[] >> metis_tac[])) >> simp[])) >> simp[]) >>
   qexistsl_tac [`ops'`,`args'`] >> simp[]
 QED

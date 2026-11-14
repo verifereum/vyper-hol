@@ -2,7 +2,8 @@
    translation protection and source-byte equality are produced from history. *)
 Theory readonlyInvokeCopyFwdLocatedActivation
 Ancestors
-  readonlyInvokeCopyFwdCopyFrontier readonlyInvokeCopyFwdGlobalSupport
+  readonlyInvokeCopyFwdCopyFrontier
+  readonlyInvokeCopyFwdMemory readonlyInvokeCopyFwdGlobalSupport
   readonlyInvokeCopyFwdMapCopyGuards readonlyInvokeCopyFwdHistoryAvailability
   readonlyInvokeCopyFwdOperationalSupport readonlyInvokeCopyFwdHistoryReadExceptions occurrenceGeometry
   internalReturnCopyFwdSim o1LowerDloadOccurrence ptrDiscipline
@@ -82,7 +83,7 @@ Proof
       `db < dimword (:256) /\ sb < dimword (:256)` by decide_tac >> simp[]) >>
   conj_tac >- simp[step_inst_base_opcode_eqs] >>
   conj_tac
-  >- (irule ricf_cert_activate_copy_frontier >>
+  >- (irule ricf_cert_activate_copy >>
       simp[arithmeticTheory.ADD_COMM] >> conj_tac
       >- (rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
       qexistsl_tac [`tn`, `tn0`] >> simp[]) >>

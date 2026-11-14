@@ -72,7 +72,8 @@ Proof
      impl_tac >- (fs[MEM, is_pointer_preserving_op_def] >>
        Cases_on `addr = value` >> simp[mem_read_ops_def, mem_write_ops_def]) >> simp[]) >>
   `op_taint tn value SUBSET count 32` by
-    (simp[SUBSET_DEF] >> metis_tac[frame_reachable_op_taint_bounded]) >>
+    (simp[SUBSET_DEF] >> metis_tac[SIMP_RULE (srw_ss()) [SUBSET_DEF]
+        lowerDloadPtrTaintBoundsTheory.dload_reachable_op_taint_bound]) >>
   `!gam. gam = ricf_phase_ranges 0 certificates \/
       MEM gam (ricf_phase_stack_ranges stk certificates) \/
       gam = ricf_site_triples sites \/
