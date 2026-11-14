@@ -42,6 +42,7 @@ Ancestors
   extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
   extcallReturnDefaultDecode extcallReturnDefaultOwnership extcallReturnDefaultIntervals
   extcallReturnInterface extcallReturnDefaultTypes
+  exprSimAbiEncodeArgsMaterializePath exprSimMemorySource
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -472,6 +473,71 @@ QED
    against the source up to the built calldata: whatever runs the rest of
    eval_ext_call from a ready request, with the lowered call step at sp and
    the return handling at sr, runs the whole call. *)
+Theorem extcall_request_default_materialize_marked:
+  !ce e vv sm dst sb cx env es_pre ctx func es sa s0 es' tvv r
+   st0 tr H0 v tv rt rtv.
+  compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
+  expr_body_pre ce cx env e es_pre /\
+  (!H. valid_horizon cx st0 H tr ==>
+       vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r) /\
+  valid_horizon cx st0 H0 tr /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  read_result cx tvv es' = (INL v,es') /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv < 2 ** 64 /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  rt <> NoneT /\ ~is_word_type rt /\
+  (lowered_value_type ce e = rt \/
+   is_bytestring_type (lowered_value_type ce e) /\ is_bytestring_type rt) /\
+  evaluate_type (get_tenv cx) rt = SOME rtv /\
+  value_has_type rtv v /\ val_wf rtv v ==>
+  ?t. gas_marked_exec F (ctx,func) (read_result cx tvv) (es',r)
+        [] (INL v) es' (OK t) /\
+      (!H. valid_horizon cx st0 H tr ==>
+         materialize_owned_post H ctx func ce cx e es sa sm sb s0 es' v dst tv t) /\
+      extcall_default_ready cx rt T dst (lowered_value_type ce e) (SOME v) t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >> (
+  drule_all (BETA_RULE (Q.INST [`HP` |-> `\H. valid_horizon cx st0 H tr`]
+    (SPEC_ALL compile_materialize_vv_owned_path))) >> strip_tac >>
+  qexists_tac `t` >>
+  conj_tac
+  >- (simp[gas_marked_exec_def] >>
+      drule read_result_gas_obs >> simp[]) >>
+  simp[] >>
+  `materialize_owned_post H0 ctx func ce cx e es sa sm sb s0 es' v dst tv t`
+    by metis_tac[] >>
+  qpat_x_assum `materialize_owned_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    mp_tac >>
+  rewrite_tac[materialize_owned_post_def] >> strip_tac >>
+  `alloca_inv t` by
+    (qpat_x_assum `stmt_state_rel H0 _ _ _ _ es' t` mp_tac >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  `w2n w + type_memory_size tv <= t.vs_alloca_next` by
+    metis_tac[venomMemDefsTheory.alloca_inv_def,
+              venomMemDefsTheory.alloca_next_valid_def] >>
+  simp[extcall_default_ready_def] >>
+  `val_footprint tv v <= type_memory_size tv` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  gvs[] >> decide_tac)
+QED
+
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
    opts args dflt ty es st0 sa sb vv s0 Q.
