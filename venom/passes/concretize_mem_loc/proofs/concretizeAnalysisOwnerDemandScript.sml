@@ -7,7 +7,7 @@ Ancestors
   frameDemandTaint frameJointRevert frameOriginReachable frameAllocationOwnership
   ptrDiscipline unitTransformDefs venomWf venomInst finite_map list pred_set enumeral arithmetic
 
-Theorem concretize_untainted_owner_read_liveat_static[local]:
+Theorem concretize_untainted_owner_read_liveat_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -78,7 +78,7 @@ Resume concretize_untainted_owner_read_liveat_static[incoming]:
   qexists_tac `observed` >> metis_tac[]
 QED
 
-Finalise concretize_untainted_owner_read_liveat_static
+Finalise concretize_untainted_owner_read_liveat_static[local]
 
 Theorem concretize_untainted_owner_read_liveat:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

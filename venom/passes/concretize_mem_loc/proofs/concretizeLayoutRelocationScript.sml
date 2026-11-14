@@ -8,7 +8,7 @@ Ancestors
 (* This is numerical noncollision only. The cache-to-metadata bridge is
  * explicit, and is not a premise added to either frozen stage theorem.
  * Semantic coverage of transformed writes remains a separate obligation. *)
-Theorem concretize_relocation_write_demand_noncollision_static[local]:
+Theorem concretize_relocation_write_demand_noncollision_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -83,7 +83,7 @@ Resume concretize_relocation_write_demand_noncollision_static[distinct]:
      qexistsl_tac [`byte`, `a`] >> simp[] >> metis_tac[]) >> decide_tac
 QED
 
-Finalise concretize_relocation_write_demand_noncollision_static
+Finalise concretize_relocation_write_demand_noncollision_static[local]
 
 Theorem concretize_relocation_write_demand_noncollision:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

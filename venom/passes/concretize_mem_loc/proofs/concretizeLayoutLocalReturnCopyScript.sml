@@ -25,7 +25,7 @@ Proof
   simp[concretize_local_obs_def, dead_result_rel_def, write_memory_with_expansion_def]
 QED
 
-Theorem concretize_returncopy_execution_geometry_static[local]:
+Theorem concretize_returncopy_execution_geometry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -129,7 +129,7 @@ Resume concretize_returncopy_execution_geometry_static[geometry]:
   simp[mem_write_ops_def, step_writes_def, source_memory_write_ranges_def,
     sized_source_write_range_def, write_memory_with_expansion_def]
 QED
-Finalise concretize_returncopy_execution_geometry_static
+Finalise concretize_returncopy_execution_geometry_static[local]
 
 Theorem concretize_returncopy_execution_geometry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

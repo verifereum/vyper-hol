@@ -263,7 +263,7 @@ Proof
   tautLib.TAUT_TAC
 QED
 
-Theorem concretize_calldatacopy_execution_geometry_static[local]:
+Theorem concretize_calldatacopy_execution_geometry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -363,7 +363,7 @@ Resume concretize_calldatacopy_execution_geometry_static[geometry]:
     source_memory_write_ranges_def, sized_source_write_range_def,
     write_memory_with_expansion_def] >> metis_tac[]
 QED
-Finalise concretize_calldatacopy_execution_geometry_static
+Finalise concretize_calldatacopy_execution_geometry_static[local]
 
 Theorem concretize_calldatacopy_execution_geometry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

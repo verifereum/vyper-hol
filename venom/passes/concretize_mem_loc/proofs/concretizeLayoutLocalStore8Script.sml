@@ -25,7 +25,7 @@ Proof
   Cases_on `opd = Var v` >> gvs[]
 QED
 
-Theorem concretize_mstore8_execution_geometry_static[local]:
+Theorem concretize_mstore8_execution_geometry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -163,7 +163,7 @@ Resume concretize_mstore8_execution_geometry_static[memory]:
      asm_rewrite_tac[] >> metis_tac[]) >>
   gvs[range_bytes_def] >> decide_tac)
 QED
-Finalise concretize_mstore8_execution_geometry_static
+Finalise concretize_mstore8_execution_geometry_static[local]
 
 Theorem concretize_mstore8_execution_geometry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
