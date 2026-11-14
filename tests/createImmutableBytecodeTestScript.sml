@@ -3,7 +3,7 @@ Theory createImmutableBytecodeTest
 Ancestors
   exprLowering exprLoweringProps vyperCompiler venomCallOracleDefs
   venomExecSemantics venomState compileEnv context words list
-  vyperState valueEncoding
+  vyperState valueEncoding loweringStateRelDefs
 Libs
   wordsLib
 
