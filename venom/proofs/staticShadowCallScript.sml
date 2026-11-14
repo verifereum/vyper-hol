@@ -48,9 +48,9 @@ Theorem static_shadow_call_output[local]:
   s.vs_call_ctx.cc_static /\ static_shadow_rel s sh /\ rq.cr_static /\
   rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient ==>
   static_shadow_result_rel
-    (let (w,t) = consume_call_outcome rq ro rz s in
+    (case consume_call_outcome rq ro rz s of (w,t) =>
       case outs of [out] => OK (update_var out w t) | _ => Error msg)
-    (let (w,t) = consume_call_outcome (rq with cr_static := b) ro rz sh in
+    (case consume_call_outcome (rq with cr_static := b) ro rz sh of (w,t) =>
       case outs of [out] => OK (update_var out w t) | _ => Error msg)
 Proof
   strip_tac >>
@@ -61,7 +61,8 @@ Proof
    (SND (consume_call_outcome rq ro rz s)).vs_call_ctx.cc_static` by
     (irule static_shadow_consume_call >> simp[]) >>
   namedCases_on `outs` ["", "out rest"] >>
-  simp[static_shadow_result_rel_def, Excl "consume_call_outcome_eq"] >>
+  simp[static_shadow_result_rel_def, pairTheory.pair_CASE_def,
+       Excl "consume_call_outcome_eq"] >>
   Cases_on `rest` >>
   simp[static_shadow_result_rel_def, Excl "consume_call_outcome_eq"] >>
   rpt (pairarg_tac >> gvs[Excl "consume_call_outcome_eq"]) >>
@@ -81,8 +82,9 @@ Proof
     (drule static_shadow_rel_fields >>
      gvs[venom_call_request_def, read_memory_def, static_shadow_rel_def,
          static_shadow_def, venom_state_component_equality]) >>
-  simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
-  irule (SRULE [LET_THM, Excl "consume_call_outcome_eq"]
+  simp[exec_ext_call_def, pairTheory.pair_CASE_def, pairTheory.UNCURRY,
+       Excl "consume_call_outcome_eq"] >>
+  irule (SRULE [LET_THM, pairTheory.pair_CASE_def, Excl "consume_call_outcome_eq"]
     static_shadow_call_output) >> simp[venom_call_request_def]
 QED
 
@@ -100,8 +102,9 @@ Proof
     (drule static_shadow_rel_fields >>
      gvs[Abbr `rq`, venom_call_request_def, read_memory_def, static_shadow_rel_def,
          static_shadow_def, venom_state_component_equality]) >>
-  simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
-  irule (SRULE [LET_THM, Excl "consume_call_outcome_eq"]
+  simp[exec_delegatecall_def, pairTheory.pair_CASE_def, pairTheory.UNCURRY,
+       Excl "consume_call_outcome_eq"] >>
+  irule (SRULE [LET_THM, pairTheory.pair_CASE_def, Excl "consume_call_outcome_eq"]
     static_shadow_call_output) >> simp[Abbr `rq`, venom_call_request_def]
 QED
 
