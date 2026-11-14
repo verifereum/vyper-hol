@@ -6,7 +6,7 @@ Ancestors
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
   targetSubscriptContinuation exprLowering exprSimArrayIndex
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
-  fragFuelExprHelpers targetPlaceSimCasesBase
+  fragFuelExprHelpers targetPlaceSimCasesBase gasOutcomeFull gasSummary exprSimDefs
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
   vyperValue compileEnv valueEncoding vyperTypeEnv vyperInterpreter vyperState
@@ -1392,4 +1392,131 @@ Proof
   gvs[elem_size_in_location_def, is_slot_addressed_def, word_scale_def] >>
   metis_tac[array_tail_memory_child_pointer]
 
+QED
+
+Theorem array_tail_packet_child_ptr_ok[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  extend_place cx pv (ValueSubscript v) mid2 = (INL child,mid2) /\
+  op_taint tn3 (FST r) = {} /\
+  op_prov G3 (FST r) = op_prov G2 (FST rb) /\
+  (!x. not_fresh_at sn x ==> FLOOKUP G3 x = FLOOKUP G2 x) ==>
+  target_ptr_ok cenv child r G3 tn3 u
+Proof
+  strip_tac >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  drule_all array_tail_packet_source_bounds >> strip_tac >>
+  `target_ptr_ok cenv pv rb G1 tn1 t1 /\
+   ghost_kept_at lo cenv mid1 sm G1 tn1 t1 G2 tn2 /\
+   local_ptrs_reserved cenv sm /\ sm.cs_next_var <= sn.cs_next_var` by
+    (fs[array_tail_packet_def] >>
+     metis_tac[local_ptrs_reserved_next_var]) >>
+  Cases_on `pv` >> gvs[] >> TRY (fs[place_ptr_rel_def] >> NO_TAC) >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >>
+  gvs[AllCaseEqs(), target_ptr_ok_def, place_ptr_rel_def] >>
+  `not_fresh_at sm p /\ not_fresh_at sn p` by
+    (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+     metis_tac[not_fresh_at_mono]) >>
+  fs[ghost_kept_at_def] >> metis_tac[]
+QED
+
+Theorem array_tail_packet_code_frame[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  sb.cs_current_bb = sn.cs_current_bb /\
+  ?code. sb.cs_current_insts = sn.cs_current_insts ++ code /\
+    EVERY (\i. i.inst_opcode <> ALLOCA) code
+Proof
+  strip_tac >> drule array_tail_packet_compile_parts >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+    fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  `loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient` by
+    (Cases_on `pv` >> gvs[place_ptr_rel_def] >>
+     rename1 `PlaceR pl` >> Cases_on `pl` >>
+     gvs[place_ptr_rel_def, AllCaseEqs(), slot_loc_def] >>
+     Cases_on `b` >> simp[]) >>
+  Cases_on `bd` >> Cases_on `is_signed_type (expr_type e)` >>
+  gvs[contextTheory.compile_ptr_load_def, array_bounds_check_def, array_bounds_valid_def,
+      array_elem_ptr_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+      fresh_var_def, fresh_id_def, emit_def]
+QED
+
+Theorem array_tail_packet_alloca_frame[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  u with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|> = t2 /\
+  u.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  strip_tac >> drule array_tail_packet_code_frame >> strip_tac >>
+  `alloca_history func t2 /\ fn_has_code sn sb func /\
+   t2.vs_current_bb = sn.cs_current_bb /\
+   t2.vs_inst_idx = LENGTH sn.cs_current_insts /\
+   s0.vs_alloca_next <= t2.vs_alloca_next` by
+    (fs[array_tail_packet_def] >> decide_tac) >>
+  `u.vs_allocas = t2.vs_allocas /\ u.vs_current_bb = t2.vs_current_bb /\
+   u.vs_alloca_next = t2.vs_alloca_next` by
+    (qpat_x_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  simp[] >> fs[allocaHistoryTheory.alloca_history_def] >>
+  rpt strip_tac >>
+  Cases_on `k < LENGTH sn.cs_current_insts` >- metis_tac[] >>
+  `?rest. bb.bb_instructions = (sn.cs_current_insts ++ code) ++ rest` by
+    (fs[fragExecTheory.fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     gvs[] >> metis_tac[]) >>
+  `EL (k - LENGTH sn.cs_current_insts) code = inst` by
+    (fs[venomInstTheory.get_instruction_def, EL_APPEND_EQN] >> gvs[]) >>
+  `k - LENGTH sn.cs_current_insts < LENGTH code` by decide_tac >>
+  `MEM inst code` by metis_tac[EL_MEM] >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem target_array_suffix_full:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  gas_outcome_full
+    (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+    (cx_tops cx) cx st0 (extend_place cx pv (ValueSubscript v))
+    (mid2, t2, G2, tn2)
+    (\H res ee G tn t. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt r t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      target_ptr_ok cenv pv' r G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+    (\H res ee gt q. expr_exit res q)
+Proof
+  strip_tac >> drule array_tail_packet_finite_source >>
+  disch_then (qspecl_then [`shadow_ctx`, `PG`] strip_assume_tac) >>
+  drule_all array_tail_packet_extend_result >> strip_tac >>
+  `storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = []` by
+    fs[array_tail_packet_def] >>
+  simp[gas_outcome_full_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
+  qexistsl [`res`, `mid2`,
+    `if idx_in_range (is_signed_type (expr_type e)) iw nw then OK t3 else Abort Revert_abort t3`,
+    `G3`, `tn3`] >>
+  conj_tac
+  >- (simp[gas_explicit_def, target_subscript_extend_gas_obs] >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `idx_in_range (is_signed_type (expr_type e)) iw nw` >> gvs[]
+  >- (`mid2 with gas_obs := [] = mid2` by
+        (simp[evaluation_state_component_equality]) >> simp[] >>
+      drule_all array_tail_packet_endpoint_frame >> strip_tac >>
+      `target_post H ctx func cenv cx es sa sb s0 mid2 child vt r t3` by
+        (irule array_tail_packet_child_post >> simp[] >>
+         goal_assum (drule_at (Pos List.last)) >> simp[] >> metis_tac[]) >>
+      `target_ptr_ok cenv child r G3 tn3 t3` by
+        (irule array_tail_packet_child_ptr_ok >> simp[] >>
+         goal_assum (drule_at (Pos List.last)) >> simp[] >> metis_tac[]) >>
+      simp[] >> drule_all array_tail_packet_alloca_frame >> simp[]) >>
+  simp[fragExecTheory.exit_result_def, expr_exit_def]
 QED
