@@ -564,6 +564,41 @@ Proof
          exprExtRequestReadProbeTheory.extrequest_read_frame_def]
 QED
 
+Theorem intcall_ext_positional_cps[local]:
+  !xs es sa sb vvs s k old_cells.
+    intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+    EVERY (intcall_expr_producer fp) xs /\ EVERY (supported_expr fp.jc_tops) xs /\
+    EVERY (\e. calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) xs /\
+    EVERY (\e. !mid. expr_sim_inv ce fp.jc_cx env mid ==>
+      expr_body_pre ce fp.jc_cx env e mid) xs /\
+    EVERY (\e. ~expr_has_effect e) (xs ++ kws) /\
+    compile_ext_call_args compile_expr ce kws (MAP (lowered_value_type ce) xs) xs sa = (vvs,sb) /\
+    fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+    intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+      fp.jc_ctx fp.jc_func ce fp.jc_cx (es with gas_obs := []) sa s) old_cells /\
+    gas_admissible (bind (eval_exprs fp.jc_cx xs) k) expr_vv_res_ok es /\
+    (!vs ee u cells.
+      MAP (\(vv,ty,tv,v). vv) cells = vvs /\
+      MAP (\(vv,ty,tv,v). ty) cells = MAP (lowered_value_type ce) xs /\
+      MAP (\(vv,ty,tv,v). v) cells = vs /\
+      EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+        fp.jc_ctx fp.jc_func ce fp.jc_cx ee sb u) (old_cells ++ cells) /\
+      intcall_expr_cont fp ce env es sa s ee sb u /\
+      extrequest_history_frame ce fp.jc_cx (es with gas_obs := []) sa s ee sb u /\
+      ee.gas_obs = [] /\
+      (?used. !tail. eval_exprs fp.jc_cx xs (es with gas_obs := used ++ tail) =
+        (INL vs,ee with gas_obs := tail)) ==>
+      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+        (k vs) (ee,u) Q (\r ef z. expr_exit r z)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (bind (eval_exprs fp.jc_cx xs) k) (es,s) Q (\r ef z. expr_exit r z)
+Proof
+  match_mp_tac intcall_ext_positional_from_head >>
+  metis_tac[intcall_ext_snapshot_head_cps]
+QED
+
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
    producer hypothesis, then reuse the canonical suffix:
