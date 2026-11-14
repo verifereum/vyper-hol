@@ -552,7 +552,7 @@ Proof
 QED
 
 (* Main theorem: combines both cases *)
-Triviality step_ok_transfer_forward_ext:
+Theorem step_ok_transfer_forward_ext:
   !fuel ctx a b s sa sb.
     step_inst fuel ctx a s = OK sa /\
     step_inst fuel ctx b s = OK sb /\
