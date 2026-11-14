@@ -1,7 +1,7 @@
 (* Source-exact initialized array loop with a synchronized owned child callback. *)
 Theory sourceOwnedArrayLoopPtr
 Ancestors
-  sourceArrayHeaderOriginPtr sourceArrayBackedgeOriginPtr
+  decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr fragGasSeqMem fragGasOriginPtr
   calldataDynOwned sourceRecursiveComplexPtr sourceEncodingWindows sourceEncodingLayout
   actualAllocaReplayPtr actualAllocSitesCredit abiDecoderCoherence abiDecoderContract
@@ -232,8 +232,11 @@ Proof
          qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
          POP_ASSUM_LIST (K ALL_TAC) >>
          simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
-      drule_all source_array_header_origin_ptr >>
+      drule_all decoder_index_header_ptr_core_uniform_origin >>
       disch_then (qspec_then `PG` strip_assume_tac) >>
+      qpat_x_assum `slot + 32 <= s.vs_alloca_next ==> _`
+        (fn origin_thm => qpat_assum `slot + 32 <= s.vs_alloca_next`
+          (fn bound_thm => assume_tac (MP origin_thm bound_thm))) >>
       `gas_path_mem ctx fn s 0 (OK t)` by
         (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
          map_every (fn pat => qpat_assum pat mp_tac)
@@ -374,8 +377,11 @@ Proof
      qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
-  drule_all source_array_header_origin_ptr >>
+  drule_all decoder_index_header_ptr_core_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  qpat_x_assum `slot + 32 <= s.vs_alloca_next ==> _`
+    (fn origin_thm => qpat_assum `slot + 32 <= s.vs_alloca_next`
+      (fn bound_thm => assume_tac (MP origin_thm bound_thm))) >>
   `gas_path_mem ctx fn s 0 (OK t)` by
     (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
      map_every (fn pat => qpat_assum pat mp_tac)
@@ -1012,10 +1018,13 @@ Proof
      qpat_assum `FLOOKUP child_end.vs_allocas index_id = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
-  drule_all source_array_backedge_origin_ptr >>
+  drule_all decoder_index_backedge_ptr_core_uniform_origin >>
   disch_then (qspec_then `PG`
     (qx_choose_then `backG` (qx_choose_then `backtn`
       (qx_choose_then `backstate` strip_assume_tac)))) >>
+  qpat_x_assum `slot + 32 <= child_end.vs_alloca_next ==> _`
+    (fn origin_thm => qpat_assum `slot + 32 <= child_end.vs_alloca_next`
+      (fn bound_thm => assume_tac (MP origin_thm bound_thm))) >>
   `fresh_vars_wrt limit backstate /\
     backstate.vs_allocas = child_end.vs_allocas /\
     backstate.vs_alloca_next = child_end.vs_alloca_next /\
