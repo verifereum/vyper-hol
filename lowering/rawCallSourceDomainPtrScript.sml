@@ -8,16 +8,21 @@ Ancestors
 
 Theorem raw_call_prepared_source_domain:
   stmt_state_rel H ctx func cenv cx es s ==>
-  ~cx.txn.is_static /\ IS_SOME es.outcomes /\
+  IS_SOME es.outcomes /\
   frame_call_value cx (if stat then NONE else SOME amount) es =
-    (INL (if stat then NONE else SOME amount),es) /\
-  (stat = IS_NONE (if stat then NONE else SOME amount))
+    (if cx.txn.is_static /\ ~stat /\ amount <> 0 then
+       INR (Error (RuntimeError "write in static context"))
+     else INL (if stat \/ cx.txn.is_static then NONE else SOME amount),es) /\
+  ((stat \/ cx.txn.is_static) =
+    IS_NONE (if stat \/ cx.txn.is_static then NONE else SOME amount))
 Proof
   strip_tac >>
-  `~cx.txn.is_static /\ es.outcomes = SOME s.vs_outcomes` by
+  `es.outcomes = SOME s.vs_outcomes` by
     fs[stmt_state_rel_def, state_rel_def] >>
-  simp[vyperInterpreterTheory.frame_call_value_def, vyperStateTheory.return_def] >>
-  Cases_on `stat` >> simp[]
+  Cases_on `cx.txn.is_static` >> Cases_on `stat` >> Cases_on `amount = 0` >>
+  simp[vyperInterpreterTheory.frame_call_value_def, vyperStateTheory.return_def,
+    vyperStateTheory.check_def,vyperStateTheory.assert_def,
+    vyperStateTheory.ignore_bind_def,vyperStateTheory.bind_def]
 QED
 
 Theorem raw_call_prepared_take_error:
@@ -84,32 +89,48 @@ Theorem raw_call_prepared_source_total:
   stmt_state_rel H ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
   ~flags.rcf_is_delegate /\
   gas_admissible (eval_raw_call cx flags target data amount gas) expr_vv_res_ok es ==>
-  ?rq outcome es1.
-    take_call_outcome target data (if flags.rcf_is_static then NONE else SOME amount) es =
-      (INL (rq,outcome),es1) /\
+  if cx.txn.is_static /\ amount <> 0 then
     (!tail. eval_raw_call cx flags target data amount gas (es with gas_obs := tail) =
-      (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
-         INR (Error (RevertData outcome.co_returnData))
-       else INL (Value (if flags.rcf_revert_on_failure then
-         if flags.rcf_max_outsize = 0 then NoneV
-         else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
-       else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
-       else ArrayV (TupleV [BoolV outcome.co_success;
-         BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),
-       SND (adopt_call_outcome rq outcome es1) with gas_obs := tail))
+      (INR (Error (RuntimeError "write in static context")),es with gas_obs := tail))
+  else
+    ?rq outcome es1.
+      take_call_outcome target data
+        (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) es =
+        (INL (rq,outcome),es1) /\
+      (!tail. eval_raw_call cx flags target data amount gas (es with gas_obs := tail) =
+        (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+           INR (Error (RevertData outcome.co_returnData))
+         else INL (Value (if flags.rcf_revert_on_failure then
+           if flags.rcf_max_outsize = 0 then NoneV
+           else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+         else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+         else ArrayV (TupleV [BoolV outcome.co_success;
+           BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),
+         SND (adopt_call_outcome rq outcome es1) with gas_obs := tail))
 Proof
   strip_tac >> drule raw_call_admissible_flags >> strip_tac >>
+  `flags.rcf_is_static ==> amount = 0` by metis_tac[] >>
+  Cases_on `cx.txn.is_static /\ amount <> 0`
+  >- (asm_rewrite_tac[] >> gen_tac >> irule raw_call_static_value_abort >> fs[]) >>
+  asm_rewrite_tac[] >>
   drule_all raw_call_prepared_take_success >>
-  disch_then (qspecl_then [`if flags.rcf_is_static then NONE else SOME amount`,
+  disch_then (qspecl_then [`if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount`,
     `target`, `data`] strip_assume_tac) >>
   qexistsl_tac [`rq`, `outcome`, `ee`] >> simp[] >> gen_tac >>
+  `frame_call_value cx (if flags.rcf_is_static then NONE else SOME amount)
+      (es with gas_obs := tail) =
+    (INL (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount),
+     es with gas_obs := tail)` by
+    (Cases_on `cx.txn.is_static` >> Cases_on `flags.rcf_is_static` >>
+     gvs[vyperInterpreterTheory.frame_call_value_def,vyperStateTheory.return_def,
+       vyperStateTheory.check_def,vyperStateTheory.assert_def,
+       vyperStateTheory.ignore_bind_def,vyperStateTheory.bind_def]) >>
   mp_tac (raw_call_source_oracle_action |> Q.INST [`es` |-> `es with gas_obs := tail`,
     `esf` |-> `es with gas_obs := tail`, `es1` |-> `ee with gas_obs := tail`,
-    `value_opt` |-> `if flags.rcf_is_static then NONE else SOME amount`]) >>
+    `value_opt` |-> `if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount`]) >>
   impl_tac >- (drule raw_call_prepared_source_domain >>
     disch_then (qspecl_then [`flags.rcf_is_static`, `amount`] strip_assume_tac) >>
-    gvs[vyperInterpreterTheory.frame_call_value_def, vyperStateTheory.return_def,
-      raw_call_take_gas_obs] >> metis_tac[]) >>
+    simp[raw_call_take_gas_obs] >> metis_tac[]) >>
   simp[raw_call_adopt_gas_obs] >>
   Cases_on `flags.rcf_revert_on_failure /\ ~outcome.co_success` >> simp[]
 QED

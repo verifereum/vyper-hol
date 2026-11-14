@@ -31,6 +31,16 @@ Proof
     vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
+Theorem raw_call_static_value_abort:
+  cx.txn.is_static /\ ~flags.rcf_is_delegate /\ ~flags.rcf_is_static /\
+  amount <> 0 ==>
+  eval_raw_call cx flags target data amount gas es =
+    (INR (Error (RuntimeError "write in static context")), es)
+Proof
+  simp[eval_raw_call_def, frame_call_value_def, type_check_def,
+       check_def, assert_def, bind_def, ignore_bind_def, vyperStateTheory.return_def]
+QED
+
 Theorem raw_call_source_oracle_take_error:
   ~flags.rcf_is_delegate /\ (~flags.rcf_is_static \/ amount = 0) /\
   frame_call_value cx (if flags.rcf_is_static then NONE else SOME amount) es =
