@@ -113,24 +113,6 @@ Proof
   metis_tac[cj 1 first_emission_emit_helpers]
 QED
 
-Theorem ctor_external_void_return_first_emission[local]:
-  !nr a x b.
-    (let (enabled,nk,ut,view) = nr in
-       do (if enabled then compile_nonreentrant_unlock nk ut view else return ());
-          emit_inst STOP [] [] od) a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  gen_tac >> PairCases_on `nr` >> simp_tac (bool_ss ++ pairSimps.PAIR_ss) [LET_THM] >>
-  ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-  >- (Cases_on `nr0` >> simp[] >>
-      metis_tac[ctor_unlock_first_emission, first_emission_return]) >>
-  mp_tac (ctor_emit_inst_weak_first_emission |> Q.SPEC `STOP`) >>
-  simp[] >> metis_tac[]
-QED
-
 Theorem ctor_return_none_stmt_first_emission:
   !ce lc ty a x b. compile_stmt ce lc ty (Return NONE) a = (x,b) ==>
     cs_extends a b /\
@@ -1008,25 +990,6 @@ Theorem ctor_annassign_stmt_first_emission:
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   MATCH_ACCEPT_TAC (cj 1 entryReachBodyFirstEmissionStmtTheory.first_emission_compile_stmt)
-QED
-
-Theorem ctor_snapshot_vv_first_emission[local]:
-  !ce copy vv a x b. compile_snapshot_vv ce copy vv a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  rpt IF_CASES_TAC
-  >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_unwrap_value_first_emission] >>
-      metis_tac[first_emission_return])
-  >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_materialize_vv_first_emission] >>
-      metis_tac[first_emission_return]) >>
-  metis_tac[first_emission_return]
 QED
 
 Theorem ctor_baseassign_stmt_first_emission:
