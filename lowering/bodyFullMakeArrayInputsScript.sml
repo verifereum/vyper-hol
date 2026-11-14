@@ -3,7 +3,7 @@ Theory bodyFullMakeArrayInputs
 Ancestors
   exprSimVVFrame exprOperandVar exprLowering loweringStateRelDefs
   venomState venomInst bodyPtrDefs abiEncodeMaterialize exprSimHyps
-  valueCopyBytes exprSimPtrProps exprSimMemDefs
+  valueCopyBytes bodyPtrMakeArrayAddFrame decoderGhostFramePtr exprSimMemDefs
 
 val _ = Parse.hide "base";
 
@@ -119,14 +119,14 @@ Proof
       gvs[contextTheory.vv_operand_def,exprSimMemDefsTheory.vv_store_bound_def] >>
       metis_tac[])
   >- (simp[Abbr `Ga`,Abbr `tna`,Abbr `ai`,Abbr `au`,Abbr `at`] >>
-      irule exprSimPtrPropsTheory.binop_source_ptr_vv_ok >> simp[] >> metis_tac[])
+      irule bodyPtrMakeArrayAddFrameTheory.binop_source_ptr_vv_ok >> simp[] >> metis_tac[])
   >- (rpt strip_tac >>
       simp[Abbr `Ga`,Abbr `ai`,Abbr `au`,Abbr `at`] >>
-      irule exprSimPtrPropsTheory.binop_source_ptr_buf_ok >>
+      irule bodyPtrMakeArrayAddFrameTheory.binop_source_ptr_buf_ok >>
       simp[] >> metis_tac[contextTheory.vv_operand_def])
   >- (rpt strip_tac >>
       simp[Abbr `Ga`,Abbr `ai`,Abbr `au`,Abbr `at`] >>
-      irule exprSimPtrPropsTheory.binop_source_ptr_buf_ok >>
+      irule bodyPtrMakeArrayAddFrameTheory.binop_source_ptr_buf_ok >>
       simp[] >> metis_tac[contextTheory.vv_operand_def])
 QED
 
