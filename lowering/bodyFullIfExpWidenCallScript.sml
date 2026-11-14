@@ -159,10 +159,9 @@ Resume ifexp_widened_call_copy_ghost_frame[kept]:
   conj_tac >- (rpt strip_tac >>
     `off+sz <= B \/ B+N <= off` by metis_tac[] >>
     `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >>
-    `b+sz <= B \/ B+N <= b` by metis_tac[] >>
-    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
-  rpt strip_tac >> `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]
+  rpt strip_tac >>
+  `b+sz <= B \/ B+N <= b` by metis_tac[] >>
+  `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]
 QED
 
 Resume ifexp_widened_call_copy_ghost_frame[value]:
