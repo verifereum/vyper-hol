@@ -2,7 +2,7 @@
 Theory nonreentrantEntryPath
 Ancestors
   nonreentrantEquiv transientLockPtr transientLockFrameProps transientLockProps
-  nonreentrantSource fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
+  nonreentrantSource accountsRelProps fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
   fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun unitTransformDefs ptrSafeRun
   ptrDiscipline gasEvents gasCount allocaHistoryFragment allocaHistory
   exprSimPtrProps exprLoweringProps codegenRel contextCodegenRel
@@ -23,6 +23,8 @@ Proof
        fresh_var_def, emit_def, transient_lock_code_def] >>
   strip_tac >> gvs[arithmeticTheory.ADD_ASSOC]
 QED
+
+
 
 Theorem compile_nonreentrant_lock_transient_prefix:
   compile_nonreentrant_lock nkey T iv st = ((),st') /\
@@ -105,4 +107,68 @@ Proof
       vyperStateTheory.assert_def, vyperStateTheory.ignore_bind_def,
       vyperStateTheory.bind_def, vyperStateTheory.return_def,
       vyperStateTheory.raise_def, AllCaseEqs()]
+QED
+
+(* The ghost update is independent of the mask used to check the prefix. *)
+Theorem nonreentrant_lock_paths:
+  compile_nonreentrant_lock nkey T iv sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~ctx_has_dalloca ctx /\ tload (n2w nkey) s <> 1w /\
+  (~iv ==> ~s.vs_call_ctx.cc_static) /\
+  (!b. ~((n2w nkey,b) IN tn.t_trans)) ==>
+  ?u G' tn'.
+    run_inst_seq (transient_lock_code nkey iv sa) s = OK u /\
+    (!D. inst_seq_ptr D 0 ctx func [] G tn
+      (transient_lock_code nkey iv sa) s G' tn') /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+      (s,G,tn) []
+      (OK (u with vs_inst_idx :=
+        s.vs_inst_idx + LENGTH (transient_lock_code nkey iv sa)),G',tn')) /\
+    (!D fuel.
+      ptr_safe_run D 0 fuel ctx func [] G' tn'
+        (u with vs_inst_idx :=
+          s.vs_inst_idx + LENGTH (transient_lock_code nkey iv sa)) ==>
+      ptr_safe_run D 0 fuel ctx func [] G tn s)
+Proof
+  strip_tac >>
+  `?u. run_inst_seq (transient_lock_code nkey iv sa) s = OK u` by
+    (Cases_on `iv` >> simp[transient_lock_code_execution]) >>
+  mp_tac (Q.INST [`D` |-> `ARB:dead`, `PG` |-> `[]`]
+    (SPEC_ALL transient_lock_code_ptr_frame)) >> simp[] >> strip_tac >>
+  `!D. inst_seq_ptr D 0 ctx func [] G tn
+    (transient_lock_code nkey iv sa) s G' tn'` by
+    (gen_tac >>
+     mp_tac (Q.INST [`PG` |-> `[]`]
+       (SPEC_ALL transient_lock_code_ptr_frame)) >> simp[] >> strip_tac >>
+     metis_tac[inst_seq_ptr_ghost_unique]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (transient_lock_code nkey iv sa)
+      (DROP s.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[compile_nonreentrant_lock_transient_prefix] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (transient_lock_code nkey iv sa)` by
+    (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def,
+      is_terminator_def]) >>
+  `run_inst_seq_mem_ok (transient_lock_code nkey iv sa) s` by
+    (irule transient_lock_code_memory_checks >> Cases_on `iv` >>
+     simp[transient_lock_code_def, mk_inst_def]) >>
+  qexistsl_tac [`u`, `G'`, `tn'`] >> simp[] >> conj_tac
+  >- (rpt gen_tac >>
+      mp_tac (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
+        `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`]
+        run_inst_seq_gas_origin_ptr_path) >>
+      simp[] >>
+      `FILTER (\i. i.inst_opcode = GAS) (transient_lock_code nkey iv sa) = []` by
+        (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def]) >>
+      simp[]) >>
+  rpt strip_tac >> irule run_inst_seq_ptr_continuation >>
+  qexistsl_tac [`transient_lock_code nkey iv sa`, `u`, `G'`, `tn'`, `bb`] >>
+  simp[]
 QED
