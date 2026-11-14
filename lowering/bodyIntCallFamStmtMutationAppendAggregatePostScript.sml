@@ -51,7 +51,7 @@ Proof
   simp[lookup_storage_def,update_storage_def,combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem intcall_append_header_state[local]:
+Theorem intcall_append_header_state:
   stmt_state_rel ctx func ce cx es s /\
   declared_storage_region cx mid name subs = SOME (tr,slot,ArrayTV tv (Dynamic cap)) ==>
   stmt_state_rel ctx func ce cx
