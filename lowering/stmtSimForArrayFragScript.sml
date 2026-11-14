@@ -421,6 +421,58 @@ Proof
   drule array_prefix_continuation >> simp[] >> metis_tac[]
 QED
 
+Theorem array_loop_initialize_memory_framed:
+  array_for_code func cenv bc ty stmts id et tv n stride saved_base
+    p sz ainst idx dv ov ep nv cond exit bod incr
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  ainst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) /\
+  lookup_block s0.vs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      pre ++ [ainst; mk_inst j JMP [Label entry] []]|> /\
+  lookup_block entry func.fn_blocks =
+    SOME <|bb_label := entry; bb_instructions :=
+      [mk_inst ei ASSIGN [Lit 0w] [idx]; mk_inst ej JMP [Label cond] []]|> /\
+  s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ P es /\
+  lookup_scopes id es.scopes = NONE /\
+  not_local_ptr cenv es.scopes p /\
+  (!x. saved_base = Var x ==> x <> p) /\
+  eval_operand saved_base s0 = SOME array_base /\ ret_pc_ok cenv st s0 /\
+  (!x. not_fresh_at caller x ==> x <> p /\ x <> idx) /\
+  local_ptrs_reserved cenv caller ==>
+  ?dst s.
+    array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
+      ainst cond st 0 es s /\ array_caller_frame caller s0 s /\
+    gas_marked_path F ctx func s0 0 (OK s) /\
+    alloca_frame cenv es caller s0 cenv es s
+Proof
+  strip_tac >>
+  dxrule array_code_initialization_fields >> strip_tac >>
+  drule_all array_allocate_ready >> strip_tac >>
+  rename1 `exec_alloca ainst s0 (n2w sz : bytes32) = OK s1` >>
+  rename1 `lookup_var p s1 = SOME dst` >>
+  drule_all array_alloca_frame >> strip_tac >>
+  qexistsl_tac [`dst`, `jump_to cond (update_var idx 0w (jump_to entry s1))`] >>
+  conj_tac
+  >- (irule array_entry_zero_inv >>
+      simp[stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def] >>
+      Cases_on `saved_base` >> fs[lookup_var_def, eval_operand_def]) >>
+  conj_tac
+  >- (simp[array_caller_frame_def, jump_to_def, update_var_def,
+           lookup_var_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> metis_tac[lookup_var_def]) >>
+  reverse conj_tac
+  >- (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+      simp[jump_to_def, update_var_def] >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `x <> p /\ x <> idx` by metis_tac[] >>
+      simp[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[lookup_var_def]) >>
+  `step_inst_base ainst s0 = OK s1` by
+    simp[step_inst_base_def, eval_operand_def] >>
+  drule array_prefix_continuation >> simp[] >> metis_tac[]
+QED
+
 Theorem array_loop_initialize_framed:
   array_for_code func cenv bc ty stmts id et tv n stride saved_base
     p sz ainst idx dv ov ep nv cond exit bod incr
@@ -448,31 +500,13 @@ Proof
   strip_tac >>
   `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
     fs[array_for_code_def, compile_env_component_equality] >>
-  dxrule array_code_initialization_fields >> strip_tac >>
+  drule array_code_initialization_fields >> strip_tac >>
   drule_all array_allocation_safe >> strip_tac >>
-  drule_all array_allocate_ready >> strip_tac >>
-  rename1 `exec_alloca ainst s0 (n2w sz : bytes32) = OK s1` >>
-  rename1 `lookup_var p s1 = SOME dst` >>
-  drule_all array_alloca_frame >> strip_tac >>
-  qexistsl_tac [`dst`, `jump_to cond (update_var idx 0w (jump_to entry s1))`] >>
-  conj_tac
-  >- (irule array_entry_zero_inv >>
-      simp[stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def] >>
-      Cases_on `saved_base` >> fs[lookup_var_def, eval_operand_def]) >>
-  conj_tac
-  >- (simp[array_caller_frame_def, jump_to_def, update_var_def,
-           lookup_var_def, FLOOKUP_UPDATE] >>
-      rpt strip_tac >> metis_tac[lookup_var_def]) >>
-  reverse conj_tac
-  >- (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
-      simp[jump_to_def, update_var_def] >>
-      reverse conj_tac >- metis_tac[] >>
-      rpt strip_tac >>
-      `x <> p /\ x <> idx` by metis_tac[] >>
-      simp[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[lookup_var_def]) >>
-  `step_inst_base ainst s0 = OK s1` by
-    simp[step_inst_base_def, eval_operand_def] >>
-  drule array_prefix_continuation >> simp[] >> metis_tac[]
+  `saved_base <> Var p` by metis_tac[] >>
+  irule array_loop_initialize_memory_framed >>
+  qpat_assum `array_for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (irule_at Any) >> simp[] >>
+  qexistsl_tac [`j`, `entry`, `ej`, `ei`] >> simp[]
 QED
 
 Theorem compile_for_array_code_ready_framed:
