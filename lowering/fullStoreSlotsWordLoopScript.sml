@@ -112,10 +112,10 @@ Theorem store_slots_word_init_invariant:
         op_taint tj (Var y) = op_taint tn (Var y)) /\
       tj.t_mem = tn.t_mem /\ tj.t_imm = tn.t_imm /\
       (if loc = LocStorage then tj.t_trans = tn.t_trans else tj.t_stor = tn.t_stor) /\
-      toplevel_copy_source_taint loc tj SUBSET
-        toplevel_copy_source_taint loc tn DIFF
-          {(k+n2w i,jj) | (i,jj) | i<j} UNION
-          {(k+n2w i,jj) | i<j /\ jj<32 /\ w2n b+32*i+jj IN tn.t_mem}) 0 Gf tf u /\
+      toplevel_copy_source_taint loc tj =
+        FOLDL (\ta i. key_update ta (k+n2w i)
+          (mem_word_taint tn.t_mem (w2n b+32*i)))
+          (toplevel_copy_source_taint loc tn) (GENLIST I j)) 0 Gf tf u /\
     ~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0
 Proof
   strip_tac >>
@@ -147,10 +147,10 @@ Theorem store_slots_word_header_invariant:
       op_taint ti (Var y) = op_taint tbase (Var y)) /\
     ti.t_mem = tbase.t_mem /\ ti.t_imm = tbase.t_imm /\
     (if loc = LocStorage then ti.t_trans = tbase.t_trans else ti.t_stor = tbase.t_stor) /\
-    toplevel_copy_source_taint loc ti SUBSET
-      toplevel_copy_source_taint loc tbase DIFF
-        {(k+n2w ii,jj) | (ii,jj) | ii<i} UNION
-        {(k+n2w ii,jj) | ii<i /\ jj<32 /\ w2n b+32*ii+jj IN tbase.t_mem}) /\
+    toplevel_copy_source_taint loc ti =
+      FOLDL (\ta ii. key_update ta (k+n2w ii)
+        (mem_word_taint tbase.t_mem (w2n b+32*ii)))
+        (toplevel_copy_source_taint loc tbase) (GENLIST I i)) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [Var cv;cnt] [tv]) /\
   get_instruction bb (SUC s.vs_inst_idx) =
@@ -183,10 +183,10 @@ Theorem store_slots_word_body_invariant:
       op_taint ti (Var y) = op_taint tbase (Var y)) /\
     ti.t_mem = tbase.t_mem /\ ti.t_imm = tbase.t_imm /\
     (if loc = LocStorage then ti.t_trans = tbase.t_trans else ti.t_stor = tbase.t_stor) /\
-    toplevel_copy_source_taint loc ti SUBSET
-      toplevel_copy_source_taint loc tbase DIFF
-        {(k+n2w ii,jj) | (ii,jj) | ii<i} UNION
-        {(k+n2w ii,jj) | ii<i /\ jj<32 /\ w2n b+32*ii+jj IN tbase.t_mem}) /\
+    toplevel_copy_source_taint loc ti =
+      FOLDL (\ta ii. key_update ta (k+n2w ii)
+        (mem_word_taint tbase.t_mem (w2n b+32*ii)))
+        (toplevel_copy_source_taint loc tbase) (GENLIST I i)) /\
   (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
   eval_operand (Var x) sbase = SOME b /\ eval_operand dst sbase = SOME k /\
   not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
@@ -219,9 +219,149 @@ Proof
     (strip_assume_tac o BETA_RULE) >>
   drule_all store_slots_word_body_scalar_origin_ptr >>
   disch_then (qx_choosel_then [`u`,`Gf`,`tf`] strip_assume_tac) >>
-  drule copy_store_taint_bound_step >> disch_then assume_tac >>
   qexistsl_tac [`u`,`Gf`,`tf`] >> fs[ADD1,Excl "isPREFIX"] >>
-  gvs[Excl "isPREFIX"] >> metis_tac[]
+  gvs[Excl "isPREFIX", GSYM ADD1, GENLIST, FOLDL_SNOC] >> metis_tac[]
+QED
+
+Theorem memory_copy_loop_op_origin_ptr_exact:
+  compile_word_copy_loop_op (Var x) dst cnt LocMemory loc F sa = (u,sb) /\
+  fn_has_code sa sb func /\ (loc=LocStorage \/ loc=LocTransient) /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
+  not_fresh_at sa x /\ (!y. dst=Var y \/ cnt=Var y ==> not_fresh_at sa y) /\
+  lookup_var x s=SOME b /\ ptr_covers G tn x s (32*n) /\
+  eval_operand dst s=SOME k /\ op_taint tn dst={} /\
+  eval_operand cnt s=SOME (n2w n) /\ op_taint tn cnt={} /\ op_prov G cnt=NONE /\
+  n<dimword(:256) /\ w2n b+32*n<dimword(:256) /\
+  w2n b+32*n<=s.vs_alloca_next /\ ~s.vs_halted /\
+  s.vs_current_bb=sa.cs_current_bb /\ s.vs_inst_idx=LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    store_copy_frame sa loc b k s n t /\ ~t.vs_halted /\
+    t.vs_current_bb=sb.cs_current_bb /\ t.vs_inst_idx=LENGTH sb.cs_current_insts /\
+    (!y. not_fresh_at sa y ==> FLOOKUP Gf y=FLOOKUP G y /\
+      op_taint tnf (Var y)=op_taint tn (Var y)) /\
+    tnf.t_mem=tn.t_mem /\ tnf.t_imm=tn.t_imm /\
+    (if loc=LocStorage then tnf.t_trans=tn.t_trans else tnf.t_stor=tn.t_stor) /\
+    toplevel_copy_source_taint loc tnf =
+      FOLDL (\ta i. key_update ta (k+n2w i)
+        (mem_word_taint tn.t_mem (w2n b+32*i)))
+        (toplevel_copy_source_taint loc tn) (GENLIST I n)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all place_store_runtime_copy_code >> strip_tac >>
+  qabbrev_tac `Inv = \i Gi ti q.
+    store_copy_frame sa loc b k s i q /\
+    eval_operand (Var cv) q=SOME (n2w i) /\
+    op_taint ti (Var cv)={} /\ op_prov Gi (Var cv)=NONE /\
+    allocas_from lo q /\
+    (!y. not_fresh_at sa y ==> FLOOKUP Gi y=FLOOKUP G y /\
+      op_taint ti (Var y)=op_taint tn (Var y)) /\
+    ti.t_mem=tn.t_mem /\ ti.t_imm=tn.t_imm /\
+    (if loc=LocStorage then ti.t_trans=tn.t_trans else ti.t_stor=tn.t_stor) /\
+    toplevel_copy_source_taint loc ti =
+      FOLDL (\ta ii. key_update ta (k+n2w ii)
+        (mem_word_taint tn.t_mem (w2n b+32*ii)))
+        (toplevel_copy_source_taint loc tn) (GENLIST I i)` >>
+  `?q G1 t1.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK q,G1,t1)) /\ Inv 0 G1 t1 q /\
+    ~q.vs_halted /\ q.vs_current_bb=hdr /\ q.vs_inst_idx=0` by
+    (qunabbrev_tac `Inv` >> irule store_slots_word_init_invariant >>
+     simp[Excl "isPREFIX"] >>
+     conj_tac >- (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >>
+       simp[] >> metis_tac[]) >> qexists_tac `id0` >> asm_rewrite_tac[]) >>
+  suspend "iterate"
+QED
+
+Resume memory_copy_loop_op_origin_ptr_exact[iterate]:
+  `!j Gj tj r. j<=n /\ Inv j Gj tj r /\ ~r.vs_halted /\
+    r.vs_current_bb=hdr /\ r.vs_inst_idx=0 ==>
+    ?z Gz tz. (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (r,Gj,tj) [] (OK z,Gz,tz)) /\ Inv j Gz tz z /\ ~z.vs_halted /\
+      z.vs_inst_idx=0 /\ z.vs_current_bb=(if j=n then exit else body_lbl)` by
+    suspend "header" >>
+  `!j Gj tj r. j<n /\ Inv j Gj tj r /\ ~r.vs_halted /\
+    r.vs_current_bb=body_lbl /\ r.vs_inst_idx=0 ==>
+    ?z Gz tz. (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (r,Gj,tj) [] (OK z,Gz,tz)) /\ Inv (j+1) Gz tz z /\ ~z.vs_halted /\
+      z.vs_current_bb=hdr /\ z.vs_inst_idx=0` by suspend "body" >>
+  `?t Gf tf.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (q,G1,t1) [] (OK t,Gf,tf)) /\ Inv n Gf tf t /\ ~t.vs_halted /\
+    t.vs_current_bb=exit /\ t.vs_inst_idx=0` by
+    (irule store_slots_uniform_loop_iterate >>
+     asm_rewrite_tac[] >> conj_tac
+     >- (qexistsl_tac [`body_lbl`,`hdr`] >> asm_rewrite_tac[]) >>
+     qexistsl_tac [`0`,`n`] >> simp[]) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >>
+  conj_tac >- metis_tac[origin_ptr_path_then] >>
+  qpat_x_assum `Inv n Gf tf t` mp_tac >> simp[Abbr `Inv`]
+QED
+
+Resume memory_copy_loop_op_origin_ptr_exact[header]:
+  rpt gen_tac >> strip_tac >>
+  `eval_operand cnt r=SOME(n2w n) /\ op_taint tj cnt={} /\ op_prov Gj cnt=NONE` by
+    (qpat_x_assum `Inv j Gj tj r` mp_tac >> simp[Abbr `Inv`] >> strip_tac >>
+     `eval_operand cnt r=SOME(n2w n)` by
+       (irule topcopy_frame_operand >> metis_tac[]) >>
+     Cases_on `cnt` >> gvs[op_taint_def,op_prov_def]) >>
+  `isPREFIX [mk_inst idh EQ [Var cv;cnt] [tv];
+    mk_inst (idh+1) JNZ [Var tv;Label exit;Label body_lbl] []]
+    (DROP 0 bbh.bb_instructions)` by asm_rewrite_tac[DROP_0] >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  `cv <> tv /\ (!y. not_fresh_at sa y ==> y <> tv)` by
+    (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >>
+     fs[] >> metis_tac[]) >>
+  qpat_x_assum `Abbrev (Inv = _)`
+    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_at (Pat `Inv = _`) store_slots_word_header_invariant >>
+  disch_then (drule_at (Pat `Inv _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  simp[Excl "isPREFIX"] >> disch_then irule >> simp[Excl "isPREFIX"] >>
+  qexistsl_tac [`idh`,`idh+1`,`tv`] >> simp[] >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `get_instruction bbh (SUC 0) = _` mp_tac >> simp[]
+QED
+
+Resume memory_copy_loop_op_origin_ptr_exact[body]:
+  rpt gen_tac >> strip_tac >>
+  `ptr_covers Gj tj x r (32*n) /\ op_taint tj dst={}` by
+    (qpat_assum `Inv j Gj tj r` mp_tac >> qunabbrev_tac `Inv` >>
+     disch_then (strip_assume_tac o BETA_RULE) >>
+     `eval_operand (Var x) r=SOME b` by
+       (irule topcopy_frame_operand >> simp[eval_operand_def] >> metis_tac[]) >>
+     conj_tac >- (gvs[ptr_covers_def,eval_operand_def,Excl "isPREFIX"] >> metis_tac[]) >>
+     Cases_on `dst` >> gvs[op_taint_def] >> metis_tac[]) >>
+  qpat_x_assum `Abbrev (Inv = _)`
+    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_at (Pat `Inv = _`) store_slots_word_body_invariant >>
+  disch_then (drule_at (Pat `Inv _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  simp[eval_operand_def,Excl "isPREFIX"] >>
+  CONV_TAC (RAND_CONV (STRIP_QUANT_CONV
+    (RAND_CONV (RAND_CONV (RAND_CONV (REWR_CONV CONJ_COMM)))))) >>
+  disch_then irule >> simp[Excl "isPREFIX"] >>
+  qexistsl_tac [`dst`,`dv`,`idb`,`mv`,`nv`,`sv`,`vv`] >>
+  conj_tac >- (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >> simp[]) >>
+  qpat_x_assum `ALL_DISTINCT _` (strip_assume_tac o SRULE []) >>
+  simp[Excl "isPREFIX"] >>
+  qpat_x_assum `isPREFIX (_::_::_::_::_::_::_::_::_) bbb.bb_instructions`
+    (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
+  asm_rewrite_tac[get_instruction_def,APPEND,LENGTH,EL] >> simp[]
+QED
+
+Finalise memory_copy_loop_op_origin_ptr_exact
+
+Theorem store_slots_taint_fold_bound:
+  !n. FOLDL (\ta i. key_update ta ((k:bytes32)+n2w i)
+        (mem_word_taint M (c+32*i))) ta0 (GENLIST I n) SUBSET
+    (ta0 DIFF {(k+n2w i,j) | (i,j) | i<n}) UNION
+    {(k+n2w i,j) | i<n /\ j<32 /\ c+32*i+j IN M}
+Proof
+  Induct >- simp[] >>
+  simp[GENLIST, FOLDL_SNOC] >>
+  drule copy_store_taint_bound_step >> simp[ADD1]
 QED
 
 Theorem memory_copy_loop_op_origin_ptr:
@@ -249,105 +389,9 @@ Theorem memory_copy_loop_op_origin_ptr:
       {(k+n2w i,j) | i<n /\ j<32 /\ w2n b+32*i+j IN tn.t_mem}
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all place_store_runtime_copy_code >> strip_tac >>
-  qabbrev_tac `Inv = \i Gi ti q.
-    store_copy_frame sa loc b k s i q /\
-    eval_operand (Var cv) q=SOME (n2w i) /\
-    op_taint ti (Var cv)={} /\ op_prov Gi (Var cv)=NONE /\
-    allocas_from lo q /\
-    (!y. not_fresh_at sa y ==> FLOOKUP Gi y=FLOOKUP G y /\
-      op_taint ti (Var y)=op_taint tn (Var y)) /\
-    ti.t_mem=tn.t_mem /\ ti.t_imm=tn.t_imm /\
-    (if loc=LocStorage then ti.t_trans=tn.t_trans else ti.t_stor=tn.t_stor) /\
-    toplevel_copy_source_taint loc ti SUBSET
-      toplevel_copy_source_taint loc tn DIFF {(k+n2w ii,jj) | (ii,jj) | ii<i} UNION
-      {(k+n2w ii,jj) | ii<i /\ jj<32 /\ w2n b+32*ii+jj IN tn.t_mem}` >>
-  `?q G1 t1.
-    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK q,G1,t1)) /\ Inv 0 G1 t1 q /\
-    ~q.vs_halted /\ q.vs_current_bb=hdr /\ q.vs_inst_idx=0` by
-    (qunabbrev_tac `Inv` >> irule store_slots_word_init_invariant >>
-     simp[Excl "isPREFIX"] >>
-     conj_tac >- (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >>
-       simp[] >> metis_tac[]) >> qexists_tac `id0` >> asm_rewrite_tac[]) >>
-  suspend "iterate"
+  drule_all memory_copy_loop_op_origin_ptr_exact >> strip_tac >>
+  qexistsl [`t`,`Gf`,`tnf`] >> simp[] >>
+  mp_tac (Q.INST [`c` |-> `w2n (b:bytes32)`, `M` |-> `tn.t_mem`,
+    `ta0` |-> `toplevel_copy_source_taint loc tn`] store_slots_taint_fold_bound) >>
+  simp[]
 QED
-
-Resume memory_copy_loop_op_origin_ptr[iterate]:
-  `!j Gj tj r. j<=n /\ Inv j Gj tj r /\ ~r.vs_halted /\
-    r.vs_current_bb=hdr /\ r.vs_inst_idx=0 ==>
-    ?z Gz tz. (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (r,Gj,tj) [] (OK z,Gz,tz)) /\ Inv j Gz tz z /\ ~z.vs_halted /\
-      z.vs_inst_idx=0 /\ z.vs_current_bb=(if j=n then exit else body_lbl)` by
-    suspend "header" >>
-  `!j Gj tj r. j<n /\ Inv j Gj tj r /\ ~r.vs_halted /\
-    r.vs_current_bb=body_lbl /\ r.vs_inst_idx=0 ==>
-    ?z Gz tz. (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (r,Gj,tj) [] (OK z,Gz,tz)) /\ Inv (j+1) Gz tz z /\ ~z.vs_halted /\
-      z.vs_current_bb=hdr /\ z.vs_inst_idx=0` by suspend "body" >>
-  `?t Gf tf.
-    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (q,G1,t1) [] (OK t,Gf,tf)) /\ Inv n Gf tf t /\ ~t.vs_halted /\
-    t.vs_current_bb=exit /\ t.vs_inst_idx=0` by
-    (irule store_slots_uniform_loop_iterate >>
-     asm_rewrite_tac[] >> conj_tac
-     >- (qexistsl_tac [`body_lbl`,`hdr`] >> asm_rewrite_tac[]) >>
-     qexistsl_tac [`0`,`n`] >> simp[]) >>
-  qexistsl_tac [`t`,`Gf`,`tf`] >>
-  conj_tac >- metis_tac[origin_ptr_path_then] >>
-  qpat_x_assum `Inv n Gf tf t` mp_tac >> simp[Abbr `Inv`]
-QED
-
-Resume memory_copy_loop_op_origin_ptr[header]:
-  rpt gen_tac >> strip_tac >>
-  `eval_operand cnt r=SOME(n2w n) /\ op_taint tj cnt={} /\ op_prov Gj cnt=NONE` by
-    (qpat_x_assum `Inv j Gj tj r` mp_tac >> simp[Abbr `Inv`] >> strip_tac >>
-     `eval_operand cnt r=SOME(n2w n)` by
-       (irule topcopy_frame_operand >> metis_tac[]) >>
-     Cases_on `cnt` >> gvs[op_taint_def,op_prov_def]) >>
-  `isPREFIX [mk_inst idh EQ [Var cv;cnt] [tv];
-    mk_inst (idh+1) JNZ [Var tv;Label exit;Label body_lbl] []]
-    (DROP 0 bbh.bb_instructions)` by asm_rewrite_tac[DROP_0] >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  `cv <> tv /\ (!y. not_fresh_at sa y ==> y <> tv)` by
-    (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >>
-     fs[] >> metis_tac[]) >>
-  qpat_x_assum `Abbrev (Inv = _)`
-    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_at (Pat `Inv = _`) store_slots_word_header_invariant >>
-  disch_then (drule_at (Pat `Inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  simp[Excl "isPREFIX"] >> disch_then irule >> simp[Excl "isPREFIX"] >>
-  qexistsl_tac [`idh`,`idh+1`,`tv`] >> simp[] >> conj_tac >- metis_tac[] >>
-  qpat_x_assum `get_instruction bbh (SUC 0) = _` mp_tac >> simp[]
-QED
-
-Resume memory_copy_loop_op_origin_ptr[body]:
-  rpt gen_tac >> strip_tac >>
-  `ptr_covers Gj tj x r (32*n) /\ op_taint tj dst={}` by
-    (qpat_assum `Inv j Gj tj r` mp_tac >> qunabbrev_tac `Inv` >>
-     disch_then (strip_assume_tac o BETA_RULE) >>
-     `eval_operand (Var x) r=SOME b` by
-       (irule topcopy_frame_operand >> simp[eval_operand_def] >> metis_tac[]) >>
-     conj_tac >- (gvs[ptr_covers_def,eval_operand_def,Excl "isPREFIX"] >> metis_tac[]) >>
-     Cases_on `dst` >> gvs[op_taint_def] >> metis_tac[]) >>
-  qpat_x_assum `Abbrev (Inv = _)`
-    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_at (Pat `Inv = _`) store_slots_word_body_invariant >>
-  disch_then (drule_at (Pat `Inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
-  simp[eval_operand_def,Excl "isPREFIX"] >>
-  CONV_TAC (RAND_CONV (STRIP_QUANT_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV (REWR_CONV CONJ_COMM)))))) >>
-  disch_then irule >> simp[Excl "isPREFIX"] >>
-  qexistsl_tac [`dst`,`dv`,`idb`,`mv`,`nv`,`sv`,`vv`] >>
-  conj_tac >- (qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >> simp[]) >>
-  qpat_x_assum `ALL_DISTINCT _` (strip_assume_tac o SRULE []) >>
-  simp[Excl "isPREFIX"] >>
-  qpat_x_assum `isPREFIX (_::_::_::_::_::_::_::_::_) bbb.bb_instructions`
-    (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
-  asm_rewrite_tac[get_instruction_def,APPEND,LENGTH,EL] >> simp[]
-QED
-
-Finalise memory_copy_loop_op_origin_ptr
