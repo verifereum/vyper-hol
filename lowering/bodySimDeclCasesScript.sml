@@ -1629,7 +1629,8 @@ Proof
   simp[] >> rpt conj_tac
   >- metis_tac[compile_stmts_grows]
   >- (rpt strip_tac >> metis_tac[fixed_array_elements_typed])
-  >- (rpt strip_tac >> irule array_snapshot_memory >> simp[] >>
+  >- (rpt strip_tac >>
+      irule (INST_TYPE [alpha |-> ``:256``] array_snapshot_memory) >> simp[] >>
       qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `ei`, `entry`, `func`,
                      `name`, `az`] >> simp[])
   >- (rpt strip_tac >> irule array_body_fragment_callback >>
