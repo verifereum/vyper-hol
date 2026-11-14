@@ -171,6 +171,6 @@ Proof
    x <> STRING #"%" (toString (st.cs_next_var + 1)) /\
    x <> STRING #"%" (toString (st.cs_next_var + 2))` by
     (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_ADD]) >>
-  simp[Abbr `G1`, Abbr `tn1`, FLOOKUP_DRESTRICT, op_taint_def,
+  simp[Abbr `G1`, FLOOKUP_DRESTRICT, op_taint_def,
        FLOOKUP_UPDATE]
 QED
