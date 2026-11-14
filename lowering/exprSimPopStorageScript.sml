@@ -40,6 +40,29 @@ Proof
   IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[]
 QED
 
+Theorem eval_pop_storage_static[local]:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT et (Dynamic n)), name) /\
+  lookup_var_slot_from_layout cx tr src name = SOME slot /\
+  evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
+  cx.txn.is_static ==>
+  eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
+    if lookup_storage (n2w slot) (get_storage cx es tr) = 0w then
+      (INR (Error (RuntimeError "pop empty storage array")), es)
+    else (INR (Error (RuntimeError "write in static context")), es)
+Proof
+  strip_tac >>
+  simp[evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+       return_def, get_place_def, pop_place_def, get_storage_backend_eq,
+       ignore_bind_def, check_def, assert_def, raise_def,
+       write_storage_slot_eq, encode_value_def, encode_base_to_slot_def,
+       integer_wordTheory.i2w_def] >>
+  IF_CASES_TAC >>
+  Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w` >> gvs[] >>
+  `w2n (lookup_storage (n2w slot) (get_storage cx es tr)) = 0` by decide_tac >>
+  fs[wordsTheory.w2n_eq_0]
+QED
+
 Theorem pop_storage_target_facts:
   well_typed_expr env (Pop ann (TopLevelNameTarget (src,id))) /\
   env_consistent env cx es /\
@@ -389,6 +412,15 @@ Proof
   simp[step_inst_base_def, exec_write2_def, mk_inst_def, eval_operand_def]
 QED
 
+Theorem storage_pop_step_store_static[local]:
+  IS_SOME (lookup_var x s) /\ s.vs_call_ctx.cc_static ==>
+  step_inst_base (mk_inst id (if tr then TSTORE else SSTORE) [Lit slot; Var x] []) s =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
+Proof
+  Cases_on `tr` >> Cases_on `lookup_var x s` >>
+  simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def]
+QED
+
 Theorem storage_pop_step_add_literals[local]:
   step_inst_base (mk_inst id ADD [Lit a; Lit b] [out]) s =
     OK (update_var out (a+b) s)
@@ -426,6 +458,24 @@ Theorem dynarray_pop_storage_run_empty:
      mk_inst (id+8) ADD [Var x4; Var x5] [x6]] s = Abort a s'
 Proof
   strip_tac >> fs storage_pop_run_simps
+QED
+
+Theorem dynarray_pop_storage_run_static[local]:
+  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\ s.vs_call_ctx.cc_static /\
+  (if tr then tload slot s else sload slot s) <> 0w ==>
+  ?u. run_inst_seq
+    [mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [x0];
+     mk_inst (id+1) ISZERO [Var x0] [x1];
+     mk_inst (id+2) ISZERO [Var x1] [x2];
+     mk_inst (id+3) ASSERT [Var x2] [];
+     mk_inst (id+4) SUB [Var x0; Lit 1w] [x3];
+     mk_inst (id+5) (if tr then TSTORE else SSTORE) [Lit slot; Var x3] [];
+     mk_inst (id+6) ADD [Lit slot; Lit 1w] [x4];
+     mk_inst (id+7) MUL [Var x3; Lit (n2w esz)] [x5];
+     mk_inst (id+8) ADD [Var x4; Var x5] [x6]] s = Abort ExHalt_abort u
+Proof
+  strip_tac >>
+  fs (storage_pop_step_store_static :: storage_pop_run_simps)
 QED
 
 Theorem dynarray_pop_storage_run:
@@ -688,8 +738,7 @@ Theorem compile_pop_storage_normalized_sim:
 Proof
   rw[exprSimDefsTheory.expr_vv_sim_def] >>
   `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
-  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-   ~cx.txn.is_static` by
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
   drule_all pop_storage_compiler_facts >> strip_tac >>
@@ -702,7 +751,6 @@ Proof
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,ArrayTV tv (Dynamic n))` by
     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
   drule_all pop_declared_header_load >> strip_tac >>
-  drule_all eval_pop_storage >> strip_tac >>
   qpat_x_assum `!ty sa' ann'. _` kall_tac >>
   qpat_x_assum `compile_dynarray_pop _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `FLOOKUP cenv.ce_module_vars _ = _` kall_tac >>
@@ -718,7 +766,14 @@ Proof
      Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by simp[] >>
   Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w`
-  >- (`?a s'. run_inst_seq (emitted_insts sa r) s0 = Abort a s'` by
+  >- (`!tail. eval_expr cx (Pop ann (TopLevelNameTarget (src,id)))
+          (es with gas_obs := tail) =
+        (INR (Error (RuntimeError "pop empty storage array")),
+         es with gas_obs := tail)` by
+        (gen_tac >> Cases_on `cx.txn.is_static`
+         >- (drule_all eval_pop_storage_static >> simp[pop_storage_gas_obs]) >>
+         drule_all eval_pop_storage >> simp[LET_THM, pop_storage_gas_obs]) >>
+      `?a s'. run_inst_seq (emitted_insts sa r) s0 = Abort a s'` by
         (simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
          irule dynarray_pop_storage_run_empty >> simp[]) >>
       drule_at (Pat `run_inst_seq _ _ = Abort _ _`)
@@ -732,13 +787,32 @@ Proof
                     `es`, `Abort a (s' with vs_inst_idx := j)`] >>
       simp[gas_marked_exec_def, exit_result_def, expr_exit_def, LET_THM,
            pop_storage_gas_obs]) >>
+  Cases_on `cx.txn.is_static`
+  >- (`s0.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
+      `?s'. run_inst_seq (emitted_insts sa r) s0 = Abort ExHalt_abort s'` by
+        (simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+         irule dynarray_pop_storage_run_static >> simp[]) >>
+      drule_at (Pat `run_inst_seq _ _ = Abort _ _`)
+        run_inst_seq_abort_zero_path >>
+      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      drule_all eval_pop_storage_static >> strip_tac >>
+      simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_summary_at_def] >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+                    `es`, `Abort ExHalt_abort (s' with vs_inst_idx := j)`] >>
+      simp[gas_marked_exec_def, exit_result_def, expr_exit_def,
+           pop_storage_gas_obs]) >>
+  drule_all eval_pop_storage >> strip_tac >>
   suspend "positive"
 QED
 
 Resume compile_pop_storage_normalized_sim[positive]:
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
   `~s0.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def, call_ctx_rel_def] >>
   drule_all dynarray_pop_storage_run >>
   disch_then (qspecl_then [`sa.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts sa r) s0 = OK u` by
