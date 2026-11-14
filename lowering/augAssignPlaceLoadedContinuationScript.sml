@@ -81,7 +81,8 @@ Proof
      goal_assum (drule_at (Pat `supported_target_info`)) >>
      goal_assum (drule_at (Pat `bind _ _ _ = _`)) >>
      qexists_tac `es with gas_obs := prefix ++ gs` >> simp[]) >>
-  drule_all aug_place_memory_rhs_callback >> strip_tac >>
+  drule_all aug_place_memory_rhs_callback >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
