@@ -39,10 +39,10 @@ Proof
 QED
 
 Theorem abi_encode_args_post_drop_fresh:
-  abi_args_post ctx func ce cx es origin st s0 es' args ops vs s /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args ops vs s /\
   EVERY (abi_decoder_operand_live st.cs_next_var) ops /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var ==>
-  abi_args_post ctx func ce cx es origin st s0 es' args ops vs (drop_fresh st s)
+  abi_args_post H ctx func ce cx es origin st s0 es' args ops vs (drop_fresh st s)
 Proof
   simp_tac bool_ss [abi_args_post_def] >> strip_tac >>
   conj_tac >- metis_tac[stmt_state_rel_drop_fresh] >>

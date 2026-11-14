@@ -76,6 +76,8 @@ Theorem abi_encode_word_counted_success:
   ?actual. gas_marked_path F ctx func s 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx /\
     vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
       es origin final s0 es' (Value result)
       (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode F mid0) target [e]))
