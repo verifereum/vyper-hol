@@ -1,0 +1,36 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5181
+Status: merged (02832229024d016d28804137e3bda52a94ff590e)
+
+Backport only the propagation of subscript-index modifiability, including
+projections through compound bases. Adapted to the pin's boolean
+check_modifiability API instead of upstream's new get_modifiability API.
+
+Keep get_expr_info and assignment/location checking unchanged: the pin's
+assignment checker relies on the base's modifiability to protect constant
+and immutable arrays, so upstream's ExprInfo changes cannot be taken alone.
+
+diff --git a/vyper/semantics/analysis/utils.py b/vyper/semantics/analysis/utils.py
+--- a/vyper/semantics/analysis/utils.py
++++ b/vyper/semantics/analysis/utils.py
+@@ -672,6 +672,21 @@ def check_modifiability(node: vy_ast.ExprNode, modifiability: Modifiability) -> bool:
+     if node.is_literal_value or node.has_folded_value:
+         return True
+ 
++    if isinstance(node, vy_ast.Subscript):
++        return check_modifiability(node.value, modifiability) and check_modifiability(
++            node.slice, modifiability
++        )
++
++    if isinstance(node, vy_ast.Attribute):
++        info = get_expr_info(node)
++        if not (info.modifiability <= modifiability):
++            return False
++        if info.var_info is not None or isinstance(info.typ, ModuleInfo):
++            return True
++        if isinstance(node.value, vy_ast.Name):
++            return True
++        return check_modifiability(node.value, modifiability)
++
+     if isinstance(node, (vy_ast.BinOp, vy_ast.Compare)):
+         return all(check_modifiability(i, modifiability) for i in (node.left, node.right))
+ 

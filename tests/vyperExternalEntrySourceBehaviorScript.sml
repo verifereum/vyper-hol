@@ -60,11 +60,6 @@ Definition defaults_balance_source_input_def:
 End
 val () = cv_auto_trans defaults_balance_source_input_def;
 
-Definition defaults_effect_source_input_def:
-  defaults_effect_source_input = ^(entry_source_fixture "dflt_effectful_constant_index")
-End
-val () = cv_auto_trans defaults_effect_source_input_def;
-
 Definition nr_internal_return_source_input_def:
   nr_internal_return_source_input = ^(entry_source_fixture "nr_internal_return")
 End
@@ -113,13 +108,6 @@ QED
 Theorem source_defaults_observe_balance_after_transfer:
   entry_source_observe defaults_balance_source_input defaults_balance_behavior_code
     [] 7 = SOME (IntV 93,0w,0w)
-Proof
-  CONV_TAC cv_eval
-QED
-
-Theorem source_defaults_retain_internal_storage_effect:
-  entry_source_observe defaults_effect_source_input defaults_effect_behavior_code
-    [] 0 = SOME (IntV 21,1w,0w)
 Proof
   CONV_TAC cv_eval
 QED

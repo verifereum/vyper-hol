@@ -44,6 +44,30 @@ def check_rejected_headers(settings):
             raise RuntimeError(f"invalid header unexpectedly accepted: {name}")
 
 
+def check_rejected_defaults(here: Path, settings: Settings) -> dict[str, dict[str, str | int]]:
+    """Retain the old annotated AST as a checker rejection witness."""
+    source = here / "typecheck-rejected/dflt_effectful_constant_index.vy"
+    try:
+        vyper.compile_code(
+            source.read_text(), contract_path=Path(source.name),
+            output_formats=("annotated_ast_dict", "bytecode"),
+            settings=settings, no_bytecode_metadata=True)
+    except VyperException as error:
+        if "Value must be literal or environment variable" not in str(error):
+            raise RuntimeError(f"unexpected default rejection: {error}") from error
+    else:
+        raise RuntimeError("effectful constant index default unexpectedly accepted")
+    return {
+        source.stem: {
+            "source": str(source.relative_to(here)),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "frozen_ast_sha256": hashlib.sha256(
+                source.with_suffix(".json").read_bytes()).hexdigest(),
+            "upstream_fix": 5181,
+        },
+    }
+
+
 def artifacts():
     here = Path(__file__).resolve().parent
     root = here.parents[1]
@@ -66,13 +90,14 @@ def artifacts():
              "dflt_only", "dflt_const", "dflt_payable", "dflt_internal_full",
              "c28_const_in_default_arg", "g37_pub_nonreentrancy_pragma", "rr_nr",
              "nr_fallback_early_return", "dflt_balance_after_transfer",
-             "dflt_effectful_constant_index"}
+             "dflt_folded_builtins", "dflt_runtime_constant_index"}
     sources = sorted((here / "sources").glob("*.vy"))
     if {p.stem for p in sources} != names:
         raise RuntimeError("external-entry fixture source set changed")
     settings = Settings(optimize=OptimizationLevel.NONE, evm_version="prague",
                         experimental_codegen=True)
     check_rejected_headers(settings)
+    rejected = check_rejected_defaults(here, settings)
     files, fixtures = {}, {}
     for source in sources:
         result = vyper.compile_code(
@@ -102,10 +127,10 @@ def artifacts():
                      "venom_ir_pipeline": "O1", "evm_version": "prague",
                      "bytecode_metadata": False},
         "fixtures": fixtures,
+        "rejected_fixtures": rejected,
         "validation_dependencies": {
             "rr_nr": [567], "c28_const_in_default_arg": [565],
-            "g37_pub_nonreentrancy_pragma": [565],
-            "dflt_effectful_constant_index": [565]},
+            "g37_pub_nonreentrancy_pragma": [565]},
     }, indent=2, sort_keys=True) + "\n"
     return here, files
 
