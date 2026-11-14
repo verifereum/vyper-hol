@@ -270,7 +270,7 @@ QED
 
 (* The frame relation excludes creation-initcode as the observed frame. *)
 Theorem asm_create_frame_output_boundary:
-  asm_frame_rel prog data es0 a es ==>
+  asm_frame_rel gas_tail prog data es0 a es ==>
   ?c rb rest. es0.contexts = (c,rb)::rest /\
     (!address. c.msgParams.outputTo <> Code address)
 Proof
@@ -532,7 +532,7 @@ Proof
 QED
 
 Theorem asm_frame_create_effects_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -556,7 +556,7 @@ Theorem asm_frame_create_effects_step_ok:
     (LENGTH a.as_pending_deletions) :: MAP SND (call_trace t) /\
   gas_readings t = gas_readings s /\
   call_requests s = request_of s :: call_requests t ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   strip_tac >>
   drule_all asm_frame_rel_rtc_trans >> disch_tac >>
@@ -589,7 +589,7 @@ Proof
      simp[arithmeticTheory.ADD1, rich_listTheory.EL_APPEND1, asm_inst_size_def]) >>
   pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
   asm_rewrite_tac[] >> simp[] >> qexists_tac `t` >> simp[] >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _ _` mp_tac >>
   rewrite_tac[asm_frame_rel_def] >> strip_tac >> gvs[] >>
   simp[asm_frame_rel_def, Abbr `prepared`, asm_next_def] >>
   gvs[asm_evm_rel_def, asm_next_def]
@@ -626,7 +626,7 @@ Proof
 QED
 
 Theorem asm_frame_create_same_depth_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -634,7 +634,7 @@ Theorem asm_frame_create_same_depth_step_ok:
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INL (),t) /\
   LENGTH t.contexts = LENGTH s.contexts ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -685,7 +685,7 @@ Proof
 QED
 
 Theorem asm_frame_create_child_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -693,7 +693,7 @@ Theorem asm_frame_create_child_step_ok:
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INL (),v) /\
   LENGTH v.contexts = SUC (LENGTH s.contexts) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -750,14 +750,14 @@ Proof
 QED
 
 Theorem asm_frame_create_normal_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INL (),v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -796,7 +796,7 @@ Proof
 QED
 
 Theorem asm_frame_create_failure_starved:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -873,17 +873,17 @@ Proof
      simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
      metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >>
   drule_all frame_resource_starved_mid >> simp[]
 QED
 
 Theorem asm_frame_create_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\
   (EL as.as_pc prog = AsmOp "CREATE" \/
    EL as.as_pc prog = AsmOp "CREATE2") ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by
@@ -892,7 +892,7 @@ Proof
      EL as.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
      as.as_stack = value::off::sz::
        (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
-     asm_frame_step_ok prog data es0 as es` by
+     asm_frame_step_ok gas_tail prog data es0 as es` by
     (rpt gen_tac >> strip_tac >>
      Cases_on `step_create (IS_SOME salt_opt) es` >>
      rename1 `step_create _ es = (res,mid)` >> Cases_on `res`

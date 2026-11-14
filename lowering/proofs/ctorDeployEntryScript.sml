@@ -46,7 +46,7 @@ Proof
   `wf_state (shadow_root es)` by simp[shadow_root_wf_state] >>
   simp[deploy_entry_state_def] >>
   conj_tac
-  >- (simp[initial_ctx_rel_def] >>
+  >- (simp[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def] >>
       gvs[unit_shape_ok_def, entry_fn_first_def] >>
       simp[shadow_root_def, shadow_root_contexts_def] >>
       fs[shadow_root_def] >>

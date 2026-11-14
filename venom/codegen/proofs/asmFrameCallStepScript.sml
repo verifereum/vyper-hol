@@ -1480,7 +1480,7 @@ Proof
   drule_all asm_step_oog_starved >> simp[]
 QED
 Theorem asm_frame_call_prepare_failure_starved:
-  asm_frame_rel prog data es0 as s /\
+  asm_frame_rel gas_tail prog data es0 as s /\
   s.contexts = (c,rb)::rest /\ next_opcode c = SOME op /\
   (op = Call \/ op = StaticCall) /\
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
@@ -1490,7 +1490,7 @@ Theorem asm_frame_call_prepare_failure_starved:
          call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `asm_frame_rel gas_tail _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> rpt strip_tac >>
   `~c.msgParams.static` by metis_tac[CONS_11, pairTheory.PAIR_EQ] >>
   drule_all asm_call_prepare_failure_starved >> strip_tac >>
@@ -1498,12 +1498,12 @@ Proof
 QED
 
 Theorem asm_frame_call_prepare_failure_step_ok:
-  asm_frame_rel prog data es0 a s /\
+  asm_frame_rel gas_tail prog data es0 a s /\
   s.contexts = (c,rb)::rest /\ next_opcode c = SOME op /\
   (op = Call \/ op = StaticCall) /\
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   asm_call_prepare op s = (INR e,t) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `?mr. c.msgParams.outputTo = Memory mr` by
@@ -1516,13 +1516,13 @@ Proof
 QED
 
 Theorem asm_frame_call_prepare_exit:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
   op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
   asm_call_prepare op s = (INR e,t) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `c.stack = a.as_stack` by fs[asm_frame_rel_def, asm_evm_rel_def] >>
@@ -1720,7 +1720,7 @@ Proof
 QED
 
 Theorem asm_frame_call_abort_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -1728,7 +1728,7 @@ Theorem asm_frame_call_abort_step:
   asm_call_prepare op s =
     (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
   ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -1879,7 +1879,7 @@ Resume asm_frame_call_abort_step[relation]:
   qpat_x_assum `Abbrev (ct = _)` kall_tac >>
   simp[asm_frame_step_ok_def] >> disj2_tac >>
   qexists_tac `t` >> simp[] >>
-  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
+  qpat_x_assum `asm_frame_rel gas_tail prog data es0 a s` mp_tac >>
   rewrite_tac[asm_frame_rel_def] >> strip_tac >>
   gvs[] >> simp[asm_next_def] >>
   gvs[asm_evm_rel_def, asm_next_def]
@@ -1888,7 +1888,7 @@ QED
 Finalise asm_frame_call_abort_step
 
 Theorem asm_frame_call_consume:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -1934,7 +1934,7 @@ Proof
 QED
 
 Theorem asm_frame_call_effects_restore:
-  asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  asm_frame_rel gas_tail prog data es0 a s /\ a.as_pc < LENGTH prog /\
   asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
     asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
@@ -1962,20 +1962,20 @@ Theorem asm_frame_call_effects_restore:
   asm_consume_call_outcome (request_of s) ro rs
     (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
     (a with as_memory := mem) = AsmOK a1 ==>
-  asm_frame_rel prog data es0 a1 t
+  asm_frame_rel gas_tail prog data es0 a1 t
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_frame_rel_rtc_trans >> disch_tac >>
   qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
   simp[asm_consume_call_outcome_eq] >> strip_tac >>
-  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
+  qpat_x_assum `asm_frame_rel gas_tail prog data es0 a s` mp_tac >>
   rewrite_tac[asm_frame_rel_def] >> strip_tac >>
   gvs[] >> simp[asm_frame_rel_def, asm_next_def] >>
   gvs[asm_evm_rel_def, asm_next_def]
 QED
 
 Theorem asm_frame_call_effects_step_ok:
-  asm_frame_rel prog data es0 a s /\ a.as_pc < LENGTH prog /\
+  asm_frame_rel gas_tail prog data es0 a s /\ a.as_pc < LENGTH prog /\
   asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
     asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
@@ -2006,7 +2006,7 @@ Theorem asm_frame_call_effects_step_ok:
     asm_consume_call_outcome (request_of s) ro rs
       (DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack)
       (a with as_memory := mem) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `?a1. asm_consume_call_outcome (request_of s) ro rs
@@ -2337,7 +2337,7 @@ Proof
 QED
 
 Theorem asm_frame_call_same_depth_transport:
-  asm_frame_rel prog data es0 a s /\ s.contexts = (c,rb)::rest /\
+  asm_frame_rel gas_tail prog data es0 a s /\ s.contexts = (c,rb)::rest /\
   step s = (INL (),t) /\ LENGTH t.contexts = LENGTH s.contexts /\
   observable_call c ==>
   let observed = outcome_of (request_of s).cr_kind t
@@ -2366,7 +2366,7 @@ Proof
 QED
 
 Theorem asm_frame_call_same_depth_effects_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
@@ -2390,7 +2390,7 @@ Theorem asm_frame_call_same_depth_effects_step_ok:
     (t.rollback.accounts,t.rollback.tStorage,ct.logs) /\
   adopt_outcome_deletions (request_of s) out a.as_pending_deletions =
     t.rollback.toDelete ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `wf_state s` by fs[asm_frame_rel_def] >>
@@ -2533,7 +2533,7 @@ QED
 Finalise asm_message_prepared_terminal_exception_view
 
 Theorem asm_frame_call_terminal_exception:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -2543,7 +2543,7 @@ Theorem asm_frame_call_terminal_exception:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR (SOME exc),v) /\ exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -2781,7 +2781,7 @@ Proof
 QED
 
 Theorem asm_frame_call_terminal_none:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -2791,7 +2791,7 @@ Theorem asm_frame_call_terminal_none:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR NONE,v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -2829,7 +2829,7 @@ Proof
 QED
 
 Theorem asm_frame_call_terminal_some:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -2839,7 +2839,7 @@ Theorem asm_frame_call_terminal_some:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR (SOME exc),v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
@@ -2853,7 +2853,7 @@ Proof
 QED
 
 Theorem asm_frame_call_terminal:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -2863,7 +2863,7 @@ Theorem asm_frame_call_terminal:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR result,v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   Cases_on `result`
@@ -6480,7 +6480,7 @@ Proof
 QED
 
 Theorem asm_frame_call_enter_transport:
-  asm_frame_rel prog data es0 a s /\ s.contexts = (c,rb)::rest /\
+  asm_frame_rel gas_tail prog data es0 a s /\ s.contexts = (c,rb)::rest /\
   step s = (INL (),u) /\ LENGTH u.contexts = SUC (LENGTH s.contexts) /\
   observable_call c /\ run_call u = SOME (INL (),t) /\
   LENGTH t.contexts = LENGTH s.contexts ==>
@@ -6927,7 +6927,7 @@ Proof
 QED
 
 Theorem asm_frame_call_enter_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
   s.contexts = (c,rb)::rest /\
@@ -6938,7 +6938,7 @@ Theorem asm_frame_call_enter_step_ok:
   asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INL (),v) /\ step s = (INL (),v) /\ observable_call c /\
   run_call v = SOME (INL (),t) /\ LENGTH t.contexts = LENGTH s.contexts ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -7032,10 +7032,10 @@ QED
 Finalise asm_frame_call_enter_step_ok
 
 Theorem asm_frame_call_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\
   (EL as.as_pc prog = AsmOp "CALL" \/ EL as.as_pc prog = AsmOp "STATICCALL") ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by
