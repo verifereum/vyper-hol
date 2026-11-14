@@ -169,7 +169,7 @@ Proof
   `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s
           (DRESTRICT G (COMPL {x})) ghost` by
     (gen_tac >> qunabbrev_tac `ghost` >>
-     irule prefix_decoder_noclamp_inst_seq_ptr >> metis_tac[]) >>
+     metis_tac[prefix_decoder_noclamp_inst_seq_ptr]) >>
   qexistsl [`DRESTRICT G (COMPL {x})`,`ghost`] >>
   `w2n (n2w d:bytes32) = d` by simp[w2n_n2w] >>
   `LENGTH st'.cs_current_insts = s.vs_inst_idx + 2` by

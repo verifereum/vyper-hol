@@ -453,8 +453,7 @@ Proof
         rpt (pop_assum kall_tac) >>
         simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
         gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
-     irule emitted_origin_ptr_path >> qexists_tac `st` >>
-     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+     irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,`B`] >>
   simp[Excl "enc_def"]
 QED
@@ -562,8 +561,7 @@ Proof
           (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) _` mp_tac >>
            rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
-        rpt gen_tac >> irule emitted_origin_ptr_path >> qexists_tac `st` >>
-        rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+        rpt gen_tac >> irule emitted_origin_ptr_path >> metis_tac[]) >>
      drule_all ctor_checked_emitted_endpoint >>
      disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
   `fn_has_code middle end_st func` by

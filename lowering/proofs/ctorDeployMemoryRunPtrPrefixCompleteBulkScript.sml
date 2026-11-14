@@ -261,8 +261,7 @@ Resume prefix_bulk_complete_mode_contract[finish]:
         rpt (pop_assum kall_tac) >>
         simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
         gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
-     irule emitted_origin_ptr_path >> qexists_tac `st` >>
-     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+     irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,32+LENGTH vs * type_memory_size tv)]`] >>
   simp[SUBSET_REFL, op_taint_def, Excl "enc_def"] >>
