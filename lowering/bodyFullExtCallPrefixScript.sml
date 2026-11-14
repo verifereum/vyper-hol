@@ -253,3 +253,73 @@ Proof
        lookup_var_def, update_var_def, read_memory_def] >>
   metis_tac[]
 QED
+
+Theorem extcall_fresh_scalar_observations:
+  ~not_fresh_at sp out /\ sa.cs_next_var <= sp.cs_next_var ==>
+  (!x. not_fresh_at sp x ==>
+    lookup_var x (update_var out w s with vs_inst_idx := idx) = lookup_var x s /\
+    FLOOKUP (G \\ out) x = FLOOKUP G x /\
+    op_taint (tn with t_var := tn.t_var |+ (out,{})) (Var x) = op_taint tn (Var x)) /\
+  (!op. safe_operand sp op ==>
+    eval_operand op (update_var out w s with vs_inst_idx := idx) = eval_operand op s /\
+    op_taint (tn with t_var := tn.t_var |+ (out,{})) op = op_taint tn op /\
+    (!x. op = Var x ==> FLOOKUP (G \\ out) x = FLOOKUP G x)) /\
+  (ghost_kept_at lo cenv es sa G0 tn0 s0 G tn ==>
+    ghost_kept_at lo cenv es sa G0 tn0 s0 (G \\ out)
+      (tn with t_var := tn.t_var |+ (out,{}))) /\
+  (!cx ty v op. safe_operand sp op /\ ptr_mem_ok cx ty v op G tn s ==>
+    ptr_mem_ok cx ty v op (G \\ out) (tn with t_var := tn.t_var |+ (out,{}))
+      (update_var out w s with vs_inst_idx := idx))
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sp x ==> x <> out` by metis_tac[] >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  conj_tac >- (rpt strip_tac >>
+    simp[update_var_def, lookup_var_def, op_taint_def, FLOOKUP_UPDATE,
+         fmap_domsub, FLOOKUP_DRESTRICT]) >>
+  conj_tac >- (Cases >> simp[safe_operand_def, eval_operand_def, update_var_def,
+    lookup_var_def, op_taint_def, FLOOKUP_UPDATE, fmap_domsub, FLOOKUP_DRESTRICT] >>
+    metis_tac[]) >>
+  conj_tac >- (simp[bodyPtrDefsTheory.ghost_kept_at_def] >> rpt strip_tac >>
+    fs[op_taint_def, FLOOKUP_UPDATE, fmap_domsub, FLOOKUP_DRESTRICT] >>
+    metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> Cases_on `op` >>
+  fs[safe_operand_def, bodyPtrDefsTheory.ptr_mem_ok_def,
+     eval_operand_def, update_var_def, lookup_var_def, fmap_domsub, FLOOKUP_DRESTRICT] >>
+  `s' <> out` by metis_tac[] >> fs[FLOOKUP_UPDATE]
+QED
+
+Theorem extcall_check_alloca_history:
+  compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
+  alloca_history func s /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  alloca_history func (update_var out w s with vs_inst_idx := LENGTH b.cs_current_insts)
+Proof
+  strip_tac >>
+  `b.cs_current_bb = a.cs_current_bb /\
+   LENGTH b.cs_current_insts = LENGTH a.cs_current_insts + 2 /\
+   emitted_insts a b =
+     [mk_inst a.cs_next_id EXTCODESIZE [addr]
+        [STRING #"%" (toString a.cs_next_var)];
+      mk_inst (a.cs_next_id + 1) ASSERT
+        [Var (STRING #"%" (toString a.cs_next_var))] []]` by
+    (qpat_x_assum `compile_extcodesize_check _ _ = _` mp_tac >>
+     simp[exprLoweringTheory.compile_extcodesize_check_def, emit_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, exprLoweringPropsTheory.DROP_PREFIX,
+       GSYM listTheory.APPEND_ASSOC, mk_inst_def, arithmeticTheory.ADD1]) >>
+  `b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b` by
+    gvs[exprLoweringTheory.compile_extcodesize_check_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+      fresh_id_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  fs[allocaHistoryTheory.alloca_history_def, update_var_def] >> rpt strip_tac >>
+  Cases_on `k < LENGTH a.cs_current_insts` >- metis_tac[] >>
+  `k = LENGTH a.cs_current_insts \/ k = LENGTH a.cs_current_insts + 1` by decide_tac >>
+  gvs[] >>
+  qpat_x_assum `!i. i < 2 ==> _`
+    (fn th => mp_tac (Q.SPEC `0` th) >> mp_tac (Q.SPEC `1` th)) >>
+  simp[] >> rpt strip_tac >> gvs[mk_inst_def]
+QED
