@@ -35,7 +35,7 @@
 
 Theory stmtSimAugAssignAttrStorage
 Ancestors
-  augAssignStorageFieldSource
+  augAssignStorageFieldSource stmtSimAssignStorageFacts
   exprBopSimDefs
   exprSimFieldLayout
   exprSimSource
@@ -167,7 +167,8 @@ Proof
        q.vs_memory = s.vs_memory /\ q.vs_allocas = s.vs_allocas /\
        (!x u. not_fresh_at sa x /\ lookup_var x s = SOME u ==>
               lookup_var x q = SOME u)` by
-    (irule attr_add_marked_path >> qexists_tac `Lit slot` >>
+    (irule attr_add_marked_path >> simp[PULL_EXISTS] >>
+     qexists_tac `Lit slot` >>
      simp[eval_operand_def]) >>
   pop_assum strip_assume_tac >>
   `stmt_state_rel H0 ctx func cenv cx es q` by
@@ -313,7 +314,7 @@ Proof
      irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ee`, `n2w slot + n2w off`, `ftv`, `w`] >> simp[] >>
+     qexistsl [`ee`, `w`, `n2w slot + n2w off`, `ftv`] >> simp[] >>
      decide_tac) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
@@ -323,9 +324,9 @@ QED
 (* ===== The statement ===== *)
 
 (* x.f's place, value and type are read for a storage or transient struct
-   x where expr_sim_inv holds: the read decodes x's whole value.  Looking x
-   up records the root it observes, so the reads are at the state after
-   the place. *)
+   x, at some state: with every storage slot zero, the read decodes x's
+   whole value.  Callers use it only to discharge guards that quantify the
+   states of the place, read and type independently. *)
 Theorem augassign_attr_storage_place:
   !cx cenv env es src id fld ts tr sid id_str slot fty fsz.
     expr_sim_inv cenv cx env es /\
@@ -336,25 +337,43 @@ Theorem augassign_attr_storage_place:
     IS_SOME (evaluate_type (get_tenv cx) (StructT sid)) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) ==>
-    ?p es1 cur ptv.
+    ?s p s1 cur s2 ptv s3.
       eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-        es = (INL p, es1) /\
-      read_place cx p es1 = (INL cur, es1) /\
-      place_type_value cx p es1 = (INL ptv, es1)
+        s = (INL p, s1) /\
+      read_place cx p s = (INL cur, s2) /\
+      place_type_value cx p s = (INL ptv, s3)
 Proof
   rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all struct_field_type >> strip_tac >>
   drule vyperPlaceResultTypingTheory.struct_field_slot_exists >>
   strip_tac >>
-  `?v0. read_storage_slot cx tr (n2w slot) (StructTV fs) es = (INL v0, es)` by
-    (irule toplevel_storage_read_decodes >> gvs[expr_sim_inv_def] >>
-     metis_tac[]) >>
+  qabbrev_tac `s0 = es with <|
+    accounts := (\a. es.accounts a with storage := vfmState$empty_storage);
+    tStorage := K vfmState$empty_storage |>` >>
+  `?v0. read_storage_slot cx tr (n2w slot) (StructTV fs) s0 = (INL v0, s0)` by
+    (`?storage. get_storage_backend cx tr s0 = (INL storage, s0) /\
+                !n. read_slot storage n = 0w` by
+       (Cases_on `tr` >>
+        simp[Abbr `s0`, get_storage_backend_def, bind_def, return_def,
+             get_transient_storage_def, get_accounts_def,
+             vfmExecutionTheory.lookup_transient_storage_def,
+             vfmStateTheory.lookup_account_def,
+             vyperStorageTheory.read_slot_def,
+             vfmStateTheory.lookup_storage_def,
+             vfmStateTheory.empty_storage_def]) >>
+     qpat_assum `evaluate_type _ (StructT _) = _`
+       (assume_tac o
+        MATCH_MP vyperTypeValuesTheory.evaluate_type_well_formed_type_value) >>
+     `slots_in_range storage (w2n (n2w slot : bytes32)) (StructTV fs)` by
+       (irule (cj 1 vyperLookupStorageTheory.slots_in_range_zero_reads) >>
+        simp[]) >>
+     drule_all vyperLookupStorageTheory.decode_value_from_slots_in_range >>
+     strip_tac >>
+     gvs[read_storage_slot_def, bind_def, lift_option_def, return_def]) >>
   drule_all read_storage_slot_field >> strip_tac >>
   drule_all eval_target_place_attr_toplevel_field >> strip_tac >>
-  drule read_storage_slot_storage_trace >>
-  disch_then (qspec_then `es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]`
-    assume_tac) >>
+  qexists_tac `s0` >>
   simp[read_place_def, place_type_value_def, return_def]
 QED
 
@@ -609,7 +628,7 @@ Resume compile_augassign_attr_storage_case[rhs_normal]:
             with gas_obs := []) s1 s2 t (es_end with gas_obs := []) v rhs t'` by
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
-                     expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >>
+                     expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
      simp[]) >>
   `expr_res_ok (bop_result cx ty bop [ty;expr_type e] fv v
      (es_end with gas_obs := []))` by
@@ -670,6 +689,10 @@ Resume compile_augassign_attr_storage_case[store]:
        ftv bop fv v` >> gvs[]) >>
   qpat_x_assum `INL result = _` kall_tac >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
+  `expr_body_pre cenv cx env e
+     (es with storage_trace :=
+        es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])` by
+    simp[] >>
   drule_all augassign_attr_binop_ready >>
   disch_then (qspecl_then [`func`, `es_end with gas_obs := []`, `ctx`]
     strip_assume_tac) >>
@@ -744,7 +767,9 @@ Resume compile_augassign_attr_storage_case[store]:
     (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
        augassign_attr_pre_store_frame >>
      disch_then irule >> simp[] >> metis_tac[]) >>
-  `alloca_frame cenv es sa s0 cenv es_end u` by fs[alloca_frame_def] >>
+  `alloca_frame cenv es sa s0 cenv es_end u` by
+    (qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+     simp[alloca_frame_def]) >>
   qspecl_then [`H2`, `ctx`, `func`, `cx`, `lctx`, `cenv`, `tr`, `dst`,
     `res_op`, `s3`, `sb`, `u`, `es_end with gas_obs := []`, `slot`, `fs`,
     `fld`, `off`, `ftv`, `result`, `sa`, `s0`, `es`]
