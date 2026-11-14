@@ -723,7 +723,7 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
      qpat_x_assum `expr_type obj = ArrayT et bd` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[vyperTypeSystemTheory.well_typed_expr_def, vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def,
          vyperTypeSystemTheory.subscript_vtype_def] >>

@@ -295,7 +295,7 @@ Resume live_memory_value_array_suffix_summary[represented]:
     (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
      simp[expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      strip_tac >> Cases_on `vt` >> gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >>
      gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
   `type_memory_bytes cenv et = type_memory_size etv` by

@@ -150,7 +150,7 @@ Proof
   Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def] >>
   `mem_word_at (off+k) s.vs_memory = n2w (LENGTH l)` by
     (`val_in_memory itv iv off s.vs_memory` by
-       (gvs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
+       (gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
         first_x_assum drule_all >> simp[]) >>
      `value_has_type itv iv /\ well_formed_type_value itv` by
        (irule imm_place_at_value_type >> goal_assum (drule_at Any) >>
