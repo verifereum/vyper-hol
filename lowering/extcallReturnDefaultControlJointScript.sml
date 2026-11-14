@@ -6,6 +6,7 @@ Ancestors
   venomExecSemantics ptrDiscipline compileEnv ptrSafeRun contextCodegenRel codegenRel
   exprLoweringProps list fragGasSeqPtr fragExecMem bodyPtrDefs
   bodyFullGhostFrame extcallReturnDefaultResources loweringStateRelDefs
+  bodyPtrEnvBuiltinsAllocation allocationPtr
 
 Theorem return_default_join_joint:
   emit_inst JMP [Label lbl] [] a = ((),b) /\ fn_has_code a b func /\
@@ -230,3 +231,235 @@ Resume return_default_shell_joint_frame[ghost]:
   gvs[jump_to_def, update_var_def, lookup_var_def]
 QED
 Finalise return_default_shell_joint_frame
+
+(* Certify the selected allocation run, without selecting a second endpoint. *)
+Theorem return_default_alloc_joint:
+  compile_alloc_buffer n a = (buf,b) /\ fn_has_code a b func /\
+  run_inst_seq (emitted_insts a b) s = OK r /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (r with vs_inst_idx := LENGTH b.cs_current_insts),
+     step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString a.cs_next_var)]) r,
+     step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString a.cs_next_var)]) s r tn)
+Proof
+  strip_tac >> gen_tac >>
+  `b.cs_current_bb = a.cs_current_bb /\
+   b.cs_current_insts = a.cs_current_insts ++
+     [mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString a.cs_next_var)]] /\
+   emitted_insts a b = [mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString a.cs_next_var)]]` by
+    (gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+      emit_def, emitted_insts_def] >> simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
+  qexistsl_tac [`emitted_insts a b`, `a`] >> simp[is_terminator_def] >>
+  conj_tac >- suspend "mem" >>
+  gvs[run_inst_seq_def, AllCaseEqs()] >>
+  simp[inst_seq_ptr_def] >>
+  irule ptrSafetyTransportTheory.ptr_inst_ok_lower_bound_transport >> simp[] >>
+  qexists_tac `0` >> simp[ptr_inst_ok_alloca]
+QED
+Resume return_default_alloc_joint[mem]:
+  simp[run_inst_seq_mem_ok_def,
+    unitTransformDefsTheory.inst_mem_below_frontier_def,
+    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  CASE_TAC >> simp[]
+QED
+Finalise return_default_alloc_joint
+
+Theorem return_default_alloc_ghost_inv_at:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
+  ghost_inv_at D lo d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ ~not_fresh_at sa out /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ghost_inv_at D lo d cenv cx es
+    (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
+    (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn) u
+Proof
+  strip_tac >> drule_all alloca_step_frame_effects >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+  conj_tac >- suspend "locals" >>
+  conj_tac >- suspend "return" >>
+  conj_tac >- (rpt strip_tac >> `x <> out` by metis_tac[] >> metis_tac[]) >>
+  suspend "fixed"
+QED
+Resume return_default_alloc_ghost_inv_at[locals]:
+  rpt gen_tac >> strip_tac >>
+  `p <> out` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `ptr_covers G tn p s sz /\
+   !w mem. lookup_var p s = SOME w /\ mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory entry.type entry.value (w2n w) mem` by metis_tac[] >>
+  conj_tac >- (drule_all alloca_step_old_ptr_covers >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `lookup_var p s = SOME w` by metis_tac[] >>
+  irule alloca_step_local_robust >> simp[] >> metis_tac[]
+QED
+Resume return_default_alloc_ghost_inv_at[return]:
+  Cases_on `d` >- simp[return_buf_ptr_def] >>
+  PairCases_on `x` >> fs[return_buf_ptr_def] >>
+  `x <> out` by metis_tac[] >>
+  `ptr_covers (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
+    (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn) x u x1` by
+    (drule_all alloca_step_old_ptr_covers >> simp[]) >>
+  metis_tac[]
+QED
+Resume return_default_alloc_ghost_inv_at[fixed]:
+  conj_tac >- suspend "storage" >>
+  conj_tac >- (rpt strip_tac >> simp[] >> first_x_assum irule >>
+    simp[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  conj_tac >- (rpt strip_tac >> `x <> out` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >> metis_tac[]) >>
+  irule ptrSafetyTransportTheory.step_inst_allocas_from >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`ctx`, `0`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`] >>
+  simp[step_inst_non_invoke, mk_inst_def]
+QED
+Resume return_default_alloc_ghost_inv_at[storage]:
+  `u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
+   u.vs_transient = s.vs_transient /\ u.vs_immutables = s.vs_immutables` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[update_var_def]) >>
+  gvs[stor_taint_ok_at_def, step_taint_def, store_taint_def, imm_taint_def,
+    adopt_reset_def, mk_inst_def]
+QED
+Finalise return_default_alloc_ghost_inv_at
+
+Theorem return_default_alloc_ghost_kept_at:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  n < dimword (:256) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
+  ~not_fresh_at sa out /\ lo <= s.vs_alloca_next ==>
+  ghost_kept_at lo cenv es sa G tn s
+    (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
+    (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn)
+Proof
+  strip_tac >> drule_all alloca_step_ghost_kept >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] mp_tac) >>
+  rewrite_tac[ghost_kept_def, ghost_kept_at_def] >> strip_tac >>
+  conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!aid off sz i. FLOOKUP _ aid = SOME (off,sz) /\ _ ==> _` irule >>
+    simp[] >> qexistsl_tac [`aid`, `off`, `sz`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!n b sz i. _` irule >>
+    simp[] >> metis_tac[]) >>
+  drule_all alloca_step_frame_effects >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  rpt strip_tac >> `i < s.vs_alloca_next` by decide_tac >> metis_tac[]
+QED
+
+Theorem return_default_alloc_run_step:
+  compile_alloc_buffer n a = (buf,b) /\
+  run_inst_seq (emitted_insts a b) s = OK r ==>
+  step_inst_base (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString a.cs_next_var)]) s = OK r /\
+  b.cs_current_bb = a.cs_current_bb /\
+  buf.buf_operand = Var (STRING #"%" (toString a.cs_next_var)) /\
+  a.cs_next_var <= b.cs_next_var
+Proof
+  gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+    emit_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+    run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  gvs[rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def, AllCaseEqs()]
+QED
+
+Theorem return_default_alloc_control:
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK r /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next ==>
+  r.vs_halted = s.vs_halted /\ r.vs_current_bb = s.vs_current_bb /\
+  r.vs_returndata = s.vs_returndata /\
+  allocas_from lo r /\ lo <= r.vs_alloca_next
+Proof
+  strip_tac >>
+  `allocas_from lo r /\ lo <= r.vs_alloca_next` by
+    (irule ptrSafetyTransportTheory.step_inst_allocas_from >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`ctx`, `0`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`] >>
+     simp[step_inst_non_invoke, mk_inst_def]) >>
+  simp[] >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[update_var_def]
+QED
+
+Theorem return_default_prefix_joint:
+  compile_alloc_buffer n a = (buf,b) /\
+  run_inst_seq (emitted_insts a b) s = OK r /\
+  emit_op RETURNDATASIZE [] b = (rds,b1) /\
+  emit_op ISZERO [rds] b1 = (test,b2) /\
+  fresh_label "extcall_default" b2 = (dl,b3) /\
+  fresh_label "extcall_decode" b3 = (cl,b4) /\
+  fresh_label "extcall_exit" b4 = (xl,b5) /\
+  emit_inst JNZ [test;Label dl;Label cl] [] b5 = ((),b6) /\
+  fn_has_code a b func /\ fn_has_code b b2 func /\ fn_has_code b5 b6 func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  ?u Gf tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tm)) /\
+    Gf = DRESTRICT (DRESTRICT
+      (step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) r)
+      (COMPL {STRING #"%" (toString b.cs_next_var)}))
+      (COMPL {STRING #"%" (toString b1.cs_next_var)}) /\
+    tm = (step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString a.cs_next_var)]) s r tn) with t_var :=
+      (((step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) s r tn).t_var |+
+        (STRING #"%" (toString b.cs_next_var),{})) |+
+        (STRING #"%" (toString b1.cs_next_var),{})) /\
+    u = jump_to (if s.vs_returndata = [] then dl else cl)
+      ((update_var (STRING #"%" (toString b1.cs_next_var))
+        (if s.vs_returndata = [] then 1w else 0w)
+        (update_var (STRING #"%" (toString b.cs_next_var))
+          (n2w (LENGTH s.vs_returndata))
+          (r with vs_inst_idx := LENGTH b.cs_current_insts)))
+        with vs_inst_idx := LENGTH b2.cs_current_insts)
+Proof
+  strip_tac >> drule_all return_default_alloc_run_step >> strip_tac >>
+  drule_all return_default_alloc_control >> strip_tac >>
+  qabbrev_tac `ar = r with vs_inst_idx := LENGTH b.cs_current_insts` >>
+  qabbrev_tac `AG = step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString a.cs_next_var)]) r` >>
+  qabbrev_tac `atn = step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString a.cs_next_var)]) s r tn` >>
+  `~ar.vs_halted /\ allocas_from lo ar /\
+   ar.vs_current_bb = b.cs_current_bb /\
+   ar.vs_inst_idx = LENGTH b.cs_current_insts /\
+   LENGTH ar.vs_returndata < dimword (:256)` by
+    simp[Abbr `ar`, allocas_from_def] >>
+  drule_all return_default_shell_joint >>
+  disch_then (qspecl_then [`atn`, `explicit`, `PG`, `AG`] strip_assume_tac) >>
+  qexistsl_tac [`u`, `H`, `tm`] >>
+  conj_tac >- suspend "path" >>
+  gvs[Abbr `AG`, Abbr `atn`, Abbr `ar`]
+QED
+Resume return_default_prefix_joint[path]:
+  gen_tac >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK ar,AG,atn)` by
+    (simp[Abbr `ar`, Abbr `AG`, Abbr `atn`] >>
+     irule return_default_alloc_joint >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _`
+    (qspec_then `D` assume_tac) >>
+  qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+    (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  simp[] >> disch_then irule >> gvs[]
+QED
+Finalise return_default_prefix_joint
