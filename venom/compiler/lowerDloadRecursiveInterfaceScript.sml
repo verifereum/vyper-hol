@@ -6387,7 +6387,7 @@ val ld_pop_witness_first_static_goal =
        list_mk_forall(heads,mk_imp(rest,res))) end;
 
 Theorem ld_pop_witness_first_static[local]:
-  ^ld_pop_witness_first_goal
+  ^ld_pop_witness_first_static_goal
 Proof
   disch_tac >> rpt gen_tac >> disch_tac >>
   mp_tac ld_recursive_paired_return_pop_static >>
@@ -6408,7 +6408,7 @@ val ld_restore_witness_first_static_goal =
        list_mk_forall(params,mk_imp(rest,res)))) end;
 
 Theorem ld_restore_witness_first_static[local]:
-  ^ld_restore_witness_first_goal
+  ^ld_restore_witness_first_static_goal
 Proof
   disch_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
   mp_tac (SPEC_ALL ld_recursive_return_restore_static) >>

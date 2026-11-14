@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem ld_runner_exec_clause_static:
-  ^ldExecClause
+  ^ldExecClauseStatic
 Proof
   qabbrev_tac `RR = ^ldPacket` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>

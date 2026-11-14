@@ -58,7 +58,7 @@ val ldRequestConclusionStatic = snd (dest_imp
   (concl ld_request_runner_induction_static));
 
 Theorem ld_request_runner_simulation_static:
-  ^ldRequestConclusion
+  ^ldRequestConclusionStatic
 Proof
   MATCH_MP_TAC ld_request_runner_induction_static >>
   conj_tac >- MATCH_ACCEPT_TAC ld_request_runner_step_clause_static >>

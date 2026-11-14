@@ -77,7 +77,7 @@ val ldRequestStaticSubst = [``o1_run_state_ok vs`` |->
 val ldRequestIndStatic = Term.subst ldRequestStaticSubst ldRequestInd;
 
 Theorem ld_request_runner_induction_static:
-  ^ldRequestInd
+  ^ldRequestIndStatic
 Proof
   MATCH_ACCEPT_TAC run_defs_ind
 QED

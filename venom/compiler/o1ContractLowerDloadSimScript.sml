@@ -126,7 +126,7 @@ val ldPacket = fst (strip_comb (fst (dest_imp
   (concl ld_runner_packet_terminates))));
 
 Theorem ld_runner_step_clause_static:
-  ^ldStepClause
+  ^ldStepClauseStatic
 Proof
   qabbrev_tac `RR = ^ldPacket` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
@@ -355,7 +355,7 @@ val ldMutualResult = snd (dest_imp (concl ld_runner_conditional_induction));
 val ldMutualResultStatic = snd (dest_imp (concl ld_runner_conditional_induction_static));
 
 Theorem ld_runner_simulation_static:
-  ^ldMutualResult
+  ^ldMutualResultStatic
 Proof
   mp_tac ld_runner_conditional_induction_static >>
   (impl_tac >- (conj_tac
