@@ -47,7 +47,7 @@ Proof
   `type_memory_size entry.type = 32` by fs[store_lays_out_def] >>
   `w2n dw + 32 <= s.vs_alloca_next` by
     (irule (tuple_local_destination_room |> cj 3) >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `entry`, `es`, `func`, `id`, `p`, `sz`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `entry`, `es`, `func`, `id`, `p`, `sz`] >>
      simp[]) >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   drule_all stmt_state_rel_write_local_store >> strip_tac >>
