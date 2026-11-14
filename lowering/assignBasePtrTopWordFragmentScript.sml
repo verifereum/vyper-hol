@@ -77,6 +77,9 @@ Resume compile_assign_storage_stmt_frag_ptr[normal]:
   drule_all storage_dead_update_word_region >> strip_tac >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt v (es_end with gas_obs := [])` >>
   rename1 `_ = (res,ee)` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `compile_store_at_loc cenv.ce_imm_alloca (Lit (n2w slot)) op
     (SOME (if tr then LocTransient else LocStorage)) sb' = ((),sb)` by

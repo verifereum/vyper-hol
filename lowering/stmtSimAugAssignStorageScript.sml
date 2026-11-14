@@ -394,6 +394,7 @@ Theorem augassign_storage_store_post_path:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   stmt_state_rel ctx func cenv cx ee s /\
+  ~cx.txn.is_static /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -419,7 +420,7 @@ Proof
     metis_tac[encode_value_word_typed] >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt w ee` >>
   `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   rename1 `_ = (res, fin)` >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   drule_all assign_storage_store_path >> strip_tac >>
@@ -708,6 +709,26 @@ Resume compile_augassign_toplevel_case[operator_normal]:
     metis_tac[word_type_slot_size] >>
   `eval_operand res_op s = SOME (typed_val_to_w256 tvt result)` by
     simp[typed_val_to_w256_word_value] >>
+  Cases_on `cx.txn.is_static`
+  >- (`s.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `eval_operand (Lit (n2w slot)) s = SOME (n2w slot)` by
+        simp[eval_operand_def] >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      `gas_marked_path F ctx func u 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `ee with gas_obs := []`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+      conj_tac
+      >- (irule augassign_toplevel_rhs_normal_exec >>
+          qexistsl_tac [`ee`, `id_str`, `slot`, `t`, `tr`, `ts`, `tvt`, `ty`,
+                        `u`, `v`, `v0`] >> simp[] >>
+          irule augassign_storage_continuation_exec >>
+          simp[lift_sum_def, bind_def, return_def, write_storage_slot_eq]) >>
+      disj2_tac >> simp[stmt_exit_def, expr_exit_def, exit_result_def]) >>
   `alloca_frame cenv (ee with gas_obs := []) s3 s cenv (ee with gas_obs := []) s` by
     (irule alloca_frame_same >> simp[]) >>
   `?fin last. write_storage_slot cx tr (n2w slot) tvt result
