@@ -30,7 +30,8 @@ Proof
   `s.vs_requests <<= sx.vs_requests` by metis_tac[ev_step_requests_prefix] >>
   drule_all ev_suffix_second_abort >> strip_tac >>
   `?v. ev_step orc p d fuel C y s = Abort a v` by
-    metis_tac[ev_pair_abort_iff, ev_step_nonterminator_abort_idx_iff] >>
+    (drule_all ev_pair_abort_iff >>
+     metis_tac[ev_step_nonterminator_abort_idx_iff]) >>
   `u.vs_requests = s.vs_requests` by
     (gvs[ev_suffix_def] >> metis_tac[ev_step_abort_requests]) >>
   metis_tac[isPREFIX_imp_request_prefix_rel]
