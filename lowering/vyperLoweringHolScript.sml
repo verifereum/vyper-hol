@@ -11,7 +11,7 @@ Ancestors
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
   fragGasOrigin fragGasOriginFocusEvents fragGasOriginPtrSafeUpto
-  gasMaskProjection memInvZeroPad
+  gasMaskProjection memInvZeroPad deployGasLinkBootstrap
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites

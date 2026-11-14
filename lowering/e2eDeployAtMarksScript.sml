@@ -54,7 +54,7 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
-Theorem deploy_selected_memory[local]:
+Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
@@ -102,7 +102,7 @@ QED
 
 (* The entry state's own facts: its callee outcomes, its code layout, and the
    compiled entry state's initial context relation. *)
-Theorem deploy_entry_facts[local]:
+Theorem deploy_entry_facts:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
