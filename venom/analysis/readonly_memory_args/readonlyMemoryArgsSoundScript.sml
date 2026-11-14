@@ -28,11 +28,10 @@ Theorem rma_fixpoint_fold_unchanged:
     FOLDL (\(changed, st) fn.
       case (FLOOKUP infos fn.fn_name, FLOOKUP dfgs fn.fn_name) of
         (SOME info, SOME dfg) =>
-          let new_state = rma_analyze_fn functions st dfg info fn in
-          let old_state = case FLOOKUP st fn.fn_name of
-                            NONE => [] | SOME s => s in
-          if new_state = old_state then (changed, st)
-          else (T, st |+ (fn.fn_name, new_state))
+          if rma_analyze_fn functions st dfg info fn =
+             (case FLOOKUP st fn.fn_name of NONE => [] | SOME s => s)
+          then (changed, st)
+          else (T, st |+ (fn.fn_name, rma_analyze_fn functions st dfg info fn))
       | _ => (changed, st)) (changed, st) fns = (F, st') ==>
     ~changed /\ st' = st /\
     !fn info dfg. MEM fn fns /\
@@ -60,7 +59,8 @@ Theorem rma_fixpoint_step_unchanged:
       rma_analyze_fn functions st dfg info fn =
         (case FLOOKUP st fn.fn_name of NONE => [] | SOME s => s)
 Proof
-  rpt gen_tac >> rewrite_tac[rma_fixpoint_step_def] >> strip_tac >>
+  rpt gen_tac >> rewrite_tac[rma_fixpoint_step_def, LET_THM] >> BETA_TAC >>
+  strip_tac >>
   drule rma_fixpoint_fold_unchanged >> simp[]
 QED
 

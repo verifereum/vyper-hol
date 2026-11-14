@@ -551,6 +551,16 @@ Proof
       simp[Once ptr_safe_block_def, get_instruction_def] >>
       computeLib.RESTR_EVAL_TAC [``ptr_inst_ok``, ``ptr_safe_block``, ``ptr_safe_blocks``,
         ``mload``, ``word_to_bytes``, ``read_memory``] >>
+      simp[ptr_inst_ok_def, allocas_from_def, ctx_has_dalloca_def,
+        fn_insts_def, fn_insts_blocks_def] >>
+      simp[access_ok_def, source_memory_read_ranges_def,
+        codegenRelTheory.source_memory_write_ranges_def,
+        codegenRelTheory.fixed_source_write_range_def,
+        codegenRelTheory.sized_source_write_range_def,
+        mem_read_ops_def, mem_write_ops_def] >>
+      simp[taint_ok_def, eval_operand_def, lookup_var_def,
+        FLOOKUP_UPDATE, op_prov_def, op_taint_def,
+        RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
       ricf_witness_ptr_clean >> simp[EXTENSION] >>
       qx_gen_tac `j` >> Cases_on `j < 32` >> simp[] >>
       `j + 32 < 64` by decide_tac >> simp[]) >>

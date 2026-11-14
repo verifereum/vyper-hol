@@ -334,7 +334,8 @@ Proof
   qexists_tac `new_blocks` >> simp[] >>
   `new_blocks = MAP (\bb. SND (ricf_pass_block ctx bb)) fn.fn_blocks` by
     (mp_tac (Q.ISPECL [`ricf_pass_block ctx`, `fn.fn_blocks`, `F`, `[]:basic_block list`]
-       invokeCopyFwdCommonDefsTheory.FOLDL_block_pass_SND) >> simp[]) >>
+       invokeCopyFwdCommonDefsTheory.FOLDL_block_pass_SND) >>
+     fs[pairTheory.UNCURRY]) >>
   simp[LIST_REL_MAP2] >> irule LIST_REL_refl >>
   simp[ricf_pass_block_certificate]
 QED
