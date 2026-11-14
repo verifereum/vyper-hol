@@ -3,7 +3,7 @@ Theory bodyFullConvertSignedClamp
 Ancestors
   bodyPtrSignedConvertClamp exprSimConvertFromBytes instSeqComposePtr
   bodyFullConvertScalarCertificate fragExecMem memSafeRun
-  fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragExec instIdxIndep
+  fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragExec instIdxIndep
   exprLoweringProps emitHelperProps venomState venomInst venomExecSemantics
   ptrDiscipline finite_map words arithmetic list pred_set
 
@@ -279,7 +279,9 @@ Proof
        (gen_tac >> first_x_assum (qspecl_then [`D`,`s.vs_inst_idx`] mp_tac) >>
         simp[venomStateTheory.venom_state_component_equality]) >>
      `run_inst_seq (emitted_insts sa sb) s = Abort err u` by metis_tac[] >>
-     drule_all scalar_seq_abort_origin >> simp[]) >>
+     drule_all run_inst_seq_abort_origin_ptr_uniform >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     qexists `j` >> metis_tac[]) >>
   Cases_on `r` >> gvs[exec_result_map_def]
   >- (qexistsl [`H`, `th`] >> simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
       rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
