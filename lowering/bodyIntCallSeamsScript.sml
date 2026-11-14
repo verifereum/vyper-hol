@@ -14,7 +14,7 @@ Theory bodyIntCallSeams
 Ancestors
   bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
   intCallCallee intCallFrame fragGasFocus gasOutcome gasContext
-  compileVyper exprLowering exprLoweringProps compileEnv
+  compileVyper exprLowering exprLoweringProps compileEnv immSectionDead
   vyperInterpreter vyperState vyperAST venomState venomExecSemantics
 Libs
   monadsyntax
@@ -293,7 +293,8 @@ End
    returned value v: the callee's global state, after the source releases
    the nonreentrant lock (ee'), related at the caller's compile env, its stack values v's words (rc of them), the return
    buffer rb, if any, holding v, and the caller's memory below t's
-   frontier untouched outside the call's own allocations (the return
+   frontier above the constructor's fixed immutable region untouched
+   outside the call's own allocations (the return
    buffer and the staged memory arguments, which the callee may write).
    The memory frame is a fact of the callee's Venom code (it writes below
    its entry frontier only through the pointers it is passed), not of the
@@ -309,7 +310,8 @@ Definition intcall_callee_exit_def:
       state_rel H func cenv cx (ee' with scopes := []) s' /\
       intret_vals_match rtv v ir.iret_values /\
       LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
-      (!b sz. b + sz <= t.vs_alloca_next /\
+      (!b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
+              b + sz <= t.vs_alloca_next /\
               (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
                              n <= aid /\ aid < m ==>
                              regions_disjoint b sz off asz) ==>
@@ -326,7 +328,8 @@ Theorem intcall_callee_exit_F:
       state_rel H func cenv cx (ee with scopes := []) s' /\
       intret_vals_match rtv v ir.iret_values /\
       LENGTH ir.iret_values = retc /\ ir.iret_adopt_fmp = NONE /\
-      (!b sz. b + sz <= t.vs_alloca_next /\
+      (!b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
+              b + sz <= t.vs_alloca_next /\
               (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
                              n <= aid /\ aid < m ==>
                              regions_disjoint b sz off asz) ==>
