@@ -592,3 +592,57 @@ Proof
   fs[gas_marked_path_def, window_strong_result_def, abi_encoder_window_result_def] >>
   metis_tac[]
 QED
+
+Theorem abi_encode_raw_relabel_window_pre:
+  !dst src ei st out en ctx func at av sb cap d s L ids obs.
+    compile_abi_encode_to_buf dst src ei st = (out,en) /\
+    abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
+    st.cs_blocks <> en.cs_blocks /\
+    LENGTH ids = LENGTH st.cs_current_insts /\
+    fn_has_code (start_relabel L ids st) (start_swap st L ids en) obs /\
+    fn_inst_ids_distinct obs /\ obs.fn_name = func.fn_name /\
+    (!i. MEM i (fn_insts obs) /\ i.inst_opcode <> STOP /\
+         i.inst_opcode <> NOP ==> MEM i (fn_insts func)) ==>
+    abi_encoder_window_pre (ctx with ctx_functions := [obs]) obs
+      (start_relabel L ids st) (start_swap st L ids en)
+      dst src ei at av sb cap d (s with vs_current_bb := L)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `alloca_room (ctx with ctx_functions := [obs]) obs s` by
+    (irule abi_encode_bridge_local_room >>
+     fs[abi_encoder_window_pre_def] >> metis_tac[]) >>
+  qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  rewrite_tac[abi_encoder_window_pre_def] >>
+  simp_tac (srw_ss()) [] >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (Cases_on `src` >> fs[eval_operand_def, lookup_var_def])
+  >- (Cases_on `dst` >> fs[eval_operand_def, lookup_var_def])
+  >- (simp_tac (srw_ss()) [start_relabel_def,
+        loweringStateRelDefsTheory.not_fresh_at_def] >>
+      qpat_x_assum `!x. _ ==> not_fresh_at st x` mp_tac >>
+      simp_tac (srw_ss()) [loweringStateRelDefsTheory.not_fresh_at_def])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qpat_x_assum `alloca_inv s` mp_tac >>
+      simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+        alloca_next_valid_def])
+  >- (qpat_x_assum `alloca_room _ obs s` mp_tac >>
+      simp_tac (srw_ss()) [alloca_room_def, pending_alloca_size_def])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (simp_tac (srw_ss()) [abiEncoderPropsTheory.frag_ids_def,
+        start_relabel_def, start_swap_def, LET_THM] >>
+      COND_CASES_TAC >> simp_tac (srw_ss()) [] >>
+      rpt strip_tac >>
+      `MEM inst (fn_insts func)` by
+        (first_x_assum irule >> simp[]) >>
+      qpat_x_assum `!inst b sz. _`
+        (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+      simp[abiEncoderPropsTheory.frag_ids_def])
+  >- first_assum ACCEPT_TAC
+  >- simp_tac (srw_ss()) [start_relabel_def]
+  >- simp[start_relabel_def]
+QED
