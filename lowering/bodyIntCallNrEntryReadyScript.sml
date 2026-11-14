@@ -9,7 +9,7 @@ Ancestors
   supportedProgram bodySim bodyIntCallActualEntrySemantic compileVyper
   bodyIntCallPackageBounds bodyIntCallJointInputs bodyMemoryDefs vyperContext
   bodyIntCallSeamDefs gasOutcome gasSummary gasExemptCert fragGasMode fragGasPath
-  bodyIntCallPackagePrefix compileEnv
+  bodyIntCallPackagePrefix compileEnv entrySinkExtraction
 
 Theorem internal_entry_lock_runtime_resources:
   fmp_room ctx func s /\ immutable_base_zero ce s /\
@@ -386,7 +386,8 @@ Theorem internal_entry_lock_indexed_success[local]:
     LENGTH post.cs_current_insts /\
   run_inst_seq (emitted_insts pre post) v = OK u ==>
   gas_path ctx func (v with vs_inst_idx := LENGTH pre.cs_current_insts) 0
-    (OK (u with vs_inst_idx := LENGTH post.cs_current_insts)) /\ ~u.vs_halted
+    (OK (u with vs_inst_idx := LENGTH post.cs_current_insts)) /\
+  ~u.vs_halted /\ u.vs_current_bb = v.vs_current_bb
 Proof
   strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -397,7 +398,7 @@ Proof
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts pre post)` by
     fs[listTheory.EVERY_CONJ] >>
   reverse conj_tac
-  >- (drule_all fragExecTheory.run_inst_seq_preserves_halted >> simp[]) >>
+  >- (drule_all run_inst_seq_preserves_entry_control >> simp[]) >>
   `run_inst_seq (emitted_insts pre post)
      (v with vs_inst_idx := LENGTH pre.cs_current_insts) =
      OK (u with vs_inst_idx := LENGTH pre.cs_current_insts)` by
@@ -496,6 +497,7 @@ Theorem intcall_entry_guard_outcome_nr:
   (!res ee r. expr_exit res r ==> R res ee r) /\
   (!locked u fp env env_after bindings.
     lock_if_nr cx T (is_view_mut mut) es1 = (INL (),locked) /\
+    ~u.vs_halted /\ u.vs_current_bb = body_start.cs_current_bb /\
     intcall_frame_ok fp /\
     fp.jc_tops = tops /\ fp.jc_ctx = ctx /\ fp.jc_func = callee /\
     fp.jc_cx = (cx with stk updated_by CONS (NONE,name)) /\
