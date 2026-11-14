@@ -32,9 +32,9 @@ Proof
   strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem store_copy_joint_frame_post:
+Theorem store_copy_joint_frame_post_at:
   ghost_inv_at D lo d cenv cx es G tn s /\
-  dead_lo_ok H D lo cenv cx /\ stor_taint_ok H cx tf u /\
+  stor_taint_ok_at D tf u /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
@@ -52,8 +52,7 @@ Proof
   `!p sz. not_fresh_at sa p /\ ptr_covers G tn p s sz ==>
           ptr_covers Gf tf p u sz` by
     (rw[ptr_covers_def] >> metis_tac[]) >>
-  fs[ghost_inv_at_def, stor_taint_ok_at_def, stor_taint_ok_def,
-     dead_lo_ok_def, allocas_from_def] >>
+  fs[ghost_inv_at_def, allocas_from_def] >>
   rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
@@ -63,6 +62,29 @@ Proof
       gvs[return_buf_ptr_def] >> metis_tac[])
   >- (rpt strip_tac >> gvs[local_ptrs_reserved_def] >> metis_tac[])
   >- metis_tac[]
+QED
+
+Theorem store_copy_joint_frame_post:
+  ghost_inv_at D lo d cenv cx es G tn s /\
+  dead_lo_ok H D lo cenv cx /\ stor_taint_ok H cx tf u /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==>
+       lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+       op_taint tf (Var x) = op_taint tn (Var x)) /\
+  ef.scopes = es.scopes /\ u.vs_memory = s.vs_memory /\
+  u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+  tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm ==>
+  ghost_inv_at D lo d cenv cx ef Gf tf u
+Proof
+  strip_tac >>
+  `stor_taint_ok_at D tf u` by
+    fs[stor_taint_ok_at_def, stor_taint_ok_def, dead_lo_ok_def] >>
+  irule store_copy_joint_frame_post_at >> simp[] >>
+  qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >> simp[]
 QED
 
 Theorem store_copy_path_history:

@@ -130,3 +130,40 @@ Resume store_copy_fold_stor_taint_ok[unwritten]:
   gvs[n2w_11, LESS_MOD] >> metis_tac[]
 QED
 Finalise store_copy_fold_stor_taint_ok
+
+
+Theorem store_copy_fold_stor_taint_ok_at:
+  declared_storage_region cx mid n subs = SOME (tr,(k:bytes32),tv) /\
+  MEM (tr,k,tv) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  well_formed_type_value tv /\ value_has_type tv v /\
+  encode_value tv v = SOME writes /\ 0 < type_slot_size tv /\
+  w2n k + type_slot_size tv <= dimword(:256) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v off m) /\
+  store_copy_normalize s u =
+    FOLDL (\q i. (if tr then tstore else sstore) (k+n2w i)
+      (mload (off+32*i) s) q) s ks /\
+  (if tr then tf.t_trans else tf.t_stor) =
+    FOLDL (\ta i. key_update ta (k+n2w i)
+      (mem_word_taint tn.t_mem (off+32*i)))
+      (if tr then tn.t_trans else tn.t_stor) ks /\
+  (if tr then tf.t_stor else tf.t_trans) =
+    (if tr then tn.t_stor else tn.t_trans) /\
+  tf.t_imm = tn.t_imm /\ (!i. MEM i ks <=> MEM i (MAP FST writes)) /\
+  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_call_ctx.cc_address = cx.txn.target /\
+  stor_taint_ok_at D tn s /\ dead_lo_ok H D lo cenv cx /\
+  u.vs_immutables = s.vs_immutables ==>
+  stor_taint_ok_at D tf u
+Proof
+  strip_tac >>
+  `stor_taint_ok H cx (tn with t_imm := {}) s` by
+    fs[bodyPtrDefsTheory.stor_taint_ok_def,
+       bodyPtrDefsTheory.stor_taint_ok_at_def, bodyPtrDefsTheory.dead_lo_ok_def] >>
+  `stor_taint_ok H cx (tf with t_imm := {}) u` by
+    (irule store_copy_fold_stor_taint_ok >> simp[] >>
+     qexistsl_tac [`k`,`ks`,`mid`,`n`,`off`,`s`,`subs`,
+       `tn with t_imm := {}`,`tr`,`tv`,`v`,`writes`] >> simp[]) >>
+  fs[bodyPtrDefsTheory.stor_taint_ok_def,
+     bodyPtrDefsTheory.stor_taint_ok_at_def, bodyPtrDefsTheory.dead_lo_ok_def] >>
+  metis_tac[]
+QED
