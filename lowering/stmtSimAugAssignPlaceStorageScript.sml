@@ -1337,38 +1337,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem aug_place_static_store_exit[local]:
-  emit_void (if tr then TSTORE else SSTORE) [dst;op] sa = ((),sb) /\
-  fn_has_code sa sb func /\
-  eval_operand dst s = SOME slot /\ eval_operand op s = SOME w /\
-  s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
-      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
-Proof
-  strip_tac >>
-  drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-     SOME (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qexists_tac `Abort ExHalt_abort (halt_state (set_returndata [] s))` >>
-  simp[stmt_exit_def, expr_exit_def, exit_result_def] >>
-  `gas_marked_path F ctx func s
-     (if (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] []).inst_opcode = GAS then 1 else 0)
-     (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
-    (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
-     Cases_on `tr` >>
-     simp[venomInstTheory.mk_inst_def] >>
-     simp[venomInstTheory.is_terminator_def] >>
-     simp[venomExecSemanticsTheory.step_inst_base_def,
-          venomStateTheory.eval_operands_def]) >>
-  Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def]
-QED
-
 Theorem aug_place_storage_write_static[local]:
   cx.txn.is_static ==>
   write_place cx (StoragePlace tr slot tv) v ee =
@@ -1421,8 +1389,19 @@ Theorem aug_place_storage_store_outcome[local]:
        (exit_result r /\ stmt_exit RetQ ff res r))
 Proof
   strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
-  drule_all aug_place_storage_write_outcome >> strip_tac >> gvs[] >>
+  Cases_on `cx.txn.is_static`
+  >- (gvs[aug_place_storage_write_static] >>
+      `s.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
+        (fs[expr_val_rel_def] >> metis_tac[]) >>
+      `emit_void (if tr then TSTORE else SSTORE) [dst;op] sa = ((),sb)` by
+        (Cases_on `tr` >> gvs[slot_loc_def]) >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      qexists_tac `Abort ExHalt_abort (halt_state (set_returndata [] s))` >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def]) >>
+  drule_all aug_place_storage_write_outcome >> simp[] >> strip_tac >> gvs[] >>
   drule_at (Pat `write_place _ _ _ _ = _`) place_store_word_run >>
   simp[] >> disch_then drule_all >> strip_tac >>
   qexists_tac `OK t` >> Cases_on `tr` >> gvs[slot_loc_def]
@@ -1689,7 +1668,16 @@ Resume aug_place_storage_binop_store_nofresh[normal]:
       disj1_tac >> simp[cenv_top_ext_refl]) >>
   drule_all aug_place_storage_write_outcome >> strip_tac >>
   gvs[stmt_exit_def, expr_exit_def] >>
-  fs[stmt_state_rel_def, state_rel_def]
+  rename1 `expr_exit (INR (Error (RuntimeError "write in static context"))) store_exit` >>
+  `gas_marked_path F ctx func z 0 store_exit` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+                `ee`, `store_exit`] >>
+  conj_tac
+  >- (simp[gasSummaryTheory.gas_marked_exec_def, bind_def,
+           lift_sum_def, return_def] >>
+      metis_tac[aug_place_storage_write_gas_obs]) >>
+  simp[]
 QED
 
 Resume aug_place_storage_binop_store_nofresh[exit]:
