@@ -2289,3 +2289,89 @@ Proof
   simp[rb_compile_create_salt, rb_compile_create_dispatch] >>
   Cases >> simp[rb_compile_create_dispatch]
 QED
+
+Theorem rb_compile_extcall_store_args:
+  !es tys buf off. rb_env_ok ce /\ rb_operand_ok buf /\
+    (!e ty. MEM e es ==> rb_step rb_value_ok (cfn ce ty e)) ==>
+    rb_step (K T) (compile_extcall_store_args cfn ce es tys buf off)
+Proof
+  Induct >> simp[compile_extcall_store_args_def, rb_step_return] >>
+  rpt gen_tac >> strip_tac >> Cases_on `tys` >>
+  (pure_rewrite_tac[compile_extcall_store_args_def, LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (IF_CASES_TAC >> simp[rb_step_return, rb_emit_op]) >>
+  gen_tac >> strip_tac >> irule rb_ignore >> reverse conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  rpt IF_CASES_TAC >> simp[rb_emit_void, rb_compile_store_bytestring])
+QED
+
+Theorem rb_compile_create_call:
+  (!dst src info. rb_operand_ok dst /\ rb_operand_ok src ==>
+     rb_step rb_operand_ok (compile_abi_encode_to_buf dst src info)) /\
+  rb_env_ok ce /\
+  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step rb_operand_ok (compile_create_call cfn ce ck has_salt rof args)
+Proof
+  strip_tac >> Cases_on `args` >> simp[compile_create_call_def]
+  >- (irule rb_ignore >> simp[rb_emit_inst, rb_step_return]) >>
+  Cases_on `t` >> simp[]
+  >- (irule rb_ignore >> simp[rb_emit_inst, rb_step_return]) >>
+  IF_CASES_TAC
+  >- (irule rb_ignore >> simp[rb_emit_inst, rb_step_return]) >>
+  Cases_on `ck` >> simp[]
+  >~ [`compile_raw_create _ _ _ _ _ _ _`]
+  >- suspend "raw" >>
+  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> gvs[]) >> gen_tac >> strip_tac)
+  >~ [`compile_create_proxy_buf _`] >- suspend "proxy"
+  >~ [`compile_create_copy _ _ _ _`] >- suspend "copy" >>
+  suspend "blueprint"
+QED
+
+Resume rb_compile_create_call[raw]:
+  irule rb_compile_raw_create >> simp[] >>
+  Cases_on `has_salt` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  metis_tac[rich_listTheory.MEM_FRONT, rich_listTheory.MEM_LAST, MEM]
+QED
+
+Resume rb_compile_create_call[proxy]:
+  Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- simp[rb_compile_create_proxy_buf] >>
+   gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
+   Cases >> simp[rb_compile_create_dispatch])
+QED
+Resume rb_compile_create_call[copy]:
+  Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  (irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
+   Cases >> simp[rb_compile_create_copy])
+QED
+Resume rb_compile_create_call[blueprint]:
+  Cases_on `has_salt` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  (irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_compile_create_salt >> gvs[]) >>
+   Cases >> simp[] >>
+   (rpt strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> gvs[] >> Cases_on `t` >> gvs[]) >>
+   gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- simp[rb_compile_create_blueprint_check] >>
+   gen_tac >> strip_tac >>
+   irule rb_step_bind >>
+   qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
+   reverse conj_tac
+   >- (irule rb_compile_create_blueprint_args >> simp[] >>
+       metis_tac[MEM_TL, MEM]) >>
+   Cases >> simp[rb_compile_create_blueprint_append]))
+QED
+Finalise rb_compile_create_call
