@@ -52,7 +52,7 @@ Proof
   >> gvs[write_memory_with_expansion_def, write_memory_def, expand_memory_def]
 QED
 
-Theorem emit_calldatacopy_endpoint_ptr_origin:
+Theorem emit_calldatacopy_endpoint_ptr_origin_joint:
   emit_void CALLDATACOPY [Var p;src;n] sa = ((),sb) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) /\
@@ -79,7 +79,12 @@ Theorem emit_calldatacopy_endpoint_ptr_origin:
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       w2n dw + w2n nw <= s.vs_alloca_next ==>
       gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
-        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)) /\
+    (!lower ctx func. fn_has_code sa sb func /\ allocas_from lower s /\
+      ~ctx_has_dalloca ctx /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+      alloca_inv s /\ w2n dw + w2n nw <= s.vs_alloca_next ==>
+      alloca_inv t)
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
@@ -90,6 +95,10 @@ Proof
     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
   drule_all calldatacopy_ghost_frame >>
   disch_then (qspecl_then [`tn`,`sa.cs_next_id`,`PG`,`G`] strip_assume_tac) >>
+  `alloca_inv s ==> alloca_inv t` by
+    (strip_tac >> irule localPtrsPropsTheory.alloca_inv_fields >>
+     qexists_tac `s` >> simp[write_memory_with_expansion_def,
+       write_memory_def, expand_memory_def]) >>
   qexistsl_tac [
     `step_prov PG G (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) t`,
     `step_taint (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s t tn`] >>
@@ -135,6 +144,74 @@ Proof
     [`i` |-> `mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []`]
     straight_line_step_origin)) >>
   fs[mk_inst_def, is_terminator_def, inst_dload_in_section_def] >> metis_tac[]
+QED
+
+Theorem emit_calldatacopy_endpoint_ptr_origin:
+  emit_void CALLDATACOPY [Var p;src;n] sa = ((),sb) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) /\
+  op_taint tn src = {} /\ op_taint tn n = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H u.
+    (!root cap. ptr_covers G tn root s cap ==> ptr_covers H u root t cap) /\
+    u.t_mem SUBSET tn.t_mem /\
+    (!i. w2n dw <= i /\ i < w2n dw + w2n nw ==> i NOTIN u.t_mem) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!D lower ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s) /\
+    (!D lower explicit ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      w2n dw + w2n nw <= s.vs_alloca_next ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  strip_tac >> drule_all emit_calldatacopy_endpoint_ptr_origin_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[]
+QED
+
+Theorem emit_calldatacopy_endpoint_ptr_joint:
+  emit_void CALLDATACOPY [Var p;src;n] sa = ((),sb) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) /\
+  op_taint tn src = {} /\ op_taint tn n = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H u.
+    (!root cap. ptr_covers G tn root s cap ==> ptr_covers H u root t cap) /\
+    u.t_mem SUBSET tn.t_mem /\
+    (!i. w2n dw <= i /\ i < w2n dw + w2n nw ==> i NOTIN u.t_mem) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!D lower ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s) /\
+    (!lower ctx func. fn_has_code sa sb func /\ allocas_from lower s /\
+      ~ctx_has_dalloca ctx /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+      alloca_inv s /\ w2n dw + w2n nw <= s.vs_alloca_next ==>
+      alloca_inv t /\ !D explicit.
+        gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  strip_tac >> drule_all emit_calldatacopy_endpoint_ptr_origin_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[] >> metis_tac[]
 QED
 
 Theorem emit_calldatacopy_endpoint_ptr:
