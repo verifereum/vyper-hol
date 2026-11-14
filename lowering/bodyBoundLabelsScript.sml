@@ -993,8 +993,7 @@ Proof
   qx_gen_tac `data_ops` >> qx_gen_tac `st3` >> strip_tac >>
   PairCases_on `data_ops` >> simp[] >>
   irule pair_let_snd_preserves >>
-  simp[bound_labels_raw_call_finish] >> rpt strip_tac >>
-  irule pair_let_snd_preserves >> simp[bound_labels_emit_void] >>
+  simp[bound_labels_raw_call_finish] >>
   rpt strip_tac >> IF_CASES_TAC >> simp[]
 QED
 

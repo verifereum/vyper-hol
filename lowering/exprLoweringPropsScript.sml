@@ -4160,7 +4160,6 @@ Proof
   Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
   Cases_on `rcf.rcf_max_outsize = 0` >>
   simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_finish >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_msg_data_to_memory >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_outbuf >>

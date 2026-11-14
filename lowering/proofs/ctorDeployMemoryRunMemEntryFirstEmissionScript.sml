@@ -4812,8 +4812,7 @@ Proof
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   ho_match_mp_tac cs_appends_bind >> conj_tac
   >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_raw_call_finish]) >>
-  gen_tac >> rewrite_tac[state_pair_let_bind] >>
-  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+  gen_tac >>
   rewrite_tac[cs_appends_def] >> simp[cs_extends_refl] >>
   rpt gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[cs_extends_refl]
 QED

@@ -164,7 +164,7 @@ Theorem compile_raw_call_calldata_open:
 Proof
   rpt gen_tac >> simp[compile_call_def] >>
   rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
-  strip_tac >> gvs[] >> drule emit_void_terminated >> simp[is_terminator_def]
+  strip_tac >> gvs[] >> drule compile_raw_call_finish_open >> simp[]
 QED
 
 Theorem compile_raw_log_open:
