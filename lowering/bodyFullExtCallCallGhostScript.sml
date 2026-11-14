@@ -118,3 +118,82 @@ Proof
   qexistsl_tac [`G`, `H`, `rd`, `ro`, `tn`] >> simp[] >>
   rpt strip_tac >> metis_tac[]
 QED
+
+Theorem extcall_request_default_ghost:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  eval_operand buf_op t = SOME ro /\
+  z.vs_memory = (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory /\
+  (!x. not_fresh_at sp x ==> lookup_var x z = lookup_var x t /\
+    FLOOKUP G' x = FLOOKUP G x) /\
+  tn'.t_mem SUBSET tn.t_mem /\
+  (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+    ptr_mem_ok cx default_ty dv default_op G tn t) ==>
+  !dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+    ptr_mem_ok cx default_ty dv default_op G' tn' z
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `safe_operand sp default_op /\
+   extcall_default_ready cx ret_type has_default default_op default_ty default_opt t` by
+    fs[exprSimExtCallCaseTheory.extcall_request_ready_def] >>
+  `?tv w. evaluate_type (get_tenv cx) default_ty = SOME tv /\
+    val_wf tv dv /\ eval_operand default_op t = SOME w` by
+    (fs[exprSimExtCallCaseTheory.extcall_default_ready_def] >> metis_tac[]) >>
+  `eval_operand default_op z = eval_operand default_op t` by
+    (Cases_on `default_op` >>
+     fs[exprSafeOperandTheory.safe_operand_def, eval_operand_def] >> metis_tac[]) >>
+  irule bodyPtrBopRepresentationFrameTheory.bop_ptr_mem_ok_frame >>
+  qexistsl_tac [`G`, `t`, `tn`, `tv`] >> simp[] >>
+  conj_tac >- (fs[exprSafeOperandTheory.safe_operand_def] >> metis_tac[]) >>
+  rpt strip_tac
+  >- (irule valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint >>
+      `LENGTH (TAKE cap rd) <= cap` by simp[listTheory.LENGTH_TAKE_EQ] >>
+      fs[exprSimExtCallCaseTheory.extcall_request_ready_def] >>
+      `regions_disjoint (w2n ro) cap (w2n w) (val_footprint tv dv)` by metis_tac[] >>
+      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  fs[SUBSET_DEF]
+QED
+
+Theorem extcall_request_call_observations:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  (!x. not_fresh_at sp x ==> lookup_var x z = lookup_var x t /\
+    FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  eval_operand buf_op t = SOME ro /\
+  tn'.t_mem = tn.t_mem DIFF {i | w2n ro <= i /\
+    i < w2n ro + MIN cap (LENGTH rd)} /\
+  EVERY (\op. op_taint tn op = {}) [addr_op; buf_op; default_op] /\
+  (cap <> 0 ==> ?v b sz rw. buf_op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+    eval_operand buf_op t = SOME rw /\ b <= w2n rw /\ w2n rw + cap <= b + sz) /\
+  (!dv. default_opt = SOME dv /\ ~is_word_type default_ty /\
+      type_memory_bytes cenv default_ty <> 0 ==>
+    ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
+      eval_operand default_op t = SOME w /\ b <= w2n w /\
+      w2n w + type_memory_bytes cenv default_ty <= b + sz) ==>
+  EVERY (\op. op_taint tn' op = {}) [addr_op; buf_op; default_op] /\
+  (cap <> 0 ==> ?v b sz rw. buf_op = Var v /\ FLOOKUP G' v = SOME (b,sz) /\
+    eval_operand buf_op z = SOME rw /\ b <= w2n rw /\ w2n rw + cap <= b + sz /\
+    (!i. w2n rw <= i /\ i < w2n rw + MIN cap (LENGTH rd) ==> i NOTIN tn'.t_mem)) /\
+  (!dv. default_opt = SOME dv /\ ~is_word_type default_ty /\
+      type_memory_bytes cenv default_ty <> 0 ==>
+    ?x b sz w. default_op = Var x /\ FLOOKUP G' x = SOME (b,sz) /\
+      eval_operand default_op z = SOME w /\ b <= w2n w /\
+      w2n w + type_memory_bytes cenv default_ty <= b + sz)
+Proof
+  strip_tac >>
+  `EVERY (safe_operand sp) [addr_op; buf_op; default_op]` by
+    fs[exprSimExtCallCaseTheory.extcall_request_ready_def] >>
+  `!op. safe_operand sp op ==> eval_operand op z = eval_operand op t /\
+    op_taint tn' op = op_taint tn op /\
+    (!x. op = Var x ==> FLOOKUP G' x = FLOOKUP G x)` by
+    (Cases >> fs[exprSafeOperandTheory.safe_operand_def, eval_operand_def,
+                 op_taint_def] >> metis_tac[]) >>
+  fs[listTheory.EVERY_DEF] >> conj_tac
+  >- (strip_tac >> qpat_x_assum `cap <> 0 ==> _` drule >> strip_tac >>
+      `rw = ro` by metis_tac[optionTheory.SOME_11] >>
+      qexistsl_tac [`v`, `b`, `sz`] >> gvs[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
