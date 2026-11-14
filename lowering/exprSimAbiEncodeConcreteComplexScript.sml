@@ -116,7 +116,7 @@ Resume abi_encode_complex_concrete_contract[dynamic]:
   `abi_encoder_window_pre ctx func ready load dst src (AbiComplex infos) at
      (ListV avs) sb cap d u` by
     (qpat_assum `abi_encoder_window_pre _ _ ready en _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [abi_encoder_window_pre_def] >> strip_tac >> asm_rewrite_tac[] >>
+     pure_rewrite_tac [abi_encoder_window_pre_def] >> strip_tac >> asm_rewrite_tac[] >>
      `cs_extends ready load /\ cs_extends load en /\ load.cs_next_id <= en.cs_next_id` by
        fs[ci_mono_def] >>
      (conj_tac >- metis_tac[fn_has_code_split]) >>

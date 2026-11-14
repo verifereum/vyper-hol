@@ -135,9 +135,9 @@ Proof
   qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
   simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >> strip_tac >>
   gvs[] >> irule frag_exec_run_inst_seq >>
-  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
-       mk_inst_def, venomInstTheory.is_terminator_def,
-       run_inst_seq_def, step_inst_base_def, exec_write2_def] >>
+  (simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def,
+       venomInstTheory.is_terminator_def, run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, exec_write2_def]) >>
   rpt strip_tac >> gvs[] >>
   simp[mstore_mem_word_at_same] >>
   irule return_copy_frame_trans >> qexists_tac `mstore (w2n dw) (n2w N) s` >>

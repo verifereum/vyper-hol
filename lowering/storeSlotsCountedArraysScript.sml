@@ -214,7 +214,7 @@ Proof
   irule store_slots_emitted_seq_path_mem >> conj_tac >- simp[] >>
   qexists_tac `sa` >> Cases_on `tr` >>
   simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
-       step_inst_base_def, exec_write2_def, eval_operands_def,
+       step_inst_base_opcode_eqs, exec_write2_def, eval_operands_def,
        run_inst_seq_mem_ok_last, below_frontier_no_ranges,
        inst_dload_in_section_def]
 QED

@@ -78,7 +78,7 @@ Theorem target_index_local_source_ptr:
          value_has_type tv cv
 Proof
   strip_tac >> drule_all target_readable_local_type_ptr >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by (fs[expr_sim_inv_def] >> metis_tac[]) >>
   `ISL (evaluate_subscripts entry'.type entry'.value path)` by
     (irule target_current_local_resolution_ptr >> metis_tac[]) >>

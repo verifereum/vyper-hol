@@ -1284,7 +1284,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-
 Theorem aug_place_storage_write_static[local]:
   cx.txn.is_static ==>
   write_place cx (StoragePlace tr slot tv) v ee =

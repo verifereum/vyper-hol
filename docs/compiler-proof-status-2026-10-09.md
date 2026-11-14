@@ -1,5 +1,7 @@
 # Compiler proof status — 2026-10-09 audit
 
+Note (2026-11-14): `immutable_free_program_def` was deleted on 2026-11-10; the current call statements omit that premise. This dated audit preserves its original text.
+
 **Milestone 1 statement/composition audit, not full compiler verification.**
 The host `date -I` returned `2026-10-09`. Source baseline and accepted primary
 HEAD: `e4cb09143b677747c4f857185e515b9c5999fe0c` (TASK056 integrated).

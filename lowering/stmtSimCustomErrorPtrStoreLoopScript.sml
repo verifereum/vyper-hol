@@ -693,6 +693,7 @@ Resume custom_error_store_args_sim_ptr_conditional[tail_exempt]:
   irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >>
   qpat_x_assum `gas_exempt_cert F _ _ _ _ right _ _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc,
       vyperStateTheory.bind_return])
 QED

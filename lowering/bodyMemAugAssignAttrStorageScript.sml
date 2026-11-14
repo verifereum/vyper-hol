@@ -776,6 +776,9 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
   Cases_on `write_storage_slot cx tr (n2w slot + n2w off) ftv result
     (ee with gas_obs := [])` >>
   rename1 `_ = (wres, fin)` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   qspecl_then [`func`, `cenv`, `cx`, `ee with gas_obs := []`, `s`, `tr`,
     `n2w slot + n2w off`, `ftv`, `result`, `typed_val_to_w256 ftv result`,
     `wres`, `fin`, `ctx`] mp_tac stmt_state_rel_write_storage_word >>

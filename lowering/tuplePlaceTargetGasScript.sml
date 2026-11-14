@@ -5,6 +5,26 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperExprNoControl
   targetPlaceSim exprSimSource supportedExprTraverse vyperTypeCallGraph
 
+(* The static part of each index's expr_body_pre, collected over the
+   target: no evm-run root and every internal call supported. *)
+Theorem target_indices_pre_static:
+  !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
+  ~supported_target_exists expr_evm_run_root bt /\
+  EVERY (\c. FST c = NONE /\
+             ?tops. supported_program tops /\
+                    get_module_code cx NONE = SOME tops /\
+                    IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_target bt)
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
+  simp[target_indices_pre_def, supported_expr_exists_def,
+       int_calls_expr_def] >>
+  strip_tac >> rename1 `target_indices_pre cenv cx env tgt` >>
+  first_x_assum (qspec_then `tgt` mp_tac) >>
+  simp[vyperASTTheory.expr_size_def] >> strip_tac >> fs[] >>
+  res_tac >> fs[expr_body_pre_def, expr_has_evm_run_def]
+QED
+
 Theorem tuple_place_target_gas_admissible:
   expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
   well_typed_target env bt ty /\

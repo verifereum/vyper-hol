@@ -1,5 +1,5 @@
 Theory concretizeLayoutExternalCall
-Ancestors concretizeLayoutExternalRequests concretizeLayoutSupplement
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutExternalRequests concretizeLayoutSupplement
   venomCallOracleDefs extCallOracle ptrDiscipline venomState venomExecSemantics
   venomInst list pred_set frameRelocationStoreSteps frameRelocationGhostCopy
   frameRelocationAllocationSteps frameRelocationLocal frameRelocationValues
@@ -499,29 +499,6 @@ Proof
   rpt gen_tac >> Cases_on `x = v` >> simp[]
 QED
 
-(* Pure transport for clean output prefixes and synchronized snapshot reset. *)
-Theorem concretize_reset_write_taint_order[local]:
-  relocation_taint_le R tn un /\
-  (!a b. next a b /\ a IN written ==> b IN writtenT) /\
-  (!a b. next a b /\ a NOTIN written ==> R a b) ==>
-  relocation_taint_le next
-    (tn with <|t_mem := tn.t_mem DIFF written;
-       t_var := tn.t_var |+ (v,{});
-       t_stor := if reset then {} else tn.t_stor;
-       t_trans := if reset then {} else tn.t_trans|>)
-    (un with <|t_mem := un.t_mem DIFF writtenT;
-       t_var := un.t_var |+ (v,{});
-       t_stor := if reset then {} else un.t_stor;
-       t_trans := if reset then {} else un.t_trans|>)
-Proof
-  strip_tac >> fs[relocation_taint_le_def] >>
-  simp[relocation_taint_le_def] >> conj_tac
-  >- (fs[demand_taint_def] >> metis_tac[]) >>
-  conj_tac
-  >- (simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
-      IF_CASES_TAC >> simp[] >> fs[op_taint_def]) >>
-  Cases_on `reset` >> simp[]
-QED
 
 Theorem ext_call_taint[local]:
   MEM inst.inst_opcode [CALL; STATICCALL] /\ inst.inst_outputs = [v] /\
@@ -630,9 +607,8 @@ Theorem concretize_ext_call_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\ taint_within D C vs0 /\
-  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -676,7 +652,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `step_inst_base inst s = OK post` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def] >> fs[MEM]) >>
@@ -732,9 +708,12 @@ Proof
      `active_inst fn inst s` by
        (fs[joint_config_reachable_def] >>
         metis_tac[joint_origin_history_projection, frameHistoryDefinitionsTheory.frame_history_active]) >>
-     fs[taint_within_def] >> first_x_assum irule >>
-     goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
-     simp[step_inst_def] >> fs[]) >>
+     `gas_cut ncut vs0 s` by
+       metis_tac[layout_cut_safe_edge_frame, layout_cut_safe_frame, layout_cut_safe_frame_cfg] >>
+     `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
+     `inst.inst_opcode <> INVOKE` by simp[] >>
+     `step_inst 0 C inst s = OK post` by gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+     drule_all taint_within_upto_request >> simp[]) >>
   `post.vs_allocas = s.vs_allocas` by metis_tac[ext_call_execution_fields] >>
   `?roT. eval_operand opr t = SOME roT /\
     (!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b /\
@@ -755,6 +734,7 @@ Proof
           joint_relocation_demand lo (concretize_positions C') q0 es qs c a b /\
           ~(w2n roT <= b /\ b < w2n roT+LENGTH (TAKE (w2n rs) post.vs_returndata)))` by
         (irule concretize_clean_write_geometry >> simp[] >>
+         goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
          goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >>
          goal_assum (drule_at (Pat `fn_ptr_ok _ _`)) >>

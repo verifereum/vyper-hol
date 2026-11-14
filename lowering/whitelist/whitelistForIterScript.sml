@@ -58,12 +58,12 @@ Theory whitelistForIter
 Ancestors
   vyperTypeContract
   bodyDynArraySource bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImm
-  exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
+  exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map pair
   bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv loweringStateRelDefs
-  supportedStmts supportedStmtTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
-  vyperValueOperation vyperTypeSystem vyperTypeInvariants vyperTypeValues
+  supportedStmts supportedStmtTraverse supportedExprTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
+  vyperValueOperation vyperTypeSystem vyperTypeInvariants vyperTypeValues vyperMisc
   targetPlaceSim exprSimTopLevelProps bodyStorageMetadata
   vyperTypeEnv valueEncoding valueEncodingProps valueEncodingTyping exprSimAggregateEncoding
   venomState arithmetic
@@ -215,6 +215,104 @@ Proof
      (r, es2)` by simp[] >>
   drule_at (Pat `eval_stmts`) array_body_scope_callback >>
   disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
+Theorem memory_iterator_source_classify[local]:
+  !e cx es rv ee.
+    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+    expr_writes_ok (\_. F) e /\
+    (!tgt nid. loop_iterator_place e = SOME tgt ==>
+       target_root tgt <> TopLevelNameTarget nid) /\
+    eval_expr cx e es = (INL rv,ee) ==>
+    (?v. rv = Value v) \/
+    (?id path tgt. rv = PlaceR (MemoryPlace id path) /\
+       loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget id)
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[supported_expr_exists_def, loop_iterator_place_def,
+       target_root_def, expr_writes_ok_def] >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      type_check_def, check_def, assert_def, lift_option_type_def,
+      AllCaseEqs()]
+  >~ [`lookup_flag_mem cx ns mid es = (INL rv,ee)`]
+  >- (Cases_on `ns` >>
+      gvs[lookup_flag_mem_def, option_CASE_rator,
+          return_def, raise_def, AllCaseEqs()])
+  >~ [`eval_expr cx (StructLit ty ns fields) es = (INL rv,ee)`]
+  >- (Cases_on `ns` >>
+      gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()])
+  >~ [`SubscriptTarget`]
+  >- (`!tgt nid. loop_iterator_place e = SOME tgt ==>
+         target_root tgt <> TopLevelNameTarget nid` by
+        (rpt strip_tac >>
+         qpat_x_assum `!tgt nid. (?tgt'. _) ==> _`
+           (qspecl_then [`SubscriptTarget tgt e'`, `nid`] mp_tac) >>
+         simp[target_root_def] >> metis_tac[]) >>
+      qpat_x_assum `!cx' es' rv' ee'. _ /\ eval_expr cx' e es' = _ ==> _`
+        drule_all >> strip_tac >>
+      gvs[bind_def, return_def, COND_RATOR, AllCaseEqs()] >>
+      gvs[select_result_def, extend_place_def, extend_memory_place_def,
+          bind_def, ignore_bind_def, return_def, lift_option_type_def,
+          lift_sum_def, raise_def, AllCaseEqs()] >>
+      metis_tac[target_root_def])
+  >~ [`AttributeTarget`]
+  >- (`!tgt nid. loop_iterator_place e = SOME tgt ==>
+         target_root tgt <> TopLevelNameTarget nid` by
+        (rpt strip_tac >>
+         qpat_x_assum `!tgt nid. (?tgt'. _) ==> _`
+           (qspecl_then [`AttributeTarget tgt s`, `nid`] mp_tac) >>
+         simp[target_root_def] >> metis_tac[]) >>
+      qpat_x_assum `!cx' es' rv' ee'. _ /\ eval_expr cx' e es' = _ ==> _`
+        drule_all >> strip_tac >>
+      gvs[select_result_def, extend_place_def, extend_memory_place_def,
+          bind_def, ignore_bind_def, return_def, lift_option_type_def,
+          lift_sum_def, raise_def, AllCaseEqs()] >>
+      metis_tac[target_root_def]) >>
+  rename1 `eval_expr cx (Call ty target args drv) es = (INL rv,ee)` >>
+  Cases_on `target` >>
+  TRY (rename1 `IntCall fid` >> Cases_on `fid`) >>
+  TRY (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind`) >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      type_check_def, check_def, assert_def, lift_option_type_def,
+      raise_def, AllCaseEqs()]
+  >>~- ([`eval_send`], metis_tac[exprSimSendTheory.eval_send_value])
+  >>~- ([`eval_raw_call`],
+       gvs[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+           raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM])
+  >>~- ([`eval_create`],
+       gvs[vyperCreateTheory.eval_create_def,
+           vyperCreateTheory.create_soft_failure_def,
+           bind_def, ignore_bind_def, return_def, raise_def,
+           lift_option_type_def, check_def, assert_def,
+           get_accounts_def, update_accounts_def, update_transient_def,
+           get_pending_deletions_def, get_transient_storage_def,
+           update_pending_deletions_def, append_logs_def,
+           COND_RATOR, option_CASE_rator, prod_CASE_rator,
+           sum_CASE_rator, AllCaseEqs(), UNCURRY, LET_THM] >>
+       metis_tac[vyperCreateTheory.create_oracle_result_address]) >>
+  qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  PairCases_on `p` >> Cases_on `target ++ vs ++ kwargs` >>
+  simp[eval_ext_call_def, frame_call_value_def, COND_RATOR,
+       bind_apply, ignore_bind_apply, lift_option_type_def,
+       type_check_def, check_def, assert_def, return_def,
+       raise_def, get_accounts_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `eval_ext_call_effects ca cb cc cd ce cf cg` >>
+  Cases_on `eval_ext_call_effects ca cb cc cd ce cf cg` >>
+  gvs[bind_apply, ignore_bind_apply, lift_sum_runtime_def,
+      return_def, raise_def, get_accounts_def, check_def, assert_def,
+      AllCaseEqs()] >>
+  Cases_on `if returnData = [] then
+    ext_call_kwarg EKDefault l (DROP (LENGTH p1) t) else NONE` >>
+  gvs[bind_apply, ignore_bind_apply, return_def, raise_def,
+      get_accounts_def, assert_def, AllCaseEqs()] >>
+  Cases_on `evaluate_abi_decode_return (get_tenv ca) p2 returnData` >>
+  gvs[bind_apply, return_def, raise_def]
 QED
 
 (* ADMITTED (out-of-packet key, allowed by the plan session): a For over a
