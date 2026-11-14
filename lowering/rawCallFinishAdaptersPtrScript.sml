@@ -1,5 +1,6 @@
 Theory rawCallFinishAdaptersPtr
 Ancestors
+  rawCallShapePtr
   rawCallResultLayoutPtr rawCallAllocationProofPtr wordArgsPtr
   stmtFragPtr vyperTypeExtCallSoundness
 
@@ -125,7 +126,7 @@ Theorem ext_call_kwarg_nonLabel:
   ext_call_kwarg kw ks xs = SOME op ==>
   !l. op <> Label l
 Proof
-  strip_tac >> drule rawCallPrefixPtrTheory.ext_call_kwarg_member >>
+  strip_tac >> drule rawCallShapePtrTheory.ext_call_kwarg_member >>
   gvs[listTheory.EVERY_MEM] >> metis_tac[]
 QED
 

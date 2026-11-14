@@ -1,6 +1,7 @@
 (* Memory-mode address and bytes argument continuation for raw_call. *)
 Theory rawCallPrefixMemory
 Ancestors
+  rawCallShapePtr
   bodyMemRawCallBounds rawCallGasMemory rawCallArgumentMemory exprSimRawCall exprSimHash bodyMemoryPreds exprSimMemDefs loweringStateRelDefs
   exprSimDefs exprSimProps exprLoweringProps loweringPosts bodySim
   compileEnv venomState vyperInterpreter vyperState fragExec exprSimSource exprSimHypsDefs
@@ -487,7 +488,7 @@ Resume raw_call_prefix_sim_mem[keyword_endpoint]:
     (irule local_ptrs_reserved_next_var >> qexists_tac `s4` >> simp[]) >>
   `!g. go = SOME g ==> ?w. eval_operand g t = SOME w` by
     (rpt strip_tac >>
-     `MEM g xs` by metis_tac[raw_call_kwarg_mem] >>
+     `MEM g xs` by metis_tac[ext_call_kwarg_member] >>
      qpat_x_assum `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[typed_args_post_def] >> strip_tac >>
      drule_all LIST_REL_MEM_IMP >> simp[] >> metis_tac[]) >>
@@ -605,7 +606,7 @@ Resume raw_call_prefix_sim_mem[freshness]:
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      Cases_on `go` >> gvs[]
      >- metis_tac[emit_op_safe_operand, safe_operand_def] >>
-     `MEM (Var x) xs` by metis_tac[raw_call_kwarg_mem] >>
+     `MEM (Var x) xs` by metis_tac[ext_call_kwarg_member] >>
      fs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   `!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
        MEM (Var x) xs ==> not_fresh_at s6 x` by
@@ -628,7 +629,7 @@ Resume raw_call_prefix_sim_mem[safety]:
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      Cases_on `go` >> gvs[]
      >- metis_tac[emit_op_safe_operand, safe_operand_def] >>
-     `MEM (Label l) xs` by metis_tac[raw_call_kwarg_mem] >>
+     `MEM (Label l) xs` by metis_tac[ext_call_kwarg_member] >>
      fs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   `safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 ptr_op /\
    safe_operand s6 gas` by
@@ -641,7 +642,7 @@ Resume raw_call_prefix_sim_mem[safety]:
   `safe_operand s6 (case ext_call_kwarg EKValue flags.rcf_kws xs of
     NONE => Lit 0w | SOME v => v)` by
     (Cases_on `ext_call_kwarg EKValue flags.rcf_kws xs` >> simp[] >>
-     `MEM x xs` by metis_tac[raw_call_kwarg_mem] >>
+     `MEM x xs` by metis_tac[ext_call_kwarg_member] >>
      fs[EVERY_MEM, safe_operand_def] >> metis_tac[]) >>
   suspend "continuation"
 QED

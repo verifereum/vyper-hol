@@ -1,6 +1,7 @@
 (* Memory-mode argument binding for raw_call. *)
 Theory rawCallArgumentMemory
 Ancestors
+  rawCallShapePtr
   rawCallSuffixMemory bodyMemRawCallBounds exprSimRawCall exprSimMemDefs
   bodyMemoryPreds gasOutcome exprSimDefs exprSimProps loweringPosts exprLoweringProps
   compileEnv venomState vyperInterpreter vyperState bodyArgsMemory exprSimWordArgs

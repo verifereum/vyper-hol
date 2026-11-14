@@ -1,6 +1,7 @@
 (* Output-allocation boundaries for the counted raw_call pointer proof. *)
 Theory rawCallAllocationProofPtr
 Ancestors
+  wordArgsPtr
   rawCallPrefixPtr rawCallBufferPtr builtinSystem context emitHelper compileEnv loweringStateRelDefs
   fragGasSeqPtr fragExecPtr typedCopyPtr exprSimAlloc exprSimPtrLiteralBuffer
   exprLoweringProps venomInst bodyPtrDefs pred_set
@@ -678,7 +679,7 @@ Proof
   `i IN tn.t_mem` suffices_by
     (strip_tac >> qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem`
       (qspec_then `i` mp_tac) >> simp[]) >>
-  irule rawCallKeywordPrefixPtrTheory.saved_value_footprint_taint_kept >>
+  irule wordArgsPtrTheory.saved_value_footprint_taint_kept >>
   first_assum (irule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
   simp[compileEnvTheory.is_word_type_def, loweringPostsTheory.val_footprint_def,
     wordsTheory.w2n_n2w] >>

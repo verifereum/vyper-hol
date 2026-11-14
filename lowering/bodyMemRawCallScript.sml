@@ -2,6 +2,7 @@
    to a target. *)
 Theory bodyMemRawCall
 Ancestors
+  rawCallShapePtr
   rawCallExpressionMemory bodyExprForceMemory bodyNonwordForceMemory exprSimRawCall exprSimDefs exprSimHypsDefs
   vyperAST vyperTypeSystem exprLowering compileEnv
   rawCallTailMemory rawCallAllocatedOracleMemory bodyMemoryPreds bodyMemRawCallRevert bodyMemRawCallBounds bodyMemRawCallFinish

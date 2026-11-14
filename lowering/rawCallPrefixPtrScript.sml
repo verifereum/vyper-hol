@@ -1,6 +1,7 @@
 (* Counted optional GAS suffix for raw_call. *)
 Theory rawCallPrefixPtr
 Ancestors
+  rawCallShapePtr
   rawCallKeywordPrefixPtr gasCount compileEnv venomInst
   gasContext exprSimDefs vyperInterpreter vyperState exprSimWordArgs
   abiCanonicalHeadSize
@@ -494,15 +495,7 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
      simp[exprSimWordArgsTheory.wb_args_exit_def]
 QED
 
-
 Finalise raw_call_operands_sim_ptr
-
-Theorem ext_call_kwarg_member:
-  !ks xs op. ext_call_kwarg kw ks xs = SOME op ==> MEM op xs
-Proof
-  Induct_on `ks` >> Cases_on `xs` >> simp[ext_call_kwarg_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
-QED
 
 Theorem typed_args_post_operands_evaluate:
   typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t ==>
