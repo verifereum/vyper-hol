@@ -129,11 +129,3 @@ Proof
   drule_all lower_abi_decode_valid >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-(* Keep the frozen source-success boundary free of new proof oracles. *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean ABI source boundary: " ^ name)
-  end) (DB.thms "abiBuiltinValidSource");

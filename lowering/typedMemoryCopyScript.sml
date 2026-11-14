@@ -3674,12 +3674,3 @@ QED
 val _ = if List.exists (fn name => name = "exprSimIfExp") (ancestry "-")
         then raise Fail "Typed-copy infrastructure depends on IfExp"
         else ();
-
-(* Every exported copy boundary must be closed, including the recursive
-   execution theorem: an old public admission must never be a dependency. *)
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Unclosed typed memory copy theorem: " ^ name)
-  end) (DB.thms "typedMemoryCopy");

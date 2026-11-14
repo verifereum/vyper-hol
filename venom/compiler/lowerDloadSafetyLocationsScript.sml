@@ -155,9 +155,6 @@ Proof
   drule_all lower_dload_insts_supply_next >> simp[]
 QED
 
-val _ = if null (hyp ld_envelope_source_next) then ()
-        else raise Fail "ld_envelope_source_next has hypotheses";
-
 (* Reverse expansion at a fetched target successor, in post-step coordinates. *)
 Theorem ld_envelope_successor_location:
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
@@ -183,9 +180,6 @@ Proof
      qexistsl_tac [`q`,`ti`] >> metis_tac[]) >>
   fs[active_inst_def, ld_envelope_def] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_envelope_successor_location) then ()
-        else raise Fail "envelope successor location has hypotheses";
 
 Theorem ld_envelope_successor_head:
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\

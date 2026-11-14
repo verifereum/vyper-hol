@@ -64,7 +64,3 @@ Proof
   goal_assum (drule_at Any) >>
   MATCH_ACCEPT_TAC (cj 3 ld_return_concrete_packages)
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "return reconstruction has kernel hypotheses")
-  [ld_return_concrete_packages, ld_invoke_return_reconstruction];

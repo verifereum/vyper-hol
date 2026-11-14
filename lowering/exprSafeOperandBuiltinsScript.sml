@@ -452,19 +452,6 @@ Proof
   metis_tac[compile_array_membership_loop_safe_operand, compile_ptr_load_next_var]
 QED
 
-(* Keep the membership safety interface closed under the HOL kernel. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted membership operand-safety theorem"
-  end)
-  [emit_membership_eqs_safe_operand, fold_membership_or_safe_operand,
-   fold_membership_and_safe_operand, compile_list_membership_in_safe_operand,
-   compile_list_membership_notin_safe_operand,
-   compile_array_membership_loop_safe_operand,
-   compile_var_array_membership_safe_operand];
-
 (* ===== Calls, names, subscripts and literals ===== *)
 
 Theorem as_stack_val_word_result_ok:

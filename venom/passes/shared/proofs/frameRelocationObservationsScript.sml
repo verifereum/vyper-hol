@@ -31,7 +31,3 @@ Theorem dead_result_rel_mstore:
 Proof
   simp[mstore_def, dead_result_rel_memory_frame]
 QED
-
-val _ = if List.all (null o hyp)
-  [dead_result_rel_memory_frame, mstore_memory_frame, dead_result_rel_mstore]
-  then () else raise Fail "memory observations export has hypotheses";

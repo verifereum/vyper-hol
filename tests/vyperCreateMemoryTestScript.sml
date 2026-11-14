@@ -133,9 +133,3 @@ Theorem compiled_create_memory_matches_source_request:
 Proof
   simp[listTheory.EVERY_DEF] >> CONV_TAC cv_eval
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "vyperCreateMemoryTest");

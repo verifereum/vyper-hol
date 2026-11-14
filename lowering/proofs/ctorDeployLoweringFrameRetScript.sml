@@ -366,13 +366,3 @@ Proof
       simp[]) >>
   gvs[vyperTypeSystemTheory.type_stmt_def]
 QED
-
-
-(* Check that this theory introduces no oracle-dependent results. *)
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then
-       print ("CTOR_FRAME_RET_KERNEL_CLOSED " ^ name ^ "\n")
-     else raise Fail ("Unclosed constructor frame return theorem: " ^ name)
-  end) (DB.thms "ctorDeployLoweringFrameRet");

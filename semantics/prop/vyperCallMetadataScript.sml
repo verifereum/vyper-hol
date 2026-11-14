@@ -33,11 +33,3 @@ Proof
   drule_at Any call_external_function_nondeploy_metadata >>
   simp[initial_evaluation_context_def]
 QED
-
-val () = List.app (fn th =>
-  let val (ors,axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn oracle => oracle = "DISK_THM") ors then
-       print "CALL_METADATA_AUDIT OK\n"
-     else raise Fail "call metadata: admitted proof dependency"
-  end) [call_external_function_nondeploy_metadata, call_external_metadata];

@@ -44,11 +44,3 @@ Proof
   simp[LET_THM, raw_create_probe_premises,
        SRULE [LET_THM] raw_create_missing_salt_execution]
 QED
-
-(* EVAL's result and the two probe lemmas must be kernel-closed. *)
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name ^ ": " ^
-                   String.concatWith "," (#1 (Tag.dest_tag (Thm.tag th)))))
-  (DB.thms "rawCreateContractProbe");

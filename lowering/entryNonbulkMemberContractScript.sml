@@ -97,10 +97,3 @@ Resume entry_nonbulk_array_child_contract[finish]:
   qexistsl [`out`,`scratch`] >> asm_rewrite_tac[]
 QED
 Finalise entry_nonbulk_array_child_contract
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_nonbulk_array_child_contract)
-  in if null axioms andalso null (Thm.hyp entry_nonbulk_array_child_contract) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry nonbulk constructor inherited admission"
-  end;

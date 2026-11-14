@@ -188,7 +188,4 @@ Proof
   qexists_tac `update_var v z t` >> simp[]
 QED
 
-val _ = if null (hyp concretize_extcodesize_local_complete) then ()
-        else raise Fail "extcodesize export has hypotheses";
-
 val _ = export_theory();

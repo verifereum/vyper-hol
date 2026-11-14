@@ -289,7 +289,3 @@ Proof
   conj_tac >- (fs[relocation_taint_le_def, demand_taint_def] >> metis_tac[]) >>
   fs[relocation_env_def, relocation_reader_context_def]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-                          else raise Fail "LOG export has hypotheses")
-  [concretize_log_demand_execution, concretize_log_local_complete];

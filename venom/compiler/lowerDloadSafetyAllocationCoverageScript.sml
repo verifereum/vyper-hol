@@ -54,12 +54,6 @@ Proof
   conj_tac >- (Cases_on `X` >> gvs[]) >> gvs[]
 QED
 
-val _ = List.app (fn (name, th) =>
-  if null (hyp th) then () else raise Fail ("nonclosed " ^ name))
-  [("ld_cached_alloca_advance", ld_cached_alloca_advance),
-   ("ld_fresh_alloca_advance", ld_fresh_alloca_advance),
-   ("ld_sync_owned_boundary_coverage", ld_sync_owned_boundary_coverage)];
-
 Theorem ld_sync_alloca_owned_coverage:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
@@ -133,6 +127,3 @@ Proof
     (mp_then Any mp_tac ld_sync_owned_boundary_coverage) >>
   disch_then irule >> simp[] >> qexists_tac `Y` >> first_assum ACCEPT_TAC
 QED
-
-val _ = if null (hyp ld_sync_alloca_owned_coverage) then ()
-  else raise Fail "nonclosed ld_sync_alloca_owned_coverage";

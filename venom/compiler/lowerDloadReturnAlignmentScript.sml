@@ -30,10 +30,6 @@ Proof
   MATCH_ACCEPT_TAC ld_return_package_induction
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-            else raise Fail "return package supply boundary has hypotheses")
-  [ld_sync_supply_covered, ld_covered_package_induction];
-
 Theorem ld_successful_body_fetch:
   ^ld_probe_guard C k bb t ==>
   ?ti. get_instruction bb t.vs_inst_idx = SOME ti

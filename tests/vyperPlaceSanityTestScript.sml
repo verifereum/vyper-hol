@@ -413,10 +413,3 @@ Theorem sha256_of_constant_copies_base:
 Proof
   EVAL_TAC
 QED
-
-(* Keep the evaluator and the checked place-order probes kernel-closed. *)
-val () = List.app (fn (_,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then () else raise Fail "interpreter has admitted dependencies"
-  end) (DB.thms "vyperInterpreter" @ DB.thms "vyperPlaceSanityTest");

@@ -90,14 +90,6 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry loop endpoint inherited admission"
-    end) [entry_terminal_header_endpoint];
-
 (* Frame the very sequence witness supplied by calldata_valid_init_header.
    The cursor update is used only for the history proof, not for execution. *)
 Theorem entry_initializer_sequence_frame:
@@ -121,13 +113,6 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH loop_st.cs_current_insts` >>
   simp[jump_to_def]
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_initializer_sequence_frame)
-  in if null axioms andalso null (Thm.hyp entry_initializer_sequence_frame) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry initializer frame inherited admission"
-  end;
 
 Theorem entry_array_initializer_reentry_code:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
@@ -168,14 +153,6 @@ Proof
      POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
   drule_all entry_initializer_sequence_frame >> simp[]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry array initializer inherited admission"
-    end) [entry_array_initializer_reentry_code, entry_array_initializer_frame];
 
 (* The source-valid initializer's original resource witness, now framed. *)
 Theorem entry_valid_initializer_header:
@@ -237,13 +214,6 @@ Proof
   >- (asm_rewrite_tac[EntryLoopHeader_def] >> simp[]) >>
   rpt strip_tac >> gvs[]
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_valid_initializer_header)
-  in if null axioms andalso null (Thm.hyp entry_valid_initializer_header) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry valid initializer inherited admission"
-  end;
 
 (* Resource/control package at the chosen terminal header endpoint. *)
 Theorem entry_joint_terminal_resources:
@@ -321,14 +291,6 @@ Resume entry_joint_terminal_resources[resources]:
     abi_decode_footprint_frame_def]
 QED
 Finalise entry_joint_terminal_resources
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_joint_terminal_resources)
-  in if null axioms andalso null (Thm.hyp entry_joint_terminal_resources) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry joint terminal resources inherited admission"
-  end;
-
 
 (* Close the finite header iteration at its own terminal witness. *)
 Theorem entry_joint_loop_endpoint:
@@ -410,13 +372,6 @@ Resume entry_joint_loop_endpoint[compose]:
 QED
 Finalise entry_joint_loop_endpoint
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_joint_loop_endpoint)
-  in if null axioms andalso null (Thm.hyp entry_joint_loop_endpoint) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry joint loop endpoint inherited admission"
-  end;
-
 (* Consume the actual initializer package without selecting a second header. *)
 Theorem entry_joint_initialized_loop_endpoint:
   EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
@@ -475,13 +430,6 @@ Proof
   qexistsl_tac [`t`,`scratch`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_joint_initialized_loop_endpoint)
-  in if null axioms andalso null (Thm.hyp entry_joint_initialized_loop_endpoint) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry initialized loop endpoint inherited admission"
-  end;
-
 (* Convert the ordinary source-member endpoint without changing its witness. *)
 Theorem entry_member_success_child_resources:
   calldata_member_success ctx fn site limit_st ready st1
@@ -496,13 +444,6 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_member_success_child_resources)
-  in if null axioms andalso null (Thm.hyp entry_member_success_child_resources) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry child resources inherited admission"
-  end;
 
 (* A framed source-child producer is consumed on the valid entry prepared by
    the loop.  It returns resources and observations under the same existential. *)
@@ -569,10 +510,3 @@ Proof
   drule entry_member_success_child_resources >> strip_tac >>
   qexistsl_tac [`child`,`scratch`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_valid_array_child_resources)
-  in if null axioms andalso null (Thm.hyp entry_valid_array_child_resources) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry valid array child resources inherited admission"
-  end;

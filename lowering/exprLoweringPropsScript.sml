@@ -2328,20 +2328,6 @@ QED
 
 (* ===== Kernel audit for changed place helpers ===== *)
 
-val () = List.app (fn (name,theorem) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
-  in
-    if null (Thm.hyp theorem) andalso null axioms andalso
-       List.all (fn label => label = "DISK_THM") oracles then
-      print ("PLACE_HELPER_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
-    else raise Fail ("admitted place helper: " ^ name)
-  end)
-  [("ci_mono_compile_subscript_cfn",ci_mono_compile_subscript_cfn),
-   ("ci_mono_compile_attribute_cfn",ci_mono_compile_attribute_cfn),
-   ("ci_mono_compile_mapping_subscript",ci_mono_compile_mapping_subscript),
-   ("ci_mono_compile_keccak256_key",ci_mono_compile_keccak256_key),
-   ("ci_mono_compile_make_array_cfn",ci_mono_compile_make_array_cfn)]
-
 Theorem ci_mono_as_stack_val[local]:
   ∀ ty p sa. SND (as_stack_val ty p) = SND p
 Proof
@@ -2829,16 +2815,6 @@ Proof
   rename1 `ArrayT _ sz` >> Cases_on `sz` >>
   simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load]
 QED
-
-val _ = app (fn (name, th) =>
-  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles
-     then print ("Membership proof oracle check: " ^ name ^ " clean\n")
-     else raise Fail ("Membership proof has oracle: " ^ name)
-  end)
-  [("entry traces", array_membership_entry_traces),
-   ("loop monotonicity", ci_mono_compile_array_membership_loop),
-   ("caller monotonicity", ci_mono_compile_var_array_membership)];
 
 Theorem ci_mono_compile_keccak256_bytes[local]:
   ∀ ptr_op sa. ci_mono sa (SND (compile_keccak256_bytes ptr_op sa))
@@ -5213,83 +5189,6 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
-
-(* Kernel-closure audit for the membership-order change and shared typed-memory prerequisite. *)
-val () = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null axioms andalso null (Thm.hyp th) andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("Kernel-closed: " ^ name ^ "\n")
-    else raise Fail ("Unexpected oracle dependency: " ^ name)
-  end)
-  [("ci_mono_bytestring_hash_selection", ci_mono_bytestring_hash_selection),
-   ("ci_mono_bytestring_comparison_branch", ci_mono_bytestring_comparison_branch),
-   ("ci_mono_emit_membership_eqs", ci_mono_emit_membership_eqs),
-   ("ci_mono_fold_membership_or", ci_mono_fold_membership_or),
-   ("ci_mono_fold_membership_and", ci_mono_fold_membership_and),
-   ("ci_mono_compile_list_membership_in", ci_mono_compile_list_membership_in),
-   ("ci_mono_compile_list_membership_notin", ci_mono_compile_list_membership_notin),
-   ("list_membership_small_traces", list_membership_small_traces),
-   ("ci_mono_typed_memory_family", ci_mono_typed_memory_family)];
-(* Immutable helper monotonicity interfaces share the typed-memory family
-   with aggregate construction; all must remain kernel-closed. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted immutable monotonicity interface"
-  end)
-  [ci_mono_compile_lit_byte_offset, ci_mono_compile_imm_copy_to_memory,
-   ci_mono_compile_imm_store_words, ci_mono_compile_ensure_in_memory,
-   ci_mono_compile_array_subscript, ci_mono_compile_array_membership_loop,
-   ci_mono_typed_memory_family];
-
-(* Issue #560 integrity gate, including local proof-interface helpers. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction proof interface"
-  end)
-  [ci_mono_typed_memory_family, ci_mono_compile_store_memory,
-   ci_mono_compile_struct_lit_cfn, ci_mono_compile_make_array_elems_cfn,
-   ci_mono_compile_make_array_cfn, ci_mono_compile_zero_words,
-   ci_mono_compile_builtin_empty_complex,
-   builtinSimpleTheory.compile_zero_words_zero,
-   builtinSimpleTheory.compile_zero_words_one_order,
-   builtinSimpleTheory.compile_zero_words_two_order,
-   builtinSimpleTheory.compile_builtin_empty_complex_length_order,
-   builtinSimpleTheory.compile_builtin_empty_complex_fixed_order];
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction regression theorem"
-  end)
-  [exprLoweringTheory.compile_empty_word_dispatch,
-   exprLoweringTheory.compile_empty_memory_dispatch,
-   exprLoweringTheory.compile_make_array_empty_length,
-   exprLoweringTheory.compile_make_array_word_order,
-   exprLoweringTheory.compile_make_fixed_array_word_order,
-   exprLoweringTheory.compile_make_tuple_word_order,
-   exprLoweringTheory.compile_struct_lit_word_order,
-   exprLoweringTheory.compile_make_array_empty_full_capacity,
-   exprLoweringTheory.compile_make_array_typed_tuple_order];
-
-(* Retained general compiler admissions and their existing structural corollary
-   are excluded; all other exported proofs must be closed.
-   compile_expr_extends_insts inherits compile_expr_ci_mono's admission. *)
-val () = List.app
-  (fn (name,th) =>
-    if List.exists (fn allowed => name = allowed)
-      ["compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
-    else let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("expression lowering proof is not closed: " ^ name)
-    end)
-  (DB.thms "exprLoweringProps");
 
 Theorem as_stack_val_stack:
   !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)

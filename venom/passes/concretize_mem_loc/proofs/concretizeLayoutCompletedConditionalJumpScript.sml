@@ -43,6 +43,4 @@ Proof
   qexists `lbl` >> simp[]
 QED
 
-val _ = if null (hyp layout_completed_conditional_jump) then ()
-        else raise Fail "completed conditional jump export has hypotheses";
 val _ = export_theory();

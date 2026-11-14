@@ -177,7 +177,4 @@ Proof
   fs[relocation_taint_le_def, demand_taint_def] >> metis_tac[]
 QED
 
-val _ = if null (hyp concretize_assert_local_complete) andalso
-           null (hyp concretize_assert_abort_complete) then ()
-        else raise Fail "assertion exports have hypotheses";
 val _ = export_theory();

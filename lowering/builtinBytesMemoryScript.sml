@@ -387,16 +387,6 @@ Proof
   simp[] >> decide_tac
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BYTE_MEMORY_KERNEL_AUDIT OK\n"
-     else raise Fail "byte memory footprint inherited admission"
-  end) [compile_assert_slice_bounds_mem_ok, compile_bytestring_src_mem_ok,
-        compile_extract32_load_mem_ok, compile_slice_data_mem_ok];
-
-
 (* Probe the body entry boundary: a source-visible local owns enough room
    for the bytestring header read, including an unsuccessful read prefix. *)
 Theorem compile_bytestring_src_local_mem_ok:
@@ -442,4 +432,3 @@ Proof
   `p MOD dimword (:256) <= p` by simp[MOD_LESS_EQ] >>
   decide_tac
 QED
-

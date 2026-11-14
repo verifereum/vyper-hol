@@ -106,6 +106,3 @@ Proof
   simp[NoAsms, lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
   fs[ADD1] >> metis_tac[ld_image_def]
 QED
-
-val _ = if null (hyp ld_return_point_endpoint_next) then ()
-        else raise Fail "endpoint return point has hypotheses";

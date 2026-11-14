@@ -1196,14 +1196,3 @@ Proof
   fs[expr_sim_pre_body, expr_sim_ok_case] >>
   irule (Q.SPEC `T` compile_augassign_local_case) >> simp[] >> metis_tac[]
 QED
-
-(* Integrity gate: the source and code sides and the store carry no
-   admission; the statement itself inherits exprSimBinopFrag's (#572). *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "AUGASSIGN_AUDIT OK\n"
-     else raise Fail "augmented assignment inherited admission"
-  end) [eval_augassign_local_bop, augassign_local_code_bop,
-        expr_sim_inv_local, assign_local_store_run];

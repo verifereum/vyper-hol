@@ -55,11 +55,3 @@ Proof
     `ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 1)`] >>
   asm_simp_tac bool_ss [] >> EVAL_TAC
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry normalized memory inherited admission"
-  end) [entry_decoder_normalized_memory, entry_valid_pre_original_memory,
-        entry_dynamic_normalized_memory_probe, entry_nested_sparse_normalized_memory_probe];

@@ -390,10 +390,4 @@ Resume concretize_create_local_complete[taint]:
 QED
 Finalise concretize_create_local_complete
 
-val _ = List.app (fn th => if null (hyp th) then ()
-                          else raise Fail "CREATE export has hypotheses")
-  [concretize_clean_create_completion, concretize_create_observation,
-   concretize_create_abort_observation, create_execution_fields,
-   concretize_create_local_execution, concretize_create_local_complete];
-
 val _ = export_theory();

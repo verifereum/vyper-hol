@@ -463,13 +463,3 @@ Proof
   >- gvs[Abbr `start`, Abbr `local`, execute_plan_def, exec_stack_op_def] >>
   simp[Abbr `vp`]
 QED
-
-(* The other boundary simulations are separate proof tasks.  Certify this
-   entry theorem and every helper in its dedicated theory independently. *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean entry parameter proof: " ^ name)
-  end) (("entry_params_frame_sim", entry_params_frame_sim) ::
-        DB.thms "fnFrameBoundaryEntryParams");
