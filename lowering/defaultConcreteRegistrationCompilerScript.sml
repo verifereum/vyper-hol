@@ -77,3 +77,62 @@ Proof
   simp[default_registration_slot_def] >> metis_tac[]
 QED
 
+
+Theorem default_registration_singleton_update:
+  FLOOKUP ce.ce_vars name = SOME (MemLoc old msz) /\
+  default_registration_ptr_reservation ce st /\
+  compile_register_positional_args ce [(name,prim,dyn,sz,info)] off st = (ce1,st1) ==>
+  ?p.
+    ce1 = ce with ce_vars updated_by (\m. m |+ (name,PtrVar (Var p) msz)) /\
+    ~not_fresh_at st p /\ not_fresh_at st1 p /\
+    cs_extends st st1 /\
+    default_registration_ptr_reservation ce1 st1
+Proof
+  strip_tac >> drule register_positional_args_step >>
+  simp[var_location_memory_size_def, register_positional_args_nil] >>
+  disch_then (fn th => fs[th, register_positional_args_nil]) >> gvs[] >>
+  drule loweringHaltTheory.compile_alloc_buffer_emission >> strip_tac >> gvs[] >>
+  drule decode_args_suffix_extends >> strip_tac >>
+  qexists `p` >> simp[] >>
+  `cs_extends st st1` by metis_tac[cs_extends_trans] >>
+  `sa.cs_next_var <= st1.cs_next_var` by
+    (qmatch_asmsub_abbrev_tac `compile_decode_args updated _ _ _ _ _ _` >>
+     qspecl_then [`[(name,prim,dyn,sz,info)]`,`updated`,`off`,
+       `CALLDATALOAD`,`Lit 0w`,`4`,`sa`] mp_tac
+       calldataRegistrationExecTheory.registration_decode_ci_mono >>
+     simp[exprLoweringPropsTheory.ci_mono_def] >> gvs[]) >>
+  `st.cs_next_var <= st1.cs_next_var` by decide_tac >>
+  `not_fresh_at st1 p` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  simp[] >>
+  qpat_x_assum `default_registration_ptr_reservation ce st` mp_tac >>
+  qpat_x_assum `~not_fresh_at st p` mp_tac >>
+  qpat_x_assum `not_fresh_at st1 p` mp_tac >>
+  `st.cs_next_var <= st1.cs_next_var` by decide_tac >>
+  pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+  simp[default_registration_ptr_reservation_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+
+Theorem default_registration_vars_update:
+  (ce with ce_vars updated_by (\m. m |+ (name,loc))) =
+  (ce with ce_vars := ce.ce_vars |+ (name,loc))
+Proof
+  Cases_on `ce` >> simp[recordtype_compile_env_seldef_ce_vars_fupd_def]
+QED
+
+Theorem default_registration_slots_advance:
+  LENGTH args = LENGTH tvs /\ ALL_DISTINCT (MAP FST args) /\
+  LIST_REL (default_registration_slot tops ce) (ZIP (args,tvs))
+    ((name,prim,dyn,sz,info)::rest) ==>
+  LIST_REL (default_registration_slot tops
+    (ce with ce_vars updated_by (\m. m |+ (name,loc))))
+    (ZIP (TL args,TL tvs)) rest
+Proof
+  Cases_on `args` >> Cases_on `tvs` >> simp[] >>
+  PairCases_on `h` >>
+  simp[default_registration_slot_def] >> strip_tac >> gvs[] >>
+  simp[default_registration_vars_update] >>
+  irule default_registration_slots_vars >> simp[]
+QED
+
