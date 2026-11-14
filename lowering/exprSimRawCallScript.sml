@@ -881,18 +881,6 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem raw_call_outbuf_steps[local]:
-  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
-  ?buf sm.
-    compile_alloc_buffer (((cap + 31) DIV 32) * 32 + 32) sa = (buf,sm) /\
-    ov = buf.buf_operand /\ emit_op ADD [ov; Lit 32w] sm = (op,sb)
-Proof
-  strip_tac >> qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
-  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
-  strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
-QED
-
 Theorem raw_call_outbuf_positive_id_growth:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) ==>
   sa.cs_next_id < sm.cs_next_id

@@ -18,9 +18,9 @@ Proof
   conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
                        exprLoweringPropsTheory.ci_mono_def] >>
   Cases_on `cap = 0`
-  >- (gvs[] >> drule raw_call_outbuf_zero_steps >> strip_tac >>
+  >- (gvs[] >> drule rawCallShapePtrTheory.raw_call_outbuf_zero_steps >> strip_tac >>
       drule raw_call_alloc_buffer_metadata >> metis_tac[]) >>
-  `0 < cap` by decide_tac >> drule_all raw_call_outbuf_steps >> strip_tac >>
+  `0 < cap` by decide_tac >> drule_all rawCallShapePtrTheory.raw_call_outbuf_steps >> strip_tac >>
   drule raw_call_alloc_buffer_metadata >> strip_tac >>
   `ci_mono sm sb` by
     (qspecl_then [`ADD`,`[ov;Lit 32w]`,`sm`] mp_tac

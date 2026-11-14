@@ -1,48 +1,11 @@
 (* Output-allocation boundaries for the counted raw_call pointer proof. *)
 Theory rawCallAllocationProofPtr
 Ancestors
+  rawCallShapePtr
   wordArgsPtr
   rawCallPrefixPtr rawCallBufferPtr builtinSystem context emitHelper compileEnv loweringStateRelDefs
   fragGasSeqPtr fragExecPtr typedCopyPtr exprSimAlloc exprSimPtrLiteralBuffer
   exprLoweringProps venomInst bodyPtrDefs pred_set
-
-Theorem raw_call_outbuf_steps:
-  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
-  ?buf sm.
-    compile_alloc_buffer (((cap + 31) DIV 32) * 32 + 32) sa = (buf,sm) /\
-    ov = buf.buf_operand /\ emit_op ADD [ov; Lit 32w] sm = (op,sb)
-Proof
-  strip_tac >> qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
-  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
-  strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem raw_call_outbuf_zero_steps:
-  compile_raw_call_outbuf 0 sa = ((ov,op),sb) ==>
-  ?buf. compile_alloc_buffer 0 sa = (buf,sb) /\
-    ov = buf.buf_operand /\ op = buf.buf_operand
-Proof
-  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
-  pairarg_tac >> strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem raw_call_outbuf_positive_code:
-  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
-  sb.cs_current_insts = sa.cs_current_insts ++
-    [mk_inst sa.cs_next_id ALLOCA
-       [Lit (n2w (((cap+31) DIV 32)*32+32))]
-       [STRING #"%" (toString sa.cs_next_var)];
-     mk_inst (SUC sa.cs_next_id) ADD [ov; Lit 32w]
-       [STRING #"%" (toString (SUC sa.cs_next_var))]] /\
-  sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_blocks = sa.cs_blocks
-Proof
-  strip_tac >> qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
-  simp[compile_raw_call_outbuf_def, compile_alloc_buffer_def,
-    emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
-  simp[arithmeticTheory.ADD1, listTheory.APPEND_ASSOC]
-QED
 
 (* Allocation succeeds by the semantic allocation invariant at its caller;
    this boundary checks that actual successful step, not an erased run. *)
@@ -398,7 +361,7 @@ Theorem raw_call_outbuf_split_code:
     fn_has_code sa sm func /\ fn_has_code sm sb func /\
     (local_ptrs_reserved cenv sa ==> local_ptrs_reserved cenv sm)
 Proof
-  strip_tac >> drule_all raw_call_outbuf_steps >> strip_tac >>
+  strip_tac >> drule_all rawCallShapePtrTheory.raw_call_outbuf_steps >> strip_tac >>
   `cs_extends sa sm /\ cs_extends sm sb` by
     (gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_var_def, fresh_id_def, emit_def, cs_extends_def] >>
@@ -549,7 +512,7 @@ Theorem raw_call_outbuf_zero_stage:
       (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
         regions_disjoint ob 0 a len))
 Proof
-  strip_tac >> drule raw_call_outbuf_zero_steps >> strip_tac >> gvs[] >>
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_outbuf_zero_steps >> strip_tac >> gvs[] >>
   drule raw_call_alloc_buffer_metadata >> strip_tac >>
   `0 < dimword(:256)` by simp[] >>
   drule_all raw_call_alloc_buffer_ghost_stage >>
