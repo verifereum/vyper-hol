@@ -1166,3 +1166,87 @@ Proof
         simp[rb_compile_select]) >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_bind_emit_op, rb_emit_op]
 QED
+
+Theorem rb_compile_bytestring_hash:
+  rb_operand_ok p ==> rb_step rb_operand_ok (compile_bytestring_hash p)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_bytestring_hash_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
+QED
+
+Theorem rb_emit_membership_eqs:
+  !elems needle. EVERY rb_operand_ok elems /\ rb_operand_ok needle ==>
+  rb_step (EVERY rb_operand_ok) (emit_membership_eqs needle elems)
+Proof
+  Induct >> simp[emit_membership_eqs_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[] >>
+  simp[rb_step_return]
+QED
+
+Theorem rb_fold_membership_or:
+  !cs acc. EVERY rb_operand_ok cs /\ rb_operand_ok acc ==>
+  rb_step rb_operand_ok (fold_membership_or acc cs)
+Proof
+  Induct >> simp[fold_membership_or_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[]
+QED
+
+Theorem rb_fold_membership_and:
+  !cs acc. EVERY rb_operand_ok cs /\ rb_operand_ok acc ==>
+  rb_step rb_operand_ok (fold_membership_and acc cs)
+Proof
+  Induct >> simp[fold_membership_and_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[]
+QED
+
+Theorem rb_compile_list_membership_in:
+  EVERY rb_operand_ok elems /\ rb_operand_ok needle ==>
+  rb_step rb_operand_ok (compile_list_membership_in needle elems)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_list_membership_in_def] >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_emit_membership_eqs] >>
+  gen_tac >> Cases_on `x` >> simp[rb_step_return, rb_fold_membership_or]
+QED
+
+Theorem rb_compile_list_membership_notin:
+  EVERY rb_operand_ok elems /\ rb_operand_ok needle ==>
+  rb_step rb_operand_ok (compile_list_membership_notin needle elems)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_list_membership_notin_def] >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_emit_membership_eqs] >>
+  gen_tac >> Cases_on `x` >> simp[rb_step_return] >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_fold_membership_and]
+QED
+
+Theorem rb_compile_mapping_subscript:
+  rb_operand_ok slot /\ rb_operand_ok key ==>
+  rb_step rb_operand_ok (compile_mapping_subscript slot key)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_mapping_subscript_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_keccak256_key:
+  rb_operand_ok key ==> rb_step rb_operand_ok (compile_keccak256_key key bytes32)
+Proof
+  strip_tac >> Cases_on `bytes32` >>
+  simp[compile_keccak256_key_def]
+  >- (irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+      gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+      irule rb_ignore >> simp[rb_emit_void, rb_emit_op]) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
+QED
