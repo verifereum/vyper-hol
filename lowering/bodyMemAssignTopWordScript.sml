@@ -10,7 +10,7 @@ Ancestors
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyDeclMemoryCounted bodyDeclMemoryCore
   allocaFootprint instMemFrontier memSafeRun exprSimMemDefs exprSimSource
-  bodyExprPreFacts stmtSimAssignStorage stmtSimForced exprSimTopLevelProps
+  bodyExprPreFacts stmtSimAssignStorage stmtSimAssignStorageFacts stmtSimForced exprSimTopLevelProps
   accountsRelProps exprSimUnwrap bodyStorageMetadata
   vyperTypeEnv vyperStorageLayoutSafety vyperStorageBackend
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
@@ -134,12 +134,6 @@ Proof
     (drule (cj 2 compile_expr_grows) >> strip_tac >>
      drule emitted_insts_emit_void >> strip_tac >> decide_tac) >>
   irule forced_then_outcome >>
-  qexists_tac `\H v ee t.
-    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
-    expr_store_bound cx (expr_type e) v op t /\
-    t.vs_current_bb = sB.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sB.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   rpt conj_tac
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> BETA_TAC >>
@@ -147,7 +141,14 @@ Proof
       simp[vyperStorageTraceTheory.storage_trace_frame_event,
            vyperStorageTraceTheory.storage_trace_frame_write_storage_slot])
   >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  qexists_tac `\H v ee t.
+    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+    expr_store_bound cx (expr_type e) v op t /\
+    t.vs_current_bb = sB.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sB.cs_current_insts /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+  rpt conj_tac
   >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
@@ -260,6 +261,7 @@ Resume compile_assign_storage_typed_stmt_frag_mem[store]:
   qexists_tac `cenv` >> rpt conj_tac
   >- simp[stmt_lands_def]
   >- first_assum ACCEPT_TAC
+  >- simp[]
   >- simp[]
   >- simp[cenv_top_ext_refl]
   >- first_assum ACCEPT_TAC
