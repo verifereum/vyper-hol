@@ -858,7 +858,7 @@ QED
 
 (* The pieces the two loop directions share: the counter's initialisation
    and the header's test and branch. *)
-Theorem copy_init_origin_ptr[local]:
+Theorem copy_init_origin_ptr:
   ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv]]
