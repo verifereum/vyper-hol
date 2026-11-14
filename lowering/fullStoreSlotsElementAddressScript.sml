@@ -244,7 +244,7 @@ Theorem store_slots_element_addresses_origin_ptr:
   op_taint tn (Var cv) = {} /\ op_taint tn dst = {} /\
   ptr_covers G tn xs s (n*ms) /\ j < n /\
   w2n sw + n*ms < dimword(:256) /\
-  w2n dw + n*slots < dimword(:256) /\
+  w2n dw + n*slots <= dimword(:256) /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\ fn_has_code sa se func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
