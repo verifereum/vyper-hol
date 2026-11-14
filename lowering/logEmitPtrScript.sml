@@ -157,6 +157,7 @@ Proof
 QED
 
 Theorem compile_log_emit_path_ptr:
+  ~cx.txn.is_static /\
   emit_inst LOG
     (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) [] sa = ((),sb) /\
   LENGTH topic_ops < dimword (:256) /\ eval_operands topic_ops s = SOME topics /\
@@ -183,7 +184,8 @@ Theorem compile_log_emit_path_ptr:
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule emitted_insts_emit_inst >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `isPREFIX [mk_inst sa.cs_next_id LOG
     (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) []]
     (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>

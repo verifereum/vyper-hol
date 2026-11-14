@@ -31,7 +31,10 @@ Theorem compile_log_emit_frontier:
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   t.vs_alloca_next = s.vs_alloca_next
 Proof
-  strip_tac >> drule_all compile_log_emit_run >> strip_tac >> gvs[] >>
-  qpat_x_assum `(_ with vs_logs := _) = _`
-    (mp_tac o Q.AP_TERM `\u. u.vs_alloca_next`) >> simp[]
+  strip_tac >> drule emitted_insts_emit_inst >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+    w2n_n2w, REVERSE_APPEND, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
 QED
