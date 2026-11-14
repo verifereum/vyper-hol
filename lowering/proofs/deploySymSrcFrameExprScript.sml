@@ -140,7 +140,7 @@ Proof
         Cases_on `bytestring_literal_hash (HD (TL args))` >>
         gvs[deploy_blocks_frame_equation]) >>
   TRY (Cases_on `HD (TL args)` >> gvs[deploy_blocks_frame_equation] >>
-       rename1 `Builtin et bb es` >> Cases_on `bb` >>
+       rename1 `Builtin et bb es` >> Cases_on `bb` >> simp[NoAsms] >>
        gvs[deploy_blocks_frame_equation] >> rpt IF_CASES_TAC >>
        gvs[deploy_blocks_frame_equation] >> NO_TAC) >>
   Cases_on `method_id_literal (HD args)` >> gvs[deploy_blocks_frame_equation]

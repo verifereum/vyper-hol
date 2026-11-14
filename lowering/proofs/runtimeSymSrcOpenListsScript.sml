@@ -72,10 +72,13 @@ Proof
   strip_tac >> gen_tac >> gen_tac >> Induct >-
     simp[compile_concat_def, comp_return_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `infos` >- gvs[compile_concat_def, comp_return_def] >>
+  Cases_on `infos`
+  >- (qpat_x_assum `compile_concat _ _ (h::es) _ [] _ _ = _` mp_tac >>
+      simp[NoAsms, Once compile_concat_def, comp_return_def] >>
+      disch_then (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   PairCases_on `h'` >>
   qpat_x_assum `~supported_exprs_exists _ (h::es)` mp_tac >>
-  simp[supported_exprs_exists_every] >> strip_tac >>
+  simp[NoAsms, supported_exprs_exists_every] >> strip_tac >>
   `runtime_sym_expr_contract tops cfn ce (expr_type h) h` by
     (first_x_assum irule >> simp[]) >>
   `supported_expr tops h` by
