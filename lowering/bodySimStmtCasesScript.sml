@@ -47,7 +47,8 @@
 
 Theory bodySimStmtCases
 Ancestors
-  bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
+  bodyStorageMetadata bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
+  exprSimAggregateLayout
   loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
@@ -663,19 +664,6 @@ Proof
   metis_tac[store_lays_out_typed]
 QED
 
-(* A storage declaration found by name is a variable declaration of tops
-   under that name. *)
-
-Theorem find_var_decl_storage_some:
-  !ts vis mut id ty init.
-    MEM (VariableDecl vis mut id ty init) ts /\
-    (mut = Storage \/ mut = Transient) ==>
-    find_var_decl_by_name id ts <> NONE
-Proof
-  Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
-QED
-
-
 (* expr_sim_inv's storage-variable clause from the program's frame: in a
    single-module program, a storage or transient variable has its declared
    type in ce_module_var_type and is not a mapping. *)
@@ -1019,24 +1007,6 @@ Proof
                     (nsid_to_string sid)) fld = SOME (fty, fsz)` by
     metis_tac[attribute_type_struct_field] >>
   irule compile_assign_attr_local_case >> simp[] >> metis_tac[]
-QED
-
-(* A struct field write the supported subset admits is to a storage or
-   transient struct of the main module, tops. *)
-Theorem supported_storage_field_write_decl:
-  !tops src id fld.
-    supported_storage_field_write tops (src, id) fld ==>
-    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
-Proof
-  rpt gen_tac >>
-  simp[supported_storage_field_write_def,
-       supportedExprFormsTheory.supported_storage_fields_def] >>
-  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-  rename1 `SOME x` >> PairCases_on `x` >>
-  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >> simp[] >>
-  metis_tac[find_var_decl_storage_some]
 QED
 
 (* An assignment to a word field of a storage or transient struct:
@@ -1454,28 +1424,6 @@ Proof
   gvs[value_runtime_typed_def])
 QED
 
-(* A local assigned to takes memory: its type is a widening of the assigned
-   value's type, which is assignable. *)
-Theorem assign_local_memory_bytes_pos[local]:
-  !cenv cx env es ret_ty id e env' ty.
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
-    FLOOKUP env.var_types id = SOME ty ==>
-    0 < type_memory_bytes cenv ty
-Proof
-  rpt strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  `assignable_type env.type_defs ty` by
-    (gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-     Cases_on `type_place_target env (NameTarget id)` >> gvs[] >>
-     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
-     gvs[vyperTypeEnvTheory.type_place_target_NameTarget] >>
-     metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type]) >>
-  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
-  metis_tac[]
-QED
-
 (* RESIDUAL (#767): a place assigned a value whose lowered type is
    neither e's type nor a bytestring type e's fits: an internal call whose
    return type widens to the call's type (type_widens_to: a DynArray of a
@@ -1874,40 +1822,6 @@ Proof
   fs[]
 QED
 
-(* The locals a tuple is assigned to take memory: their types are the
-   tuple's element types, which are assignable, so they take a storage slot
-   (assignable_type_slot_size_pos). *)
-Theorem assign_tuple_locals_bytes_pos:
-  !cenv cx env es ret_ty ids e env'.
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty
-      (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
-      SOME env' ==>
-    EVERY (\id. !ty. FLOOKUP env.var_types id = SOME ty ==>
-                     0 < type_memory_bytes cenv ty) ids
-Proof
-  rpt strip_tac >>
-  `?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty)
-           (MAP (BaseTarget o NameTarget) ids) tys /\
-         assignable_type env.type_defs (TupleT tys)` by
-    (gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
-         AllCaseEqs()] >> metis_tac[]) >>
-  `EVERY (assignable_type env.type_defs) tys` by fs[assignable_type_def, EVERY_MEM] >>
-  rw[EVERY_EL] >>
-  `n < LENGTH tys /\
-   well_typed_atarget env (BaseTarget (NameTarget (EL n ids))) (EL n tys)` by
-    (fs[LIST_REL_EL_EQN] >> first_x_assum (qspec_then `n` mp_tac) >>
-     simp[EL_MAP]) >>
-  `ty = EL n tys` by
-    gvs[well_typed_atarget_def, well_typed_target_def, vyperTypeEnvTheory.type_place_target_NameTarget,
-        AllCaseEqs()] >>
-  `assignable_type env.type_defs ty` by metis_tac[EVERY_EL] >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
-  metis_tac[]
-QED
-
 Theorem body_assign_tuple_rhs_pre[local]:
   body_inv tops ctx cenv cx /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -2149,7 +2063,9 @@ Theorem body_assign_tuple_targets[local]:
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt strip_tac >>
-  irule stmtSimAssignTupleTargetsTheory.stmt_frag_storage_maps_intro >> strip_tac >>
+  irule stmtSimAssignTupleTargetsTheory.stmt_frag_storage_maps_intro >>
+  conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  strip_tac >>
   drule tupleTargetStorePropsTheory.tuple_targets_typing >> strip_tac >> gvs[] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>

@@ -22,7 +22,8 @@
  *   augassign_attr_storage_place        — x.f's place, value and type are
  *                                         read where expr_sim_inv holds
  *
- * Helpers: eval_target_place_attr_toplevel_field,
+ * Shared source helpers (augAssignStorageFieldSource):
+ *   eval_target_place_attr_toplevel_field,
  *   augassign_storage_field_place, augassign_storage_field_read,
  *   eval_augassign_storage_place, augassign_storage_place_rhs_exception,
  *   augassign_storage_place_rhs_normal,
@@ -168,8 +169,7 @@ Proof
        (!x u. not_fresh_at sa x /\ lookup_var x s = SOME u ==>
               lookup_var x q = SOME u)` by
     (irule attr_add_marked_path >> simp[PULL_EXISTS] >>
-     qexists_tac `Lit slot` >>
-     simp[eval_operand_def]) >>
+     qexists_tac `Lit slot` >> simp[eval_operand_def]) >>
   pop_assum strip_assume_tac >>
   `stmt_state_rel H0 ctx func cenv cx es q` by
     (qpat_assum `!H. stmt_state_rel H _ _ _ _ _ s ==> _` irule >>

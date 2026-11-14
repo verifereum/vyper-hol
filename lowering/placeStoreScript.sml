@@ -23,7 +23,7 @@ Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
-  valueEncodingTyping vyperStoragePlaceRegion
+  valueEncodingTyping vyperStoragePlaceRegion vyperStoragePlaceObserved
   stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState valueEncoding valueEncodingDefs vyperTyping valueEncodingProps valueEncodingProofs
@@ -1217,7 +1217,7 @@ Proof
      ee (s with vs_memory := mem')` by
     (irule place_store_local_immutables_frame >>
      goal_assum (drule_at Any) >> simp[] >>
-     qexistsl_tac [`ctx`, `func`] >> simp[] >>
+     qexistsl_tac [`H`, `ctx`, `func`] >> simp[] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `entry'.type = entry.type` by metis_tac[replace_memory_entry_type] >>
   `!n b z. local_region cenv sc' (s with vs_memory := mem') n b z ==>
@@ -1396,15 +1396,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  `accounts_rel cx es s` by fs[stmt_state_rel_def, state_rel_def] >>
-  `accounts_rel cx es' (if tr then tstore k u s else sstore k u s)` by
+  `accounts_rel H cx es s` by fs[stmt_state_rel_def, state_rel_def] >>
+  `accounts_rel H cx es' (if tr then tstore k u s else sstore k u s)` by
     (Cases_on `tr` >> gvs[] >>
      metis_tac[accounts_rel_sstore, accounts_rel_tstore]) >>
-  `storage_rel cx cx.txn.target es'
+  `storage_rel H cx.txn.target es'
      (if tr then tstore k u s else sstore k u s) /\
-   transient_rel cx cx.txn.target es'
+   transient_rel H cx.txn.target es'
      (if tr then tstore k u s else sstore k u s)` by
-    (qpat_x_assum `accounts_rel cx es' _` mp_tac >>
+    (qpat_x_assum `accounts_rel H cx es' _` mp_tac >>
      Cases_on `tr` >> simp[] >> strip_tac >>
      drule accounts_rel_storage_transient >>
      simp[sstore_def, tstore_def]) >>
@@ -1691,10 +1691,14 @@ Proof
     (Cases_on `p` >> gvs[place_ptr_rel_def] >>
      rename1 `slot_loc tr` >> Cases_on `tr` >> simp[slot_loc_def]) >>
   Cases_on `loc = LocMemory`
-  >- (qspecl_then
+  >- (`storage_place_region cx p` by
+        (Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def,
+                             storage_place_region_def] >>
+         Cases_on `b` >> gvs[slot_loc_def]) >>
+    qspecl_then
       [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`, `dst_op`,
        `op`, `src_loc`, `dty`, `sty`, `stv`, `v`, `sa`, `sb`]
-      mp_tac place_store_value_memory_run >>
+      mp_tac (INST_TYPE [alpha |-> ``:256``] place_store_value_memory_run) >>
     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
     simp[]) >>
   `dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>

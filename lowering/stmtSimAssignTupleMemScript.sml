@@ -133,7 +133,7 @@ Proof
         expr_post H ctx func cenv cx e es sa su s0 ee v op t) /\
    t.vs_current_bb = su.cs_current_bb /\
    t.vs_inst_idx = LENGTH su.cs_current_insts` by metis_tac[] >>
-  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `?H0. valid_horizon cx st0 H0 ee.storage_trace` by metis_tac[] >>
   `expr_post H0 ctx func cenv cx e es sa su s0 ee v op t` by
     (qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >> simp[]) >>
   suspend "success"
@@ -162,6 +162,20 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[success]:
     (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `valid_horizon cx st0 H0 (es with gas_obs := gs).storage_trace` by
+    (irule (INST_TYPE [alpha |-> ``:value``]
+              vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`bind (eval_expr cx e) (read_result cx)`,
+               `INL (ArrayV (TupleV vs))`, `ee`] >>
+     irule_at Any vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `H0` mp_tac) >> fs[]) >>
   `alloca_frame cenv es sa s0 cenv ee t` by
     (drule_all expr_post_alloca_frame >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -188,11 +202,19 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[suffix]:
    expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op t` by gvs[] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_state_rel H ctx func cenv cx ee t` by
-    (rpt strip_tac >>
+    (qx_gen_tac `Hx` >> strip_tac >>
      qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (qspec_then `H` mp_tac) >>
-     simp[expr_post_def]) >>
-  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path) >> strip_tac >>
+       (qspec_then `Hx` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+  mp_tac (Q.SPECL [`st0`, `ctx`, `func`, `cx`, `cenv`, `ids`, `ee`, `ee'`, `tys`,
+                   `tvs`, `vs`, `sa`, `su`, `sl`, `ss`, `sb`, `op`, `staged`,
+                   `elems`, `t`, `flag`]
+    (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path)) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
   `sa.cs_next_id <= su.cs_next_id` by
     (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac
        (cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa) >>
@@ -209,7 +231,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[post]:
   qexists `t'` >> simp_tac (srw_ss()) [] >>
   qx_gen_tac `H'` >> strip_tac >>
   `valid_horizon cx st0 H' ee.storage_trace` by
-    (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+    (irule (INST_TYPE [alpha |-> ``:unit``] vyperStorageFootprintTheory.valid_horizon_frame) >>
      qpat_assum `assign_tuple_targets _ _ _ ee = _` (irule_at Any) >>
      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `stmt_state_rel H' ctx func cenv cx ee' t'` by
@@ -217,15 +239,15 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[post]:
   `storage_well_formed_on cx ee (FST H')` by
     (qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `H'` mp_tac) >>
-     simp[expr_post_def]) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
   `ee'.accounts = ee.accounts /\ ee'.tStorage = ee.tStorage` by
     (drule tupleLocalStorePropsTheory.assign_tuple_target_list_locals_backends >>
      simp[]) >>
   `storage_well_formed_on cx (ee' with gas_obs := []) (FST H')` by
-    (mp_tac (Q.INST [`st'` |-> `ee' with gas_obs := []`, `st` |-> `ee`,
-                     `regions` |-> `FST H'`]
-               vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
-     simp[]) >>
+    (irule (vyperStorageFootprintTheory.storage_well_formed_on_backends
+            |> SPEC_ALL |> UNDISCH |> iffRL |> DISCH_ALL) >>
+     qexists_tac `ee` >> simp[]) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   `stmt_state_rel H' ctx func cenv cx (ee' with gas_obs := []) t'` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ ee' t'` mp_tac >>
