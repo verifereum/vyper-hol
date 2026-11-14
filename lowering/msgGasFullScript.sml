@@ -2,6 +2,7 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  bodyFullBuiltinECAddStaging
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
@@ -244,5 +245,5 @@ Proof
   simp[post_value_type_def, expr_type_def] >> strip_tac >>
   gvs[expr_type_def, vv_store_bound_stack_word, env_item_type_def,
       is_word_type_def, ptr_vv_ok_def, vv_location_def, read_result_def,
-      return_def, update_var_def]
+      return_def, update_var_def, bodyPtrDefsTheory.ptr_val_ok_def]
 QED
