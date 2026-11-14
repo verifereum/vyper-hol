@@ -25,6 +25,7 @@ Theorem nonreentrant_entry_lock_source_correct:
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
+  (mut = View \/ ~cx.txn.is_static) /\
   tload (n2w global_nonreentrant_slot) ss <> 1w ==>
   ?vs' ss'.
     (case cx.nonreentrant_slot of
@@ -72,7 +73,8 @@ Theorem nonreentrant_entry_unlock_source_correct:
   function_header_ok vis mut T rr name args dflts ret /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
   state_rel func cenv cx vs ss /\
-  compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View) st = ((),st') ==>
+  compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View) st = ((),st') /\
+  (mut = View \/ ~cx.txn.is_static) ==>
   ?vs' ss'.
     (if ~(mut = View \/ mut = Pure) then
        case cx.nonreentrant_slot of
@@ -101,6 +103,7 @@ Theorem checked_nonreentrant_entry_lock:
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   local_ptrs_rel func cenv scopes ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
+  (mut = View \/ ~cx.txn.is_static) /\
   tload (n2w global_nonreentrant_slot) ss <> 1w ==>
   ?vs' ss'.
     (case cx.nonreentrant_slot of
@@ -116,7 +119,8 @@ Proof
   strip_tac >>
   `function_header_ok vis mut T rr name args dflts ret` by
     metis_tac[source_typing_function_header] >>
-  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
+  `~(mut = View) ==> ~ss.vs_call_ctx.cc_static` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   drule_all nonreentrant_entry_lock_source_correct >> strip_tac >>
   drule_all compile_nonreentrant_lock_transient_frame >> strip_tac >>
   gvs[] >> metis_tac[]

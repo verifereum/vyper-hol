@@ -132,12 +132,12 @@ QED
 
 Theorem assign_base_ptr_call_context_exists:
   !tx. tx_env_ok tx ==>
-    ?cc tc bc. call_ctx_rel tx cc tc bc /\ ~cc.cc_static
+    ?cc tc bc. call_ctx_rel tx cc tc bc
 Proof
   rpt strip_tac >>
   qexistsl [`ARB with <| cc_caller := tx.sender; cc_address := tx.target;
               cc_callvalue := n2w tx.value; cc_calldata := tx.calldata;
-              cc_static := F |>`,
+              cc_static := tx.is_static |>`,
     `ARB with <| tc_origin := tx.origin; tc_gasprice := n2w tx.gas_price;
               tc_chainid := n2w tx.chain_id; tc_blobhashes := tx.blob_hashes |>`,
     `ARB with <| bc_coinbase := tx.coinbase; bc_timestamp := n2w tx.time_stamp;
