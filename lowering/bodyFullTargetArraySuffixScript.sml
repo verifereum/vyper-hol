@@ -4,6 +4,7 @@ Ancestors
   bodyFullTargetSubscript bodyFullTargetArraySource bodyFullTargetArrayLoad
   bodyFullTargetArrayScalar bodyFullTargetAttribute targetSubscriptMemory
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
+  targetSubscriptContinuation exprLowering exprSimArrayIndex
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
@@ -668,4 +669,40 @@ Proof
     strip_assume_tac) >>
   qexistsl_tac [`t`, `G'`, `tn'`] >> simp[] >> gen_tac >>
   irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC
+QED
+
+Theorem array_tail_packet_compile_parts[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  ?loc len sl sc p.
+    loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+    SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+    (if (case bd of Dynamic _ => T | _ => F)
+     then compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST rb)
+     else comp_return (Lit (n2w (case bd of Fixed n => n | _ => 0)))) sn = (len,sl) /\
+    array_bounds_check iop len (is_signed_type (expr_type e)) sl = ((),sc) /\
+    array_elem_ptr (FST rb) iop (case bd of Dynamic _ => T | _ => F)
+      (word_scale loc) (elem_size_in_location cenv loc et) sc = (p,sb) /\
+    r = (p,FST (SND rb),SOME (ValPT et))
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+    fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  drule_all array_tail_packet_index_post >> strip_tac >>
+  `SND (SND rb) = SOME (ValPT (ArrayT et bd))` by
+    fs[target_post_def, value_type_place_def] >>
+  `target_subscript_suffix cenv e rb iop sn = (r,sb)` by
+    (fs[array_tail_packet_def] >>
+     drule target_subscript_compile_decompose >> strip_tac >> gvs[]) >>
+  qpat_x_assum `target_subscript_suffix _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [target_subscript_suffix_def] >> strip_tac >>
+  Cases_on `(if (case bd of Dynamic _ => T | _ => F)
+     then compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+       (case FST (SND rb) of SOME l => l | NONE => LocMemory) (FST rb)
+     else comp_return (Lit (n2w (case bd of Fixed n => n | _ => 0)))) sn` >>
+  fs[compile_array_subscript_split, comp_bind_def, comp_ignore_bind_def,
+     comp_return_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  Cases_on `_0` >> gvs[] >> metis_tac[]
 QED
