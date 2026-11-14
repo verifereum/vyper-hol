@@ -1,7 +1,7 @@
 (* Pointer certificates and ghost framing for a successful transient guard. *)
 Theory transientLockPtr
 Ancestors
-  transientLockProps nonreentrantSource fragGasSeqPtr instSeqComposePtr
+  transientLockProps nonreentrantSource sourceUnitExecution fragGasSeqPtr instSeqComposePtr
   bodyPtrIfExpScalarLoad bodyPtrSignedConvertClamp stmtAppendStorageRunPtr
   bodyPtrDefs ptrSafeRun ptrDiscipline contextCodegenRel codegenRel
   exprLoweringProps emitHelperProps venomInst venomState venomExecSemantics
