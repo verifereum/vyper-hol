@@ -309,12 +309,14 @@ Proof
   qexists `t` >> simp[] >>
   `ci_mono sa sb` by
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
-  drule_all tuple_place_store_guard >> disch_then assume_tac >>
+  drule_all tuple_place_store_guard >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `Hff` assume_tac) assume_tac) >>
   irule (at_horizon_named "H" tuple_place_pointer_head_advance) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
-  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
+  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >>
+  qexists_tac `Hff` >> simp[] >> rpt strip_tac >>
   `i <= j` by simp[] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_pending_memory >> simp[]
@@ -453,7 +455,7 @@ Proof
        metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
      drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
      drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
-     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     qexistsl [`func`, `EL i tvs`, `ctx`, `H0`] >> simp[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   `alloca_frame cenv es sp s0 cenv ff t` by
     (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
@@ -461,14 +463,16 @@ Proof
   `ci_mono sa sb` by
     (metis_tac[exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND]) >>
   `LENGTH ltys = LENGTH tys` by metis_tac[vyperTypeArgFitsTheory.arg_types_fit_LENGTH] >>
-  drule_all tuple_place_store_guard >> disch_then assume_tac >>
+  drule_all tuple_place_store_guard >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `Hff` assume_tac) assume_tac) >>
   irule (at_horizon_named "H" tuple_place_pointer_head_advance) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
-  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
+  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >>
+  qexists_tac `Hff` >> simp[] >> rpt strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  irule tuple_place_pointer_window_transport >>
+  irule (at_horizon_named "H" tuple_place_pointer_window_transport) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL]
@@ -565,14 +569,15 @@ Proof
      first_assum ACCEPT_TAC) >>
   `0 < type_memory_size (EL i tvs)` by
     (drule_all tuplePlaceZeroTheory.tuple_place_element_source_positive >> simp[]) >>
-  drule_all tuplePlaceBranchReadyTheory.tuple_place_pointer_equal_memory_store >> strip_tac >>
+  drule_all (at_horizon_named "H"
+    tuplePlaceBranchReadyTheory.tuple_place_pointer_equal_memory_store) >> strip_tac >>
   `alloca_frame cenv ee sa s cenv ff t` by
     (irule (at_horizon_named "H" tuple_place_store_alloca_frame) >>
      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
      drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
      drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
-     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     qexistsl [`func`, `EL i tvs`, `ctx`, `H0`] >> simp[] >>
      conj_tac >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
      rpt strip_tac >>
      qpat_x_assum `!aid b len a n. _` irule >> simp[] >>
@@ -588,19 +593,25 @@ Proof
      drule_all tuple_place_pointer_snapshot_apart >> simp[]) >>
   `ci_mono sa sb` by
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+  `!(H :(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
        regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
-       stmt_state_rel H ctx func cenv cx ff t` by metis_tac[] >>
-  drule_all tuple_place_store_guard >> disch_then assume_tac >>
+       stmt_state_rel H ctx func cenv cx ff t` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. stmt_state_rel H _ _ _ _ ee s ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  drule_all tuple_place_store_guard >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `Hff` assume_tac) assume_tac) >>
   irule (at_horizon_named "H" tuple_place_pointer_head_advance) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
-  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
+  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >>
+  qexists_tac `Hff` >> simp[] >> rpt strip_tac >>
   `0 < type_memory_size (EL j tvs)` by
     (drule_all tuplePlaceZeroTheory.tuple_place_element_source_positive >> simp[]) >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  irule tuple_place_pointer_slice_transport >>
+  irule (at_horizon_named "H" tuple_place_pointer_slice_transport) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `type_memory_size (EL i tvs)`, `w2n dw`, `bt`] >>
@@ -663,7 +674,7 @@ Proof
      qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
      drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
      drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
-     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     qexistsl [`func`, `EL i tvs`, `ctx`, `H0`] >> simp[] >>
      conj_tac >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
      rpt strip_tac >>
      qpat_x_assum `!id lb len a n dtv. _` irule >> simp[] >>
@@ -687,14 +698,16 @@ Proof
      metis_tac[]) >>
   `ci_mono sa sb` by
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
-  drule_all tuple_place_store_guard >> disch_then assume_tac >>
+  drule_all tuple_place_store_guard >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `Hff` assume_tac) assume_tac) >>
   irule (at_horizon_named "H" tuple_place_pointer_head_advance) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
-  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
+  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >>
+  qexists_tac `Hff` >> simp[] >> rpt strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  irule tuple_place_pointer_window_transport >>
+  irule (at_horizon_named "H" tuple_place_pointer_window_transport) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL]
@@ -745,8 +758,9 @@ Proof
   qpat_x_assum `!j. j < LENGTH tys ==> _` kall_tac >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> strip_tac >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
+  `i < LENGTH ltys` by simp[] >>
   `expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s` by
-    (irule tuplePlacePointerReadyTheory.tuple_place_pointer_value_rel >> metis_tac[]) >>
+    (drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_value_rel >> simp[]) >>
   `EL i ltys = EL i tys` by
     metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
   `value_has_type (EL i tvs) (EL i vs)` by
@@ -774,19 +788,21 @@ Proof
     (irule (at_horizon_named "H" tuple_place_store_alloca_frame) >>
      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
-     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     qexistsl [`func`, `EL i tvs`, `ctx`, `H0`] >> simp[] >>
      metis_tac[vyperScopePreservationTheory.write_place_scopes_dom]) >>
   `alloca_frame cenv es sp s0 cenv ff t` by
     (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
   qexists `t` >> simp[] >>
   `ci_mono sa sb` by
     (metis_tac[exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND]) >>
-  drule_all tuple_place_store_guard >> disch_then assume_tac >>
+  drule_all tuple_place_store_guard >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `Hff` assume_tac) assume_tac) >>
   irule (at_horizon_named "H" tuple_place_pointer_head_advance) >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >>
+  qexists_tac `Hff` >> simp[] >>
   metis_tac[listTheory.EVERY_EL]
 QED
 
@@ -857,8 +873,12 @@ Proof
       qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
       qpat_assum `valid_horizon _ _ H0 _` (irule_at Any) >>
       qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-      simp[] >> qexistsl [`tops`, `loc`, `env`, `dw`, `dst`, `bt`] >>
+      simp[] >> qexistsl [`tops`, `loc`, `env`, `dw`, `dst`] >>
       simp[] >> strip_tac >> qpat_x_assum `loc = LocMemory` SUBST_ALL_TAC >>
+      `target_post H0 ctx func cenv cx es sp sa s0 ee (PlaceR p)
+         (Type (EL i tys)) r s` by
+        (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` irule >>
+         first_assum ACCEPT_TAC) >>
       drule_all tuple_place_pointer_snapshot_apart >> simp[]) >>
   gvs[] >>
   `0 < type_memory_size_list ltvs` by
