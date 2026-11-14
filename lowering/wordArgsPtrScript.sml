@@ -99,6 +99,24 @@ Proof
   gvs[wb_frame_def] >> metis_tac[]
 QED
 
+Theorem ghost_kept_at_wb_trans:
+  stmt_state_rel H ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
+  wb_frame cenv es0 es' sa s0 s1 /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  ghost_kept_at lo cenv es0 sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept_at lo cenv es1 sb G1 tn1 s1 G2 tn2 ==>
+  ghost_kept_at lo cenv es0 sa G0 tn0 s0 G2 tn2
+Proof
+  strip_tac >>
+  `ghost_kept cenv es0 sa G0 tn0 s0 G1 tn1 /\
+   ghost_kept cenv es1 sb G1 tn1 s1 G2 tn2` by
+    (fs[ghost_kept_def, ghost_kept_at_def] >> metis_tac[]) >>
+  `ghost_kept cenv es0 sa G0 tn0 s0 G2 tn2` by
+    metis_tac[ghost_kept_wb_trans] >>
+  fs[ghost_kept_def, ghost_kept_at_def] >> metis_tac[]
+QED
+
 Theorem eval_exprs_nil_marked_ptr:
   ~s.vs_halted ==>
   gas_marked_exec_ptr D (ctx,func) PG (eval_exprs cx []) (es,s,G,tn)
