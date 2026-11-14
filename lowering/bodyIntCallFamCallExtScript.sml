@@ -1176,6 +1176,37 @@ Resume intcall_ext_kwargs_fold_from_head[kwargs_tail_cont]:
   Cases_on `kw` >> gvs[] >> metis_tac[]
 QED
 Finalise intcall_ext_kwargs_fold_from_head
+Theorem intcall_ext_kwargs_cps[local]:
+  !ks xs es sa sb value_op gas_op default_op s k old_es old_rs old_vvs.
+    intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+    LENGTH ks = LENGTH xs /\ EVERY (intcall_expr_producer fp) xs /\
+    EVERY (supported_expr fp.jc_tops) xs /\
+    EVERY (\e. calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) xs /\
+    EVERY (\e. ~expr_has_effect e) xs /\
+    (!i ee. i < LENGTH xs /\ extrequest_kwargs_reach fp.jc_cx xs es i ee ==>
+      expr_body_pre ce fp.jc_cx env (EL i xs) ee) /\
+    (!i. i < LENGTH xs ==> expr_type (EL i xs) =
+      (if EL i ks = EKDefault then ret else BaseT (UintT 256))) /\
+    compile_ext_call_kwargs compile_expr ce ret ks xs sa = ((value_op,gas_op,default_op),sb) /\
+    fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+    intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    extrequest_strong_captures fp.jc_ctx fp.jc_func ce fp.jc_cx old_es old_rs old_vvs
+      (es with gas_obs := []) sa s /\
+    gas_admissible (bind (eval_exprs fp.jc_cx xs) k) expr_vv_res_ok es /\
+    (!vs ee u.
+      extrequest_kwargs_post fp.jc_ctx fp.jc_func ce fp.jc_cx ret ks xs es sa s sb
+        value_op gas_op default_op old_es old_rs old_vvs vs ee u /\
+      intcall_expr_cont fp ce env es sa s ee sb u ==>
+      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+        (k vs) (ee,u) Q (\r ef z. expr_exit r z)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (bind (eval_exprs fp.jc_cx xs) k) (es,s) Q (\r ef z. expr_exit r z)
+Proof
+  match_mp_tac intcall_ext_kwargs_fold_from_head >>
+  metis_tac[intcall_ext_kwarg_head_cps]
+QED
+
 
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
