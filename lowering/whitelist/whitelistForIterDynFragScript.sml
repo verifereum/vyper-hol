@@ -40,13 +40,14 @@ Proof
 QED
 
 (* Cut the compiler at the length load, the copy, the body and the back edge. *)
-Theorem compile_for_dynarray_stages:
-  FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
-  compile_stmt cenv lctx ty
-    (For id et (Array (Name (ArrayT et (Dynamic c)) name)) n stmts) st =
+Theorem compile_for_dynarray_memory_stages:
+  expr_type e = ArrayT et (Dynamic c) /\
+  compile_expr cenv (ArrayT et (Dynamic c)) e st = (av,se) /\
+  vv_location av = SOME LocMemory /\ vv_operand av = arr_op /\
+  compile_stmt cenv lctx ty (For id et (Array e) n stmts) st =
     ((),st') ==>
   ?lvo st1 bc entry cond bod incr exit idx offo toto epo sa sb0 sb1 sj.
-    emit_op MLOAD [arr_op] st = (lvo,st1) /\
+    emit_op MLOAD [arr_op] se = (lvo,st1) /\
     (do bc <- declare_local cenv id et;
         emit_local_alloca bc id;
         entry <- fresh_label "iter_entry";
@@ -91,7 +92,7 @@ Theorem compile_for_dynarray_stages:
         return ()
      od) sj = ((),st')
 Proof
-  strip_tac >> drule compile_array_name_dynamic >> strip_tac >>
+  strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_stmt_def, expr_type_def, LET_THM, vv_location_def,
        vv_operand_def, mk_ptr_def, is_slot_addressed_def,
@@ -314,7 +315,14 @@ Theorem compile_for_dynarray_parts:
          mk_inst (sj.cs_next_id + 2) JMP [Label cond] []]|> /\
     st'.cs_current_bb = exit /\ st'.cs_current_insts = []
 Proof
-  strip_tac >> drule_all compile_for_dynarray_stages >> strip_tac >>
+  strip_tac >>
+  `compile_expr cenv (ArrayT et (Dynamic c))
+     (Name (ArrayT et (Dynamic c)) name) st =
+   (LocatedValue (ArrayT et (Dynamic c)) (mk_ptr arr_op LocMemory),st)` by
+    metis_tac[compile_array_name_dynamic] >>
+  drule_at (Pat `compile_stmt _ _ _ _ _ = _`) compile_for_dynarray_memory_stages >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
   drule_all compile_for_dynarray_prefix >> strip_tac >>
   dxrule compile_for_array_suffix >> strip_tac >>
