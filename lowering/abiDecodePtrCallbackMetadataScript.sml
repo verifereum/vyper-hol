@@ -6,7 +6,7 @@ Ancestors
   exprSimHyps allocLimits vyperValue words venomMemProps
   fragExec context compileEnv list exprSimHypsDefs vyperABI vyperAST
   exprOperandVar exprLowering exprLoweringProps freshWrites calldataDynOwned
-  abiCallerAbiBound supportedTypes
+  abiCallerAbiBound combinatorics supportedTypes
 
 Theorem abi_decode_body_machine_bounds:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode b) (TupleT tys) args) es /\
