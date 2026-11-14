@@ -168,7 +168,7 @@ Proof
   metis_tac[writes_fresh_mem_ok]
 QED
 
-Theorem scalar_seq_lower_bound[local]:
+Theorem scalar_seq_lower_bound:
   !code s G tn Gf tnf.
     inst_seq_ptr D lo0 ctx fn PG G tn code s Gf tnf /\
     lo0 <= lo /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -206,7 +206,7 @@ Proof
   simp[gas_count_step_def, ptr_safe_step_def, exit_result_def]
 QED
 
-Theorem scalar_seq_abort_origin[local]:
+Theorem scalar_seq_abort_origin:
   !code s t a G tn Gf tnf ctx fn bb.
     ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
