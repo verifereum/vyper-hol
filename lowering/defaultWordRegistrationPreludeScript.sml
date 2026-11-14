@@ -56,7 +56,7 @@ Proof
     ctorDeployMemoryRunPtrPrefixMemberSetupTheory.prefix_member_add_taint, op_taint_def]
 QED
 
-Theorem default_word_registration_prelude:
+Theorem default_word_registration_prelude_footprint:
   compile_alloc_buffer 32 st = (buf,allocated) /\
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (src,first) /\
   fn_has_code st first fn /\
@@ -99,7 +99,8 @@ Theorem default_word_registration_prelude:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK ready,H,u)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
-      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!v. ~not_fresh_at first v ==> lookup_var v ready = lookup_var v s)
 Proof
   strip_tac >>
   `cs_extends st allocated` by metis_tac[compile_alloc_buffer_extends] >>
@@ -161,13 +162,14 @@ Proof
   qexistsl [`ready`, `DRESTRICT H0 (COMPL {x})`,
     `q with t_var := q.t_var |+ (x,{})`, `p`] >>
   pure_rewrite_tac[CONJ_ASSOC] >>
+  reverse conj_tac >- suspend "footprint" >>
   reverse conj_tac >- suspend "pullback" >>
   reverse conj_tac >- suspend "origin" >>
   reverse conj_tac >- suspend "memory" >>
   suspend "fields"
 QED
 
-Resume default_word_registration_prelude[fields]:
+Resume default_word_registration_prelude_footprint[fields]:
   pure_rewrite_tac[GSYM CONJ_ASSOC] >>
   simp[] >>
   conj_tac >- simp[Abbr `ready`, update_var_def, eval_operand_def,
@@ -216,16 +218,16 @@ Resume default_word_registration_prelude[fields]:
   simp[Abbr `q`]
 QED
 
-Resume default_word_registration_prelude[history]:
+Resume default_word_registration_prelude_footprint[history]:
   metis_tac[Abbr `ready`]
 QED
 
-Resume default_word_registration_prelude[memory]:
+Resume default_word_registration_prelude_footprint[memory]:
   `gas_path_mem ctx fn a 0 (OK ready)` by metis_tac[Abbr `ready`] >>
   metis_tac[fragGasPathMemTheory.gas_path_mem_then, ADD]
 QED
 
-Resume default_word_registration_prelude[origin]:
+Resume default_word_registration_prelude_footprint[origin]:
   rpt gen_tac >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK a,H0,q)` by
     (qpat_x_assum `a = _` SUBST1_TAC >>
@@ -281,7 +283,7 @@ Resume default_word_registration_prelude[origin]:
   simp[NoAsms] >> disch_then irule >> simp[]
 QED
 
-Resume default_word_registration_prelude[pullback]:
+Resume default_word_registration_prelude_footprint[pullback]:
   gen_tac >> strip_tac >>
   `(!fuel. ptr_safe_run D lo fuel ctx fn PG H0 q a) ==>
     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by
@@ -303,4 +305,65 @@ Resume default_word_registration_prelude[pullback]:
   gvs[]
 QED
 
-Finalise default_word_registration_prelude
+Resume default_word_registration_prelude_footprint[footprint]:
+  rpt strip_tac >>
+  `v <> p /\ v <> x` by
+    (gvs[not_fresh_at_def, Abbr `p`, Abbr `x`] >>
+     metis_tac[LESS_EQ_TRANS, DECIDE ``!n:num. n <= n+1``]) >>
+  simp[Abbr `ready`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  qpat_x_assum `a = _` (fn th => once_rewrite_tac [th]) >>
+  simp[update_var_def, FLOOKUP_UPDATE]
+QED
+
+Finalise default_word_registration_prelude_footprint
+
+(* Exact legacy interface, projected from the common endpoint producer. *)
+Theorem default_word_registration_prelude:
+  compile_alloc_buffer 32 st = (buf,allocated) /\
+  emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (src,first) /\
+  fn_has_code st first fn /\
+  alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
+  fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  alloca_history fn s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?ready H u p.
+    buf.buf_operand = Var p /\
+    eval_operand (Var p) ready = SOME (n2w s.vs_alloca_next) /\
+    eval_operand src ready = SOME ((n2w 4 + n2w (off-4)):bytes32) /\
+    abi_decoder_operand_live first.cs_next_var (Var p) /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    not_fresh_at first p /\ (!v. src = Var v ==> not_fresh_at first v) /\
+    ptr_covers H u p ready 32 /\ op_taint u src = {} /\
+    FLOOKUP ready.vs_allocas st.cs_next_id = SOME (s.vs_alloca_next,32) /\
+    ready.vs_alloca_next = s.vs_alloca_next + 32 /\
+    s.vs_alloca_next + 32 < dimword (:256) /\
+    alloca_inv ready /\ alloca_frontier_inv_from k ctx fn site ready /\
+    allocas_from lo ready /\ lo <= ready.vs_alloca_next /\
+    alloca_history fn ready /\
+    ~ready.vs_halted /\ ready.vs_current_bb = first.cs_current_bb /\
+    ready.vs_inst_idx = LENGTH first.cs_current_insts /\
+    ready = (s with <|vs_vars := ready.vs_vars;
+      vs_allocas := ready.vs_allocas; vs_alloca_next := ready.vs_alloca_next;
+      vs_inst_idx := LENGTH first.cs_current_insts|>) /\
+    st.cs_next_id < first.cs_next_id /\ st.cs_next_var <= first.cs_next_var /\
+    (!id. id <> st.cs_next_id ==> FLOOKUP ready.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op ready = eval_operand op s) /\
+    (!v. not_fresh_at st v ==> FLOOKUP H v = FLOOKUP G v /\
+      op_taint u (Var v) = op_taint tn (Var v)) /\
+    u.t_mem = tn.t_mem UNION
+      {j | s.vs_alloca_next <= j /\ j < s.vs_alloca_next+32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    gas_path_mem ctx fn s 0 (OK ready) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK ready,H,u)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all default_word_registration_prelude_footprint >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl [`ready`,`H`,`u`,`p`] >> simp[]
+QED
