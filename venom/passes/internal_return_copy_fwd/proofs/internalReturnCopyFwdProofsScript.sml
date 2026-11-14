@@ -511,11 +511,11 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def,
        written_taint_def, range_bytes_def] >>
   conj_tac
-  >- (simp[ircf_witness_no_dalloca, ptr_safe_step_def, ptr_inst_ok_def,
-           access_ok_def, taint_ok_def, allocas_from_def, op_taint_def,
+  >- (simp[ircf_witness_no_dalloca, ptr_safe_step_def, ptr_inst_ok_def] >>
+      simp[access_ok_def, taint_ok_def, allocas_from_def, op_taint_def,
            codegenRelTheory.source_memory_write_ranges_def,
-           contextCodegenRelTheory.source_memory_read_ranges_def,
-           step_inst_def, step_inst_base_def, exec_alloca_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def] >>
+      simp[step_inst_def, step_inst_base_def, exec_alloca_def,
            eval_operand_def, update_var_def, FLOOKUP_UPDATE]) >>
   simp[step_inst_def, step_inst_base_def, exec_alloca_def,
        eval_operand_def, update_var_def, is_terminator_def, FLOOKUP_UPDATE] >>
@@ -632,10 +632,12 @@ Resume ircf_witness_safe_entry[caller_rest]:
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, setup_callee_def] >>
   simp[Once run_blocks_def, lookup_block_def, FIND_thm,
        eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
-  simp[Once run_block_non_phis_def, get_instruction_def,
-       step_inst_def, step_inst_base_def, update_var_def, is_terminator_def] >>
-  simp[Once run_block_non_phis_def, get_instruction_def,
-       step_inst_def, step_inst_base_def, update_var_def, is_terminator_def] >>
+  simp[Once run_block_non_phis_def, get_instruction_def] >>
+  simp[step_inst_def, step_inst_base_def] >>
+  simp[update_var_def, is_terminator_def] >>
+  simp[Once run_block_non_phis_def, get_instruction_def] >>
+  simp[step_inst_def, step_inst_base_def] >>
+  simp[update_var_def, is_terminator_def] >>
   simp[Once run_block_non_phis_def, get_instruction_def] >>
   simp[step_inst_def, step_inst_base_def] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, is_terminator_def] >>
