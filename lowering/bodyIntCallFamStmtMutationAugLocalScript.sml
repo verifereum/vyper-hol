@@ -12,6 +12,7 @@ Ancestors
 Theorem augassign_local_normal_source:
   bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
   lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
+  word_value entry.value /\
   bop_result cx ty bop [ty;expr_type e] entry.value v ee = INL result /\
   write_place cx (MemoryPlace id []) result ee = (INL (),fin) ==>
   evaluate_binop
@@ -25,7 +26,8 @@ Proof
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        entry.type bop entry.value v of
      INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     metis_tac[word_value_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
      entry.type bop entry.value v = INL result` by
@@ -278,7 +280,8 @@ Resume intcall_augassign_local_stmt_step[arithmetic_exit]:
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        entry.type bop entry.value v of
      INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     metis_tac[word_value_not_bytes]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        entry.type bop entry.value v` >>
