@@ -410,7 +410,7 @@ Proof
 QED
 
 Theorem ptr_historical_ordinary_assembly[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -440,7 +440,7 @@ Proof
    EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
    ptr_discipline lo C vs`
-    by fs[ptr_demand_interval_def] >>
+    by fs[ptr_demand_interval_static_def] >>
   `!u. u IN FDOM TGj ==> u IN fn_pv P (EL j h).po_fn` by
     (rpt strip_tac >> irule ptr_transcript_tagged_domain_support >> simp[] >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
@@ -452,25 +452,25 @@ Proof
       (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-   o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+   (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
    access_ok lo (EL j h).po_prov (EL j h).po_fn
       (EL j h).po_inst (EL j h).po_state /\
    ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
    b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
      (EL (SUC j) h).po_state)` by
-    (fs[ptr_demand_interval_def] >>
+    (fs[ptr_demand_interval_static_def] >>
      metis_tac[rich_listTheory.EL_MEM, LESS_IMP_LESS_OR_EQ]) >>
-  drule_all ptr_historical_write_classification >>
+  drule_all ptr_historical_write_classification_static >>
   disch_then assume_tac >>
   `MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
     LENGTH (EL (SUC j) h).po_state.vs_returndata = LENGTH postt.vs_returndata` by simp[] >>
-  drule_all ptr_demand_ordinary_write_exclusion >> simp[]
+  drule_all ptr_demand_ordinary_write_exclusion_static >> simp[]
 QED
 
 Theorem ptr_paired_historical_owned_write_exclusion_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -499,7 +499,7 @@ Proof
      simp[ptr_event_embedding_def, EVERY_MEM] >> strip_tac >>
      `EL q done < LENGTH h` by
        (first_x_assum irule >> simp[MEM_EL] >> qexists `q` >> simp[]) >>
-     fs[ptr_demand_interval_def] >>
+     fs[ptr_demand_interval_static_def] >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `EL q done` mp_tac) >> simp[]) >>
   drule_all ptr_paired_historical_event_memory_static >> strip_tac >>
@@ -509,7 +509,7 @@ Proof
     (fs[ptr_observation_reachable_def] >>
      drule ptr_frame_context_membership >> simp[]) >>
   `fn_ptr_ok P aa.po_fn` by
-    (fs[ptr_demand_interval_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_demand_interval_static_def, EVERY_MEM] >> metis_tac[]) >>
   `opaque_use_ok aa.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >>
      metis_tac[]) >>
@@ -588,14 +588,15 @@ Theorem ptr_paired_historical_owned_write_exclusion_memory:
       (EL (SUC q) ht).po_state)
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_historical_owned_write_exclusion_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
 Theorem ptr_paired_historical_owned_write_exclusion_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -643,7 +644,8 @@ Theorem ptr_paired_historical_owned_write_exclusion:
       (EL (SUC q) ht).po_state)
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_historical_owned_write_exclusion_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 

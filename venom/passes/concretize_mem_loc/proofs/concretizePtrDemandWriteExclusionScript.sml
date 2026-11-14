@@ -212,6 +212,72 @@ Definition ptr_demand_interval_def:
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst)
 End
 
+Definition ptr_demand_interval_static_def:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w <=>
+  (ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+    births PT TG saved entries H /\ vs.vs_allocas = FEMPTY /\
+  o1_ctx_shape C /\
+  EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  (!obs. MEM obs h ==> access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state) /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN /\ d <= LENGTH endpoint.po_stack /\
+  FLOOKUP (ptr_owner_view d endpoint).cf_state.vs_allocas aid = SOME (b,sz) /\
+  lo <= b+k /\ k < sz /\ b+k NOTIN endpoint.po_taint.t_mem /\
+  MEM (Var v) endpoint.po_inst.inst_operands /\
+  (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) /\
+  FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
+  EL (LENGTH endpoint.po_stack-d) tokens = token /\
+  fn = (ptr_owner_view d endpoint).cf_fn /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  mems = (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm))) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
+  EVERY fn_inst_wf C.ctx_functions) /\
+  (w+1 < LENGTH h /\
+    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+      (EL (SUC w) h).po_state) /\
+    b+k NOTIN (EL (SUC w) h).po_taint.t_mem /\
+    (!j. w < j /\ j+1 < LENGTH h ==>
+      b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
+        (EL (SUC j) h).po_state)) /\
+    (!t. w < t /\ t < LENGTH h ==>
+      ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
+        observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
+        MEM ((ptr_owner_view d (EL t h)).cf_state.vs_current_bb,
+          (ptr_owner_view d (EL t h)).cf_state.vs_inst_idx) xs) /\
+    (!j. w <= j /\ j < LENGTH h ==>
+      d <= LENGTH (EL j h).po_stack /\
+      FLOOKUP (ptr_owner_view d (EL j h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+      ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
+      EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token) /\
+    ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst)
+End
+
+Theorem ptr_demand_interval_static_compat:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w <=>
+  (ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ ~vs.vs_call_ctx.cc_static)
+Proof
+  pure_rewrite_tac[ptr_demand_interval_def, ptr_demand_interval_static_def,
+    o1_run_state_ok_def] >> tautLib.TAUT_TAC
+QED
+
 Theorem ptr_demand_interval_exists_static:
   ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
     births PT TG saved entries H /\ vs.vs_allocas = FEMPTY /\
@@ -242,14 +308,14 @@ Theorem ptr_demand_interval_exists_static:
   o1_walk_view rpolicy 2 C' fn observed /\
   (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
-  (?w. ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  (?w. ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w) \/
   dyn_floor C vs <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ptr_demand_protected_token_interval_static >> strip_tac
-  >- (disj1_tac >> qexists `w` >> simp[ptr_demand_interval_def]) >>
+  >- (disj1_tac >> qexists `w` >> simp[ptr_demand_interval_static_def]) >>
   simp[]
 QED
 
@@ -289,12 +355,13 @@ Theorem ptr_demand_interval_exists:
   dyn_floor C vs <= b+k
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_interval_exists_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
 Theorem ptr_demand_interval_owner_at[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h ==>
   d <= LENGTH (EL j h).po_stack /\
@@ -308,7 +375,7 @@ Theorem ptr_demand_interval_owner_at[local]:
     MEM ((ptr_owner_view d (EL j h)).cf_state.vs_current_bb,
       (ptr_owner_view d (EL j h)).cf_state.vs_inst_idx) xs
 Proof
-  pure_rewrite_tac[ptr_demand_interval_def] >>
+  pure_rewrite_tac[ptr_demand_interval_static_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
@@ -328,21 +395,21 @@ Proof
 QED
 
 Theorem ptr_demand_interval_reserved_prefix[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ptr_stage_placements C' positions /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\ fixed_region_reserved lo C ==>
   lo <= pa+k
 Proof
-  pure_rewrite_tac[ptr_demand_interval_def] >>
+  pure_rewrite_tac[ptr_demand_interval_static_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule ptr_stage_placements_reserved_prefix >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem ptr_demand_fixed_write_exclusion[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ptr_stage_placements C' positions /\
@@ -362,7 +429,7 @@ Theorem ptr_demand_fixed_write_exclusion[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lo <= pa+k` by (drule_all ptr_demand_interval_reserved_prefix >> simp[]) >>
-  `k < sz` by fs[ptr_demand_interval_def] >>
+  `k < sz` by fs[ptr_demand_interval_static_def] >>
   `eval_operand sizeop tgt = SOME z /\ eval_operand ops.iao_ofst tgt = SOME x` by
     gvs[concretizePtrValueTransportTheory.ptr_lookup_transport_some,
         concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty] >>
@@ -375,7 +442,7 @@ Proof
 QED
 
 Theorem ptr_demand_interval_snapshot[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) ==>
@@ -384,8 +451,8 @@ Theorem ptr_demand_interval_snapshot[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ptr_demand_interval_owner_at >> strip_tac >>
-  qhdtm_x_assum `ptr_demand_interval` mp_tac >>
-  pure_rewrite_tac[ptr_demand_interval_def] >>
+  qhdtm_x_assum `ptr_demand_interval_static` mp_tac >>
+  pure_rewrite_tac[ptr_demand_interval_static_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule ptr_structural_transcript_ownership >>
   disch_then (qspec_then `j` mp_tac) >>
@@ -400,7 +467,7 @@ Proof
 QED
 
 Theorem ptr_demand_same_owner_write_exclusion[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -426,14 +493,14 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ptr_demand_interval_snapshot >> strip_tac >>
   drule_all ptr_demand_interval_owner_at >> strip_tac >>
-  `k < sz` by fs[ptr_demand_interval_def] >>
+  `k < sz` by fs[ptr_demand_interval_static_def] >>
   drule_all ptr_write_transport_owner_exact >>
   asm_rewrite_tac[]
 QED
 
 
-Theorem ptr_demand_owner_layout:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+Theorem ptr_demand_owner_layout_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\ A = EL j h /\
   e <= LENGTH A.po_stack /\ owner = (ptr_owner_view e A).cf_fn /\
@@ -458,8 +525,8 @@ Theorem ptr_demand_owner_layout:
         (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts owner))))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qhdtm_x_assum `ptr_demand_interval` mp_tac >>
-  pure_rewrite_tac[ptr_demand_interval_def] >>
+  qhdtm_x_assum `ptr_demand_interval_static` mp_tac >>
+  pure_rewrite_tac[ptr_demand_interval_static_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `MEM owner C.ctx_functions` by metis_tac[lookup_function_MEM] >>
   `owner.fn_eom = NONE /\ fn_ptr_ok P owner /\ wf_function owner /\
@@ -477,8 +544,8 @@ Proof
   `frame_reachable vs C A.po_stack A.po_params A.po_prov A.po_taint
     A.po_fn A.po_inst A.po_state` by
     fs[ptr_observation_reachable_def] >>
-  drule_all ptr_frame_table_source >> strip_tac >>
-  drule_all ptr_frame_sizes >> strip_tac >>
+  drule_all ptr_frame_table_source_static >> strip_tac >>
+  drule_all ptr_frame_sizes_static >> strip_tac >>
   `ptr_table_source owner (ptr_owner_view e A).cf_state /\
    alloca_sizes_match owner (ptr_owner_view e A).cf_state` by
     (Cases_on `e = LENGTH A.po_stack`
@@ -531,8 +598,39 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_demand_other_owner_separation:
+Theorem ptr_demand_owner_layout:
   ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\ A = EL j h /\
+  e <= LENGTH A.po_stack /\ owner = (ptr_owner_view e A).cf_fn /\
+  FLOOKUP (ptr_owner_view e A).cf_state.vs_allocas xid = SOME (xb,xsz) /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP positions (Allocation xid) = SOME (xp,xsz) /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) obs st owner result /\
+  lookup_function owner.fn_name C.ctx_functions = SOME owner /\
+  lookup_function owner.fn_name C'.ctx_functions = SOME result.fpo_function /\
+  ctx_fn_names obs.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' owner obs ==>
+  owner.fn_eom = NONE /\ fn_ptr_ok P owner /\ wf_function owner /\
+  ssa_form owner /\ all_reachable owner /\ fn_inst_wf owner /\
+  EVERY inst_wf (fn_insts owner) /\ ptr_history_cfg_ok owner (cfg_analyze owner) /\
+  MEM (Allocation xid,xp,xsz) result.fpo_function.fn_mems_used /\
+  ?reserved items.
+    concretize_function_fuel_in_context (concretize_memloc_fuel owner)
+      obs.cu_context reserved owner = SOME result.fpo_function /\
+    static_alloca_items owner = SOME items /\ MEM (Allocation xid,xsz) items /\
+    (!c p size. MEM (c,p,size) (imported_mems_used obs.cu_context owner) ==>
+      ~MEM c (MAP (\i. Allocation i.inst_id)
+        (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts owner))))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_owner_layout_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_demand_other_owner_separation_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\ A = EL j h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -552,9 +650,9 @@ Proof
      (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-   o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+   (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
    ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
-     births PT TG saved entries H` by fs[ptr_demand_interval_def] >>
+     births PT TG saved entries H` by fs[ptr_demand_interval_static_def] >>
   `?e owner output p.
     e <= LENGTH A.po_stack /\ EL (LENGTH A.po_stack-e) tsj = tokB /\
     owner = (ptr_owner_view e A).cf_fn /\
@@ -563,7 +661,7 @@ Proof
     FLOOKUP positions (Allocation bid) = SOME (p,sb)` by
     (qpat_x_assum `A = EL j h` SUBST_ALL_TAC >>
      `j <= j /\ j < LENGTH h` by decide_tac >>
-     drule_all ptr_transcript_historical_placement >>
+     drule_all ptr_transcript_historical_placement_static >>
      strip_tac >> metis_tac[]) >>
   `ptr_ledger_source_activations vs C (TAKE (SUC j) h) (EL j h) tsj rj` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
@@ -574,7 +672,7 @@ Proof
     metis_tac[ptr_source_activations_sound, ptr_chrono_history_reachable,
       ptr_observation_reachable_def] >>
   `MEM owner C.ctx_functions` by
-    (drule_all ptr_frame_table_source >> strip_tac >>
+    (drule_all ptr_frame_table_source_static >> strip_tac >>
      Cases_on `e = LENGTH A.po_stack`
      >- (simp[ptr_owner_view_def] >> metis_tac[]) >>
      `MEM (ptr_owner_view e A) A.po_stack` by
@@ -590,7 +688,7 @@ Proof
    lookup_function fn.fn_name C.ctx_functions = SOME fn /\
    lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
    ctx_fn_names observed.cu_context = ctx_fn_names C /\
-   o1_walk_view rpolicy 2 C' fn observed` by fs[ptr_demand_interval_def] >>
+   o1_walk_view rpolicy 2 C' fn observed` by fs[ptr_demand_interval_static_def] >>
   `owner.fn_eom = NONE /\ fn_ptr_ok P owner /\ wf_function owner /\
    ssa_form owner /\ all_reachable owner /\ fn_inst_wf owner /\
    EVERY inst_wf (fn_insts owner) /\ ptr_history_cfg_ok owner (cfg_analyze owner) /\
@@ -602,8 +700,8 @@ Proof
      (!c p size. MEM (c,p,size) (imported_mems_used observed'.cu_context owner) ==>
        ~MEM c (MAP (\i. Allocation i.inst_id)
          (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts owner))))` by
-    (irule ptr_demand_owner_layout >>
-     goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    (irule ptr_demand_owner_layout_static >>
+     goal_assum (drule_at (Pat `ptr_demand_interval_static _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -618,14 +716,14 @@ Proof
      (!c p size. MEM (c,p,size) (imported_mems_used observed.cu_context fn) ==>
        ~MEM c (MAP (\i. Allocation i.inst_id)
          (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn))))` by
-    (irule ptr_demand_owner_layout >>
-     goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    (irule ptr_demand_owner_layout_static >>
+     goal_assum (drule_at (Pat `ptr_demand_interval_static _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
   qpat_x_assum `A = EL j h` (fn th => SUBST_ALL_TAC (SYM th) >> mk_asm "observation" th) >>
   `0 < sz /\ bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn` by
-    (fs[ptr_demand_interval_def] >> decide_tac) >>
+    (fs[ptr_demand_interval_static_def] >> decide_tac) >>
   `EL (LENGTH A.po_stack-d) tsj = token` by
     (qpat_x_assum `EL (LENGTH A.po_stack-d) (FST (EL j H)) = token` mp_tac >> simp[]) >>
   Cases_on `e = d`
@@ -665,7 +763,7 @@ Proof
   suspend "distinct_depths"
 QED
 
-Resume ptr_demand_other_owner_separation[active_same_depth]:
+Resume ptr_demand_other_owner_separation_static[active_same_depth]:
   `fn = A.po_fn /\ tokB = HD tsj` by
     (fs[ptr_owner_view_def, GSYM HD] >> metis_tac[]) >>
   `dv IN pointer_derived_vars fn (ptr_bp_alloc_roots fn bid)` by
@@ -711,7 +809,7 @@ Resume ptr_demand_other_owner_separation[active_same_depth]:
   simp[] >> metis_tac[]
 QED
 
-Resume ptr_demand_other_owner_separation[distinct_depths]:
+Resume ptr_demand_other_owner_separation_static[distinct_depths]:
   `ptr_chrono_history vs C h endpoint` by
     (drule ptr_structural_transcript_erasure >>
      strip_tac >> drule ptr_structural_trace_source >> simp[]) >>
@@ -732,7 +830,7 @@ Resume ptr_demand_other_owner_separation[distinct_depths]:
       qpat_x_assum `bp = bp_analyze_fuel _ _ _` SUBST_ALL_TAC >>
       `?pc. MEM (Allocation bid,pc,sb) (imported_mems_used observed.cu_context fn) /\
         reserved_intervals_disjoint (pa,sz) (pc,sb)` by
-        (irule ptr_output_suspended_descendant_separation >> simp[] >>
+        (irule ptr_output_suspended_descendant_separation_static >> simp[] >>
          (conj_tac >- first_assum ACCEPT_TAC) >>
          (conj_tac >- (qexists `P` >> asm_rewrite_tac[])) >>
          goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
@@ -780,7 +878,7 @@ Resume ptr_demand_other_owner_separation[distinct_depths]:
   qpat_x_assum `owner = (ptr_owner_view e A).cf_fn` kall_tac >>
   `?pc. MEM (Allocation aid,pc,sz) (imported_mems_used observed'.cu_context owner) /\
     reserved_intervals_disjoint (pb,sb) (pc,sz)` by
-    (irule ptr_output_tagged_ancestor_destination_separation >> simp[] >>
+    (irule ptr_output_tagged_ancestor_destination_separation_static >> simp[] >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- (qexists `P` >> asm_rewrite_tac[])) >>
      goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
@@ -807,13 +905,33 @@ Resume ptr_demand_other_owner_separation[distinct_depths]:
   fs[staticLayoutDefsTheory.reserved_intervals_disjoint_def] >> decide_tac
 QED
 
-Finalise ptr_demand_other_owner_separation
+Finalise ptr_demand_other_owner_separation_static
+
+Theorem ptr_demand_other_owner_separation:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\ A = EL j h /\
+  EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  inst_write_op A.po_inst = SOME (Var dv) /\
+  FLOOKUP TGj dv = SOME (tokB,bid) /\
+  FLOOKUP A.po_prov dv = SOME (db,sb) /\
+  FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
+  0 < sb /\ (tokB <> token \/ bid <> aid) ==>
+  reserved_intervals_disjoint (pa,sz) (pb,sb)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_other_owner_separation_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
+QED
 
 (* Conditional paired ordinary-write consumer. Operand classification, word
    bounds, and paired CALL returndata lengths are inputs, not consequences
    of the structural transcript. The initializing writer w is unchanged. *)
-Theorem ptr_demand_ordinary_write_exclusion:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+Theorem ptr_demand_ordinary_write_exclusion_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -853,7 +971,7 @@ Proof
       drule_all ptr_demand_fixed_write_exclusion >> simp[])
   >- (`pa + sz <= w2n x` by
         (`pa + sz <= eom` by
-           (fs[ptr_demand_interval_def] >>
+           (fs[ptr_demand_interval_static_def] >>
             drule_all concretizePtrStageBoundsTheory.ptr_stage_placements_endpoint_bound >>
             simp[]) >>
          `w2n x < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
@@ -863,7 +981,7 @@ Proof
   drule_all ptr_demand_interval_snapshot >> strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
    ptr_discipline lo C vs`
-    by fs[ptr_demand_interval_def] >>
+    by fs[ptr_demand_interval_static_def] >>
   `FLOOKUP bj (tokB,bid) = SOME (db,sb)` by
     (drule_all ptr_source_ownership_prov_erases >>
      simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def,
@@ -887,13 +1005,54 @@ Proof
   `inst_write_op (EL j h).po_inst = SOME (Var dv)` by
     simp[inst_write_op_def] >>
   `reserved_intervals_disjoint (pa,sz) (pb,sb)` by
-    (irule ptr_demand_other_owner_separation >> simp[] >>
-     goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    (irule ptr_demand_other_owner_separation_static >> simp[] >>
+     goal_assum (drule_at (Pat `ptr_demand_interval_static _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `inst_write_op _ = SOME _`)) >>
      goal_assum (drule_at (Pat `EL _ H = _`)) >>
      goal_assum (drule_at (Pat `ptr_stage_placements _ _`)) >>
      simp[] >> metis_tac[]) >>
   pop_assum mp_tac >>
   simp[staticLayoutDefsTheory.reserved_intervals_disjoint_def] >>
-  `k < sz` by fs[ptr_demand_interval_def] >> decide_tac
+  `k < sz` by fs[ptr_demand_interval_static_def] >> decide_tac
+QED
+
+Theorem ptr_demand_ordinary_write_exclusion:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
+  EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  fixed_region_reserved lo C /\
+  ptr_lookup_transport bj positions (op_prov TGj ops.iao_ofst)
+    (op_taint (EL j h).po_taint ops.iao_ofst)
+    (eval_operand ops.iao_ofst src) (eval_operand ops.iao_ofst tgt) /\
+  ptr_lookup_transport bj positions (op_prov TGj sizeop)
+    (op_taint (EL j h).po_taint sizeop)
+    (eval_operand sizeop src) (eval_operand sizeop tgt) /\
+  (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
+  src.vs_labels = tgt.vs_labels /\
+  mem_write_ops (EL j h).po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+  ((?u. ops.iao_ofst = Var u) \/ (?y. ops.iao_ofst = Lit y)) /\
+  ((?u. sizeop = Var u) \/ (?y. sizeop = Lit y)) /\
+  eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
+  op_prov TGj sizeop = NONE /\ op_taint (EL j h).po_taint sizeop = {} /\
+  (MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
+    LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
+  b+k NOTIN range_bytes (step_writes (EL j h).po_inst src posts) /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  ((op_prov TGj ops.iao_ofst = NONE /\
+    op_taint (EL j h).po_taint ops.iao_ofst = {} /\
+    (w2n x + w2n z <= lo \/ dyn_floor C vs <= w2n x)) \/
+   (?dv tokB bid db sb pb.
+     ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (tokB,bid) /\
+     FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
+     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
+     db <= w2n x /\ w2n x + w2n z <= db+sb /\ pb+sb < dimword(:256))) ==>
+  pa+k NOTIN range_bytes (step_writes (EL j h).po_inst tgt postt)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_ordinary_write_exclusion_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
 QED

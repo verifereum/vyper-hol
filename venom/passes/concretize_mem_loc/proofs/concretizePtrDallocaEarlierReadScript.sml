@@ -88,7 +88,7 @@ QED
 Theorem ptr_dalloca_earlier_copy_read_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -121,16 +121,16 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~in_revert_forward (EL (EL q done) h).po_fn
       (EL (EL q done) h).po_state` by
-    (fs[ptr_demand_interval_def] >>
+    (fs[ptr_demand_interval_static_def] >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `w` mp_tac) >> simp[] >> decide_tac) >>
   drule_all ptr_paired_historical_event_memory_static >> strip_tac >>
   `EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
-      (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_def] >>
+      (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_static_def] >>
   drule_all ptr_dalloca_writer_instruction_facts >> strip_tac >>
-  gvs[] >> drule_all ptr_dalloca_initial_writer_snapshot >> strip_tac >>
+  gvs[] >> drule_all ptr_dalloca_initial_writer_snapshot_static >> strip_tac >>
   drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   `(EL (EL q done) h).po_state.vs_labels = (EL q ht).po_state.vs_labels` by
     metis_tac[ptr_history_content_labels] >>
@@ -144,7 +144,7 @@ Proof
   `!id pos size. FLOOKUP positions (Allocation id) = SOME (pos,size) ==>
      pos+size < dimword(:256)` by
     (rpt strip_tac >> drule_all ptr_stage_placements_strict_bound >> simp[]) >>
-  drule_all ptr_dalloca_demand_writer_index >> strip_tac >>
+  drule_all ptr_dalloca_demand_writer_index_static >> strip_tac >>
   drule_all (SPEC_ALL ptr_dalloca_read_byte_classification
     |> Q.INST [`ops` |-> `<|iao_ofst := cp_src; iao_size := SOME cp_n; iao_max_size := SOME cp_n|>`]
     |> SIMP_RULE (srw_ss()) []) >>
@@ -185,7 +185,8 @@ Theorem ptr_dalloca_earlier_copy_read_memory:
      ix < size /\ w2n x+off = base+ix /\ w2n y+off = pos+ix))
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_earlier_copy_read_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 

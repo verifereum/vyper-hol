@@ -14,7 +14,7 @@ Ancestors
 Theorem ptr_dalloca_copy_read_demand_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -50,7 +50,7 @@ Theorem ptr_dalloca_copy_read_demand_memory_static:
 Proof
   strip_tac >>
   `~in_revert_forward (EL w h).po_fn (EL w h).po_state` by
-    (fs[ptr_demand_interval_def] >>
+    (fs[ptr_demand_interval_static_def] >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `w` mp_tac) >> simp[] >> decide_tac) >>
   drule_all ptr_dalloca_earlier_copy_read_memory_static >>
@@ -95,14 +95,15 @@ Theorem ptr_dalloca_copy_read_demand_memory:
      ix < size /\ w2n x+off = base+ix /\ w2n y+off = pos+ix))
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_copy_read_demand_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
 Theorem ptr_dalloca_copy_writer_clean_demand_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -138,7 +139,7 @@ Theorem ptr_dalloca_copy_writer_clean_demand_memory_static:
 Proof
   strip_tac >> drule_all ptr_dalloca_writer_updates_memory_static >> strip_tac >>
   drule_all ptr_dalloca_writer_forward_memory_static >> strip_tac >>
-  `b+k NOTIN (EL (SUC w) h).po_taint.t_mem` by fs[ptr_demand_interval_def] >>
+  `b+k NOTIN (EL (SUC w) h).po_taint.t_mem` by fs[ptr_demand_interval_static_def] >>
   `?dst src n. (EL w h).po_inst.inst_operands = [dst;src;n] /\
       ops.iao_ofst = dst /\ sizeop = n` by
     gvs[mem_write_ops_def, AllCaseEqs()] >>
@@ -194,14 +195,15 @@ Theorem ptr_dalloca_copy_writer_clean_demand_memory:
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_copy_writer_clean_demand_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
 Theorem ptr_dalloca_protected_writer_demand_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -243,7 +245,7 @@ Proof
   >- (`?q. q < LENGTH done /\ EL q done = w` by
         (drule ptr_structural_trace_actual_writer_retained >>
          disch_then (qspecl_then [`w`,`b+k`] mp_tac) >>
-         fs[ptr_demand_interval_def] >> metis_tac[]) >>
+         fs[ptr_demand_interval_static_def] >> metis_tac[]) >>
       `!op. op_taint (EL q ht).po_taint op SUBSET op_taint (EL w h).po_taint op` by
         metis_tac[] >>
       `pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem` by
@@ -259,7 +261,7 @@ Proof
     (fn_insts fn)) C'.ctx_functions` by
     (drule_all concretize_stage_allocation_free >> simp[]) >>
   `ptr_observation_reachable vs C' at` by metis_tac[ptr_chrono_history_reachable] >>
-  `vs.vs_allocas = FEMPTY` by fs[ptr_demand_interval_def] >>
+  `vs.vs_allocas = FEMPTY` by fs[ptr_demand_interval_static_def] >>
   fs[ptr_observation_reachable_def] >>
   drule_all allocation_free_reachable_taint >> simp[taint_empty_def]
 QED
@@ -302,6 +304,7 @@ Theorem ptr_dalloca_protected_writer_demand_memory:
   pa+k NOTIN at.po_taint.t_mem
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_protected_writer_demand_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED

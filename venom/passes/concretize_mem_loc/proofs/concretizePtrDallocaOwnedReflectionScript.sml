@@ -30,7 +30,7 @@ Theorem ptr_dalloca_owned_demand_memory_static:
   MEM (Var v) endpoint.po_inst.inst_operands /\
   (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) ==>
   (?P d fn bp mems observed s out w.
-    ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
       PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
       rpolicy s out names w) \/ dyn_floor C vs <= b+k
 Proof
@@ -111,7 +111,8 @@ Theorem ptr_dalloca_owned_demand_memory:
       rpolicy s out names w) \/ dyn_floor C vs <= b+k
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_owned_demand_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
@@ -139,7 +140,7 @@ Theorem ptr_dalloca_owned_demand_reflection_memory_static:
   MEM (Var v) endpoint.po_inst.inst_operands /\
   (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) /\
   (!P d fn bp mems observed s out w.
-    ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
       PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
       rpolicy s out names w ==> pa+k NOTIN at.po_taint.t_mem) ==>
   pa+k IN at.po_taint.t_mem ==> b+k IN endpoint.po_taint.t_mem
@@ -188,7 +189,8 @@ Theorem ptr_dalloca_owned_demand_reflection_memory:
   pa+k IN at.po_taint.t_mem ==> b+k IN endpoint.po_taint.t_mem
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_owned_demand_reflection_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 

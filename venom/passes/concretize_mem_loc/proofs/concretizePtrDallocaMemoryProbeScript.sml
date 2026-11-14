@@ -32,7 +32,7 @@ QED
 Theorem ptr_dalloca_store_writer_clean_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -52,7 +52,7 @@ Theorem ptr_dalloca_store_writer_clean_memory_static:
 Proof
   strip_tac >> drule_all ptr_dalloca_writer_updates_memory_static >> strip_tac >>
   drule_all ptr_dalloca_writer_forward_memory_static >> strip_tac >>
-  `b+k NOTIN (EL (SUC w) h).po_taint.t_mem` by fs[ptr_demand_interval_def] >>
+  `b+k NOTIN (EL (SUC w) h).po_taint.t_mem` by fs[ptr_demand_interval_static_def] >>
   `?dst value. (EL w h).po_inst.inst_operands = [dst;value] /\
       ops.iao_ofst = dst` by
     gvs[mem_write_ops_def, AllCaseEqs()] >>
@@ -86,7 +86,8 @@ Theorem ptr_dalloca_store_writer_clean_memory:
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_store_writer_clean_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
@@ -169,7 +170,7 @@ QED
 Theorem ptr_dalloca_suffix_nonwrites_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -224,7 +225,8 @@ Theorem ptr_dalloca_suffix_nonwrites_memory:
         (EL (SUC r) ht).po_state)
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_suffix_nonwrites_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
@@ -267,7 +269,7 @@ QED
 Theorem ptr_dalloca_suffix_fresh_exclusion_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -289,7 +291,7 @@ Proof
   strip_tac >>
   `k < sz /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    fs[ptr_demand_interval_def] >>
+    fs[ptr_demand_interval_static_def] >>
   drule ptr_paired_memory_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_embedding >>
@@ -297,7 +299,7 @@ Proof
   `EL r done < LENGTH h` by
     (first_x_assum irule >> simp[MEM_EL] >> qexists `r` >> simp[]) >>
   `~in_revert_forward (EL (EL r done) h).po_fn (EL (EL r done) h).po_state` by
-    (fs[ptr_demand_interval_def] >> metis_tac[]) >>
+    (fs[ptr_demand_interval_static_def] >> metis_tac[]) >>
   drule_all ptr_paired_historical_event_memory_static >> strip_tac >>
   `w2n vs.vs_initial_fmp <= w2n (EL r ht).po_state.vs_fmp` by
     (drule_all ptr_dalloca_history_content_fmp_floor >> simp[]) >>
@@ -337,7 +339,8 @@ Theorem ptr_dalloca_suffix_fresh_exclusion_memory:
   pa+k NOTIN new_site_bytes (EL r ht).po_state post
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_suffix_fresh_exclusion_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
@@ -370,7 +373,7 @@ QED
 Theorem ptr_dalloca_protected_suffix_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -432,7 +435,8 @@ Theorem ptr_dalloca_protected_suffix_memory:
   pa+k NOTIN at.po_taint.t_mem
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_protected_suffix_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 
@@ -463,7 +467,7 @@ QED
 Theorem ptr_dalloca_other_writer_observation_clean_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -508,7 +512,8 @@ Theorem ptr_dalloca_other_writer_observation_clean_memory:
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem
 Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_other_writer_observation_clean_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
   tautLib.TAUT_TAC
 QED
 

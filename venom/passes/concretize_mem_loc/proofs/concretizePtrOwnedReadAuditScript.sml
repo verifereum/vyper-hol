@@ -384,10 +384,10 @@ Proof
         simp[Abbr `token`]) >>
      rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
      (impl_tac >- decide_tac) >> strip_tac >> simp[]) >>
-  `ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  `ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w` by
-    (simp[ptr_demand_interval_def, Abbr `token`, ADD1] >> metis_tac[]) >>
+    (simp[ptr_demand_interval_static_def, Abbr `token`, ADD1] >> metis_tac[]) >>
   unabbrev_all_tac >> drule_all ptr_paired_historical_owned_write_exclusion_static >> simp[]
 QED
 
