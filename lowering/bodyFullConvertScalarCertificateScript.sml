@@ -1,9 +1,12 @@
 Theory bodyFullConvertScalarCertificate
-Ancestors
+Ancestors exprSimBopRestWordLayout[qualified,ignore_grammar] loweringShapeDefs[qualified,ignore_grammar] marker[qualified,ignore_grammar] vyperTypeSystem[qualified,ignore_grammar]
   bodyPtrTypeBuiltinsCheckedArithmetic bodyPtrSignedConvertBool
   bodyPtrTypeBuiltinsScalarChecks bodyPtrTypeBuiltinsScalarArithmetic
   fragGasSeqPtr ptrSafetyTransport ptrSafeRun exprLowering exprLoweringProps
   compileEnv ptrDiscipline venomExecSemantics venomState venomInst finite_map list
+  freshWrites exprSimConvert convertScalarProps bodyUnopFragMemory
+  fragGasOriginPtr fragGasOrigin memSafeRun gasEvents gasCount fragGasPathPtr fragExec
+  codegenRel venomExecProofs venomInstProofs fragExecMem instIdxIndep fragGasFresh
 
 Theorem scalar_op_fixed_ok[local]:
   (case tc of ConvBytestringToBool => F | ConvBytestringToInt _ _ _ => F
@@ -88,4 +91,222 @@ Proof
        gvs[vyperTypeSystemTheory.valid_conversion_def, is_bytestring_type_def, mk_convert_op_def]) >>
   simp[type_bounds_def, type_bits_def, is_signed_type_def] >>
   IF_CASES_TAC >> simp[]
+QED
+
+Theorem scalar_convert_uniform_ok[local]:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H th. (!D. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th) /\
+    op_prov H out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all scalar_dispatch_op >>
+  disch_then (qspec_then `cenv` assume_tac) >>
+  drule_all scalar_op_fixed_ok >>
+  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
+  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  drule_all scalar_op_fixed_ok >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  metis_tac[inst_seq_ptr_ghost_unique]
+QED
+
+Theorem scalar_convert_uniform_abort[local]:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
+  ?H th. (!D. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >> drule_all scalar_dispatch_op >>
+  disch_then (qspec_then `cenv` assume_tac) >>
+  drule_all scalar_op_fixed_abort >>
+  disch_then (qspecl_then [`fn`,`PG`,`ARB`] strip_assume_tac) >>
+  qexistsl [`H`,`th`] >> simp[] >> gen_tac >>
+  drule_all scalar_op_fixed_abort >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  metis_tac[inst_seq_ptr_ghost_unique]
+QED
+
+Theorem scalar_convert_code[local]:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> GAS) (emitted_insts sa sb) /\
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> drule_all scalar_dispatch_op >>
+  disch_then (qspec_then `cenv` mp_tac) >>
+  qmatch_asmsub_abbrev_tac `compile_type_convert x conv` >> strip_tac >>
+  `straight_fresh (compile_type_convert x conv)` by
+    (Cases_on `conv` >>
+     gvs[straight_fresh_convert, straight_fresh_convert_scalar] >>
+     simp[compile_type_convert_def, straight_fresh_return]) >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    metis_tac[straight_fresh_def] >>
+  conj_tac
+  >- (fs[writes_fresh_def, EVERY_MEM] >>
+      qx_gen_tac `i` >> disch_tac >>
+      first_x_assum (qspec_then `i` mp_tac) >>
+      simp[] >> strip_tac >>
+      fs[fresh_write_op_def] >> gvs[is_terminator_def]) >>
+  metis_tac[writes_fresh_mem_ok]
+QED
+
+Theorem scalar_seq_lower_bound[local]:
+  !code s G tn Gf tnf.
+    inst_seq_ptr D lo0 ctx fn PG G tn code s Gf tnf /\
+    lo0 <= lo /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    EVERY (\i. i.inst_opcode <> INVOKE) code ==>
+    inst_seq_ptr D lo ctx fn PG G tn code s Gf tnf
+Proof
+  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule ptr_inst_ok_lower_bound_transport >> metis_tac[]) >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `step_inst 0 ctx h s = OK u` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  drule_all step_inst_allocas_from >> strip_tac >>
+  first_x_assum irule >>
+  gvs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
+QED
+
+Theorem scalar_abort_origin_edge[local]:
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx fn G tn i s /\ step_inst_base i s = Abort a t ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort a t,G,tn)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
+  rewrite_tac[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl [`0`,`bb`,`i`,`Abort a t`] >>
+      simp[gas_events_step_def, mem_safe_step_non_invoke, exit_result_def]) >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+  qexists `0` >>
+  simp[gas_count_step_def, ptr_safe_step_def, exit_result_def]
+QED
+
+Theorem scalar_seq_abort_origin[local]:
+  !code s t a G tn Gf tnf ctx fn bb.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+      i.inst_opcode <> GAS) code /\
+    run_inst_seq_mem_ok code s /\
+    (!D. inst_seq_ptr D lo ctx fn PG G tn code s Gf tnf) /\
+    run_inst_seq code s = Abort a t ==>
+    ?j. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (Abort a (t with vs_inst_idx := j),Gf,tnf)
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def]
+  >~ [`step_inst_base h s = OK u`]
+  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `step_prov PG G h u`,
+        `step_taint h s u tn`, `Gf`, `tnf`, `ctx`, `fn`, `bb`] mp_tac) >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+      qexists `j` >> gen_tac >>
+      `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+        (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+         step_prov PG G h u, step_taint h s u tn)` by
+        (metis_tac[straight_line_origin_ptr_edge]) >>
+      drule (cj 2 gas_origin_ptr_path_rules) >> simp[] >> metis_tac[]) >>
+  qexists `t.vs_inst_idx` >> gen_tac >> simp[] >>
+  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
+  irule scalar_abort_origin_edge >> simp[] >> metis_tac[]
+QED
+
+Theorem scalar_convert_straight[local]:
+  valid_conversion src dst /\ ~is_bytestring_type src ==>
+  straight_fresh (compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst))
+Proof
+  strip_tac >> drule_all scalar_dispatch_op >>
+  disch_then (qspec_then `cenv` mp_tac) >>
+  Cases_on `(case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst)` >>
+  simp[straight_fresh_convert, straight_fresh_convert_scalar,
+       compile_type_convert_def, straight_fresh_return]
+QED
+
+Theorem scalar_convert_run_origin:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  run_inst_seq (emitted_insts sa sb) s = r /\
+  ((?t. r = OK t) \/ (?a t. r = Abort a t)) ==>
+  ?H th j.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (exec_result_map (\t. t with vs_inst_idx := j) r,H,th)) /\
+    (!t. r = OK t ==> op_prov H out = NONE /\ op_taint th out = {} /\
+      j = s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
+    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+      op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `straight_fresh (compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst))` by metis_tac[scalar_convert_straight] >>
+  drule_all fragGasFreshTheory.straight_fresh_code_prefix >> strip_tac >>
+  drule_all scalar_convert_code >> disch_then (qspec_then `s` strip_assume_tac) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  Cases_on `r` >> gvs[]
+  >- (drule_all scalar_convert_uniform_ok >>
+      disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
+      qexistsl [`H`,`th`] >>
+      simp[exec_result_map_def] >> gen_tac >>
+      `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
+        (irule scalar_seq_lower_bound >> simp[] >> qexists `0` >> simp[]) >>
+      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+        (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+      `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+        (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+      `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+      `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+      drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
+  drule_all scalar_convert_uniform_abort >>
+  disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
+    (gen_tac >> irule scalar_seq_lower_bound >> simp[] >> qexists `0` >> simp[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all scalar_seq_abort_origin >>
+  disch_then (qspec_then `explicit` strip_assume_tac) >>
+  qexistsl [`H`,`th`,`j`] >> simp[exec_result_map_def]
 QED
