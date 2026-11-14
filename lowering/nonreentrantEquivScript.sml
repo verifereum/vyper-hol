@@ -110,6 +110,7 @@ Theorem compile_nonreentrant_lock_source_correct:
   nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock key T is_view st = ((),st') /\
+  (~is_view ==> ~cx.txn.is_static) /\
   tload (n2w key) ss <> 1w ==>
   ?vs' ss'.
     acquire_nonreentrant_lock cx.txn.target key is_view vs = (INL (),vs') /\
@@ -117,7 +118,8 @@ Theorem compile_nonreentrant_lock_source_correct:
     state_rel func cenv cx vs' ss'
 Proof
   strip_tac >>
-  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
+  `~is_view ==> ~ss.vs_call_ctx.cc_static` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   `storage_read_live cx T (vs.tStorage cx.txn.target) (n2w key)
      (BaseTV (UintT 256))` by
     (irule nonreentrant_slot_read_live >> simp[]) >>
@@ -150,8 +152,32 @@ Proof
   drule_all compile_nonreentrant_lock_transient_revert >> simp[]
 QED
 
+Theorem compile_nonreentrant_lock_source_static:
+  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
+  state_rel func cenv cx vs ss /\ cx.txn.is_static /\ ~is_view /\
+  compile_nonreentrant_lock key T is_view st = ((),st') /\
+  tload (n2w key) ss <> 1w ==>
+  lock_if_nr cx T is_view vs =
+    (INR (vyperState$Error (RuntimeError "write in static context")),vs) /\
+  ?ss'. run_inst_seq (emitted_insts st st') ss = Abort ExHalt_abort ss'
+Proof
+  strip_tac >>
+  `storage_read_live cx T (vs.tStorage cx.txn.target) (n2w key)
+     (BaseTV (UintT 256))` by
+    (irule nonreentrant_slot_read_live >> simp[]) >>
+  drule_all state_rel_transient_lookup >> strip_tac >>
+  `ss.vs_call_ctx.cc_static` by gvs[state_rel_def, call_ctx_rel_def] >>
+  conj_tac
+  >- simp[lock_if_nr_def, acquire_nonreentrant_lock_execution,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+          vyperStateTheory.return_def] >>
+  drule compile_nonreentrant_lock_transient_code >>
+  simp[transient_lock_code_execution]
+QED
+
 Theorem compile_nonreentrant_unlock_source_correct:
   state_rel func cenv cx vs ss /\
+  (~is_view ==> ~cx.txn.is_static) /\
   compile_nonreentrant_unlock key T is_view st = ((),st') ==>
   ?vs' ss'.
     (if is_view then return () else
@@ -162,7 +188,7 @@ Proof
   Cases_on `is_view` >> strip_tac
   >- gvs[compile_nonreentrant_unlock_transient_view, emitted_insts_def,
          run_inst_seq_def, vyperStateTheory.return_def] >>
-  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
+  `~ss.vs_call_ctx.cc_static` by gvs[state_rel_def, call_ctx_rel_def] >>
   drule_all compile_nonreentrant_unlock_transient_correct >> strip_tac >>
   simp[release_nonreentrant_lock_execution] >>
   irule state_rel_transient_update >> simp[] >>
