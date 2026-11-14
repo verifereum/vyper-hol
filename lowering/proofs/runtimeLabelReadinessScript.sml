@@ -129,7 +129,7 @@ Theorem rb_package_external[local]:
 Proof
   rpt gen_tac >> PairCases_on `f` >>
   simp[package_external_fn_def, set_external_package_target_def,
-       rb_external_package_ok_def] >>
+       rb_external_package_ok_def, rb_env_updates] >>
   Cases_on `f6 = NoneT` >>
   simp[rb_build_compile_env] >>
   simp[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
