@@ -7,16 +7,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem split_blocks_at_partition:
-  !blocks label pre suf.
-    split_blocks_at label blocks = SOME (pre,suf) ==>
-    blocks = pre ++ suf
-Proof
-  Induct_on `blocks` >> simp[split_blocks_at_def] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem package_internal_blocks_entry_every:
   !ds blocks entry fs P.
     package_internal_blocks ds blocks = SOME (entry,fs) /\

@@ -12,13 +12,6 @@ Proof
   simp[call_tx_well_typed_def]
 QED
 
-Theorem code_layout_valid_code_length:
-  code_layout_valid vs ==> LENGTH vs.vs_code < 2 ** 256
-Proof
-  simp[code_layout_valid_def, wordsTheory.dimword_def,
-       fcpLib.INDEX_CONV ``dimindex(:256)``] >> decide_tac
-QED
-
 Theorem initial_evaluation_context_code_update:
   initial_evaluation_context srcs layouts (tx with code := c) mid =
   (initial_evaluation_context srcs layouts tx mid with

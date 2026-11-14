@@ -155,6 +155,27 @@ Definition code_layout_valid_def:
     LENGTH s.vs_code <= dimword(:256) DIV 2
 End
 
+Theorem code_layout_valid_code_length:
+  code_layout_valid vs ==> LENGTH vs.vs_code < 2 ** 256
+Proof
+  simp[code_layout_valid_def, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex(:256)``] >> decide_tac
+QED
+
+Theorem code_layout_valid_data_section_bound:
+  code_layout_valid vs /\
+  vs.vs_code = prefix ++ vs.vs_data_section /\ prefix <> [] ==>
+  LENGTH vs.vs_data_section < dimword (:256) DIV 2
+Proof
+  strip_tac >>
+  `LENGTH vs.vs_code <= dimword (:256) DIV 2` by
+    fs[code_layout_valid_def] >>
+  `0 < LENGTH prefix` by (Cases_on `prefix` >> fs[]) >>
+  qpat_x_assum `0 < _` mp_tac >>
+  qpat_x_assum `LENGTH vs.vs_code <= _` mp_tac >>
+  qpat_x_assum `vs.vs_code = _` SUBST1_TAC >> simp[]
+QED
+
 (* The expansion computes the code offset of a DLOAD/DLOADBYTES source
    offset as ADD [off; Label "code_end"], in word arithmetic, so it reads
    the bytes DLOAD reads only when the sum does not wrap: when the offset
