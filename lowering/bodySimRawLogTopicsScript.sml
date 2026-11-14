@@ -87,6 +87,6 @@ Proof
   `expr_body_pre cenv cx env data (ee with gas_obs := [])` by
     (first_x_assum irule >> simp[]) >>
   qpat_x_assum `body_expr_ok cx data`
-    (assume_tac o PURE_REWRITE_RULE [body_expr_ok_def]) >>
+    (assume_tac o PURE_ONCE_REWRITE_RULE [body_expr_ok_def]) >>
   metis_tac[]
 QED
