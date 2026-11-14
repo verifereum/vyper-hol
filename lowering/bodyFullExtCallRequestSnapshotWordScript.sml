@@ -188,6 +188,43 @@ Proof
   qexistsl_tac [`ee`, `s`, `sb`] >> simp[]
 QED
 
+Theorem extcall_capture_stack_memory_transport:
+  !ce cx src sa sb sc ee ef raw tag op s u v sv dv w func cut.
+    vv_at ce cx src sa sb ee raw (StackValue tag op) s /\
+    read_result cx raw ee = (INL v,ee) /\
+    evaluate_type (get_tenv cx) src = SOME sv /\ ~is_word_type src /\
+    eval_operand op s = SOME w /\
+    val_in_memory dv v (w2n w) s.vs_memory /\ val_wf dv v /\
+    val_footprint sv v = val_footprint dv v /\
+    wb_frame ce ee ef sb s u /\ pure_frame ce func ee cut s u /\
+    FST (read_result cx raw ef) = FST (read_result cx raw ee) /\
+    eval_operand op u = SOME w /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+               FLOOKUP u.vs_allocas aid = SOME row) /\
+    ef.scopes = ee.scopes /\
+    (!n b sz. local_region ce ee.scopes s n b sz <=>
+               local_region ce ee.scopes u n b sz) /\
+    sb.cs_next_id <= sc.cs_next_id ==>
+    val_in_memory dv v (w2n w) u.vs_memory /\
+    vv_at ce cx src sa sc ef raw (StackValue tag op) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_val_at ce cx src sa sb ee v op s` by gvs[vv_at_def] >>
+  conj_tac
+  >- (drule_all extcall_capture_expr_val_bytes_frame >> strip_tac >>
+      irule exprSimPropsTheory.val_in_memory_footprint_agree >>
+      simp[] >> qexists_tac `s.vs_memory` >> gvs[]) >>
+  `vv_at ce cx src sa sc ee raw (StackValue tag op) u` by
+    (irule abiEncodeMaterializeTheory.materialize_vv_at_alloc_frame >>
+     qexistsl_tac [`s`, `sb`] >> simp[vv_operand_def]) >>
+  `read_result cx raw ef = (INL v,ef)` by
+    (Cases_on `read_result cx raw ef` >>
+     imp_res_tac vyperStateTheory.read_result_state >> gvs[]) >>
+  `expr_val_at ce cx src sa sc ef v op u <=>
+   expr_val_at ce cx src sa sc ee v op u` by simp[expr_val_at_def] >>
+  gvs[vv_at_def]
+QED
+
 (* No-copy composites retain their ownership type even when a memory
    bytestring's value interpretation changes capacity. *)
 Theorem extcall_request_nonword_snapshot_capture:
