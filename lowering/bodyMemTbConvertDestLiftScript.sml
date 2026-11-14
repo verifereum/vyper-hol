@@ -350,10 +350,12 @@ Proof
           metis_tac[bytestring_convert_capacity_posts]) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                    `es_end`, `out`] >>
-      simp[expr_exit_success_map] >> gen_tac >>
-      drule exprSimStackTheory.eval_expr_force_value >>
-      disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
-      simp[] >> metis_tac[eval_expr_type_builtin_value]) >>
+      simp[expr_exit_success_map] >> conj_tac
+      >- (gen_tac >>
+          drule exprSimStackTheory.eval_expr_force_value >>
+          disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
+          simp[] >> metis_tac[eval_expr_type_builtin_value]) >>
+      disj2_tac >> Cases_on `res` >> gvs[]) >>
   disj2_tac >> drule exprSimStackTheory.eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[eval_expr_type_builtin_value]
 QED
