@@ -33,7 +33,7 @@ Ancestors
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix
   (* M7: closed-world callee-outcome guard and fixed-mark call correctness *)
-  e2eOutcomesGuard e2eCallAtMarks
+  e2eOutcomesGuard e2eCallAtMarks guardIntCallTrace
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
