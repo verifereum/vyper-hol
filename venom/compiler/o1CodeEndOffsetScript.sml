@@ -33,4 +33,3 @@ Theorem o1_pipeline_code_end_offset_ok:
 Proof
   cheat
 QED
-
