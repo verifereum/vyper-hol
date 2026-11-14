@@ -817,3 +817,42 @@ Resume return_default_suffix_path_joint[join]:
   metis_tac[listTheory.APPEND_NIL]
 QED
 Finalise return_default_suffix_path_joint
+
+(* The optional code check writes one fresh variable, not two. *)
+Theorem return_default_suffix_joint_frame:
+  sa.cs_next_var <= n /\
+  u = jump_to lbl ((update_var (STRING #"%" (toString n)) w s)
+        with vs_inst_idx := k) /\
+  G1 = DRESTRICT G (COMPL {STRING #"%" (toString n)}) /\
+  tn1 = tn with t_var := tn.t_var |+ (STRING #"%" (toString n),{}) ==>
+  (!x. not_fresh_at sa x ==>
+    lookup_var x u = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
+    op_taint tn1 (Var x) = op_taint tn (Var x)) /\
+  (!lo cenv es sa0 G0 tn0 s0.
+    sa0.cs_next_var <= sa.cs_next_var /\
+    ghost_kept_at lo cenv es sa0 G0 tn0 s0 G tn ==>
+    ghost_kept_at lo cenv es sa0 G0 tn0 s0 G1 tn1) /\
+  (!D lo d cenv cx ee.
+    ghost_inv_at D lo d cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+    ghost_inv_at D lo d cenv cx ee G1 tn1 u) /\
+  (!H cenv cx ee.
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s ==>
+    stmt_state_rel H ctx func cenv cx ee u) /\
+  (!cenv es ee sa0 s0.
+    sa0.cs_next_var <= sa.cs_next_var /\ wb_frame cenv es ee sa0 s0 s ==>
+    wb_frame cenv es ee sa0 s0 u)
+Proof
+  strip_tac >>
+  `u = jump_to lbl ((update_var (STRING #"%" (toString n)) w
+      (update_var (STRING #"%" (toString n)) w s)) with vs_inst_idx := k)` by
+    simp[update_var_def] >>
+  `G1 = DRESTRICT (DRESTRICT G (COMPL {STRING #"%" (toString n)}))
+      (COMPL {STRING #"%" (toString n)})` by
+    simp[finite_mapTheory.DRESTRICT_DRESTRICT] >>
+  `tn1 = tn with t_var := (tn.t_var |+ (STRING #"%" (toString n),{})) |+
+      (STRING #"%" (toString n),{})` by simp[] >>
+  drule_all return_default_shell_joint_frame >> simp[]
+QED
+
