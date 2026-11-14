@@ -2,27 +2,34 @@ Theory dftGasFromListTraceReach
 Ancestors
   dftGasFromListCalleeSeed dftGasFromListReachBoundary dftGasFromListReplay dftGasFromListReplayBoundary
   dftGasFromListRestore dftGasFromListTraceDefs gasOracleReplay
-  dftGasOracleDefs contextCodegenRel contextCodegenRelProps venomExecSemantics venomInst venomState list
+  dftGasOracleDefs contextCodegenRel contextCodegenRelProps venomExecSemantics venomInst venomState list rich_list
 
-Theorem trace_visits_reachable:
+(* Reaching a visit needs agreement only before that visit. *)
+Theorem trace_prefix_visits_reachable:
   (!p d fuel ctx fn inst s. !orc vs0 gs.
     active_inst fn inst s /\
-    ev_reachable orc vs0 ctx p d fn inst (s with vs_gas_readings := gs) /\
-    trace_agrees orc (trace_step p d fuel ctx fn inst s) ==>
-    !q e id f i t. MEM ((q,e,id),f,i,t) (trace_step p d fuel ctx fn inst s) ==>
+    ev_reachable orc vs0 ctx p d fn inst (s with vs_gas_readings := gs) ==>
+    !k q e id f i t.
+      k < LENGTH (trace_step p d fuel ctx fn inst s) /\
+      EL k (trace_step p d fuel ctx fn inst s) = ((q,e,id),f,i,t) /\
+      trace_agrees orc (TAKE k (trace_step p d fuel ctx fn inst s)) ==>
       ev_reachable orc vs0 ctx q e f i (t with vs_gas_readings := gs)) /\
   (!p d fuel ctx fn bb s. !orc vs0 gs.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     (!i. active_inst fn i s ==>
-      ev_reachable orc vs0 ctx p d fn i (s with vs_gas_readings := gs)) /\
-    trace_agrees orc (trace_block p d fuel ctx fn bb s) ==>
-    !q e id f i t. MEM ((q,e,id),f,i,t) (trace_block p d fuel ctx fn bb s) ==>
+      ev_reachable orc vs0 ctx p d fn i (s with vs_gas_readings := gs)) ==>
+    !k q e id f i t.
+      k < LENGTH (trace_block p d fuel ctx fn bb s) /\
+      EL k (trace_block p d fuel ctx fn bb s) = ((q,e,id),f,i,t) /\
+      trace_agrees orc (TAKE k (trace_block p d fuel ctx fn bb s)) ==>
       ev_reachable orc vs0 ctx q e f i (t with vs_gas_readings := gs)) /\
   (!p d fuel ctx fn s. !orc vs0 gs.
     (!u i. enters_block fn s u /\ active_inst fn i u ==>
-      ev_reachable orc vs0 ctx p (SUC d) fn i (u with vs_gas_readings := gs)) /\
-    trace_agrees orc (trace_blocks p d fuel ctx fn s) ==>
-    !q e id f i t. MEM ((q,e,id),f,i,t) (trace_blocks p d fuel ctx fn s) ==>
+      ev_reachable orc vs0 ctx p (SUC d) fn i (u with vs_gas_readings := gs)) ==>
+    !k q e id f i t.
+      k < LENGTH (trace_blocks p d fuel ctx fn s) /\
+      EL k (trace_blocks p d fuel ctx fn s) = ((q,e,id),f,i,t) /\
+      trace_agrees orc (TAKE k (trace_blocks p d fuel ctx fn s)) ==>
       ev_reachable orc vs0 ctx q e f i (t with vs_gas_readings := gs))
 Proof
   ho_match_mp_tac trace_defs_ind >> rpt conj_tac
@@ -31,7 +38,7 @@ Proof
   >> suspend "blocks"
 QED
 
-Resume trace_visits_reachable[step]:
+Resume trace_prefix_visits_reachable[step]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (Cases_on `decode_invoke inst`
@@ -54,13 +61,14 @@ Resume trace_visits_reachable[step]:
       disch_then drule >> disch_then drule >>
       disch_then drule >> disch_then drule >>
       disch_then (qspecl_then [`orc`,`vs0`,`gs`] mp_tac) >>
-      disch_then irule >> reverse conj_tac
-      >- metis_tac[] >>
+      disch_then (fn ih =>
+        irule (SIMP_RULE (srw_ss()) [GSYM AND_IMP_INTRO] ih)) >>
+      reverse conj_tac >- (qexistsl_tac [`id`,`k`] >> simp[]) >>
       rpt strip_tac >> metis_tac[restored_callee_entry]) >>
   simp[trace_step_noninvoke]
 QED
 
-Resume trace_visits_reachable[block]:
+Resume trace_prefix_visits_reachable[block]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `get_instruction bb s.vs_inst_idx`
   >- simp[Once trace_defs] >>
@@ -68,14 +76,20 @@ Resume trace_visits_reachable[block]:
   `active_inst fn inst s` by (irule lookup_instruction_active >> simp[]) >>
   `ev_reachable orc vs0 ctx p d fn inst (s with vs_gas_readings := gs)` by
     metis_tac[] >>
-  qpat_x_assum `trace_agrees _ _` mp_tac >>
-  simp[Once trace_defs, trace_agrees_cons] >> strip_tac >>
-  simp[Once trace_defs, MEM_APPEND] >> rpt strip_tac
-  >- gvs[]
-  >- (qpat_x_assum `!inst'. SOME inst = SOME inst' ==> _`
-        (mp_tac o SRULE []) >>
+  rpt gen_tac >> strip_tac >>
+  drule trace_block_visit >> disch_then (fn th =>
+    RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  Cases_on `k` >- gvs[] >> rename1 `SUC pos < _` >>
+  fs[trace_agrees_cons] >>
+  Cases_on `pos < LENGTH (trace_step p d fuel ctx fn inst s)`
+  >- (fs[EL_APPEND_EQN, TAKE_APPEND1] >>
+      qpat_x_assum `!orc vs0 gs. ev_reachable _ _ _ _ _ _ _ _ ==> _` mp_tac >>
       disch_then (qspecl_then [`orc`,`vs0`,`gs`] mp_tac) >>
-      metis_tac[]) >>
+      disch_then (fn ih =>
+        irule (SIMP_RULE (srw_ss()) [GSYM AND_IMP_INTRO] ih)) >>
+      simp[] >> qexistsl_tac [`id`,`pos`] >> simp[]) >>
+  `LENGTH (trace_step p d fuel ctx fn inst s) <= pos` by decide_tac >>
+  fs[EL_APPEND_EQN, rich_listTheory.TAKE_APPEND2, trace_agrees_append] >>
   Cases_on `step_inst fuel ctx inst s` >> gvs[] >>
   rename1 `step_inst _ _ _ _ = OK out` >>
   Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
@@ -90,43 +104,57 @@ Resume trace_visits_reachable[block]:
     (drule_all ev_step_preserves_current_bb >> simp[]) >>
   qpat_x_assum `!orc vs0 gs. lookup_block _ _ = _ /\ _ ==> _` mp_tac >>
   disch_then (qspecl_then [`orc`,`vs0`,`gs`] mp_tac) >>
-  disch_then irule >> simp[] >>
-  reverse conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
+  disch_then (fn ih =>
+    irule (SIMP_RULE (srw_ss()) [GSYM AND_IMP_INTRO] ih)) >>
+  simp[] >> reverse conj_tac
+  >- (qexistsl_tac [`id`,`pos - LENGTH (trace_step p d fuel ctx fn inst s)`] >>
+      simp[] >> decide_tac) >>
+  qx_gen_tac `cursor_inst` >> strip_tac >>
   qpat_x_assum `!orc vs0 gs. _` kall_tac >>
   `ev_reachable orc vs0 ctx p d fn inst (s with vs_gas_readings := gs)` by
     metis_tac[] >>
   `active_inst fn inst (s with vs_gas_readings := gs)` by
     simp[active_inst_restore] >>
-  `active_inst fn i' ((out with vs_gas_readings := gs) with
+  `active_inst fn cursor_inst ((out with vs_gas_readings := gs) with
       vs_inst_idx := SUC (s with vs_gas_readings := gs).vs_inst_idx)` by
     (fs[active_inst_def] >> metis_tac[]) >>
   drule_all ev_reachable_next >> simp[]
 QED
 
-Resume trace_visits_reachable[blocks]:
+Resume trace_prefix_visits_reachable[blocks]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  Cases_on `fuel` >- simp[] >>
-  rename1 `trace_blocks p d (SUC k) ctx fn s` >>
+  qx_genl_tac [`idx`,`q`,`e`,`id`,`f`,`i`,`t`] >> strip_tac >>
+  Cases_on `fuel` >- fs[] >>
+  rename1 `idx < LENGTH (trace_blocks p d (SUC k) ctx fn s)` >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
-  >- simp[Once trace_defs] >>
+  >- (qpat_x_assum `idx < LENGTH _` mp_tac >>
+      once_rewrite_tac[cj 3 trace_defs] >> simp[]) >>
   rename1 `lookup_block _ _ = SOME bb` >>
   Cases_on `eval_phis s bb.bb_instructions` >>
-  simp[Once trace_defs] >> gvs[] >>
+  qpat_x_assum `idx < LENGTH _` mp_tac >>
+  once_rewrite_tac[cj 3 trace_defs] >> simp[] >> strip_tac >> gvs[] >>
   rename1 `eval_phis _ _ = OK sp` >>
   `sp.vs_current_bb = s.vs_current_bb` by
     metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
   `enters_block fn s (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
     (simp[enters_block_def] >> metis_tac[]) >>
-  qpat_x_assum `trace_agrees _ _` mp_tac >>
-  simp[Once trace_defs] >> strip_tac >>
-  rpt strip_tac
-  >- (qpat_x_assum `!orc vs0 gs. lookup_block _ _ = _ /\ _ ==> _` mp_tac >>
+  drule_all trace_blocks_enter >> disch_then (fn th =>
+    RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  Cases_on `idx < LENGTH (trace_block p (SUC d) k ctx fn bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))`
+  >- (fs[EL_APPEND_EQN, TAKE_APPEND1] >>
+      qpat_x_assum `!orc vs0 gs. (!i. active_inst _ _ _ ==> _) ==> _` mp_tac >>
       disch_then (qspecl_then [`orc`,`vs0`,`gs`] mp_tac) >>
-      disch_then irule >> simp[] >> reverse conj_tac
-      >- metis_tac[] >>
+      disch_then (fn ih =>
+        irule (SIMP_RULE (srw_ss()) [GSYM AND_IMP_INTRO] ih)) >>
+      simp[] >> reverse conj_tac
+      >- (qexistsl_tac [`id`,`idx`] >> simp[]) >>
       rpt strip_tac >>
       qpat_x_assum `!u i. _` (drule_at Any) >> simp[]) >>
+  `LENGTH (trace_block p (SUC d) k ctx fn bb
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)) <= idx`
+    by decide_tac >>
+  fs[EL_APPEND_EQN, rich_listTheory.TAKE_APPEND2, trace_agrees_append] >>
   Cases_on `exec_block k ctx bb
     (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
   gvs[] >>
@@ -137,13 +165,17 @@ Resume trace_visits_reachable[blocks]:
         with vs_gas_readings := gs) = OK (out with vs_gas_readings := gs)` by
     (drule (cj 2 trace_replay) >>
      disch_then (qspec_then `gs` mp_tac) >> simp[restore_rel_cases]) >>
-  qpat_x_assum `!orc vs0 gs. (!u i. _ ) /\ _ ==> _` mp_tac >>
+  qpat_x_assum `!orc vs0 gs. (!u i. _ ) ==> _` mp_tac >>
   disch_then (qspecl_then [`orc`,`vs0`,`gs`] mp_tac) >>
-  disch_then irule >> simp[] >> reverse conj_tac
-  >- metis_tac[] >>
-  rpt strip_tac >>
+  disch_then (fn ih =>
+    irule (SIMP_RULE (srw_ss()) [GSYM AND_IMP_INTRO] ih)) >>
+  simp[] >> reverse conj_tac
+  >- (qexistsl_tac [`id`,`idx - LENGTH (trace_block p (SUC d) k ctx fn bb
+        (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))`] >>
+      simp[] >> decide_tac) >>
+  qx_genl_tac [`u`,`cursor_inst`] >> rpt strip_tac >>
   drule enters_block_restore >> disch_then (qspec_then `gs` assume_tac) >>
-  `active_inst fn i' (u with vs_gas_readings := gs)` by simp[] >>
+  `active_inst fn cursor_inst (u with vs_gas_readings := gs)` by simp[] >>
   irule ev_block_next_entry >> conj_tac >- simp[] >>
   qexistsl_tac [`bb`, `k`,
     `(sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
@@ -152,4 +184,32 @@ Resume trace_visits_reachable[blocks]:
   qpat_x_assum `!u i. _` (drule_at Any) >> simp[]
 QED
 
-Finalise trace_visits_reachable
+Finalise trace_prefix_visits_reachable
+
+Theorem trace_visits_reachable:
+  (!p d fuel ctx fn inst s. !orc vs0 gs.
+    active_inst fn inst s /\
+    ev_reachable orc vs0 ctx p d fn inst (s with vs_gas_readings := gs) /\
+    trace_agrees orc (trace_step p d fuel ctx fn inst s) ==>
+    !q e id f i t. MEM ((q,e,id),f,i,t) (trace_step p d fuel ctx fn inst s) ==>
+      ev_reachable orc vs0 ctx q e f i (t with vs_gas_readings := gs)) /\
+  (!p d fuel ctx fn bb s. !orc vs0 gs.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (!i. active_inst fn i s ==>
+      ev_reachable orc vs0 ctx p d fn i (s with vs_gas_readings := gs)) /\
+    trace_agrees orc (trace_block p d fuel ctx fn bb s) ==>
+    !q e id f i t. MEM ((q,e,id),f,i,t) (trace_block p d fuel ctx fn bb s) ==>
+      ev_reachable orc vs0 ctx q e f i (t with vs_gas_readings := gs)) /\
+  (!p d fuel ctx fn s. !orc vs0 gs.
+    (!u i. enters_block fn s u /\ active_inst fn i u ==>
+      ev_reachable orc vs0 ctx p (SUC d) fn i (u with vs_gas_readings := gs)) /\
+    trace_agrees orc (trace_blocks p d fuel ctx fn s) ==>
+    !q e id f i t. MEM ((q,e,id),f,i,t) (trace_blocks p d fuel ctx fn s) ==>
+      ev_reachable orc vs0 ctx q e f i (t with vs_gas_readings := gs))
+Proof
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[MEM_EL] >> strip_tac
+  >- metis_tac[cj 1 trace_prefix_visits_reachable, trace_agrees_take]
+  >- metis_tac[cj 2 trace_prefix_visits_reachable, trace_agrees_take]
+  >> metis_tac[cj 3 trace_prefix_visits_reachable, trace_agrees_take]
+QED

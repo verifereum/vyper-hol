@@ -12,6 +12,12 @@ Proof
   simp[trace_agrees_def, trace_gas_def, MAP_APPEND, FLAT_APPEND]
 QED
 
+Theorem trace_agrees_take:
+  trace_agrees orc xs ==> trace_agrees orc (TAKE n xs)
+Proof
+  metis_tac[TAKE_DROP, trace_agrees_append]
+QED
+
 Theorem trace_agrees_cons:
   trace_agrees orc ((e,fn,inst,s)::xs) <=>
   (inst.inst_opcode = GAS ==>
