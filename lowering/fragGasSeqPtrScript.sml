@@ -74,6 +74,9 @@ Proof
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  `ptr_safe_run D lo fuel ctx func PG G' tn'
+     (t with vs_inst_idx := LENGTH code + SUC s.vs_inst_idx)` by
+    fs[ADD_CLAUSES] >>
   `ptr_safe_run D lo fuel ctx func PG (step_prov PG G h u)
      (step_taint h s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (first_x_assum (qspecl_then
@@ -84,9 +87,12 @@ Proof
      simp[run_inst_seq_inst_idx, exec_result_map_def, ADD_CLAUSES]) >>
   `ptr_safe_step D lo fuel ctx func PG G tn h s` by
     (simp[Once ptr_safe_step_def] >> metis_tac[ptr_inst_ok_fuel]) >>
+  `ghost_step fuel ctx PG G tn h s =
+     (step_prov PG G h u, step_taint h s u tn)` by
+    metis_tac[ghost_step_non_invoke] >>
   fs[ptr_safe_run_def] >>
   once_rewrite_tac[ptr_safe_block_def] >>
-  simp[ghost_step_def]
+  simp[]
 QED
 
 Theorem gas_path_ptr_ok_suffix:
