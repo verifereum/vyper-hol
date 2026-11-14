@@ -372,6 +372,63 @@ Proof
   Cases_on `i.inst_opcode = GAS` >> simp[]
 QED
 
+Theorem sha_origin_abort_edge[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  i.inst_opcode <> GAS /\ inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx fn G tn i s /\ step_inst_base i s = Abort a t ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort a t,G,tn)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
+  rewrite_tac[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `bb`, `i`, `Abort a t`] >>
+      simp[gas_events_step_def, mem_safe_step_non_invoke, exit_result_def]) >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+  qexists_tac `0` >>
+  simp[gas_count_step_def, ptr_safe_step_def, exit_result_def]
+QED
+
+Theorem sha_zero_origin_abort:
+  !code s t a G tn G' tn' ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode) code /\
+    run_inst_seq_mem_ok code s /\
+    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
+    run_inst_seq code s = Abort a t ==>
+    ?j. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (Abort a (t with vs_inst_idx := j),G',tn')
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def]
+  >~ [`step_inst_base h s = OK u`]
+  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+      disch_then drule_all >> strip_tac >> qexists_tac `j` >>
+      `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+        (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+          step_prov PG G h u,step_taint h s u tn)` by
+        (drule_all straight_line_origin_ptr_edge >> simp[]) >>
+      drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]) >>
+  qexists_tac `t.vs_inst_idx` >> simp[] >>
+  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
+  irule sha_origin_abort_edge >> simp[] >> metis_tac[]
+QED
+
 Theorem run_inst_seq_gas_origin_ptr_path:
   !code s t G tn G' tn' ctx func bb.
     ~s.vs_halted /\

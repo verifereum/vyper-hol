@@ -40,6 +40,26 @@ Proof
   metis_tac[mem_safe_run_all_fuel, exit_result_not_error]
 QED
 
+Theorem sha_origin_abort_endpoint_unique:
+  gas_origin_ptr_path (D1,lo,explicit,ctx,fn,PG) (s,G,tn) marks
+    (Abort a t,G1,tn1) /\
+  gas_origin_ptr_path (D2,lo,explicit2,ctx,fn,PG) (s,G,tn) marks'
+    (Abort a u,G2,tn2) ==> t = u
+Proof
+  strip_tac >>
+  qpat_assum `gas_origin_ptr_path (D1,_,_,_,_,_) _ _ _`
+    (mp_then Any mp_tac gas_origin_ptr_path_exec) >>
+  simp[exit_result_def] >> disch_then (qx_choose_then `k` strip_assume_tac) >>
+  qpat_assum `gas_origin_ptr_path (D2,_,_,_,_,_) _ _ _`
+    (mp_then Any mp_tac gas_origin_ptr_path_exec) >>
+  simp[exit_result_def] >> disch_then (qx_choose_then `l` strip_assume_tac) >>
+  `run_from (k+l) ctx fn s = Abort a t` by
+    (irule fragGasPathTheory.gas_run_from_fuel_mono >> simp[] >> qexists_tac `k` >> simp[]) >>
+  `run_from (k+l) ctx fn s = Abort a u` by
+    (irule fragGasPathTheory.gas_run_from_fuel_mono >> simp[] >> qexists_tac `l` >> simp[]) >>
+  gvs[]
+QED
+
 Theorem ptr_edge_mem_continue[local]:
   gas_path_ptr_edge D lo ctx func PG G tn s n G1 tn1 (OK t) /\
   (!k. mem_safe_run k ctx func s) /\

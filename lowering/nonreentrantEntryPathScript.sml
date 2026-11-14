@@ -2,7 +2,7 @@
 Theory nonreentrantEntryPath
 Ancestors
   nonreentrantEquiv transientLockPtr transientLockFrameProps transientLockProps
-  bodyFullHashShaOrigin bodyFullHashShaAbortOrigin
+  fragGasOriginPtrExec
   nonreentrantSource accountsRelProps ghostPcTransportPtr
   fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
   fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun unitTransformDefs ptrSafeRun
