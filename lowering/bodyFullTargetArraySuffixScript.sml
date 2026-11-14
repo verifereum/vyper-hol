@@ -3,7 +3,7 @@ Theory bodyFullTargetArraySuffix
 Ancestors
   bodyFullTargetSubscript bodyFullTargetArraySource bodyFullTargetArrayLoad
   bodyFullTargetArrayScalar bodyFullTargetAttribute targetSubscriptMemory
-  targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites
+  targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
@@ -611,4 +611,61 @@ Proof
   drule_all array_elem_ptr_certified >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
   metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique]
+QED
+
+(* Certify the scalar failure once with no dead bytes. Monotonicity then
+   keeps the actual failing cursor fixed for every horizon mask. *)
+Theorem array_tail_bounds_abort_uniform[local]:
+  array_bounds_check idx len sgn sa = ((),sb) /\
+  eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
+  fresh_vars_wrt sa s /\ ~idx_in_range sgn iw nw /\
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  fn_has_code sa sb func /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sa sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn') ==>
+  ?t j. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort Revert_abort (t with vs_inst_idx := j),G',tn')
+Proof
+  strip_tac >>
+  `inst_seq_ptr <| d_stor := K (K {}); d_trans := K (K {});
+                   d_imm := K {}; d_ret := K {} |>
+     lo ctx func PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
+  drule_all array_bounds_check_joint_abort >>
+  disch_then (qspec_then `explicit` strip_assume_tac) >>
+  qexistsl_tac [`t`, `j`] >> simp[] >> gen_tac >>
+  irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC
+QED
+
+Theorem array_tail_length_uniform[local]:
+  (if dyn then compile_ptr_load ctor imm loc bop
+   else comp_return (Lit (n2w cnt))) sa = (p,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (dyn ==> ?t G' tn'.
+    array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG
+      s G tn t G' tn') ==>
+  ?t G' tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    eval_operand p t = SOME (if dyn then w else n2w cnt) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    array_length_frame sa s G tn t G' tn' /\
+    (if dyn then
+       array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG
+         s G tn t G' tn'
+     else t = s /\ G' = G /\ tn' = tn)
+Proof
+  strip_tac >> drule_all array_length_joint >>
+  disch_then (qspecl_then [`explicit`,
+    `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+    strip_assume_tac) >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[] >> gen_tac >>
+  irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC
 QED
