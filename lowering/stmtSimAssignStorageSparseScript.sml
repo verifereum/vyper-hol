@@ -192,10 +192,6 @@ Proof
   `value_has_type tvt v /\ expr_sim_inv cenv cx env ee` by
     (qpat_x_assum `!gs v es1. _ ==> _ /\ _` irule >>
      fs[ETA_THM] >> metis_tac[]) >>
-  `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
-  drule typed_storage_copy_write >>
-  disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
   `post_value_type cenv e = expr_type e` by
@@ -228,8 +224,39 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `!x. op = Var x ==> not_fresh_at sB x` by
     metis_tac[compile_lower_value_var] >>
-  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `slot < dimword (:256)` by decide_tac >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `val_wf tvt v` by
+        metis_tac[cj 1 valueEncodingTypingTheory.value_has_type_val_wf] >>
+      `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+       (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+          ALL_DISTINCT (MAP FST fields) /\
+          EVERY (\(fname,fty,sz). !tv.
+            evaluate_type (get_tenv cx) fty = SOME tv ==>
+            sz = type_memory_size tv) fields)` by
+        (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+      `?r. gas_marked_path F ctx func t 0 r /\ exit_result r /\
+           stmt_exit RetQ ee
+             (INR (Error (RuntimeError "write in static context"))) r` by
+        (irule place_store_slots_static_exit >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexistsl_tac [`cenv`, `n2w slot`, `sB`, `sb`, `Lit (n2w slot)`,
+                       `op`, `sw`, `get_tenv cx`, `tr`, `tvt`,
+                       `expr_type e`, `v`] >>
+         simp[eval_operand_def, wordsTheory.w2n_n2w,
+              arithmeticTheory.LESS_MOD] >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+                    `ee`, `r`] >>
+      fs[write_storage_slot_eq, stmt_exit_def]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  drule typed_storage_copy_write >>
+  disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
   qspecl_then [`cenv`, `op`, `Lit (n2w slot)`, `expr_type e`, `tr`, `sB`, `sb`,
     `tvt`, `func`, `t`, `sw`, `slot`, `ctx`, `cx`, `env`, `ee`, `src`, `id`,
     `[]`, `n2w slot`, `tvt`, `[]`, `0`, `writes`, `v`] mp_tac
