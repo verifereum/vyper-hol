@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState loweringPosts bodyPtrDefs fragGasOriginPtr
   fragExec list finite_map
 
-Theorem bop_in_literal_operands_full:
+Theorem bop_in_literal_operands_clean_full:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
     expr_body_pre cenv cx env
@@ -47,6 +47,7 @@ Theorem bop_in_literal_operands_full:
         storage_well_formed_on cx ee (FST H) /\
         EVERY (value_has_type tv) vs /\
         LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) xs vs /\
+        EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
         wb_frame cenv es ee sa s0 u /\
         (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 u) /\
         u.vs_current_bb = sb.cs_current_bb /\
@@ -197,6 +198,7 @@ Proof
         storage_well_formed_on cx ee (FST H) /\
         EVERY (value_has_type tv) vs /\
         LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) ys vs /\
+        EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) ys /\
         wb_frame cenv mid ee s1 t1 u /\
         (~EXISTS expr_has_effect args ==> pure_frame cenv func mid s1 t1 u) /\
         u.vs_current_bb = sb.cs_current_bb /\
@@ -271,6 +273,15 @@ Proof
     (drule_all literal_word_post_cons >> simp[]) >>
   qpat_x_assum `LIST_REL _ (_::_) (_::_)`
     (strip_assume_tac o SRULE []) >>
+  `op_prov G1 x = NONE /\ op_taint tn1 x = {}` by
+    fs[ptr_val_ok_def] >>
+  `op_prov G' x = NONE /\ op_taint tn' x = {}` by
+    (Cases_on `x` >> simp[ptrDisciplineTheory.op_prov_def,
+                           ptrDisciplineTheory.op_taint_def] >>
+     qpat_x_assum `ghost_kept_at lo cenv mid s1 G1 tn1 t1 G' tn'`
+       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+     first_x_assum (drule_then strip_assume_tac) >>
+     fs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def]) >>
   simp[] >>
   conj_tac >-
     (strip_tac >> irule pure_frame_trans >>
@@ -289,4 +300,58 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qexistsl_tac [`G1`, `mid`, `mid`, `t1`, `s1`, `tn1`] >>
   simp[wb_frame_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem bop_in_literal_operands_full:
+  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+   ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    expr_body_pre cenv cx env
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
+    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
+    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
+    (!e. MEM e args ==> MEM e (e1::elems)) /\
+    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
+    expr_sim_inv cenv cx env es /\
+    lower_word_args cenv expr_type args sa = (xs,sb) /\
+    gas_shadow_state sa shadow_sa /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    gas_shadow_function func shadow_func /\
+    MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+    fn_has_code sa sb func /\
+    (!shadow_xs shadow_sb.
+       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+         (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome_full
+      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+      (\H res ee G tn u. ?vs. res = INL vs /\
+        stmt_state_rel H ctx func cenv cx ee u /\
+        storage_well_formed_on cx ee (FST H) /\
+        EVERY (value_has_type tv) vs /\
+        LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) xs vs /\
+        wb_frame cenv es ee sa s0 u /\
+        (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 u) /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d cenv cx ee G tn u /\
+        ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+      (\H res ee gt r. expr_exit res r)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bop_in_literal_operands_clean_full >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule gas_outcome_full_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
