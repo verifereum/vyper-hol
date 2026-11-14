@@ -2,60 +2,8 @@
    Keep gas observations in the action: implicit machine GAS is not a source keyword. *)
 Theory rawCallActionBindPtr
 Ancestors
-  rawCallPrefixReadyPtr gasSummaryComposePtr gasExemptCert stmtSimForRounds
+  rawCallPrefixReadyPtr rawCallSourceActionPtr gasSummaryComposePtr gasExemptCert gasContext
   vyperInterpreter vyperState vyperValue exprReasonOperand
-
-Theorem raw_call_eval_action:
-  eval_expr cx (Call ann (RawCallTarget flags) args dflt) =
-  bind (eval_exprs cx args) (\vs.
-    do
-      type_check (LENGTH vs = 2 + LENGTH flags.rcf_kws) "raw_call args";
-      target <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
-      data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
-      amount <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 vs)) "raw_call value";
-      eval_raw_call cx flags target data amount
-        (forwarded_gas default_evm_gas_limit
-          (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 vs)))
-    od)
-Proof
-  simp[Once evaluate_def]
-QED
-
-Theorem raw_call_source_continuation:
-  dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
-  raw_call_value flags.rcf_kws kvs = SOME amount ==>
-  (do
-      type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
-      target' <- lift_option_type (dest_AddressV (EL 0 (av::BytesV bs::kvs))) "raw_call target";
-      data <- lift_option_type (dest_BytesV (EL 1 (av::BytesV bs::kvs))) "raw_call data";
-      value <- lift_option_type (raw_call_value flags.rcf_kws (DROP 2 (av::BytesV bs::kvs))) "raw_call value";
-      eval_raw_call cx flags target' data value
-        (forwarded_gas default_evm_gas_limit
-          (ext_call_kwarg EKGas flags.rcf_kws (DROP 2 (av::BytesV bs::kvs))))
-   od) = eval_raw_call cx flags target bs amount
-     (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
-Proof
-  strip_tac >> simp[type_check_def, assert_def, ignore_bind_def,
-    lift_option_type_def, check_def, dest_BytesV_def] >>
-  simp[FUN_EQ_THM, vyperStateTheory.bind_def, vyperStateTheory.assert_def,
-    vyperStateTheory.return_def]
-QED
-
-Theorem raw_call_marked_continuation_admissible:
-  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) args dflt)) expr_vv_res_ok es /\
-  gas_marked_exec F (ctx,func) (eval_exprs cx args) (es,s) marks
-    (INL (av::BytesV bs::kvs)) mid (OK t) /\
-  dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
-  raw_call_value flags.rcf_kws kvs = SOME amount ==>
-  gas_admissible (eval_raw_call cx flags target bs amount
-    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)))
-    expr_vv_res_ok (mid with gas_obs := [])
-Proof
-  rewrite_tac[raw_call_eval_action, gasSummaryTheory.gas_marked_exec_def] >>
-  strip_tac >> drule_all gas_admissible_bind_tail >>
-  BETA_TAC >> drule_all raw_call_source_continuation >>
-  disch_then (qspecl_then [`cx`, `bs`] SUBST1_TAC) >> simp[]
-QED
 
 Theorem raw_call_scalar_action_outcome:
   body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
@@ -101,7 +49,7 @@ Proof
     (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
   drule_all rawCallPrefixPtrTheory.raw_call_prefix_sim_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
-  rewrite_tac[raw_call_eval_action] >>
+  rewrite_tac[rawCallSourceActionPtrTheory.raw_call_eval_action] >>
   irule gas_outcome_ptr_bind >> rpt conj_tac
   >- suspend "certificate_head"
   >- suspend "certificate_tail" >>
@@ -138,8 +86,8 @@ Resume raw_call_scalar_action_outcome[normal]:
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
   drule_at (Pat `eval_exprs _ _ _ = _`) raw_call_prefix_amount >>
   disch_then drule_all >> strip_tac >>
-  drule_all raw_call_marked_continuation_admissible >> disch_tac >>
-  drule_all raw_call_source_continuation >>
+  drule_all rawCallSourceActionPtrTheory.raw_call_marked_continuation_admissible >> disch_tac >>
+  drule_all rawCallSourceActionPtrTheory.raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`, `bs`]
     (fn th => rewrite_tac[SIMP_RULE
       (srw_ss() ++ listSimps.LIST_ss ++ numSimps.ARITH_ss) [] th])) >>
@@ -347,7 +295,7 @@ Resume raw_call_prepared_prefix_sim_ptr[normal]:
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
   drule_at (Pat `eval_exprs _ _ _ = _`) raw_call_prefix_amount >>
   disch_then drule_all >> strip_tac >>
-  drule_all raw_call_marked_continuation_admissible >> disch_tac >>
+  drule_all rawCallSourceActionPtrTheory.raw_call_marked_continuation_admissible >> disch_tac >>
   suspend "ready"
 QED
 
@@ -469,7 +417,7 @@ Proof
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es` by
     (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
   drule_all raw_call_prepared_prefix_sim_ptr >> disch_then (qspec_then `PG` assume_tac) >>
-  rewrite_tac[raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  rewrite_tac[rawCallSourceActionPtrTheory.raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
   >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
       irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[])
   >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
@@ -484,7 +432,7 @@ QED
 Resume raw_call_zero_reverting_action_outcome[normal]:
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  drule_all raw_call_source_continuation >>
+  drule_all rawCallSourceActionPtrTheory.raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`, `bs`] assume_tac) >> gvs[] >>
   `type_memory_bytes cenv (lowered_value_type cenv
       (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) = 0` by
@@ -556,7 +504,7 @@ Proof
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es` by
     (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
   drule_all raw_call_prepared_prefix_sim_ptr >> disch_then (qspec_then `PG` assume_tac) >>
-  rewrite_tac[raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  rewrite_tac[rawCallSourceActionPtrTheory.raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
   >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
       irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[])
   >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
@@ -571,7 +519,7 @@ QED
 Resume raw_call_bytes_action_outcome[normal]:
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  drule_all raw_call_source_continuation >>
+  drule_all rawCallSourceActionPtrTheory.raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`, `bs`] assume_tac) >> gvs[] >>
   drule_all raw_call_prefix_result_capacity >> strip_tac >>
   `?gw. eval_operand gas_op t = SOME gw` by metis_tac[] >>
@@ -640,7 +588,7 @@ Proof
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es` by
     (drule rawCallPrefixPtrTheory.raw_call_operands_admissible >> simp[]) >>
   drule_all raw_call_prepared_prefix_sim_ptr >> disch_then (qspec_then `PG` assume_tac) >>
-  rewrite_tac[raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  rewrite_tac[rawCallSourceActionPtrTheory.raw_call_eval_action] >> irule gas_outcome_ptr_bind >> rpt conj_tac
   >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
       irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >> simp[])
   >- (rpt strip_tac >> gvs[ignore_bind_def, bind_assoc] >>
@@ -655,7 +603,7 @@ QED
 Resume raw_call_tuple_action_outcome[normal]:
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  drule_all raw_call_source_continuation >>
+  drule_all rawCallSourceActionPtrTheory.raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`, `bs`] assume_tac) >> gvs[] >>
   drule_all raw_call_prefix_result_capacity >> strip_tac >>
   `?gw. eval_operand gas_op t = SOME gw` by metis_tac[] >>
