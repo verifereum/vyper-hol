@@ -3002,8 +3002,10 @@ Proof
               gen_tac] >> BETA_TAC) >>
   simp[comp_return_def, cs_extends_refl] >> rpt strip_tac >>
   imp_res_tac first_emission_emit_helpers >> gvs[] >>
-  metis_tac[first_emission_safe_arithmetic, first_emission_safe_pow,
-            first_emission_compare, first_emission_binop_aux]
+  imp_res_tac first_emission_safe_pow >>
+  imp_res_tac first_emission_compare >>
+  simp[] >>
+  metis_tac[first_emission_safe_arithmetic, first_emission_binop_aux]
 QED
 
 Theorem first_emission_builtin_bop:

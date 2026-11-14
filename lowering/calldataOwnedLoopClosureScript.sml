@@ -391,7 +391,9 @@ Resume calldata_owned_loop_from_header[terminal]:
       abi_decode_header_insts hid ip src CALLDATALOAD
         (STRING #"%" (toString next)) (STRING #"%" (toString (next+1)))
         (STRING #"%" (toString (next+2))) (STRING #"%" (toString (next+3)))
-        body_lbl exit_lbl|>` by metis_tac[] >>
+        body_lbl exit_lbl|>` by
+    (qpat_assum `v.vs_current_bb = hdr` (fn th => pure_rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`s` |-> `v`, `pw` |-> `(n2w p : bytes32)`]
     (Q.INST [`p` |-> `pw`] (SPEC_ALL calldata_owned_terminal_endpoint))) >>
   impl_tac >- suspend "terminal_inputs" >>

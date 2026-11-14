@@ -61,7 +61,10 @@ Proof
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `(mcopy d (sb MOD dimword (:256)) 0 initial)
     with vs_inst_idx := LENGTH st'.cs_current_insts` >>
-  simp[eval_operand_def, mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
+  qpat_assum `enc at av = []` (fn th => pure_rewrite_tac [th]) >>
+  qpat_assum `out = _` (fn th => pure_rewrite_tac [th]) >>
+  simp_tac (srw_ss()) [eval_operand_def, mem_bytes_at_def] >>
+  asm_simp_tac bool_ss [abi_encoder_extend_sim_sim] >>
   conj_tac
   >- (irule abi_encoder_registered_effect_trans >>
       qexists_tac `mcopy d (sb MOD dimword (:256)) 0 initial` >>
