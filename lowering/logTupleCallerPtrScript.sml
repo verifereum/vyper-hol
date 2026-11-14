@@ -33,7 +33,7 @@ Proof
   asm_simp_tac bool_ss [] >> rpt strip_tac >>
   irule alloca_step_taint_below_frontier >>
   asm_simp_tac bool_ss [] >> conj_tac >- decide_tac >>
-  qexistsl_tac [`ce`,`ctx`,`cx`,`es`,`func`] >> asm_simp_tac bool_ss []
+  qexistsl_tac [`H`,`ce`,`ctx`,`cx`,`es`,`func`] >> asm_simp_tac bool_ss []
 QED
 
 (* The caller's staged input survives allocating the output buffer, including

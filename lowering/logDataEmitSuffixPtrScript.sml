@@ -15,6 +15,7 @@ Proof
 QED
 
 Theorem log_data_emit_suffix_path_ptr:
+  ~cx.txn.is_static /\
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view ce args sa xs sm /\
   EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\

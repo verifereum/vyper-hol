@@ -33,7 +33,7 @@ Proof
   simp[] >> rpt strip_tac
   >- (irule alloca_step_ptr_val_ok >> simp[] >>
       reverse conj_tac
-      >- (qexistsl_tac [`ce`,`ctx`,`es`,`func`,`sa`,`st`] >>
+      >- (qexistsl_tac [`H`,`ce`,`ctx`,`es`,`func`,`sa`,`st`] >>
           fs[log_arg_rel_def]) >>
       simp[] >> rpt strip_tac >>
       qpat_x_assum `!x. arg0 = Var x ==> _` drule >>
