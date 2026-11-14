@@ -73,8 +73,9 @@ Proof
   `~t.vs_halted` by
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
-  drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >> strip_tac >>
-  `?ast ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL (),ast')` by
+  drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (`?ast ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL (),ast')` by
     (qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      disch_then (qspec_then `[]` strip_assume_tac o CONJUNCT1) >> fs[] >>
@@ -89,5 +90,12 @@ Proof
   rpt strip_tac >>
   `not_fresh_at sa x` by
     (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  metis_tac[]
+  metis_tac[]) >>
+  rename1 `expr_exit (INR (Error (RuntimeError "write in static context"))) rr` >>
+  `exit_result rr` by
+    (Cases_on `rr` >>
+     gvs[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]) >>
+  irule tuple_place_write_gas_exit >>
+  qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
