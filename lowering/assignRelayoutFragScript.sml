@@ -1,6 +1,7 @@
 (* Source and gas composition for existing-local relayout. *)
 Theory assignRelayoutFrag
 Ancestors
+  fullAssignCopyFacts
   assignRelayoutContinue annassignRelayoutFrag annassignRelayoutCode
   stmtSimAssignMem stmtSimAssignCompose stmtSimAssignSource stmtSimAssignPath
   stmtSimDeclCompose gasOutcome gasSummary gasSummaryCompose gasExemptCert

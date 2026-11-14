@@ -25,6 +25,7 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  fullAssignCopyFacts
   exprSimFieldLayout exprSimAggregateChildren exprSimVVFrame immutableWordExecution
   fragGasSeq fragGasPath fragGasMode gasSummary exprSimUnwrap exprSimUnwrapProps
   exprSimSource exprSimMemorySource exprSimMemoryRead exprSimProps gasContext

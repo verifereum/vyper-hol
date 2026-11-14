@@ -1,6 +1,7 @@
 (* Assignment slices in raw RHS / target / no-op unwrap / store order. *)
 Theory placeRelayoutCode
 Ancestors
+  fullAssignCopyFacts
   exprSimIfExpWidenedCounted stmtSimAssignMem stmtLoweringMono
   exprLoweringProps stmtLowering exprLowering context compileEnv fragExec
 

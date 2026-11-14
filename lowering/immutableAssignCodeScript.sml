@@ -1,6 +1,7 @@
 (* Compiler inversion for root constructor immutable assignment. *)
 Theory immutableAssignCode
 Ancestors
+  fullAssignCopyFacts
   stmtSimAssignMem stmtSimProps exprLoweringProps stmtLowering exprLowering loweringPosts
   compileEnv finite_map stmtLoweringMono fragExec
 
