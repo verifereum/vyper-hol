@@ -3,7 +3,7 @@ Theory rawCallShapePtr
 Ancestors
   exprSimHypsDefs exprLowering exprLoweringProps builtinSystem
   vyperTyping vyperTypeSystem vyperInterpreter vyperState vyperValue
-  supportedExprTraverse allocLimits list pair exprSimSend
+  supportedExprTraverse allocLimits list pair exprSimSend context emitHelper
   exprSimSource vyperTypeCallGraph exprSimWordArgs compileEnv
   exprSimPrecompiles exprSimHash vyperTypeExtCallSoundness
 Libs
@@ -241,4 +241,42 @@ Proof
   qexists_tac `amount` >> fs[] >> strip_tac >>
   `~MEM EKValue flags.rcf_kws` by fs[vyperTypeSystemTheory.raw_call_kws_ok_def] >>
   gvs[raw_call_value_def, ext_call_kwarg_not_mem]
+QED
+
+Theorem raw_call_outbuf_steps:
+  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
+  ?buf sm.
+    compile_alloc_buffer (((cap + 31) DIV 32) * 32 + 32) sa = (buf,sm) /\
+    ov = buf.buf_operand /\ emit_op ADD [ov; Lit 32w] sm = (op,sb)
+Proof
+  strip_tac >> qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
+  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem raw_call_outbuf_zero_steps:
+  compile_raw_call_outbuf 0 sa = ((ov,op),sb) ==>
+  ?buf. compile_alloc_buffer 0 sa = (buf,sb) /\
+    ov = buf.buf_operand /\ op = buf.buf_operand
+Proof
+  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem raw_call_outbuf_positive_code:
+  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (((cap+31) DIV 32)*32+32))]
+       [STRING #"%" (toString sa.cs_next_var)];
+     mk_inst (SUC sa.cs_next_id) ADD [ov; Lit 32w]
+       [STRING #"%" (toString (SUC sa.cs_next_var))]] /\
+  sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_blocks = sa.cs_blocks
+Proof
+  strip_tac >> qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
+  simp[compile_raw_call_outbuf_def, compile_alloc_buffer_def,
+    emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
+  simp[arithmeticTheory.ADD1, listTheory.APPEND_ASSOC]
 QED
