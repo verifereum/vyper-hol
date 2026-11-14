@@ -48,8 +48,8 @@ Proof
     (Cases_on `left` >> Cases_on `right` >> gvs[eval_operand_def, lookup_var_def]) >>
   qpat_x_assum `run_inst_seq _ s = _` kall_tac >>
   drule_all emit_scalar_binop_endpoint_ptr_core >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`] >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
+  qexistsl_tac [`HG`,`u`] >>
   fs[cj 4 control_moves_keep_vars, allocas_from_def] >> metis_tac[]
 QED
 
@@ -97,8 +97,8 @@ Proof
   qpat_x_assum `run_inst_seq _ s = _` kall_tac >>
   drule_all (Q.INST [`off` |-> `off`, `n` |-> `n`, `total` |-> `capacity`]
     (SPEC_ALL emit_ptr_offset_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`,`q`] >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
+  qexistsl_tac [`HG`,`u`,`q`] >>
   gvs[cj 4 control_moves_keep_vars, allocas_from_def, ptr_covers_def, lookup_var_def] >>
   metis_tac[]
 QED

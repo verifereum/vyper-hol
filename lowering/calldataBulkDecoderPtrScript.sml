@@ -73,7 +73,7 @@ Proof
   rename1 `run_inst_seq (emitted_insts c2 sb) s2 = OK t` >>
   dxrule run_inst_seq_append_ok >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa c1) s = OK s1` >>
-  drule_all calldata_count_guard_endpoint_ptr_core >>
+  drule_all (Q.INST [`H` |-> `ARB`] calldata_count_guard_endpoint_ptr_core) >>
   disch_then (qspecl_then [`ARB`,`ctx`,`ARB`,`PG`,`G`] strip_assume_tac) >>
   rename1 `op_taint u1 count_op = {}` >>
   rename1 `op_prov H1 count_op = NONE` >>
@@ -109,7 +109,7 @@ Proof
   drule_all calldata_array_header_raw_endpoint_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `op_taint u2 cnt = {}` >> rename1 `op_prov H2 cnt = NONE` >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   `abi_decoder_operand_live c1.cs_next_var src` by
     (Cases_on `src` >> fs[abi_decoder_operand_live_def, calldata_operand_live_not_fresh] >> metis_tac[]) >>
   `eval_operand src s2 = SOME a /\ op_taint u2 src = {} /\ op_prov H2 src = NONE` by
