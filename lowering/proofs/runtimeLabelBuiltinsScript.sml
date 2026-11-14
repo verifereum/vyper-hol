@@ -1694,3 +1694,121 @@ Theorem rb_compile_invert:
 Proof
   Cases_on `ty` >> simp[compile_invert_def, rb_emit_op]
 QED
+
+Theorem rb_compile_type_convert:
+  !conv v. rb_operand_ok v ==>
+  rb_step rb_operand_ok (compile_type_convert v conv)
+Proof
+  Cases >> rpt strip_tac
+  >~ [`compile_type_convert v ConvIdentity`] >- simp[compile_type_convert_def, rb_step_return]
+  >~ [`compile_type_convert v ConvToBool`]
+  >- (pure_rewrite_tac[compile_type_convert_def] >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op])
+  >~ [`compile_type_convert v (ConvBoolToDecimal n)`]
+  >- simp[compile_type_convert_def, rb_emit_op]
+  >~ [`compile_type_convert v (ConvToFlag n)`]
+  >- (Cases_on `n < 256` >> simp[compile_type_convert_def, rb_compile_int_clamp, rb_step_return])
+  >~ [`compile_type_convert v ConvToAddress`]
+  >- (pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvBytestringCast n m)`]
+  >- (simp[compile_type_convert_def] >> IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvBytesMToBytesM n m)`]
+  >- (simp[compile_type_convert_def] >> IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v ConvBytestringToBool`]
+  >- (pure_rewrite_tac[compile_type_convert_def] >>
+      irule rb_step_bind >>
+      qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >>
+      BETA_TAC >> reverse conj_tac >- simp[rb_load_bytestring_as_word] >>
+      Cases >> simp[] >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op])
+  >~ [`compile_type_convert v (ConvBytestringToBytesM n)`]
+  >- (pure_rewrite_tac[compile_type_convert_def] >>
+      irule rb_step_bind >>
+      qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >>
+      BETA_TAC >> reverse conj_tac >- simp[rb_load_bytestring_as_word] >>
+      Cases >> simp[rb_emit_op])
+  >~ [`compile_type_convert v (ConvBytestringToInt b n m)`]
+  >- (pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+      irule rb_step_bind >>
+      qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >>
+      BETA_TAC >> reverse conj_tac >- simp[rb_load_bytestring_as_word] >>
+      Cases >> simp[] >> strip_tac >> IF_CASES_TAC >>
+      simp[rb_compile_int_clamp, rb_step_return])
+  >~ [`compile_type_convert v (ConvBytesToInt m b n)`]
+  >- (pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac >- (Cases_on `b` >> simp[rb_emit_op]) >>
+      gen_tac >> strip_tac >> IF_CASES_TAC >> simp[rb_compile_int_clamp, rb_step_return])
+  >~ [`compile_type_convert v (ConvBytesToAddress n)`]
+  >- (pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvIntToBytesM b n m)`]
+  >- (pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      conj_tac >- simp[rb_emit_op] >>
+      Cases_on `n > m * 8` >> simp[rb_step_return] >>
+      Cases_on `b` >> simp[] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvIntToInt b n c m)`]
+  >- (Cases_on `b` >> Cases_on `c` >>
+      Cases_on `m < n` >> simp[compile_type_convert_def] >>
+      simp[rb_compile_int_clamp, rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvBytesMToDecimal m d lo hi)`]
+  >- (pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvBytestringToDecimal d lo hi n)`]
+  >- (pure_rewrite_tac[compile_type_convert_def] >>
+      irule rb_step_bind >>
+      qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >>
+      BETA_TAC >> reverse conj_tac >- simp[rb_load_bytestring_as_word] >>
+      Cases >> simp[] >> strip_tac >> IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+  >~ [`compile_type_convert v (ConvIntToDecimal b n d lo hi)`]
+  >- suspend "int_decimal"
+  >> suspend "decimal_int"
+QED
+
+Resume rb_compile_type_convert[int_decimal]:
+  pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      simp[rb_emit_void]) >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac >- (Cases_on `b` >> simp[rb_emit_op]) >>
+      gen_tac >> strip_tac >> irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_void]) >>
+  simp[rb_emit_op]
+QED
+
+Resume rb_compile_type_convert[decimal_int]:
+  pure_rewrite_tac[compile_type_convert_def, LET_THM] >> BETA_TAC >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      simp[rb_emit_void]) >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac >- (Cases_on `b` >> simp[rb_emit_op]) >>
+      gen_tac >> strip_tac >> irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_void]) >>
+  simp[rb_emit_op]
+QED
+Finalise rb_compile_type_convert
