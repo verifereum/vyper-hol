@@ -132,7 +132,7 @@ Proof
   gvs[mcopy_def, write_memory_with_expansion_def, venom_state_component_equality] >> metis_tac[]
 QED
 
-Theorem return_default_memory_store_joint:
+Theorem return_default_memory_store_capacity_joint:
   compile_store_memory ce src (Var dst) rt sty a = ((),b) /\
   ~is_word_type rt /\ ~is_word_type sty /\
   (rt = sty \/ is_bytestring_type rt /\ is_bytestring_type sty) /\
@@ -143,7 +143,6 @@ Theorem return_default_memory_store_joint:
   type_memory_bytes ce rt = type_memory_size tv /\
   type_memory_bytes ce sty = type_memory_size stv /\
   type_memory_size tv + 64 < dimword (:256) /\
-  type_memory_size stv + 64 < dimword (:256) /\
   (!x. src = Var x ==> not_fresh_at a x) /\ not_fresh_at a dst /\
   eval_operand src s = SOME sw /\ lookup_var dst s = SOME dw /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
@@ -193,7 +192,7 @@ Proof
   gvs[eval_operand_def] >> rename1 `lookup_var source s = SOME sw` >>
   suspend "static"
 QED
-Resume return_default_memory_store_joint[zero]:
+Resume return_default_memory_store_capacity_joint[zero]:
   gvs[compile_copy_memory_def, comp_return_def] >>
   qexistsl_tac [`s`, `G`, `tn`] >> simp[] >>
   conj_tac >- simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules] >>
@@ -204,7 +203,7 @@ Resume return_default_memory_store_joint[zero]:
   simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   drule exprSimPropsTheory.val_footprint_le >> simp[]
 QED
-Resume return_default_memory_store_joint[static]:
+Resume return_default_memory_store_capacity_joint[static]:
   `emit_void MCOPY [Var dst;Var source;Lit (n2w (type_memory_size stv))] a = ((),b)` by
     (Cases_on `type_memory_size stv` >> gvs[compile_copy_memory_def]) >>
   `w2n (n2w (type_memory_size stv) : bytes32) = type_memory_size stv` by
@@ -226,7 +225,7 @@ Resume return_default_memory_store_joint[static]:
       venom_state_component_equality] >>
   conj_tac >- metis_tac[] >> rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
-Resume return_default_memory_store_joint[bytes]:
+Resume return_default_memory_store_capacity_joint[bytes]:
   `is_bytestring_type sty` by metis_tac[] >>
   `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      val_in_memory tv v (w2n sw) mem` by
@@ -304,4 +303,56 @@ Resume return_default_memory_store_joint[bytes]:
      simp[LENGTH_TAKE] >> decide_tac) >>
   gvs[mcopy_def, write_memory_with_expansion_def, venom_state_component_equality]
 QED
-Finalise return_default_memory_store_joint
+Finalise return_default_memory_store_capacity_joint
+
+Theorem return_default_memory_store_joint:
+  compile_store_memory ce src (Var dst) rt sty a = ((),b) /\
+  ~is_word_type rt /\ ~is_word_type sty /\
+  (rt = sty \/ is_bytestring_type rt /\ is_bytestring_type sty) /\
+  evaluate_type (get_tenv cx) rt = SOME tv /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  value_has_type tv v /\ value_has_type stv v /\
+  val_wf tv v /\ val_wf stv v /\
+  type_memory_bytes ce rt = type_memory_size tv /\
+  type_memory_bytes ce sty = type_memory_size stv /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  type_memory_size stv + 64 < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at a x) /\ not_fresh_at a dst /\
+  eval_operand src s = SOME sw /\ lookup_var dst s = SOME dw /\
+  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
+  ptr_mem_ok cx sty v src G tn s /\
+  (type_memory_size stv <> 0 ==>
+    ?x. src = Var x /\ ptr_covers G tn x s (type_memory_size stv) /\
+        w2n sw + type_memory_size stv <= s.vs_alloca_next) /\
+  (type_memory_size tv <> 0 ==>
+    ptr_covers G tn dst s (type_memory_size tv) /\
+    w2n dw + type_memory_size tv <= s.vs_alloca_next) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  fn_has_code a b func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?u Gf tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (s,G,tn) [] (OK u,Gf,tm)) /\
+    (!mem. mem_agree_outside tm.t_mem u.vs_memory mem ==>
+       val_in_memory tv v (w2n dw) mem) /\
+    lookup_var dst u = SOME dw /\
+    (!x. not_fresh_at a x ==>
+      lookup_var x u = lookup_var x s /\
+      FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    (!off len. off+len <= w2n dw \/ w2n dw+type_memory_size tv <= off ==>
+      mem_bytes_at off len u.vs_memory = mem_bytes_at off len s.vs_memory) /\
+    (!i. i < w2n dw \/ w2n dw+type_memory_size tv <= i ==>
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    u.vs_current_bb = b.cs_current_bb /\
+    u.vs_inst_idx = LENGTH b.cs_current_insts /\ ~u.vs_halted
+Proof
+  strip_tac >> irule return_default_memory_store_capacity_joint >>
+  simp[] >> qexistsl_tac [`ce`, `cx`, `rt`, `src`, `stv`, `sty`, `sw`] >>
+  fs[arithmeticTheory.ADD_COMM]
+QED
