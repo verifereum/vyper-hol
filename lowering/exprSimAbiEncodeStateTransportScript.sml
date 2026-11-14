@@ -727,3 +727,52 @@ Proof
   qpat_assum `abi_encoder_registered_effect ids0 [] prepared actual` (irule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* Raw encoder endpoint transport: all request-specific byte and allocation
+   obligations are explicit, independently of how the endpoint was reached. *)
+Theorem abi_encode_raw_caller_state:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs s /\
+  abi_encode_exec_frame func s t /\
+  abi_encoder_registered_effect ids outs s t /\
+  alloca_inv t /\ t.vs_labels = s.vs_labels /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!i r. FLOOKUP s.vs_allocas i = SOME r ==>
+    FLOOKUP t.vs_allocas i = SOME r) /\
+  (!i b n. FLOOKUP t.vs_allocas i = SOME(b,n) /\
+    FLOOKUP s.vs_allocas i = NONE ==> s.vs_alloca_next <= b) /\
+  (!name entry ptr sz. lookup_scopes name vs.scopes = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME(PtrVar (Var ptr) sz) ==>
+    lookup_var ptr t = lookup_var ptr s) /\
+  (!x v. ce.ce_imm_alloca = SOME (Var x) /\ lookup_var x s = SOME v ==>
+    lookup_var x t = SOME v) /\
+  (!name b n. local_region ce vs.scopes s name b n ==>
+    mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME(ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME(tv,v) ==>
+    mem_bytes_at off (type_memory_size tv) t.vs_memory =
+      mem_bytes_at off (type_memory_size tv) s.vs_memory) /\
+  (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME(b,sz) ==> sz = w2n n) ==>
+  stmt_state_rel H ctx func ce cx vs t
+Proof
+  strip_tac >>
+  `state_rel H func ce cx vs s /\ alloca_room ctx func s /\
+   fmp_room ctx func s /\ immutable_alloca_sep func ce cx vs s /\
+   immutable_base_zero ce s` by fs[stmt_state_rel_def] >>
+  `state_rel H func ce cx vs t` by
+    (irule abi_encode_caller_state_rel >>
+     qexistsl [`ids`, `s`, `func`, `outs`, `s`] >> simp[] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `immutable_alloca_sep func ce cx vs t` by
+    (drule_all abi_encode_caller_immutable_separation >> simp[]) >>
+  `immutable_base_zero ce t` by
+    (drule_all abi_encode_caller_immutable_base >> simp[]) >>
+  `alloca_room ctx func t /\ fmp_room ctx func t` by
+    (fs[alloca_room_def, fmp_room_def, abi_encode_exec_frame_def] >>
+     disch_tac >> qpat_x_assum `_ ==> _ /\ _` mp_tac >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> decide_tac) >>
+  simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
+QED
