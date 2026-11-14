@@ -2,6 +2,7 @@
 Theory bodyFullConvertBytesWordSuffix
 Ancestors
   bodyFullConvertBytesWordPrefix bodyFullConvertBytesWordNormalize
+  bodyPtrTypeBuiltinsBytesWordParts
   bodyPtrSignedConvertUnsignedCompose reasonCopySourcePtr instSeqComposePtr
   bodyPtrSignedConvertUnsignedLoad bodyPtrDefs fragExec venomState
   venomInst venomExecSemantics finite_map words arithmetic exprLoweringProps list

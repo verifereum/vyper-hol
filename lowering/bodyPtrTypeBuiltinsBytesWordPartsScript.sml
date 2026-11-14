@@ -1,6 +1,5 @@
 Theory bodyPtrTypeBuiltinsBytesWordParts
 Ancestors
-  bodyPtrTypeBuiltinsUintCounted bodyPtrSignedConvertBool
   exprLowering exprLoweringProps emitHelperProps compileEnv
 
 (* All positive-capacity branches share exactly the SHR loader. *)
