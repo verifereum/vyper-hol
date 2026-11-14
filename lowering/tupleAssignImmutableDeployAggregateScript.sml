@@ -11,15 +11,18 @@ Theorem tuple_immutable_aggregate_store:
   da = (case dty of ArrayT et (Dynamic _) =>
     SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
     | _ => NONE) /\
-  (let dst = FST place; loc_opt = FST (SND place); dst_ty_opt = SND (SND place);
-       loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
-   in (if is_word_type (EL i ltys) then
-         if is_word_type dty then
-           compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
-         else emit_void INVALID []
-       else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+  (if is_word_type (EL i ltys) then
+     if is_word_type (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys) then
+       compile_store_at_loc cenv.ce_imm_alloca (FST place) (EL i elems) (FST (SND place))
+     else emit_void INVALID []
+   else compile_assign_value cenv (FST place)
+     (case FST (SND place) of SOME l => l | NONE => LocMemory)
+     (EL i elems)
+     (is_word_type (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys))
+     NONE (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys)
+     (EL i ltys)
+     (type_memory_bytes cenv
+       (case SND (SND place) of SOME (ValPT t) => t | _ => EL i ltys))) sa = ((),sb) /\
   ~is_word_type sty /\ type_widens_to (get_tenv cx) sty dty /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -89,7 +92,7 @@ Proof
   qpat_x_assum `sty = EL i ltys` kall_tac >>
   qpat_x_assum `L = type_memory_bytes cenv dty` kall_tac >>
   qpat_x_assum `da = _` kall_tac >>
-  qpat_x_assum `(let dst = _ in _) = _` kall_tac >>
+  qpat_x_assum `(if is_word_type _ then _ else _) _ = _` kall_tac >>
   `~is_word_type dty` by metis_tac[compileEnvTheory.type_widens_to_word] >>
   fs[] >>
   Cases_on `is_bytestring_type dty`
