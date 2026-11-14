@@ -438,6 +438,40 @@ Proof
   gvs[]
 QED
 
+Theorem supply_prefix_defined_return:
+  wf_function f /\ supply_prefix_defined f a /\
+  MEM bb f.fn_blocks /\ bb.bb_label = a.vs_current_bb /\
+  a.vs_inst_idx < LENGTH bb.bb_instructions /\
+  outs = (EL a.vs_inst_idx bb.bb_instructions).inst_outputs /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state a e)) = SOME u ==>
+  supply_prefix_defined f (u with vs_inst_idx := SUC a.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  `u.vs_current_bb = a.vs_current_bb` by
+    (qpat_assum `bind_outputs _ _ _ = SOME _` mp_tac >>
+     mp_tac (Q.ISPEC `\s:venom_state. s.vs_current_bb`
+       venomInstProofs1Theory.bind_outputs_preserves) >>
+     simp[venomStateTheory.update_var_def] >>
+     disch_then drule >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     simp[venomExecSemanticsTheory.adopt_return_fmp_def,
+          venomExecSemanticsTheory.merge_callee_state_def]) >>
+  `FDOM u.vs_vars = FDOM a.vs_vars UNION set outs` by
+    (drule venomExecProofsTheory.bind_outputs_fdom >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     simp[venomExecSemanticsTheory.adopt_return_fmp_def,
+          venomExecSemanticsTheory.merge_callee_state_def]) >>
+  gvs[supply_prefix_defined_def, supply_entry_defined_def] >> conj_tac
+  >- (gvs[strict_dom_vars_defined_def] >> metis_tac[]) >>
+  map_every qx_gen_tac [`prior_bb`, `j`, `var`] >> strip_tac >>
+  Cases_on `j < a.vs_inst_idx`
+  >- metis_tac[] >>
+  `j = a.vs_inst_idx` by decide_tac >>
+  `prior_bb = bb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[]
+QED
+
 Theorem phi_forward_sources_exec_block_defined:
   wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ supply_prefix_defined f st /\
   MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
@@ -3023,6 +3057,55 @@ Proof
   Cases_on `step_inst fuel ctx inst st'` >>
   simp[stateEquivTheory.lift_result_def, stateEquivTheory.state_equiv_def,
        GSYM supply_state_agree_execution_equiv, supply_state_agree_prev_bb]
+QED
+
+Theorem supply_state_agree_return_frame[local]:
+  supply_state_agree fn a v /\ execution_frame e = execution_frame e' ==>
+  supply_state_agree fn
+    (adopt_return_fmp ret (merge_callee_state a e))
+    (adopt_return_fmp ret (merge_callee_state v e'))
+Proof
+  Cases_on `ret.iret_adopt_fmp` >>
+  simp[supply_state_agree_def, execution_frame_def,
+       venomExecSemanticsTheory.adopt_return_fmp_def,
+       venomExecSemanticsTheory.merge_callee_state_def,
+       venomStateTheory.lookup_var_def,
+       venomStateTheory.venom_state_component_equality] >>
+  metis_tac[]
+QED
+
+Theorem supply_state_agree_bind_outputs[local]:
+  supply_state_agree fn a v ==>
+  OPTREL (supply_state_agree fn)
+    (bind_outputs outs vals a) (bind_outputs outs vals v)
+Proof
+  simp[venomExecSemanticsTheory.bind_outputs_def] >>
+  Cases_on `LENGTH outs = LENGTH vals` >> simp[] >>
+  qspec_tac (`ZIP (outs,vals)`, `kvs`) >>
+  qid_spec_tac `v` >> qid_spec_tac `a` >>
+  Induct_on `kvs` >> simp[pairTheory.FORALL_PROD] >>
+  metis_tac[supply_state_agree_update]
+QED
+
+(* Consume the actual return against the saved callers, without a completed
+   INVOKE execution premise. *)
+Theorem supply_return_agree:
+  supply_state_agree fn a v /\ execution_frame e = execution_frame e' /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state v e')) = SOME w ==>
+  ?u. bind_outputs outs ret.iret_values
+        (adopt_return_fmp ret (merge_callee_state a e)) = SOME u /\
+      supply_state_agree fn u w
+Proof
+  rpt strip_tac >>
+  `supply_state_agree fn
+     (adopt_return_fmp ret (merge_callee_state a e))
+     (adopt_return_fmp ret (merge_callee_state v e'))` by
+    metis_tac[supply_state_agree_return_frame] >>
+  drule_at Any supply_state_agree_bind_outputs >>
+  disch_then (qspecl_then [`ret.iret_values`, `outs`] mp_tac) >> simp[] >>
+  Cases_on `bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state a e))` >> simp[]
 QED
 
 (* A data Label in the branch condition is allowed by inst_wf. *)
