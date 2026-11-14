@@ -207,7 +207,7 @@ QED
 Theorem ctor_unlock_gas_path[local]:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st = ((),st') /\ (nr ==> ut) /\ st.cs_current_insts = [] /\
-  fn_has_code st st' func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  fn_has_code st st' func /\ ~s.vs_halted /\ (nr ==> ~s.vs_call_ctx.cc_static) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   gas_path ctx func s 0
     (OK ((if nr then tstore (n2w nkey) 0w s else s) with
@@ -235,7 +235,8 @@ Theorem constructor_exit_gas_path:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey /\
+          ~cx.txn.is_static) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
   stmt_state_rel ctx func body_cenv cx es s /\ ~s.vs_halted /\
@@ -257,7 +258,8 @@ Proof
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `nr ==> ~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `gas_path ctx func s 0 (OK s1)` by
     (simp[Abbr `s1`] >> irule ctor_unlock_gas_path >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -292,7 +294,8 @@ Theorem constructor_return_none_frag:
     st_exit = ((), st_epilogue) /\
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey /\
+          ~cx.txn.is_static) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
   stmt_frag ctx func cx lctx
@@ -350,7 +353,7 @@ Theorem constructor_frame_ret_ok:
     fn_has_code st_exit st_final func /\
     runtime_size + immutables_len < dimword(:256) /\
     (nr ==> ut /\ storage_layout_safe cx /\
-            cx.nonreentrant_slot = SOME nkey) /\
+            cx.nonreentrant_slot = SOME nkey /\ ~cx.txn.is_static) /\
     (immutables_len <> 0 ==>
       cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
