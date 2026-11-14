@@ -217,6 +217,7 @@ Theorem immutable_augassign_store_post_path:
     stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) fin last
 Proof
   strip_tac >> drule_all immutable_augassign_store_post_path_fields >>
-  disch_then (qx_choosel_then [`fin`, `last`] strip_assume_tac) >>
+  disch_then (qspec_then `lctx`
+    (qx_choosel_then [`fin`, `last`] strip_assume_tac)) >>
   qexistsl_tac [`fin`, `last`] >> simp[]
 QED
