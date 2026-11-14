@@ -92,7 +92,7 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `k` >> gvs[]
 QED
 
-Theorem sum_take_el_le[local]:
+Theorem sum_take_el_le:
   !l k. k < LENGTH l ==> SUM (TAKE k l) + EL k l <= SUM l
 Proof
   Induct >> simp[] >> rpt gen_tac >> Cases_on `k` >> simp[] >>
@@ -158,7 +158,7 @@ Proof
        slot_count_of_memory_size]
 QED
 
-Theorem tuple_offset_memory[local]:
+Theorem tuple_offset_memory:
   !cenv cx env es tys tvs k.
     expr_sim_inv cenv cx env es /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs ==>
@@ -894,7 +894,7 @@ Proof
 QED
 
 (* The base's read, a tuple of the element types. *)
-Theorem tuple_base_read[local]:
+Theorem tuple_base_read:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
     vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
     post_value_type cenv obj = TupleT tys /\
@@ -1080,7 +1080,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem tuple_source[local]:
+Theorem tuple_source:
   !cx ann obj ity k.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) =
     bind (eval_expr cx obj)

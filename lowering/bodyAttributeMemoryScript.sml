@@ -16,7 +16,7 @@ Ancestors
 
 (* The counted outcome of a source also gives, at its normal end, a run of
    the source that reached the end state. *)
-Theorem gas_outcome_link[local]:
+Theorem gas_outcome_link:
   gas_outcome memory tops (ctx,func) source (es,s0) Q R ==>
   gas_outcome memory tops (ctx,func) source (es,s0)
     (\res ee t. Q res ee t /\ ?gs. source (es with gas_obs := gs) = (res, ee))
