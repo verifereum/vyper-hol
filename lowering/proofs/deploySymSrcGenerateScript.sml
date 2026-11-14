@@ -81,11 +81,11 @@ QED
 
 Theorem deploy_sym_constructor_finish[local]:
   !cfg nr key trans exit_lbl imm rt len ints st_body jump_u st_jump
-    block_u st_exit unlock_u st_unlock epi_u st_epi u s'.
+    block_u st_exit unlock_u st_unlock epi_u st_epi s'.
   runtime_sym_label exit_lbl /\ ~is_label_operand imm /\
   EVERY runtime_sym_inst (state_insts st_body) /\
-  (!s u s'. EVERY deploy_sym_inst (state_insts s) /\
-    compile_internal_fn_bodies ints s = (u,s') ==>
+  (!s s'. EVERY deploy_sym_inst (state_insts s) /\
+    compile_internal_fn_bodies ints s = ((),s') ==>
     EVERY deploy_sym_inst (state_insts s')) /\
   (if block_is_terminated st_body then comp_return ()
    else emit_inst JMP [Label exit_lbl] []) st_body = (jump_u,st_jump) /\
@@ -93,7 +93,7 @@ Theorem deploy_sym_constructor_finish[local]:
   (if nr then (\(a,b,c,view). compile_nonreentrant_unlock key trans view) cfg
    else comp_return ()) st_exit = (unlock_u,st_unlock) /\
   compile_constructor_epilogue rt len imm st_unlock = (epi_u,st_epi) /\
-  compile_internal_fn_bodies ints st_epi = (u,s') ==>
+  compile_internal_fn_bodies ints st_epi = ((),s') ==>
   EVERY deploy_sym_inst (state_insts s')
 Proof
   rpt gen_tac >> PairCases_on `cfg` >> strip_tac >>
