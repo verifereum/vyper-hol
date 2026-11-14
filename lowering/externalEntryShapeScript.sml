@@ -3181,8 +3181,9 @@ Proof
             compile_create_dispatch_labels, compile_create_copy_labels,
             compile_create_salt_labels, compile_create_blueprint_check_labels,
             compile_create_blueprint_args_labels, compile_create_blueprint_append_labels]) >>
+  rpt CASE_TAC >>
   simp[pairTheory.ELIM_UNCURRY, compile_create_blueprint_append_labels,
-       compile_raw_create_labels]
+       compile_raw_create_labels, lower_value_labels, comp_return_labels]
 QED
 
 Theorem compile_raw_revert_labels:

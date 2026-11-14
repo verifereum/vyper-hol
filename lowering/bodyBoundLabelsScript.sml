@@ -1263,7 +1263,8 @@ Proof
   >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_create_salt >> simp[] >> rpt strip_tac >>
           gvs[AllCaseEqs()] >> Cases_on `rest` >> gvs[]) >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >> reverse conj_tac
-  >- (simp[] >> rpt strip_tac >> BETA_TAC >> irule bound_labels_lower_value >> simp[] >>
+  >- (simp[] >> rpt strip_tac >> BETA_TAC >> rpt CASE_TAC >>
+      simp[comp_return_def] >> irule bound_labels_lower_value >> simp[] >>
       rpt strip_tac >> first_x_assum irule >> Cases_on `salted` >> gvs[] >>
       Cases_on `rest` >> gvs[] >> rename1 `HD tl` >> Cases_on `tl` >> gvs[]) >>
   rpt strip_tac >> BETA_TAC >> irule bound_labels_bind >>

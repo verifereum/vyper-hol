@@ -1149,7 +1149,8 @@ Proof
   irule cs_appends_bind >> reverse conj_tac
   >- (irule create_salt_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
-  >- (irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
+  >- (rpt CASE_TAC >> simp[cs_appends_return] >>
+      irule lower_value_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
   >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_create_blueprint_check_labels, pairTheory.SND]) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
@@ -1392,7 +1393,8 @@ Resume first_emission_create_call[blueprint]:
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (drule first_emission_create_salt >> disch_then MATCH_ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  >- (rpt CASE_TAC >> simp[comp_return_def, cs_extends_refl] >>
+      ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[first_emission_create_blueprint_check] >>

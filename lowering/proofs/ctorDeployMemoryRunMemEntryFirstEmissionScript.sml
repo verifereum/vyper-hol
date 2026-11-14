@@ -5339,7 +5339,8 @@ Resume ctor_create_call_first_emission[blueprint]:
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_create_salt_first_emission >> disch_then irule >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
+  >- (rpt CASE_TAC >> simp[comp_return_def, cs_extends_refl] >>
+      ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[ctor_create_blueprint_check_first_emission_strong] >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
