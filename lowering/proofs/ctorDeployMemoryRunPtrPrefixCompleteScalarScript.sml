@@ -14,6 +14,8 @@ Ancestors
   abiDecoderClampedWord ptrDiscipline allocaBudgetProps
   ctorDeployLoweringEntryAllocation venomMemDefs
   venomState venomExecSemantics words list
+  ctorDeployMemoryRunPtrPrefixWord ctorDeployMemoryRunPtrPrefixSteps instIdxIndep
+  fragGasSeqPtr fragGasOriginPtrLoop
 
 Theorem prefix_scalar_complete_execution:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
@@ -57,6 +59,62 @@ Proof
   metis_tac[]
 QED
 
+(* The forward twin of prefix_decoder_noclamp_ptr: the DLOAD and the MSTORE
+   pass the pointer check along the run, ending in the same ghost. *)
+Theorem prefix_decoder_noclamp_inst_seq_ptr:
+  !st st' src dst hi x s a w b sz G tn D lo ctx fn PG.
+    compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord NoClamp) st =
+      ((),st') /\ x = "%" ++ toString st.cs_next_var /\ x <> dst /\
+    eval_operand src s = SOME w /\ eval_operand (Var dst) s = SOME a /\
+    FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a + 32 <= b+sz /\
+    op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
+    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    inst_seq_ptr D lo ctx fn PG G tn (emitted_insts st st') s
+      (DRESTRICT G (COMPL {x}))
+      (step_taint (mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] [])
+         ((update_var x (word_of_bytes T (0w:bytes32)
+            (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s)
+          with vs_inst_idx := s.vs_inst_idx+1)
+         ((mstore (w2n a) (word_of_bytes T (0w:bytes32)
+            (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)))
+            (update_var x (word_of_bytes T (0w:bytes32)
+              (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s))
+          with vs_inst_idx := s.vs_inst_idx+1)
+         (step_taint (mk_inst st.cs_next_id DLOAD [src] [x]) s
+            (update_var x (word_of_bytes T (0w:bytes32)
+              (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s)
+            tn))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule prefix_decoder_noclamp_code >> strip_tac >>
+  qabbrev_tac `v = word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))` >>
+  qabbrev_tac `i = mk_inst st.cs_next_id DLOAD [src] [x]` >>
+  qabbrev_tac `j = mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] []` >>
+  qabbrev_tac `l = update_var x v s` >>
+  qabbrev_tac `t = mstore (w2n a) v l` >>
+  qabbrev_tac `H = DRESTRICT G (COMPL {x})` >>
+  qabbrev_tac `q = step_taint i s l tn` >>
+  qabbrev_tac `r = step_taint j (l with vs_inst_idx := s.vs_inst_idx+1)
+    (t with vs_inst_idx := s.vs_inst_idx+1) q` >>
+  mp_tac (Q.INST [`src` |-> `src`, `s` |-> `s`, `a` |-> `w`,
+    `dst` |-> `dst`, `p` |-> `a`, `x` |-> `x`, `b` |-> `b`, `sz` |-> `sz`,
+    `G` |-> `G`, `tn` |-> `tn`, `lo` |-> `lo`, `ctx` |-> `ctx`,
+    `fn` |-> `fn`, `PG` |-> `PG`, `D` |-> `D`, `iid` |-> `st.cs_next_id`]
+    prefix_canonical_noclamp_certificate) >>
+  simp[LET_THM] >> strip_tac >>
+  `emitted_insts st st' = [i;j]` by simp[Abbr `i`, Abbr `j`] >>
+  qpat_assum `emitted_insts st st' = [i;j]` (fn th => once_rewrite_tac[th]) >>
+  qspecl_then [`[i;j]`,`s`,`\n. if n=0 then s else if n=1 then l else t`,
+    `\n. if n=0 then G else H`, `\n. if n=0 then tn else if n=1 then q else r`]
+    (MATCH_MP_TAC o SRULE [] o Q.SPEC `[]` o Q.GEN `ys`)
+    prefix_trace_inst_seq_ptr >>
+  simp[Abbr `i`, Abbr `j`, mk_inst_def, inst_seq_ptr_def] >>
+  qx_gen_tac `k` >> strip_tac >>
+  qpat_x_assum `!fuel n. _` (qspecl_then [`0`,`k`] mp_tac) >>
+  simp[Abbr `l`, Abbr `t`, Abbr `q`, Abbr `r`, Abbr `H`, mk_inst_def]
+QED
+
 Theorem prefix_scalar_noclamp_ghost:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
@@ -76,7 +134,8 @@ Theorem prefix_scalar_noclamp_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >>
   drule prefix_canonical_noclamp_shape >> strip_tac >>
@@ -107,6 +166,10 @@ Proof
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st st') s = OK endpoint` >>
   `t = endpoint` by metis_tac[exec_result_11] >>
   qmatch_asmsub_abbrev_tac `ghost.t_mem = _` >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s
+          (DRESTRICT G (COMPL {x})) ghost` by
+    (gen_tac >> qunabbrev_tac `ghost` >>
+     metis_tac[prefix_decoder_noclamp_inst_seq_ptr]) >>
   qexistsl [`DRESTRICT G (COMPL {x})`,`ghost`] >>
   `w2n (n2w d:bytes32) = d` by simp[w2n_n2w] >>
   `LENGTH st'.cs_current_insts = s.vs_inst_idx + 2` by
@@ -117,7 +180,7 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
-  reverse conj_tac >- metis_tac[] >>
+  reverse conj_tac >- (conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC) >>
   gen_tac >> disch_tac >>
   `v <> x` by
     (qpat_x_assum `not_fresh_at st v` mp_tac >>
@@ -145,7 +208,8 @@ Theorem prefix_scalar_complete_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >> Cases_on `clamp`
   >- (irule prefix_scalar_noclamp_ghost >> goal_assum (drule_at Any) >> metis_tac[])
@@ -257,7 +321,8 @@ Theorem prefix_scalar_complete_shift:
       (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 final.vs_memory) ==>
         val_in_memory tv v d mem)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt final) ==>
-     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+    (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') initial H qt)
 Proof
   strip_tac >>
   drule_all prefix_scalar_complete_execution >>
