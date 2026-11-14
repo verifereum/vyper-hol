@@ -1,7 +1,7 @@
 (* Static boundaries for one concrete registration slot. *)
 Theory defaultConcreteRegistrationCompiler
 Ancestors defaultConcreteRegistrationDefs defaultConcreteRegistrationInit
-  actualRegistrationCode entryStateRel ctorRegisterArgs compileEnv
+  actualRegistrationCode entryStateRel ctorRegisterArgs compileEnv entryArgPtrs moduleLowering
   finite_map list words
 
 Theorem default_registration_singleton_suffix:
@@ -76,3 +76,4 @@ Proof
   PairCases_on `arg` >> PairCases_on `spec` >>
   simp[default_registration_slot_def] >> metis_tac[]
 QED
+
