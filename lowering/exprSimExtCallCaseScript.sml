@@ -596,14 +596,13 @@ Theorem extcall_call_prefix_observation:
       value_opt' <- frame_call_value cx value_opt;
       eval_ext_call_effects cx target calldata value_opt' gas accounts
    od) (ee with gas_obs := tail) =
-  (let (res, last) =
-     (do accounts <- get_accounts;
+  UNCURRY (\res last. (res, last with gas_obs := tail))
+    ((do accounts <- get_accounts;
          check (ext_call_precheck_ok skip ret_type target accounts)
                "ExtCall target has no code";
          value_opt' <- frame_call_value cx value_opt;
          eval_ext_call_effects cx target calldata value_opt' gas accounts
-      od) ee
-   in (res, last with gas_obs := tail))
+      od) ee)
 Proof
   strip_tac >>
   simp[get_accounts_def, bind_def, ignore_bind_def, check_def,
@@ -689,23 +688,24 @@ Theorem extcall_call_finish_shape:
       (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
     (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
       (new_block cont_lbl)))))))) sc = (u,sr) ==>
-  let fl = fresh_label_output "extcall_fail" sc.cs_next_label;
-      cl = fresh_label_output "extcall_cont" (sc.cs_next_label + 1);
-      rv = STRING #"%" (toString sc.cs_next_var);
-      bv = STRING #"%" (toString (sc.cs_next_var + 1)) in
-  u = fl /\ sr.cs_current_bb = cl /\ sr.cs_current_insts = [] /\
+  u = (fresh_label_output "extcall_fail" sc.cs_next_label) /\ sr.cs_current_bb = (fresh_label_output
+    "extcall_cont" (sc.cs_next_label + 1)) /\ sr.cs_current_insts = [] /\
   sr.cs_next_var = sc.cs_next_var + 2 /\
   sr.cs_next_id = sc.cs_next_id + 5 /\
   sr.cs_next_label = sc.cs_next_label + 2 /\
   sr.cs_blocks =
-    <|bb_label := fl; bb_instructions :=
-      [mk_inst (sc.cs_next_id + 1) RETURNDATASIZE [] [rv];
-       mk_inst (sc.cs_next_id + 2) ALLOCA [Lit 0w] [bv];
-       mk_inst (sc.cs_next_id + 3) RETURNDATACOPY [Var bv; Lit 0w; Var rv] [];
-       mk_inst (sc.cs_next_id + 4) REVERT [Var bv; Var rv] []]|> ::
+    <|bb_label := (fresh_label_output "extcall_fail" sc.cs_next_label); bb_instructions :=
+      [mk_inst (sc.cs_next_id + 1) RETURNDATASIZE [] [(STRING #"%" (toString sc.cs_next_var))];
+       mk_inst (sc.cs_next_id + 2) ALLOCA [Lit 0w] [(STRING #"%" (toString (sc.cs_next_var + 1)))];
+       mk_inst (sc.cs_next_id + 3) RETURNDATACOPY [Var (STRING #"%" (toString (sc.cs_next_var +
+         1))); Lit 0w; Var (STRING #"%" (toString sc.cs_next_var))] [];
+       mk_inst (sc.cs_next_id + 4) REVERT [Var (STRING #"%" (toString (sc.cs_next_var + 1))); Var
+         (STRING #"%" (toString sc.cs_next_var))] []]|> ::
     <|bb_label := sc.cs_current_bb; bb_instructions :=
       sc.cs_current_insts ++
-      [mk_inst sc.cs_next_id JNZ [success; Label cl; Label fl] []]|> ::
+      [mk_inst sc.cs_next_id JNZ [success; Label (fresh_label_output "extcall_cont"
+        (sc.cs_next_label + 1)); Label (fresh_label_output "extcall_fail" sc.cs_next_label)] []]|>
+        ::
     sc.cs_blocks
 Proof
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
