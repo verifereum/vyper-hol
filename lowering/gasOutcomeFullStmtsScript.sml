@@ -223,9 +223,8 @@ Proof
   fs[] >> metis_tac[]
 QED
 
-(* C1.2.1.1 proposed additive interface (review checkpoint, NOT a theorem).
-   The input/output source result types may differ. No new Definition.
-
+(* Reviewed handler transport: source result types may differ; all
+   transformed endpoints and ghosts are selected before the horizon. *)
 Theorem gas_outcome_full_handler_transport:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0
     source (es, s, G, tn) Q R /\
@@ -273,8 +272,46 @@ Theorem gas_outcome_full_handler_transport:
             R' H res' (ee' with gas_obs := []) (G'', tn'') r')))) ==>
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0
     wrapped (es_out, s, G, tn) Q' R'
+Proof
+  rewrite_tac[gas_outcome_full_def] >> strip_tac
+  >- suspend "bad"
+  >- suspend "success" >> suspend "exempt"
+QED
 
-   Premise-to-For map:
+Resume gas_outcome_full_handler_transport[bad]:
+  qexists_tac `marks` >> disj1_tac >> metis_tac[]
+QED
+
+Resume gas_outcome_full_handler_transport[success]:
+  qpat_x_assum `!marks res ee r G' tn'. _`
+    (drule_then mp_tac) >>
+  disch_then (qspecl_then [`r`, `G'`, `tn'`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `om` (qx_choose_then `ov`
+    (qx_choose_then `oe` (qx_choose_then `ot` (qx_choose_then `og`
+      (qx_choose_then `onum` strip_assume_tac)))))) >>
+  qexists_tac `om` >> disj2_tac >> disj1_tac >>
+  qexistsl_tac [`ov`, `oe`, `ot`, `og`, `onum`] >>
+  simp[] >> gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> valid_horizon _ _ _ _`
+    (drule_then assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> _ /\ _`
+    (drule_then strip_assume_tac) >>> NTH_GOAL (simp[]) 1 >>
+  (simp[])
+QED
+
+Resume gas_outcome_full_handler_transport[exempt]:
+  qpat_x_assum `!marks res ee r G' tn'. _` kall_tac >>
+  qpat_x_assum `!marks. gas_bad_storage_at _ _ _ _ _ _ ==> _` kall_tac >>
+  qpat_x_assum `!marks err ee leaf finish. _` (drule_then strip_assume_tac) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err'`, `ee'`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+  simp[] >> qexists_tac `H` >> simp[]
+QED
+
+Finalise gas_outcome_full_handler_transport
+
+(* Premise-to-For map:
    es is after push_scope_with_var; es_out before that source push.
    Push/pop preserve the initial storage trace. The bad-storage premise
    needs trace-frame facts for try/handler/finally, not a body IH on an
