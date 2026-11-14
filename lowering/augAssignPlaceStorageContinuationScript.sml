@@ -117,10 +117,12 @@ Proof
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `ff` >>
-  conj_tac >- fs[] >>
-  conj_tac >- fs[] >>
+  qpat_x_assum `slot = _` SUBST_ALL_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qx_gen_tac `HH` >> strip_tac >>
-  mp_tac (Q.INST [`H` |-> `HH`] (SPEC_ALL aug_place_storage_store_wf)) >>
+  mp_tac (Q.INST [`H` |-> `HH`, `slot` |-> `n2w offset + n2w delta`]
+    (SPEC_ALL aug_place_storage_store_wf)) >>
   impl_tac >- (simp[] >>
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]) >>
   simp[]) >>
