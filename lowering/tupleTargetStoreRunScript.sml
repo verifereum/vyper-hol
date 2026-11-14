@@ -422,7 +422,7 @@ Proof
        stmt_state_rel_write_local >>
      disch_then irule >>
      rpt conj_tac >~ [`immutables_rel`] >- suspend "immutables" >>
-     simp[] >>
+     fs[] >>
      first_assum ACCEPT_TAC) >>
   qexistsl [`dw`, `t`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
