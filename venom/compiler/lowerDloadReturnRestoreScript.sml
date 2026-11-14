@@ -419,12 +419,3 @@ Proof
   irule ld_paired_live_endpoints >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> metis_tac[]
 QED
-
-(* Return boundaries must be unconditional kernel theorems. *)
-val _ = List.app (fn (name,th) =>
-  if null (hyp th) then print ("KERNEL_HYP_EMPTY " ^ name ^ "\n")
-  else raise Fail ("unexpected kernel hypothesis: " ^ name))
-  [("ld_return_owner_lookup",ld_return_owner_lookup),
-   ("ld_return_head_table",ld_return_head_table),
-   ("ld_return_owned_vars_table",ld_return_owned_vars_table),
-   ("ld_return_frame_data",ld_return_frame_data)];

@@ -45,7 +45,3 @@ Proof
   irule write_memory_byte_frame >>
   qexists_tac `w2n nw` >> simp[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "scratch byte theorem has hypotheses")
-  [ld_read_memory_written, ld_codecopy_mload, ld_codecopy_byte_outside];

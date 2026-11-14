@@ -145,8 +145,3 @@ Resume dload_joint_block_closed[normal]:
 QED
 
 Finalise dload_joint_block_closed
-
-(* Constructor interface audited against JointDispatch's normal quotation:
-   the true guard is erased; scratch identities remain anchored at t0. *)
-val _ = if null (hyp dload_joint_block_closed) then ()
-  else raise Fail "joint block: nonempty hypotheses";

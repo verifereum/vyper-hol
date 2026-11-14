@@ -10155,10 +10155,6 @@ Finalise eval_scc_type_sound_results_mutual
 Theorem eval_scc_type_sound_mutual =
   LIST_CONJ (List.take (CONJUNCTS eval_scc_type_sound_results_mutual, 10));
 
-val _ = if null (hyp eval_scc_type_sound_mutual) then
-  print "Soundness SCC finalised with no suspension hypotheses\n"
-  else raise Fail "Soundness SCC retains hypotheses";
-
 (* Forcing is part of the public expression guarantee, not a caller premise. *)
 Theorem eval_expr_read_type_sound:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\

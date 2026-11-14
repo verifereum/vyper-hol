@@ -180,7 +180,3 @@ Proof
      simp[Abbr `g`]) >>
   qexistsl [`ss`,`g`] >> simp[Abbr `g`]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "ordinary endpoint has hypotheses")
-  [ld_sync_ordinary_effect, ld_ordinary_endpoint];

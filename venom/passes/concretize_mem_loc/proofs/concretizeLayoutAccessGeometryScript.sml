@@ -158,8 +158,3 @@ Proof
   qexists_tac `y` >> simp[] >>
   qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-                          else raise Fail "access geometry export has hypotheses")
-  [frame_reachable_saved_allocas_from, joint_activation_cache_lower_bound,
-   memory_offset_taint_empty, concretize_memory_access_geometry];

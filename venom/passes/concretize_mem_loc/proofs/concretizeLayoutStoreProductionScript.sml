@@ -45,12 +45,6 @@ Proof
      qexistsl_tac [`C`, `EL c qs`, `vs0`] >> simp[]) >> gvs[]
 QED
 
-val _ = if null (hyp joint_mstore_demand_address_coherence) then ()
-        else raise Fail "store coherence export has hypotheses";
-
-val _ = if null (hyp joint_relocation_demand_mstore_value_byte) then ()
-        else raise Fail "value byte export has hypotheses";
-
 Theorem concretize_mstore_execution_geometry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -202,9 +196,6 @@ Resume concretize_mstore_execution_geometry[memory]:
 QED
 Finalise concretize_mstore_execution_geometry
 
-val _ = if null (hyp concretize_mstore_execution_geometry) then ()
-        else raise Fail "store execution export has hypotheses";
-
 Theorem concretize_mstore_demand_execution:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -260,6 +251,3 @@ Proof
   reverse conj_tac >- metis_tac[frameRelocationLocalTheory.local_rel_demand] >>
   rpt strip_tac >> metis_tac[]
 QED
-
-val _ = if null (hyp concretize_mstore_demand_execution) then ()
-        else raise Fail "store execution export has hypotheses";

@@ -57,9 +57,6 @@ Proof
   metis_tac[]
 QED
 
-val _ = if null (hyp ld_dloadbytes_trace_operands) then ()
-  else raise Fail "public trace has hypotheses";
-
 Theorem ld_dloadbytes_supply_temporary:
   inst.inst_opcode = DLOADBYTES /\
   inst.inst_operands = [dest;off;len] /\
@@ -494,17 +491,3 @@ Proof
   conj_tac >- metis_tac[ld_alloc_bounds] >>
   metis_tac[ld_alloc_separate]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "public trace boundary has hypotheses")
-  [ld_dloadbytes_supply_temporary, ld_dloadbytes_scalar_nonpointer,
-   ld_dloadbytes_scalar_observation, ld_dloadbytes_destinations,
-   ld_envelope_supply_reserved, ld_dloadbytes_envelope_temporary,
-   raw_reachable_code_data, ld_sync_source_code_layout,
-   ld_sync_dload_code_offset, ld_dloadbytes_source_operands,
-   ld_sync_dloadbytes_trace_evaluations, ld_sync_dloadbytes_destination_cases];
-
-val _ = app (fn th => if null (hyp th) then () else
-  raise Fail "active envelope boundary has hypotheses")
-  [ld_active_envelope_origin, ld_dloadbytes_envelope_temporary,
-   ld_dload_supply_temporary, ld_dload_envelope_temporary, ld_dload_operand_equal];

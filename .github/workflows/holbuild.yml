@@ -43,10 +43,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: No theorem-tag checks in sources (use holbuild check)
+      - name: No theorem-tag or hypothesis checks in sources (use holbuild check)
         run: |
-          if git grep -nE 'Tag\.dest_tag|Thm\.tag' -- '*.sml'; then
-            echo "Check cheats with holbuild check: add a selector to .github/holbuild-check-targets.txt" >&2
+          # The listed tests check conversion results, not stored theorems.
+          if git grep -nE 'Tag\.dest_tag|Thm\.tag' -- '*.sml' ||
+             git grep -nE 'null *\((Thm\.)?hyp\b' -- '*Script.sml' \
+               ':!tests/jsonFrontendCVBenchmarkScript.sml' \
+               ':!tests/vyperCheckContractLibTestScript.sml' \
+               ':!tests/vyperExternalHeadersTestScript.sml' \
+               ':!tests/vyperImmutableMutationTestScript.sml'; then
+            echo "Check theorems with holbuild check: add a selector to .github/holbuild-check-targets.txt" >&2
             exit 1
           fi
 

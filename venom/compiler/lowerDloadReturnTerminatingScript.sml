@@ -53,9 +53,6 @@ Proof
   asm_rewrite_tac[] >> metis_tac[]
 QED
 
-val _ = if null (hyp ld_return_point_terminal) then ()
-        else raise Fail "ld_return_point_terminal has hypotheses";
-
 Theorem ld_return_terminating_S:
   is_terminator ti.inst_opcode /\ step_inst_base ti t = z /\
   ((?u. z = OK u) \/ (?rt u. z = IntRet rt u)) ==>
@@ -83,6 +80,3 @@ Proof
   qunabbrev_tac `Ambient` >> qunabbrev_tac `Point` >> qunabbrev_tac `Terminal` >>
   drule_all ld_return_point_terminal >> simp[]
 QED
-
-val _ = if null (hyp ld_return_terminating_S) then ()
-        else raise Fail "ld_return_terminating_S has hypotheses";

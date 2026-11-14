@@ -52,11 +52,6 @@ Proof
   gvs[update_var_def]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "CREATE interface: nonempty hypotheses")
-  [dload_create_request_observations, dload_exec_create_success_iff,
-   dload_consume_create_footprint, dload_exec_create_footprint];
-
 Theorem dload_consume_create_environment:
   dload_equal_environment s t /\
   rq = venom_create_request s value off sz salt /\
@@ -75,9 +70,6 @@ Proof
   gvs[dload_equal_environment_def, venom_state_component_equality,
       adopt_outcome_def, adopt_outcome_deletions_def]
 QED
-
-val _ = if null (hyp dload_consume_create_environment) then ()
-        else raise Fail "CREATE environment: nonempty hypotheses";
 
 Theorem dload_exec_create_environment:
   dload_equal_environment s t /\
@@ -100,9 +92,6 @@ Proof
       Excl "consume_create_outcome_eq"] >>
   fs[dload_equal_environment_def, venom_state_component_equality]
 QED
-
-val _ = if null (hyp dload_exec_create_environment) then ()
-        else raise Fail "CREATE exec environment: nonempty hypotheses";
 
 Theorem dload_consume_create_shared_store:
   dload_equal_environment s t /\ dload_shared_store tn un s t /\
@@ -139,10 +128,6 @@ Proof
   gvs[dload_shared_store_def, update_var_def, step_taint_def,
       adopt_reset_def, store_taint_def, imm_taint_def]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "CREATE shared store: nonempty hypotheses")
-  [dload_consume_create_shared_store, dload_exec_create_shared_store];
 
 Theorem dload_create_frame_fields:
   exec_create i s value off sz salt = OK s1 ==>

@@ -59,10 +59,6 @@ Proof
   gvs[op_taint_def]
 QED
 
-val _ = if null (hyp ld_public_copy_scalar_nonpointer) andalso
-           null (hyp ld_public_copy_scalar_equal) then ()
-        else raise Fail "public copy operand lemmas have hypotheses";
-
 (* Operational inversion only; the common byte list is the actual write. *)
 Theorem ld_public_copy_steps:
   ld_nonghost tn s t /\
@@ -166,10 +162,6 @@ Proof
      qexists_tac `tn` >> simp[]) >>
   qexistsl_tac [`dst`,`src`,`len`,`addr`,`x`,`y`,`off`,`n`,`xs`] >> simp[]
 QED
-
-val _ = if List.all (null o hyp)
-  [ld_public_copy_steps, ld_public_copy_dispatch, ld_public_copy_operands]
-  then () else raise Fail "public copy step/operand lemmas have hypotheses";
 
 Theorem ld_public_copy_taint:
   MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] /\
@@ -345,4 +337,3 @@ Proof
     (qexists `f::fs` >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-

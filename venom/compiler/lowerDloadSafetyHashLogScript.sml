@@ -332,7 +332,3 @@ Proof
   disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
   qexistsl [`ss`,`f.lf_H`] >> simp[]
 QED
-
-val _ = if List.all (null o hyp)
-  [ld_sync_sha3_effect, ld_sync_log_effect, ld_log_steps, ld_sha3_effect]
-  then () else raise Fail "hash/log effects have hypotheses";

@@ -106,10 +106,6 @@ Proof
   `MEM (SOME x) f.lf_Q` by metis_tac[MEM_EL] >> simp[]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-        else raise Fail "return restoration boundary has kernel hypotheses")
-  [ld_return_shared_restore, ld_vars_bind_outputs, ld_vars_alloc_agree];
-
 Theorem ld_maps_alloc_agree:
   ld_maps A f /\
   (!a. a IN ld_slots A [f] ==> FLOOKUP B a = FLOOKUP A a) ==>
@@ -203,11 +199,6 @@ Proof
   simp[ld_vars_def]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-        else raise Fail "saved-frame restoration has kernel hypotheses")
-  [ld_maps_alloc_agree, ld_slots_restrict_domain, ld_saved_alloc_restore,
-   ld_call_saved_alloc_restore, ld_vars_merge_callee, ld_vars_resume];
-
 Theorem ld_vars_return_restore:
   ld_vars P A f /\ set outs SUBSET set (fn_ir_vars f.lf_fn) /\
   bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
@@ -227,9 +218,6 @@ Proof
   simp[] >> strip_tac >>
   drule ld_vars_resume >> simp[]
 QED
-
-val _ = if null (hyp ld_vars_return_restore) then ()
-        else raise Fail "resumed variable restoration has kernel hypotheses";
 
 Theorem ld_return_frame_geometry:
   bind_outputs outs vals (merge_callee_state f.lf_src sc) = SOME sr /\
@@ -461,12 +449,6 @@ Proof
     (simp[FLOOKUP_DRESTRICT] >> fs[SUBSET_DEF]) >>
   rpt strip_tac >> drule_all ld_saved_stack_alloc_agree >> simp[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-        else raise Fail "structural return restoration has kernel hypotheses")
-  [ld_return_frame_geometry, ld_global_return_restore, ld_return_stack_geometry,
-   ld_call_global_return_restore, ld_saved_stack_alloc_agree,
-   ld_call_saved_stack_return];
 
 (* The actual source return supplies reachability of the resumed caller;
    the old caller continuation, not the callee entry, is retained. *)
@@ -904,7 +886,3 @@ Proof
   qunabbrev_tac `Terminal` >> qunabbrev_tac `Point` >>
   drule_all ld_invoke_active_pop >> simp[NoAsms]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "caller pop has kernel hypotheses")
-  [ld_invoke_active_pop, ld_invoke_guarded_pop];

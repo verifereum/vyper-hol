@@ -343,7 +343,6 @@ val _ =
            (load_contract NONE gobs am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
   in
-    if aconv expanded (concl savedDeploymentAdmission) andalso
-       null (Thm.hyp savedDeploymentAdmission) then ()
+    if aconv expanded (concl savedDeploymentAdmission) then ()
     else raise Fail "PLAN 5.11 deployment schema mismatch"
   end;

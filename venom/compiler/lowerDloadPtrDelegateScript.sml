@@ -98,10 +98,6 @@ Resume dload_delegate_evaluated_inputs[delegate_write_inputs]:
 QED
 Finalise dload_delegate_evaluated_inputs
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "delegate evaluated inputs: nonempty hypotheses")
-  [dload_delegate_success_inputs, dload_delegate_evaluated_inputs];
-
 Theorem dload_delegate_ghosts[local]:
   i.inst_opcode = DELEGATECALL /\
   source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\
@@ -138,10 +134,6 @@ Proof
   simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "delegate footprints: nonempty hypotheses")
-  [dload_delegate_ghosts, dload_delegate_frame_fields];
 
 Theorem dload_delegate_memory[local]:
   i.inst_opcode = DELEGATECALL /\
@@ -186,10 +178,6 @@ Proof
   pure_asm_rewrite_tac[] >>
   POP_ASSUM_LIST (K all_tac) >> simp[dload_memory_match_def] >> metis_tac[]
 QED
-
-val _ = if null (hyp dload_delegate_memory) then ()
-  else raise Fail "delegate memory: nonempty hypotheses";
-
 
 Theorem dload_delegate_reverse_inputs[local]:
   dload_equal_environment s t /\ dload_shared_store tn un s t /\
@@ -275,11 +263,6 @@ Proof
   disch_then (qspec_then `ro` strip_assume_tac) >>
   qexists `s1` >> simp[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "delegate backward: nonempty hypotheses")
-  [dload_delegate_reverse_inputs, dload_delegate_exec_shape,
-   dload_delegate_exec_backward, dload_delegate_step];
 
 Theorem dload_delegate_shared_store[local]:
   i.inst_opcode = DELEGATECALL /\ dload_shared_store tn un s t /\
@@ -459,8 +442,3 @@ Proof
      gvs[AllCaseEqs()] >> metis_tac[]) >>
   irule dload_boundary_core_delegate_shaped >> metis_tac[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "delegate full core: nonempty hypotheses")
-  [dload_delegate_shared_store, dload_delegate_boundary,
-   dload_boundary_core_delegate_shaped, dload_boundary_core_delegate];
