@@ -9,7 +9,7 @@ Ancestors
   lowerDloadSupplyProofs unitLabelMapIdentity venomInst list words finite_map
   venomPassSchedule
 
-Theorem lower_dload_stage_code_end:
+Theorem lower_dload_stage_code_end[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\

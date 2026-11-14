@@ -4,7 +4,7 @@ Ancestors
   o1CodeEndLowerBoundary lowerDloadSafetyKernel
   lowerDloadDefs venomInst venomState words list
 
-Theorem lower_dload_generated_index:
+Theorem lower_dload_generated_index[local]:
   lower_dload_inst_supply u inst = (xs,u') /\ h < LENGTH xs /\
   MEM (Label "code_end") (EL h xs).inst_operands /\
   ~MEM (Label "code_end") inst.inst_operands ==>
@@ -16,8 +16,8 @@ Theorem lower_dload_generated_index:
   (h = 0 /\ inst.inst_opcode = DLOADBYTES)
 Proof
   rw[lower_dload_inst_supply_def, AllCaseEqs()] >> gvs[] >>
-  Cases_on `h` >> gvs[] >> Cases_on `n` >> gvs[] >>
-  Cases_on `n'` >> gvs[] >> Cases_on `n` >> gvs[]
+  `h = 0 \/ h = 1 \/ h = 2 \/ h = 3` by decide_tac >>
+  pop_assum strip_assume_tac >> gvs[]
 QED
 
 Theorem lower_dload_prefix_code_end_bound:

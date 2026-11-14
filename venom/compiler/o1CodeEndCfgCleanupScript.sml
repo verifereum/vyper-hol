@@ -8,7 +8,7 @@ Ancestors
   simplifyCfgFragments simplifyCfgRestriction simplifyCfgDefs venomWf
   o1PassLift venomInst
 
-Theorem o1_code_end_fix_all_phis_reach_back:
+Theorem o1_code_end_fix_all_phis_reach_back[local]:
   wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
   (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
   fn_entry_state fn s0 /\ frame_reach C (fix_all_phis fn) s0 j t /\

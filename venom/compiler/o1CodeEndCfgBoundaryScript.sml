@@ -4,7 +4,7 @@ Theory o1CodeEndCfgBoundary
 Ancestors
   simplifyCfgControl memSafeRun
 
-Theorem scfg_payload_code_data:
+Theorem scfg_payload_code_data[local]:
   scfg_payload s t ==>
   s.vs_code = t.vs_code /\ s.vs_data_section = t.vs_data_section
 Proof

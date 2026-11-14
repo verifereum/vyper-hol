@@ -6,7 +6,7 @@ Ancestors
   simplifyCfgStaticInterface simplifyCfgCollapseSemantics simplifyCfgDefs
   simplifyCfgControl o1PassLift venomWf venomInst
 
-Theorem o1_code_end_round_reach_back:
+Theorem o1_code_end_round_reach_back[local]:
   (!f lm visited lbl. scfg_normalized f ==>
     !C s0 j t.
       fn_entry_state f s0 /\

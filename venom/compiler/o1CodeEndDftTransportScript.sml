@@ -1,6 +1,6 @@
 Theory o1CodeEndDftTransport
 Ancestors
-  o1CodeEndDftBoundary dftGasInvMemoryObservation dftGasSimInvariant
+  dftGasInvResidualTrace gasOracleReplay dftGasInvMemoryObservation dftGasSimInvariant
   o1LabelFlowLateDft o1ContractDft codegenSymRel
   dftGasOracleDefs dftRunRel venomExecSemantics venomInstProofs1
   o1PassContract unitShapeDefs venomState contextCodegenRel venomExecProps
@@ -23,7 +23,7 @@ Proof
   gvs[setup_callee_def, AllCaseEqs()]
 QED
 
-Theorem dft_ev_code_end_offset_ok:
+Theorem dft_ev_code_end_offset_ok[local]:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
@@ -45,7 +45,7 @@ Proof
   simp[] >> metis_tac[MEM]
 QED
 
-Theorem dft_ctx_code_end_sim_gas:
+Theorem dft_ctx_code_end_sim_gas[local]:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\

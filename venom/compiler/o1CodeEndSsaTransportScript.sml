@@ -49,7 +49,7 @@ Proof
   `(n,v) IN Hf` by
     (drule_all code_end_actual_trace_owner_alignment >> simp[]) >>
   `?x. (n,x) IN Hf /\ code_end_var f x` by
-    (irule code_end_ssa_protected_owner >>
+    (irule (cj 1 code_end_ssa_protected_facts) >>
      goal_assum $ drule_at Any >> simp[] >> metis_tac[]) >>
   `x = v` by metis_tac[current_name_owner_unique] >> gvs[]
 QED

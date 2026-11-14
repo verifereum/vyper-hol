@@ -54,18 +54,3 @@ Proof
      gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   irule dload_in_section_half_bound >> metis_tac[]
 QED
-
-Theorem lower_dload_generated_add_position:
-  lower_dload_inst_supply u inst = (xs,u') /\ MEM j xs /\
-  MEM (Label "code_end") j.inst_operands /\
-  ~MEM (Label "code_end") inst.inst_operands ==>
-  (inst.inst_opcode = DLOAD /\
-   ?a c d av u1. xs = [a;j;c;d] /\
-     fresh_ir_var u = (av,u1) /\
-     a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
-     a.inst_outputs = [av]) \/
-  (inst.inst_opcode = DLOADBYTES /\ ?c. xs = [j;c])
-Proof
-  rw[lower_dload_inst_supply_def, AllCaseEqs()] >> gvs[] >>
-  metis_tac[]
-QED

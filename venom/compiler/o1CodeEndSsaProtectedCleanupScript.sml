@@ -27,7 +27,7 @@ Proof
   metis_tac[simplified_phi_operand, MEM]
 QED
 
-Theorem code_end_cleanup_backward_no_phi:
+Theorem code_end_cleanup_backward_no_phi[local]:
   (!i x. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f x ==>
          ~MEM (Var x) i.inst_operands) ==>
   !enabled x. code_end_var
@@ -109,7 +109,7 @@ Proof
   gvs[] >> metis_tac[simplified_phi_operand]
 QED
 
-Theorem code_end_ssa_protected_facts[local]:
+Theorem code_end_ssa_protected_facts:
   wf_function f /\ fn_inst_wf f /\ make_ssa_input_ok f /\
   fn_entry_label f = SOME entry /\ ir_supply_covers_fn s f /\
   ir_supply_inst_ok s /\
@@ -186,40 +186,6 @@ Proof
        mp_tac phi_prefix_nonphi_insts >>
      simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
   gvs[] >> metis_tac[]
-QED
-
-Theorem code_end_ssa_protected_owner:
-  wf_function f /\ fn_inst_wf f /\ make_ssa_input_ok f /\
-  fn_entry_label f = SOME entry /\ ir_supply_covers_fn s f /\
-  ir_supply_inst_ok s /\
-  (!x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
-    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
-    d.inst_outputs = [x] /\
-    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
-    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
-      MEM (Var x) j.inst_operands ==>
-      j.inst_opcode = CODECOPY /\
-      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
-        dst <> Var x /\ sz <> Var x) /\
-      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) /\
-  add_phi_nodes_supply s df pm
-    (select_current_live_in had_phis (liveness_analyze f) f) f.fn_blocks
-    (compute_defs (MAP THE (FILTER IS_SOME
-      (MAP (\lbl. lookup_block lbl f.fn_blocks) labels)))) = (bbs,s1) /\
-  visit_blocks path s1
-    (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
-      (MAP (\lbl. lookup_block lbl f.fn_blocks) labels)))))
-    bbs (current_succ_map f) (current_dom_tree f) = ((ct,t,final),events) /\
-  current_name_owner (set (fn_ir_vars f)) R u /\
-  (!e. MEM e events ==>
-    current_stack_owner (set (fn_ir_vars f)) R (SND e.sve_in) /\
-    current_stack_owner (set (fn_ir_vars f)) R (SND e.sve_out) /\
-    LIST_REL (\i j. LIST_REL (\v n. (n,v) IN R)
-      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
-  g = f with fn_blocks := simplify_current_phis_if enabled final ==>
-  !n. code_end_var g n ==> ?x. (n,x) IN R /\ code_end_var f x
-Proof
-  strip_tac >> drule_all code_end_ssa_protected_facts >> simp[]
 QED
 
 Theorem code_end_ssa_context_protected_uses:

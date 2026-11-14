@@ -5,7 +5,7 @@ Ancestors
 
 (* Sealing changes signatures only: the active instruction and its state
    are literally unchanged, including the evaluated code_end offset. *)
-Theorem code_end_offset_ok_seal_eq:
+Theorem code_end_offset_ok_seal_eq[local]:
   ctx_seal_eq C C' ==>
   (code_end_offset_ok (raw_reachable s) C <=>
    code_end_offset_ok (raw_reachable s) C')
@@ -19,7 +19,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fmp_lowering_stage_code_end_offset_ok:
+Theorem fmp_lowering_stage_code_end_offset_ok[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
   o1_ctx_shape C /\
