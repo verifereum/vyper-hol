@@ -350,7 +350,7 @@ QED
 
 (* The relation after the send's CALL holds at every horizon the source
    relation holds at: the CALL's step is a function of the Venom state. *)
-Theorem send_read_state_rel_any[local]:
+Theorem send_read_state_rel_any:
   stmt_state_rel H ctx fn cenv cx es s /\
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
