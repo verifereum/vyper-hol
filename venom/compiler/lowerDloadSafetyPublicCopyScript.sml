@@ -262,7 +262,10 @@ Proof
   >- (irule ld_memory_write_classified >> simp[] >>
       conj_tac >- metis_tac[ld_alloc_bounds] >>
       metis_tac[ld_alloc_separate]) >>
-  conj_tac >- gvs[ld_nonghost_def, write_memory_with_expansion_def, write_memory_def] >>
+  conj_tac >-
+    (qpat_x_assum `ld_nonghost _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     gvs[ld_nonghost_def, write_memory_with_expansion_def, write_memory_def]) >>
   conj_tac >- (fs[MEM] >> simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]) >>
   conj_tac >-
     (simp[] >> ONCE_REWRITE_TAC[arithmeticTheory.ADD_COMM] >>
