@@ -20,6 +20,8 @@ roots = [
   "lowering/whitelist/whitelistForIterScript.sml",
   "lowering/whitelist/whitelistScopesScript.sml",
   "lowering/whitelist/whitelistLogWidenScript.sml",
+  # shared target source facts for the joint body
+  "lowering/targetPtrFactsScript.sml",
   # joint-body decoder and encoder providers awaiting their call/return leaves
   "lowering/extcallReturnCompletedCutScript.sml",
   "lowering/extcallReturnCountedRejectScript.sml",
