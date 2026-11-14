@@ -2,7 +2,7 @@
 Theory exprSimMemDefs
 Ancestors
   exprSimDefs exprSimProps loweringPosts gasOutcome gasContext allocaHistory
-  exprLowering compileEnv loweringSlice vyperInterpreter vyperState venomState
+  exprLowering compileEnv context loweringSlice vyperInterpreter vyperState venomState
 
 (* A memory-backed result lies below the allocation frontier with its
    bytestring data rounded up to whole words, which is how much a copy of
@@ -41,6 +41,16 @@ Definition vv_store_bound_def:
       type_memory_size tvt = 0 \/
       w2n w + type_memory_size tvt <= s.vs_alloca_next)
 End
+
+Theorem vv_store_bound_frame_mem_src:
+  vv_store_bound cx ty lt es tv vv s /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  s.vs_alloca_next <= t.vs_alloca_next ==>
+  vv_store_bound cx ty lt es tv vv t
+Proof
+  Cases_on `vv` >> simp[vv_operand_def, vv_store_bound_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
 
 Theorem expr_store_bound_word:
   is_word_type t ==> expr_store_bound cx t v op s

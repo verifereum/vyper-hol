@@ -3,7 +3,7 @@ Ancestors
   bodyMemAggregateContinuation bodyDeclMemoryCounted allocaFootprint
   exprSimAggregateChildren exprSimVVFrame exprSimHash emitHelperProps
   exprLoweringProps venomInst venomState instMemFrontier memSafeRun fragGasMode
-  bodyMemAssignAttrStorage exprOperandVar allocaHistory fragExec list rich_list
+  bodyMemAssignAttrStorage exprSimMemDefs exprOperandVar allocaHistory fragExec list rich_list
 
 Theorem aggregate_tuple_add_marked_mem:
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
