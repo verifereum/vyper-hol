@@ -969,7 +969,7 @@ Proof
   simp[]
 QED
 
-Theorem dynarray_code_loop_counted[local]:
+Theorem dynarray_code_loop_counted:
   dynarray_for_code func cenv bc ty stmts id et tv stride saved_base
     p sz ainst idx dv ov tot ep nv lv cond exit bod incr
     j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
