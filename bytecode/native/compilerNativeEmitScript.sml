@@ -474,7 +474,7 @@ val code_rewrites = [
        Cases_on `i` >> simp[integerTheory.INT_EXP, integerTheory.NUM_OF_INT] >>
        Cases_on `EVEN n` >>
        full_simp_tac std_ss
-         [GSYM arithmeticTheory.ODD_EVEN, integerTheory.INT_EXP_NEG]),
+         [arithmeticTheory.ODD_EVEN, integerTheory.INT_EXP_NEG]),
      prove (``word_exp (b : 'a word) e =
                 n2w (vfmExecution$modexp (w2n b) (w2n e) (dimword (:'a)) 1)``,
        simp[wordsTheory.word_exp_def, vfmExecutionTheory.modexp_exp,
