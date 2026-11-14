@@ -2375,3 +2375,107 @@ Resume rb_compile_create_call[blueprint]:
    Cases >> simp[rb_compile_create_blueprint_append]))
 QED
 Finalise rb_compile_create_call
+
+Theorem rb_compile_get_target_ptr:
+  !bt. rb_env_ok ce /\
+    (!e ty. expr_size e < base_assignment_target_size bt ==>
+      rb_step rb_value_ok (cfn ce ty e)) ==>
+    rb_step (rb_operand_ok o FST) (compile_get_target_ptr cfn ce bt)
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
+  simp[Once compile_get_target_ptr_def] >> strip_tac
+  >- suspend "name"
+  >- suspend "top"
+  >- suspend "subscript" >>
+  suspend "attribute"
+QED
+Resume rb_compile_get_target_ptr[name]:
+  Cases_on `FLOOKUP ce.ce_vars s` >> simp[rb_step_return] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >>
+  `rb_location_ok loc` by metis_tac[rb_env_ok_def] >>
+  Cases_on `loc` >> gvs[rb_location_ok_def, rb_step_return]
+QED
+Resume rb_compile_get_target_ptr[top]:
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  Cases_on `FLOOKUP ce.ce_module_vars p` >> simp[rb_step_return] >>
+  Cases_on `x` >> simp[rb_step_return]
+QED
+Resume rb_compile_get_target_ptr[subscript]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[] >> rpt strip_tac >>
+    first_x_assum irule >> simp[] >> decide_tac) >>
+  gen_tac >> simp[] >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  Cases_on `SND (SND x)` >> simp[]
+  >- suspend "array" >>
+  Cases_on `x'` >> simp[]
+  >- suspend "map" >>
+  suspend "array"
+QED
+Resume rb_compile_get_target_ptr[attribute]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[] >> rpt strip_tac >>
+    first_x_assum irule >> simp[] >> decide_tac) >>
+  gen_tac >> simp[] >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]
+QED
+Resume rb_compile_get_target_ptr[map]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> simp[] >> first_x_assum irule >> simp[]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (IF_CASES_TAC >> simp[rb_compile_keccak256_key, rb_step_return]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[rb_compile_mapping_subscript, rb_step_return]
+QED
+Resume rb_compile_get_target_ptr[array]:
+  markerLib.RESUME_TAC >>
+  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_lower_value >> simp[] >> first_x_assum irule >> simp[]) >>
+   gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- (irule rb_compile_array_subscript >> simp[] >>
+     rpt strip_tac >> irule rb_compile_ptr_load >> gvs[rb_env_ok_def]) >>
+   simp[rb_step_return])
+QED
+Finalise rb_compile_get_target_ptr
+
+
+Theorem rb_step_let:
+  rb_step P m /\ (!x. P x ==> rb_step Q (k x)) ==>
+  rb_step Q (\st. let (x,st') = m st in k x st')
+Proof
+  pure_rewrite_tac[GSYM comp_bind_def, ETA_AX] >>
+  metis_tac[rb_step_bind]
+QED
+
+Theorem rb_compile_acc:
+  rb_env_ok ce /\ rb_step rb_value_ok (cfn ce (BaseT AddressT) e) ==>
+  rb_step rb_operand_ok (compile_acc cfn ce e acc)
+Proof
+  strip_tac >> Cases_on `acc` >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  pure_rewrite_tac[compile_acc_def] >> simp[ETA_AX, rb_lower_value]
+  >~ [`emit_inst INVALID [] [] _`]
+  >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+        (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+      conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+        irule rb_emit_inst >> simp[]) >>
+      pure_rewrite_tac[GSYM comp_return_def] >>
+      CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+      irule rb_step_return >> simp[])
+  >~ [`rb_step _ (\x. lower_value _ _ _ _ x)`]
+  >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+      irule rb_lower_value >> simp[]) >>
+  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_lower_value >> simp[]) >> gen_tac >> strip_tac >>
+   CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+   simp[rb_emit_op] >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   simp[rb_emit_op] >>
+   CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+   irule rb_emit_op >> simp[])
+QED
