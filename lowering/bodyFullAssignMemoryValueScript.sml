@@ -1,7 +1,7 @@
 (* The memory-local assignment suffix stages when the compiler stages. *)
 Theory bodyFullAssignMemoryValue
 Ancestors
-  bodyFullMemoryStore bodyFullMemoryStage bodyFullLocalCopy bodyFullMemoryFrames
+  bodyFullMemoryValue bodyFullLocalCopy bodyFullMemoryFrames
   annassignRelayoutCode assignRelayoutFrame typedMemoryCopy
   bodyMemBopRestWordPath fragGasOriginPtr fragGasOrigin fragGasMode fragGasPath
   stmtLowering exprLoweringProps loweringStateRelDefs loweringPosts
@@ -66,18 +66,12 @@ Theorem body_full_assign_local_memory_value_path:
       op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `loc = SOME LocMemory`
-  >- suspend "staged" >>
-  `compile_store_memory cenv (Var xs) (Var p) dty sty sa = ((),sb)` by
-    gvs[compile_assign_value_def] >>
-  mp_tac (Q.INST [`xs` |-> `xs`,`xd` |-> `p`,`dty` |-> `dty`,
-    `sty` |-> `sty`,`cenv` |-> `cenv`,`tenv` |-> `get_tenv cx`,
-    `sa` |-> `sa`,`sb` |-> `sb`,`stv` |-> `stv`,`dtv` |-> `dtv`,
-    `v` |-> `v`,`s` |-> `s`,`sw` |-> `sw`,`dw` |-> `dw`,
-    `tn` |-> `tn`,`G` |-> `G`,`lo` |-> `lo`,`ctx` |-> `ctx`,
-    `func` |-> `func`,`explicit` |-> `explicit`,`PG` |-> `PG`]
-    (SPEC_ALL body_full_memory_store_path)) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  `?id cap. local_region cenv es.scopes s id (w2n dw) cap /\
+    type_memory_size dtv <= cap` by
+    (qexistsl_tac [`id`,`cap`] >> simp[local_region_def] >>
+     metis_tac[vyperLookupTheory.find_containing_scope_lookup]) >>
+  mp_tac (SPEC_ALL body_full_memory_value_path) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qexistsl_tac [`t`,`Gf`,`tf`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
@@ -85,95 +79,10 @@ Proof
       disch_then (map_every assume_tac o CONJUNCTS) >>
       irule body_full_local_copy_post >> simp[] >>
       conj_tac >- (qexists_tac `sb` >> simp[]) >>
-      qexistsl_tac [`G`,`PG`,`dw`,`explicit`,`s`,`sa`,`tn`] >> simp[]) >>
-  simp[] >>
-  `gas_marked_path T ctx func s 0 (OK t)` by
-    (qpat_assum `!D. gas_origin_ptr_path _ _ _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
-     disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
-     drule gas_origin_path_erase >> simp[]) >>
-  `alloca_inv s` by fs[stmt_state_rel_def,state_rel_def] >>
-  drule_all rest_word_marked_allocation_posts >> strip_tac >>
-  fs[typed_copy_state_frame_def,venom_state_component_equality]
+      qexistsl_tac [`Gu`,`PG`,`dw`,`explicit`,`u`,`scStore`,`tu`] >>
+      simp[] >> rpt conj_tac
+      >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+          qexists_tac `sa` >> fs[ci_mono_def]) >>
+      metis_tac[freshWritesTheory.not_fresh_at_mono,ci_mono_def]) >>
+  simp[]
 QED
-
-Resume body_full_assign_local_memory_value_path[staged]:
-  qpat_x_assum `loc = SOME LocMemory` SUBST_ALL_TAC >>
-  drule_all assign_memory_relayout_code >> strip_tac >>
-  `compile_alloc_buffer (type_memory_size stv) sa = (buf,sm) /\
-   compile_copy_memory buf.buf_operand (Var xs) (type_memory_size stv) sm = ((),sc')` by
-    metis_tac[] >>
-  drule_all (SRULE [] (Q.INST [`n` |-> `type_memory_size tv`]
-    (SPEC_ALL body_full_memory_stage_path))) >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  rename1 `ptr_covers Gf tf root t (type_memory_size stv)` >>
-  rename1 `lookup_var root t = SOME (n2w b)` >>
-  `lookup_var p t = SOME dw /\ not_fresh_at sc' p` by metis_tac[] >>
-  `ptr_covers Gf tf p t (type_memory_size dtv)` by
-    (irule ptr_covers_lookup_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `local_region cenv es.scopes t id (w2n dw) cap` by
-    (simp[local_region_def] >> metis_tac[vyperLookupTheory.find_containing_scope_lookup]) >>
-  `regions_disjoint b (type_memory_size stv) (w2n dw) cap` by metis_tac[] >>
-  `s.vs_alloca_next <= t.vs_alloca_next` by
-    (qpat_assum `!D. gas_origin_ptr_path _ _ _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
-     disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
-     drule gas_origin_path_erase >> strip_tac >>
-     drule gas_marked_path_exec >> strip_tac >> drule rest_word_path_frontier >> simp[]) >>
-  `b < dimword (:256) /\
-   w2n dw + type_memory_size dtv <= t.vs_alloca_next` by decide_tac >>
-  `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) \/
-      cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sc' x` by metis_tac[] >>
-  `compile_store_memory cenv (Var root) (Var p) dty sty sc' = ((),sb)` by metis_tac[] >>
-  `b MOD dimword (:256) = b` by simp[] >>
-  mp_tac (Q.INST [`xs` |-> `root`,`xd` |-> `p`,`dty` |-> `dty`,
-    `sty` |-> `sty`,`cenv` |-> `cenv`,`tenv` |-> `get_tenv cx`,
-    `sa` |-> `sc'`,`sb` |-> `sb`,`stv` |-> `stv`,`dtv` |-> `dtv`,
-    `v` |-> `v`,`s` |-> `t`,`sw` |-> `(n2w b):bytes32`,`dw` |-> `dw`,
-    `tn` |-> `tf`,`G` |-> `Gf`,`lo` |-> `lo`,`ctx` |-> `ctx`,
-    `func` |-> `func`,`explicit` |-> `explicit`,`PG` |-> `PG`]
-    (SPEC_ALL body_full_memory_store_path)) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >>
-    TRY (first_assum ACCEPT_TAC) >>
-    fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> strip_tac >>
-  rename1 `typed_copy_state_frame sc' _ _ t t'` >>
-  qexistsl_tac [`t'`,`Gf'`,`tf'`] >>
-  conj_tac >- suspend "join" >>
-  conj_tac >- suspend "post" >>
-  simp[] >> suspend "frame"
-QED
-
-Resume body_full_assign_local_memory_value_path[join]:
-  gen_tac >>
-  qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
-    (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
-  disch_then (qspecl_then [`t`,`Gf`,`tf`,`[]`,`OK t'`,`Gf'`,`tf'`] mp_tac) >> simp[]
-QED
-
-Resume body_full_assign_local_memory_value_path[post]:
-  qx_genl_tac [`H`,`D`,`d`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule body_full_local_copy_post >> simp[] >>
-  conj_tac >- (qexists_tac `sb` >> simp[]) >>
-  qexistsl_tac [`Gf`,`PG`,`dw`,`explicit`,`t`,`sc'`,`tf`] >>
-  simp[] >> rpt conj_tac
-  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
-      fs[ci_mono_def] >> decide_tac) >>
-  metis_tac[]
-QED
-
-Resume body_full_assign_local_memory_value_path[frame]:
-  `gas_marked_path T ctx func t 0 (OK t')` by
-    (qpat_assum `!D. gas_origin_ptr_path _ (t,Gf,tf) _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
-     disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
-     drule gas_origin_path_erase >> simp[]) >>
-  `alloca_history func t /\ alloca_inv t` by
-    (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
-     disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
-     drule gas_origin_path_erase >> strip_tac >>
-     `alloca_inv s` by fs[stmt_state_rel_def] >>
-     drule_all rest_word_marked_alloca >> simp[]) >>
-  drule_all rest_word_marked_allocation_posts >> strip_tac >>
-  fs[typed_copy_state_frame_def,venom_state_component_equality] >>
-  rpt strip_tac >> metis_tac[]
-QED
-
-Finalise body_full_assign_local_memory_value_path
