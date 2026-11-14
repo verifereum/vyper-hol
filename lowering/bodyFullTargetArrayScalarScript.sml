@@ -480,10 +480,10 @@ Proof
   simp[run_inst_seq_inst_idx, exec_result_map_def]
 QED
 
-Theorem array_elem_ptr_output_metadata[local]:
+Theorem array_elem_ptr_nonalias_metadata[local]:
   array_elem_ptr bop idx dyn ws esz sa = (p,sb) /\
   eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
-  fresh_vars_wrt sa s /\ op_prov G idx = NONE /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\ op_prov G idx = NONE /\
   op_taint tn bop = {} /\ op_taint tn idx = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm ==>
@@ -506,9 +506,26 @@ Proof
   simp[array_address_taint_step, op_taint_def] >>
   Cases_on `bop` >> gvs[op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   `s' <> STRING #"%" (toString sa.cs_next_var)` by
-    (irule emitHelperPropsTheory.fresh_vars_wrt_eval_operand >>
-     qexistsl_tac [`Var s'`, `s`, `sa`, `b`] >> simp[]) >>
+    (gvs[not_fresh_at_def]) >>
   gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
+Theorem array_elem_ptr_output_metadata[local]:
+  array_elem_ptr bop idx dyn ws esz sa = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
+  fresh_vars_wrt sa s /\ op_prov G idx = NONE /\
+  op_taint tn bop = {} /\ op_taint tn idx = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm ==>
+  op_prov H p = op_prov G bop /\ op_taint tm p = {}
+Proof
+  strip_tac >>
+  `!x. bop = Var x ==> not_fresh_at sa x` by
+    (gen_tac >> disch_tac >> rewrite_tac[not_fresh_at_def] >>
+     gen_tac >> disch_tac >>
+     irule emitHelperPropsTheory.fresh_vars_wrt_eval_operand >>
+     qexistsl [`bop`, `s`, `sa`, `b`] >> simp[]) >>
+  drule_all array_elem_ptr_nonalias_metadata >> simp[]
 QED
 
 Theorem array_elem_ptr_certified:
@@ -544,6 +561,83 @@ Proof
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
   `ss' with vs_vars := s.vs_vars = s` by
     (qpat_x_assum `ss' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  `~MEM x (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb)))` by
+    (fs[writes_fresh_def, EVERY_MEM] >>
+     simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem array_elem_ptr_nonalias_run[local]:
+  array_elem_ptr bop idx dyn ws esz sa = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
+Proof
+  Cases_on `dyn` >>
+  simp[array_elem_ptr_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, GSYM mk_inst_def] >>
+  `!n w u. sa.cs_next_var <= n ==>
+     eval_operand bop (update_var (STRING #"%" (toString n)) w u) = eval_operand bop u /\
+     eval_operand idx (update_var (STRING #"%" (toString n)) w u) = eval_operand idx u` by
+    (rpt strip_tac >> Cases_on `bop` >> Cases_on `idx` >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+         not_fresh_at_def]) >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[exec_pure2_def, eval_operand_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, exec_pure2_def] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[run_inst_seq_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem array_elem_ptr_nonalias_uniform:
+  array_elem_ptr bop idx dyn ws esz sa = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  op_taint tn bop = {} /\ op_taint tn idx = {} /\
+  op_prov G idx = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  ?t H tm. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm) /\
+    op_taint tm p = {} /\ op_prov H p = op_prov G bop /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz)
+Proof
+  strip_tac >>
+  `EVERY scalar_shape (emitted_insts sa sb) /\
+   run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    metis_tac[array_elem_ptr_shape_mem] >> simp[] >>
+  drule_all array_elem_ptr_nonalias_run >> strip_tac >>
+  `?H tm. inst_seq_ptr ARB lo ctx func PG G tn (emitted_insts sa sb) s H tm`
+    by (irule array_elem_ptr_exists >> metis_tac[]) >>
+  `!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm` by
+    (gen_tac >>
+     `?H' tm'. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H' tm'`
+       by (irule array_elem_ptr_exists >> metis_tac[]) >>
+     metis_tac[inst_seq_ptr_ghost_unique]) >>
+  qexistsl [`t`, `H`, `tm`] >> simp[] >>
+  drule_all array_elem_ptr_nonalias_metadata >> strip_tac >> simp[] >>
+  drule_all scalar_shape_seq_metadata_frame >> strip_tac >> simp[] >>
+  drule array_elem_ptr_writes_fresh >> strip_tac >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `t with vs_vars := s.vs_vars = s` by
+    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   simp[] >> rpt strip_tac >>
   `~MEM x (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb)))` by
     (fs[writes_fresh_def, EVERY_MEM] >>
