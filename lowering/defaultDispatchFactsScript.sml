@@ -3,6 +3,7 @@ Theory defaultDispatchFacts
 Ancestors sourceEntryCode runtimeBodyStartDefs checkedSelectorTableProps entryStateRel
   vyperCalldata compileVyper vyperABIEntries publicGetterProps list entryDispatchProps
   defaultDispatchRouting defaultDispatchPlacement supportedDecls loweringShapeSource
+  entrySelectedPackageCoherence calldataSourceSize
 
 Theorem default_dispatch_raw_cases:
   calldata_dispatch tops cd = SOME (name,vals) ==>
@@ -278,4 +279,173 @@ Proof
   drule_all default_selected_raw_return >> strip_tac >>
   drule_all default_selected_classified_member >> strip_tac >>
   gvs[]
+QED
+
+Theorem default_external_package:
+  !tops target mut rr name args ret fbody.
+  ?ce pa mc pay key ut iv rt.
+    set_external_package_target target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,F,rr,name,args,([]:expr list),ret,fbody)) =
+    ("fn_" ++ name,ce,pa,mc,pay,F,key,ut,iv,fbody,rt)
+Proof
+  rpt gen_tac >> simp[package_external_fn_def, set_external_package_target_def]
+QED
+
+Theorem default_empty_package:
+  set_external_package_target target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,F,rr,name,[],([]:expr list),ret,fbody)) =
+    (lbl,ce,pa,mc,pay,F,key,ut,iv,fbody,rt) ==>
+  pa = [] /\ mc = 4 /\
+  set_fallback_package_target target
+    (package_fallback_fn tops T (K global_nonreentrant_slot)
+      (SOME (mut,F,rr,name,[],([]:expr list),ret,fbody))) =
+    SOME (ce,pay,F,key,ut,iv,fbody,rt)
+Proof
+  simp[package_external_fn_def, package_fallback_fn_def,
+    set_external_package_target_def, set_fallback_package_target_def,
+    build_positional_args_def, min_calldata_size_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem default_selected_min_size:
+  source_typing_ok tops am tx /\ supported_program tops /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+  set_external_package_target target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,F,rr,tx.function_name,args,([]:expr list),ret,fbody)) =
+    (lbl,ce,pa,mc,pay,F,key,ut,iv,fbody,rt) ==>
+  mc = 4 + SUM (MAP tv_abi_size tvs)
+Proof
+  strip_tac >>
+  `mc = min_calldata_size ce args 0` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[package_external_fn_def, set_external_package_target_def] >>
+     rpt strip_tac >> gvs[min_calldata_size_def]) >>
+  simp[min_calldata_size_def] >> AP_TERM_TAC >>
+  `LENGTH tvs = LENGTH args` by
+    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+  irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  drule vyperTypeABITheory.OPT_MMAP_LIST_REL >>
+  simp[LIST_REL_EL_EQN, EL_MAP] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `EL x args` >> gvs[] >>
+  `MEM (q,r) args` by metis_tac[MEM_EL] >>
+  drule_all selected_external_package_decoder_coherent >>
+  metis_tac[calldata_coherent_embedded_size]
+QED
+
+Theorem default_dispatch_cases:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  tx.function_name = "__default__" /\
+  calldata_dispatch tops cd = SOME (tx.function_name,vals) /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+  fn_entry_label func = SOME elbl ==>
+  ?lbl ce pa mc pay key ut iv rt fallback label_st dispatch_st before checks
+     st ce' body_st st'.
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+         tx.function_name,args,([]:expr list),ret,fbody)) =
+      (lbl,ce,pa,mc,pay,F,key,ut,iv,fbody,rt) /\
+    fresh_label "fallback" (initial_compile_state "__entry") = (fallback,label_st) /\
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fallback label_st = ((),dispatch_st) /\
+    new_block (linear_dispatch_target cd
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fallback) before = (before.cs_current_bb,checks) /\
+    compile_entry_checks mc pay checks = ((),st) /\
+    compile_register_positional_args ce pa 4 st = (ce',body_st) /\
+    compile_guarded_body ce' F key ut iv fbody rt body_st = ((),st') /\
+    shape_state label_st /\ shape_state dispatch_st /\ shape_state checks /\
+    shape_state st /\ shape_state body_st /\ shape_state st' /\
+    cs_extends label_st dispatch_st /\ cs_extends dispatch_st checks /\
+    cs_extends checks st /\ cs_extends st body_st /\ cs_extends body_st st' /\
+    fn_has_code label_st dispatch_st func /\ fn_has_code checks st func /\
+    fn_has_code st body_st func /\ fn_has_code body_st st' func /\
+    label_st.cs_current_bb = elbl /\ label_st.cs_current_insts = [] /\
+    label_st.cs_next_var = 0 /\
+    ((runtime_selected_body_start tops rpolicy
+        (lbl,ce,pa,mc,pay,F,key,ut,iv,fbody,rt) st /\
+      linear_dispatch_target cd
+        (MAP (\(sel,lbl,z). (sel,lbl))
+          (build_selectors (type_env tops) (FST (classify_functions tops))))
+        fallback = lbl /\
+      (?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+        mc = 4 + SUM (MAP tv_abi_size tvs) /\ mc <= LENGTH cd /\
+        calldata_decode_args cd tvs 0 = SOME vals) /\
+      ?pre post. MAP (set_external_package_target rpolicy.rpol_target o
+          package_external_fn tops T (K global_nonreentrant_slot))
+          (FST (classify_functions tops)) =
+        pre ++ (lbl,ce,pa,mc,pay,F,key,ut,iv,fbody,rt)::post /\
+        ~MEM lbl (MAP FST pre) /\
+        compile_external_fn_bodies pre dispatch_st = ((),before)) \/
+     (runtime_fallback_body_start tops rpolicy
+        (lbl,ce,pa,mc,pay,F,key,ut,iv,fbody,rt) st /\
+      args = [] /\ vals = [] /\ pa = [] /\ mc = 4 /\
+      FST (SND (SND (classify_functions tops))) =
+        SOME (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+          tx.function_name,[],([]:expr list),ret,fbody) /\
+      linear_dispatch_target cd
+        (MAP (\(sel,lbl,z). (sel,lbl))
+          (build_selectors (type_env tops) (FST (classify_functions tops))))
+        fallback = fallback /\
+      compile_external_fn_bodies
+        (MAP (set_external_package_target rpolicy.rpol_target o
+          package_external_fn tops T (K global_nonreentrant_slot))
+          (FST (classify_functions tops))) dispatch_st = ((),before)))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`,
+    `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`,
+    `tx.function_name`, `args`, `ret`, `fbody`] strip_assume_tac default_external_package >>
+  `calldata_dispatch tops cd = SOME ("__default__",vals)` by fs[] >>
+  `vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,F,args,([]:expr list),ret,fbody)` by metis_tac[] >>
+  drule_all default_dispatch_source_cases >>
+  disch_then (DISJ_CASES_THEN2 strip_assume_tac assume_tac)
+  >- (`mc = 4 + SUM (MAP tv_abi_size tvs)` by
+        (drule_all default_selected_min_size >> simp[]) >>
+      `ALL_DISTINCT (MAP FST (build_selectors (type_env tops)
+        (FST (classify_functions tops))))` by
+        fs[supportedProgramTheory.supported_program_def,
+          supportedNamesTheory.supported_declaration_names_def,
+          supportedNamesTheory.supported_selectors_distinct_def] >>
+      qpat_assum `tx.function_name = _` SUBST_ALL_TAC >>
+      drule_all default_selected_compile_placement >> strip_tac >>
+      drule_all default_raw_selected_target >>
+      disch_then (qspec_then `fallback` assume_tac) >>
+      qexistsl [`"fn_" ++ "__default__"`, `ce`, `pa`, `mc`, `pay`, `key`,
+        `ut`, `iv`, `rt`, `fallback`, `label_st`, `dispatch_st`, `before`,
+        `checks`, `st`, `ce'`, `body_st`, `st'`] >>
+      gvs[] >> disj1_tac >> qexistsl [`pre`, `post`] >> simp[]) >>
+  qpat_assum `tx.function_name = _` SUBST_ALL_TAC >>
+  fs[] >> drule_all default_empty_package >> strip_tac >> gvs[] >>
+  `set_fallback_package_target rpolicy.rpol_target
+    (package_fallback_fn tops T (K global_nonreentrant_slot)
+      (FST (SND (SND (classify_functions tops))))) =
+    SOME (ce,pay,F,key,ut,iv,fbody,rt)` by metis_tac[] >>
+  drule_all (INST_TYPE [alpha |-> ``:string``] default_fallback_compile_placement) >>
+  disch_then (qspec_then `("fn___default__":string)` strip_assume_tac) >>
+  `linear_dispatch_target cd
+    (MAP (\(sel,lbl,z). (sel,lbl))
+      (build_selectors (type_env tops) (FST (classify_functions tops))))
+    fallback = fallback` by metis_tac[default_raw_fallback_target] >>
+  qexistsl [`fallback`, `label_st`, `dispatch_st`, `opened`, `checks`,
+    `st`, `ce`, `st`, `st'`] >>
+  gvs[compileEnvTheory.cs_extends_refl] >>
+  (conj_tac >- (irule compileEnvTheory.cs_extends_trans >>
+     qexists_tac `opened` >> simp[]) >>
+   fs[runtime_fallback_body_start_def] >> metis_tac[])
 QED
