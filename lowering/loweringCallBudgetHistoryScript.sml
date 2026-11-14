@@ -703,3 +703,18 @@ Proof
   rw[gas_outcome_full_budget_def, lower_budget_continuation_def] >>
   metis_tac[lower_budget_path_forget_checks]
 QED
+
+Theorem lower_budget_raw_variant_entry:
+  !tops am tx fmp vs_in vs.
+    gas_variant vs_in
+      (vs with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\ initial_venom_state_rel tops am tx vs ==>
+    initial_venom_state_rel tops am tx vs_in /\
+    vs_in.vs_fmp = fmp /\ vs_in.vs_initial_fmp = fmp /\
+    vs_in.vs_outcomes = vs.vs_outcomes /\
+    vs_in.vs_call_ctx = vs.vs_call_ctx /\
+    vs_in.vs_memory = vs.vs_memory
+Proof
+  rw[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  fs[initial_venom_state_rel_def, venom_env_rel_def] >>
+  metis_tac[]
+QED
