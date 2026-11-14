@@ -10,6 +10,7 @@ Ancestors
   o1PassContract fragGasOriginPtr contextRawReachable
   vyperLoweringCorrect e2eDefs exprSimHypsDefs lowerDloadDefs
   list rich_list arithmetic pred_set
+  concretizePtrCoverageStaticMemReachability
 
 Datatype:
   lower_budget_point = <|
@@ -552,6 +553,161 @@ Proof
   gvs[LENGTH_APPEND, EL_APPEND_EQN] >>
   Cases_on `n < LENGTH h` >> gvs[lower_event_ordinal_def] >>
   `n = LENGTH h` by decide_tac >> gvs[lower_event_ordinal_def]
+QED
+
+Theorem lower_budget_frame_history[local]:
+  !vs ctx stk PG G tn fn inst s.
+    frame_reachable vs ctx stk PG G tn fn inst s ==>
+    !D lo explicit. ~vs.vs_halted ==>
+    ?name entry lbl entered h marks.
+      ctx.ctx_entry = SOME name /\
+      lookup_function name ctx.ctx_functions = SOME entry /\
+      fn_entry_label entry = SOME lbl /\
+      enters_block entry
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0 |>) entered /\
+      lower_budget_path F (D,lo,explicit,ctx)
+        <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+           bp_taint := entry_taint; bp_fn := entry; bp_state := entered |>
+        h marks
+        <| bp_stack := stk; bp_params := PG; bp_prov := G;
+           bp_taint := tn; bp_fn := fn; bp_state := s |>
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >- suspend "ret"
+QED
+
+Resume lower_budget_frame_history[entry]:
+  (rename1 `ctx.ctx_entry = SOME entry_name` >>
+      rename1 `fn_entry_label entry_fn = SOME entry_label` >>
+      rename1 `enters_block entry_fn _ entry_state` >>
+      qexistsl_tac [`entry_name`, `entry_fn`, `entry_label`,
+                    `entry_state`, `[]`, `[]`] >>
+      simp[] >> irule lower_budget_path_entry >>
+      simp[] >> conj_tac
+      >- (fs[contextCodegenRelTheory.enters_block_def] >>
+          drule venomExecProofsTheory.eval_phis_preserves_halted >> simp[]) >>
+      metis_tac[])
+QED
+
+Resume lower_budget_frame_history[next]:
+  (first_x_assum (qspecl_then [`D`, `lo`, `explicit`] mp_tac) >>
+      simp[] >> strip_tac >>
+      rename1 `lower_budget_path F (_,_,_,ctx0) _ _ _
+        <| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+           bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>` >>
+      rename1 `step_inst fuel0 ctx0 i0 pre0 = OK post0` >>
+      metis_tac[SIMP_RULE (srw_ss()) []
+        (Q.INST [`checked` |-> `F`,
+          `p` |-> `<| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+                      bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>`,
+          `q` |-> `<| bp_stack := stk0; bp_params := PG0;
+                      bp_prov := step_prov PG0 G0 i0 post0;
+                      bp_taint := step_taint i0 pre0 post0 tn0;
+                      bp_fn := fn0;
+                      bp_state := post0 with vs_inst_idx := SUC pre0.vs_inst_idx |>`]
+          (SPEC_ALL lower_budget_path_next))])
+QED
+
+Resume lower_budget_frame_history[block]:
+  (first_x_assum (qspecl_then [`D`, `lo`, `explicit`] mp_tac) >>
+      simp[] >> strip_tac >>
+      rename1 `lower_budget_path F (_,_,_,ctx0) _ _ _
+        <| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+           bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>` >>
+      rename1 `step_inst fuel0 ctx0 i0 pre0 = OK post0` >>
+      rename1 `enters_block fn0 post0 entered0` >>
+      metis_tac[SIMP_RULE (srw_ss()) []
+        (Q.INST [`checked` |-> `F`,
+          `p` |-> `<| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+                      bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>`,
+          `q` |-> `<| bp_stack := stk0; bp_params := PG0;
+                      bp_prov := entry_prov fn0 post0 G0;
+                      bp_taint := entry_taint_vars fn0 post0 tn0;
+                      bp_fn := fn0; bp_state := entered0 |>`]
+          (SPEC_ALL lower_budget_path_block))])
+QED
+
+Resume lower_budget_frame_history[call]:
+  (first_x_assum (qspecl_then [`D`, `lo`, `explicit`] mp_tac) >>
+      simp[] >> strip_tac >>
+      rename1 `lower_budget_path F (_,_,_,ctx0) _ _ _
+        <| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+           bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>` >>
+      rename1 `setup_callee callee0 args0 pre0 = SOME cs0` >>
+      rename1 `eval_operands ops0 pre0 = SOME args0` >>
+      rename1 `active_inst fn0 inv0 pre0` >>
+      rename1 `enters_block callee0 cs0 entered0` >>
+      metis_tac[SIMP_RULE (srw_ss()) []
+        (Q.INST [`checked` |-> `F`,
+          `p` |-> `<| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+                      bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>`,
+          `q` |-> `<| bp_stack := <| cf_fn := fn0; cf_inst := inv0;
+                        cf_state := pre0; cf_params := PG0; cf_prov := G0;
+                        cf_tvar := tn0.t_var |> :: stk0;
+                      bp_params := MAP (op_prov G0) ops0;
+                      bp_prov := FEMPTY; bp_taint := tn0 with t_var := FEMPTY;
+                      bp_fn := callee0; bp_state := entered0 |>`]
+          (SPEC_ALL lower_budget_path_call))])
+QED
+
+Resume lower_budget_frame_history[ret]:
+  (first_x_assum (qspecl_then [`D`, `lo`, `explicit`] mp_tac) >>
+      simp[] >> strip_tac >>
+      rename1 `lower_budget_path F (_,_,_,ctx0) _ _ _
+        <| bp_stack := frame0::stk0; bp_params := PG0; bp_prov := G0;
+           bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>` >>
+      rename1 `bind_outputs _ _ _ = SOME post0` >>
+      metis_tac[SIMP_RULE (srw_ss()) []
+        (Q.INST [`checked` |-> `F`,
+          `p` |-> `<| bp_stack := frame0::stk0; bp_params := PG0; bp_prov := G0;
+                      bp_taint := tn0; bp_fn := fn0; bp_state := pre0 |>`,
+          `q` |-> `<| bp_stack := stk0; bp_params := frame0.cf_params;
+                      bp_prov := DRESTRICT frame0.cf_prov
+                        (COMPL (set frame0.cf_inst.inst_outputs));
+                      bp_taint := tn0 with t_var := DRESTRICT frame0.cf_tvar
+                        (COMPL (set frame0.cf_inst.inst_outputs));
+                      bp_fn := frame0.cf_fn;
+                      bp_state := post0 with vs_inst_idx :=
+                        SUC frame0.cf_state.vs_inst_idx |>`]
+          (SPEC_ALL lower_budget_path_ret))])
+QED
+Finalise lower_budget_frame_history[local]
+
+Theorem lower_budget_raw_history:
+  !vs ctx fn inst s D lo explicit.
+    ~vs.vs_halted /\ raw_reachable vs ctx fn inst s ==>
+    ?name entry lbl entered p h marks q.
+      ctx.ctx_entry = SOME name /\
+      lookup_function name ctx.ctx_functions = SOME entry /\
+      fn_entry_label entry = SOME lbl /\
+      enters_block entry
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0 |>) entered /\
+      p = <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+             bp_taint := entry_taint; bp_fn := entry; bp_state := entered |> /\
+      lower_budget_path F (D,lo,explicit,ctx) p h marks q /\
+      q.bp_fn = fn /\ q.bp_state = s /\ active_inst fn inst s
+Proof
+  rpt strip_tac >> drule ptr_raw_reachable_frame >> strip_tac >>
+  drule lower_budget_frame_history >>
+  disch_then (qspecl_then [`D`, `lo`, `explicit`] mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `ctx.ctx_entry = SOME name0` >>
+  rename1 `fn_entry_label entry0 = SOME lbl0` >>
+  rename1 `enters_block entry0 _ entered0` >>
+  rename1 `lower_budget_path F _ _ history0 marks0
+    <| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+       bp_taint := tn0; bp_fn := fn; bp_state := s |>` >>
+  qexistsl_tac [`name0`, `entry0`, `lbl0`, `entered0`, `history0`, `marks0`,
+    `<| bp_stack := stk0; bp_params := PG0; bp_prov := G0;
+        bp_taint := tn0; bp_fn := fn; bp_state := s |>`] >>
+  simp[] >> metis_tac[stepWriteFootprintBaseTheory.raw_reachable_active]
 QED
 
 Theorem lower_budget_filter_indices_length[local]:
