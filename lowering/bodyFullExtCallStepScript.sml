@@ -80,6 +80,7 @@ Theorem extcall_call_full:
      ?v b sz ro. buf_op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
        eval_operand buf_op t = SOME ro /\ b <= w2n ro /\
        w2n ro + cap <= b + sz) /\
+    (!returnData. storage_trace_frame (k returnData)) /\
     (!returnData ee' t' G' tn'.
        extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op
          buf_op cap target has_default default_op default_ty default_opt
