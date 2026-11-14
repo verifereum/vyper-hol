@@ -951,7 +951,8 @@ Theorem sym_fn_sims_all:
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel
 Proof
   Induct
-  >- (simp[gen_fn_sim_at_def, gen_fn_frame_sim_at_def, sym_fn_sim_at_def,
+  >- (simp[gen_fn_sim_at_def, gen_fn_frame_sim_at_def,
+           gen_fn_sim_resource_at_def, gen_fn_frame_sim_resource_at_def, sym_fn_sim_at_def,
            sym_fn_frame_sim_at_def] >>
       rpt strip_tac >> gvs[Once run_blocks_def]) >>
   metis_tac[fn_entry_block_step, fn_block_frame_step,

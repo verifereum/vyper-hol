@@ -348,17 +348,11 @@ QED
 
 Finalise fn_entry_block_step_resource
 
-Theorem fn_entry_block_step_cost:
-  !q fuel. gen_fn_sim_cost_at q fuel /\ gen_fn_frame_sim_cost_at q fuel ==>
-    gen_fn_sim_cost_at (OPTION_MAP (\F unit cp prog.
-      fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
-Proof
-  mp_tac (Q.SPEC `F` fn_entry_block_step_resource) >> simp[]
-QED
 
 Theorem fn_entry_block_step:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel ==>
          gen_fn_sim_at (SUC fuel)
 Proof
-  mp_tac (Q.SPEC `NONE` fn_entry_block_step_cost) >> simp[]
+  mp_tac (Q.SPECL [`F`, `NONE`] fn_entry_block_step_resource) >>
+  simp[GSYM gen_fn_sim_at_def, GSYM gen_fn_frame_sim_at_def]
 QED
