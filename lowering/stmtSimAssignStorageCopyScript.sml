@@ -5,7 +5,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
-  fullAssignCopyFacts stmtSimAssignStorageFacts
+  storageCopyBackendFold fullAssignCopyFacts stmtSimAssignStorageFacts
   abiTypeBoundProps vyperABI vyperStorageCoverage
   exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
@@ -652,10 +652,7 @@ Theorem storage_copy_backend_fold:
             FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
               (contract_storage s) is)) s.vs_accounts
 Proof
-  Induct >> rpt gen_tac >> Cases_on `tr` >>
-  simp[FOLDL, sstore_def, tstore_def, contract_storage_def,
-       contract_transient_def, vfmStateTheory.lookup_account_def,
-       combinTheory.APPLY_UPDATE_THM, combinTheory.APPLY_UPDATE_ID]
+  ACCEPT_TAC storageCopyBackendFoldTheory.storage_copy_backend_fold
 QED
 
 (* The copy prefix writes storage only: the call context stays sbase's. *)
