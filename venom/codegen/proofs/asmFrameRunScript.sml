@@ -44,6 +44,64 @@ Proof
   irule asm_frame_local_step >> fs[]
 QED
 
+(* Successful assembly prefixes stay inside the observed EVM run. *)
+Theorem asm_frame_prefix:
+  !n gas_tail prog data es0 as es a1 r es'.
+    asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
+    run_call es = SOME (r, es') /\ ~frame_resource_starved es0 r es' /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n as = AsmOK a1 ==>
+    ?es1. run_call es1 = SOME (r, es') /\
+          asm_frame_rel gas_tail prog data es0 a1 es1
+Proof
+  Induct >- (simp[asm_steps_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `as.as_pc < LENGTH prog` by
+    (spose_not_then assume_tac >> fs[Once asm_steps_def]) >>
+  `~is_data_inst (EL as.as_pc prog)` by
+    (spose_not_then assume_tac >>
+     Cases_on `EL as.as_pc prog` >>
+     gvs[is_data_inst_def, Once asm_steps_def, asm_step_def]) >>
+  Cases_on `asm_step (SND (compute_label_offsets prog))
+    (build_offset_to_pc prog) (EL as.as_pc prog) as` >>
+  gvs[Once asm_steps_def] >>
+  drule_all asm_frame_step >>
+  simp[asm_frame_step_ok_def] >> strip_tac >> gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+(* A reached GAS must have a real reading, even with an unread padding tail. *)
+Theorem asm_frame_prefix_gas_available:
+  !n gas_tail prog data es0 as es a1 r es'.
+    asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
+    run_call es = SOME (r, es') /\ ~frame_resource_starved es0 r es' /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n as = AsmOK a1 /\
+    a1.as_pc < LENGTH prog /\ EL a1.as_pc prog = AsmOp "GAS" ==>
+    LENGTH gas_tail < LENGTH a1.as_gas_readings
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all asm_frame_prefix >> strip_tac >>
+  `~is_data_inst (EL a1.as_pc prog)` by simp[asmWfTheory.is_data_inst_def] >>
+  drule_all asm_frame_gas_step >> strip_tac >- gvs[] >>
+  fs[asm_frame_rel_def]
+QED
+
+Theorem asm_frame_prefix_gas_count_bound:
+  !n k gas_tail prog data es0 as es a1 r es'.
+    asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
+    run_call es = SOME (r, es') /\ ~frame_resource_starved es0 r es' /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n as = AsmOK a1 /\
+    a1.as_pc < LENGTH prog /\ EL a1.as_pc prog = AsmOp "GAS" /\
+    a1.as_gas_readings = DROP (k - 1) as.as_gas_readings /\ 0 < k ==>
+    k <= LENGTH (gas_readings es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all asm_frame_prefix_gas_available >>
+  fs[asm_frame_rel_def, listTheory.LENGTH_DROP] >> decide_tac
+QED
+
 Theorem asm_frame_run:
   !n gas_tail prog data es0 as es r es'.
     asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
