@@ -1666,3 +1666,68 @@ Proof
   Cases_on `b` >> simp[evaluate_subscripts_def, sum_case_id] >>
   rpt strip_tac >> BasicProvers.EVERY_CASE_TAC >> gvs[] >> metis_tac[]
 QED
+
+Theorem memory_iterator_source_current_path:
+  !e cx es ee target root path.
+    loop_iterator_place e = SOME target /\
+    target_root target = NameTarget root /\
+    expr_writes_ok (\_. F) e /\
+    eval_expr cx e es = (INL (PlaceR (MemoryPlace root path)), ee) ==>
+    ?entry value.
+      lookup_scopes root ee.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL value
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[loop_iterator_place_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[target_root_def, Once evaluate_def, expr_writes_ok_def,
+      bind_def, ignore_bind_def, get_scopes_def, type_check_def,
+      check_def, assert_def, return_def, raise_def, AllCaseEqs()]
+  >- (Cases_on `lookup_scopes root ee.scopes` >>
+      gvs[evaluate_subscripts_def]) >>
+  drule exprSimPropsTheory.select_result_memory_place >>
+  disch_then (qspecl_then [`root`, `path`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+  >~ [`select_result cx (expr_type obj) _ (AttrSubscript fld) mid = _`]
+  >- (rename1 `eval_expr cx obj es =
+                 (INL (PlaceR (MemoryPlace root prior)), mid)` >>
+      qpat_x_assum `!cx' es' ee' path'. _`
+        (qspecl_then [`cx`, `es`, `mid`, `prior`] mp_tac) >>
+      simp[] >> strip_tac >>
+      gvs[select_result_def, extend_place_def, place_type_value_def,
+          read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+          lift_option_type_def, lift_sum_def, return_def, raise_def,
+          read_memory_path_def, AllCaseEqs()] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+      drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+      simp[] >> metis_tac[]) >>
+  rename1 `subscript_reads_base cx obj index` >>
+  Cases_on `subscript_reads_base cx obj index` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  rename1 `eval_expr cx obj es =
+    (INL (PlaceR (MemoryPlace root prior)), base_end)` >>
+  rename1 `eval_expr cx index base_end = (INL idx, index_end)` >>
+  qpat_x_assum `!cx' es' ee' path'. _`
+    (qspecl_then [`cx`, `es`, `base_end`, `prior`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qspecl_then
+    [`\(c:evaluation_context) (s:evaluation_state). OPTION_MAP (\entry. (entry.type,entry.value))
+                (lookup_scopes root s.scopes)`, `\w. F`]
+    mp_tac eval_observation_frame_mutual >> simp[] >>
+  disch_then (mp_tac o CONJUNCT1) >>
+  disch_then (qspecl_then [`cx`, `index`] mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`base_end`, `INL idx`, `index_end`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `lookup_scopes root index_end.scopes` >> gvs[] >>
+  gvs[select_result_def, extend_place_def, place_type_value_def,
+      read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+      lift_option_type_def, lift_sum_def, return_def, raise_def,
+      read_memory_path_def, AllCaseEqs()] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  simp[] >> metis_tac[]
+QED
