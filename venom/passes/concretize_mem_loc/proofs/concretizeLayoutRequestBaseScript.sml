@@ -97,7 +97,8 @@ Theorem layout_request_base_certificate:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==> ?eom.
+    max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ taint_within D C vs0 /\
@@ -117,9 +118,6 @@ Theorem layout_request_base_certificate:
     (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
   strip_tac >>
-  `(ctx_has_dalloca C ==>
-     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp)` by
-    simp[] >>
   match_mp_tac layout_request_base_lift >> conj_tac
   >- (drule_all layout_canonical_base_certificate >> simp[]) >>
   rpt gen_tac >> strip_tac >>
