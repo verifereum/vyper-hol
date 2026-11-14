@@ -21,12 +21,6 @@ Ancestors
 
 (* ===== Gas readings only shrink ===== *)
 
-Theorem gas_cut_readings_mono:
-  gas_cut n vs t /\ LENGTH t.vs_gas_readings <= LENGTH s.vs_gas_readings ==>
-  gas_cut n vs s
-Proof
-  simp[gas_cut_def]
-QED
 
 Theorem step_inst_noninvoke_readings_le:
   inst.inst_opcode <> INVOKE /\

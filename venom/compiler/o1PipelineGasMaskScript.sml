@@ -703,45 +703,6 @@ Proof
   asm_rewrite_tac[APPEND_ASSOC, TAKE_DROP]
 QED
 
-(* DFT's mask, with the prefix half when the DFT block lemma holds. *)
-Theorem o1_dft_gas_mask[local]:
-  dft_blocks_gas_prefix /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
-  o1_ctx_shape C /\ o1_ctx_shape C' /\ EVERY wf_ssa C.ctx_functions /\
-  o1_run_state_ok vs' /\
-  C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn' /\
-  fn_entry_label fn' = SOME lbl /\
-  terminates (run_context fuel C' vs') /\
-  gas_count_blocks fuel C' fn'
-    (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
-    LENGTH vs'.vs_gas_readings ==>
-  ?fn raw_slots sites unused.
-    C.ctx_entry = SOME nm /\
-    lookup_function nm C.ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl /\
-    LENGTH raw_slots = LENGTH sites /\
-    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs'.vs_gas_readings /\
-    (!gobs tail.
-      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
-      (?extra. sites =
-         gas_events_blocks fuel C fn
-           (vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
-                        vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra) /\
-      ((?fr. terminates
-               (run_context fr C (vs' with vs_gas_readings := gobs ++ tail))) ==>
-       terminates (run_context fuel C (vs' with vs_gas_readings := gobs ++ tail)) /\
-       !D. ctx_sim D C C' (vs' with vs_gas_readings := gobs ++ tail) vs')) /\
-    (dft_blocks_gas_prefix ==>
-     !gobs tail.
-       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
-       !f_src. ?extra. sites =
-         gas_events_blocks f_src C fn
-           (vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
-                        vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra)
-Proof
-  strip_tac >> drule_all dft_stage_gas_mask_prefix >> strip_tac >>
-  qexistsl [`fn`, `raw_slots`, `sites`, `unused`] >> simp[] >>
-  metis_tac[]
-QED
 
 Theorem o1_walk_gas_mask[local]:
   dft_blocks_gas_prefix /\
@@ -849,7 +810,7 @@ Proof
   (* the DFT mask at the output state *)
   mp_tac (Q.INST [`C` |-> `stage 7`, `C'` |-> `stage 8`, `vs'` |-> `vs_out`,
                   `fuel` |-> `fuel8`, `fn'` |-> `fn8`,
-                  `view` |-> `o1_walk_view rpolicy 7`] o1_dft_gas_mask) >>
+                  `view` |-> `o1_walk_view rpolicy 7`] dft_stage_gas_mask_prefix) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then (qx_choosel_then [`fn7`, `raw_slots`, `sites`, `unused`]
                 strip_assume_tac) >>
@@ -857,8 +818,8 @@ Proof
   reverse conj_tac
   >- ((* the safe prefix *)
       rpt strip_tac >>
-      qpat_x_assum `dft_blocks_gas_prefix ==> _`
-        (fn th => mp_tac (Q.SPECL [`gobs`, `tail`] (UNDISCH th))) >>
+      qpat_x_assum `!gobs tail. _`
+        (qspecl_then [`gobs`, `tail`] mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
       RULE_ASSUM_TAC (REWRITE_RULE [GSYM filled_entry_state]) >>
       rewrite_tac [GSYM filled_entry_state] >>
@@ -876,7 +837,6 @@ Proof
       qpat_x_assum `!f_src. _` (qspec_then `f7` strip_assume_tac) >>
       metis_tac[take_prefix_extend]) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dft_blocks_gas_prefix ==> _` kall_tac >>
   qabbrev_tac `w = vs_out with vs_gas_readings := gobs ++ tail` >>
   `o1_run_state_ok w` by simp[Abbr `w`, run_state_ok_gas_readings] >>
   qpat_x_assum `!gobs tail. _` (qspecl_then [`gobs`, `tail`] mp_tac) >>

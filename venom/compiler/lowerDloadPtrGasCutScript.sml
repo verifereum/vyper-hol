@@ -60,12 +60,6 @@ Proof
   imp_res_tac dload_prefix_match_gas_le >> gvs[gas_cut_def]
 QED
 
-Theorem gas_cut_le:
-  LENGTH t.vs_gas_readings <= LENGTH s.vs_gas_readings /\
-  gas_cut cut vs t ==> gas_cut cut vs s
-Proof
-  rw[gas_cut_def] >> decide_tac
-QED
 
 Theorem step_inst_gas_le:
   step_inst fuel ctx inst s = OK s' ==>
@@ -104,7 +98,7 @@ Proof
   rw[] >> drule step_inst_gas_le >> strip_tac >>
   `LENGTH (s' with vs_inst_idx := k).vs_gas_readings <=
    LENGTH s.vs_gas_readings` by simp[] >>
-  metis_tac[gas_cut_le]
+  metis_tac[gas_cut_readings_mono]
 QED
 
 Theorem frame_block_gas_cut:
@@ -113,7 +107,7 @@ Theorem frame_block_gas_cut:
 Proof
   rw[] >> imp_res_tac step_inst_gas_le >> imp_res_tac enters_block_gas_le >>
   `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by decide_tac >>
-  metis_tac[gas_cut_le]
+  metis_tac[gas_cut_readings_mono]
 QED
 
 Theorem frame_call_gas_cut:
@@ -123,7 +117,7 @@ Proof
   rw[] >> imp_res_tac gasOracleReplayTheory.gas_setup_callee_readings >>
   imp_res_tac enters_block_gas_le >>
   `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
-  metis_tac[gas_cut_le]
+  metis_tac[gas_cut_readings_mono]
 QED
 
 Theorem frame_ret_gas_cut:
@@ -138,5 +132,5 @@ Proof
     (Cases_on `ret.iret_adopt_fmp` >>
      gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
   `gas_cut cut vs s_end` by gvs[gas_cut_def] >>
-  metis_tac[gas_cut_le]
+  metis_tac[gas_cut_readings_mono]
 QED

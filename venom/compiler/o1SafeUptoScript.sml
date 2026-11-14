@@ -86,6 +86,13 @@ Proof
   rw[gas_cut_def]
 QED
 
+Theorem gas_cut_readings_mono:
+  gas_cut n vs t /\ LENGTH t.vs_gas_readings <= LENGTH s.vs_gas_readings ==>
+  gas_cut n vs s
+Proof
+  simp[gas_cut_def]
+QED
+
 Theorem ptr_discipline_upto_mono:
   m <= n /\ ptr_discipline_upto lo n ctx vs ==> ptr_discipline_upto lo m ctx vs
 Proof

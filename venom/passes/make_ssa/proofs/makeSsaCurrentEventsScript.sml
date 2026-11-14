@@ -53,31 +53,6 @@ Proof
   metis_tac[make_ssa_current_fn_metadata, fn_identity_metadata_eq_def]
 QED
 
-(* Readiness supplies totality; failed ASSIGN prefixes cannot be erased. *)
-Theorem current_ready_prefix_gas_events_block[local]:
-  current_copy_prefix_ready D xs /\
-  (!x. x IN D ==> IS_SOME (lookup_var x st)) /\
-  DROP st.vs_inst_idx bb.bb_instructions = xs ++ rest ==>
-  ?post. current_prefix_steps fuel C xs st post /\
-    gas_events_block fuel C owner bb st =
-      gas_events_block fuel C owner bb post /\
-    post.vs_inst_idx = st.vs_inst_idx + LENGTH xs /\
-    execution_frame post = execution_frame st /\
-    post.vs_current_bb = st.vs_current_bb /\
-    post.vs_prev_bb = st.vs_prev_bb
-Proof
-  strip_tac >>
-  `EVERY (\inst. inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE) xs` by
-    (qpat_x_assum `current_copy_prefix_ready _ _` mp_tac >>
-     map_every qid_spec_tac [`D`, `xs`] >> Induct >>
-     simp[current_copy_prefix_ready_def] >> rpt strip_tac >> gvs[] >>
-     metis_tac[]) >>
-  drule_all current_copy_prefix_total >>
-  disch_then (qspecl_then [`fuel`, `C`] strip_assume_tac) >>
-  qexists_tac `post` >> asm_rewrite_tac[] >> conj_tac
-  >- (irule current_prefix_steps_gas_events_block >> metis_tac[]) >>
-  metis_tac[current_prefix_steps_index]
-QED
 
 Theorem current_events_decode_none[local]:
   inst_pair sg inst inst' ==>
