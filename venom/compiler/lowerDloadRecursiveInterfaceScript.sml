@@ -4729,7 +4729,7 @@ val ld_combined_return_witness =
     val (_,normal) = dest_conj rest
   in snd (strip_exists normal) end;
 
-Theorem ld_recursive_paired_return_pop:
+val ld_paired_return_pop_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
@@ -4757,7 +4757,10 @@ Theorem ld_recursive_paired_return_pop:
       (entry_taint with t_var := DRESTRICT sf.lf_tvar
         (COMPL (set sf.lf_inst.inst_outputs)))
       (entry_taint with t_var := DRESTRICT tf.lf_tvar
-        (COMPL (set tf.lf_inst.inst_outputs))) s' t'
+        (COMPL (set tf.lf_inst.inst_outputs))) s' t'``;
+
+Theorem ld_recursive_paired_return_pop_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_paired_return_pop_header)
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
@@ -4821,6 +4824,16 @@ Proof
   qpat_x_assum `ld_owned_vars _ _ (DRESTRICT _ _) _ _ _ _ _` mp_tac >>
   qpat_x_assum `HD supports = _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> simp[EL])
+QED
+
+Theorem ld_recursive_paired_return_pop:
+  ^ld_paired_return_pop_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_paired_return_pop_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  first_x_assum (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Common-state RETURN interface audit. This is a TERM, not an asserted theorem.
@@ -5013,8 +5026,8 @@ val ld_return_restored_validity =
     val bound = hd (filter (fn v => fst(dest_var v) = "t'") vars)
   in list_mk_forall(vars,mk_imp(pre,``alloca_inv ^bound``)) end;
 
-Theorem ld_recursive_return_restored_validity:
-  ^ld_return_restored_validity
+Theorem ld_recursive_return_restored_validity_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_return_restored_validity)
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
@@ -5035,6 +5048,18 @@ Proof
      adopt_return_fmp_allocas, merge_callee_state_def]
 QED
 
+Theorem ld_recursive_return_restored_validity:
+  ^ld_return_restored_validity
+Proof
+  mp_tac ld_recursive_return_restored_validity_static >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt (ho_match_mp_tac MONO_ALL >> gen_tac) >>
+  disch_tac >> disch_tac >> first_x_assum irule >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  first_x_assum (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 val ld_return_normal_prefix =
   let
     val (vars,body) = strip_forall ld_proposed_combined_return_restore
@@ -5044,11 +5069,11 @@ val ld_return_normal_prefix =
     val prefix = list_mk_conj (List.take (strip_conj clauses,4))
   in list_mk_forall(vars,mk_imp(pre,list_mk_exists(floors,prefix))) end;
 
-Theorem ld_recursive_return_normal_prefix:
-  ^ld_return_normal_prefix
+Theorem ld_recursive_return_normal_prefix_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_return_normal_prefix)
 Proof
   rpt gen_tac >> disch_tac >>
-  first_assum (assume_tac o MATCH_MP ld_recursive_return_restored_validity) >>
+  first_assum (assume_tac o MATCH_MP ld_recursive_return_restored_validity_static) >>
   qpat_x_assum `_ /\ _` mp_tac >> BETA_TAC >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >> simp[] >> NO_TAC) >>
   qpat_x_assum `astk = sf::astail` SUBST_ALL_TAC >>
@@ -5085,7 +5110,7 @@ Proof
   suspend "normal_data"
 QED
 
-Resume ld_recursive_return_normal_prefix[normal_data]:
+Resume ld_recursive_return_normal_prefix_static[normal_data]:
   qpat_x_assum `?sk' stn. _`
     (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   `wf_function sf.lf_fn` by
@@ -5108,7 +5133,7 @@ Resume ld_recursive_return_normal_prefix[normal_data]:
   suspend "normal_clauses"
 QED
 
-Resume ld_recursive_return_normal_prefix[frame_data]:
+Resume ld_recursive_return_normal_prefix_static[frame_data]:
   qpat_assum `tf.lf_inst = sf.lf_inst` (fn th => rewrite_tac [th]) >>
   `ld_shared_state tn un s t` by
     (drule ld_normal_data_frame >> strip_tac >>
@@ -5140,7 +5165,7 @@ Resume ld_recursive_return_normal_prefix[frame_data]:
   POP_ASSUM_LIST (K ALL_TAC) >> simp[]
 QED
 
-Resume ld_recursive_return_normal_prefix[normal_clauses]:
+Resume ld_recursive_return_normal_prefix_static[normal_clauses]:
   drule ld_normal_data_geometry >> strip_tac >>
   drule ld_normal_data_masks >> strip_tac >>
   drule ld_normal_data_memory >> strip_tac >>
@@ -5308,7 +5333,19 @@ Resume ld_recursive_return_normal_prefix[normal_clauses]:
   drule_all lowerDloadReturnRestoreTheory.ld_annotated_return_call_ctx >> simp[]
 QED
 
-Finalise ld_recursive_return_normal_prefix
+Finalise ld_recursive_return_normal_prefix_static
+
+Theorem ld_recursive_return_normal_prefix:
+  ^ld_return_normal_prefix
+Proof
+  mp_tac ld_recursive_return_normal_prefix_static >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt (ho_match_mp_tac MONO_ALL >> gen_tac) >>
+  disch_tac >> disch_tac >> first_x_assum irule >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  first_x_assum (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 
 Theorem ld_normal_data_inst_idx:
   !CS fn V U lo E L H AP BP AG BH tn un sx tx n m astk live keys d A suspended gstk f.
@@ -5328,11 +5365,11 @@ Proof
     venomStateTheory.read_memory_def]
 QED
 
-Theorem ld_recursive_return_restore:
-  ^ld_proposed_combined_return_restore
+Theorem ld_recursive_return_restore_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_proposed_combined_return_restore)
 Proof
   rpt gen_tac >> disch_tac >>
-  first_assum (mp_tac o MATCH_MP ld_recursive_return_normal_prefix) >>
+  first_assum (mp_tac o MATCH_MP ld_recursive_return_normal_prefix_static) >>
   simp_tac bool_ss [LET_THM] >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   disch_then (qx_choose_then `floor` strip_assume_tac) >>
   qexists_tac `floor` >>
@@ -5500,7 +5537,7 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def]
 QED
 
-Resume ld_recursive_return_restore[normal_data_position]:
+Resume ld_recursive_return_restore_static[normal_data_position]:
   rewrite_tac[ld_normal_data_inst_idx] >>
   qpat_x_assum `ld_normal_data CS sf.lf_fn _ _ _ _ _ _ _ _ _ _ _ _ s' t' _ _ _ _ _ _ _ _`
     mp_tac >>
@@ -5509,14 +5546,14 @@ Resume ld_recursive_return_restore[normal_data_position]:
   POP_ASSUM_LIST (K ALL_TAC) >> simp[]
 QED
 
-Resume ld_recursive_return_restore[tail_caps]:
+Resume ld_recursive_return_restore_static[tail_caps]:
   qpat_x_assum `LIST_REL _ (A::suspended) _` mp_tac >>
   qpat_x_assum `LENGTH suspended = _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
   Cases_on `suspended` >> simp[]
 QED
 
-Resume ld_recursive_return_restore[tail_saved]:
+Resume ld_recursive_return_restore_static[tail_saved]:
   gen_tac >> disch_tac >>
   qpat_x_assum `!q. q < LENGTH (sf::astail) ==> ld_saved_embedded _ _ _ _ _ _ _ /\ _`
     (qspec_then `SUC q` mp_tac) >>
@@ -5554,7 +5591,7 @@ Resume ld_recursive_return_restore[tail_saved]:
   qexists_tac `EL q astail` >> simp[EL_MEM]
 QED
 
-Resume ld_recursive_return_restore[revert_successor]:
+Resume ld_recursive_return_restore_static[revert_successor]:
   `lower_dload_insts_supply a
      (TAKE (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx).vs_inst_idx
        bs.bb_instructions) = (p' ++ [tf.lf_inst],d)` by
@@ -5607,7 +5644,19 @@ Resume ld_recursive_return_restore[revert_successor]:
   simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise ld_recursive_return_restore
+Finalise ld_recursive_return_restore_static
+
+Theorem ld_recursive_return_restore:
+  ^ld_proposed_combined_return_restore
+Proof
+  mp_tac ld_recursive_return_restore_static >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt (ho_match_mp_tac MONO_ALL >> gen_tac) >>
+  disch_tac >> disch_tac >> first_x_assum irule >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  first_x_assum (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 
 (* Fixed-environment specialization of the provenance-forgetting induction.
    Unlike the raw five clause quotations, these premises quantify neither
