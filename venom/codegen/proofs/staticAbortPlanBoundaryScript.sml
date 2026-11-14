@@ -1,7 +1,7 @@
 (* Structural administrative boundaries for the regular instruction planner. *)
 Theory staticAbortPlanBoundary
 Ancestors
-  planWf planAlign fnBlockPlanStaticBalance stackPlanGen stackPlanOps
+  planWf planAlign fnBlockPlanStaticBalance fnPlanPrefix stackPlanGen stackPlanOps
   stackModel prefixExec cleanOpsSim doSwapSim list rich_list arithmetic sorting
 
 Theorem popmany_fold_wf_len[local]:
@@ -127,4 +127,112 @@ Proof
         metis_tac[emit_input_plan_no_labels_opcode] >>
       simp[emit_input_plan_wf_len]) >>
   simp[emit_input_plan_wf_len]
+QED
+
+Theorem selected_reorder_wf_len[local]:
+  LENGTH operands <= LENGTH ps.ps_stack /\ LENGTH operands <= 16 /\
+  (if comm /\ 2 <= LENGTH operands then
+     let (oa,sa) = reorder_plan dfg operands ps;
+         swapped = TAKE (LENGTH operands - 2) operands ++
+           [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands];
+         (ob,sb) = reorder_plan dfg swapped ps
+     in if reorder_cost oa < reorder_cost ob then (oa,sa) else (ob,sb)
+   else reorder_plan dfg operands ps) = (ops,qs) ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  prefix_end_len lo (LENGTH ps.ps_stack) ops = LENGTH qs.ps_stack /\
+  LENGTH operands <= LENGTH qs.ps_stack
+Proof
+  strip_tac >>
+  Cases_on `comm /\ 2 <= LENGTH operands`
+  >- (`LENGTH (TAKE (LENGTH operands - 2) operands ++
+          [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]) =
+        LENGTH operands` by simp[] >>
+      qpat_x_assum `(if _ then _ else _) = _` mp_tac >> simp[] >>
+      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+      IF_CASES_TAC >> strip_tac >> gvs[] >>
+      imp_res_tac reorder_plan_length_floor >>
+      qspecl_then [`dfg`, `operands`, `ps`, `lo`] mp_tac reorder_plan_wf_len >>
+      qspecl_then [`dfg`, `TAKE (LENGTH operands - 2) operands ++
+        [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]`,
+        `ps`, `lo`] mp_tac reorder_plan_wf_len >> fs[]) >>
+  gvs[] >> imp_res_tac reorder_plan_length_floor >>
+  qspecl_then [`dfg`, `operands`, `ps`, `lo`] mp_tac reorder_plan_wf_len >> simp[]
+QED
+
+Theorem output_pushes_length[local]:
+  !outputs ps.
+    LENGTH (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      ps outputs).ps_stack = LENGTH ps.ps_stack + LENGTH outputs
+Proof
+  Induct >> simp[] >> simp[stack_push_def, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem regular_plan_admin_decomposition:
+  generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps = (ops,qs) /\
+  inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) ==>
+  ?pre emit post ps6 ps7 m h.
+    ops = pre ++ emit ++ post /\
+    prefix_wf lo (LENGTH ps.ps_stack) pre /\
+    prefix_end_len lo (LENGTH ps.ps_stack) pre = m /\
+    LENGTH (compute_operands inst) <= m /\
+    h + LENGTH (compute_operands inst) = m + LENGTH inst.inst_outputs /\
+    LENGTH ps6.ps_stack = h /\
+    generate_emit_ops inst (case inst.inst_opcode of LOG =>
+      (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0) ps6 = (emit,ps7) /\
+    LENGTH ps7.ps_stack = h /\
+    prefix_wf lo h post /\ prefix_end_len lo h post = LENGTH qs.ps_stack
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics core` >>
+  `prefix_wf lo (LENGTH ps.ps_stack) input_ops /\
+   prefix_end_len lo (LENGTH ps.ps_stack) input_ops = LENGTH ps1.ps_stack` by
+    (drule regular_input_plan_wf_len >>
+     disch_then (qspecl_then [`nl`, `ps`] mp_tac) >> simp[]) >>
+  `LENGTH (compute_operands inst) <= LENGTH ps1.ps_stack` by fs[] >>
+  `prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops /\
+   prefix_end_len lo (LENGTH ps1.ps_stack) reorder_ops = LENGTH ps4.ps_stack /\
+   LENGTH (compute_operands inst) <= LENGTH ps4.ps_stack` by
+    (irule selected_reorder_wf_len >> simp[] >>
+     qexistsl [`is_commutative inst.inst_opcode`, `dfg`] >>
+     fs[arithmeticTheory.GREATER_EQ]) >>
+  `prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) /\
+   prefix_end_len lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) = LENGTH ps4.ps_stack` by
+    metis_tac[prefix_wf_len_append] >>
+  `LENGTH core.ps_stack + LENGTH (compute_operands inst) =
+    LENGTH ps4.ps_stack + LENGTH inst.inst_outputs` by
+    (simp[Abbr `core`, output_pushes_length, stack_pop_def]) >>
+  pairarg_tac >> simp[] >>
+  `LENGTH ps7.ps_stack = LENGTH core.ps_stack` by
+    metis_tac[generate_emit_ops_stack, pairTheory.SND] >>
+  Cases_on `inst.inst_outputs = []` >> simp[]
+  >- (strip_tac >> gvs[] >>
+      qexistsl [`input_ops ++ reorder_ops`, `emit_ops`, `[]`, `core`, `ps7`] >>
+      simp[APPEND_ASSOC, prefix_wf_def, prefix_end_len_def, release_dead_spills_stack] >>
+      decide_tac) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  `prefix_wf lo (LENGTH ps7.ps_stack) pop_ops /\
+   prefix_end_len lo (LENGTH ps7.ps_stack) pop_ops = LENGTH ps8.ps_stack` by
+    (qpat_x_assum `(if _ then _ else _) = (pop_ops,ps8)` mp_tac >>
+     IF_CASES_TAC >> simp[]
+     >- (strip_tac >> qspecl_then
+           [`MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)`, `ps7`, `lo`]
+           mp_tac popmany_plan_wf_len >> simp[]) >>
+     strip_tac >> gvs[prefix_wf_def, prefix_end_len_def]) >>
+  `prefix_wf lo (LENGTH ps8.ps_stack) opt_ops /\
+   prefix_end_len lo (LENGTH ps8.ps_stack) opt_ops = LENGTH ps9.ps_stack` by
+    (qpat_x_assum `(if _ then _ else _) = (opt_ops,ps9)` mp_tac >>
+     IF_CASES_TAC >> simp[prefix_wf_def, prefix_end_len_def] >>
+     strip_tac >> qspecl_then [`dfg`, `inst`, `nl`, `term`, `ps8`, `lo`]
+       mp_tac optimistic_swap_plan_wf_len >> simp[]) >>
+  qexistsl [`input_ops ++ reorder_ops`, `emit_ops`, `pop_ops ++ opt_ops`, `core`, `ps7`] >>
+  simp[APPEND_ASSOC, release_dead_spills_stack] >>
+  `LENGTH qs.ps_stack = LENGTH ps9.ps_stack` by
+    metis_tac[release_dead_spills_stack] >>
+  metis_tac[prefix_wf_len_append]
 QED
