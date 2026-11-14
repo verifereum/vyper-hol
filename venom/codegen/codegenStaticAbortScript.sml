@@ -1,10 +1,7 @@
 Theory codegenStaticAbort
 Ancestors
-  contextStaticAbortRel
-  staticAbortExec
-  fnStaticAbortSim
-  codegenCorrectness
-  codegenRequestPrefix
+  codegenStaticAbortEntrySim
+  codegenStaticAbortFrame
 
 (* Static-prefix spill corruption permits an earlier ASSERT revert. The
    source Error branch accepts either EVM exception; its provenance is
@@ -28,5 +25,7 @@ Theorem codegen_correct_static_abort:
        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)) /\
     call_requests es <<= vs'.vs_requests
 Proof
-  rpt strip_tac
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_sim_abort >> strip_tac >>
+  metis_tac[codegen_static_abort_frame]
 QED
