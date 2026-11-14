@@ -483,7 +483,7 @@ Theorem ircf_witness_safe_entry:
 Proof
   `lookup_function "callee" ircf_witness_ctx.ctx_functions =
     SOME ircf_witness_callee` by
-    simp[lookup_function_def, ircf_witness_ctx_def,
+    simp[lookup_function_def, FIND_thm, ircf_witness_ctx_def,
          ircf_witness_callee_def, ircf_witness_main_def,
          mk_raw_function_def] >>
   qexists_tac `init_venom_state "main"` >>
@@ -502,11 +502,11 @@ Proof
       simp[access_ok_def, taint_ok_def, allocas_from_def, entry_taint_def,
            op_taint_def, codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def] >>
-      simp[step_inst_def, step_inst_base_def, exec_alloca_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, exec_alloca_def,
            eval_operand_def, update_var_def]) >>
-  simp[step_inst_def, step_inst_base_def, exec_alloca_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, exec_alloca_def,
        eval_operand_def, update_var_def, is_terminator_def] >>
-  simp[ghost_step_def, step_inst_def, step_inst_base_def,
+  simp[ghost_step_def, step_inst_def, step_inst_base_opcode_eqs,
        exec_alloca_def, eval_operand_def, update_var_def,
        step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        FLOOKUP_UPDATE, mem_taint_def, set_var_taint_def, out_taint_def,
@@ -520,11 +520,11 @@ Proof
       simp[access_ok_def, taint_ok_def, allocas_from_def, op_taint_def,
            codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def] >>
-      simp[step_inst_def, step_inst_base_def, exec_alloca_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, exec_alloca_def,
            eval_operand_def, update_var_def, FLOOKUP_UPDATE]) >>
-  simp[step_inst_def, step_inst_base_def, exec_alloca_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, exec_alloca_def,
        eval_operand_def, update_var_def, is_terminator_def, FLOOKUP_UPDATE] >>
-  simp[ghost_step_def, step_inst_def, step_inst_base_def,
+  simp[ghost_step_def, step_inst_def, step_inst_base_opcode_eqs,
        exec_alloca_def, eval_operand_def, update_var_def, FLOOKUP_UPDATE,
        step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        mem_taint_def, set_var_taint_def, out_taint_def,
@@ -560,10 +560,13 @@ Resume ircf_witness_safe_entry[callee_safe]:
       simp[access_ok_def, taint_ok_def, allocas_from_def,
            op_taint_def, codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def] >>
-      simp[step_inst_def, step_inst_base_def, update_var_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def,
            allocas_below_fmp_def]) >>
-  simp[step_inst_def, step_inst_base_def, update_var_def, is_terminator_def] >>
-  simp[ghost_step_def, step_inst_def, step_inst_base_def, update_var_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def, is_terminator_def] >>
+  simp[ghost_step_def] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[update_var_def] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
   simp[mem_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def] >>
@@ -577,10 +580,13 @@ Resume ircf_witness_safe_entry[callee_safe]:
       simp[access_ok_def, taint_ok_def, allocas_from_def, op_taint_def,
            codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def] >>
-      simp[step_inst_def, step_inst_base_def, update_var_def,
+      simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def,
            allocas_below_fmp_def]) >>
-  simp[step_inst_def, step_inst_base_def, update_var_def, is_terminator_def] >>
-  simp[ghost_step_def, step_inst_def, step_inst_base_def, update_var_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def, is_terminator_def] >>
+  simp[ghost_step_def] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[update_var_def] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
   simp[mem_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def] >>
@@ -599,14 +605,12 @@ Resume ircf_witness_safe_entry[callee_safe]:
       simp[allocas_below_fmp_def] >>
       rpt strip_tac >> Cases_on `op` >> simp[] >>
       rpt IF_CASES_TAC >> gvs[]) >>
-  simp[step_inst_def, step_inst_base_def, exec_write2_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, is_terminator_def] >>
   qpat_abbrev_tac `stored = mstore _ _ _` >>
   simp[ghost_step_def] >>
-  pure_rewrite_tac[step_inst_def] >>
-  simp[] >>
-  pure_rewrite_tac[step_inst_base_def] >>
-  simp[] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_write2_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
@@ -626,7 +630,7 @@ Resume ircf_witness_safe_entry[callee_safe]:
            op_taint_def, FLOOKUP_UPDATE] >>
       rpt strip_tac >> Cases_on `op` >> simp[] >>
       rpt IF_CASES_TAC >> gvs[]) >>
-  simp[step_inst_def, step_inst_base_def, eval_operands_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, eval_operands_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -638,52 +642,56 @@ Resume ircf_witness_safe_entry[caller_rest]:
   simp[Once run_blocks_def, lookup_block_def, FIND_thm,
        eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
   simp[Once run_block_non_phis_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs] >>
   simp[update_var_def, is_terminator_def] >>
   simp[Once run_block_non_phis_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs] >>
   simp[update_var_def, is_terminator_def] >>
   simp[Once run_block_non_phis_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, is_terminator_def] >>
   simp[exec_write2_def, eval_operand_def, lookup_var_def,
        FLOOKUP_UPDATE, mstore_def] >>
   qmatch_goalsub_abbrev_tac `word_to_bytes _ T` >>
   simp[Once run_block_non_phis_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def, eval_operands_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, eval_operands_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[bind_outputs_def, merge_callee_state_def, is_terminator_def] >>
   asm_simp_tac (srw_ss()) [ghost_step_def, decode_invoke_def,
+       ircf_witness_callee_def, mk_raw_function_def,
        FIND_thm, eval_operands_def, eval_operand_def, lookup_var_def,
        FLOOKUP_UPDATE, setup_callee_def, op_prov_def] >>
   simp[Once ghost_blocks_def, lookup_block_def, FIND_thm,
        eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
-  simp[Once ghost_block_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def, update_var_def, is_terminator_def] >>
+  simp[Once ghost_block_def, get_instruction_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def, is_terminator_def] >>
   simp[ghost_step_def] >>
-  simp[step_inst_def, step_inst_base_def, update_var_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
   simp[mem_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def] >>
   simp[new_site_bytes_def, FLOOKUP_UPDATE, step_writes_def,
        codegenRelTheory.source_memory_write_ranges_def,
        written_taint_def, range_bytes_def] >>
-  simp[Once ghost_block_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def, update_var_def, is_terminator_def] >>
+  simp[Once ghost_block_def, get_instruction_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def, is_terminator_def] >>
   simp[ghost_step_def] >>
-  simp[step_inst_def, step_inst_base_def, update_var_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, update_var_def] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
   simp[mem_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def] >>
   simp[new_site_bytes_def, FLOOKUP_UPDATE, step_writes_def,
        codegenRelTheory.source_memory_write_ranges_def,
        written_taint_def, range_bytes_def, eval_operand_def] >>
-  simp[Once ghost_block_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def, exec_write2_def,
+  simp[Once ghost_block_def, get_instruction_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, is_terminator_def] >>
   simp[ghost_step_def] >>
-  pure_rewrite_tac[step_inst_def] >> simp[] >>
-  pure_rewrite_tac[step_inst_base_def] >> simp[] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_write2_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
   simp[mem_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
@@ -693,8 +701,9 @@ Resume ircf_witness_safe_entry[caller_rest]:
        codegenRelTheory.fixed_source_write_range_def,
        written_taint_def, range_bytes_def, eval_operand_def, lookup_var_def] >>
   simp[mstore_def] >>
-  simp[Once ghost_block_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def, eval_operands_def,
+  simp[Once ghost_block_def, get_instruction_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, eval_operands_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[op_taint_def] >>
   simp[Once ptr_safe_block_def, get_instruction_def] >>
@@ -711,12 +720,12 @@ Resume ircf_witness_safe_entry[caller_rest]:
       conj_tac
       >- (rpt strip_tac >> Cases_on `op` >> simp[] >>
           rpt IF_CASES_TAC >> gvs[]) >> EVAL_TAC) >>
-  simp[step_inst_def, step_inst_base_def, eval_operand_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, eval_operand_def,
        lookup_var_def, FLOOKUP_UPDATE, eval_operands_def,
        is_terminator_def] >>
   simp[ghost_step_def] >>
-  pure_rewrite_tac[step_inst_def] >> simp[] >>
-  pure_rewrite_tac[step_inst_base_def] >> simp[] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, eval_operands_def] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
   simp[mem_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
@@ -736,13 +745,13 @@ Resume ircf_witness_safe_entry[caller_rest]:
            codegenRelTheory.fixed_source_write_range_def,
            eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def,
            mem_write_ops_def, mem_read_ops_def, op_prov_def] >> EVAL_TAC) >>
-  simp[step_inst_def, step_inst_base_def, exec_read1_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, exec_read1_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        update_var_def, is_terminator_def] >>
   qpat_abbrev_tac `value = mload _ _` >>
   simp[ghost_step_def] >>
-  pure_rewrite_tac[step_inst_def] >> simp[] >>
-  pure_rewrite_tac[step_inst_base_def] >> simp[] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_read1_def, eval_operand_def, lookup_var_def,
        FLOOKUP_UPDATE, update_var_def] >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def] >>
@@ -762,7 +771,7 @@ Resume ircf_witness_safe_entry[caller_rest]:
       conj_tac
       >- (rpt strip_tac >> gvs[] ) >>
       qpat_x_assum `Abbrev _` kall_tac >> EVAL_TAC) >>
-  simp[step_inst_def, step_inst_base_def, exec_write2_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        empty_call_context_def, sstore_def, is_terminator_def] >>
   simp[Once ptr_safe_block_def, get_instruction_def] >>
@@ -772,7 +781,7 @@ Resume ircf_witness_safe_entry[caller_rest]:
            codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def] >>
       qpat_x_assum `Abbrev _` kall_tac >> EVAL_TAC) >>
-  simp[step_inst_def, step_inst_base_def, halt_state_def]
+  simp[step_inst_def, step_inst_base_opcode_eqs, halt_state_def]
 QED
 
 Finalise ircf_witness_safe_entry
