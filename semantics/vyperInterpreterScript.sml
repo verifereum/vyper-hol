@@ -1405,6 +1405,24 @@ val () = lock_if_nr_def
             bind_def]
   |> cv_auto_trans;
 
+(* A free lock slot supplies a successful source run when instantiating
+   the body's induction hypothesis. *)
+Theorem lock_if_nr_runs:
+  (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static ==>
+  ?s u t. lock_if_nr cx nr v s = (INL u,t)
+Proof
+  Cases_on `nr` >> simp[lock_if_nr_def, return_def] >> strip_tac >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[] >>
+  qexists `ARB with tStorage := empty_transient_storage` >>
+  simp[acquire_nonreentrant_lock_def, get_transient_storage_def,
+       update_transient_def, record_storage_event_def, bind_def,
+       ignore_bind_def, return_def,
+       vfmContextTheory.empty_transient_storage_def,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.empty_storage_def] >>
+  rw[return_def, vyperStateTheory.update_transient_def]
+QED
+
 Definition unlock_if_nr_def:
   unlock_if_nr cx nr is_view =
     if nr ∧ ¬is_view then
