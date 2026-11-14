@@ -10,6 +10,8 @@ Ancestors
   bodyIntCallFamStmtMutationAugTargetMappingFinish
   bodyIntCallFamStmtMutationAugTargetPrehash bodyIntCallFamStmtMutationAugTargetAttr
   bodyIntCallFamStmtMutationAugTargetAttrCounted
+  bodyIntCallFamStmtMutationAugTargetCounted
+  bodyIntCallFamStmtMutationAugPlaceProducer bodyIntCallFamStmtMutationAugLocal
   bodyIntCallFamStmtMutationFlatCopy bodyIntCallFamStmtMutationBytesFootprint
   bodyIntCallFamStmtMutationInactiveStore bodyIntCallFamStmtMutationWordInit
   bodyIntCallFamStmtMutationEmptyInit bodyIntCallFamStmtMutationEmptyProducer
@@ -496,5 +498,13 @@ Theorem intcall_mutation_stmt_step:
    (?ty tg op e. st = AugAssign ty tg op e) \/ (?tg e. st = Append tg e)) ==>
   intcall_stmts_producer fp [st]
 Proof
-  cheat
+  rpt strip_tac >> gvs[]
+  >- (irule intcall_annassign_stmt_step >> simp[])
+  >- (irule intcall_assign_stmt_step >> simp[])
+  >- (Cases_on `?id. tg = NameTarget id`
+      >- (gvs[] >> irule intcall_augassign_local_stmt_step >> simp[]) >>
+      irule intcall_augassign_place_stmt_step >>
+      conj_tac >- (MATCH_ACCEPT_TAC intcall_target_counted) >>
+      fs[]) >>
+  irule intcall_append_stmt_step >> simp[]
 QED
