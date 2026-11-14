@@ -9463,7 +9463,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Base_Attribute_Selection]:
     (drule_all_then assume_tac) >> simp[]
 QED
 
-Theorem eval_create_success_value[local]:
+Theorem eval_create_success_value:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
@@ -9508,7 +9508,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Create_Returned_Result]:
   drule eval_create_success_value >> strip_tac >> gvs[]
 QED
 
-Theorem eval_ext_call_success_value[local]:
+Theorem eval_ext_call_success_value:
   eval_ext_call cx static skip sigt opts vs st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
@@ -9564,7 +9564,7 @@ Resume eval_scc_type_sound_results_mutual[Live_SelfDestruct_Returned_Result]:
   simp[selfdestruct_no_success]
 QED
 
-Theorem eval_send_success_value[local]:
+Theorem eval_send_success_value:
   eval_send cx has_gas vs st = (INL pv,st') ==> ?v. pv = Value v
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
@@ -9601,7 +9601,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Send_Returned_Result]:
   drule eval_send_success_value >> strip_tac >> gvs[]
 QED
 
-Theorem eval_raw_call_success_value[local]:
+Theorem eval_raw_call_success_value:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
