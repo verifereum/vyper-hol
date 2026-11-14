@@ -15,6 +15,7 @@ Ancestors
   exprSimAbiEncodeOpenFinishExtension abiEncoderExtendSim
   exprLoweringProps compileEnv words finite_map arithmetic
   exprSimAbiEncodeSourceRoom exprSimAbiEncodeChargeTransfer venomInstIdsProps
+  exprSimAbiEncodeNoBlockFrame exprSimAbiGasBridge emitHelperProps
 
 Theorem abi_encode_framed_setup_window:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
@@ -481,4 +482,59 @@ Proof
      qexists `obs` >> simp[] >> rpt strip_tac >>
      qpat_x_assum `!i. MEM i (fn_insts obs) /\ _ ==> _` irule >> simp[]) >>
   qexists `t` >> simp[]
+QED
+
+Theorem abi_encode_window_seq_counted:
+  window_seq st en s raw /\ frag_gas_free st en /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~(raw with vs_inst_idx := LENGTH en.cs_current_insts).vs_halted /\
+  Q (raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
+  (!t rd. Q t ==> Q (t with vs_returndata := rd)) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
+      t.vs_current_bb = en.cs_current_bb /\
+      t.vs_inst_idx = LENGTH en.cs_current_insts
+Proof
+  strip_tac >>
+  irule abi_decode_sim_gas_path_named >> simp[] >> qexists `st` >> simp[] >>
+  `en.cs_blocks = st.cs_blocks /\ en.cs_current_bb = st.cs_current_bb /\
+   inst_extends st en` by fs[window_seq_def] >>
+  `cs_extends st en` by
+    (fs[cs_extends_def, inst_extends_def]) >>
+  simp[] >> rpt strip_tac >>
+  `?t. t = raw with vs_inst_idx := LENGTH en.cs_current_insts /\
+       t.vs_current_bb = en.cs_current_bb /\
+       t.vs_inst_idx = LENGTH en.cs_current_insts /\
+       abi_decode_sim ctx fn' s t` by
+    (irule abi_encoder_run_sequence_reach >> simp[] >> qexists `st` >>
+     fs[window_seq_def]) >>
+  qexists `t` >> gvs[]
+QED
+
+Theorem abi_encode_raw_sequence_counted_frame:
+  compile_abi_encode_to_buf dst src ei st = (out,en) /\
+  window_seq st en s raw /\ frag_gas_free st en /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~(raw with vs_inst_idx := LENGTH en.cs_current_insts).vs_halted /\
+  Q (raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
+  (!t rd. Q t ==> Q (t with vs_returndata := rd)) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\
+      abi_encode_exec_frame func s t /\ ~t.vs_halted /\
+      t.vs_current_bb = en.cs_current_bb /\
+      t.vs_inst_idx = LENGTH en.cs_current_insts
+Proof
+  strip_tac >>
+  `abi_encode_exec_frame func s
+     (raw with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encode_no_block_body_frame_normalized >>
+     fs[window_seq_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`Q` |-> `\t. Q t /\ abi_encode_exec_frame func s t`]
+    abi_encode_window_seq_counted) >>
+  pure_rewrite_tac[BETA_THM, GSYM CONJ_ASSOC] >>
+  impl_tac
+  >- (simp[] >> metis_tac[abi_encode_exec_frame_bridge_updates]) >>
+  simp[CONJ_ASSOC]
 QED
