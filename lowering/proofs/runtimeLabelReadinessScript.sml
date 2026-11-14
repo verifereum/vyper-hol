@@ -4,6 +4,7 @@
 Theory runtimeLabelReadiness
 Ancestors
   compileVyper venomInst list runtimeLabelInvariant runtimeLabelValues
+  runtimeLabelABI
 
 Theorem lower_vyper_runtime_unit_no_runtime_begin:
   !tops rpolicy unit fn inst.
