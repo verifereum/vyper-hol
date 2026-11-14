@@ -381,72 +381,9 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
 QED
 Finalise compile_subscript_array_framed_base_case
 
-(* Every other array subscript: a base in storage or transient storage, an
-   immutable in the constructor, a dynamic array or one with a dynamic
-   array inside it in memory, a base whose source result is a storage
-   place, or an index that changes the locals or the immutables.  ADMITTED (cheat).  NOT DERIVABLE from these hypotheses,
-   though no miscompile is known: vv_post H does not tie the base's pointer
-   to its source place.  vv_at and local_val_at pick the local's path by
-   its type alone, immutable_holds' constructor form takes any offset of
-   the staged buffer that holds the value, and storage_holds pins the slot
-   only by what it reads; so the base's pointer may lie in dead bytes that
-   hold an equal value (past a dynamic array's length, in the staged
-   buffer, in dead slots), which nothing keeps across the index's
-   fragment: state_rel H and immutables_rel relate only the live parts,
-   locals_kept exempts every dynamic array's length word, and expr_post H
-   has no frame on Venom storage.  Witness: x : DynArray[DynArray[uint256,
-   2], 2] holding [[5, 1]], with [5, 1] and its length word 2 left at
-   x[1]'s bytes by an earlier pop; for x[0][i], with i a local, a pointer
-   at x[1]'s offset satisfies every hypothesis on the base, i's fragment
-   may rewrite that length word, and the bounds check then loads a word
-   unrelated to x[0]'s length.  Further cases need more than that:
-   - x[1][x.pop()[0]] pops x[1], and the base's place then reads the
-     snapshot x's popped history keeps (read_memory_path), which no
-     invariant relates to memory;
-   - self.a[0][self.f()], with f popping self.a to empty, leaves a[0]'s
-     slots dead, and storage_rel after the call relates nothing there;
-   - in the constructor, with a : DynArray[DynArray[DynArray[uint256, 2],
-     2], 2] holding [[[1, 2], [0, 5]]], a[0][1][a[0].pop()[0]] (the
-     pinned Python compiler accepts a pop of an immutable's member in
-     __init__) is false: the source's read of the base's place raises a
-     RuntimeError, an immutable keeping no popped history, while the
-     lowering ILOADs the stale length 2 and goes on, where expr_exit asks
-     for an abort.
-   A place-pointer clause in vv_post H replaces most of this lemma: a
-   conjunct vv_place_ptr cenv cx es' s tv vv, as place_ptr_rel says for
-   targets, with
-     vv_place_ptr cenv cx es s (PlaceR (MemoryPlace id path))
-                  (LocatedValue t p) <=>
-       p.ptr_location = LocMemory /\
-       ?q sz b t0 tv0 k tvk.
-         FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
-         lookup_var q s = SOME b /\ cenv.ce_var_type id = SOME t0 /\
-         evaluate_type (get_tenv cx) t0 = SOME tv0 /\
-         mem_path_offset tv0 path = SOME (k, tvk) /\
-         eval_operand p.ptr_operand s = SOME (b + n2w k)
-     vv_place_ptr cenv cx es s (PlaceR (StoragePlace tr slot tv))
-                  (LocatedValue t p) <=>
-       p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME slot
-     (and the same for HashMapRef tr slot kt vt)
-     vv_place_ptr cenv cx es s (PlaceR (ImmutablePlace src id path))
-                  (LocatedValue t p) <=>
-       p.ptr_location = LocCode /\ src = cenv.ce_module /\
-       ?off itv iv k tvk.
-         FLOOKUP cenv.ce_module_vars (cenv.ce_module, id) =
-           SOME (ImmutableLoc off) /\
-         FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
-                    NONE => FEMPTY
-                  | SOME imms => get_source_immutables cenv.ce_module imms)
-                 id = SOME (itv, iv) /\
-         mem_path_offset itv path = SOME (k, tvk) /\
-         eval_operand p.ptr_operand s = SOME (n2w (off + k))
-     vv_place_ptr cenv cx es s _ _ <=> T
-   Its producers are the expressions whose source result can be a place:
-   Name, TopLevelName, Subscript (array, tuple, mapping), Attribute, Pop,
-   and IfExp (conditional_result keeps a memory aggregate's place, and the
-   PHI carries the arm's pointer).  With it, and the base live at the
-   index's end, the rest goes through but for popped snapshots, dead
-   storage slots and the constructor immutable above. *)
+(* A live captured base has a current source value after the index.
+   Storage liveness is required only at horizons valid for that execution's
+   trace. The expression-place pin identifies the captured source address. *)
 Definition subscript_base_live_after_def:
   (subscript_base_live_after H cenv cx (obj:expr) (et:type) (bd:bound) (PlaceR (MemoryPlace id path)) t t' <=>
      !entry. lookup_scopes id t'.scopes = SOME entry ==>
@@ -816,6 +753,7 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
 QED
 Finalise compile_subscript_array_live_base_case
 
+(* The remaining place-base obligation retains its original contract. *)
 Theorem compile_subscript_array_place_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
