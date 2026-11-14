@@ -93,10 +93,10 @@ Proof
       rewrite_tac[gas_summary_at_def] >>
       qexistsl [`INR ex`,`mid`,`r`] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      BETA_TAC >> simp[] >> rpt strip_tac >>
-      `?ex'. INR ex = INR ex' /\ R H (INR ex') (mid with gas_obs := []) r` by
-        metis_tac[] >>
-      gvs[]) >>
+      BETA_TAC >> simp[] >> disj2_tac >> rpt strip_tac >>
+      qpat_x_assum `!H res ee r. Exit H res ee r ==> _`
+        (qspecl_then [`H`, `INR ex`, `mid with gas_obs := []`, `r`] mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >> gvs[]) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ef) (callee,tf)` >>
   rewrite_tac[gas_outcome_def] >> qexists `marks` >> disj2_tac >> disj2_tac >>
@@ -110,12 +110,14 @@ Theorem tuple_place_head_gas_obs[simp]:
     lo cs tys ltys ltvs vs elems w i s =
   tuple_place_head ctx func cenv cx st0 es lo cs tys ltys ltvs vs elems w i s
 Proof
-  `!regions. storage_well_formed_on cx (es with gas_obs := gs) regions <=>
+  `!regions : (bool # bytes32 # type_value) list.
+     storage_well_formed_on cx (es with gas_obs := gs) regions <=>
              storage_well_formed_on cx es regions` by
     (gen_tac >> irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
      simp[]) >>
   simp[tuplePlaceHeadTheory.tuple_place_head_def,
-       tuplePlacePrefixCertTheory.tuple_place_snapshot_def]
+       tuplePlacePrefixCertTheory.tuple_place_snapshot_def] >>
+  qpat_x_assum `!regions. _` (fn th => rewrite_tac[th])
 QED
 
 Theorem tuple_place_target_post_gas_obs[simp]:
@@ -124,6 +126,9 @@ Theorem tuple_place_target_post_gas_obs[simp]:
   (target_post H ctx func cenv cx es sa sb s0 (ee with gas_obs := hs) pv vt r s =
    target_post H ctx func cenv cx es sa sb s0 ee pv vt r s)
 Proof
+  `storage_well_formed_on cx (ee with gas_obs := hs) (FST H) <=>
+   storage_well_formed_on cx ee (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
   simp[loweringPostsTheory.target_post_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def]
 QED
@@ -196,8 +201,11 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx (mid with gas_obs := []) s` by
     (qpat_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.target_post_def])) >>
-  `res = INL ()` by (irule tuple_place_source_write_success >>
-    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> gvs[] >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ _ _`
+    (assume_tac o REWRITE_RULE [exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs)` by metis_tac[] >>
+  drule_all tuplePlaceWriteOutcomeTheory.tuple_place_source_write_success >>
+  disch_then assume_tac >> gvs[] >>
   `expr_sim_inv cenv cx env ff` by
     (irule tuple_place_source_write_endpoint >>
      qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
@@ -249,7 +257,7 @@ Proof
   >- (strip_tac >> qexists `[] ++ right` >> disj1_tac >>
       rewrite_tac[ignore_bind_def] >>
       irule gasStorageTheory.gas_bad_storage_at_bind_right >>
-      qexistsl [`ff`,`t`,`()`] >> simp[]) >>
+      (metis_tac[])) >>
   disch_then (DISJ_CASES_THEN mp_tac)
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `out` (qx_choose_then `fin`
@@ -327,13 +335,17 @@ Proof
        (strip_assume_tac o REWRITE_RULE [tuplePlaceHeadTheory.tuple_place_head_def]) >>
      metis_tac[]) >>
   irule tuple_place_gas_outcome_bind_exec >>
-  goal_assum (drule_at Any) >> simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (rpt strip_tac >> irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
-      simp[vyperStorageTraceTheory.storage_trace_frame_write_place])
+  conj_tac
+  >- (BETA_TAC >> rpt strip_tac >>
+      irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
+  qpat_assum `gas_outcome _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> rpt conj_tac
   >~ [`expr_exit _ _`]
   >- (rpt strip_tac >> Cases_on `res` >>
-      gvs[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      gvs[stmtSimPropsTheory.expr_exit_INR_type])
+  >~ [`?v. _ = INL v`]
+  >- (rpt strip_tac >> metis_tac[]) >>
   rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -343,22 +355,28 @@ Proof
   `target_post H0 ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
      (PlaceR v) (Type (EL i tys)) r t /\
    t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts` by
-    res_tac >>
+    (simp[] >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      target_post H ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
        (PlaceR v) (Type (EL i tys)) r t` by
-    (rpt strip_tac >> res_tac) >>
+    (rpt strip_tac >> simp[] >> metis_tac[]) >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
-  drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >> strip_tac >>
+  drule_all tuple_place_marked_head_step >> strip_tac >>
   irule tuple_place_write_gas_prefix >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   first_x_assum irule >> simp[] >>
-  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[loweringPostsTheory.target_post_def] >> strip_tac >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.target_post_def]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> _` irule >>
+      metis_tac[]) >>
   rpt strip_tac >>
   `not_fresh_at sa x` by
-    (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    (qpat_x_assum `not_fresh_at sp x` mp_tac >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   metis_tac[]
 QED
