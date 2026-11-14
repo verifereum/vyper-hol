@@ -8,7 +8,7 @@ Theorem return_output_alloc_encoder_continuation:
   compile_alloc_buffer msz st = (buf,mid) /\
   compile_abi_encode_to_buf buf.buf_operand src ei mid = (out,en) /\
   fn_has_code st mid func /\ fn_has_code mid en func /\
-  fn_inst_ids_distinct func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_inst_ids_distinct func /\ stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv st /\ msz < dimword (:256) /\
   LENGTH (enc at av) <= msz /\ abi_encoder_admissible ei /\
   abi_encoder_window_input ei at av sb cap s.vs_memory /\
@@ -22,7 +22,7 @@ Theorem return_output_alloc_encoder_continuation:
       b <= sb /\ sb + cap <= b + len)) ==>
   ?u w.
     frag_exec ctx st mid (\z. z = s) (\z. z = u) (\r. F) /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     u.vs_labels = s.vs_labels /\
     contract_storage u = contract_storage s /\
     contract_transient u = contract_transient s /\
@@ -66,7 +66,7 @@ Proof
   `?t. abi_encoder_window_result ctx func mid en out at av (w2n w) u t` by
     (irule return_output_window_run >> goal_assum (drule_at Any) >>
      asm_rewrite_tac[] >>
-     qexistsl_tac [`cap`, `cenv`, `cx`, `buf.buf_operand`, `ei`, `es`,
+     qexistsl_tac [`H`, `cap`, `cenv`, `cx`, `buf.buf_operand`, `ei`, `es`,
                    `msz`, `st.cs_next_id`, `sb`, `src`] >>
      asm_rewrite_tac[n2w_w2n]) >>
   qexists_tac `t` >> simp[] >>

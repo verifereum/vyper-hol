@@ -7,7 +7,7 @@ Ancestors
 
 Theorem return_output_alloc_window:
   compile_alloc_buffer msz st = (buf,mid) /\ fn_has_code st mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ msz < dimword (:256) /\
   eval_operand src s = SOME (n2w sb) /\
   (!x. src = Var x ==> not_fresh_at st x) /\
@@ -20,7 +20,7 @@ Theorem return_output_alloc_window:
       b <= sb /\ sb + cap <= b + len)) ==>
   ?u w.
     frag_exec ctx st mid (\z. z = s) (\z. z = u) (\r. F) /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     eval_operand src u = SOME (n2w sb) /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas st.cs_next_id = SOME (w2n w,msz) /\
@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem return_output_registered_scratch:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   FLOOKUP s.vs_allocas output_id = SOME (d,msz) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit 32w] /\ inst.inst_id <> output_id /\

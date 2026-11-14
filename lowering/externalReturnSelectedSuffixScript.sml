@@ -1,6 +1,6 @@
 (* Successful-read external return consumers. *)
 Theory externalReturnSelectedSuffix
-Ancestors externalReturnSelectedResources externalReturnSiteSemantics
+Ancestors e2eDefs externalReturnSelectedResources externalReturnSiteSemantics
   externalReturnConsumerFit externalReturnSimpleSuffix vyperLoweringCorrect
   typedMemoryCopy loweringPosts exprLoweringProps fragExec compileEnv
   valueCopyBytes valueTypingMemoryProps exprSimProps stmtSimReturn
@@ -118,11 +118,11 @@ Theorem return_site_word_operand:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   is_word_type ret ==>
   ?tv. evaluate_type (get_tenv cx) ret = SOME tv /\
     safe_cast tv v = SOME v /\
-    stmt_state_rel ctx func ce cx ee s /\
+    stmt_state_rel H ctx func ce cx ee s /\
     eval_operand op s = SOME (typed_val_to_w256 tv v)
 Proof
   strip_tac >> drule_all return_site_value_semantics >> strip_tac >>
@@ -137,20 +137,20 @@ Theorem return_prim_suffix_path:
   (!y. op = Var y ==> not_fresh_at st y) /\
   evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
   is_word_type ret /\
-  fn_has_code st st' fn /\ state_rel func cenv cx es s /\
+  fn_has_code st st' fn /\ state_rel H func cenv cx es s /\
   eval_operand op s = SOME (typed_val_to_w256 tv v0) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?n r. gas_path ctx fn s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests) r
 Proof
   Cases_on `x` >> strip_tac >>
   `frag_exec ctx st st'
-    (\s. state_rel func cenv cx es s /\
+    (\s. state_rel H func cenv cx es s /\
          eval_operand op s = SOME (typed_val_to_w256 tv v0)) (\s. F)
-    (external_call_result_rel tops ret tx
+    (external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests))` by
     (irule external_return_prim_result_rel >> simp[] >> metis_tac[]) >>
@@ -163,7 +163,7 @@ Theorem return_site_nonraw_word_path:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   is_word_type ret /\ ~ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
@@ -178,7 +178,7 @@ Theorem return_site_nonraw_word_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -188,7 +188,7 @@ Proof
      ce.ce_max_return_size F nkey ut iv sb = (u,sf)` by
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
-  `state_rel func ce cx ee s` by
+  `state_rel H func ce cx ee s` by
     fs[stmt_state_rel_def] >>
   `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`
     by fs[] >>
@@ -223,13 +223,13 @@ Theorem return_site_nocopy_memory:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\
   (post_value_type ce e = ret \/
     (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) ==>
   ?tv w. evaluate_type (get_tenv cx) ret = SOME tv /\
     safe_cast tv v = SOME v /\ val_wf tv v /\
-    stmt_state_rel ctx func ce cx ee s /\
+    stmt_state_rel H ctx func ce cx ee s /\
     eval_operand op s = SOME w /\
     val_in_memory tv v (w2n w) s.vs_memory /\
     expr_val_at ce cx ret sa sb ee v op s /\
@@ -243,7 +243,7 @@ Proof
           fs[expr_val_rel_def] >>
           drule_all bytestring_val_in_memory_transfer >> simp[])) >>
      drule_all return_bytestring_val_at >> simp[]) >>
-  `stmt_state_rel ctx func ce cx ee s` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx ee s` by fs[expr_post_def] >>
   fs[expr_val_rel_def] >>
   (conj_tac
    >- (qpat_x_assum `!tv. evaluate_type _ ret = SOME tv ==> _`
@@ -264,13 +264,13 @@ Theorem return_selected_nocopy_window:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\ ret <> NoneT /\
   (post_value_type ce e = ret \/
     (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) ==>
   ?tv w ct rv. evaluate_type (type_env tops) ret = SOME tv /\
     safe_cast tv v = SOME v /\
-    stmt_state_rel ctx func ce cx ee s /\
+    stmt_state_rel H ctx func ce cx ee s /\
     eval_operand op s = SOME w /\
     abi_encoder_admissible ce.ce_ret_enc_info /\
     abi_encoder_window_input ce.ce_ret_enc_info ct rv (w2n w)
@@ -303,7 +303,7 @@ QED
 Theorem return_abi_suffix_path:
   compile_external_return (SOME src) F F ei msz F nkey ut iv st = (x,sf) /\
   fn_has_code st sf func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx ee s /\ local_ptrs_reserved ce st /\
   msz < dimword (:256) /\ LENGTH (enc ct rv) <= msz /\
   abi_encoder_admissible ei /\
   abi_encoder_window_input ei ct rv (w2n w) cap s.vs_memory /\
@@ -321,7 +321,7 @@ Theorem return_abi_suffix_path:
   ~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops /\
   return_bytes tops ret v (enc ct rv) ==>
   ?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r
@@ -340,7 +340,7 @@ Proof
    fn_has_code cs'' sf func` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `eval_operand src s = SOME (n2w (w2n w))` by simp[] >>
-  `?fuel. external_call_result_rel tops ret tx
+  `?fuel. external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
       (abstract_machine_from_state am.sources am.exports am.layouts ee),
      ee.requests) (run_from fuel ctx func s)` by
@@ -369,7 +369,7 @@ Theorem return_selected_nocopy_path:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\ ret <> NoneT /\ ~ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
@@ -387,7 +387,7 @@ Theorem return_selected_nocopy_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -406,7 +406,7 @@ Proof
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
@@ -446,7 +446,7 @@ Theorem return_selected_allocated_path:
   compile_external_return (SOME op) F F ce.ce_ret_enc_info
     ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sb /\ stmt_state_rel ctx func ce cx ee s /\
+  local_ptrs_reserved ce sb /\ stmt_state_rel H ctx func ce cx ee s /\
   (!y. op = Var y ==> not_fresh_at sb y) /\
   evaluate_type (get_tenv cx) ret = SOME dtv /\
   eval_operand op s = SOME w /\ val_in_memory dtv v (w2n w) s.vs_memory /\
@@ -457,7 +457,7 @@ Theorem return_selected_allocated_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -475,7 +475,7 @@ Proof
   `val_footprint dtv v <= type_memory_size dtv` by
     (irule externalReturnCopyTransportTheory.return_footprint_le_layout >> gvs[]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
@@ -551,7 +551,7 @@ Theorem return_selected_located_normalize_path:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es se sa s0 ee v src s /\
+  expr_post H ctx func ce cx e es se sa s0 ee v src s /\
   ~is_word_type ret /\ ~is_word_type (post_value_type ce e) /\ ~ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
@@ -568,7 +568,7 @@ Theorem return_selected_located_normalize_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -605,7 +605,7 @@ Theorem return_selected_raw_copy_path:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es se sa s0 ee v src s /\
+  expr_post H ctx func ce cx e es se sa s0 ee v src s /\
   is_bytestring_type ret /\ ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
@@ -622,7 +622,7 @@ Theorem return_selected_raw_copy_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -645,7 +645,7 @@ Proof
   disch_then (qspec_then `func` mp_tac) >> simp[] >>
   disch_then ho_match_mp_tac >>
   rpt strip_tac >>
-  `state_rel func ce cx ee t` by fs[stmt_state_rel_def] >>
+  `state_rel H func ce cx ee t` by fs[stmt_state_rel_def] >>
   `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`
     by fs[] >>
   `evaluate_type (type_env tops) ret = SOME dtv` by metis_tac[] >>
@@ -675,7 +675,7 @@ Theorem return_selected_bufferless_normalize_path:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   ~is_word_type ret /\ ~ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
@@ -691,7 +691,7 @@ Theorem return_selected_bufferless_normalize_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -736,7 +736,7 @@ Theorem return_selected_bufferless_nocopy_path:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   ~is_word_type ret /\ ~ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
@@ -750,7 +750,7 @@ Theorem return_selected_bufferless_nocopy_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -777,7 +777,7 @@ Proof
     (irule externalReturnCopyTransportTheory.return_footprint_le_layout >> simp[]) >>
   `val_footprint dtv v = 0` by decide_tac >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
@@ -849,7 +849,7 @@ Theorem return_selected_located_suffix:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es se sa s0 ee v op s /\
+  expr_post H ctx func ce cx e es se sa s0 ee v op s /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
@@ -864,7 +864,7 @@ Theorem return_selected_located_suffix:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -939,7 +939,7 @@ Theorem return_selected_bufferless_suffix:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
@@ -951,7 +951,7 @@ Theorem return_selected_bufferless_suffix:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)

@@ -64,10 +64,10 @@ Theorem return_alloc_zero_value_run:
   type_memory_size stv = 0 /\ type_memory_size dtv = 0 /\ val_wf dtv v /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t w. stmt_state_rel ctx func ce cx ee t /\
+  ?t w. stmt_state_rel H ctx func ce cx ee t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     eval_operand buf.buf_operand t = SOME w /\
@@ -121,11 +121,11 @@ Theorem return_bufferless_site_alloc_exit:
   compile_store_memory_typed ce buf.buf_operand dst (Lit 0w) phy sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!dtv t w. evaluate_type (get_tenv cx) dst = SOME dtv /\
-    safe_cast dtv v = SOME v /\ stmt_state_rel ctx func ce cx ee t /\
+    safe_cast dtv v = SOME v /\ stmt_state_rel H ctx func ce cx ee t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     eval_operand buf.buf_operand t = SOME w /\
@@ -181,11 +181,11 @@ Theorem return_selected_bufferless_alloc_exit:
   compile_store_memory_typed ce buf.buf_operand dst (Lit 0w) phy sm = ((),sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!dtv t w. evaluate_type (get_tenv cx) dst = SOME dtv /\
-    safe_cast dtv v = SOME v /\ stmt_state_rel ctx func ce cx ee t /\
+    safe_cast dtv v = SOME v /\ stmt_state_rel H ctx func ce cx ee t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     eval_operand buf.buf_operand t = SOME w /\
