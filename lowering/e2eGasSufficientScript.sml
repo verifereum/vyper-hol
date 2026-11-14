@@ -40,12 +40,15 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
-  venomRunBounded unitMemInv
-  asmOptimizer callTrace e2eAsmOpt
+  venomRunBounded unitMemInv o1OpcodeAbsence
+  loweringRuntimeNoCreate venomPipelineDriverProps
+  asmOptimizer callTrace
   e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployMemory ctorDeployDload ctorDeployDead
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
+
+val _ = Parse.hide "tops";
 
 (* ===== add_frame_gas keeps the call's state relation ===== *)
 
@@ -120,10 +123,10 @@ End
 
 (* ===== The call cases ===== *)
 
-(* HELD ADMISSION SEQ-4325: the runtime unit S7g runs reaches no CREATE or
-   CREATE2 whose initcode exceeds the EIP-3860 limit; discharged through
-   S3's mem_safe_step and O1's mem_inv transport, with the size bound taken
-   from the source run's own check, so it survives CreateTarget support. *)
+(* The runtime unit S7g runs reaches no oversized CREATE.
+   supported_program's body_stmt_safe excludes CreateTarget, so the lowering
+   emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
+   holds at every state. *)
 Theorem o1_runtime_unit_create_size_ok:
   !tops rpolicy unit out vs.
     supported_program tops /\
@@ -132,7 +135,22 @@ Theorem o1_runtime_unit_create_size_ok:
     ==>
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >> match_mp_tac mem_inv_create_size_ok_no_create >>
+  conj_tac
+  >- (qpat_x_assum `o1PipelineCorrect$o1_pipeline _ _ = _` mp_tac >>
+      simp[o1PipelineCorrectTheory.o1_pipeline_def] >>
+      disch_then (assume_tac o MATCH_MP run_venom_pipeline_success_unit_wf) >>
+      fs[venomCompilerWfTheory.unit_wf_def]) >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
+    lower_vyper_runtime_unit_no_create >>
+  impl_tac >- fs[] >> disch_tac >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (qspecl_then [`rpolicy`, `unit`, `out`, `CREATE`] mp_tac
+        o1_pipeline_opcode_absence >>
+      impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]) >>
+  qspecl_then [`rpolicy`, `unit`, `out`, `CREATE2`] mp_tac
+    o1_pipeline_opcode_absence >>
+  impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]
 QED
 
 (* vyper_call_correct's hypotheses.  The two that range over the call
@@ -146,7 +164,7 @@ QED
 Theorem vyper_call_gas_sufficient_identity:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\

@@ -901,7 +901,14 @@ Proof
   rpt conj_tac >- gvs[] >- gvs[] >>
   rpt strip_tac >>
   qpat_x_assum `!at. MEM at ps_after.ps_stack \/ _ ==> _`
-    (qspec_then `at` mp_tac) >> gvs[]
+    (qspec_then `at` mp_tac) >>
+  pop_assum mp_tac >>
+  qpat_assum `lo = SND (compute_label_offsets prog)` mp_tac >>
+  qpat_assum `dfg = dfg_build_function fn` mp_tac >>
+  qpat_assum `vs1 = jump_to target vs` mp_tac >>
+  qpat_assum `ps_after.ps_spilled = ps_dfs_after.ps_spilled` mp_tac >>
+  qpat_assum `ps_after.ps_stack = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]
 QED
 
 Theorem body_succ_sym_label:

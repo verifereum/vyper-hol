@@ -4469,76 +4469,9 @@ Proof
        o1PassLiftTheory.frame_result_rel_def, supply_state_agree_def] >> metis_tac[]
 QED
 
-Theorem supply_run_blocks_forward:
-  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
-  EVERY label_positions_ok (fn_insts fn) /\
-  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
-  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
-  build_split_block_supply s pred target = (split,repls,s') /\
-  insert_split_supply s fn pred target = (fn',s') ==>
-  !n u v. supply_entry_pair fn s pred target split repls u v /\
-    terminates (run_blocks n ctx fn u) ==>
-    ?m. frame_result_rel (run_blocks n ctx fn u) (run_blocks m ctx fn' v)
-Proof
-  strip_tac >> completeInduct_on `n` >>
-  `!u v. supply_ready fn pred target split repls u v /\
-     terminates (run_blocks n ctx fn u) ==>
-     ?m. frame_result_rel (run_blocks n ctx fn u) (run_blocks m ctx fn' v)` by
-    (suspend "ready") >>
-  rpt strip_tac >>
-  gvs[supply_entry_pair_def] >>
-  drule_all supply_pending_contract >>
-  disch_then (qspecl_then [`0`, `ctx`] strip_assume_tac) >>
-  first_x_assum (drule_then mp_tac) >> simp[] >> strip_tac >>
-  drule_all supply_pending_split_lookup >> strip_tac >>
-  `~m.vs_halted` by gvs[supply_ready_def] >>
-  drule frame_result_rel_terminates >> strip_tac >>
-  `?N. run_blocks N ctx fn' v = run_blocks m' ctx fn' m` by
-    (irule supply_run_blocks_assemble >> metis_tac[]) >>
-  metis_tac[]
-QED
-
-Resume supply_run_blocks_forward[ready]:
-  rpt strip_tac >> Cases_on `n`
-  >- gvs[Once venomExecSemanticsTheory.run_blocks_def,
-         passSimulationDefsTheory.terminates_def] >>
-  rename1 `SUC k` >>
-  Cases_on `lookup_block u.vs_current_bb fn.fn_blocks`
-  >- gvs[venomExecSemanticsTheory.run_blocks_unfold,
-         passSimulationDefsTheory.terminates_def] >>
-  rename1 `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb` >>
-  drule_all supply_ready_image_lookup >> strip_tac >>
-  drule_all supply_ready_run_block >>
-  disch_then (qspecl_then [`k`, `ctx`] mp_tac) >>
-  Cases_on `run_block_entry k ctx bb u` >>
-  Cases_on `run_block_entry k ctx (supply_block_image pred target split repls bb) v` >>
-  simp[stateEquivTheory.lift_result_def] >> rpt strip_tac >>
-  gvs[venomExecSemanticsTheory.run_blocks_unfold,
-      passSimulationDefsTheory.terminates_def]
-  >- suspend "continue" >>
-  qexists_tac `SUC k` >>
-  simp[venomExecSemanticsTheory.run_blocks_unfold,
-       o1PassLiftTheory.frame_result_rel_def] >>
-  gvs[supply_state_agree_def]
-QED
-
-Resume supply_run_blocks_forward[continue]:
-  `~v'.vs_halted /\ ~v''.vs_halted` by
-    gvs[supply_entry_pair_def, supply_ready_def, supply_pending_def] >>
-  gvs[] >>
-  first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
-  disch_then (drule_then mp_tac) >> simp[] >> strip_tac >>
-  drule frame_result_rel_terminates >> strip_tac >>
-  `?N. run_blocks N ctx fn' v = run_blocks m ctx fn' v''` by
-    (irule supply_run_blocks_assemble >> metis_tac[]) >>
-  metis_tac[]
-QED
-
-Finalise supply_run_blocks_forward
-
 (* The image block run on more fuel gives the same result as the source
    block on less, since a terminating block run is fuel-monotone. *)
-Theorem supply_ready_run_block_fuel:
+Theorem supply_ready_run_block_fuel[local]:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
   EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -4651,6 +4584,22 @@ Resume supply_run_blocks_forward_fuel[continue]:
 QED
 
 Finalise supply_run_blocks_forward_fuel
+
+Theorem supply_run_blocks_forward:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  !n u v. supply_entry_pair fn s pred target split repls u v /\
+    terminates (run_blocks n ctx fn u) ==>
+    ?m. frame_result_rel (run_blocks n ctx fn u) (run_blocks m ctx fn' v)
+Proof
+  strip_tac >> mp_tac supply_run_blocks_forward_fuel >>
+  impl_tac >- simp[] >>
+  rw[supply_entry_pair_def] >> metis_tac[]
+QED
 
 Theorem supply_entry_defined_lookup:
   wf_function fn /\ supply_entry_defined fn u ==>

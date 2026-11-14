@@ -30,7 +30,7 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-Theorem normalize_alloc_registered[local]:
+Theorem normalize_alloc_registered:
   compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
   stmt_state_rel ctx func cenv cx es s /\ n < dimword (:256) /\
   exec_alloca (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)]

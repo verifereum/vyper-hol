@@ -182,7 +182,7 @@ Proof
        asmSemTheory.asm_state_component_equality]
 QED
 
-Theorem merge_iszero_pairs_fst[local]:
+Theorem merge_iszero_pairs_fst:
   FST (merge_iszero_pairs (x :: y :: z :: rest)) =
   if asm_returns_zero_or_one x ∧ y = AsmOp "ISZERO" ∧ z = AsmOp "ISZERO"
   then FST (merge_iszero_pairs (x :: rest))
@@ -310,7 +310,7 @@ Proof
        asmSemTheory.asm_state_component_equality]
 QED
 
-Theorem merge_iszero_jumpi_fst[local]:
+Theorem merge_iszero_jumpi_fst:
   FST (merge_iszero_jumpi (a :: b :: c :: d :: rest)) =
   if a = AsmOp "ISZERO" ∧ b = AsmOp "ISZERO" ∧ asm_is_push_label c ∧
      d = AsmOp "JUMPI"
@@ -348,7 +348,7 @@ QED
 
 (* ===== The rule ===== *)
 
-Theorem merge_iszero_fst[local]:
+Theorem merge_iszero_fst:
   FST (merge_iszero p) =
   FST (merge_iszero_jumpi (FST (merge_iszero_pairs p)))
 Proof

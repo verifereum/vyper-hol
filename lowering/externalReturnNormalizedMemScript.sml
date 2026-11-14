@@ -13,6 +13,7 @@ Ancestors
   valueEncodingProofs vyperABI vyperTypeABI loweringHalt
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 (* A returned value read at its physical (lowered) type: typed there, and
    widening to the return type. *)

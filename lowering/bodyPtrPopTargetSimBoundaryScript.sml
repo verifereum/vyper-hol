@@ -23,37 +23,20 @@ QED
 
 Theorem target_attribute_ptr_premises:
   body_base_target_ptr_ok cx (AttributeTarget bt fld) /\
-  target_pre cenv cx env (AttributeTarget bt fld) es /\
-  (!id. target_root (AttributeTarget bt fld) = NameTarget id ==>
-        local_target_live cx id (AttributeTarget bt fld)) /\
-  (!src id. target_root (AttributeTarget bt fld) =
-             TopLevelNameTarget (src,id) ==>
-             EVERY pure_expr (target_indices (AttributeTarget bt fld))) ==>
-  body_base_target_ptr_ok cx bt /\ target_pre cenv cx env bt es /\
-  (!id. target_root bt = NameTarget id ==> local_target_live cx id bt) /\
-  (!src id. target_root bt = TopLevelNameTarget (src,id) ==>
-             EVERY pure_expr (target_indices bt))
+  target_pre cenv cx env (AttributeTarget bt fld) es ==>
+  body_base_target_ptr_ok cx bt /\ target_pre cenv cx env bt es
 Proof
   simp[body_base_target_ptr_ok_def, target_pre_def, immutable_root_def, target_root_def,
-       target_indices_pre_def, target_indices_def, local_target_live_def]
+       target_indices_pre_def]
 QED
 
 Theorem target_subscript_ptr_premises:
   body_base_target_ptr_ok cx (SubscriptTarget bt e) /\
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (!id. target_root (SubscriptTarget bt e) = NameTarget id ==>
-        local_target_live cx id (SubscriptTarget bt e)) /\
-  (!src id. target_root (SubscriptTarget bt e) =
-             TopLevelNameTarget (src,id) ==>
-             EVERY pure_expr (target_indices (SubscriptTarget bt e))) ==>
-  body_base_target_ptr_ok cx bt /\ target_pre cenv cx env bt es /\
-  (!id. target_root bt = NameTarget id ==> local_target_live cx id bt) /\
-  (!src id. target_root bt = TopLevelNameTarget (src,id) ==>
-             EVERY pure_expr (target_indices bt))
+  target_pre cenv cx env (SubscriptTarget bt e) es ==>
+  body_base_target_ptr_ok cx bt /\ target_pre cenv cx env bt es
 Proof
   simp[body_base_target_ptr_ok_def, target_pre_def, immutable_root_def, target_root_def,
-       target_indices_pre_def, target_indices_def, local_target_live_def,
-       listTheory.EVERY_APPEND] >> metis_tac[]
+       target_indices_pre_def] >> metis_tac[]
 QED
 
 (* Current-value resolution, rather than a historical read_memory_path

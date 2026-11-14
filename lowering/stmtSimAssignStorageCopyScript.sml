@@ -1132,7 +1132,7 @@ Proof
   simp[Abbr `s1`, storage_copy_backend_fold]
 QED
 
-Theorem storage_copy_initial_agree[local]:
+Theorem storage_copy_initial_agree:
   !ctx func cenv cx es s tr.
     stmt_state_rel ctx func cenv cx es s ==>
     storage_agree (storage_dead cx tr (get_storage cx es tr))

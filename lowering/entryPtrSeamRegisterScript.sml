@@ -2442,18 +2442,23 @@ Proof
     (!mem. mem_agree_outside u1.t_mem a.vs_memory mem ==>
       val_in_memory (EL j tvs) (EL j vals) p mem)` by
     (match_mp_tac registration_owned_prefix_invariant_update >>
-     qpat_x_assum `!y. LENGTH args - y < _ ==> _` kall_tac >>
-     qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
-     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
-     gvs[EL_MAP] >>
-     qpat_x_assum `!old q0 p0 n0 tv0 v0. _` mp_tac >>
-     qpat_x_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` mp_tac >>
-     qpat_x_assum `FLOOKUP a.vs_allocas st.cs_next_id = SOME _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> ntac 3 strip_tac >>
-     `st.cs_next_id < mid.cs_next_id` by
-       (qpat_x_assum `!id entry. _` drule >> simp[]) >>
-     rpt gen_tac >> strip_tac >> conj_tac >- decide_tac >>
-     first_x_assum irule >> simp[] >> qexists_tac `old` >> simp[]) >>
+     pure_rewrite_tac [LENGTH_MAP] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `i < LENGTH args`
+          (fn bound => simp_tac bool_ss [EL_MAP, bound]) >>
+        first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (qx_gen_tac `j` >> disch_tac >>
+        `j < LENGTH args` by decide_tac >>
+        qpat_assum `j < LENGTH args`
+          (fn bound => simp_tac bool_ss [EL_MAP, bound]) >>
+        qpat_x_assum `!j. j < i ==> _`
+          (qspec_then `j` (fn th =>
+            qpat_assum `j < i`
+              (ACCEPT_TAC o SIMP_RULE bool_ss [] o MATCH_MP th)))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `ce1 = ce0 with ce_vars := ce1.ce_vars` by
     (qpat_assum `ce1 = ce with ce_vars updated_by _`
        (fn th => pure_rewrite_tac[th]) >>

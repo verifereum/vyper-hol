@@ -329,41 +329,6 @@ Proof
   gvs[venom_frame_rel_def]
 QED
 
-(* A context whose functions have no CREATE or CREATE2 meets
-   inst_create_size_ok at every reachable instruction: the predicate only
-   constrains those two opcodes.  venom_wf supplies the entry the package
-   starts from. *)
-Theorem mem_inv_create_size_ok_no_create:
-  !ctx vs.
-    venom_wf ctx /\
-    (!fn inst. MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
-               inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2) ==>
-    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) ctx vs
-Proof
-  rpt strip_tac >> simp[mem_inv_raw_reachable] >> conj_tac
-  >- (fs[venom_wf_def, ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def] >>
-      Cases_on `lookup_function entry_name ctx.ctx_functions`
-      >- metis_tac[lookup_function_not_mem] >>
-      rename1 `lookup_function _ _ = SOME efn` >>
-      `wf_function efn` by metis_tac[venomInstTheory.lookup_function_MEM] >>
-      Cases_on `efn.fn_blocks` >>
-      fs[wf_function_def, fn_has_entry_def, fn_entry_label_def,
-         entry_block_def]) >>
-  rpt strip_tac >>
-  `lookup_function fn.fn_name ctx.ctx_functions = SOME fn` by
-    (qspecl_then [`K T`, `ctx`, `ctx`, `vs`] mp_tac raw_reachable_ctx_agree >>
-     simp[ctx_agree_def, fn_calls_within_def] >> impl_tac
-     >- simp[listTheory.EVERY_MEM, inst_calls_within_def] >>
-     disch_then drule >> simp[]) >>
-  `MEM inst (fn_insts fn)` by
-    (drule raw_reachable_active >>
-     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
-     metis_tac[listTheory.MEM_EL]) >>
-  `inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
-    metis_tac[venomInstTheory.lookup_function_MEM] >>
-  simp[inst_create_size_ok_def]
-QED
-
 (* The constructor unit's Venom run makes no oversized CREATE: it makes no
    CREATE at all.  constructor_call_free excludes CreateTarget, so the
    lowered entry function has no CREATE, CREATE2 or INVOKE, and no O1 pass
