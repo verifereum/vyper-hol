@@ -4,6 +4,8 @@ Ancestors
   concretizePtrValueTransport concretizePtrDallocaGhostInterface
   concretizePtrScalarCoreProducer concretizePtrShiftProducer
   concretizePtrReturnTransport lowerDloadPtrDalloca
+  concretizePtrCurrentRangeTransport concretizePtrObservationInterface
+  concretizePtrOwnershipErasure concretizePtrDallocaRuntimeCall
   concretizePtrPrefixLedger concretizePtrOpaqueRetpc o1FrameLockstep
   basePtrProofs blockPrefixEquiv ptrDiscipline venomExecSemantics venomState venomInst
   concretizeLayoutLocalShifts contextCodegenRel finite_map pred_set words list
@@ -99,21 +101,21 @@ Theorem ptr_dalloca_runtime_next_mask:
   ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
      ?a b. inst.inst_operands = [a;b]) /\
   (inst.inst_opcode = ASSIGN ==> ?op. inst.inst_operands = [op]) /\
-  ptr_dalloca_ghost_vars G tn.t_var s Gt tnt.t_var t /\
-  (!v site. FLOOKUP Gt v = SOME site ==> FLOOKUP TG v = NONE) /\
+  ptr_dalloca_ghost_vars G tn.t_var s Gout tnt.t_var t /\
+  (!v site. FLOOKUP Gout v = SOME site ==> FLOOKUP TG v = NONE) /\
   (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
-     FLOOKUP Gt v = SOME site) /\
+     FLOOKUP Gout v = SOME site) /\
   ptr_ledger_erases dyn births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\ s.vs_labels = t.vs_labels /\
   ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
      !op. MEM op inst.inst_operands ==>
        ptr_nonopaque_operand f op /\ op_taint tn op = {}) /\
-  LENGTH PT = LENGTH PG /\ LENGTH PG = LENGTH PGt /\
-  (!k site. k < LENGTH PG /\ EL k PGt = SOME site ==>
+  LENGTH PT = LENGTH PG /\ LENGTH PG = LENGTH PGout /\
+  (!k site. k < LENGTH PG /\ EL k PGout = SOME site ==>
      EL k PG = SOME site /\ EL k PT = NONE) /\
   (!k site. k < LENGTH PG /\ EL k PT = NONE /\ EL k PG = SOME site ==>
-     EL k PGt = SOME site) /\
-  (!k site. k < LENGTH PGt /\ EL k PGt = SOME site ==>
+     EL k PGout = SOME site) /\
+  (!k site. k < LENGTH PGout /\ EL k PGout = SOME site ==>
      EL k s.vs_params = EL k t.vs_params) /\
   s.vs_fmp = t.vs_fmp /\
   (inst.inst_opcode = DALLOCA ==>
@@ -123,18 +125,18 @@ Theorem ptr_dalloca_runtime_next_mask:
   step_inst fuel C inst s = OK s' /\ step_inst fuelt Ct instt t = OK t' ==>
   ptr_dalloca_ghost_vars (step_prov PG G inst s') (step_taint inst s s' tn).t_var
     (s' with vs_inst_idx := SUC s.vs_inst_idx)
-    (step_prov PGt Gt instt t') (step_taint instt t t' tnt).t_var
+    (step_prov PGout Gout instt t') (step_taint instt t t' tnt).t_var
     (t' with vs_inst_idx := SUC t.vs_inst_idx) /\
-  (!v site. FLOOKUP (step_prov PGt Gt instt t') v = SOME site ==>
+  (!v site. FLOOKUP (step_prov PGout Gout instt t') v = SOME site ==>
      FLOOKUP (ptr_tagged_step token PT TG inst s') v = NONE) /\
   (!v site. FLOOKUP (ptr_tagged_step token PT TG inst s') v = NONE /\
      FLOOKUP (step_prov PG G inst s') v = SOME site ==>
-     FLOOKUP (step_prov PGt Gt instt t') v = SOME site)
+     FLOOKUP (step_prov PGout Gout instt t') v = SOME site)
 Proof
   strip_tac
   >- (irule ptr_dalloca_runtime_static_next >> metis_tac[]) >>
   qpat_x_assum `instt = inst` SUBST_ALL_TAC >>
-  `!v site. FLOOKUP Gt v = SOME site ==>
+  `!v site. FLOOKUP Gout v = SOME site ==>
      FLOOKUP G v = SOME site /\ FLOOKUP TG v = NONE` by
     (fs[ptr_dalloca_ghost_vars_def] >> metis_tac[]) >>
   drule_all ptr_dalloca_runtime_next_sites >>
@@ -231,10 +233,10 @@ QED
 Theorem ptr_dalloca_positive_retention:
   ptr_ledger_erases dyn births TG G /\
   (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
-     FLOOKUP Gt v = SOME site) /\
+     FLOOKUP Gout v = SOME site) /\
   (!owner b sz. FLOOKUP births owner = SOME (b,sz) ==> b + sz <= dyn) ==>
   !v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
-    FLOOKUP Gt v = SOME (b,sz)
+    FLOOKUP Gout v = SOME (b,sz)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `FLOOKUP TG v` >- metis_tac[] >>
@@ -288,23 +290,23 @@ QED
 
 Theorem ptr_dalloca_compare_transport_positive[local]:
   access_ok lo G fn inst s /\
-  ptr_dalloca_ghost_vars G V s Gt Vt t /\
-  (!v b sz. FLOOKUP Gt v = SOME (b,sz) ==> dyn <= b) /\
+  ptr_dalloca_ghost_vars G V s Gout Vt t /\
+  (!v b sz. FLOOKUP Gout v = SOME (b,sz) ==> dyn <= b) /\
   (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
-    FLOOKUP Gt v = SOME (b,sz)) ==>
+    FLOOKUP Gout v = SOME (b,sz)) ==>
   !u w. (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
          inst.inst_opcode = EQ) /\ inst.inst_operands = [Var u; Var w] /\
-    (u IN FDOM Gt \/ w IN FDOM Gt) ==>
-    ?b sz x y. FLOOKUP Gt u = SOME (b,sz) /\ FLOOKUP Gt w = SOME (b,sz) /\
+    (u IN FDOM Gout \/ w IN FDOM Gout) ==>
+    ?b sz x y. FLOOKUP Gout u = SOME (b,sz) /\ FLOOKUP Gout w = SOME (b,sz) /\
       0 < sz /\ eval_operand (Var u) t = SOME x /\
       eval_operand (Var w) t = SOME y /\
       b <= w2n x /\ w2n x <= b + sz /\
       b <= w2n y /\ w2n y <= b + sz
 Proof
   strip_tac >> rpt gen_tac >> disch_tac >>
-  `FDOM Gt SUBSET FDOM G` by
+  `FDOM Gout SUBSET FDOM G` by
     (simp[SUBSET_DEF, TO_FLOOKUP] >> gen_tac >>
-     Cases_on `FLOOKUP Gt x` >> simp[] >>
+     Cases_on `FLOOKUP Gout x` >> simp[] >>
      drule_all ptr_dalloca_ghost_prov >> simp[]) >>
   `?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
       0 < sz /\ eval_operand (Var u) s = SOME x /\
@@ -313,36 +315,36 @@ Proof
       b <= w2n y /\ w2n y <= b + sz` by
     (fs[access_ok_def, SUBSET_DEF] >> metis_tac[]) >>
   `dyn <= b` by
-    (Cases_on `FLOOKUP Gt u`
-     >- (fs[TO_FLOOKUP] >> Cases_on `FLOOKUP Gt w` >> fs[] >>
-         rename1 `FLOOKUP Gt w = SOME site` >> PairCases_on `site` >>
+    (Cases_on `FLOOKUP Gout u`
+     >- (fs[TO_FLOOKUP] >> Cases_on `FLOOKUP Gout w` >> fs[] >>
+         rename1 `FLOOKUP Gout w = SOME site` >> PairCases_on `site` >>
          drule_all ptr_dalloca_ghost_prov >> strip_tac >> fs[] >> metis_tac[]) >>
-     rename1 `FLOOKUP Gt u = SOME site` >> PairCases_on `site` >>
+     rename1 `FLOOKUP Gout u = SOME site` >> PairCases_on `site` >>
      drule_all ptr_dalloca_ghost_prov >> strip_tac >> fs[] >> metis_tac[]) >>
-  `FLOOKUP Gt u = SOME (b,sz) /\ FLOOKUP Gt w = SOME (b,sz)` by metis_tac[] >>
+  `FLOOKUP Gout u = SOME (b,sz) /\ FLOOKUP Gout w = SOME (b,sz)` by metis_tac[] >>
   fs[ptr_dalloca_ghost_vars_def, eval_operand_def] >> metis_tac[]
 QED
 
 Theorem ptr_dalloca_access_transport_positive:
   access_ok lo G fn inst s /\ lo <= eom /\
-  ptr_dalloca_ghost_vars G tn.t_var s Gt tnt.t_var t /\
+  ptr_dalloca_ghost_vars G tn.t_var s Gout tnt.t_var t /\
   (in_revert_forward fn s ==> in_revert_forward ft t) /\
-  (!v b sz. FLOOKUP Gt v = SOME (b,sz) ==> dyn <= b) /\
+  (!v b sz. FLOOKUP Gout v = SOME (b,sz) ==> dyn <= b) /\
   (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
-    FLOOKUP Gt v = SOME (b,sz)) /\
+    FLOOKUP Gout v = SOME (b,sz)) /\
   (!off len. MEM (off,len) (source_memory_read_ranges inst t) /\ len <> 0 ==>
     ?off_s. MEM (off_s,len) (source_memory_read_ranges inst s) /\
     ((off = off_s /\ (!ops. mem_read_ops inst = SOME ops ==>
-        op_prov G ops.iao_ofst = op_prov Gt ops.iao_ofst)) \/
+        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
      (off + len <= eom /\ (!ops. mem_read_ops inst = SOME ops ==>
-        op_prov Gt ops.iao_ofst = NONE)))) /\
+        op_prov Gout ops.iao_ofst = NONE)))) /\
   (!off len. MEM (off,len) (source_memory_write_ranges inst t) /\ len <> 0 ==>
     ?off_s. MEM (off_s,len) (source_memory_write_ranges inst s) /\
     ((off = off_s /\ (!ops. mem_write_ops inst = SOME ops ==>
-        op_prov G ops.iao_ofst = op_prov Gt ops.iao_ofst)) \/
+        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
      (off + len <= eom /\ (!ops. mem_write_ops inst = SOME ops ==>
-        op_prov Gt ops.iao_ofst = NONE)))) ==>
-  access_ok eom Gt ft inst t
+        op_prov Gout ops.iao_ofst = NONE)))) ==>
+  access_ok eom Gout ft inst t
 Proof
   strip_tac >> rewrite_tac[access_ok_def] >> reverse conj_tac
   >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_compare_transport_positive >>
@@ -364,19 +366,157 @@ Proof
 QED
 
 Theorem ptr_dalloca_untagged_op_prov[local]:
-  ptr_dalloca_ghost_vars G V s Gt Vt t /\
+  ptr_dalloca_ghost_vars G V s Gout Vt t /\
   (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
-     FLOOKUP Gt v = SOME site) /\ op_prov TG op = NONE ==>
-  op_prov G op = op_prov Gt op
+     FLOOKUP Gout v = SOME site) /\ op_prov TG op = NONE ==>
+  op_prov G op = op_prov Gout op
 Proof
   strip_tac >> Cases_on `op` >> gvs[op_prov_def] >>
   rename1 `FLOOKUP TG v = NONE` >>
   qpat_x_assum `ptr_dalloca_ghost_vars _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE[ptr_dalloca_ghost_vars_def]) >>
   qpat_x_assum `!v. op_taint _ _ SUBSET _` kall_tac >>
-  qpat_x_assum `!v site. FLOOKUP Gt v = SOME site ==> _`
+  qpat_x_assum `!v site. FLOOKUP Gout v = SOME site ==> _`
     (qspec_then `v` assume_tac) >>
   qpat_x_assum `!v site. FLOOKUP TG v = NONE /\ _ ==> _`
     (qspec_then `v` assume_tac) >>
-  Cases_on `FLOOKUP G v` >> Cases_on `FLOOKUP Gt v` >> gvs[]
+  Cases_on `FLOOKUP G v` >> Cases_on `FLOOKUP Gout v` >> gvs[]
+QED
+
+(* A tagged descriptor is bounded by its source birth, then relocated into
+   the corresponding static placement. No target access bound is assumed. *)
+Theorem ptr_dalloca_tagged_range[local]:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  ptr_ledger_erases dyn births TG G /\
+  ((rs = source_memory_read_ranges inst s /\ mops = mem_read_ops inst) \/
+   (rs = source_memory_write_ranges inst s /\ mops = mem_write_ops inst)) /\
+  mops = SOME ops /\ MEM (w2n x,len) rs /\ len <> 0 /\
+  op_prov TG ops.iao_ofst = SOME (token,aid) /\
+  ptr_lookup_transport births positions (SOME (token,aid)) {} (SOME x) (SOME y) /\
+  (!b sz p. FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (p,sz) ==>
+    p + sz <= eom /\ p + sz < dimword(:256)) ==>
+  w2n y + len <= eom
+Proof
+  strip_tac >>
+  gvs[ptr_lookup_transport_def, ptr_value_transport_def] >>
+  rename1 `FLOOKUP births (token,aid) = SOME (b,sz)` >>
+  drule ptr_owner_op_projection >>
+  disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
+  simp[ptr_owner_erases_def] >> strip_tac >>
+  `b <= w2n x /\ w2n x + len <= b + sz` by
+    (`?v b' sz'. ops.iao_ofst = Var v /\ FLOOKUP G v = SOME (b',sz') /\
+        b' <= w2n x /\ w2n x + len <= b' + sz'` by
+       (fs[access_ok_def] >>
+        qpat_x_assum `SOME ops = _` (SUBST_ALL_TAC o SYM) >>
+        fs[] >> metis_tac[]) >> gvs[op_prov_def]) >>
+  `pos + sz <= eom /\ pos + sz < dimword(:256)` by metis_tac[] >>
+  `w2n (x - n2w b + n2w pos) + len <= pos + sz` by
+    (irule (cj 2 ptr_owned_range_relocation_probe) >>
+     simp[] >> qexistsl_tac [`b`, `x`] >> simp[]) >> decide_tac
+QED
+
+Theorem ptr_dalloca_range_cases[local]:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+  opaque_use_ok fn /\ label_positions_ok inst /\
+  ptr_ledger_erases dyn births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_mixed_vars births positions TG tn fn ft s t /\
+  s.vs_labels = t.vs_labels /\ taint_ok fn tn inst s /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  ptr_dalloca_ghost_vars G tn.t_var s Gout tnt.t_var t /\
+  (!v site. FLOOKUP Gout v = SOME site ==> FLOOKUP TG v = NONE) /\
+  (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
+    FLOOKUP Gout v = SOME site) /\
+  ((mops = mem_read_ops inst /\ rs = source_memory_read_ranges inst s /\
+      rt = source_memory_read_ranges inst t) \/
+   (mops = mem_write_ops inst /\ rs = source_memory_write_ranges inst s /\
+      rt = source_memory_write_ranges inst t)) /\
+  (!ops token aid b sz p. mops = SOME ops /\
+    op_prov TG ops.iao_ofst = SOME (token,aid) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (p,sz) ==>
+    p + sz <= eom /\ p + sz < dimword(:256)) /\
+  MEM (off,len) rt /\ len <> 0 ==>
+  ?off_s. MEM (off_s,len) rs /\
+    ((off = off_s /\ (!ops. mops = SOME ops ==>
+        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
+     (off + len <= eom /\ (!ops. mops = SOME ops ==>
+        op_prov Gout ops.iao_ofst = NONE)))
+Proof
+  strip_tac >>
+  `!op site. op_prov Gout op = SOME site ==>
+     op_prov G op = SOME site /\ op_prov TG op = NONE` by
+    (rpt gen_tac >> drule_all ptr_dalloca_call_operand >> metis_tac[]) >>
+  `?off_s. MEM (off_s,len) rs /\
+     ((off = off_s /\ ~(?ops. mops = SOME ops /\ op_prov G ops.iao_ofst <> NONE)) \/
+      (?ops x y. mops = SOME ops /\ eval_operand ops.iao_ofst s = SOME x /\
+       eval_operand ops.iao_ofst t = SOME y /\ off_s = w2n x /\ off = w2n y /\
+       ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+         (SOME x) (SOME y)))` by
+    (irule ptr_current_range_transport >> metis_tac[]) >>
+  qexists_tac `off_s` >> simp[] >>
+  (Cases_on `?ops. mops = SOME ops /\ op_prov TG ops.iao_ofst <> NONE`
+  >- (gvs[] >>
+      `op_prov Gout ops.iao_ofst = NONE` by
+        (Cases_on `op_prov Gout ops.iao_ofst` >> gvs[] >> metis_tac[]) >>
+      simp[] >>
+      Cases_on `op_prov TG ops.iao_ofst` >> gvs[] >>
+      rename1 `op_prov TG ops.iao_ofst = SOME owner` >> PairCases_on `owner` >>
+      disj2_tac >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+      irule ptr_dalloca_tagged_range >>
+      qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `ptr_ledger_erases _ _ _ _` (irule_at Any) >>
+      qpat_assum `ptr_lookup_transport _ _ _ _ _ _` (irule_at Any) >>
+      simp[] >> metis_tac[]) >>
+  `off = off_s` by
+    (gvs[] >>
+     `op_prov TG ops.iao_ofst = NONE` by metis_tac[] >>
+     gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
+  `!ops. mops = SOME ops ==>
+     op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst` by
+    (rpt strip_tac >> irule ptr_dalloca_untagged_op_prov >>
+     conj_tac
+     >- (qexists_tac `TG` >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any)) >>
+  disj1_tac >> gvs[])
+QED
+
+(* Local endpoint adapter. The placement premise mentions only owners of
+   the current instruction's memory offsets, not target access ranges. *)
+Theorem ptr_dalloca_access_cases:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+  opaque_use_ok fn /\ label_positions_ok inst /\
+  ptr_ledger_erases dyn births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_mixed_vars births positions TG tn fn ft s t /\
+  s.vs_labels = t.vs_labels /\ taint_ok fn tn inst s /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  ptr_dalloca_ghost_vars G tn.t_var s Gout tnt.t_var t /\
+  (!v site. FLOOKUP Gout v = SOME site ==> FLOOKUP TG v = NONE) /\
+  (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
+    FLOOKUP Gout v = SOME site) /\
+  (!ops token aid b sz p.
+    (mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops) /\
+    op_prov TG ops.iao_ofst = SOME (token,aid) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (p,sz) ==>
+    p + sz <= eom /\ p + sz < dimword(:256)) ==>
+  (!off len. MEM (off,len) (source_memory_read_ranges inst t) /\ len <> 0 ==>
+    ?off_s. MEM (off_s,len) (source_memory_read_ranges inst s) /\
+      ((off = off_s /\ (!ops. mem_read_ops inst = SOME ops ==>
+          op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
+       (off + len <= eom /\ (!ops. mem_read_ops inst = SOME ops ==>
+          op_prov Gout ops.iao_ofst = NONE)))) /\
+  (!off len. MEM (off,len) (source_memory_write_ranges inst t) /\ len <> 0 ==>
+    ?off_s. MEM (off_s,len) (source_memory_write_ranges inst s) /\
+      ((off = off_s /\ (!ops. mem_write_ops inst = SOME ops ==>
+          op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
+       (off + len <= eom /\ (!ops. mem_write_ops inst = SOME ops ==>
+          op_prov Gout ops.iao_ofst = NONE))))
+Proof
+  strip_tac >> conj_tac >> rpt gen_tac >> disch_tac >>
+  irule ptr_dalloca_range_cases >>
+  qpat_assum `ptr_mixed_vars _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_dalloca_ghost_vars _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_ledger_erases _ _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[]
 QED
