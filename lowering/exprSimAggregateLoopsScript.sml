@@ -818,7 +818,9 @@ Proof
   >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_expr _ _) _ _ _`
         (irule o MATCH_MP aggregate_tuple_gas_outcome_mono) >>
       simp[] >> rpt strip_tac >>
-      Cases_on `res` >> gvs[expr_exit_def])
+      qpat_x_assum `expr_exit res r` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `res` >> simp[expr_exit_def])
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[storage_trace_frame_read_result] >> gen_tac >>
       irule storage_trace_frame_bind_all >>
