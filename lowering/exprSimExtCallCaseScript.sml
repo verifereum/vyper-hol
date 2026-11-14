@@ -347,6 +347,34 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
+Theorem extcall_default_ready_prefix_frame:
+  extcall_default_ready cx rt hd dop dt dv s /\
+  safe_operand st dop /\
+  (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!d w tv. dv = SOME d /\ ~is_word_type dt /\
+     eval_operand dop s = SOME w /\
+     evaluate_type (get_tenv cx) dt = SOME tv ==>
+     mem_bytes_at (w2n w) (val_footprint tv d) t.vs_memory =
+     mem_bytes_at (w2n w) (val_footprint tv d) s.vs_memory) ==>
+  extcall_default_ready cx rt hd dop dt dv t
+Proof
+  strip_tac >>
+  `!w. eval_operand dop s = SOME w ==> eval_operand dop t = SOME w` by
+    (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
+     fs[exprSafeOperandTheory.safe_operand_def] >>
+     qexistsl_tac [`st`, `s`] >> metis_tac[]) >>
+  fs[extcall_default_ready_def] >> rpt strip_tac >>
+  qpat_x_assum `!d. dv = SOME d ==> _` drule >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  qexistsl_tac [`tv`, `rtv`, `w`] >> simp[] >>
+  reverse conj_tac >- (strip_tac >> gvs[] >> decide_tac) >>
+  Cases_on `is_word_type dt`
+  >- gvs[loweringPostsTheory.expr_val_rel_def] >>
+  irule exprSimPropsTheory.expr_val_rel_footprint_agree >>
+  simp[] >> qexists_tac `s` >> metis_tac[]
+QED
+
 Theorem extcall_request_default_frame:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
