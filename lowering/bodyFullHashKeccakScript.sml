@@ -272,6 +272,9 @@ Resume keccak_vv_sim_full[fixed]:
     (qpat_assum `lower_value _ _ _ _ sa = _`
       (mp_tac o MATCH_MP (cj 2 compile_expr_grows)) >> simp[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> simp[is_word_type_def]) >>
+  `expr_store_bound cx (expr_type e) (BytesV bs) v s` by metis_tac[] >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by
     (qpat_assum `expr_post _ _ _ _ _ e es sa sm s0 mid (BytesV bs) v s`
        (mp_then Any mp_tac keccak_typed_suffix_mem_ok_open_free) >>

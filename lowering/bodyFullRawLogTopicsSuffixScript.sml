@@ -382,6 +382,10 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
      fs[EVERY_APPEND, EVERY_MAP] >>
      irule vyperTypeArgFitsTheory.arg_type_fits_prim_word >>
      simp[vyperTypeSystemTheory.is_prim_word_type_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> simp[is_word_type_def]) >>
+  qpat_assum `post_value_type cenv e = expr_type e`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `(!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l)` by
     (`is_word_type (expr_type e)` by simp[is_word_type_def] >>
      drule_all expr_body_pre_lower_value_word_shape >> simp[]) >>

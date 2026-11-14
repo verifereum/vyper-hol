@@ -436,6 +436,9 @@ Resume sha_vv_sim_full[fixed]:
 QED
 
 Resume sha_vv_sim_full[fixed_outcome]:
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> simp[is_word_type_def]) >>
+  `expr_store_bound cx (expr_type e) (BytesV bs) v s` by metis_tac[] >>
   `sn.cs_current_bb = sm.cs_current_bb /\
    sn.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sn /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
