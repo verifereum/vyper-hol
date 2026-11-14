@@ -419,39 +419,6 @@ Proof
     mp_tac >> asm_rewrite_tac[] >> strip_tac >> asm_rewrite_tac[]
 QED
 
-Theorem ptr_demand_same_owner_write_exclusion_upto[local]:
-  ptr_demand_interval_view R vs C C' h endpoint ht at done tokens registry births
-    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
-    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
-  EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
-  ptr_lookup_transport bj positions (op_prov TGj ops.iao_ofst)
-    (op_taint (EL j h).po_taint ops.iao_ofst)
-    (eval_operand ops.iao_ofst src) (eval_operand ops.iao_ofst tgt) /\
-  ptr_lookup_transport bj positions (op_prov TGj sizeop)
-    (op_taint (EL j h).po_taint sizeop)
-    (eval_operand sizeop src) (eval_operand sizeop tgt) /\
-  (!op. IS_SOME (eval_operand op src) = IS_SOME (eval_operand op tgt)) /\
-  src.vs_labels = tgt.vs_labels /\
-  mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
-  eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
-  op_prov TGj ops.iao_ofst = SOME (token,aid) /\
-  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
-  op_prov TGj sizeop = NONE /\ op_taint (EL j h).po_taint sizeop = {} /\
-  b <= w2n x /\ w2n x + w2n z <= b+sz /\ pa+sz < dimword(:256) /\
-  (MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
-    LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
-  b+k NOTIN range_bytes (step_writes inst src posts) ==>
-  pa+k NOTIN range_bytes (step_writes inst tgt postt)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_demand_interval_snapshot_upto >> strip_tac >>
-  drule_all ptr_demand_interval_owner_at_upto >> strip_tac >>
-  `k < sz` by fs[] >>
-  drule_all ptr_write_transport_owner_exact >>
-  asm_rewrite_tac[]
-QED
-
-
 Theorem ptr_demand_owner_layout_structural:
   vs.vs_allocas = FEMPTY /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   ~ctx_has_dalloca C /\

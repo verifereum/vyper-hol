@@ -112,28 +112,6 @@ Proof
   simp[venom_call_request_def]
 QED
 
-Theorem ptr_create_family_execution[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t /\
-  exec_create inst t value ot sz salt = OK z ==>
-  ?u. exec_create inst s value off sz salt = OK u /\
-      u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
-      (!out. inst.inst_outputs = [out] ==> lookup_var out u = lookup_var out z)
-Proof
-  strip_tac >>
-  `venom_create_request s value off sz salt = venom_create_request t value ot sz salt` by
-    (irule ptr_create_family_request >> metis_tac[]) >>
-  qpat_x_assum `exec_create _ _ _ _ _ _ = OK _` mp_tac >>
-  simp[exec_create_def, AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
-  strip_tac >> gvs[Excl "consume_create_outcome_eq"] >>
-  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) s` >>
-  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) t` >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  drule_all ptr_create_family_completion >>
-  simp[ptr_history_content_update_var, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
 Theorem ptr_create_family_mixed_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\

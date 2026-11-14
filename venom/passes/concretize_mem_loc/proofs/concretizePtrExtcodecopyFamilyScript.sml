@@ -48,18 +48,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_extcodecopy_footprint[local]:
-  inst.inst_opcode = EXTCODECOPY /\ inst.inst_operands = [a;d;r;n] /\
-  eval_operand a s = SOME addr /\ eval_operand d s = SOME dst /\
-  eval_operand r s = SOME src /\ eval_operand n s = SOME sz ==>
-  (i IN range_bytes (step_writes inst s post) <=>
-   w2n dst <= i /\ i < w2n dst + w2n sz)
-Proof
-  simp[step_writes_def, source_memory_write_ranges_def,
-       sized_source_write_range_def, range_bytes_def,
-       arithmeticTheory.ADD_COMM]
-QED
-
 Theorem ptr_extcodecopy_scalar_discipline[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
