@@ -28,7 +28,7 @@ QED
 
 Theorem append_aggregate_rhs_memory:
   supported_pure_expr tops e /\
-  expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
   expr_store_bound cx (expr_type e) v op s ==>
@@ -84,7 +84,9 @@ Theorem append_aggregate_target_layout:
     lookup_var_slot_from_layout cx (mut = Transient) src id = SOME rslot /\
     eval_target_place cx (TopLevelNameTarget (src,id)) es =
       (INL (StoragePlace (mut = Transient) (n2w rslot)
-        (ArrayTV tv (Dynamic dn))),es)
+        (ArrayTV tv (Dynamic dn))),
+       es with storage_trace := es.storage_trace ++
+         [StorageRoot (mut = Transient) rslot (ArrayTV tv (Dynamic dn))])
 Proof
   strip_tac >>
   `ALL_DISTINCT
