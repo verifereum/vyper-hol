@@ -12,7 +12,7 @@ Ancestors
   venomExecSemantics venomExecProps venomInst callLayoutDefs opcodeClass
   list
 
-Theorem step_inst_IntRet_opcode[local]:
+Theorem step_inst_IntRet_opcode:
   step_inst fuel ctx inst s = IntRet v t ==>
   is_raw_return_opcode inst.inst_opcode
 Proof

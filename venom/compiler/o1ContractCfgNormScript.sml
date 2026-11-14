@@ -1279,6 +1279,48 @@ Proof
   simp[active_inst_def] >> qexists_tac `bb` >> simp[]
 QED
 
+Theorem supply_body_cursor_projection:
+  MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\
+  next = EL i (supply_block_image pred target split repls bb).bb_instructions /\
+  inst_wf inst /\ label_positions_ok inst /\ supply_state_agree fn a v ==>
+  mem_corr inst a next v /\ call_corr inst a next v
+Proof
+  strip_tac >>
+  `next.inst_opcode = inst.inst_opcode` by metis_tac[supply_block_image_index] >>
+  Cases_on `MEM inst.inst_opcode [PHI; JMP; JNZ]`
+  >- (`inst_mem_ranges next v = []` by
+        (irule supply_inst_mem_ranges_empty >> gvs[]) >>
+      gvs[mem_corr_def, call_corr_def, supply_state_agree_def, stateFrameTheory.execution_frame_def]) >>
+  `next = inst` by
+    (gvs[] >> irule supply_block_image_index_unchanged >> simp[]) >>
+  gvs[] >> irule supply_unchanged_inst_projection >> metis_tac[listTheory.EL_MEM]
+QED
+
+Theorem supply_body_cursor_revert_forward:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  EVERY label_positions_ok bb.bb_instructions /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s1) /\
+  insert_split_supply s fn pred target = (next_fn,s1) /\
+  a.vs_current_bb = bb.bb_label /\ v.vs_current_bb = bb.bb_label /\
+  a.vs_inst_idx = v.vs_inst_idx /\ in_revert_forward fn a ==>
+  in_revert_forward next_fn v
+Proof
+  strip_tac >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  `revert_forward_at bb a.vs_inst_idx` by gvs[in_revert_forward_def] >>
+  `~MEM split.bb_label (fn_labels fn)` by metis_tac[supply_split_label_not_old] >>
+  `split.bb_label <> bb.bb_label` by
+    (gvs[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `lookup_block bb.bb_label next_fn.fn_blocks =
+     SOME (supply_block_image pred target split repls bb)` by
+    (irule insert_split_supply_image_lookup >> metis_tac[]) >>
+  simp[in_revert_forward_def] >>
+  irule supply_block_image_revert_forward_at >> metis_tac[]
+QED
+
 Theorem supply_frame_body_projection:
   wf_function fn /\ fn_inst_wf fn /\
   EVERY label_positions_ok (fn_insts fn) /\
@@ -1295,14 +1337,7 @@ Proof
     (drule_all EVERY_fn_block >>
      gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
   qexistsl [`inst`, `a`] >> simp[] >>
-  Cases_on `MEM inst.inst_opcode [PHI; JMP; JNZ]`
-  >- (`inst_mem_ranges inst' v = []` by
-        (irule supply_inst_mem_ranges_empty >> gvs[]) >>
-      gvs[mem_corr_def, call_corr_def, supply_state_agree_def,
-          stateFrameTheory.execution_frame_def]) >>
-  `inst' = inst` by
-    (gvs[] >> irule supply_block_image_index_unchanged >> simp[]) >>
-  gvs[] >> irule supply_unchanged_inst_projection >> metis_tac[]
+  irule supply_body_cursor_projection >> simp[] >> metis_tac[]
 QED
 
 Theorem supply_frame_body_projection_rf:
@@ -1327,25 +1362,10 @@ Proof
     (drule_all EVERY_fn_block >>
      gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `~in_revert_forward fn a` by
-    (strip_tac >> gvs[contextCodegenRelTheory.in_revert_forward_def] >>
-     `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-       (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
-     gvs[] >>
-     `~MEM split.bb_label (fn_labels fn)` by metis_tac[supply_split_label_not_old] >>
-     `split.bb_label <> bb.bb_label` by
-       (gvs[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
-     `lookup_block bb.bb_label fn'.fn_blocks =
-        SOME (supply_block_image pred target split repls bb)` by
-       (irule insert_split_supply_image_lookup >> metis_tac[]) >>
-     `revert_forward_at (supply_block_image pred target split repls bb) v.vs_inst_idx` by
-       (irule supply_block_image_revert_forward_at >> metis_tac[]) >> metis_tac[]) >>
-  qexistsl [`inst`,`a`] >> simp[] >>
-  `~MEM inst.inst_opcode [PHI; JMP; JNZ]` by
-    (strip_tac >> `inst_mem_ranges inst' v = []` by
-       (irule supply_inst_mem_ranges_empty >> gvs[]) >> gvs[]) >>
-  `inst' = inst` by
-    (gvs[] >> irule supply_block_image_index_unchanged >> simp[]) >>
-  gvs[] >> metis_tac[supply_unchanged_inst_projection]
+    (strip_tac >> drule_all supply_body_cursor_revert_forward >> simp[]) >>
+  `mem_corr inst a inst' v /\ call_corr inst a inst' v` by
+    (irule supply_body_cursor_projection >> simp[] >> metis_tac[]) >>
+  qexistsl [`inst`,`a`] >> simp[]
 QED
 
 Theorem supply_frame_split_projection:

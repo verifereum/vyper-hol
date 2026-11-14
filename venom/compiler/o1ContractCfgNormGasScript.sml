@@ -1,7 +1,9 @@
 (* Reached GAS prefixes through the dispatched CFG normalization stage. *)
 Theory o1ContractCfgNormGas
 Ancestors
-  o1ContractCfgNorm gasEventsContext gasEventsFuel gasEvents o1PassLift
+  o1ContractCfgNorm o1ContractCfgNormCursorBlocks o1ContractCfgNormCursorReturns
+  o1ContractCfgNormCursorProjection
+  gasEventsContext gasEventsFuel gasEvents o1PassLift
   o1PassContract venomExecSemantics venomExecProofs venomInst venomState
   venomWf list option pair cfgNormSupplySim cfgNormDefs o1SafeUpto unitMemInv
   frameFinitePrefix rich_list arithmetic
