@@ -48,10 +48,6 @@ P2 is ported. These still differ from the oracle with it:
   `DynArray` as `raw_log` topics (only a literal list is accepted), as
   `raw_log_rejects_constant_topics` in `tests/vyperRawSystemTypingTestScript.sml`
   records.
-- `raw-system/rr_local`: the HOL lowering sizes the `concat` result by its
-  target's bound (40) where Python sums the argument bounds (10 + 10), which
-  moves a later buffer from `0x40` to `0x60`. This isn't from #5127: main
-  without P1 or P2 shows it too.
 - `builtin-forms/concat_wide_local`
 
 ## P4 (direct ABI encoder)
@@ -142,3 +138,12 @@ They remain out of parity until regenerated with that fix.
 ## Not yet attributed
 
 - `memory-stores/w01_return_intcall_dynarray_bytes_widen`
+
+## Constant folding (#543), not #5127
+
+- `raw-system/rl05_3topics_concat`: HOL hashes the literal `b"x"` at runtime
+  with `KECCAK256`, while the pinned Python compiler embeds the constant hash.
+  The retained `rl07_3topics_concat_nolit` fixture checks the nonliteral path.
+  This remains outside exact bytecode parity until
+  [#543](https://github.com/verifereum/vyper-hol/issues/543) supplies the same
+  compile-time folding.
