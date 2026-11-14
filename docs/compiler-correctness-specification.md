@@ -213,8 +213,15 @@ them to EVM readings. The old
   success regardless of resources; the companion `vyper_call_gas_sufficient`
   does: with enough gas the run exists, and, provided the call trace's outcomes are
   storage-valid (`call_outcomes_storage_ok`) and none of its source
-  observations is exempt (`~source_exempt`), the frame runs out of gas only
-  if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`).
+  observations is exempt (`~gas_source_exempt`), the frame runs out of gas only
+  if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`). The identity
+  case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
+  assembly-optimizer case remains admitted, so the general companion is not
+  an admission-free result. The deploy companion `e2e_deploy_gas_sufficient`
+  similarly composes proved stage bounds; under its source-exemption and
+  storage premises, OutOfGas implies oversized deposited code or a reached
+  `RETURNDATACOPY`. The per-finalizer case theorems give the stronger
+  code-size-only alternative. Its assembly-optimizer case also remains admitted.
 - Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing
   STATICCALL is not a static-entry guarantee. Environmental satisfiability,
