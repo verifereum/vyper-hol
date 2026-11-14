@@ -27,11 +27,11 @@ Proof
     (rpt strip_tac >> irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   simp[compile_builtin_dispatch_body_def] >>
   Cases_on `is_bytestring_type (expr_type (HD args))`
-  >- (simp[] >> pairarg_tac >> simp[outcomes_free_as_stack_val] >>
+  >- (simp[] >> pairarg_tac >> simp[as_stack_val_state] >>
       metis_tac[pairTheory.SND]) >>
   simp[] >> Cases_on `expr_type (HD args)` >>
   simp[] >> rpt (CASE_TAC >> simp[]) >>
-  pairarg_tac >> simp[outcomes_free_as_stack_val] >>
+  pairarg_tac >> simp[as_stack_val_state] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -90,10 +90,10 @@ Proof
                (gvs[] >> metis_tac[outcomes_free_make_array_children]) >>
              pairarg_tac >> simp[] >>
              `Q st2` by metis_tac[pairTheory.SND] >>
-             Cases_on `op = In` >> simp[outcomes_free_as_stack_val]) >>
-          pairarg_tac >> simp[outcomes_free_as_stack_val] >>
+             Cases_on `op = In` >> simp[as_stack_val_state]) >>
+          pairarg_tac >> simp[as_stack_val_state] >>
           fs[] >> metis_tac[pairTheory.SND]) >>
-      pairarg_tac >> simp[outcomes_free_as_stack_val] >>
+      pairarg_tac >> simp[as_stack_val_state] >>
       fs[] >> metis_tac[pairTheory.SND]) >>
   simp[] >>
   Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)`
@@ -107,9 +107,9 @@ Proof
       `Q st2` by metis_tac[pairTheory.SND] >>
       pairarg_tac >> simp[] >>
       `Q st4` by metis_tac[pairTheory.SND] >>
-      Cases_on `op = Eq` >> simp[outcomes_free_as_stack_val] >>
-      pairarg_tac >> simp[outcomes_free_as_stack_val] >>
+      Cases_on `op = Eq` >> simp[as_stack_val_state] >>
+      pairarg_tac >> simp[as_stack_val_state] >>
       metis_tac[pairTheory.SND]) >>
-  simp[] >> ntac 2 (pairarg_tac >> simp[outcomes_free_as_stack_val]) >>
+  simp[] >> ntac 2 (pairarg_tac >> simp[as_stack_val_state]) >>
   metis_tac[pairTheory.SND]
 QED

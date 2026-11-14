@@ -154,7 +154,7 @@ Theorem o1_label_flow_enriched_contracts:
     (\k f. o1_fn_row k f /\ label_flow_row_extra ctx k f)
     rp 0 o1_fn_passes
 Proof
-  mp_tac (Q.SPEC `rp` (GEN_ALL o1_label_flow_static_steps)) >>
+  mp_tac (Q.SPEC `rp` (GEN_ALL o1_fn_passes_steps)) >>
   disch_then (mp_tac o MATCH_MP o1_step_contracts_from_rows) >>
   rewrite_tac[o1_fn_passes_def, rows_step_contracts_from_def] >> strip_tac >>
   rpt conj_tac >> irule rows_step_contract_enrich_invariant >> simp[]

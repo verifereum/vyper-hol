@@ -241,8 +241,8 @@ Proof
         (rpt strip_tac >>
          irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
       IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
-      simp[outcomes_free_as_ptr_val] >> metis_tac[pairTheory.SND]) >>
-  rpt (pairarg_tac >> simp[]) >> simp[outcomes_free_as_ptr_val] >>
+      simp[as_ptr_val_state] >> metis_tac[pairTheory.SND]) >>
+  rpt (pairarg_tac >> simp[]) >> simp[as_ptr_val_state] >>
   metis_tac[pairTheory.SND]
 QED
 

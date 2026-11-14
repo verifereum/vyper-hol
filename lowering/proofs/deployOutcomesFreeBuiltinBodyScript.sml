@@ -39,7 +39,7 @@ Proof
     (rpt strip_tac >> irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   Cases_on `bi` >> gvs[] >>
   simp[compile_builtin_dispatch_body_def] >>
-  pairarg_tac >> simp[outcomes_free_as_stack_val, outcomes_free_as_ptr_val] >>
+  pairarg_tac >> simp[as_stack_val_state, as_ptr_val_state] >>
   metis_tac[pairTheory.SND]
 QED
 

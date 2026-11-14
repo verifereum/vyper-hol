@@ -1,5 +1,6 @@
 Theory o1SymStaticPipeline
 Ancestors
+  o1LabelFlowStaticContracts
   o1SymStaticSimple o1SymStaticMakeSSA o1SymStaticSimplifyCFG
   o1SymStaticCFGNormalization o1SymStaticFMP o1SymStaticSchedule
   o1PipelineCorrect o1PipelineCompose o1ComposeSupport

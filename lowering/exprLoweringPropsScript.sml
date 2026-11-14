@@ -2342,18 +2342,6 @@ val () = List.app (fn (name,theorem) =>
    ("ci_mono_compile_keccak256_key",ci_mono_compile_keccak256_key),
    ("ci_mono_compile_make_array_cfn",ci_mono_compile_make_array_cfn)]
 
-Theorem ci_mono_as_stack_val[local]:
-  ∀ ty p sa. SND (as_stack_val ty p) = SND p
-Proof
-  rpt gen_tac >> Cases_on `p` >> simp[as_stack_val_def]
-QED
-
-Theorem ci_mono_as_ptr_val[local]:
-  ∀ ty loc p sa. SND (as_ptr_val ty loc p) = SND p
-Proof
-  rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
-QED
-
 Theorem ci_mono_compile_clamp[local]:
   ∀ val_op ty sa. ci_mono sa (SND (compile_clamp val_op ty sa))
 Proof
@@ -2686,7 +2674,7 @@ Proof
     (drule ci_mono_bytestring_hash_selection >>
      disch_then (qspecl_then [`expr_type (HD args)`, `HD (TL args)`, `st2`] mp_tac) >> simp[]) >>
   Cases_on `emit_op EQ [h1;h2] st4` >>
-  gvs[ci_mono_as_stack_val] >>
+  gvs[as_stack_val_state] >>
   `ci_mono st st4` by metis_tac[ci_mono_trans] >>
   `ci_mono st4 r` by
     (mp_tac (Q.SPECL [`EQ`, `[h1;h2]`, `st4`] ci_mono_emit_op) >> simp[]) >>
@@ -4229,7 +4217,7 @@ Theorem ci_mono_compile_create_target_call[local]:
       (CreateTarget ck salted rof order) args default_ret sa))
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[compile_call_def, ci_mono_as_stack_val] >>
+  simp[compile_call_def, as_stack_val_state] >>
   irule ci_mono_compile_create_call >> simp[]
 QED
 
@@ -4556,7 +4544,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_compile_name_vv, ci_mono_unwrap_value]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_addmod,
+  simp[as_stack_val_state, ci_mono_compile_addmod,
        ci_mono_compile_mulmod, ci_mono_compile_pow_mod256]
 QED
 
@@ -4606,7 +4594,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn, ci_mono_compile_keccak256_word]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_as_ptr_val,
+  simp[as_stack_val_state, as_ptr_val_state,
        ci_mono_compile_neg_helper, ci_mono_compile_builtin_abs,
        ci_mono_compile_blockhash, ci_mono_compile_blobhash,
        ci_mono_compile_ceil, ci_mono_compile_floor,
@@ -4622,7 +4610,7 @@ Proof
   strip_tac >> Cases_on `method_id_literal (HD args)` >>
   simp[compile_builtin_dispatch_body_def, LET_THM, ci_mono_compile_literal_vv] >>
   irule ci_mono_uncurry >> reverse conj_tac >- simp[ci_mono_lower_value_cfn] >>
-  rw[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_compile_method_id_runtime]
+  rw[as_stack_val_state, as_ptr_val_state, ci_mono_compile_method_id_runtime]
 QED
 
 Theorem ci_mono_builtin_branching_scalar[local]:
@@ -4637,7 +4625,7 @@ Proof
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
   rpt IF_CASES_TAC >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_invert, ci_mono_emit_op,
+  simp[as_stack_val_state, ci_mono_compile_invert, ci_mono_emit_op,
        ci_mono_compile_builtin_len, ci_mono_compile_builtin_calldatasize,
        ci_mono_compile_as_wei_value_decimal, ci_mono_compile_as_wei_value_int]
 QED
@@ -4648,7 +4636,7 @@ Theorem ci_mono_builtin_environment[local]:
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
   strip_tac >> gen_tac >> Cases_on `bi` >>
-  simp[compile_builtin_dispatch_body_def, LET_THM, ci_mono_as_stack_val,
+  simp[compile_builtin_dispatch_body_def, LET_THM, as_stack_val_state,
        ci_mono_compile_env_var, ci_mono_compile_acc_cfn,
        ci_mono_compile_builtin_calldatasize]
 QED
@@ -4664,7 +4652,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
+  simp[as_stack_val_state, ci_mono_compile_keccak256_bytes,
        ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
        ci_mono_compile_sha256_bytes, ci_mono_compile_sha256_bytesm,
        ci_mono_compile_sha256_word] >>
@@ -4672,11 +4660,11 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word,
+  simp[as_stack_val_state, ci_mono_compile_keccak256_word,
        ci_mono_compile_sha256_word] >>
   rename1 `BytesT bd` >> Cases_on `bd` >> simp[] >>
   irule ci_mono_uncurry >>
-  simp[ci_mono_lower_value_cfn, ci_mono_as_stack_val,
+  simp[ci_mono_lower_value_cfn, as_stack_val_state,
        ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
        ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
 QED
@@ -4690,7 +4678,7 @@ Theorem ci_mono_membership_var_array[local]:
        (f cenv rhs_ty e st)))
 Proof
   rpt strip_tac >> irule ci_mono_uncurry >>
-  gs[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]
+  gs[as_stack_val_state, ci_mono_compile_var_array_membership]
 QED
 
 Theorem ci_mono_builtin_membership[local]:
@@ -4712,7 +4700,7 @@ Proof
   irule ci_mono_uncurry >> reverse conj_tac
   >- simp[ci_mono_compile_multi_exprs] >>
   rpt gen_tac >> BETA_TAC >> rpt IF_CASES_TAC >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
+  simp[as_stack_val_state, ci_mono_compile_list_membership_in,
        ci_mono_compile_list_membership_notin]
 QED
 
@@ -4736,7 +4724,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_emit_op]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_binop, ci_mono_emit_op]
+  simp[as_stack_val_state, ci_mono_compile_binop, ci_mono_emit_op]
 QED
 
 Theorem ci_mono_compile_ecadd_points[local]:
@@ -4786,7 +4774,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn, ci_mono_unwrap_value]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_compile_ecrecover,
+  simp[as_stack_val_state, as_ptr_val_state, ci_mono_compile_ecrecover,
        ci_mono_compile_ecadd_points, ci_mono_compile_ecmul_point]
 QED
 
@@ -4812,7 +4800,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_compile_alloc_buffer]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_ptr_val, ci_mono_compile_make_array_cfn,
+  simp[as_ptr_val_state, ci_mono_compile_make_array_cfn,
        ci_mono_compile_make_tuple_cfn]
 QED
 
@@ -4833,14 +4821,14 @@ Proof
                ci_mono_compile_bytestring_src, ci_mono_compile_alloc_buffer,
                ci_mono_emit_op, ci_mono_emit_void]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_ptr_val, ci_mono_compile_slice_calldata,
+  simp[as_ptr_val_state, ci_mono_compile_slice_calldata,
        ci_mono_compile_slice_code, ci_mono_compile_slice_extcode,
        ci_mono_compile_slice_data] >>
   pairarg_tac >> gvs[] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_ptr_val, ci_mono_compile_slice_extcode, ci_mono_compile_slice_data]
+  simp[as_ptr_val_state, ci_mono_compile_slice_extcode, ci_mono_compile_slice_data]
 QED
 
 Theorem ci_mono_compile_bytestring_widen_copy[local]:
@@ -4861,9 +4849,9 @@ Proof
   >- simp[ci_mono_lower_value_cfn] >>
   rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >- simp[ci_mono_refl] >>
   IF_CASES_TAC
-  >- simp[ci_mono_as_stack_val, ci_mono_compile_bytestring_widen_copy] >>
+  >- simp[as_stack_val_state, ci_mono_compile_bytestring_widen_copy] >>
   Cases_on `ret_ty` >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_type_convert]
+  simp[as_stack_val_state, ci_mono_compile_type_convert]
 QED
 
 Theorem ci_mono_type_builtin_constants[local]:
@@ -4887,7 +4875,7 @@ Proof
        >- simp[ci_mono_lower_value_cfn, ci_mono_compile_bytestring_src,
                ci_mono_compile_extract32_load]
        >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_clamp_basetype]
+  simp[as_stack_val_state, ci_mono_compile_clamp_basetype]
 QED
 
 Theorem ci_mono_compile_abi_encode_args[local]:
@@ -4919,7 +4907,7 @@ Proof
                ci_mono_compile_alloc_buffer, ci_mono_compile_store_abi_tuple,
                ci_mono_emit_void, ci_mono_unwrap_value]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_ptr_val, ci_mono_lower_abi_encode]
+  simp[as_ptr_val_state, ci_mono_lower_abi_encode]
 QED
 
 Theorem ci_mono_type_builtin_abi_decode[local]:
@@ -4931,7 +4919,7 @@ Proof
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_unwrap_value]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_ptr_val, ci_mono_lower_abi_decode]
+  simp[as_ptr_val_state, ci_mono_lower_abi_decode]
 QED
 
 Theorem ci_mono_compile_builtin_dispatch_body[local]:

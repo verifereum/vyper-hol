@@ -1,24 +1,7 @@
 Theory o1LabelFlowMiddleCleanupFlow
 Ancestors
   o1LabelFlowMiddleCleanup codegenSymRel makeSsaDefs
-  makeSsaCurrentLockstepShape venomExecProofs venomInst unitLabelMapIdentity list
-
-Theorem remove_phi_self_operand:
-  !out ops a. MEM a (remove_current_phi_self out ops) ==> MEM a ops
-Proof
-  recInduct remove_current_phi_self_ind >>
-  rpt strip_tac >> gvs[remove_current_phi_self_def] >>
-  Cases_on `v = out` >> gvs[] >> metis_tac[]
-QED
-
-Theorem phi_values_operand:
-  !ops vs. current_phi_values ops = SOME vs ==>
-    !v. MEM v vs ==> MEM (Var v) ops
-Proof
-  recInduct current_phi_values_ind >>
-  simp[current_phi_values_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()] >> metis_tac[]
-QED
+  makeSsaOriginCleanup makeSsaCurrentLockstepShape venomExecProofs venomInst unitLabelMapIdentity list
 
 Theorem simplified_phi_operand:
   MEM (Var v) (simplify_current_phi i).inst_operands ==>
@@ -32,7 +15,7 @@ Proof
   Cases_on `current_phi_values (remove_current_phi_self out i.inst_operands)` >> simp[] >>
   rename1 `current_phi_values _ = SOME vs` >>
   Cases_on `vs` >> simp[] >> IF_CASES_TAC >> simp[] >>
-  metis_tac[phi_values_operand, remove_phi_self_operand, MEM]
+  metis_tac[origin_phi_values_member, origin_remove_self_member, MEM]
 QED
 
 Theorem cleanup_reassign_payloads:

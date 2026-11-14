@@ -2164,6 +2164,18 @@ Definition as_ptr_val_def:
   as_ptr_val ty loc (op, st) = (LocatedValue ty (mk_ptr op loc), st)
 End
 
+Theorem as_stack_val_state:
+  SND (as_stack_val ty m) = SND m
+Proof
+  Cases_on `m` >> simp[as_stack_val_def]
+QED
+
+Theorem as_ptr_val_state:
+  SND (as_ptr_val ty loc m) = SND m
+Proof
+  Cases_on `m` >> simp[as_ptr_val_def]
+QED
+
 (* Compile a Vyper expression to Venom IR instructions.
    Returns the operand holding the result value.
 
