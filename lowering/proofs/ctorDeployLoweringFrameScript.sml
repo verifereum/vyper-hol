@@ -100,7 +100,7 @@ Proof
   simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem deploy_ctor_target_package_immutable[local]:
+Theorem deploy_ctor_target_package_immutable:
   !target tops use_trans nkeys cf cenv args rest.
     set_constructor_package_target target
       (package_constructor tops use_trans nkeys cf) = (cenv,args,rest) ==>
