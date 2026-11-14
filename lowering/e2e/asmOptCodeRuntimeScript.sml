@@ -6,7 +6,9 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect e2eEntry o1PassContract
   e2eComposition e2eProducers o1PipelineCorrect loweringShapeProps loweringShapeSource
   runtimeSymSrcUnit codegenAsmOpt contextCodegenRel ptrDiscipline immutableCodeLayout
-  lowerDloadDefs o1CodeEndOffset
+  lowerDloadDefs o1CodeEndOffset o1LabelFlowCompose
+
+val _ = Parse.hide "tops";
 
 val _ = Parse.hide "tops";
 
@@ -274,7 +276,7 @@ Proof
     (drule_all code_layout_valid_data_section_bound >> simp[]) >>
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   `label_flow_ok out.po_unit.cu_context` by
-    (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
+    (irule o1_pipeline_label_flow_preserved >> metis_tac[]) >>
   `sym_unit_static_ok out.po_unit` by
     (irule o1_pipeline_sym_unit_static_ok >> metis_tac[]) >>
   simp[] >> drule_all o1_pipeline_code_end_offset_ok >> simp[]

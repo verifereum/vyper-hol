@@ -4,26 +4,6 @@ Ancestors
   runtimeSymSrcInterfaces compileEnv emitHelper loweringShapeDefs venomInst list
   stackPlanTypes
 
-Theorem decode_op[local]:
-  emit_op opc ops s = (v,s') ==>
-  opc <> CODESIZE /\ opc <> CODECOPY /\
-  EVERY (\op. ~is_label_operand op) ops /\
-  EVERY runtime_sym_inst (state_insts s) ==>
-  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
-Proof
-  metis_tac[runtime_sym_emit_op]
-QED
-
-Theorem decode_void[local]:
-  emit_void opc ops s = (u,s') ==>
-  opc <> CODESIZE /\ opc <> CODECOPY /\
-  EVERY (\op. ~is_label_operand op) ops /\
-  EVERY runtime_sym_inst (state_insts s) ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  metis_tac[runtime_sym_emit_void]
-QED
-
 Theorem decode_head[local]:
   ~is_label_operand src /\ ~is_label_operand hi /\
   EVERY runtime_sym_inst (state_insts s) /\
@@ -37,7 +17,7 @@ Proof
   simp[comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >- (rpt strip_tac >> gvs[is_label_operand_def]) >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
   drule_all runtime_sym_abi_decode_range_check >> simp[]
 QED
 
@@ -54,7 +34,7 @@ Proof
   simp[comp_return_def, comp_bind_def]
   >- (rpt strip_tac >> gvs[]) >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  ntac 2 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
+  ntac 2 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   drule_all runtime_sym_abi_decode_range_check >> simp[]
 QED
 
@@ -99,9 +79,9 @@ Resume runtime_sym_abi_decode_mutual[prim]:
   drule_all runtime_sym_abi_dec_addr >> strip_tac >>
   gvs[compile_abi_decode_static_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rev_dxrule decode_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   drule_all runtime_sym_abi_clamp_basetype >> strip_tac >>
-  rev_dxrule decode_void >> simp[]
+  rev_dxrule runtime_sym_emit_void_result >> simp[]
 QED
 Resume runtime_sym_abi_decode_mutual[bytes]:
   rpt gen_tac >>
@@ -111,24 +91,24 @@ Resume runtime_sym_abi_decode_mutual[bytes]:
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule_all decode_head >> strip_tac >>
   drule_all runtime_sym_abi_dec_addr >> strip_tac >>
-  ntac 3 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
-  rev_dxrule decode_void >> simp[] >> strip_tac >>
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
   rename1 `(if _ then comp_return () else _) _ = (_,bound_state)` >>
   `EVERY runtime_sym_inst (state_insts bound_state)` by
     (qpat_x_assum `(if _ then comp_return () else _) _ = _` mp_tac >>
      Cases_on `hi = Lit 0w` >>
      simp[comp_return_def, comp_bind_def] >- (strip_tac >> gvs[]) >>
      pairarg_tac >> simp[] >> strip_tac >>
-     rev_dxrule decode_op >> simp[] >> strip_tac >>
+     rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
      drule_all runtime_sym_abi_decode_range_check >> simp[]) >>
   Cases_on `bop = Lit 0w`
-  >- (Cases_on `opc` >> gvs[] >> rev_dxrule decode_void >> simp[is_label_operand_def]) >>
+  >- (Cases_on `opc` >> gvs[] >> rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def]) >>
   gvs[comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  ntac 4 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
-  rev_dxrule decode_void >> simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule decode_void >> simp[is_label_operand_def]
+  ntac 4 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def]
 QED
 Resume runtime_sym_abi_decode_mutual[array]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
@@ -138,25 +118,25 @@ Resume runtime_sym_abi_decode_mutual[array]:
   rpt (pairarg_tac >> first_assum SUBST1_TAC >> simp[NoAsms]) >>
   strip_tac >> drule_all decode_head >> strip_tac >>
   drule_all runtime_sym_abi_dec_addr >> strip_tac >>
-  ntac 3 (rev_dxrule decode_op >>
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >>
     (impl_tac >- (simp[NoAsms, is_label_operand_def] >> rpt conj_tac >>
       first_assum (MATCH_ACCEPT_TAC o REWRITE_RULE [is_label_operand_def]))) >> strip_tac) >>
-  rev_dxrule decode_void >>
+  rev_dxrule runtime_sym_emit_void_result >>
   (impl_tac >- (simp[NoAsms] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)) >>
   strip_tac >>
   drule_all decode_array_bound >> strip_tac >>
-  rev_dxrule decode_op >>
+  rev_dxrule runtime_sym_emit_op_result >>
   (impl_tac >- (simp[NoAsms] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)) >> strip_tac >>
-  rev_dxrule decode_void >>
+  rev_dxrule runtime_sym_emit_void_result >>
   (impl_tac >- (simp[NoAsms] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)) >> strip_tac >>
   Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp ei`
   >- (qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _` kall_tac >>
       gvs[comp_bind_def, comp_ignore_bind_def] >>
       rpt (pairarg_tac >> gvs[]) >>
-      ntac 2 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
+      ntac 2 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
       drule_all runtime_sym_abi_dec_addr >> strip_tac >>
-      rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac >>
-      Cases_on `opc` >> gvs[] >> rev_dxrule decode_void >> simp[]) >>
+      rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+      Cases_on `opc` >> gvs[] >> rev_dxrule runtime_sym_emit_void_result >> simp[]) >>
   qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _`
     (qspec_then `F` mp_tac) >>
   simp[NoAsms] >>
@@ -166,7 +146,7 @@ Resume runtime_sym_abi_decode_mutual[array]:
   simp[comp_bind_def, comp_ignore_bind_def, NoAsms] >>
   rpt (pairarg_tac >> first_assum SUBST1_TAC >> simp[NoAsms]) >> strip_tac >>
   drule_all runtime_sym_alloc_buffer >> strip_tac >>
-  rev_dxrule decode_void >>
+  rev_dxrule runtime_sym_emit_void_result >>
   (impl_tac >- (simp[NoAsms, is_label_operand_def] >> rpt conj_tac >>
     first_assum (MATCH_ACCEPT_TAC o REWRITE_RULE [is_label_operand_def]))) >> strip_tac >>
   first_x_assum drule_all >> simp[NoAsms]
@@ -181,7 +161,7 @@ Resume runtime_sym_abi_decode_mutual[complex]:
         (qspec_then `FOLDR (\(_,a,_) n. a+n) 0 elems` mp_tac) >>
       simp[] >> disch_then drule_all >> simp[]) >>
   ntac 2 (pairarg_tac >> first_assum SUBST1_TAC >> simp[NoAsms]) >> strip_tac >>
-  rev_dxrule decode_op >>
+  rev_dxrule runtime_sym_emit_op_result >>
   (impl_tac >- (simp[NoAsms, is_label_operand_def] >> conj_tac >>
     first_assum (MATCH_ACCEPT_TAC o REWRITE_RULE [is_label_operand_def]))) >>
   strip_tac >>
@@ -199,7 +179,7 @@ Resume runtime_sym_abi_decode_mutual[cons]:
   simp[Once compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def, NoAsms] >>
   rpt (pairarg_tac >> first_assum SUBST1_TAC >> simp[NoAsms]) >> strip_tac >>
   drule_all runtime_sym_getelemptr_abi >> strip_tac >>
-  rev_dxrule decode_op >>
+  rev_dxrule runtime_sym_emit_op_result >>
   (impl_tac >- (simp[NoAsms, is_label_operand_def] >> conj_tac >>
     first_assum (MATCH_ACCEPT_TAC o REWRITE_RULE [is_label_operand_def]))) >>
   strip_tac >> Cases_on `_0` >>
@@ -223,23 +203,23 @@ Resume runtime_sym_abi_decode_mutual[loop]:
   rename1 `new_block hdr_lbl jumped = (bu,blocked)` >>
   `EVERY runtime_sym_inst (state_insts blocked)` by
     metis_tac[runtimeSymSrcEmissionProbeTheory.runtime_sym_new_block, pairTheory.SND] >>
-  rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
   drule_all runtime_sym_abi_dec_addr >> strip_tac >>
-  ntac 3 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   drule_all runtime_sym_jnz >> strip_tac >>
   rename1 `new_block body_lbl bs = (bu2,body_state)` >>
   `EVERY runtime_sym_inst (state_insts body_state)` by
     metis_tac[runtimeSymSrcEmissionProbeTheory.runtime_sym_new_block, pairTheory.SND] >>
-  ntac 4 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
+  ntac 4 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   rename1 `(if dec_info_needs_offset ei then _ else _) nav_s = (actual_src,nav_t)` >>
   `EVERY runtime_sym_inst (state_insts nav_t) /\ ~is_label_operand actual_src` by
     (Cases_on `dec_info_needs_offset ei` >> gvs[comp_return_def] >>
      drule_at (Pat `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _`)
        runtime_sym_abi_decode_dyn_elem_ptr >> simp[]) >>
-  ntac 3 (rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac) >>
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   disch_then drule_all >> strip_tac >>
-  rev_dxrule decode_op >> simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule decode_void >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
   drule_all runtime_sym_jump >> strip_tac >>
   metis_tac[runtimeSymSrcEmissionProbeTheory.runtime_sym_new_block, pairTheory.SND]
 QED

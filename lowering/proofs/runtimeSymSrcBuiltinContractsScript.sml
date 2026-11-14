@@ -13,9 +13,3 @@ Proof
   >- metis_tac[runtime_sym_uint2str] >>
   metis_tac[runtime_sym_builtin_empty_complex]
 QED
-
-Theorem runtime_sym_misc_contract:
-  runtime_sym_misc_clauses
-Proof
-  ACCEPT_TAC runtimeSymSrcBuiltinMiscTheory.runtime_sym_misc_clauses
-QED

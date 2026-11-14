@@ -6,26 +6,6 @@ Ancestors
   loweringShapeDefs venomInst list stackPlanTypes
 
 (* Equation-first versions support forward composition in emission order. *)
-Theorem runtime_sym_sc_op[local]:
-  emit_op opc ops s = (v,s') ==>
-  opc <> CODESIZE /\ opc <> CODECOPY /\
-  EVERY (\op. ~is_label_operand op) ops /\
-  EVERY runtime_sym_inst (state_insts s) ==>
-  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
-Proof
-  metis_tac[runtime_sym_emit_op]
-QED
-
-Theorem runtime_sym_sc_void[local]:
-  emit_void opc ops s = (u,s') ==>
-  opc <> CODESIZE /\ opc <> CODECOPY /\
-  EVERY (\op. ~is_label_operand op) ops /\
-  EVERY runtime_sym_inst (state_insts s) ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  metis_tac[runtime_sym_emit_void]
-QED
-
 Theorem runtime_sym_sc_inst[local]:
   emit_inst opc ops outs s = (u,s') ==>
   opc <> CODESIZE /\ opc <> CODECOPY /\
@@ -53,7 +33,7 @@ Theorem runtime_sym_select:
 Proof
   simp[compile_select_def, comp_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  ntac 3 (rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac) >> simp[]
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac) >> simp[]
 QED
 
 Theorem runtime_sym_send:
@@ -63,8 +43,8 @@ Theorem runtime_sym_send:
 Proof
   simp[compile_send_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[]
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[]
 QED
 
 Theorem runtime_sym_raw_revert:
@@ -73,7 +53,7 @@ Theorem runtime_sym_raw_revert:
 Proof
   simp[compile_raw_revert_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  ntac 2 (rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac) >>
+  ntac 2 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   rev_dxrule runtime_sym_sc_inst >> simp[]
 QED
 
@@ -82,7 +62,7 @@ Theorem runtime_sym_selfdestruct:
   compile_selfdestruct to_op s = (u,s') ==> EVERY runtime_sym_inst (state_insts s')
 Proof
   simp[compile_selfdestruct_def] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[]
+  rev_dxrule runtime_sym_emit_void_result >> simp[]
 QED
 
 Theorem runtime_sym_msg_data_to_memory:
@@ -93,9 +73,9 @@ Theorem runtime_sym_msg_data_to_memory:
 Proof
   simp[compile_msg_data_to_memory_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[comp_return_def] >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   drule_all runtime_sym_alloc_dynamic >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def]
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def]
 QED
 
 Theorem runtime_sym_raw_call_outbuf:
@@ -107,7 +87,7 @@ Proof
   simp[compile_raw_call_outbuf_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[comp_return_def] >>
   rev_dxrule runtime_sym_sc_alloc >> strip_tac >> simp[] >>
-  rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def]
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def]
 QED
 
 Theorem runtime_sym_sc_block[local]:
@@ -132,9 +112,9 @@ Proof
   drule_at (Pat `emit_inst JNZ _ _ _ = _`) runtime_sym_jnz >>
   simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_block >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_alloc >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_inst REVERT _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_sc_inst) >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_block >> simp[]
@@ -149,7 +129,7 @@ Theorem runtime_sym_create_dispatch:
 Proof
   Cases_on `salt` >> simp[compile_create_dispatch_def, comp_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   drule_all runtime_sym_check_create_result >> simp[]
 QED
 
@@ -162,11 +142,11 @@ Proof
   rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >>
   gvs[comp_return_def] >>
   rev_dxrule runtime_sym_sc_alloc >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def] >> strip_tac >>
-  ntac 2 (rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac) >>
-  rev_dxrule runtime_sym_sc_void >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def]
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
+  ntac 2 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def]
 QED
 
 Theorem runtime_sym_create_proxy:
@@ -193,14 +173,14 @@ Proof
   Cases_on `salt` >>
   simp[compile_create_copy_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[] >> strip_tac >>
-  ntac 3 (rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   drule_all runtime_sym_alloc_dynamic >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def] >> strip_tac >>
-  ntac 3 (rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
   drule_all runtime_sym_check_create_result >> simp[]
 QED
 
@@ -213,8 +193,8 @@ Proof
   simp[compile_create_blueprint_check_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >>
   gvs[comp_return_def] >>
-  ntac 3 (rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac) >>
-  rev_dxrule runtime_sym_sc_void >> simp[]
+  ntac 3 (rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac) >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[]
 QED
 
 (* Memory copy safety is supplied by the integrated context boundary. *)
@@ -231,23 +211,23 @@ Proof
   qpat_x_assum `compile_create_blueprint_append _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_create_blueprint_append_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   pairarg_tac >> simp[] >>
   drule_all runtime_sym_alloc_dynamic >> strip_tac >>
   pairarg_tac >> simp[] >>
-  rev_dxrule runtime_sym_sc_void >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
   Cases_on `len = Lit 0w` >> simp[comp_return_def]
   >- (Cases_on `salt` >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
-      rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+      rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
       drule_all runtime_sym_check_create_result >> simp[]) >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
   simp[comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   drule_all runtime_sym_copy_memory_dynamic >> strip_tac >>
   Cases_on `salt` >> gvs[] >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   drule_all runtime_sym_check_create_result >> simp[]
 QED
 
@@ -285,28 +265,28 @@ Proof
   simp[compile_raw_call_finish_def, comp_bind_def] >>
   pairarg_tac >> simp[] >>
   `EVERY runtime_sym_inst (state_insts cs') /\ ~is_label_operand success` by
-    (Cases_on `call_ty` >> gvs[] >> rev_dxrule runtime_sym_sc_op >>
+    (Cases_on `call_ty` >> gvs[] >> rev_dxrule runtime_sym_emit_op_result >>
      simp[is_label_operand_def]) >>
   reverse (Cases_on `revert_on_failure`) >> simp[comp_bind_def, comp_ignore_bind_def]
   >- (Cases_on `max_outsize > 0` >> simp[comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
       rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[comp_return_def] >>
-      rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
-      rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac >>
+      rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
+      rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
       drule_at (Pat `compile_select _ _ _ _ = _`) runtime_sym_select >>
       simp[is_label_operand_def] >> strip_tac >>
-      rev_dxrule runtime_sym_sc_void >> simp[] >> strip_tac >>
+      rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
       rev_dxrule runtime_sym_sc_alloc >> strip_tac >>
-      rev_dxrule runtime_sym_sc_void >> simp[] >> strip_tac >>
-      rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac >>
-      rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def]) >>
+      rev_dxrule runtime_sym_emit_void_result >> simp[] >> strip_tac >>
+      rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
+      rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def]) >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   imp_res_tac runtime_sym_fresh_label >> gvs[] >>
   drule_at (Pat `emit_inst JNZ _ _ _ = _`) runtime_sym_jnz >>
   simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_block >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_alloc >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_inst REVERT _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_sc_inst) >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_block >> simp[] >> strip_tac >>
@@ -317,9 +297,9 @@ Proof
   pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rev_dxrule runtime_sym_sc_op >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_op >> simp[is_label_operand_def] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def] >> strip_tac >>
   drule_at (Pat `compile_select _ _ _ _ = _`) runtime_sym_select >>
   simp[is_label_operand_def] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_void >> simp[]
+  rev_dxrule runtime_sym_emit_void_result >> simp[]
 QED

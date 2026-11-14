@@ -191,8 +191,8 @@ Theorem cleanup_code_end_backward:
 Proof
   Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
   drule cleanup_if_origin >> strip_tac >> gvs[]
-  >- (irule (cj 1 code_end_var_rules) >> qexistsl [`j`, `op`] >> simp[]) 
-  >- (drule simplify_current_phi_opcodes >> gvs[]) 
+  >- (irule (cj 1 code_end_var_rules) >> qexistsl [`j`, `op`] >> simp[])
+  >- (drule simplify_current_phi_opcodes >> gvs[])
   >- (rename1 `j.inst_operands = [Var src]` >>
       irule (cj 2 code_end_var_rules) >> qexistsl [`j`, `src`] >> simp[] >>
       metis_tac[]) >>

@@ -1970,7 +1970,7 @@ Proof
 QED
 
 (* Every label a push refers to has an offset. *)
-Theorem clo_FDOM[local]:
+Theorem clo_FDOM:
   ∀prog off0 (labels0:string|->num).
     l ∈ FDOM labels0 ∨ MEM (AsmLabel l) prog ∨ MEM (AsmDataHeader l) prog ⇒
     l ∈ FDOM (SND (FOLDL (λ(pc:num,labels:string|->num) inst.

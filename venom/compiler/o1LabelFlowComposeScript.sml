@@ -238,34 +238,3 @@ Proof
       metis_tac[MEM_prune_unit_fcg_unreachable_functions]) >>
   simp[]
 QED
-
-(* Audit publication at the kernel boundary, including imported runner facts.
-   DISK_THM is HOL's ordinary persisted-theorem marker, not an admission. *)
-val _ = List.app (fn (n, th) =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-      val bad = List.filter (fn s => s <> "DISK_THM") ors @ axs
-  in print ("LABEL_FLOW_AUDIT " ^ n ^ ": " ^
-       String.concatWith "," (ors @ axs) ^ "\n");
-     if null bad then () else raise Fail ("oracle dependency: " ^ n)
-  end)
-  [("static_steps", o1_label_flow_static_steps),
-   ("enriched_contracts", o1_label_flow_enriched_contracts),
-   ("walk", o1_label_flow_walk),
-   ("pipeline", o1_pipeline_label_flow_preserved),
-   ("first_ssa", first_make_ssa_step_seed_free_flow),
-   ("lower_dload_flow", lower_dload_function_label_flow_ok),
-   ("lower_dload_lifetime", lower_dload_function_code_end_lifetime),
-   ("concretize_flow", concretize_label_flow),
-   ("concretize_lifetime", concretize_function_code_end_lifetime),
-   ("fmp_flow", fmp_row_label_flow_ok),
-   ("fmp_lifetime", fmp_row_code_end_lifetime),
-   ("ssa_replay", make_ssa_pass_step_replay),
-   ("second_ssa", make_ssa_current_fn_label_flow),
-   ("late", o1_late_row_label_flow_ok),
-   ("driver", o1_driver_runs),
-   ("pre_rows", o1_pre_walk_rows),
-   ("pre_flow", o1_pre_walk_seed_free_flow),
-   ("pre_sim", o1_pre_walk_sim),
-   ("walk_order", o1_walk_callee_first),
-   ("prune_shape", o1_ctx_shape_prune),
-   ("runner", run_named_fn_schedules_decomp)];

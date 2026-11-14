@@ -90,6 +90,26 @@ Proof
   metis_tac[runtime_sym_nonlabel_reserved]
 QED
 
+Theorem runtime_sym_emit_op_result:
+  emit_op opc ops s = (v,s') ==>
+  opc <> CODESIZE /\ opc <> CODECOPY /\
+  EVERY (\op. ~is_label_operand op) ops /\
+  EVERY runtime_sym_inst (state_insts s) ==>
+  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
+Proof
+  metis_tac[runtime_sym_emit_op]
+QED
+
+Theorem runtime_sym_emit_void_result:
+  emit_void opc ops s = (u,s') ==>
+  opc <> CODESIZE /\ opc <> CODECOPY /\
+  EVERY (\op. ~is_label_operand op) ops /\
+  EVERY runtime_sym_inst (state_insts s) ==>
+  EVERY runtime_sym_inst (state_insts s')
+Proof
+  metis_tac[runtime_sym_emit_void]
+QED
+
 (* Mixed operand lists cover branches and INVOKE: labels are permitted, but
    only outside the reserved assembler namespace. *)
 Theorem runtime_sym_label_or_operand:

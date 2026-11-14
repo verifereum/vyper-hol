@@ -39,28 +39,13 @@ Proof
   qexists_tac `k` >> fs[] >> qexists_tac `i` >> fs[]
 QED
 
-Theorem clo_FDOM_header[local]:
-  !prog off0 (labels0:string|->num).
-    l IN FDOM labels0 \/ MEM (AsmDataHeader l) prog ==>
-    l IN FDOM (SND (FOLDL (\(pc:num,labels:string|->num) inst.
-                     (pc + asm_inst_size inst,
-                      case inst of
-                        AsmLabel lbl => labels |+ (lbl, pc)
-                      | AsmDataHeader lbl' => labels |+ (lbl', pc)
-                      | _ => labels))
-              (off0, labels0) prog))
-Proof
-  Induct >- simp[] >> strip_tac >> Cases_on `h` >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> gvs[]
-QED
-
 Theorem asm_data_env_header_fdom:
   MEM (AsmDataHeader l) p ==> l IN FDOM (asm_data_env p code)
 Proof
   strip_tac >>
   simp[asm_data_env_def, finite_mapTheory.FDOM_DRESTRICT] >>
   simp[compute_label_offsets_def, clo_step_eq] >>
-  irule clo_FDOM_header >> simp[]
+  irule clo_FDOM >> simp[]
 QED
 
 (* ===== Terminal observations ===== *)

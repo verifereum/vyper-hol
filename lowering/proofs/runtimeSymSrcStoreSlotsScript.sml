@@ -58,14 +58,14 @@ Resume runtime_sym_store_slots_all[store]:
       >- (Cases_on `ty` >> simp[NoAsms] >>
           rule_assum_tac (SIMP_RULE (srw_ss()) [])
           >- (strip_tac >> qpat_x_assum `emit_void _ _ _ = _`
-              (mp_then Any mp_tac runtime_sym_emit_void) >> simp[]) 
-          >- (strip_tac >> first_x_assum drule_all >> simp[]) 
+              (mp_then Any mp_tac runtime_sym_emit_void) >> simp[])
+          >- (strip_tac >> first_x_assum drule_all >> simp[])
           >- (rename1 `ArrayT elem sz` >> Cases_on `sz` >>
               simp[NoAsms] >> rule_assum_tac (SIMP_RULE (srw_ss()) [])
               >- (strip_tac >> first_x_assum irule >> simp[is_label_operand_def] >>
                   goal_assum (drule_at Any) >> simp[]) >>
               suspend "dynamic")
-          >- (strip_tac >> first_x_assum drule_all >> simp[]) 
+          >- (strip_tac >> first_x_assum drule_all >> simp[])
           >> strip_tac >> qpat_x_assum `emit_void _ _ _ = _`
               (mp_then Any mp_tac runtime_sym_emit_void) >> simp[]) >>
       rpt (qpat_x_assum `!store_opc store_loc. _` kall_tac) >>

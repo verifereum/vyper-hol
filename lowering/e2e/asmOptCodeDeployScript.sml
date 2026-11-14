@@ -1,7 +1,7 @@
 (* Deployment boundary for the optimizer's shadow transaction. *)
 Theory asmOptCodeDeploy
 Ancestors
-  o1CodeEndOffset
+  o1CodeEndOffset o1LabelFlowCompose
   asmOptCodeCommon e2eDeployAsmOpt e2eSelfCodeFree ctorDeployDefs
   e2eDeployDefs vyperInterpreter
   supportedDecls vyperTypeEntryReadiness vyperTypeContractSoundness
@@ -283,7 +283,7 @@ Proof
   `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
   drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
   `label_flow_ok dout.po_unit.cu_context` by
-    (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
+    (irule o1_pipeline_label_flow_preserved >> metis_tac[]) >>
   `sym_unit_static_ok dout.po_unit` by
     (irule o1_pipeline_sym_unit_static_ok >> metis_tac[]) >>
   `code_layout_valid vs_out` by fs[o1_run_state_ok_def] >>
