@@ -10,109 +10,6 @@ Ancestors
   vyperInterpreter vyperState vyperTypeSystem valueEncoding valueEncodingDefs
   loweringStateRelDefs gasStorage vyperStorageTrace vyperStorageFootprint
 
-(* buffer_alloc_counted with one endpoint for every valid horizon: the
-   ALLOCA run is a function of the start state, so the endpoint found at H0
-   is the one literal_alloc_buffer_run gives at every other horizon. *)
-Theorem buffer_alloc_counted_horizons[local]:
-  compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  sz < dimword (:256) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func ce cx es s0 /\
-     storage_well_formed_on cx es (FST H)) /\
-  valid_horizon cx st0 H0 es.storage_trace /\
-  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?inst x t b. buf.buf_operand = Var x /\ MEM inst (fn_insts func) /\
-    inst.inst_id = sa.cs_next_id /\ inst.inst_outputs = [x] /\
-    inst.inst_id < sm.cs_next_id /\ not_fresh_at sm x /\
-    local_ptrs_reserved ce sm /\ (!scopes. not_local_ptr ce scopes x) /\
-    gas_marked_path F ctx func s0 0 (OK t) /\ ~t.vs_halted /\
-    t.vs_current_bb = sm.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-       stmt_state_rel H ctx func ce cx es t) /\
-    lookup_var x t = SOME (n2w b) /\
-    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
-    b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
-    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) /\
-    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
-      FLOOKUP t.vs_allocas aid = SOME a) /\
-    (!aid p n. aid < sa.cs_next_id /\
-      FLOOKUP s0.vs_allocas aid = SOME (p,n) ==>
-      regions_disjoint b sz p n) /\
-    (!name p n. local_region ce es.scopes t name p n ==>
-      regions_disjoint b sz p n) /\
-    (!name p n. local_region ce es.scopes t name p n <=>
-      local_region ce es.scopes s0 name p n)
-Proof
-  strip_tac >>
-  `stmt_state_rel H0 ctx func ce cx es s0` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-       (drule_then (ACCEPT_TAC o cj 1))) >>
-  drule_all buffer_alloc_provenance >> strip_tac >>
-  drule_all buffer_alloc_code >> strip_tac >>
-  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
-    literal_alloc_buffer_run) >> strip_tac >>
-  rename1 `run_inst_seq _ s0 = OK u` >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func ce cx es u` by
-    (gen_tac >> strip_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-       (drule_then (assume_tac o cj 1)) >>
-     drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)
-       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
-          literal_alloc_buffer_run) >>
-     disch_then (qpat_assum `compile_alloc_buffer _ _ = _` o mp_then Any mp_tac) >>
-     simp[] >> strip_tac >> gvs[]) >>
-  qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ u` kall_tac >>
-  qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ s0` kall_tac >>
-  `emitted_insts sa sm =
-     [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
-       [STRING #"%" (toString sa.cs_next_var)]] /\
-   sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm` by
-    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-     simp[contextTheory.compile_alloc_buffer_def,
-          compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
-     pairarg_tac >> strip_tac >> gvs[] >>
-     drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
-  `?bb. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
-        isPREFIX (emitted_insts sa sm)
-          (DROP s0.vs_inst_idx bb.bb_instructions)` by
-    (fs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
-     simp[listTheory.DROP_APPEND]) >>
-  `gas_path ctx func s0 0
-     (OK (u with vs_inst_idx := LENGTH sm.cs_current_insts))` by
-    (drule_all tuple_run_inst_seq_gas_path >>
-     simp[venomInstTheory.mk_inst_def]) >>
-  `~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb` by
-    (qmatch_asmsub_abbrev_tac `emitted_insts sa sm = [ai]` >>
-     `step_inst 0 ctx ai s0 = OK u` by
-       (fs[run_inst_seq_def, venomExecSemanticsTheory.step_inst_non_invoke,
-           Abbr `ai`, venomInstTheory.mk_inst_def, AllCaseEqs()]) >>
-     `~is_terminator ai.inst_opcode` by
-       simp[Abbr `ai`, venomInstTheory.mk_inst_def,
-            venomInstTheory.is_terminator_def] >>
-     drule_all venomInstProofsTheory.step_preserves_control_flow >>
-     drule_all venomInstProofsTheory.step_preserves_halted >> simp[]) >>
-  `!name p n. local_region ce es.scopes u name p n <=>
-               local_region ce es.scopes s0 name p n` by
-    (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
-     qexists_tac `sa` >> simp[]) >>
-  qexistsl_tac [`inst`, `x`, `u with vs_inst_idx := LENGTH sm.cs_current_insts`,
-                `w2n w`] >>
-  gvs[gas_marked_path_def, stmt_state_rel_inst_idx,
-      venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def, local_region_def,
-      wordsTheory.n2w_w2n] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid b len. aid < _ /\ _ ==> _` irule >>
-      qexists_tac `aid` >> simp[]) >>
-  rpt gen_tac >>
-  qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _`
-    (qspecl_then [`name`, `p'`, `n`] mp_tac) >> simp[]
-QED
-
 Theorem compile_make_array_body_vv_case:
   !ctx func cenv cx ann topt bnd args.
     exprs_case F ctx func cenv cx args /\
@@ -148,9 +45,14 @@ Proof
          disch_then (qspec_then `TupleTV tvs` mp_tac) >>
          gvs[valueEncodingTheory.type_memory_size_def,
              wordsTheory.dimword_def]) >>
+      `!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0` by
+        (gen_tac >> strip_tac >>
+         qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
+           (drule_then (ACCEPT_TAC o cj 1))) >>
       drule buffer_alloc_counted_horizons >>
       disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
-      disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ storage_well_formed_on _ _ (FST H)`)) >>
+      disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `valid_horizon _ _ H0 _`)) >>
       simp[] >> strip_tac >>
       `!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -261,9 +163,14 @@ Resume compile_make_array_body_vv_case[array_case]:
     (drule expr_body_pre_copy_ok >>
      simp[vyperASTTheory.expr_type_def, is_word_type_def] >>
      gvs[wordsTheory.dimword_def]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
+       (drule_then (ACCEPT_TAC o cj 1))) >>
   drule buffer_alloc_counted_horizons >>
   disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
-  disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ storage_well_formed_on _ _ (FST H)`)) >>
+  disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `valid_horizon _ _ H0 _`)) >>
   simp[] >> strip_tac >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
