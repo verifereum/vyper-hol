@@ -166,8 +166,7 @@ Theorem vv_holds_array_element:
   read_result cx child es = (INL v,es) /\
   j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
   eval_operand dst s = SOME (w + n2w j) /\
-  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) /\
-  vv_place_ptr cenv cx es' s child (LocatedValue et (mk_ptr dst p.ptr_location)) ==>
+  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
   vv_holds cenv cx et child (LocatedValue et (mk_ptr dst p.ptr_location)) es s
 Proof
   strip_tac >>
@@ -744,7 +743,8 @@ Theorem vv_post_array_element:
   eval_operand dst s = SOME (w + n2w j) /\
   (!id path'. child = PlaceR (MemoryPlace id path') <=>
      ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
-  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
+  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) /\
+  vv_place_ptr cenv cx es' s child (LocatedValue et (mk_ptr dst p.ptr_location)) ==>
   vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
     (LocatedValue et (mk_ptr dst p.ptr_location)) s
 Proof

@@ -279,8 +279,7 @@ Theorem attr_vv_at_field[local]:
     struct_has_type fs vals /\ ALOOKUP vals fld = SOME fv /\
     ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
-       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) /\
-    vv_place_ptr cenv cx es1 q tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ==>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx ann sa sn es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -483,7 +482,8 @@ Theorem attr_vv_post:
        ?fv. ALOOKUP vals fld = SOME fv /\
             read_result cx tv' es1 = (INL fv, es1)) /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
-       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) /\
+    vv_place_ptr cenv cx es1 q tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ==>
     vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof

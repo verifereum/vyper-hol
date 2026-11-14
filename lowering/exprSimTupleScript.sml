@@ -645,8 +645,7 @@ Theorem tuple_vv_at_elem[local]:
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     LENGTH vs = LENGTH tvs /\ k < LENGTH tvs /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
-       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) /\
-    vv_place_ptr cenv cx es1 q tv' (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) ==>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx (EL k tys) sa sn es1 tv'
       (LocatedValue t (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -1001,7 +1000,8 @@ Theorem tuple_vv_post[local]:
     values_have_types tvs vs /\
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
-       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) /\
+    vv_place_ptr cenv cx es1 q tv' (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) ==>
     vv_post H ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
