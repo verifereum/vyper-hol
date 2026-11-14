@@ -4,7 +4,7 @@ Ancestors
   venomExecSemantics venomInst venomState finite_map pred_set
   contextCodegenRel codegenRel emitHelper compileEnv loweringStateRelDefs bodyPtrDefs memLocDefs
   exprSimPtrProps fragGasPathPtr bodyPtrIfExpBytesFrame
-  robustCopyTransportPtr typedCopyPtr valueEncodingProps exprSimProps
+  robustCopyTransportPtr typedCopyPtr valueEncodingProps exprSimProps wordLoadStorePtr
 
 Theorem ifexp_materialize_load_taint:
   MEM opc [SLOAD;TLOAD;DLOAD] /\ eval_operand arg s = SOME a ==>
@@ -24,26 +24,6 @@ Proof
        range_bytes_def, taint_component_equality, DRESTRICT_UNIV]
 QED
 
-Theorem ifexp_materialize_mstore_check:
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id MSTORE [Var p; v] []) s
-Proof
-  strip_tac >> gvs[ptr_covers_def] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def, fixed_source_write_range_def,
-       eval_operand_def] >>
-  conj_tac >-
-    (Cases_on `eval_operand v s` >> simp[] >>
-     rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> gvs[]) >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
-  simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
-  rpt strip_tac >> gvs[]
-QED
 
 Theorem ifexp_materialize_load_covers:
   MEM opc [SLOAD;TLOAD;DLOAD] /\ eval_operand arg s = SOME a /\
@@ -59,21 +39,6 @@ Proof
       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
 
-Theorem ifexp_materialize_mstore_taint:
-  eval_operand addr s = SOME a /\ eval_operand value s = SOME w ==>
-  (step_taint (mk_inst id MSTORE [addr;value] []) s
-    (mstore (w2n a) w s) tn).t_mem =
-    (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}) UNION
-      {w2n a + k | k IN op_taint tn value}
-Proof
-  strip_tac >>
-  simp[step_taint_def, mk_inst_def, mem_taint_def, new_site_bytes_def,
-       mstore_def, write_memory_with_expansion_def, FLOOKUP_DEF,
-       step_writes_def, source_memory_write_ranges_def,
-       fixed_source_write_range_def, eval_operand_def, written_taint_def,
-       range_bytes_def, pred_setTheory.EXTENSION] >>
-  metis_tac[]
-QED
 
 Theorem ifexp_materialize_word_path:
   MEM opc [SLOAD;TLOAD;DLOAD] /\ ~ctx_has_dalloca ctx /\
@@ -124,17 +89,6 @@ Proof
   drule_all gas_path_ptr_then >> simp[]
 QED
 
-Theorem ifexp_materialize_mstore_ghost:
-  step_prov PG G (mk_inst id MSTORE [addr;value] []) (mstore off w s) = G /\
-  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_var = tn.t_var /\
-  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_stor = tn.t_stor /\
-  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_trans = tn.t_trans /\
-  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_imm = tn.t_imm
-Proof
-  simp[step_prov_def, set_prov_def, step_taint_def, mk_inst_def,
-       set_var_taint_def, DRESTRICT_UNIV, store_taint_def, adopt_reset_def,
-       imm_taint_def]
-QED
 
 Theorem ifexp_materialize_load_old:
   MEM opc [SLOAD;TLOAD;DLOAD] /\ eval_operand arg s = SOME a /\ x <> out ==>

@@ -6,6 +6,83 @@ Ancestors
   contextCodegenRelProps finite_map memLocDefs codegenRel contextCodegenRel fragExec
   typedCopyAgreement emitHelper compileEnv valueEncodingProps representationCleanPtr
   ptrCoverage allocationPtr exprLoweringProps typedCopyLayoutPtr exprSimBufferStore
+  fragGasSeqPtr pred_set
+
+Theorem ifexp_materialize_mstore_check:
+  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx fn G tn
+    (mk_inst id MSTORE [Var p; v] []) s
+Proof
+  strip_tac >> gvs[ptr_covers_def] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, fixed_source_write_range_def,
+       eval_operand_def] >>
+  conj_tac >-
+    (Cases_on `eval_operand v s` >> simp[] >>
+     rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem ifexp_materialize_mstore_taint:
+  eval_operand addr s = SOME a /\ eval_operand value s = SOME w ==>
+  (step_taint (mk_inst id MSTORE [addr;value] []) s
+    (mstore (w2n a) w s) tn).t_mem =
+    (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}) UNION
+      {w2n a + k | k IN op_taint tn value}
+Proof
+  strip_tac >>
+  simp[step_taint_def, mk_inst_def, mem_taint_def, new_site_bytes_def,
+       mstore_def, write_memory_with_expansion_def, FLOOKUP_DEF,
+       step_writes_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, eval_operand_def, written_taint_def,
+       range_bytes_def, pred_setTheory.EXTENSION] >>
+  metis_tac[]
+QED
+
+Theorem ifexp_materialize_mstore_ghost:
+  step_prov PG G (mk_inst id MSTORE [addr;value] []) (mstore off w s) = G /\
+  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_var = tn.t_var /\
+  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_stor = tn.t_stor /\
+  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_trans = tn.t_trans /\
+  (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore off w s) tn).t_imm = tn.t_imm
+Proof
+  simp[step_prov_def, set_prov_def, step_taint_def, mk_inst_def,
+       set_var_taint_def, DRESTRICT_UNIV, store_taint_def, adopt_reset_def,
+       imm_taint_def]
+QED
+
+Theorem ifexp_copy_store_phase:
+  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
+  eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
+  ?t tn'.
+    run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var addr;value] []]
+      s G tn' /\
+    t = mstore (w2n d) w s /\
+    tn'.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + 32}) UNION
+      {w2n d + k | k IN op_taint tn value} /\
+    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MSTORE [Var addr;value] []) s =
+     OK (mstore (w2n d) w s)` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var addr;value] []) s` by
+    (irule ifexp_materialize_mstore_check >> simp[]) >>
+  qexistsl_tac [`mstore (w2n d) w s`,
+    `step_taint (mk_inst id MSTORE [Var addr;value] []) s (mstore (w2n d) w s) tn`] >>
+  simp[run_inst_seq_def, inst_seq_ptr_def,
+       CONJUNCT1 ifexp_materialize_mstore_ghost] >>
+  conj_tac >- simp[ifexp_materialize_mstore_taint] >>
+  simp[ifexp_materialize_mstore_ghost]
+QED
 
 Theorem ptr_inst_ok_mload:
   !D ctx fn G tn s id src tmp fuel.

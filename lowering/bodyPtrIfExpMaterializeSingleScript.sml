@@ -1,9 +1,9 @@
 Theory bodyPtrIfExpMaterializeSingle
 Ancestors
-  bodyPtrIfExpMaterializeWord bodyPtrIfExpMaterializeFrame
+  bodyPtrIfExpMaterializeWord bodyPtrIfExpMaterializeFrame wordLoadStorePtr
   context compileEnv loweringStateRelDefs emitHelper fragExec contextCodegenRel codegenRel
   venomExecSemantics venomInst venomState finite_map rich_list
-  ptrDiscipline ptrSafeRun bodyPtrDefs bodyPtrIfExpBytesEndpoint
+  ptrDiscipline ptrSafeRun bodyPtrDefs assignTuplePtrCopyEndpoint
 
 Theorem ifexp_ensure_single_stages:
   (loc = LocStorage \/ loc = LocTransient) /\
@@ -178,7 +178,8 @@ Proof
   `MEM opc [SLOAD;TLOAD;DLOAD]` by gvs[] >>
   `ghost_inv H d ce cx ee G1 tn1 (update_var out w s)` by
     (gvs[] >> irule ifexp_materialize_load_inv >> simp[] >> metis_tac[]) >>
-  `ghost_inv H d ce cx ee G1 tn1 s1` by gvs[] >>
+  `ghost_inv H d ce cx ee G1 tn1 s1` by
+    gvs[assignTuplePtrCopyEndpointTheory.ghost_inv_inst_idx] >>
   `ghost_kept ce es sa G0 tn0 s0 G1 tn1` by
     (gvs[] >> irule ifexp_materialize_load_kept >> simp[] >> metis_tac[]) >>
   `op_taint tn1 (Var out) SUBSET count 32` by
@@ -189,7 +190,7 @@ Proof
 QED
 
 Resume ifexp_materialize_single_frames[inv]:
-  pure_rewrite_tac[ifexp_ghost_inv_inst_idx] >>
+  pure_rewrite_tac[assignTuplePtrCopyEndpointTheory.ghost_inv_inst_idx] >>
   qpat_x_assum `G2 = _` SUBST1_TAC >> qpat_x_assum `tn2 = _` SUBST1_TAC >>
   qpat_x_assum `u = _` SUBST1_TAC >>
   irule ifexp_materialize_store_inv >>
