@@ -186,6 +186,54 @@ Proof
   irule call_ghost_kept >> metis_tac[]
 QED
 
+Theorem send_call_stor_taint_at:
+  ~s.vs_call_ctx.cc_static /\ stor_taint_ok_at D tn s /\
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
+  eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
+  eval_operand value s = SOME vw /\ step_inst_base inst s = OK u ==>
+  stor_taint_ok_at D (step_taint inst s u tn) u
+Proof
+  strip_tac >> drule_all send_call_runtime_frame >> strip_tac >>
+  `u.vs_immutables = s.vs_immutables` by
+    (drule_all send_call_step >>
+     simp[consume_call_outcome_eq, update_var_def] >>
+     strip_tac >> gvs[]) >>
+  irule call_stor_taint_ok_at >> simp[] >> strip_tac >>
+  drule_all send_call_step >> strip_tac >>
+  gvs[update_var_def, Excl "consume_call_outcome_eq"] >>
+  irule consume_call_no_reset_accounts >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  qexistsl_tac [`0w`, `aw`, `0w`, `0`, `0`, `vw`] >> simp[]
+QED
+
+Theorem send_call_ghost_inv_at:
+  ~s.vs_call_ctx.cc_static /\ ghost_inv_at D lo d cenv cx es G tn s /\
+  es'.scopes = es.scopes /\
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
+  eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
+  eval_operand value s = SOME vw /\ step_inst_base inst s = OK u /\
+  (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> out) /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) /\
+  (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> x <> out) ==>
+  ghost_inv_at D lo d cenv cx es' (step_prov PG G inst u)
+    (step_taint inst s u tn) u
+Proof
+  strip_tac >>
+  `stor_taint_ok_at D tn s` by gvs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  drule_all send_call_runtime_frame >> strip_tac >>
+  `u.vs_alloca_next = s.vs_alloca_next` by
+    (qspecl_then [`inst`,`s`,`u`] mp_tac
+       venomMemProofsTheory.step_inst_base_preserves_alloca_fields >> simp[]) >>
+  `stor_taint_ok_at D (step_taint inst s u tn) u` by
+    (irule send_call_stor_taint_at >> metis_tac[]) >>
+  `(step_taint inst s u tn).t_mem = tn.t_mem` by
+    (irule call_zero_region_memory_taint >> metis_tac[]) >>
+  irule call_ghost_inv_at >> metis_tac[]
+QED
+
 Theorem call_assert_ok_path_ptr:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; ao; az; ro; rz] /\
