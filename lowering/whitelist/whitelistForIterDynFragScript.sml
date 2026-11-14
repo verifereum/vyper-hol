@@ -240,6 +240,107 @@ fun emitted_lookup_tac pat a b =
 
 
 (* Static producer, as compile_for_array_parts: the body stays opaque. *)
+Theorem compile_for_dynarray_memory_parts:
+  expr_type e = ArrayT et (Dynamic c) /\
+  compile_expr cenv (ArrayT et (Dynamic c)) e origin = (av,st) /\
+  vv_location av = SOME LocMemory /\ vv_operand av = arr_op /\
+  compile_stmt cenv lctx ty
+    (For id et (Array e) n stmts) origin =
+    ((),st') /\ cenv.ce_alloca_locals /\ fn_has_code st st' func /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
+                cs_extends sa sb) ==>
+  ?st1 bc lv p idx g vld dv ov tot ep nv entry cond bod incr exit
+   sa sb0 sb1 sj.
+    lv = STRING #"%" (toString st.cs_next_var) /\
+    p = STRING #"%" (toString (st.cs_next_var + 1)) /\
+    idx = STRING #"%" (toString (st.cs_next_var + 2)) /\
+    g = STRING #"%" (toString (st.cs_next_var + 3)) /\
+    vld = STRING #"%" (toString (st.cs_next_var + 4)) /\
+    dv = STRING #"%" (toString (st.cs_next_var + 5)) /\
+    ov = STRING #"%" (toString (st.cs_next_var + 6)) /\
+    tot = STRING #"%" (toString (st.cs_next_var + 7)) /\
+    ep = STRING #"%" (toString (st.cs_next_var + 8)) /\
+    nv = STRING #"%" (toString sj.cs_next_var) /\
+    st1.cs_next_var = st.cs_next_var + 1 /\
+    declare_local cenv id et st1 =
+      (bc, st1 with cs_next_var := st1.cs_next_var + 1) /\
+    FLOOKUP bc.ce_vars id =
+      SOME (PtrVar (Var p) (type_memory_bytes cenv et)) /\
+    sa.cs_current_bb = bod /\
+    sa.cs_current_insts =
+      [mk_inst (st.cs_next_id + 10) MUL
+         [Var idx; Lit (n2w (elem_size_in_location cenv LocMemory et))] [ov];
+       mk_inst (st.cs_next_id + 11) ADD [Lit 32w; Var ov] [tot];
+       mk_inst (st.cs_next_id + 12) ADD [arr_op; Var tot] [ep]] /\
+    sa.cs_next_var = st.cs_next_var + 9 /\
+    sa.cs_next_id = st.cs_next_id + 13 /\
+    sa.cs_next_id <= sb0.cs_next_id /\
+    compile_iter_elem_copy cenv (Var ep) (Var p)
+      (elem_size_in_location cenv LocMemory et) LocMemory F et et sa = ((),sb0) /\
+    sb0.cs_current_bb = bod /\ same_blocks sa sb0 /\
+    sb0.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb0 /\
+    ~block_is_terminated sb0 /\ sa.cs_next_var <= sb0.cs_next_var /\
+    compile_stmts bc (InLoop exit incr) ty stmts sb0 = ((),sb1) /\
+    emit_jmp_if_not_terminated incr sb1 = ((),sj) /\
+    sj.cs_next_var = sb1.cs_next_var /\
+    (~block_is_terminated sb1 ==>
+      sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+      sj.cs_current_insts = sb1.cs_current_insts ++
+        [mk_inst sb1.cs_next_id JMP [Label incr] []]) /\
+    cs_extends st sa /\ cs_extends sa sb0 /\ cs_extends sb0 sb1 /\
+    cs_extends sb1 sj /\ cs_extends sj st' /\
+    fn_has_code st sa func /\ fn_has_code sa sb0 func /\
+    fn_has_code sb0 sb1 func /\ fn_has_code sb1 sj func /\
+    fn_has_code sj st' func /\
+    lookup_block st.cs_current_bb func.fn_blocks =
+      SOME <|bb_label := st.cs_current_bb;
+             bb_instructions := st.cs_current_insts ++
+               [mk_inst st.cs_next_id MLOAD [arr_op] [lv];
+                mk_inst (st.cs_next_id + 1) ALLOCA
+                  [Lit (n2w (type_memory_bytes cenv et))] [p];
+                mk_inst (st.cs_next_id + 2) JMP [Label entry] []]|> /\
+    lookup_block entry func.fn_blocks =
+      SOME <|bb_label := entry; bb_instructions :=
+        [mk_inst (st.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+         mk_inst (st.cs_next_id + 4) GT [Var lv; Lit (n2w c)] [g];
+         mk_inst (st.cs_next_id + 5) ISZERO [Var g] [vld];
+         mk_inst (st.cs_next_id + 6) ASSERT [Var vld] [];
+         mk_inst (st.cs_next_id + 7) JMP [Label cond] []]|> /\
+    lookup_block cond func.fn_blocks =
+      SOME <|bb_label := cond; bb_instructions :=
+        [mk_inst (st.cs_next_id + 8) EQ [Var idx; Var lv] [dv];
+         mk_inst (st.cs_next_id + 9) JNZ [Var dv; Label exit; Label bod] []]|> /\
+    lookup_block incr func.fn_blocks =
+      SOME <|bb_label := incr; bb_instructions :=
+        [mk_inst sj.cs_next_id ADD [Var idx; Lit 1w] [nv];
+         mk_inst (sj.cs_next_id + 1) ASSIGN [Var nv] [idx];
+         mk_inst (sj.cs_next_id + 2) JMP [Label cond] []]|> /\
+    st'.cs_current_bb = exit /\ st'.cs_current_insts = []
+Proof
+  strip_tac >>
+  drule_all compile_for_dynarray_memory_stages >> strip_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
+  drule_all compile_for_dynarray_prefix >> strip_tac >>
+  dxrule compile_for_array_suffix >> strip_tac >>
+  `cs_extends st sa` by (irule array_prefix_extends >> simp[] >> metis_tac[]) >>
+  `~block_is_terminated sa` by
+    simp[block_is_terminated_def, mk_inst_def, is_terminator_def] >>
+  qpat_x_assum `_ sa = ((),sb0)` mp_tac >>
+  simp[] >> strip_tac >>
+  drule_all array_iter_copy_static >> strip_tac >>
+  drule array_body_backedge >> strip_tac >>
+  `cs_extends sb0 sb1` by metis_tac[] >>
+  drule_all array_stages_code >> strip_tac >>
+  qexistsl_tac [`st1`, `bc`, `entry`, `cond`, `incr`, `sa`, `sb0`, `sb1`, `sj`] >>
+  fs[] >>
+  rpt conj_tac
+  >- fs[same_blocks_def]
+  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
+  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
+  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
+  >> emitted_lookup_tac `st'.cs_blocks = _` `sj` `st'`
+QED
+
 Theorem compile_for_dynarray_parts:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
   compile_stmt cenv lctx ty
@@ -318,36 +419,19 @@ Proof
   strip_tac >>
   `compile_expr cenv (ArrayT et (Dynamic c))
      (Name (ArrayT et (Dynamic c)) name) st =
-   (LocatedValue (ArrayT et (Dynamic c)) (mk_ptr arr_op LocMemory),st)` by
+     (LocatedValue (ArrayT et (Dynamic c)) (mk_ptr arr_op LocMemory),st)` by
     metis_tac[compile_array_name_dynamic] >>
-  drule_at (Pat `compile_stmt _ _ _ _ _ = _`) compile_for_dynarray_memory_stages >>
-  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >> strip_tac >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
-  drule_all compile_for_dynarray_prefix >> strip_tac >>
-  dxrule compile_for_array_suffix >> strip_tac >>
-  `cs_extends st sa` by (irule array_prefix_extends >> simp[] >> metis_tac[]) >>
-  `~block_is_terminated sa` by
-    simp[block_is_terminated_def, mk_inst_def, is_terminator_def] >>
-  qpat_x_assum `_ sa = ((),sb0)` mp_tac >>
-  simp[] >> strip_tac >>
-  drule_all array_iter_copy_static >> strip_tac >>
-  drule array_body_backedge >> strip_tac >>
-  `cs_extends sb0 sb1` by metis_tac[] >>
-  drule_all array_stages_code >> strip_tac >>
-  qexistsl_tac [`st1`, `bc`, `entry`, `cond`, `incr`, `sa`, `sb0`, `sb1`, `sj`] >>
-  fs[] >>
-  rpt conj_tac
-  >- fs[same_blocks_def]
-  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
-  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
-  >- emitted_lookup_tac `sa.cs_blocks = _` `st` `sa`
-  >> emitted_lookup_tac `st'.cs_blocks = _` `sj` `st'`
+  mp_tac (Q.INST
+    [`e` |-> `Name (ArrayT et (Dynamic c)) name`, `origin` |-> `st`,
+     `av` |-> `LocatedValue (ArrayT et (Dynamic c)) (mk_ptr arr_op LocMemory)`]
+    compile_for_dynarray_memory_parts) >>
+  simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >>
+  disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem dynarray_register_frame[local]:
   local_ptrs_reserved cenv st /\
-  FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
+  (!x. arr_op = Var x ==> not_fresh_at st x) /\
   st.cs_next_var + 9 <= sj.cs_next_var /\
   lv = STRING #"%" (toString st.cs_next_var) /\
   p = STRING #"%" (toString (st.cs_next_var + 1)) /\
@@ -377,12 +461,109 @@ Proof
          not_local_ptr cenv scs vld` by
     (gen_tac >> rpt conj_tac >> simp[] >>
      irule local_ptrs_reserved_fresh >> qexists_tac `st` >> simp[]) >>
-  `!x. arr_op = Var x ==> not_fresh_at st x` by
-    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   simp[] >> simp[not_fresh_at_def] >> rpt strip_tac >> gvs[]
 QED
 
 (* Everything the loop and its entry need from the compiled code. *)
+Theorem compile_for_dynarray_memory_code:
+  expr_type e = ArrayT et (Dynamic c) /\
+  compile_expr cenv (ArrayT et (Dynamic c)) e origin = (av,st) /\
+  vv_location av = SOME LocMemory /\ vv_operand av = arr_op /\
+  (!x. arr_op = Var x ==> not_fresh_at st x) /\
+  compile_stmt cenv lctx ty
+    (For id et (Array e) n stmts) origin =
+    ((),st') /\ cenv.ce_alloca_locals /\ fn_has_code st st' func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv st /\
+  (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
+                cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+  type_memory_bytes cenv et = type_memory_size tv /\
+  type_memory_bytes cenv et + 64 < dimword (:256) ==>
+  ?st1 bc lv p idx g vld dv ov tot ep nv entry cond bod incr exit
+   sa sb0 sb1 sj ainst.
+    dynarray_for_code func cenv bc ty stmts id et tv
+      (type_memory_bytes cenv et) arr_op p (type_memory_bytes cenv et)
+      ainst idx dv ov tot ep nv lv cond exit bod incr
+      (st.cs_next_id + 8) (st.cs_next_id + 9) (st.cs_next_id + 10)
+      (st.cs_next_id + 11) (st.cs_next_id + 12)
+      sj.cs_next_id (sj.cs_next_id + 1) (sj.cs_next_id + 2) sa sb0 sb1 sj /\
+    ainst = mk_inst (st.cs_next_id + 1) ALLOCA
+      [Lit (n2w (type_memory_bytes cenv et))] [p] /\
+    lookup_block st.cs_current_bb func.fn_blocks =
+      SOME <|bb_label := st.cs_current_bb;
+             bb_instructions := st.cs_current_insts ++
+               [mk_inst st.cs_next_id MLOAD [arr_op] [lv]; ainst;
+                mk_inst (st.cs_next_id + 2) JMP [Label entry] []]|> /\
+    lookup_block entry func.fn_blocks =
+      SOME <|bb_label := entry; bb_instructions :=
+        [mk_inst (st.cs_next_id + 3) ASSIGN [Lit 0w] [idx];
+         mk_inst (st.cs_next_id + 4) GT [Var lv; Lit (n2w c)] [g];
+         mk_inst (st.cs_next_id + 5) ISZERO [Var g] [vld];
+         mk_inst (st.cs_next_id + 6) ASSERT [Var vld] [];
+         mk_inst (st.cs_next_id + 7) JMP [Label cond] []]|> /\
+    st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
+    (?sd. declare_local cenv id et st1 = (bc,sd)) /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= ainst.inst_id /\
+    st.cs_next_id <= sb0.cs_next_id /\
+    ALL_DISTINCT [lv; p; idx; g; vld] /\
+    (!scs. not_local_ptr cenv scs lv /\ not_local_ptr cenv scs g /\
+           not_local_ptr cenv scs vld /\ not_local_ptr cenv scs idx) /\
+    (!x. arr_op = Var x ==> ~MEM x [lv; p; idx; g; vld]) /\
+    (!x. not_fresh_at st x ==> ~MEM x [lv; p; idx; g; vld]) /\
+    (!x. not_fresh_at st x ==> not_fresh_at st1 x) /\
+    (!x. not_fresh_at st1 x ==>
+      not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> tot /\ x <> ep) /\
+    (!x. not_fresh_at st1 x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+    not_fresh_at st1 lv /\
+    not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+    (!x. arr_op = Var x ==> not_fresh_at sb0 x)
+Proof
+  strip_tac >>
+  `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
+                cs_extends sa sb` by metis_tac[] >>
+  drule_all compile_for_dynarray_memory_parts >> strip_tac >>
+  drule_all declare_local_ptr >> strip_tac >>
+  `st.cs_next_var + 9 <= sj.cs_next_var` by
+    (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
+  drule_all dynarray_register_frame >> strip_tac >>
+  `local_ptrs_reserved cenv st1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
+  `st1.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
+  drule_all array_declared_reserved >> strip_tac >>
+  `MEM (mk_inst (st.cs_next_id + 1) ALLOCA
+          [Lit (n2w (type_memory_bytes cenv et))] [p]) (fn_insts func)` by
+    (irule lookup_block_fn_insts >>
+     qpat_assum `lookup_block st.cs_current_bb _ = _` (irule_at (Pos hd)) >>
+     simp[]) >>
+  qexistsl_tac [`st1`, `bc`, `lv`, `p`, `idx`, `g`, `vld`, `dv`, `ov`, `tot`,
+    `ep`, `nv`, `entry`, `cond`, `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`,
+    `sj`] >>
+  simp[mk_inst_def] >> rpt conj_tac
+  >- (`elem_size_in_location cenv LocMemory et = type_memory_size tv` by
+        simp[elem_size_in_location_def, is_slot_addressed_def] >>
+      simp[dynarray_for_code_def, mk_inst_def] >> gvs[ALL_DISTINCT] >>
+      qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `MEM _ (fn_insts func)` mp_tac >>
+      simp[mk_inst_def] >> rpt strip_tac >> simp[not_fresh_at_def] >>
+      rpt strip_tac >> rename1 `x = STRING #"%" (toString m)` >>
+      qpat_x_assum `!x. arr_op = Var x ==> _` drule >>
+      rewrite_tac[not_fresh_at_def] >>
+      disch_then (qspec_then `m` mp_tac) >> simp[])
+  >- gvs[ALL_DISTINCT]
+  >- (rpt strip_tac >> gvs[] >> fs[not_fresh_at_def])
+  >- (rpt strip_tac >> qpat_x_assum `not_fresh_at st _` mp_tac >>
+      simp[not_fresh_at_def])
+  >- simp[not_fresh_at_def]
+  >- (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[])
+  >- (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[])
+  >- simp[not_fresh_at_def]
+  >- simp[not_fresh_at_def]
+  >> rpt strip_tac >>
+  qpat_x_assum `!x. arr_op = Var x ==> not_fresh_at st x` drule >>
+  rewrite_tac[not_fresh_at_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem compile_for_dynarray_code_ready:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
   compile_stmt cenv lctx ty
@@ -434,49 +615,18 @@ Theorem compile_for_dynarray_code_ready:
     (!x. arr_op = Var x ==> not_fresh_at sb0 x)
 Proof
   strip_tac >>
-  `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
-                cs_extends sa sb` by metis_tac[] >>
-  drule_all compile_for_dynarray_parts >> strip_tac >>
-  drule_all declare_local_ptr >> strip_tac >>
-  `st.cs_next_var + 9 <= sj.cs_next_var` by
-    (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
-  drule_all dynarray_register_frame >> strip_tac >>
-  `local_ptrs_reserved cenv st1` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
-  `st1.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
-  drule_all array_declared_reserved >> strip_tac >>
-  `MEM (mk_inst (st.cs_next_id + 1) ALLOCA
-          [Lit (n2w (type_memory_bytes cenv et))] [p]) (fn_insts func)` by
-    (irule lookup_block_fn_insts >>
-     qpat_assum `lookup_block st.cs_current_bb _ = _` (irule_at (Pos hd)) >>
-     simp[]) >>
-  qexistsl_tac [`st1`, `bc`, `lv`, `p`, `idx`, `g`, `vld`, `dv`, `ov`, `tot`,
-    `ep`, `nv`, `entry`, `cond`, `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`,
-    `sj`] >>
-  simp[mk_inst_def] >> rpt conj_tac
-  >- (`elem_size_in_location cenv LocMemory et = type_memory_size tv` by
-        simp[elem_size_in_location_def, is_slot_addressed_def] >>
-      simp[dynarray_for_code_def, mk_inst_def] >> gvs[ALL_DISTINCT] >>
-      qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-      qpat_x_assum `MEM _ (fn_insts func)` mp_tac >>
-      simp[mk_inst_def] >> rpt strip_tac >> simp[not_fresh_at_def] >>
-      rpt strip_tac >> rename1 `x = STRING #"%" (toString m)` >>
-      qpat_x_assum `!x. arr_op = Var x ==> _` drule >>
-      rewrite_tac[not_fresh_at_def] >>
-      disch_then (qspec_then `m` mp_tac) >> simp[])
-  >- gvs[ALL_DISTINCT]
-  >- (rpt strip_tac >> gvs[] >> fs[not_fresh_at_def])
-  >- (rpt strip_tac >> qpat_x_assum `not_fresh_at st _` mp_tac >>
-      simp[not_fresh_at_def])
-  >- simp[not_fresh_at_def]
-  >- (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[])
-  >- (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[])
-  >- simp[not_fresh_at_def]
-  >- simp[not_fresh_at_def]
-  >> rpt strip_tac >>
-  qpat_x_assum `!x. arr_op = Var x ==> not_fresh_at st x` drule >>
-  rewrite_tac[not_fresh_at_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum irule >> simp[]
+  `!x. arr_op = Var x ==> not_fresh_at st x` by
+    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `compile_expr cenv (ArrayT et (Dynamic c))
+     (Name (ArrayT et (Dynamic c)) name) st =
+     (LocatedValue (ArrayT et (Dynamic c)) (mk_ptr arr_op LocMemory),st)` by
+    metis_tac[compile_array_name_dynamic] >>
+  mp_tac (Q.INST
+    [`e` |-> `Name (ArrayT et (Dynamic c)) name`, `origin` |-> `st`,
+     `av` |-> `LocatedValue (ArrayT et (Dynamic c)) (mk_ptr arr_op LocMemory)`]
+    compile_for_dynarray_memory_code) >>
+  simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >>
+  disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* The entry block: index zero, then the capacity check passes. *)
