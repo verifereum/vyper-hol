@@ -65,7 +65,7 @@ Proof
       irule val_in_memory_footprint_agree >>
       simp[] >> qexists `s.vs_memory` >> simp[] >>
       drule mem_bytes_at_agree_window >> strip_tac >>
-      first_x_assum irule >> simp[]) 
+  first_x_assum irule >> simp[])
   >~ [`val_footprint tv v = 0`]
   >- (irule val_in_memory_footprint_agree >>
       simp[mem_bytes_at_def] >> qexists `s.vs_memory` >> simp[])

@@ -4,13 +4,14 @@ Theory bodyIntCallPostProvenanceArrayOrigin
 Ancestors vyperInterpreter vyperState pair exprSimSubscriptMap
   compileEnv context vyperMisc supportedExprTraverse bodyIntCallPostProvenanceCapture
   exprLowering loweringStateRelDefs bodyIntCallPostProvenanceCaptureAlignment
+  bodyIntCallPostProvenanceOriginLocation
 
 Theorem conditional_result_nonstorage:
   conditional_result cx raw es = (INL tv,ee) ==>
   !tr slot vt. tv <> PlaceR (StoragePlace tr slot vt)
 Proof
   Cases_on `raw`
-  >~ [`Value v`] >- (simp[conditional_result_def, return_def] >> rpt strip_tac >> gvs[]) 
+  >~ [`Value v`] >- (simp[conditional_result_def, return_def] >> rpt strip_tac >> gvs[])
   >~ [`HashMapRef tr slot kt vt`] >- simp[conditional_result_def, raise_def] >>
   rename1 `PlaceR p` >> Cases_on `p` >>
   simp[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
