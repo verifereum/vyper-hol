@@ -245,7 +245,7 @@ Resume log_members_child_mem_ok[bytes_compose]:
   `run_inst_seq (emitted_insts st prepared) s = OK ready` by
     fs[abi_builtin_prefix_def] >>
   asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >>
-  simp[] >> rpt strip_tac >> gvs[] >>
+  simp[] >> rpt strip_tac >> fs[] >>
   irule run_inst_seq_mem_ok_append >> simp[]
 QED
 Finalise log_members_child_mem_ok

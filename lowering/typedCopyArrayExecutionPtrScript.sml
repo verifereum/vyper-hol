@@ -703,7 +703,10 @@ Resume compile_copy_sarray_strings_two_frag_ptr[code_containment]:
      qexists `[HD sb.cs_blocks]` >>
      qpat_assum `sb = _` (fn th => rewrite_tac[th]) >>
      qpat_assum `tail = _` (fn th => rewrite_tac[th]) >> simp[]) >>
-  `cs_extends si sb /\ cs_extends sb' sb` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `cs_extends si sb` by
+    (irule compileEnvTheory.cs_extends_trans >> qexists_tac `se` >> asm_rewrite_tac[]) >>
+  `cs_extends sb' sb` by
+    (irule compileEnvTheory.cs_extends_trans >> qexists_tac `si` >> asm_rewrite_tac[]) >>
   `fn_has_code sb' sb fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
   `fn_has_code si sb fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
   metis_tac[fragExecTheory.fn_has_code_split]
