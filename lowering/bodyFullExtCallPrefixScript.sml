@@ -323,3 +323,107 @@ Proof
     (fn th => mp_tac (Q.SPEC `0` th) >> mp_tac (Q.SPEC `1` th)) >>
   simp[] >> rpt strip_tac >> gvs[mk_inst_def]
 QED
+
+Theorem extcall_check_guarded_success:
+  compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ w2w aw = target /\ op_taint tn addr = {} /\
+  accounts_runtime_well_typed ee.accounts /\
+  (lookup_account target ee.accounts).code <> [] /\ ~ctx_has_dalloca ctx /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s) ==>
+  ?out. ~not_fresh_at a out /\
+    !H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (update_var out
+          (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s
+          with vs_inst_idx := s.vs_inst_idx + 2),
+         G \\ out, tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  strip_tac >> Cases_on `?H. valid_horizon cx st0 H ee.storage_trace`
+  >- (pop_assum strip_assume_tac >>
+      `stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s` by metis_tac[] >>
+      `accounts_agree H cx ee.accounts s.vs_accounts` by
+        fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+      drule accountsRelPropsTheory.accounts_agree_lookup >>
+      disch_then (qspec_then `target` assume_tac) >>
+      ` (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32) <> 0w` by
+        metis_tac[extcall_code_length_nonzero] >>
+      drule_all extcall_check_success_path >>
+      disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
+      qexists_tac `out` >> simp[]) >>
+  qexists_tac `STRING #"%" (toString a.cs_next_var)` >>
+  simp[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem extcall_precheck_success_boundary:
+  (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
+   else comp_return ()) sp = ((),sb) /\ fn_has_code sp sb func /\
+  ~ctx_has_dalloca ctx /\
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee t /\
+  ext_call_precheck_ok skip ret_type target ee.accounts /\
+  op_taint tn addr = {} /\ alloca_history func t /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?t1 G1 tn1.
+    extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sb stat
+      addr value gas buf off len cap target value_opt calldata has_default
+      default_op default_ty default_opt ee t1 /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK t1,G1,tn1)) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t1) /\
+    t1.vs_memory = t.vs_memory /\ t1.vs_allocas = t.vs_allocas /\
+    t1.vs_alloca_next = t.vs_alloca_next /\ tn1.t_mem = tn.t_mem /\
+    (!x. not_fresh_at sp x ==> lookup_var x t1 = lookup_var x t /\
+      FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x)) /\
+    (!op. safe_operand sp op ==> eval_operand op t1 = eval_operand op t /\
+      op_taint tn1 op = op_taint tn op /\
+      (!x. op = Var x ==> FLOOKUP G1 x = FLOOKUP G x)) /\
+    (ghost_kept_at lo cenv es sa G0 tn0 s0 G tn ==>
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) /\
+    (!cx' ty v op. safe_operand sp op /\ ptr_mem_ok cx' ty v op G tn t ==>
+      ptr_mem_ok cx' ty v op G1 tn1 t1) /\ alloca_history func t1
+Proof
+  strip_tac >> Cases_on `ret_type = NoneT /\ ~skip`
+  >- (fs[] >>
+      `~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sp.cs_current_insts /\
+       sa.cs_next_var <= sp.cs_next_var /\ local_ptrs_reserved cenv sp /\
+       accounts_runtime_well_typed ee.accounts /\
+       ?aw. eval_operand addr t = SOME aw /\ w2w aw = target` by
+        fs[extcall_request_ready_def] >>
+      `sb.cs_current_bb = sp.cs_current_bb /\
+       sp.cs_next_var <= sb.cs_next_var /\ sp.cs_next_id <= sb.cs_next_id /\
+       LENGTH sb.cs_current_insts = t.vs_inst_idx + 2` by
+        gvs[exprLoweringTheory.compile_extcodesize_check_def, emit_op_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+          fresh_id_def, emit_def] >>
+      ` (lookup_account target ee.accounts).code <> []` by
+        fs[vyperInterpreterTheory.ext_call_precheck_ok_def, vyperInterpreterTheory.ext_call_has_code_def, listTheory.NULL_EQ] >>
+      `!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee t /\ allocas_from lo t` by
+        (fs[extcall_request_ready_def, bodyPtrDefsTheory.ghost_inv_at_def] >> metis_tac[]) >>
+      drule_all extcall_check_guarded_success >>
+      disch_then (qspecl_then [`explicit`,`PG`,`G`,`DF`] strip_assume_tac) >>
+      qexistsl_tac [`update_var out
+        (n2w (LENGTH (lookup_account (w2w aw) t.vs_accounts).code)) t
+        with vs_inst_idx := LENGTH sb.cs_current_insts`,
+        `G \\ out`, `tn with t_var := tn.t_var |+ (out,{})`] >>
+      conj_tac >- metis_tac[extcall_request_fresh_scalar] >>
+      conj_tac >- metis_tac[] >>
+      conj_tac >- (rpt strip_tac >> irule extcall_fresh_scalar_ghost_frame >>
+        reverse conj_tac >- metis_tac[] >> qexists_tac `sp` >>
+        simp[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+      drule_all extcall_check_alloca_history >> strip_tac >>
+      drule_all extcall_fresh_scalar_observations >> strip_tac >>
+      gvs[update_var_def] >> metis_tac[]) >>
+  gvs[comp_return_def] >> qexistsl_tac [`t`,`G`,`tn`] >> simp[] >>
+  rpt strip_tac >> irule (cj 1 gas_origin_ptr_path_rules) >>
+  fs[extcall_request_ready_def]
+QED
