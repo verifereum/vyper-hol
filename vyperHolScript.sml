@@ -33,7 +33,7 @@ Ancestors
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
-  codegenRequestPrefix
+  codegenRequestPrefix callTraceFrame guardPushProjections
   fnStaticAbortSim
   contextStaticAbortRel
   staticAbortMemDefs
