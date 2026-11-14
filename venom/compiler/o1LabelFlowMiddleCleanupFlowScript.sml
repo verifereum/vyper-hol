@@ -167,10 +167,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem cleanup_code_end_backward:
-  !g x. code_end_var g x ==> !f enabled ctx.
+Theorem cleanup_code_end_backward_no_phi:
+  !g x. code_end_var g x ==> !f enabled.
     g = f with fn_blocks := simplify_current_phis_if enabled f.fn_blocks /\
-    label_flow_ok (ctx with ctx_functions := [f]) ==> code_end_var f x
+    (!i y. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f y ==>
+           ~MEM (Var y) i.inst_operands) ==> code_end_var f x
 Proof
   Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
   drule cleanup_if_origin >> strip_tac >> gvs[]
@@ -181,7 +182,20 @@ Proof
       metis_tac[]) >>
   rename1 `inst.inst_operands = [Var src]` >>
   `code_end_var f src` by metis_tac[] >>
-  drule_all cleanup_phi_no_protected_read >> simp[]
+  metis_tac[simplified_phi_operand, MEM]
+QED
+
+Theorem cleanup_code_end_backward:
+  !g x. code_end_var g x ==> !f enabled ctx.
+    g = f with fn_blocks := simplify_current_phis_if enabled f.fn_blocks /\
+    label_flow_ok (ctx with ctx_functions := [f]) ==> code_end_var f x
+Proof
+  rpt strip_tac >> drule cleanup_code_end_backward_no_phi >>
+  disch_then (qspecl_then [`f`, `enabled`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> fs[label_flow_ok_def] >>
+    qpat_x_assum `!inst. MEM inst (fn_insts f) ==> _`
+      (qspec_then `i` mp_tac) >> simp[] >> metis_tac[]) >>
+  simp[]
 QED
 
 Theorem cleanup_code_end_iff:
