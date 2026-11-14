@@ -6,6 +6,7 @@ Ancestors
   exprExtRequestHistory extcallProtFramePath exprSimSliceCompose
   exprExtRequestSnapshotHeadCps extcallProtFrameUnread
   exprLoweringProps fragExec exprSimMemorySource vyperInterpreter exprExtRequestGasBind
+  exprLowering compileEnv exprExtRequestSnapshotPositionalCps vyperState stmtSimDeclGas
 
 Theorem intcall_ext_history_cont[local]:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -411,6 +412,157 @@ Resume intcall_ext_snapshot_head_cps[suffix_join]:
 QED
 
 Finalise intcall_ext_snapshot_head_cps
+
+Theorem intcall_ext_positional_from_head[local]:
+  (!e es sa sc vv sv sb s kont Q.
+    intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+    intcall_expr_producer fp e /\ supported_expr fp.jc_tops e /\
+    calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+    expr_body_pre ce fp.jc_cx env e es /\ ~expr_has_effect e /\
+    compile_expr ce (expr_type e) e sa = (vv,sc) /\
+    compile_snapshot_vv ce F (ext_call_arg_value (lowered_value_type ce e) vv) sc = (sv,sb) /\
+    fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+    intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    gas_admissible (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+      expr_vv_res_ok es /\
+    (!v ee u tv.
+      extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+        fp.jc_ctx fp.jc_func ce fp.jc_cx ee sb u (sv,lowered_value_type ce e,tv,v) /\
+      intcall_expr_cont fp ce env es sa s ee sb u /\
+      extrequest_history_frame ce fp.jc_cx (es with gas_obs := []) sa s ee sb u /\
+      ee.gas_obs = [] /\
+      (?used. !tail. bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+        (es with gas_obs := used ++ tail) = (INL v,ee with gas_obs := tail)) ==>
+      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+        (kont v) (ee,u) Q (\r ef z. expr_exit r z)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+      (es,s) Q (\r ef z. expr_exit r z)) ==>
+  !xs es sa sb vvs s k old_cells.
+    intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+    EVERY (intcall_expr_producer fp) xs /\ EVERY (supported_expr fp.jc_tops) xs /\
+    EVERY (\e. calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) xs /\
+    EVERY (\e. !mid. expr_sim_inv ce fp.jc_cx env mid ==>
+      expr_body_pre ce fp.jc_cx env e mid) xs /\
+    EVERY (\e. ~expr_has_effect e) (xs ++ kws) /\
+    compile_ext_call_args compile_expr ce kws (MAP (lowered_value_type ce) xs) xs sa = (vvs,sb) /\
+    fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+    intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+      fp.jc_ctx fp.jc_func ce fp.jc_cx (es with gas_obs := []) sa s) old_cells /\
+    gas_admissible (bind (eval_exprs fp.jc_cx xs) k) expr_vv_res_ok es /\
+    (!vs ee u cells.
+      MAP (\(vv,ty,tv,v). vv) cells = vvs /\
+      MAP (\(vv,ty,tv,v). ty) cells = MAP (lowered_value_type ce) xs /\
+      MAP (\(vv,ty,tv,v). v) cells = vs /\
+      EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+        fp.jc_ctx fp.jc_func ce fp.jc_cx ee sb u) (old_cells ++ cells) /\
+      intcall_expr_cont fp ce env es sa s ee sb u /\
+      extrequest_history_frame ce fp.jc_cx (es with gas_obs := []) sa s ee sb u /\
+      ee.gas_obs = [] /\
+      (?used. !tail. eval_exprs fp.jc_cx xs (es with gas_obs := used ++ tail) =
+        (INL vs,ee with gas_obs := tail)) ==>
+      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+        (k vs) (ee,u) Q (\r ef z. expr_exit r z)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (bind (eval_exprs fp.jc_cx xs) k) (es,s) Q (\r ef z. expr_exit r z)
+Proof
+  disch_then (mk_asm "head") >>
+  Induct_on `xs` >> rpt gen_tac
+  >- (simp[compile_ext_call_args_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >>
+      `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func) (k [])
+        (es with gas_obs := [],s) Q (\r ef z. expr_exit r z)` by
+        (first_x_assum irule >>
+         simp[exprExtRequestHistoryTheory.extrequest_history_frame_refl] >>
+         conj_tac
+         >- (qexists `[]` >> simp[Once evaluate_def, return_def,
+               vyperStateTheory.evaluation_state_component_equality]) >>
+         fs[intcall_expr_res_def,
+           exprExtRequestHistoryTheory.extrequest_history_frame_refl] >>
+         simp[intcall_expr_cont_def, intcall_expr_res_def,
+           loweringPostsTheory.locals_kept_def,
+           loweringPostsTheory.popped_kept_def] >> metis_tac[]) >>
+      simp[Once evaluate_def, bind_return] >>
+      qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+      >- (qexists `marks` >> disj1_tac >>
+          gvs[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
+          metis_tac[]) >>
+      drule stmtSimDeclGasTheory.gas_exempt_cert_start_gas_obs >>
+      disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[] >> metis_tac[]) >>
+  strip_tac >>
+  `~exprs_can_mutate ce (xs ++ kws)` by
+    (irule exprExtRequestSnapshotProbeTheory.extrequest_snapshot_tail_no_copy >> gvs[]) >>
+  qpat_x_assum `compile_ext_call_args _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_ext_call_args_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `compile_expr ce (expr_type h) h sa = (head_vv,sm)` >>
+  rename1 `compile_snapshot_vv ce F _ sm = (head_sv,sn)` >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`ce`, `expr_type h`, `h`, `sa`] (cj 1 compile_expr_ci_mono)) >> simp[]) >>
+  `ci_mono sm sn` by metis_tac[ci_mono_compile_snapshot_vv, pairTheory.SND] >>
+  rename1 `compile_ext_call_args compile_expr ce kws _ xs sn = (tail_vvs,sb)` >>
+  `ci_mono sn sb` by
+    (qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` mp_tac >>
+     mp_tac (Q.SPECL [`xs`, `MAP (lowered_value_type ce) xs`, `compile_expr`, `ce`, `kws`, `sn`]
+       ci_mono_compile_ext_call_args) >>
+     simp[cj 1 compile_expr_ci_mono] >> metis_tac[pairTheory.SND]) >>
+  `ci_mono sa sn` by metis_tac[ci_mono_trans] >>
+  `fn_has_code sa sn fp.jc_func /\ fn_has_code sn sb fp.jc_func` by
+    (irule fn_has_code_split >> gvs[ci_mono_def]) >>
+  `expr_body_pre ce fp.jc_cx env h es` by
+    (fs[intcall_expr_res_def] >> metis_tac[]) >>
+  simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_assoc, bind_return] >>
+  once_rewrite_tac[GSYM bind_assoc] >>
+  asm "head" irule >>
+  qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_snapshot_vv _ _ _ _ = _` (irule_at Any) >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+      simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_assoc, bind_return]) >>
+  rpt gen_tac >> strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `gas_admissible (bind (eval_exprs fp.jc_cx xs) (\vs. k (v::vs))) expr_vv_res_ok ee` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_assoc, bind_return] >>
+     once_rewrite_tac[GSYM bind_assoc] >>
+     strip_tac >> drule stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+     disch_then drule >> simp[]) >>
+  `intcall_expr_res fp ce env ee sn u /\ ~u.vs_halted /\
+    u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  `EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+      fp.jc_ctx fp.jc_func ce fp.jc_cx ee sn u) old_cells` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     irule exprExtRequestSnapshotStoreInterfaceTheory.extrequest_snapshot_cell_protected_history >>
+     qexistsl [`sa`, `es with gas_obs := []`, `s`] >>
+     fs[intcall_expr_res_def] >> metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  first_x_assum irule >>
+  qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` (irule_at Any) >>
+  qexists `(head_sv,lowered_value_type ce h,tv,v)::old_cells` >>
+  simp[] >>
+  rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!ee u cells. _`
+        (qspecl_then [`ee'`, `u'`, `(head_sv,lowered_value_type ce h,tv,v)::cells`] mp_tac) >>
+      simp[] >> disch_then irule >> conj_tac
+      >- (qexists `used ++ used'` >>
+          irule exprExtRequestKwargsTheory.extrequest_kwargs_counted_cons >>
+          qexists `ee` >> simp[]) >>
+      conj_tac
+      >- (irule exprExtRequestHistoryComposeTheory.extrequest_history_frame_trans >>
+          conj_tac
+          >- (qexistsl [`fp.jc_ctx`, `fp.jc_func`] >>
+              fs[intcall_expr_res_def]) >>
+          qexistsl [`ee`, `sn`, `u`] >> gvs[]) >>
+      irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
+      qexistsl [`sn`, `ee`, `u`] >>
+      fs[ci_mono_def, exprExtRequestHistoryTheory.extrequest_history_frame_def,
+         exprExtRequestReadProbeTheory.extrequest_read_frame_def]
+QED
 
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
