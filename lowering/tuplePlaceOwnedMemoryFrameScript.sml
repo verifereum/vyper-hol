@@ -376,14 +376,15 @@ Resume tuple_place_owned_memory_forward_frame[staged]:
   disch_then (qspecl_then [`ee.scopes`, `sa`, `cenv`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then strip_assume_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
-       stmt_state_rel H ctx func cenv cx ee r` by
-    (qpat_assum `(r with <|vs_vars := _; vs_allocas := _;
+  qpat_assum `(r with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|>) = s`
-       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexists_tac `H0` >> fs[]) >>
+    (strip_assume_tac o SRULE [venom_state_component_equality]) >>
   qexistsl_tac [`r`, `t`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac
+   >- (rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+       conj_tac >- (qexists_tac `H0` >> asm_rewrite_tac[]) >>
+       qexists_tac `s` >> fs[])) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- (qpat_assum `(t with <|vs_vars := _; vs_memory := _;
      vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = r` mp_tac >>
