@@ -1,6 +1,8 @@
 (* The source replay and full post use the same canonical target leaf. *)
 Theory msgGasOriginPost
 Ancestors
+  (* Keep the joint word leaf reachable until body-case assembly imports it. *)
+  bodyFullBuiltinWord
   msgGasOrigin msgGasPost msgGasSim gasExplicitSites fragGasOrigin
   gasSummary gasCount loweringPosts
   gasShadowState gasShadowUnit exprSimProps exprSimHypsDefs exprLoweringProps exprLowering
