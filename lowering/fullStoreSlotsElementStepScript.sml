@@ -114,7 +114,7 @@ Theorem store_slots_element_step_origin_ptr:
   eval_operand dst s = SOME dw /\ op_prov G dst = NONE /\
   FLOOKUP G cv = NONE /\ op_taint tn (Var cv) = {} /\ op_taint tn dst = {} /\
   ptr_covers G tn xs s (n*ms) /\ j < n /\ n < dimword(:256) /\
-  w2n sw+n*ms < dimword(:256) /\ w2n dw+n*slots < dimword(:256) /\
+  w2n sw+n*ms < dimword(:256) /\ w2n dw+n*slots <= dimword(:256) /\
   val_store_size tv v <= ms /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n sw+j*ms) m) /\
@@ -169,8 +169,8 @@ Proof
     (`w2n sw+j*ms < dimword(:256) /\
       w2n dw+j*slots < dimword(:256)` by
       (conj_tac >- decide_tac >>
-       `j*slots <= n*slots` by
-         (irule LESS_MONO_MULT >> decide_tac) >> decide_tac) >> simp[]) >>
+       Cases_on `slots=0` >- simp[w2n_lt] >>
+       `j*slots < n*slots` by simp[LT_MULT_RCANCEL] >> decide_tac) >> simp[]) >>
   `ptr_covers Gp tp sp p (val_store_size tv v)` by
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> decide_tac) >>
   `eval_operand (Var dp) p = SOME (n2w (w2n dw+j*slots))` by
