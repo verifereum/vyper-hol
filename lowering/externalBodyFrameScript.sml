@@ -1,6 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
+  externalReturnBuffer
   entryDispatchProps constSubst supportedGetterProps externalRawReturnType
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
@@ -47,75 +48,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem supported_function_names_mem:
-  !tops vis mut nr rr name args defaults ret body.
-    MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
-    MEM name (supported_function_names tops)
-Proof
-  Induct >> simp[supported_function_names_def] >>
-  rpt gen_tac >> Cases_on `h` >> simp[supported_function_names_def] >>
-  metis_tac[]
-QED
-
-Theorem distinct_classify_fold_fallback[local]:
-  !tops mut nr rr args defaults ret body.
-    ALL_DISTINCT (supported_function_names tops) /\
-    MEM (FunctionDecl External mut nr rr "__default__" args defaults ret body) tops ==>
-    FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
-      SOME (mut,nr,rr,"__default__",args,defaults,ret,body)
-Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  simp[Once FOLDR] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >> fs[] >> Cases_on `h` >>
-  simp[supported_function_names_def, classify_function_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  Cases_on `f` >> gvs[] >>
-  Cases_on `s = "__default__"` >> gvs[] >>
-  metis_tac[supported_function_names_mem]
-QED
-
-Theorem distinct_external_classification:
-  !tops mut nr rr name args defaults ret body exts ints fb ctor.
-    supported_declaration_headers tops /\
-    ALL_DISTINCT (supported_function_names tops) /\
-    MEM (FunctionDecl External mut nr rr name args defaults ret body) tops /\
-    classify_functions tops = (exts,ints,fb,ctor) ==>
-    (if name = "__default__" then
-       fb = SOME (mut,nr,rr,name,args,defaults,ret,body)
-     else MEM (mut,nr,rr,name,args,defaults,ret,body) exts)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `module_consts_env tops [] = []` by
-    metis_tac[supported_declaration_headers_def,
-              supported_headers_module_consts_env] >>
-  Cases_on `name = "__default__"`
-  >- (gvs[] >> drule_all distinct_classify_fold_fallback >>
-      qpat_x_assum `classify_functions _ = _` mp_tac >>
-      simp[classify_functions_def] >> pairarg_tac >>
-      rpt strip_tac >> gvs[subst_consts_fn_empty]) >>
-  drule_all classify_fold_external_member >>
-  qpat_x_assum `classify_functions _ = _` mp_tac >>
-  simp[classify_functions_def] >> pairarg_tac >>
-  rpt strip_tac >> gvs[MEM_MAP] >>
-  disj1_tac >> qexists `(mut,nr,rr,name,args,defaults,ret,body)` >>
-  simp[subst_consts_fn_empty]
-QED
-
-Theorem supported_external_classification:
-  supported_program tops /\
-  MEM (FunctionDecl External mut nr rr name args defaults ret fbody) tops /\
-  classify_functions tops = (exts,ints,fb,ctor) ==>
-  (if name = "__default__" then
-     fb = SOME (mut,nr,rr,name,args,defaults,ret,fbody)
-   else MEM (mut,nr,rr,name,args,defaults,ret,fbody) exts)
-Proof
-  strip_tac >> irule distinct_external_classification >>
-  drule supported_program_names >>
-  simp[supported_declaration_names_def] >>
-  gvs[supported_program_def] >> metis_tac[]
-QED
-
 Theorem supported_external_allocs_ok:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
@@ -130,64 +62,6 @@ Proof
   simp[] >> Cases_on `name = "__default__"` >> gvs[]
 QED
 
-
-Theorem build_compile_env_return_buffer_ok:
-  !tops vis mut name args ret body use_trans.
-    return_buffer_ok
-      (build_compile_env tops vis mut name args ret body use_trans)
-Proof
-  rpt gen_tac >> simp[build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[]) >> simp[return_buffer_ok_def]
-QED
-
-Theorem update_cenv_ret_abi_word_return_buffer_ok:
-  !cenv ret. is_word_type ret ==>
-    return_buffer_ok (update_cenv_ret_abi cenv ret)
-Proof
-  Cases_on `ret` >> simp[is_word_type_def] >-
-    (Cases_on `b` >>
-     simp[is_word_type_def, update_cenv_ret_abi_def, return_buffer_ok_def,
-          type_to_abi_enc_info_def, abi_size_bound_def, is_abi_dynamic_def,
-          abi_static_size_def, type_memory_bytes_def] >>
-     rename1 `BytesT kind` >> Cases_on `kind` >>
-     simp[is_word_type_def, update_cenv_ret_abi_def, return_buffer_ok_def,
-          type_to_abi_enc_info_def, abi_size_bound_def, is_abi_dynamic_def,
-          abi_static_size_def, type_memory_bytes_def]) >>
-  simp[update_cenv_ret_abi_def, return_buffer_ok_def,
-       type_to_abi_enc_info_def, abi_size_bound_def, is_abi_dynamic_def,
-       abi_static_size_def, type_memory_bytes_def]
-QED
-
-Theorem package_external_fn_return_buffer_ok:
-  !target tops use_trans nkeys mut nr rr name args dflts ret body'
-   lbl cenv pos_args min_cds is_payable nr' nkey ut iv body rt.
-  set_external_package_target target
-    (package_external_fn tops use_trans nkeys
-      (mut,nr,rr,name,args,dflts,ret,body')) =
-      (lbl,cenv,pos_args,min_cds,is_payable,nr',nkey,ut,iv,body,rt) /\
-  external_return_buffer_ok
-      (lbl,cenv,pos_args,min_cds,is_payable,nr',nkey,ut,iv,body,rt) ==>
-  (stmts_valued_return body /\ ~cenv.ce_raw_return ==>
-    return_buffer_ok cenv)
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `ret = NoneT`
-  >- (qpat_x_assum `external_return_buffer_ok _` kall_tac >>
-      `return_buffer_ok
-         (build_compile_env tops External mut name args ret body' use_trans)`
-        by irule build_compile_env_return_buffer_ok >>
-      gvs[package_external_fn_def, set_external_package_target_def,
-          update_cenv_nonreentrant_def, return_buffer_ok_def]) >>
-  Cases_on `is_word_type ret`
-  >- (qpat_x_assum `external_return_buffer_ok _` kall_tac >>
-      drule update_cenv_ret_abi_word_return_buffer_ok >>
-      disch_then (qspec_then
-        `build_compile_env tops External mut name args ret body' use_trans
-           with ce_raw_return := rr` mp_tac) >>
-      gvs[package_external_fn_def, set_external_package_target_def,
-          update_cenv_nonreentrant_def, return_buffer_ok_def]) >>
-  gvs[package_external_fn_def, set_external_package_target_def,
-      external_return_buffer_ok_def]
-QED
 
 Theorem make_struct_fields_map_fields:
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\

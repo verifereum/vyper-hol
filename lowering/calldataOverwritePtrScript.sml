@@ -163,8 +163,7 @@ Theorem clean_mstore_overwrite_prefix_uniform:
   ptr_covers G tn p s 32 /\ op_taint tn v = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ allocas_from lo s /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
     run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
