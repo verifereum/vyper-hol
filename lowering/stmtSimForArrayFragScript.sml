@@ -81,6 +81,25 @@ Proof
   simp[]
 QED
 
+Theorem array_caller_freshness[local]:
+  sa.cs_next_var = st.cs_next_var + 5 /\
+  sa.cs_next_var <= sb0.cs_next_var /\
+  sa.cs_next_var <= sj.cs_next_var /\
+  p = STRING #"%" (toString st.cs_next_var) /\
+  idx = STRING #"%" (toString (st.cs_next_var + 1)) /\
+  dv = STRING #"%" (toString (st.cs_next_var + 2)) /\
+  ov = STRING #"%" (toString (st.cs_next_var + 3)) /\
+  ep = STRING #"%" (toString (st.cs_next_var + 4)) /\
+  nv = STRING #"%" (toString sj.cs_next_var) ==>
+  (!x. not_fresh_at st x ==> not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> ep) /\
+  (!x. not_fresh_at st x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+  st.cs_next_var <= sa.cs_next_var
+Proof
+  simp[not_fresh_at_def] >> rpt strip_tac >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem compile_for_array_memory_code:
   expr_type e = ArrayT et (Fixed n) /\
   compile_expr cenv (ArrayT et (Fixed n)) e origin = (av,st) /\
@@ -113,12 +132,24 @@ Theorem compile_for_array_memory_code:
         [mk_inst (st.cs_next_id + 2) ASSIGN [Lit 0w] [idx];
          mk_inst (st.cs_next_id + 3) JMP [Label cond] []]|> /\
     st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
-    cs_extends st sa
+    cs_extends st sa /\
+    (?sd. declare_local cenv id et st = (bc,sd)) /\
+    (!x. not_fresh_at st x ==>
+      not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> ep) /\
+    (!x. not_fresh_at st x ==>
+      not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+    not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+    (!x. arr_op = Var x ==> not_fresh_at sb0 x) /\
+    st.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+    (!x. not_fresh_at st x ==> x <> p /\ x <> idx) /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id
 Proof
   strip_tac >>
   `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
                 cs_extends sa sb` by metis_tac[] >>
   drule_all compile_for_array_memory_parts >> strip_tac >>
+  `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id` by
+    (conj_tac >- simp[] >> decide_tac) >>
   drule_all declare_local_ptr >> strip_tac >>
   `st.cs_next_var + 5 <= sj.cs_next_var` by
     (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
@@ -126,10 +157,20 @@ Proof
   `st.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
   drule_all array_declared_reserved >> strip_tac >>
   drule array_start_alloca_member >> strip_tac >>
+  `sa.cs_next_var <= sj.cs_next_var` by simp[] >>
+  `(!x. not_fresh_at st x ==> not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> ep) /\
+   (!x. not_fresh_at st x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+   not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+   st.cs_next_var <= sa.cs_next_var` by
+    (irule array_caller_freshness >> simp[] >> qexists_tac `sj` >> simp[]) >>
+  `!x. arr_op = Var x ==> not_fresh_at sb0 x` by
+    (rpt strip_tac >> fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `!x. not_fresh_at st x ==> x <> p /\ x <> idx` by
+    simp[not_fresh_at_def] >>
   qexistsl_tac [`bc`, `p`, `idx`, `dv`, `ov`, `ep`, `nv`, `entry`, `cond`,
                `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`, `sj`] >>
   fs[array_for_code_def, elem_size_in_location_def, is_slot_addressed_def,
-     mk_inst_def] >> gvs[]
+     mk_inst_def] >> gvs[] >> metis_tac[]
 QED
 
 Theorem compile_for_array_code:
@@ -176,7 +217,9 @@ Proof
     compile_for_array_memory_code) >>
   simp[vyperASTTheory.expr_type_def, contextTheory.vv_location_def,
        contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-  disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  qexistsl_tac [`bc`, `p`, `idx`, `dv`, `ov`, `ep`, `nv`, `entry`, `cond`,
+               `bod`, `incr`, `sa`, `sb0`, `sb1`, `sj`] >> gvs[]
 QED
 
 (* Allocation changes exactly its output register, whether reused or fresh. *)
@@ -432,25 +475,6 @@ Proof
   drule array_prefix_continuation >> simp[] >> metis_tac[]
 QED
 
-Theorem array_caller_freshness[local]:
-  sa.cs_next_var = st.cs_next_var + 5 /\
-  sa.cs_next_var <= sb0.cs_next_var /\
-  sa.cs_next_var <= sj.cs_next_var /\
-  p = STRING #"%" (toString st.cs_next_var) /\
-  idx = STRING #"%" (toString (st.cs_next_var + 1)) /\
-  dv = STRING #"%" (toString (st.cs_next_var + 2)) /\
-  ov = STRING #"%" (toString (st.cs_next_var + 3)) /\
-  ep = STRING #"%" (toString (st.cs_next_var + 4)) /\
-  nv = STRING #"%" (toString sj.cs_next_var) ==>
-  (!x. not_fresh_at st x ==> not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> ep) /\
-  (!x. not_fresh_at st x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
-  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
-  st.cs_next_var <= sa.cs_next_var
-Proof
-  simp[not_fresh_at_def] >> rpt strip_tac >> simp[] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem compile_for_array_code_ready_framed:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
   compile_stmt cenv lctx ty
@@ -492,34 +516,19 @@ Theorem compile_for_array_code_ready_framed:
     st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id
 Proof
   strip_tac >>
-  `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
-                cs_extends sa sb` by metis_tac[] >>
-  drule_all compile_for_array_parts >> strip_tac >>
-  `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id` by
-    (conj_tac >- simp[] >> decide_tac) >>
   `!x. arr_op = Var x ==> not_fresh_at st x` by
     (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  drule_all declare_local_ptr >> strip_tac >>
-  `st.cs_next_var + 5 <= sj.cs_next_var` by
-    (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
-  drule_all array_register_frame >> strip_tac >>
-  `st.cs_next_var + 1 <= sa.cs_next_var` by simp[] >>
-  drule_all array_declared_reserved >> strip_tac >>
-  drule array_start_alloca_member >> strip_tac >>
-  `sa.cs_next_var <= sj.cs_next_var` by simp[] >>
-  `(!x. not_fresh_at st x ==> not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> ep) /\
-   (!x. not_fresh_at st x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
-   not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
-   st.cs_next_var <= sa.cs_next_var` by
-    (irule array_caller_freshness >> simp[] >> qexists_tac `sj` >> simp[]) >>
-  `!x. arr_op = Var x ==> not_fresh_at sb0 x` by
-    (rpt strip_tac >> fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-  `!x. not_fresh_at st x ==> x <> p /\ x <> idx` by
-    simp[not_fresh_at_def] >>
-  qexistsl_tac [`bc`, `p`, `idx`, `dv`, `ov`, `ep`, `nv`, `entry`, `cond`,
-               `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`, `sj`] >>
-  fs[array_for_code_def, elem_size_in_location_def, is_slot_addressed_def,
-     mk_inst_def] >> gvs[] >> metis_tac[]
+  `compile_expr cenv (ArrayT et (Fixed n))
+     (Name (ArrayT et (Fixed n)) name) st =
+     (LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory),st)` by
+    metis_tac[compile_array_name] >>
+  mp_tac (Q.INST
+    [`e` |-> `Name (ArrayT et (Fixed n)) name`, `origin` |-> `st`,
+     `av` |-> `LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory)`]
+    compile_for_array_memory_code) >>
+  simp[vyperASTTheory.expr_type_def, contextTheory.vv_location_def,
+       contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+  disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_for_array_code_ready:
