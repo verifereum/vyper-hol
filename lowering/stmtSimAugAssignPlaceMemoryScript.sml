@@ -1603,13 +1603,22 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     simp[] >>
   drule aug_place_store_post >> disch_then assume_tac >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  irule (Q.INST [`dst` |-> `FST r`, `dtv` |-> `ptv`, `e` |-> `e`,
-    `el` |-> `if bop = Exp then expr_int_literal e else NONE`,
-    `op` |-> `op`, `s2` |-> `s2`, `s3` |-> `s3`, `w` |-> `w`,
-    `x` |-> `cur`, `y` |-> `rhs`, `env` |-> `env`]
-    aug_place_binop_store_outcome) >>
-  asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
-  metis_tac[]
+  irule aug_place_binop_store_outcome >>
+  qpat_assum `compile_binop _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
+  qpat_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `alloca_frame _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `place_ptr_rel _ _ t' _ _ _ _` (irule_at Any) >>
+  qpat_assum `evaluate_type _ ty = SOME ptv` (irule_at Any) >>
+  qexistsl_tac [`old`, `env`, `entry'`] >>
+  simp[exprBopSimPropsTheory.bop_result_gas_obs,
+       expr_sim_inv_gas_obs] >>
+  reverse conj_tac
+  >- metis_tac[stmtSimAugAssignTheory.word_value_not_bytes] >>
+  rpt gen_tac >> strip_tac >>
+  irule aug_place_store_post >>
+  qpat_assum `write_place _ _ _ _ = (INL (),ff)` (irule_at Any) >>
+  simp[]
 QED
 
 Finalise compile_augassign_place_memory_case
