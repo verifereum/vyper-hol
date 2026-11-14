@@ -138,7 +138,7 @@ Proof
      fs[o1_run_state_ok_def, o1_initial_state_ok_def]) >>
   `run_context f A w = run_blocks f A fa st /\
    run_context f' B w = run_blocks f' B fb st` by
-    (simp[Abbr `st`] >> conj_tac >> irule run_context_entry_blocks >> gvs[]) >>
+    (simp[Abbr `st`] >> rpt conj_tac >> irule run_context_entry_blocks >> gvs[]) >>
   `terminates (run_blocks f A fa st) /\ terminates (run_blocks f' B fb st)` by
     metis_tac[] >>
   `f <= f + f' /\ f' <= f + f'` by decide_tac >>
