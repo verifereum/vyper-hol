@@ -136,6 +136,6 @@ Proof
   asm_rewrite_tac[MAP, eval_for_cons_value_round] >> disch_tac >>
   drule gas_marked_exec_ptr_exec >>
   rewrite_tac[gas_marked_exec_def] >> strip_tac >>
-  drule_all gasContextTheory.gas_admissible_bind_tail >> simp[] >> strip_tac >>
+  drule_all gas_admissible_bind_tail >> simp[] >> strip_tac >>
   qpat_x_assum `!y. _` (qspec_then `SUC k` mp_tac) >> simp[]
 QED
