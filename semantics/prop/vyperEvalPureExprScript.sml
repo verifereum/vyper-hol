@@ -542,13 +542,3 @@ Proof
   >- (drule_all (eval_to_eval_pure_mutual |> CONJUNCT1) >> gvs[])
   >- (`st' = st` by metis_tac[eval_expr_preserves_state] >> gvs[])
 QED
-
-(* Pure correspondence exports must not depend on admissions. *)
-val () = List.app
-  (fn (name,th) =>
-    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("pure correspondence proof is not closed: " ^ name)
-    end)
-  (DB.thms "vyperEvalPureExpr");

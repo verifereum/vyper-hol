@@ -63,12 +63,3 @@ Proof
     (SPEC_ALL entry_relation_finite_iteration))) >>
   simp[] >> qexists_tac `j` >> simp[]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry relation iteration inherited admission"
-    end) [entry_relation_finite_iteration, entry_observation_history_reflexive,
-          entry_observation_history_transitive, entry_safe_pull_frame_iteration];

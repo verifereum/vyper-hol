@@ -135,10 +135,3 @@ Proof
   gvs[value_has_type_def, Once vyper_to_abi_def] >>
   simp[Once abi_to_vyper_def]
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_typed_forward_backward_exists)
-  in if null axioms andalso null (Thm.hyp entry_typed_forward_backward_exists) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry backward existence inherited admission"
-  end;

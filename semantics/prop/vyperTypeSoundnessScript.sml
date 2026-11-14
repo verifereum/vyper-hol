@@ -308,16 +308,3 @@ Proof
   drule_all (CONJUNCT1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >>
   gvs[runtime_storage_consistent_def, runtime_consistent_def]
 QED
-
-(* Public soundness exports and their mutual foundations are kernel-closed. *)
-val () = List.app
-  (fn (name,th) =>
-    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("public soundness proof is not closed: " ^ name)
-    end)
-  (DB.thms "vyperTypeSoundness" @
-   [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
-    ("eval_scc_storage_preservation_mutual",eval_scc_storage_preservation_mutual),
-    ("eval_expr_read_type_sound",eval_expr_read_type_sound)]);

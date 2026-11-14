@@ -80,12 +80,3 @@ Proof
   >- metis_tac[default_value_well_typed] >>
   gvs[value_has_type_def] >> metis_tac[ALOOKUP_sparse_has_type]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry memory congruence inherited admission"
-  end) [entry_elems_memory_congruence, entry_sparse_memory_congruence,
-        entry_tuple_memory_congruence, entry_fields_memory_congruence,
-        entry_typed_sparse_memory_indexed, entry_typed_sparse_element];

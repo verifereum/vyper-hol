@@ -776,14 +776,3 @@ Resume topcopy_compile_loop_path[entry]:
 QED
 
 Finalise topcopy_compile_loop_path
-
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
-    then print (name ^ ": kernel dependency audit passed\n")
-    else raise Fail (name ^ " has oracle or axiom dependencies")
-  end)
-  [("topcopy_compile_loop_path", topcopy_compile_loop_path),
-   ("topcopy_singleton_path", topcopy_singleton_path),
-   ("topcopy_code_certificate", topcopy_code_certificate)];

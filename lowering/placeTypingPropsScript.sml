@@ -178,10 +178,3 @@ Proof
   >> drule_all place_type_checked_place_on_defined >> strip_tac >>
   Cases_on `vt` >> gvs[value_type_place_def, subscript_vtype_def, AllCaseEqs()]
 QED
-
-(* Fail the build rather than silently export an admitted bridge. *)
-val _ = List.app (fn (name,th) =>
-  if List.all (fn tag => tag = "DISK_THM")
-       (fst (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("oracle in place typing bridge: " ^ name))
-  (DB.thms "placeTypingProps");

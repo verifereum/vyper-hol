@@ -478,13 +478,3 @@ Proof
   rpt strip_tac >> irule compile_raise_reason_frag >> simp[] >>
   metis_tac[]
 QED
-
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "REASON_EXPR_FORCE_AUDIT OK\n"
-     else raise Fail "reason expression inherited admission"
-  end) [compile_reason_message_expr, reason_expr_revert_extends,
-        eval_raise_reason_cases, compile_raise_reason_path_frag,
-        compile_raise_reason_frag, compile_assert_reason_frag];

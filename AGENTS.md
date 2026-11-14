@@ -91,6 +91,8 @@ When proof-tool use is authorized, prefer a holbuild-centered workflow:
 
 **Never use `--skip-goalfrag`:** It is not allowed.
 
+**Checking for cheats:** check theories for cheats, oracles or axioms with `holbuild check THEORY[:THEOREM]`, never with `Thm.tag`/`Tag.dest_tag` checks in a script (CI rejects them). To have CI enforce a theory or theorem clean, add its selector to `.github/holbuild-check-targets.txt`.
+
 ### File Conventions (repo-specific)
 
 Local test/scratch files use **dot prefixes** (gitignored), except buildable

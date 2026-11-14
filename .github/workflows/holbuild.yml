@@ -43,6 +43,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: No theorem-tag checks in sources (use holbuild check)
+        run: |
+          if git grep -nE 'Tag\.dest_tag|Thm\.tag' -- '*.sml'; then
+            echo "Check cheats with holbuild check: add a selector to .github/holbuild-check-targets.txt" >&2
+            exit 1
+          fi
+
       - uses: ./.github/actions/setup-holbuild-project
 
       - name: Configure remote cache
@@ -58,11 +65,8 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
-      - name: Check external-entry theories for cheats and axioms
-        run: |
-          for theory in vyperABIEntriesTheory vyperExternalEntryBehaviorTheory vyperExternalEntrySourceBehaviorTheory; do
-            holbuild check "$theory"
-          done
+      - name: Check listed theories and theorems for cheats and axioms
+        run: holbuild check $(grep -v '^#' .github/holbuild-check-targets.txt)
 
       - name: Verify no successful-build checkpoints remain
         run: |

@@ -52,9 +52,3 @@ Proof
   >- metis_tac[build_compile_env_defined_map_agreement] >>
   metis_tac[checked_contract_place_type]
 QED
-
-val _ = List.app (fn (name,th) =>
-  if List.all (fn tag => tag = "DISK_THM")
-       (fst (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("oracle in contextual place typing bridge: " ^ name))
-  (DB.thms "placeTypingE2EProps");

@@ -33,13 +33,6 @@ Proof
   asm_rewrite_tac[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_base_common_conversion_memory)
-  in if null axioms andalso null (Thm.hyp entry_base_common_conversion_memory) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry primitive conversion inherited admission"
-  end;
-
 Theorem entry_tuple_common_conversion_memory[local]:
   (!tv' env ty v w av p mem.
     type_value_size tv' < type_value_size tv /\
@@ -162,11 +155,3 @@ Proof
   Cases_on `v'` >> Cases_on `w` >>
   gvs[value_has_type_def, Once vyper_to_abi_def]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry common conversion inherited admission"
-  end) [entry_tuple_common_conversion_memory, entry_array_common_conversion_memory,
-        entry_struct_common_conversion_memory, entry_common_conversion_memory];

@@ -422,10 +422,3 @@ Theorem adopt_create_outcome_accounts:
 Proof
   simp[adopt_create_outcome_equation]
 QED
-
-(* Kernel audit of this boundary, including its strict prerequisites. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then () else raise Fail ("Incomplete oracle boundary: " ^ name)
-  end) (DB.thms "vyperCallOutcome");

@@ -167,10 +167,3 @@ Proof
   qexistsl [`ss.vs_data_section`,`tops`] >>
   simp[immutable_build_compile_env_layout]
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Unclosed immutable environment origin: " ^ name)
-  end) (DB.thms "immutableLocationProps");

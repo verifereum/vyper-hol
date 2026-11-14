@@ -60,10 +60,3 @@ Proof
     (CONJUNCT1 val_in_memory_mem_agree_proof) >>
   simp[val_in_memory_drop, mem_bytes_at_drop]
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Unclosed value memory transport: " ^ name)
-  end) (DB.thms "valueMemoryTransport");
