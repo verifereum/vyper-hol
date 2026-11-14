@@ -205,6 +205,9 @@ Proof
           listTheory.EVERY_APPEND]) >>
   qpat_x_assum `MEM _ _ ==> _` drule >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es1 s` by simp[Abbr `es1`] >>
+  `~cx.txn.is_static` by
+    (Cases_on `cx.txn.is_static` >>
+     gvs[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   qspecl_then [`H`, `func`, `cenv`, `cx`, `es1`, `s`, `tr`, `slot`, `tv`, `v`,
     `typed_val_to_w256 tv v`, `INL ()`, `es'`, `ctx`] mp_tac
     stmt_state_rel_write_storage_word >>
