@@ -16,6 +16,7 @@ Libs EmitML finite_mapLib wordsLib cv_typeLib memoryStoreWitnessLib
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
 val () = computeLib.upd_compset (computeLib.add_thms [alistTheory.fmap_to_alist_FEMPTY]);
 val () = computeLib.upd_compset (computeLib.add_thms [integer_wordTheory.i2w_pos]);
+val () = computeLib.upd_compset (computeLib.add_thms [vyperPinFoldTheory.pin_fold_expr_def]);
 
 (* Static annotations read by holbuild; no-ops when the script runs. *)
 fun holbuild_extra_outputs (_ : string list) = ();
@@ -448,6 +449,9 @@ val code_rewrites = [
   (* alloc_limits_expr asks whether a builtin is a Slice *)
   prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
     Cases_on `bi` >> rw[]),
+  (* pin_fold_builtin asks whether an argument type is a BaseT *)
+  prove (``(?bt. ty = BaseT bt) <=> (case ty of BaseT _ => T | _ => F)``,
+    Cases_on `ty` >> rw[]),
   GSYM listTheory.EXISTS_MEM, GSYM listTheory.EVERY_MEM,
   (* entry_instructions' no-effects test. *)
   prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
