@@ -27,7 +27,8 @@ Theorem immutable_store_stmt_state_rel:
 Proof
   strip_tac >> gvs[] >>
   `q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
-   q.vs_fmp = s.vs_fmp /\ q.vs_labels = s.vs_labels /\
+   q.vs_fmp = s.vs_fmp /\ q.vs_initial_fmp = s.vs_initial_fmp /\
+   q.vs_labels = s.vs_labels /\
    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
    q.vs_call_ctx = s.vs_call_ctx /\ q.vs_tx_ctx = s.vs_tx_ctx /\
    q.vs_block_ctx = s.vs_block_ctx /\ q.vs_logs = s.vs_logs /\

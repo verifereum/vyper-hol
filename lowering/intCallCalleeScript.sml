@@ -2121,7 +2121,9 @@ Theorem run_inst_seq_fmp_room:
 Proof
   rpt strip_tac >> irule fmp_room_static_charge >>
   qexists_tac `s` >> simp[] >>
-  irule run_inst_seq_static_charge >> metis_tac[]
+  conj_tac
+  >- (irule run_inst_seq_static_charge >> metis_tac[]) >>
+  strip_tac >> metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length]
 QED
 
 Theorem internal_prologue_run:

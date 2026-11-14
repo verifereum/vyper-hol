@@ -301,8 +301,8 @@ Proof
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
   conj_tac
-  >- (irule fmp_room_fields >> qexists_tac `s` >>
-      asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+  >- (irule fmp_room_mstore >> irule fmp_room_write_memory >>
+      fs[stmt_state_rel_def]) >>
   simp[] >>
   qpat_x_assum `immutable_base_zero cenv (mstore _ _ _)` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>

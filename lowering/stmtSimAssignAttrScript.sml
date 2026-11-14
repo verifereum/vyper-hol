@@ -436,6 +436,10 @@ Proof
     (simp[Abbr `t`, Abbr `a`] >> irule local_mstore_immutables_at >>
      reverse conj_tac >- metis_tac[] >>
      qexistsl_tac [`id`, `sz`] >> gvs[type_memory_size_def]) >>
+  `((ctx_has_dalloca ctx \/
+     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+    LENGTH s.vs_memory <= LENGTH t.vs_memory)` by
+    simp[Abbr `t`, venomMemPropsTheory.mstore_memory_nondecreasing] >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `t`, Abbr `a`]
 QED
 

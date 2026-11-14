@@ -2716,7 +2716,11 @@ Theorem raw_call_oracle_stmt_frame[local]:
   stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx es' t /\
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
   t.vs_alloca_next = s.vs_alloca_next /\
-  t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels /\
+  ((ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   stmt_state_rel H ctx func cenv cx es' t
 Proof
   strip_tac >>
@@ -2731,7 +2735,7 @@ Proof
       qexistsl_tac [`s`,`es`] >> gvs[] >>
       reverse conj_tac >- fs[stmt_state_rel_def] >>
       simp[local_region_def, lookup_var_def] >> metis_tac[]) >>
-  qexistsl_tac [`es`,`s`] >> simp[]
+  qexistsl_tac [`es`,`s`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 
@@ -3202,11 +3206,14 @@ Proof
   `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `oracle_state.vs_vars = s.vs_vars /\ oracle_state.vs_allocas = s.vs_allocas /\
    oracle_state.vs_alloca_next = s.vs_alloca_next /\
-   oracle_state.vs_fmp = s.vs_fmp /\ oracle_state.vs_labels = s.vs_labels` by
+   oracle_state.vs_fmp = s.vs_fmp /\ oracle_state.vs_labels = s.vs_labels /\
+   oracle_state.vs_initial_fmp = s.vs_initial_fmp` by
     (qpat_x_assum `oracle_state = _ with <| vs_outcomes := _; vs_requests := _;
        vs_accounts := _; vs_transient := _; vs_logs := _;
        vs_pending_deletions := _; vs_returndata := _; vs_memory := _ |>`
        (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `LENGTH s.vs_memory <= LENGTH oracle_state.vs_memory` by
+    simp[venomMemPropsTheory.write_memory_with_expansion_nondecreasing] >>
   drule_all_then (qspec_then `bool_to_word outcome.co_success`
     (qx_choose_then `result_state` strip_assume_tac)) raw_call_result_frame >>
   suspend "result"

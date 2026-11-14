@@ -223,20 +223,6 @@ Proof
   gvs[local_ptrs_reserved_def] >> metis_tac[]
 QED
 
-Theorem calldata_memory_restore_fmp[local]:
-  !ctx func s t op id.
-  fmp_room ctx func s /\
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-  eval_operand op t = SOME s.vs_fmp ==>
-  step_inst_base (mk_inst id SETFMP [op] []) t =
-    OK (t with vs_fmp := s.vs_fmp) /\
-  fmp_room ctx func (t with vs_fmp := s.vs_fmp)
-Proof
-  rpt strip_tac
-  >- simp[step_inst_base_opcode_eqs, mk_inst_def] >>
-  irule fmp_room_fields >> qexists_tac `s` >> simp[]
-QED
-
 (* ===== Legal source shape ===== *)
 Theorem calldata_call_pre[local]:
   !cenv cx env ann flags args dflt es.
@@ -2541,7 +2527,10 @@ Theorem raw_call_buffer_oracle_fields[local]:
   es1.scopes = es.scopes /\ es1.immutables = es.immutables /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   t.vs_vars = s.vs_vars /\ t.vs_memory = s.vs_memory /\
-  t.vs_labels = s.vs_labels ==>
+  t.vs_labels = s.vs_labels /\
+  ((ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst_opcode = DALLOCA) (fn_insts func)) ==>
+    t.vs_initial_fmp = s.vs_initial_fmp) ==>
   raw_call_buffer_frame H ctx func cenv cx es0 es1 sf s0 saved ai w n t
 Proof
   rewrite_tac[raw_call_buffer_frame_def] >> strip_tac >> simp[] >>
@@ -2555,7 +2544,8 @@ Proof
       >- (irule immutable_base_zero_frame >>
           qexists_tac `s with vs_fmp := saved` >>
           fs[stmt_state_rel_def, lookup_var_def]) >>
-      qexistsl_tac [`es`, `s with vs_fmp := saved`] >> simp[]) >>
+      qexistsl_tac [`es`, `s with vs_fmp := saved`] >> simp[] >>
+      first_assum ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >> qexistsl_tac [`sf`, `s`] >>
   simp[lookup_var_def] >>
   qpat_x_assum `wb_frame cenv es0 es sf s0 s` mp_tac >>
@@ -2656,6 +2646,10 @@ Proof
     fs[raw_call_buffer_frame_def, stmt_state_rel_def, raw_call_state_rel_fmp,
        state_rel_def] >>
   drule_all raw_call_oracle_step >> strip_tac >>
+  `t.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_assum `step_inst_base inst s = _`
+       (mp_tac o MATCH_MP ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp) >>
+     simp[update_var_def]) >>
   `t.vs_alloca_next = s.vs_alloca_next` by
     (qspecl_then [`inst`, `s`,
        `update_var out (if outcome.co_success then 1w else 0w) t`]

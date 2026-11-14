@@ -8,12 +8,12 @@ Ancestors
 (* The epilogue returns bytes from a related snapshot after releasing the
    constructor lock. The snapshot is not an execution-success assumption. *)
 Definition constructor_return_q_def:
-  constructor_return_q func cenv cx runtime_size immutables_len nr nkey
+  constructor_return_q H func cenv cx runtime_size immutables_len nr nkey
     v (es:evaluation_state) r <=>
     v = NoneV /\
     ?before final codepos.
       r = Halt final /\ final.vs_halted /\
-      state_rel func cenv cx
+      state_rel H func cenv cx
         (if nr then
            es with tStorage :=
              (cx.txn.target =+
@@ -41,9 +41,10 @@ Definition constructor_return_q_def:
 End
 
 Theorem constructor_unlock_stmt_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\
-  storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+  nkey < dimword (:256) /\ cx.nonreentrant_slot = SOME nkey ==>
+  stmt_state_rel H ctx func cenv cx
     (es with tStorage := (cx.txn.target =+
       update_storage (n2w nkey) 0w (es.tStorage cx.txn.target)) es.tStorage)
     (tstore (n2w nkey) 0w s)
@@ -98,26 +99,28 @@ Theorem constructor_exit_run:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+          storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+          nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
-  stmt_state_rel ctx func body_cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   ?fuel final. run_from fuel ctx func s = Halt final /\
-    constructor_return_q func cenv cx rt cap nr nkey NoneV
+    constructor_return_q H func cenv cx rt cap nr nkey NoneV
       (es with scopes := []) (Halt final)
 Proof
   strip_tac >>
   `nr ==> ut` by simp[] >>
   drule_all constructor_exit_code >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `constructor_return_q _ _ _ _ _ _ _ _ es0 _` >>
+  qmatch_goalsub_abbrev_tac `constructor_return_q _ _ _ _ _ _ _ _ _ es0 _` >>
   qabbrev_tac `es1 = if nr then
     es with tStorage := (cx.txn.target =+
       update_storage (n2w nkey) 0w (es.tStorage cx.txn.target)) es.tStorage
     else es` >>
   qabbrev_tac `s1 = (if nr then tstore (n2w nkey) 0w s else s) with
     vs_inst_idx := LENGTH st_epilogue.cs_current_insts` >>
-  `stmt_state_rel ctx func body_cenv cx es1 s1` by
+  `stmt_state_rel H ctx func body_cenv cx es1 s1` by
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
@@ -128,7 +131,7 @@ Proof
   simp[frag_exec_def] >>
   disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func body_cenv cx es1 s1` >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func body_cenv cx es1 s1` >>
   `body_cenv.ce_is_ctor /\
    (cap <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x))` by
@@ -140,7 +143,7 @@ Proof
   qpat_x_assum `!fuel. _` (qspec_then `fuel` mp_tac) >>
   simp[] >> strip_tac >>
   goal_assum (drule_at Any) >>
-  `state_rel func cenv cx (es1 with scopes := []) s1` by
+  `state_rel H func cenv cx (es1 with scopes := []) s1` by
     (irule constructor_exit_state_rel >> qexists `body_cenv` >>
      gvs[stmt_state_rel_def]) >>
   ` (if nr then es0 with tStorage := (cx.txn.target =+

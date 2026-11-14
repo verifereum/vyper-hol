@@ -177,7 +177,10 @@ Proof
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es1 t` by
-    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+    (`((ctx_has_dalloca ctx \/
+        EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+       LENGTH s.vs_memory <= LENGTH t.vs_memory)` by simp[] >>
+     drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -397,6 +400,9 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
      `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+     `((ctx_has_dalloca ctx \/
+        EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+       LENGTH s.vs_memory <= LENGTH t.vs_memory)` by simp[] >>
      drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
@@ -1343,6 +1349,7 @@ Proof
   simp[] >> qexistsl_tac [`s`, `w`] >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
   simp[mstore_def, LET_THM, lookup_var_def]
 QED
 

@@ -3,7 +3,7 @@ Theory abiDecoderSiteEffect
 Ancestors
   valueEncodingDefs
   actualDecoderSites abiDecoderReentry valueEncodingProps valueEncoding
-  localPtrsProps venomState instIdxIndep exprLoweringProps venomMemDefs finite_map pred_set words arithmetic list rich_list
+  localPtrsProps venomState instIdxIndep exprLoweringProps venomMemDefs venomMemProps finite_map pred_set words arithmetic list rich_list
 
 Definition decode_static_frame_def:
   decode_static_frame s t <=>
@@ -201,7 +201,11 @@ QED
 
 Theorem decode_site_resources_fields:
   decode_site_resources ctx fn s /\ t.vs_allocas = s.vs_allocas /\
-  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp ==>
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+  ((ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn)) ==>
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   decode_site_resources ctx fn t
 Proof
   rw[actualDecoderSitesTheory.decode_site_resources_def]
@@ -220,7 +224,10 @@ Proof
   strip_tac >> simp_tac bool_ss [decode_site_effect_def] >>
   conj_tac
   >- (irule decode_site_resources_fields >> qexists `s` >>
-      simp[write_memory_with_expansion_def]) >>
+      simp[write_memory_with_expansion_nondecreasing,
+           write_memory_with_expansion_def, LENGTH_TAKE, LENGTH_DROP,
+           arithmeticTheory.MAX_DEF] >> rpt strip_tac >>
+      rpt (IF_CASES_TAC >> simp[]) >> decide_tac) >>
   conj_tac >- simp[write_memory_with_expansion_def] >>
   conj_tac >- simp[write_memory_with_expansion_def] >>
   conj_tac >- simp[write_memory_with_expansion_def, eval_operand_def, lookup_var_def] >>

@@ -63,8 +63,8 @@ Proof
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
   conj_tac
-  >- (irule fmp_room_fields >> qexists_tac `s` >>
-      simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
+  >- (simp_tac bool_ss [mcopy_def, LET_THM] >>
+      irule fmp_room_write_memory >> fs[stmt_state_rel_def]) >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>

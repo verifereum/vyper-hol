@@ -425,6 +425,7 @@ Proof
          qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> fs[stmt_state_rel_def]) >>
       irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
       fs[regions_disjoint_def] >> decide_tac) >>
+  simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
   simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 

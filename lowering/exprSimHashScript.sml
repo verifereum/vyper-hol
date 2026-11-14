@@ -47,6 +47,8 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort
 
+val _ = Parse.hide "gas_var";
+
 Theorem hash_builtin_types:
   (b = Keccak256 \/ b = Sha256 \/ b = MethodId) /\
   well_typed_builtin_app ty b ts ==>

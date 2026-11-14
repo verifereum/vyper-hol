@@ -203,9 +203,10 @@ Proof
     (irule abi_encode_charge_difference_lift >>
      conj_tac >- first_assum ACCEPT_TAC >> qexists `observer` >>
      fs[abi_encode_exec_frame_def]) >>
-  fs[alloca_room_def, fmp_room_def, abi_encode_exec_frame_def] >>
-  disch_tac >> qpat_x_assum `_ ==> _ /\ _` mp_tac >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> decide_tac
+  conj_tac >- gvs[alloca_room_def] >>
+  irule fmp_room_static_charge >> qexists_tac `initial` >>
+  fs[abi_encode_exec_frame_def,
+     exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_def]
 QED
 
 Theorem abi_encode_caller_immutable_separation:

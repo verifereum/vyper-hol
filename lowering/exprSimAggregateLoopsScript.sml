@@ -1682,7 +1682,10 @@ Proof
   >- (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`es`, `s`] >>
       gvs[stmt_state_rel_def, mstore_def]) >>
-  qexistsl_tac [`es`, `s`] >> simp[mstore_def]
+  qexistsl_tac [`es`, `s`] >> simp[] >> reverse conj_tac
+  >- (strip_tac >> conj_tac >- simp[mstore_def] >>
+      simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
+  simp[mstore_def]
 QED
 
 Theorem array_header_store_boundary:

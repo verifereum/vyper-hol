@@ -6,14 +6,15 @@ Ancestors
 
 Definition abi_encode_semantic_obs_def:
   abi_encode_semantic_obs (s:venom_state) =
-    (s.vs_tx_ctx,s.vs_block_ctx,s.vs_outcomes,s.vs_immutables,s.vs_code)
+    (s.vs_tx_ctx,s.vs_block_ctx,s.vs_outcomes,s.vs_immutables,s.vs_code,
+     s.vs_initial_fmp)
 End
 
 Theorem abi_encode_semantic_obs_fields:
   abi_encode_semantic_obs t = abi_encode_semantic_obs s <=>
   t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
   t.vs_outcomes = s.vs_outcomes /\ t.vs_immutables = s.vs_immutables /\
-  t.vs_code = s.vs_code
+  t.vs_code = s.vs_code /\ t.vs_initial_fmp = s.vs_initial_fmp
 Proof
   simp[abi_encode_semantic_obs_def]
 QED

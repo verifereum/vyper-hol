@@ -56,7 +56,8 @@ Theorem registration_fmp_room_necessary:
     CARD {g | TC (fn_directly_calls ctx) fn.fn_name g} *
       unit_alloca_frame ctx + 2 ** 65 < dimword (:256)
 Proof
-  simp[fmp_room_def] >> rpt strip_tac >>
+  simp[fmp_room_def, ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
+  rpt strip_tac >>
   qpat_x_assum `_ ==> _` mp_tac >>
   (impl_tac >- metis_tac[]) >> strip_tac >> decide_tac
 QED
@@ -151,11 +152,13 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def, allocas_from_def]
 QED
 
-(* The logical entry relations do not constrain the code-generator's
-   initial free-memory-pointer field. *)
+(* Without dynamic allocation, the initial free-memory-pointer field
+   does not constrain the logical entry relations. *)
 Theorem registration_stmt_initial_fmp:
-  stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
-  stmt_state_rel H ctx func cenv cx es s
+  ~(ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+  (stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+   stmt_state_rel H ctx func cenv cx es s)
 Proof
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def, immutable_decl_sep_def,

@@ -57,6 +57,7 @@ Ancestors
   exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple exprCallBounds
   builtinCreate context
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
+  ctxLookupAgreeHelpers execMemoryLengthBase
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs valueLoadProps
@@ -564,6 +565,31 @@ Theorem fmp_room_fields:
 Proof
   rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >>
   res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem fmp_room_mstore:
+  fmp_room ctx func s ==> fmp_room ctx func (mstore off value s)
+Proof
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> rpt conj_tac
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- (disch_tac >> conj_tac >- simp[mstore_def] >>
+      simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem fmp_room_write_memory:
+  fmp_room ctx func s ==>
+  fmp_room ctx func (write_memory_with_expansion off bytes s)
+Proof
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> rpt conj_tac
+  >- simp[write_memory_with_expansion_def]
+  >- simp[write_memory_with_expansion_def]
+  >- simp[write_memory_with_expansion_def]
+  >- (disch_tac >> conj_tac >- simp[write_memory_with_expansion_def] >>
+      simp[venomMemPropsTheory.write_memory_with_expansion_nondecreasing]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem fmp_room_fields_cong:
@@ -5135,6 +5161,26 @@ Proof
      rpt strip_tac >>
      first_x_assum (qspecl_then [`i`, `ss1`, `ss2`] mp_tac) >> simp[]) >>
   simp[]
+QED
+
+Theorem run_inst_seq_initial_fmp:
+  run_inst_seq is s = OK t ==> t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_initial_fmp`
+    run_inst_seq_preserves_field)) >>
+  qexists_tac `is` >> simp[] >>
+  metis_tac[step_inst_base_initial_fmp]
+QED
+
+Theorem run_inst_seq_memory_length:
+  !is s t. run_inst_seq is s = OK t ==>
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
+  drule_all step_base_memory_length >> strip_tac >>
+  first_x_assum drule_all >> decide_tac
 QED
 
 (* ===== Structural Properties ===== *)

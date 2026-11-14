@@ -47,6 +47,9 @@ Proof
   `EVERY (\i. abi_bytes_opcode i.inst_opcode) (emitted_insts st middle)`
     by fs[EVERY_MEM] >>
   drule_all abi_bytes_sequence_static >> strip_tac >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
   `decode_site_resources ctx func t` by
     (irule decode_site_resources_fields >>
      qexists_tac `s` >> fs[abi_decoder_address_frame_def,

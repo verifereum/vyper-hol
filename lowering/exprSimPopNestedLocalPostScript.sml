@@ -180,6 +180,8 @@ Proof
      >- (qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>`
            (fn th => once_rewrite_tac[th]) >> simp[]) >>
      gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
   irule pop_stmt_state_rel_scopes >> goal_assum (drule_at Any) >>
   simp[] >> qexists_tac `s` >> simp[] >>
   conj_tac
