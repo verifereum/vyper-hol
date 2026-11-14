@@ -2,6 +2,7 @@
 Theory abiDecodePtrSelectionJoint
 Ancestors
   abiDecodeSelectionMem abiDecodePtrHead abiDecodePtrSelectionFrame
+  abiDecodePtrSelectionAbort
   abiDecodePtrScalarFrame abiDecodePtrMemberFrame bodyPtrBopScalarSeq
   bodyPtrBopScalarCompile abiDecodePtrPosition abiEncoder
   entryDecoderHistoryFrame fragGasCopyLoop fragGasOriginPtrDead
@@ -42,6 +43,68 @@ Proof
   `isPREFIX sa.cs_current_insts sb.cs_current_insts` by simp[] >>
   drule_all entry_straight_line_code_slice >> strip_tac >>
   qexists_tac `bb` >> simp[IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem abi_decode_getelemptr_abort_joint:
+  compile_getelemptr_abi pos T off MLOAD (Var src) hi sa = (v,sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  abi_decode_ptr_window G tn s src b h /\ not_fresh_at sa src /\
+  (!x. pos = Var x ==> not_fresh_at sa x) /\
+  eval_operand pos s = SOME z /\ op_prov G pos = NONE /\ op_taint tn pos = {} /\
+  p = w2n (z + n2w off) /\ p+32 <= h /\
+  w2n b+h < dimword(:256) /\ w2n b+h <= s.vs_alloca_next /\
+  allocas_from lo s /\ run_inst_seq (emitted_insts sa sb) s = Abort a u ==>
+  ?j G' tn'.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort a (u with vs_inst_idx := j),G',tn')) /\
+    (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+      vs_halted := s.vs_halted; vs_returndata := s.vs_returndata|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\ allocas_from lo u
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (irule abi_decode_getelemptr_mem_ok >>
+     goal_assum (drule_at (Pat `compile_getelemptr_abi _ _ _ _ _ _ _ = _`)) >>
+     qexistsl_tac [`b`, `p`, `z`] >>
+     fs[abi_decode_ptr_window_def] >> strip_tac >> fs[] >> decide_tac) >>
+  drule_all (abi_decode_getelemptr_abort_ptr |> Q.INST
+    [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {});
+       d_imm := K {}; d_ret := K {}|>`]) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule_all abi_decode_getelemptr_joint_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  drule_all run_inst_seq_abort_origin_ptr_uniform >>
+  disch_then (qspec_then `ctx` (qx_choose_then `abort_idx` assume_tac)) >>
+  `inst_seq_ptr
+      <|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>
+      lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf` by
+    (irule (inst_seq_ptr_lower_bound_transport |> Q.INST [`lo0` |-> `0`]) >>
+     simp[] >> fs[EVERY_MEM]) >>
+  `!explicit. gas_origin_ptr_path
+      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
+       lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort a (u with vs_inst_idx := abort_idx),Gf,tnf)` by
+    (gen_tac >> qpat_assum `!D lo explicit PG G tn HG th. _`
+       (qspecl_then
+         [`<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`,
+          `lo`, `explicit`, `PG`, `G`, `tn`, `Gf`, `tnf`] irule) >> simp[]) >>
+  `u.vs_allocas = s.vs_allocas` by
+    (qpat_assum `(u with <|vs_vars := _; vs_inst_idx := _;
+        vs_halted := _; vs_returndata := _|>) = s`
+       (mp_tac o AP_TERM ``\z:venom_state. z.vs_allocas``) >> simp[]) >>
+  qexistsl_tac [`abort_idx`, `Gf`, `tnf`] >> conj_tac
+  >- (rpt gen_tac >> irule gas_origin_ptr_path_from_no_dead >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `(u with <|vs_vars := _; vs_inst_idx := _;
+        vs_halted := _; vs_returndata := _|>) = s` mp_tac >>
+      simp[venom_state_component_equality]) >>
+  fs[allocas_from_def] >> metis_tac[]
 QED
 
 Theorem abi_decode_getelemptr_success_joint:
