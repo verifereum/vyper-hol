@@ -2,6 +2,8 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  (* Keep the joint word leaf reachable until body-case assembly imports it. *)
+  bodyFullBuiltinWord
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
