@@ -270,7 +270,7 @@ QED
 
 (* The frame relation excludes creation-initcode as the observed frame. *)
 Theorem asm_create_frame_output_boundary:
-  asm_frame_rel prog data es0 a es ==>
+  asm_frame_rel gas_tail prog data es0 a es ==>
   ?c rb rest. es0.contexts = (c,rb)::rest /\
     (!address. c.msgParams.outputTo <> Code address)
 Proof
@@ -531,8 +531,8 @@ Proof
       asm_step_extcall_def, asm_exec_create_def, asm_exec_create2_def]
 QED
 
-Theorem asm_frame_create_effects_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+Theorem asm_frame_create_effects_result[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -543,7 +543,9 @@ Theorem asm_frame_create_effects_step_ok:
     account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
   (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
     (lookup_account c.msgParams.callee t.rollback.accounts)) /\
-  run_call t = run_call s /\ wf_state t /\ t.txParams = s.txParams /\
+  run_call t = run_call s /\
+  RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t /\
+  wf_state t /\ t.txParams = s.txParams /\
   (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
   ct.stack = result::stk /\ (result = 0w \/ result = w2w (address:address)) /\
@@ -554,9 +556,13 @@ Theorem asm_frame_create_effects_step_ok:
     (LENGTH a.as_pending_deletions) :: MAP SND (call_trace t) /\
   gas_readings t = gas_readings s /\
   call_requests s = request_of s :: call_requests t ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 /\
+    asm_frame_rel gas_tail prog data es0 a1 t
 Proof
   strip_tac >>
+  drule_all asm_frame_rel_rtc_trans >> disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s` by fs[asm_frame_rel_def] >>
   `EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2"` by
     (Cases_on `salt_opt` >> gvs[]) >>
@@ -584,12 +590,50 @@ Proof
      drule asmEncodeParseTheory.asm_pc_to_offset_suc >>
      Cases_on `salt_opt` >>
      simp[arithmeticTheory.ADD1, rich_listTheory.EL_APPEND1, asm_inst_size_def]) >>
-  pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
-  asm_rewrite_tac[] >> simp[] >> qexists_tac `t` >> simp[] >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
-  rewrite_tac[asm_frame_rel_def] >> strip_tac >> gvs[] >>
-  simp[asm_frame_rel_def, Abbr `prepared`, asm_next_def] >>
-  gvs[asm_evm_rel_def, asm_next_def]
+  `?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 /\
+      asm_frame_rel gas_tail prog data es0 a1 t` by
+    (asm_rewrite_tac[] >> simp[] >>
+     qpat_x_assum `asm_frame_rel _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[asm_frame_rel_def] >> strip_tac >> gvs[] >>
+     simp[asm_frame_rel_def, Abbr `prepared`, asm_next_def] >>
+     gvs[asm_evm_rel_def, asm_next_def]) >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+  simp[asm_frame_step_ok_def] >> metis_tac[]
+QED
+
+Theorem asm_frame_create_effects_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  w2n sz <= 2 * max_code_size /\
+  s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\ t.contexts = (ct,rb)::rest /\
+  (a.as_call_ctx.cc_created_in_tx =
+    account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
+  (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
+    (lookup_account c.msgParams.callee t.rollback.accounts)) /\
+  run_call t = run_call s /\
+  RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t /\
+  wf_state t /\ t.txParams = s.txParams /\
+  (?d. t.msdomain = Collect d) /\
+  ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
+  ct.stack = result::stk /\ (result = 0w \/ result = w2w (address:address)) /\
+  buffer_to_list ct.memory = asm_call_memory (w2n off) (w2n sz) 0 0 a.as_memory /\
+  ct.logs = a.as_logs ++ added /\
+  t.rollback.toDelete = deleted ++ a.as_pending_deletions /\
+  a.as_outcomes = outcome_of (request_of s).cr_kind t (LENGTH a.as_logs)
+    (LENGTH a.as_pending_deletions) :: MAP SND (call_trace t) /\
+  gas_readings t = gas_readings s /\
+  call_requests s = request_of s :: call_requests t ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_create_effects_result))
 QED
 
 Theorem asm_create_step_success:
@@ -622,8 +666,8 @@ Proof
   strip_tac >> drule_all asm_create_success_prefix >> strip_tac >> simp[]
 QED
 
-Theorem asm_frame_create_same_depth_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+Theorem asm_frame_create_same_depth_step_ok_progress[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -631,7 +675,16 @@ Theorem asm_frame_create_same_depth_step_ok:
   s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
   step_create (IS_SOME salt_opt) s = (INL (),t) /\
   LENGTH t.contexts = LENGTH s.contexts ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -673,14 +726,45 @@ Proof
     (mp_tac (Q.INST [`d` |-> `LENGTH s.contexts`, `B` |-> `s.rollback`,
                     `s` |-> `s`, `t` |-> `t`, `x` |-> `()`]
        vfmRunCallTheory.step_continuing_collision_current) >> simp[]) >>
-  drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexists_tac `salt_opt` >>
-  Cases_on `salt_opt` >> gvs[]
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
+  `asm_frame_step_ok gas_tail prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\
+     asm_frame_rel gas_tail prog data es0 a1 t` by
+    (drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_result >>
+    goal_assum (drule_at Any) >> simp[] >>
+    qexists_tac `salt_opt` >>
+    Cases_on `salt_opt` >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`s.contexts = _`,
+     `EL a.as_pc prog = _`,
+     `asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`,
+     `step s = (INL (),_)`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+  simp[relationTheory.RTC_REFL]
 QED
 
-Theorem asm_frame_create_child_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+Theorem asm_frame_create_same_depth_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
+  step_create (IS_SOME salt_opt) s = (INL (),t) /\
+  LENGTH t.contexts = LENGTH s.contexts ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_create_same_depth_step_ok_progress))
+QED
+
+Theorem asm_frame_create_child_step_ok_progress[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -688,7 +772,16 @@ Theorem asm_frame_create_child_step_ok:
   s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
   step_create (IS_SOME salt_opt) s = (INL (),v) /\
   LENGTH v.contexts = SUC (LENGTH s.contexts) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -736,21 +829,67 @@ Proof
        `t` |-> `t`, `self` |-> `c.msgParams.callee`,
        `created` |-> `a.as_call_ctx.cc_created_in_tx`]
        step_run_call_creation_guard) >> gvs[asm_frame_rel_def] >> metis_tac[]) >>
-  drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`address`, `salt_opt`] >>
-  Cases_on `salt_opt` >> Cases_on `ex = NONE` >> gvs[]
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule run_call_enter_return_rtc >> metis_tac[]) >>
+  `asm_frame_step_ok gas_tail prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\
+     asm_frame_rel gas_tail prog data es0 a1 t` by
+    (drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_result >>
+    goal_assum (drule_at Any) >> simp[] >>
+    qexistsl_tac [`address`, `salt_opt`] >>
+    Cases_on `salt_opt` >> Cases_on `ex = NONE` >> gvs[]) >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                step x = (INL (),y)) v t` by
+    (drule_at (Pat `run_call v = _`) run_call_inl_rtc >> strip_tac >>
+     irule relationTheory.RTC_MONOTONE >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`s.contexts = _`,
+     `EL a.as_pc prog = _`,
+     `asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`,
+     `step s = (INL (),_)`,
+     `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (),y)) v t`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+  simp[relationTheory.RTC_REFL]
 QED
 
-Theorem asm_frame_create_normal_step_ok:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+Theorem asm_frame_create_child_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
+  step_create (IS_SOME salt_opt) s = (INL (),v) /\
+  LENGTH v.contexts = SUC (LENGTH s.contexts) ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_create_child_step_ok_progress))
+QED
+
+Theorem asm_frame_create_normal_step_ok_progress[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
   step_create (IS_SOME salt_opt) s = (INL (),v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -763,10 +902,23 @@ Proof
     (drule_all asm_create_success_prefix >> strip_tac >>
      drule_at (Pat `_ = (INL (),v)`) asm_create_finish_view >>
      simp[] >> strip_tac >> gvs[])
-  >- (drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_same_depth_step_ok >>
+  >- (drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_same_depth_step_ok_progress >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_child_step_ok >>
+  drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_child_step_ok_progress >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_frame_create_normal_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
+  a.as_stack = value::off::sz::
+    (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
+  s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
+  step_create (IS_SOME salt_opt) s = (INL (),v) ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_create_normal_step_ok_progress))
 QED
 
 Theorem asm_create_step_terminal:
@@ -789,7 +941,7 @@ Proof
 QED
 
 Theorem asm_frame_create_failure_starved:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
@@ -829,6 +981,9 @@ Proof
      gvs[wf_context_def]) >>
   `step s = handle_step (SOME OutOfGas) u` by
     (irule asm_create_step_terminal >> metis_tac[]) >>
+  `frame_inst_raises s OutOfGas (if IS_SOME salt_opt then Create2 else Create)` by
+    (irule frame_inst_raises_next >> simp[] >>
+     Cases_on `salt_opt` >> gvs[step_inst_def] >> metis_tac[]) >>
   `!address. c.msgParams.outputTo <> Code address` by
     gvs[asm_evm_rel_def] >>
   `(rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr))` by
@@ -840,21 +995,21 @@ Proof
     (irule asm_step_fault_outcome >> simp[vfm_abort_def] >>
      qexistsl [`p`, `u`] >> simp[]) >>
   `frame_resource_starved s r t` by
-    metis_tac[frame_resource_starved_def] >>
+    metis_tac[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
   goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `asm_frame_rel _ _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >>
   metis_tac[frame_resource_starved_mid]
 QED
 
 Theorem asm_frame_create_static_step_ok[local]:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ s.contexts = (c,rb)::rest /\
   c.msgParams.static /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
     (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\
@@ -873,24 +1028,34 @@ Proof
     (Cases_on `rest` >> simp[] >> Cases_on `c.msgParams.outputTo` >>
      gvs[asm_evm_rel_def] >> fs[wf_state_def, outputTo_consistent_stack_def]) >>
   `?r u. run_call s = SOME (r,u) /\ frame_outcome s r u (SOME ex) [] [] /\
-         call_requests s = []` by
-    (irule asm_step_fault_outcome >> simp[] >>
+         call_requests s = [] /\ gas_readings s = []` by
+    (irule asm_step_fault_outcome_readings >> simp[] >>
      qexistsl [`p`, `t`] >> gvs[vfm_abort_def]) >>
-  irule asm_frame_fault_step_ok >> goal_assum (drule_at Any) >>
-  (reverse conj_tac >- (conj_tac >- simp[] >> qexistsl [`ex`, `r`, `u`] >> gvs[]) >>
-   qexists `a with as_returndata := []` >>
-   Cases_on `salt_opt` >>
-   gvs[asm_step_def, asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
-       asm_step_extcall_def, asm_exec_create_def, asm_exec_create2_def])
+  `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmFault (a with as_returndata := [])` by
+    (Cases_on `salt_opt` >>
+     gvs[asm_step_def, asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+         asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
+         asm_step_extcall_def, asm_exec_create_def, asm_exec_create2_def]) >>
+  `((a with as_returndata := []).as_gas_readings = a.as_gas_readings)` by simp[] >>
+  metis_tac[asm_frame_fault_step_ok, exception_distinct]
 QED
 
-Theorem asm_frame_create_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+Theorem asm_frame_create_step_progress:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\
   (EL as.as_pc prog = AsmOp "CREATE" \/
    EL as.as_pc prog = AsmOp "CREATE2") ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es /\
+  (!a1 r end_state. run_call es = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL as.as_pc prog) as = AsmOK a1 ==>
+    ?next_es end_es. step es = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH es.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call es /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by
@@ -899,18 +1064,34 @@ Proof
      EL as.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
      as.as_stack = value::off::sz::
        (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
-     asm_frame_step_ok prog data es0 as es` by
+     asm_frame_step_ok gas_tail prog data es0 as es /\
+  (!a1 r end_state. run_call es = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL as.as_pc prog) as = AsmOK a1 ==>
+    ?next_es end_es. step es = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH es.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call es /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)` by
     (rpt gen_tac >> strip_tac >>
      Cases_on `c.msgParams.static`
-     >- (irule asm_frame_create_static_step_ok >>
-         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     >- (conj_tac
+         >- (irule asm_frame_create_static_step_ok >>
+             goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+         `as.as_call_ctx.cc_static` by
+           fs[asm_frame_rel_def, asm_evm_rel_def] >>
+         Cases_on `salt_opt` >>
+         gvs[asm_step_def, asm_step_op_def, asm_step_arith_def,
+             asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+             asm_step_control_def, asm_step_extcall_def,
+             asm_exec_create_def, asm_exec_create2_def]) >>
      Cases_on `step_create (IS_SOME salt_opt) es` >>
      rename1 `step_create _ es = (res,mid)` >> Cases_on `res`
      >- (Cases_on `x` >>
-         drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_normal_step_ok >>
+         drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_normal_step_ok_progress >>
          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-     drule_at (Pat `step_create _ _ = _`) asm_frame_create_failure_starved >>
-     simp[] >> strip_tac >>
+     drule_all asm_frame_create_failure_starved >> strip_tac >>
      simp[asm_frame_step_ok_def] >> metis_tac[]) >>
   Cases_on `as.as_stack`
   >- gvs[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
@@ -927,13 +1108,29 @@ Proof
       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
       asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
       asm_exec_create_def, asm_exec_create2_def] >>
+  rename1 `as.as_stack = value::off::sz::rest_stk` >>
   Cases_on `EL as.as_pc prog = AsmOp "CREATE"`
-  >- (first_x_assum (qspec_then `NONE` irule) >> simp[] >> metis_tac[]) >>
-  Cases_on `t`
+  >- (qpat_x_assum `!salt_opt value off sz stk. _`
+        (qspecl_then [`NONE`, `value`, `off`, `sz`, `rest_stk`] mp_tac) >>
+      simp[GSYM AND_IMP_INTRO]) >>
+  Cases_on `rest_stk`
   >- gvs[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
       asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
       asm_exec_create_def, asm_exec_create2_def] >>
   rename1 `as.as_stack = value::off::sz::salt::stk` >>
-  first_x_assum (qspec_then `SOME salt` irule) >> simp[] >> metis_tac[]
+  `EL as.as_pc prog = AsmOp "CREATE2"` by metis_tac[] >>
+  qpat_x_assum `!salt_opt value off sz stk. _`
+    (qspecl_then [`SOME salt`, `value`, `off`, `sz`, `stk`] mp_tac) >>
+  simp[GSYM AND_IMP_INTRO]
+QED
+
+Theorem asm_frame_create_step:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
+  as.as_pc < LENGTH prog /\
+  (EL as.as_pc prog = AsmOp "CREATE" \/
+   EL as.as_pc prog = AsmOp "CREATE2") ==>
+  asm_frame_step_ok gas_tail prog data es0 as es
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_create_step_progress))
 QED
