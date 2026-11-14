@@ -116,7 +116,7 @@ Proof
       (UNDISCH opcode_every_imm_copy_to_memory), (UNDISCH opcode_every_copy_memory), (UNDISCH opcode_every_store_memory)])])
 QED
 
-Theorem opcode_every_imm_store_words[local]:
+Theorem opcode_every_imm_store_words:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
