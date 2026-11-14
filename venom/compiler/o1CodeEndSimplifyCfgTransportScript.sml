@@ -1,46 +1,12 @@
 Theory o1CodeEndSimplifyCfgTransport
 Ancestors
   o1CodeEndCfgRounds o1CodeEndCfgCollapse o1LabelFlowSimplifyPreservation
-  o1LabelFlowSimplifyChain o1LabelFlowSimplifyJump o1LabelFlowRetention
+  o1LabelFlowLateSimplify o1LabelFlowSimplifyChain o1LabelFlowSimplifyJump o1LabelFlowRetention
   o1ContractSimplifyCfg o1PassContract o1PassLift codegenSymRel simplifyCfgStruct
   simplifyCfgDefs simplifyCfgShape simplifyCfgFixupShape simplifyCfgInvariant
   simplifyCfgBypassDataflow simplifyCfgWfssa simplifyCfgSimTools cfgTransform venomInst list
   simplifyCfgCorrectness simplifyCfgProof simplifyCfgStaticInterface simplifyCfgShapeCore
   simplifyCfgPhiRepair o1ContractCfgNorm venomWfProps simplifyCfgControl
-
-Theorem code_end_fix_phi_protected_identity[local]:
-  (!x i. code_end_var f x /\ MEM i (fn_insts f) /\
-    MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
-  MEM i (fn_insts f) /\ code_end_var f x /\
-  MEM (Var x) (fix_phi_inst ps i).inst_operands ==>
-  fix_phi_inst ps i = i
-Proof
-  strip_tac >>
-  `MEM (Var x) i.inst_operands` by metis_tac[fix_phi_inst_var_subset] >>
-  `i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY` by metis_tac[] >>
-  `i.inst_opcode <> PHI` by (fs[] >> simp[]) >>
-  simp[fix_phi_inst_def]
-QED
-
-Theorem code_end_fix_phis_backward[local]:
-  !g x. code_end_var g x ==>
-  !f. g = fix_all_phis f /\
-    (!x i. code_end_var f x /\ MEM i (fn_insts f) /\
-      MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
-    code_end_var f x
-Proof
-  Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
-  drule scfg_fix_all_phis_inst_mem >>
-  disch_then (qx_choosel_then [`source_inst`, `actual_preds`] strip_assume_tac)
-  >- (`fix_phi_inst actual_preds source_inst = source_inst` by
-        (irule scfg_fix_phi_seed_identity >> gvs[]) >>
-      gvs[] >> metis_tac[code_end_var_rules]) >>
-  rename1 `inst.inst_operands = [Var y]` >>
-  `code_end_var f y` by metis_tac[] >>
-  `fix_phi_inst actual_preds source_inst = source_inst` by
-    (irule code_end_fix_phi_protected_identity >> metis_tac[MEM]) >>
-  gvs[] >> metis_tac[code_end_var_rules]
-QED
 
 Theorem code_end_fix_phis_uses[local]:
   (!x i. code_end_var f x /\ MEM i (fn_insts f) /\
@@ -49,10 +15,10 @@ Theorem code_end_fix_phis_uses[local]:
     MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY
 Proof
   rpt strip_tac >>
-  `code_end_var f x` by metis_tac[code_end_fix_phis_backward] >>
+  `code_end_var f x` by metis_tac[simplify_fix_phis_code_end_backward_no_phi, opcode_distinct] >>
   drule scfg_fix_all_phis_inst_mem >> strip_tac >> gvs[] >>
   `fix_phi_inst actual_preds inst = inst` by
-    (irule code_end_fix_phi_protected_identity >> metis_tac[]) >>
+    (irule fix_phi_inst_code_end_identity >> metis_tac[opcode_distinct]) >>
   metis_tac[]
 QED
 
@@ -168,7 +134,7 @@ Proof
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY` by
     metis_tac[code_end_unreachable_uses] >>
   conj_tac >- metis_tac[code_end_fix_phis_uses] >>
-  metis_tac[code_end_fix_phis_backward, code_end_var_instruction_subset,
+  metis_tac[simplify_fix_phis_code_end_backward_no_phi, opcode_distinct, code_end_var_instruction_subset,
     simplify_unreachable_inst_subset]
 QED
 

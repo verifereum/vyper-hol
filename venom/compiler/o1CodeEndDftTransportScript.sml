@@ -1,6 +1,6 @@
 Theory o1CodeEndDftTransport
 Ancestors
-  dftGasInvResidualTrace gasOracleReplay dftGasInvMemoryObservation dftGasSimInvariant
+  dftGasInvResidualTrace gasOracleReplay dftGasInvMemoryObservation
   o1LabelFlowLateDft o1ContractDft codegenSymRel
   dftGasOracleDefs dftRunRel venomExecSemantics venomInstProofs1
   o1PassContract unitShapeDefs venomState contextCodegenRel venomExecProps

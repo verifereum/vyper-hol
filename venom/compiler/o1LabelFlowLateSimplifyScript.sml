@@ -5,6 +5,19 @@ Ancestors
 (* PHI input exclusion is phi_input_not_code_end, not a new duplicate.
    This boundary covers all changed PHIs, including the new singleton
    ASSIGN case, without assuming that the input PHI is well formed. *)
+Theorem fix_phi_inst_code_end_identity:
+  (!i x. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f x ==>
+    ~MEM (Var x) i.inst_operands) /\
+  MEM i (fn_insts f) /\ code_end_var f x /\
+  MEM (Var x) (fix_phi_inst ps i).inst_operands ==>
+  fix_phi_inst ps i = i
+Proof
+  strip_tac >>
+  `MEM (Var x) i.inst_operands` by metis_tac[fix_phi_inst_var_subset] >>
+  `i.inst_opcode <> PHI` by metis_tac[] >>
+  metis_tac[fix_phi_inst_non_phi]
+QED
+
 Theorem fix_phi_inst_changed_no_code_end:
   label_flow_ok ctx /\ MEM f ctx.ctx_functions /\
   MEM i (fn_insts f) /\ fix_phi_inst ps i <> i /\
@@ -12,10 +25,10 @@ Theorem fix_phi_inst_changed_no_code_end:
   ~code_end_var f x
 Proof
   rpt strip_tac >>
-  `i.inst_opcode = PHI` by metis_tac[fix_phi_inst_non_phi] >>
-  `MEM (Var x) i.inst_operands` by
-    metis_tac[fix_phi_inst_var_subset] >>
-  metis_tac[phi_input_not_code_end]
+  `fix_phi_inst ps i = i` by
+    (irule fix_phi_inst_code_end_identity >>
+     qexistsl_tac [`f`,`x`] >> simp[] >>
+     metis_tac[phi_input_not_code_end]) >> fs[]
 QED
 
 (* For a tainted operand there was no PHI repair at all.  In particular,

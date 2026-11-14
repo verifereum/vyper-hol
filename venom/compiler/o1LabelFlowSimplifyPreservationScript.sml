@@ -96,23 +96,36 @@ Proof
   metis_tac[code_end_var_rules]
 QED
 
+Theorem simplify_fix_phis_code_end_backward_no_phi:
+  !g x. code_end_var g x ==>
+  !f. g = fix_all_phis f /\
+    (!i x. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f x ==>
+      ~MEM (Var x) i.inst_operands) ==>
+    code_end_var f x
+Proof
+  Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
+  drule scfg_fix_all_phis_inst_mem >>
+  disch_then (qx_choosel_then [`source_inst`, `actual_preds`] strip_assume_tac)
+  >- (`fix_phi_inst actual_preds source_inst = source_inst` by
+        (irule scfg_fix_phi_seed_identity >> gvs[]) >>
+      gvs[] >> metis_tac[code_end_var_rules]) >>
+  rename1 `inst.inst_operands = [Var y]` >>
+  `code_end_var f y` by metis_tac[] >>
+  `fix_phi_inst actual_preds source_inst = source_inst` by
+    (irule fix_phi_inst_code_end_identity >> metis_tac[MEM]) >>
+  gvs[] >> metis_tac[code_end_var_rules]
+QED
+
 Theorem simplify_fix_phis_code_end_backward:
   !g x. code_end_var g x ==>
   !f ctx. g = fix_all_phis f /\
     label_flow_ok (ctx with ctx_functions := [f]) ==> code_end_var f x
 Proof
-  Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
-  drule scfg_fix_all_phis_inst_mem >> strip_tac
-  >- (`fix_phi_inst actual_preds inst' = inst'` by
-        (irule scfg_fix_phi_seed_identity >> gvs[]) >>
-      gvs[] >> metis_tac[code_end_var_rules]) >>
-  rename1 `inst.inst_operands = [Var y]` >>
-  `code_end_var f y` by metis_tac[] >>
+  rpt strip_tac >>
   `MEM f (ctx with ctx_functions := [f]).ctx_functions` by simp[] >>
-  `MEM (Var y) (fix_phi_inst actual_preds inst').inst_operands` by metis_tac[MEM] >>
-  `fix_phi_inst actual_preds inst' = inst'` by
-    metis_tac[fix_phi_inst_changed_no_code_end] >>
-  gvs[] >> metis_tac[code_end_var_rules]
+  drule simplify_fix_phis_code_end_backward_no_phi >>
+  disch_then (qspec_then `f` mp_tac) >> simp[] >>
+  impl_tac >- metis_tac[phi_input_not_code_end, MEM] >> simp[]
 QED
 
 Theorem simplify_fix_phis_label_flow:

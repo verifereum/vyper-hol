@@ -5,7 +5,7 @@ Ancestors
   dftRunRel dftAvailability venomWfProps venomExecSemantics
   venomExecProofs venomWf venomInst venomState contextCodegenRel
   dftGasInvPseudoPrefix dftIndexedExec venomInstProofs1 venomExecProps
-  dftCorrectness dftGasSimInvariant
+  dftCorrectness
   list finite_map pred_set
 
 Theorem inv_strict_dom_mono[local]:

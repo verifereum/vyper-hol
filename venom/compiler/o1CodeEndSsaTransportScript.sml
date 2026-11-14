@@ -157,8 +157,12 @@ Proof
   disch_then (qspec_then `vs.vs_labels` assume_tac) >>
   simp[code_end_offset_ok_def] >> rpt strip_tac >>
   drule ptr_raw_reachable_frame >> strip_tac >>
-  drule_all code_end_frame_reachable_certified >> strip_tac >>
-  `raw_reachable vs C fn' inst' s` by
+  drule_all code_end_frame_reachable_certified >>
+  disch_then (qx_choosel_then
+    [`source_stack`,`source_ghost`,`source_token`,`source_fn`,`source_inst`,
+     `source_state`,`source_pos`,`target_ghost`,`positions`,`relation`]
+    strip_assume_tac) >>
+  `raw_reachable vs C source_fn source_inst source_state` by
     (irule frame_reachable_raw >> reverse conj_tac
      >- (goal_assum $ drule_at Any) >>
      fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
