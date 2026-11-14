@@ -30,7 +30,7 @@ Ancestors
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
-  e2eDeployFrame ctorDeployLoweringEntry ctorDeployLoweringArms
+  e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs

@@ -6,7 +6,7 @@
 Theory deployUnitExecution
 Ancestors
   sourceUnitExecution ctorDeployDefs e2eDeployDefs fragGasOriginPtr
-  vyperStorageFootprint
+  vyperStorageFootprint ctorDeployLoweringArms
 
 (* At gas marks marks: either the constructor run's finite storage guard
    fails for every continuation of the selected readings, or the run's
