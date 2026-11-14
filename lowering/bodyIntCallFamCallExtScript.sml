@@ -9,10 +9,11 @@ Ancestors
   exprLowering compileEnv exprExtRequestSnapshotPositionalCps vyperState stmtSimDeclGas
   exprExtRequestSnapshotLayout exprExtRequestGasSelections
   exprExtRequestSnapshotStorePrefix extcallProtFramePrefixCompose exprSimExtCallCase
-  vyperCallOutcomeFrame bodyIntCallJointPureSlot exprSimSend
+  vyperCallOutcomeFrame bodyIntCallJointPureSlot exprSimSend sendSourceFrame
   venomExecSemantics venomInst venomState fragGasPath gasExemptCert
   loweringPosts loweringStateRelDefs localPtrsProps wordArgsPtr exprSimProps
   exprSimPrecompiles exprSimDefs exprSimOperands exprSimWordArgs
+  exprExtRequestTupleCapturedHead
 
 Theorem intcall_ext_history_cont[local]:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -2402,7 +2403,6 @@ Proof
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
-(* Assembly opening retained for C1.2.3.
 Theorem intcall_send_expr_step[local]:
   (!e'. expr_size e' < expr_size (Call a (Send flag) args NONE) ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -2414,9 +2414,507 @@ Proof
   drule exprSimSendTheory.send_pre_types >> strip_tac >>
   drule exprSimSendTheory.compile_expr_send_stack >> strip_tac >> gvs[] >>
   drule_all exprSimSendTheory.compile_expr_send >> strip_tac >>
-  FAIL_TAC "send_operand_entry"
+  `?dst amt gs. args = dst::amt::gs /\ LENGTH gs = (if flag then 1 else 0)` by
+    (Cases_on `flag` >> gvs[listTheory.LENGTH_EQ_NUM_compute]) >>
+  gvs[] >>
+  gvs[lower_word_args_cons] >>
+  `EVERY (supported_pure_expr fp.jc_tops) (dst::amt::gs)` by
+    (Cases_on `flag` >> gvs[listTheory.LENGTH_EQ_NUM_compute,
+       supportedExprsTheory.supported_expr_def,
+       supportedExprsTheory.supported_pure_call_pop_rejected,
+       supportedExprsTheory.supported_effect_expr_def]) >>
+  `supported_expr fp.jc_tops dst /\
+   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr dst)` by
+    (fs[] >> metis_tac[supportedExprsTheory.supported_expr_def,
+      bodyExprPreFactsTheory.supported_pure_int_calls,
+      vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_nil]) >>
+  `intcall_forced_producer fp dst` by
+    (first_x_assum (qspec_then `dst` mp_tac) >> simp[]) >>
+  `expr_body_pre ce fp.jc_cx env dst es` by
+    (irule exprSimSendTheory.expr_body_pre_send_arg >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >>
+     simp[] >> fs[intcall_expr_res_def]) >>
+  `ci_mono sa s1 /\ ci_mono s1 s1'` by
+    metis_tac[cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND] >>
+  `ci_mono s1' sm` by
+    (Cases_on `flag` >> gvs[listTheory.LENGTH_EQ_NUM_compute,
+       lower_word_args_cons, lower_word_args_nil] >>
+     metis_tac[cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND,
+       ci_mono_refl]) >>
+  `ci_mono sm s3 /\ ci_mono s3 sb` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void, pairTheory.SND] >>
+  `fn_has_code sa s1 fp.jc_func` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, fn_has_code_split]) >>
+  simp[vyperASTTheory.expr_type_def, contextTheory.vv_operand_def] >>
+  once_rewrite_tac[vyperInterpreterTheory.evaluate_def] >>
+  simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def] >>
+  `assert T (Error (TypeError "Send args")) = return ()` by
+    simp[FUN_EQ_THM, vyperStateTheory.assert_def, vyperStateTheory.return_def] >>
+  asm_rewrite_tac[vyperStateTheory.bind_return] >>
+  once_rewrite_tac[eval_exprs_cons_action] >>
+  rewrite_tac[vyperStateTheory.bind_assoc, vyperStateTheory.bind_return] >>
+  once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
+  irule intcall_send_word_cps >>
+  simp[] >>
+  conj_tac
+  >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+      once_rewrite_tac[vyperInterpreterTheory.evaluate_def] >>
+      simp[vyperStateTheory.type_check_def, vyperStateTheory.ignore_bind_def] >>
+      asm_rewrite_tac[vyperStateTheory.bind_return] >>
+      simp[eval_exprs_cons_action, vyperStateTheory.bind_assoc,
+           vyperStateTheory.bind_return]) >>
+  qpat_assum `lower_value _ _ _ dst sa = _` (irule_at Any) >>
+  qexists `env` >> simp[] >>
+  rpt gen_tac >> strip_tac >> suspend "after_dst"
 QED
-*)
+
+Resume intcall_send_expr_step[after_dst]:
+  `intcall_expr_res fp ce env ee s1 u /\ ~u.vs_halted /\
+   u.vs_current_bb = s1.cs_current_bb /\
+   u.vs_inst_idx = LENGTH s1.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  `intcall_forced_producer fp amt` by
+    (first_x_assum (qspec_then `amt` mp_tac) >> simp[]) >>
+  `supported_expr fp.jc_tops amt /\
+   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr amt)` by
+    (fs[] >> metis_tac[supportedExprsTheory.supported_expr_def,
+      bodyExprPreFactsTheory.supported_pure_int_calls,
+      vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_nil]) >>
+  `expr_body_pre ce fp.jc_cx env amt ee` by
+    (irule exprSimSendTheory.expr_body_pre_send_arg >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >>
+     simp[] >> fs[intcall_expr_res_def]) >>
+  `fn_has_code s1 s1' fp.jc_func` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, fn_has_code_split]) >>
+  simp[eval_exprs_cons_action, vyperStateTheory.bind_assoc,
+       vyperStateTheory.bind_return] >>
+  once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
+  irule intcall_send_word_cps >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+      once_rewrite_tac[vyperInterpreterTheory.evaluate_def] >>
+      simp[vyperStateTheory.type_check_def, vyperStateTheory.ignore_bind_def] >>
+      asm_rewrite_tac[vyperStateTheory.bind_return] >>
+      simp[eval_exprs_cons_action, vyperStateTheory.bind_assoc,
+           vyperStateTheory.bind_return] >>
+      once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >> strip_tac >>
+      drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+      simp[eval_exprs_cons_action, vyperStateTheory.bind_assoc,
+           vyperStateTheory.bind_return, vyperStateTheory.evaluation_state_component_equality]) >>
+  qpat_assum `lower_value _ _ _ amt s1 = _` (irule_at Any) >>
+  qexists `env` >> simp[] >> rpt gen_tac >> strip_tac >>
+  suspend "after_amt"
+QED
+Resume intcall_send_expr_step[after_amt]:
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ post _` >>
+  `!hg gas_vs gop ready_cs es_ready t aw vw.
+    hg = flag /\
+    emit_op CALL [gop; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+      ready_cs = (success,s3) /\
+    local_ptrs_reserved ce ready_cs /\
+    ci_mono sa ready_cs /\ fn_has_code ready_cs sb fp.jc_func /\
+    intcall_expr_cont fp ce env es sa s es_ready ready_cs t /\
+    wb_frame ce es es_ready sa s t /\ es_ready.gas_obs = [] /\
+    eval_operand addr_op t = SOME aw /\ dest_AddressV v = SOME (w2w aw) /\
+    eval_operand val_op t = SOME vw /\ dest_NumV v' = SOME (w2n vw) /\
+    IS_SOME (eval_operand gop t) /\ LENGTH gas_vs = (if hg then 1 else 0) /\
+    (?prefix. !tail. eval_exprs fp.jc_cx (dst::amt::gs)
+      (es with gas_obs := prefix ++ tail) =
+      (INL (v::v'::gas_vs), es_ready with gas_obs := tail)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (eval_send fp.jc_cx hg (v::v'::gas_vs)) (es_ready,t) post
+      (\r ee z. expr_exit r z)` by suspend "suffix_join" >>
+  Cases_on `flag`
+  >- suspend "gas_operand" >>
+  gvs[lower_word_args_nil, listTheory.LENGTH_EQ_NUM_compute] >>
+  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_return] >>
+  suspend "no_gas_ready"
+QED
+Resume intcall_send_expr_step[suffix_join]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `eval_send fp.jc_cx flag (v::v'::gas_vs) es_ready` >>
+  rename1 `eval_send _ _ _ es_ready = (raw,es_end)` >>
+  `?res. bind (eval_send fp.jc_cx flag (v::v'::gas_vs)) (read_result fp.jc_cx)
+      es_ready = (res,es_end) /\
+    raw = (case res of INL z => INL (Value z) | INR ex => INR ex)` by
+    (Cases_on `raw`
+     >- (drule eval_send_value >> strip_tac >> gvs[] >>
+         simp[vyperStateTheory.bind_def, vyperStateTheory.read_result_def,
+              vyperStateTheory.return_def]) >>
+     simp[vyperStateTheory.bind_def]) >>
+  `intcall_expr_res fp ce env es_ready ready_cs t /\ ~t.vs_halted /\
+   t.vs_current_bb = ready_cs.cs_current_bb /\
+   t.vs_inst_idx = LENGTH ready_cs.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es_ready t /\
+   outcomes_accounts_typed es_ready.outcomes /\
+   accounts_runtime_well_typed es_ready.accounts` by
+    fs[intcall_expr_res_def, exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  `expr_has_effect (Call NoneT (Send flag) (dst::amt::gs) NONE) /\
+   post_value_type ce (Call NoneT (Send flag) (dst::amt::gs) NONE) = NoneT /\
+   expr_type (Call NoneT (Send flag) (dst::amt::gs) NONE) = NoneT` by
+    simp[loweringPostsTheory.expr_has_effect_thm, vyperASTTheory.expr_type_def] >>
+  `sa.cs_next_var <= ready_cs.cs_next_var` by fs[ci_mono_def] >>
+  `post_value_type ce (Call NoneT (Send flag) (dst::amt::gs) NONE) =
+     expr_type (Call NoneT (Send flag) (dst::amt::gs) NONE)` by simp[vyperASTTheory.expr_type_def] >>
+  `(do tv <- eval_send fp.jc_cx flag (v::v'::gas_vs);
+       read_result fp.jc_cx tv od) es_ready = (res,es_end)` by
+    (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
+  `bind (eval_send fp.jc_cx flag (v::v'::gas_vs)) return =
+     eval_send fp.jc_cx flag (v::v'::gas_vs)` by
+    (simp[FUN_EQ_THM, vyperStateTheory.bind_def] >> gen_tac >>
+     Cases_on `eval_send fp.jc_cx flag (v::v'::gas_vs) x` >>
+     Cases_on `q` >> simp[vyperStateTheory.return_def]) >>
+  `es_end.gas_obs = [] /\
+   !tail. eval_send fp.jc_cx flag (v::v'::gas_vs)
+       (es_ready with gas_obs := tail) = (raw,es_end with gas_obs := tail)` by
+    (`!cx hg vs st rr en.
+       bind (eval_send cx hg vs) return st = (rr,en) ==>
+       en.gas_obs = st.gas_obs /\
+       !tail. bind (eval_send cx hg vs) return (st with gas_obs := tail) =
+         (rr,en with gas_obs := tail)` by
+       (ho_match_mp_tac sendSourceFrameTheory.send_bind_gas_frame >>
+        simp[vyperStateTheory.return_def]) >>
+     metis_tac[]) >>
+  drule_all intcall_send_tail_path_frame >> strip_tac
+  >- suspend "suffix_success" >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists `REPLICATE n F` >> disj1_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl [`raw`, `es_end`, `r`] >>
+  simp[gasSummaryTheory.gas_marked_exec_def, rich_listTheory.LENGTH_REPLICATE,
+       gasSummaryTheory.gas_explicit_replicate_false] >>
+  gvs[] >> Cases_on `res` >> fs[expr_exit_def] >>
+  gvs[stmtSimPropsTheory.expr_exit_INR_type]
+QED
+Resume intcall_send_expr_step[suffix_success]:
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists `REPLICATE n F` >> disj1_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl [`raw`, `es_end`, `r`] >>
+  simp[gasSummaryTheory.gas_marked_exec_def, rich_listTheory.LENGTH_REPLICATE,
+       gasSummaryTheory.gas_explicit_replicate_false] >>
+  gvs[] >>
+
+  `es_end with gas_obs := [] = es_end` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  asm_rewrite_tac[] >>
+  `eval_expr fp.jc_cx (Call NoneT (Send flag) (dst::amt::gs) NONE)
+      (es with gas_obs := prefix) = (INL (Value v''), es_end)` by
+    (once_rewrite_tac[vyperInterpreterTheory.evaluate_def] >>
+     simp[vyperStateTheory.type_check_def, vyperStateTheory.ignore_bind_def] >>
+     asm_rewrite_tac[vyperStateTheory.bind_return] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     qpat_assum `!tail. eval_exprs _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     `es_ready with gas_obs := [] = es_ready` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     fs[]) >>
+  `expr_body_pre ce fp.jc_cx env
+      (Call NoneT (Send flag) (dst::amt::gs) NONE) (es with gas_obs := prefix)` by
+    simp[] >>
+  drule_all exprSimSourceTheory.expr_body_pre_eval_result >> strip_tac >>
+  simp[Abbr `post`] >>
+  conj_tac
+  >- gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.vv_holds_def,
+        loweringPostsTheory.expr_val_rel_def,
+        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+        compileEnvTheory.is_word_type_def] >>
+  conj_tac
+  >- gvs[loweringPostsTheory.vv_at_def, loweringPostsTheory.expr_post_def,
+         vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  `~w.vs_halted` by
+    (drule fragGasModeTheory.gas_marked_path_exec >>
+     metis_tac[exprExtRequestTupleCapturedHeadTheory.extrequest_head_path_nonhalting]) >>
+  `es_end.scopes = es_ready.scopes /\
+   es_end.immutables = es_ready.immutables` by
+    metis_tac[vyperCallOutcomeFrameTheory.eval_send_preserves_non_accounts] >>
+  `MAP FDOM es.scopes = MAP FDOM es_end.scopes` by
+    (qpat_assum `eval_expr _ _ _ = _` mp_tac >>
+     disch_then (assume_tac o MATCH_MP vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >> fs[]) >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
+   local_ptrs_reserved ce sa` by fs[intcall_expr_res_def] >>
+  `wb_frame ce es es_end sa s w` by
+    (fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.wb_frame_def] >>
+     metis_tac[]) >>
+  `!n b k. local_region ce es.scopes s n b k <=>
+            local_region ce es_end.scopes w n b k` by
+    (irule wordArgsPtrTheory.wb_frame_local_regions >> metis_tac[]) >>
+  `!n b k. local_region ce es.scopes s n b k <=>
+            local_region ce es_ready.scopes t n b k` by
+    (irule wordArgsPtrTheory.wb_frame_local_regions >> metis_tac[]) >>
+  `!op. fp.jc_reserved op ==> eval_operand op w = eval_operand op t` by
+    (rpt strip_tac >>
+     `?x z. op = Var x /\ lookup_var x fp.jc_oorig = SOME z` by
+       metis_tac[intcall_frame_ok_def] >>
+     `not_fresh_at sa x /\ eval_operand op s = SOME z /\
+      eval_operand op t = SOME z` by
+       (fs[intcall_expr_res_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+     qpat_x_assum `op = Var x` SUBST_ALL_TAC >>
+     fs[loweringPostsTheory.wb_frame_def, venomStateTheory.eval_operand_def] >>
+     `lookup_var x w = SOME z` by
+       (qpat_x_assum `!x w'. not_fresh_at sa x /\ lookup_var x s = SOME w' ==> lookup_var x w = SOME w'` irule >> simp[]) >>
+     simp[]) >>
+  `supported_pure_exprs fp.jc_tops (dst::amt::gs)` by
+    simp[supportedExprsTheory.supported_pure_exprs_every] >>
+  `es_ready.immutables = es.immutables` by
+    (drule (cj 2 bodyIntCallJointCallSourceTheory.intcall_pure_immutables_mutual) >>
+     strip_tac >>
+     qpat_assum `!tail. eval_exprs _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     first_x_assum drule >> simp[]) >>
+  `ready_cs.cs_next_var <= sb.cs_next_var` by
+    (drule compilerInstructionSuffixTheory.added_insts_emit_op >>
+     strip_tac >> fs[ci_mono_def] >> decide_tac) >>
+  `intcall_expr_res fp ce env es_end sb w` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_joint_res_frame >>
+     `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es_end w` by
+       fs[loweringPostsTheory.expr_post_def] >>
+     `allocas_above fp.jc_lo w` by
+       (gvs[intcall_expr_res_def, intCallFrameTheory.allocas_above_def] >>
+        rpt strip_tac >> first_x_assum drule >> simp[]) >>
+     simp[] >>
+     qexistsl [`es`, `s`, `sa`] >> simp[] >>
+     conj_tac
+     >- (qpat_x_assum `wb_frame ce es es_end sa s w` mp_tac >>
+         simp[loweringPostsTheory.wb_frame_def]) >>
+     conj_tac
+     >- (rpt strip_tac >> metis_tac[]) >>
+     conj_tac
+     >- (qpat_x_assum `intcall_expr_res fp ce env es_ready ready_cs t` mp_tac >>
+         qpat_x_assum `intcall_expr_res fp ce env es sa s` mp_tac >>
+         simp[intcall_expr_res_def] >> rpt strip_tac >> metis_tac[]) >>
+     conj_tac
+     >- (qpat_x_assum `intcall_expr_res fp ce env es_ready ready_cs t` mp_tac >>
+         qpat_x_assum `intcall_expr_res fp ce env es sa s` mp_tac >>
+         simp[intcall_expr_res_def] >> rpt strip_tac >> metis_tac[]) >>
+     fs[intcall_expr_cont_def]) >>
+  fs[intcall_expr_cont_def, loweringPostsTheory.expr_post_def] >>
+  metis_tac[]
+QED
+Resume intcall_send_expr_step[gas_operand]:
+  gvs[listTheory.LENGTH_EQ_NUM_compute, lower_word_args_cons, lower_word_args_nil] >>
+  rename1 `expr_type gas_e = BaseT (UintT 256)` >>
+  `intcall_expr_res fp ce env ee' s1' u' /\ ~u'.vs_halted /\
+   u'.vs_current_bb = s1'.cs_current_bb /\
+   u'.vs_inst_idx = LENGTH s1'.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  `intcall_forced_producer fp gas_e` by
+    (first_x_assum (qspec_then `gas_e` mp_tac) >> simp[]) >>
+  `supported_expr fp.jc_tops gas_e /\
+   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr gas_e)` by
+    (fs[] >> metis_tac[supportedExprsTheory.supported_expr_def,
+      bodyExprPreFactsTheory.supported_pure_int_calls,
+      vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_nil]) >>
+  `expr_body_pre ce fp.jc_cx env gas_e ee'` by
+    (irule exprSimSendTheory.expr_body_pre_send_arg >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >>
+     simp[] >> fs[intcall_expr_res_def]) >>
+  `fn_has_code s1' sm fp.jc_func` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, fn_has_code_split]) >>
+  simp[eval_exprs_cons_action, vyperInterpreterTheory.evaluate_def,
+       vyperStateTheory.bind_assoc, vyperStateTheory.bind_return] >>
+  once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >>
+  irule intcall_send_word_cps >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+      once_rewrite_tac[vyperInterpreterTheory.evaluate_def] >>
+      simp[vyperStateTheory.type_check_def, vyperStateTheory.ignore_bind_def] >>
+      asm_rewrite_tac[vyperStateTheory.bind_return] >>
+      simp[eval_exprs_cons_action, vyperStateTheory.bind_assoc,
+           vyperStateTheory.bind_return, vyperInterpreterTheory.evaluate_def] >>
+      once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >> strip_tac >>
+      drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+      simp[vyperStateTheory.bind_assoc] >>
+      once_rewrite_tac[GSYM vyperStateTheory.bind_assoc] >> strip_tac >>
+      drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+      simp[vyperStateTheory.evaluation_state_component_equality,
+           vyperStateTheory.bind_assoc]) >>
+  qpat_assum `lower_value _ _ _ gas_e s1' = _` (irule_at Any) >>
+  qexists `env` >> simp[] >> rpt gen_tac >> strip_tac >>
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+    (qpat_assum `!tail. monad_bind (eval_expr _ dst) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     `expr_body_pre ce fp.jc_cx env dst (es with gas_obs := used ++ [])` by simp[] >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         abiEncodeArgsCaseTheory.abi_args_success_ready)) >> simp[] >>
+     disch_then (qspecl_then [`env`, `ce`] mp_tac) >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM ee'.scopes` by
+    (qpat_assum `!tail. monad_bind (eval_expr _ amt) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     `expr_body_pre ce fp.jc_cx env amt (ee with gas_obs := used' ++ [])` by simp[] >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         abiEncodeArgsCaseTheory.abi_args_success_ready)) >> simp[] >>
+     disch_then (qspecl_then [`env`, `ce`] mp_tac) >> simp[]) >>
+  `intcall_expr_cont fp ce env es sa s ee' s1' u'` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_expr_cont_trans >>
+     conj_tac >- simp[] >>
+     qexistsl [`s1`, `ee`, `u`] >> simp[] >> fs[ci_mono_def]) >>
+  `intcall_expr_cont fp ce env es sa s ee'' sm u''` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_expr_cont_trans >>
+     conj_tac >- simp[] >>
+     qexistsl [`s1'`, `ee'`, `u'`] >> simp[] >> fs[ci_mono_def]) >>
+  `wb_frame ce es ee'' sa s u''` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_frame] >>
+  `ci_mono sa sm` by metis_tac[ci_mono_trans] >>
+  `local_ptrs_reserved ce sm` by fs[intcall_expr_cont_def, intcall_expr_res_def] >>
+  `fn_has_code sm sb fp.jc_func` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, fn_has_code_split]) >>
+  `?prefix. !tail. eval_exprs fp.jc_cx [dst;amt;gas_e]
+     (es with gas_obs := prefix ++ tail) =
+     (INL [v;v';v''],ee'' with gas_obs := tail)` by
+    (qexists `used ++ used' ++ used''` >> gen_tac >>
+     once_rewrite_tac[eval_exprs_cons_action] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp_tac (srw_ss()) [] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     once_rewrite_tac[eval_exprs_cons_action] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp_tac (srw_ss()) [] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     once_rewrite_tac[eval_exprs_cons_action] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     asm_rewrite_tac[] >>
+     simp[eval_exprs_nil, vyperStateTheory.bind_def, vyperStateTheory.return_def]) >>
+  `value_has_type (BaseTV AddressT) v` by
+    (`expr_body_pre ce fp.jc_cx env dst (es with gas_obs := used ++ [])` by simp[] >>
+     qpat_assum `!tail. monad_bind (eval_expr _ dst) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         exprSimSourceTheory.expr_body_pre_word_value)) >>
+     disch_then (qspecl_then [`ce`, `env`] mp_tac) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `value_has_type (BaseTV (UintT 256)) v'` by
+    (`expr_body_pre ce fp.jc_cx env amt (ee with gas_obs := used' ++ [])` by simp[] >>
+     qpat_assum `!tail. monad_bind (eval_expr _ amt) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         exprSimSourceTheory.expr_body_pre_word_value)) >>
+     disch_then (qspecl_then [`ce`, `env`] mp_tac) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `eval_operand addr_op u = SOME (typed_val_to_w256 (BaseTV AddressT) v)` by
+    (irule exprSimPrecompilesTheory.expr_post_typed_stack_operand >>
+     qpat_assum `expr_post _ _ _ _ dst _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `eval_operand val_op u' = SOME (typed_val_to_w256 (BaseTV (UintT 256)) v')` by
+    (irule exprSimPrecompilesTheory.expr_post_typed_stack_operand >>
+     qpat_assum `expr_post _ _ _ _ amt _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `eval_operand gas_op u'' = SOME (typed_val_to_w256 (BaseTV (UintT 256)) v'')` by
+    (irule exprSimPrecompilesTheory.expr_post_typed_stack_operand >>
+     qpat_assum `expr_post _ _ _ _ gas_e _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `(!z. addr_op = Var z ==> not_fresh_at s1 z) /\
+   (!l. addr_op <> Label l)` by
+    (qpat_assum `lower_value _ _ _ dst _ = _`
+       (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_lower_value_word_shape) >>
+     disch_then (qspecl_then [`fp.jc_cx`, `env`, `es`] mp_tac) >> simp[]) >>
+  `(!z. val_op = Var z ==> not_fresh_at s1' z) /\
+   (!l. val_op <> Label l)` by
+    (qpat_assum `lower_value _ _ _ amt _ = _`
+       (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_lower_value_word_shape) >>
+     disch_then (qspecl_then [`fp.jc_cx`, `env`, `ee`] mp_tac) >> simp[]) >>
+  `wb_frame ce ee ee' s1 u u' /\ wb_frame ce ee' ee'' s1' u' u''` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_frame] >>
+  `eval_operand addr_op u' = SOME (typed_val_to_w256 (BaseTV AddressT) v)` by
+    (irule abiEncodeArgsSimTheory.abi_args_operand_kept >>
+     conj_tac >- simp[] >>
+     qexistsl [`ce`, `ee`, `ee'`, `u`, `s1`] >> simp[]) >>
+  `!z. addr_op = Var z ==> not_fresh_at s1' z` by
+    (fs[ci_mono_def, not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum drule >> simp[not_fresh_at_def] >> decide_tac) >>
+  `eval_operand addr_op u'' = SOME (typed_val_to_w256 (BaseTV AddressT) v)` by
+    (irule abiEncodeArgsSimTheory.abi_args_operand_kept >>
+     conj_tac >- simp[] >>
+     qexistsl [`ce`, `ee'`, `ee''`, `u'`, `s1'`] >> simp[]) >>
+  `eval_operand val_op u'' = SOME (typed_val_to_w256 (BaseTV (UintT 256)) v')` by
+    (irule abiEncodeArgsSimTheory.abi_args_operand_kept >>
+     conj_tac >- simp[] >>
+     qexistsl [`ce`, `ee'`, `ee''`, `u'`, `s1'`] >> simp[]) >>
+  first_x_assum irule >>
+  simp[exprSimSendTheory.address_typed_dest, exprSimSendTheory.uint256_typed_dest] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`gas_op`, `sm`] >> simp[]
+QED
+Resume intcall_send_expr_step[no_gas_ready]:
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+    (qpat_assum `!tail. monad_bind (eval_expr _ dst) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     `expr_body_pre ce fp.jc_cx env dst (es with gas_obs := used ++ [])` by simp[] >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         abiEncodeArgsCaseTheory.abi_args_success_ready)) >> simp[] >>
+     disch_then (qspecl_then [`env`, `ce`] mp_tac) >> simp[]) >>
+  `intcall_expr_cont fp ce env es sa s ee' s1' u'` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_expr_cont_trans >>
+     conj_tac >- simp[] >>
+     qexistsl [`s1`, `ee`, `u`] >> simp[] >> fs[ci_mono_def]) >>
+  `wb_frame ce es ee' sa s u'` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_frame] >>
+  `ci_mono sa s1'` by metis_tac[ci_mono_trans] >>
+  `local_ptrs_reserved ce s1'` by fs[intcall_expr_cont_def, intcall_expr_res_def] >>
+  `fn_has_code s1' sb fp.jc_func` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, fn_has_code_split]) >>
+  `?prefix. !tail. eval_exprs fp.jc_cx [dst;amt]
+     (es with gas_obs := prefix ++ tail) =
+     (INL [v;v'],ee' with gas_obs := tail)` by
+    (qexists `used ++ used'` >> gen_tac >>
+     once_rewrite_tac[eval_exprs_cons_action] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp_tac (srw_ss()) [] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     once_rewrite_tac[eval_exprs_cons_action] >>
+     once_rewrite_tac[vyperStateTheory.bind_def] >>
+     asm_rewrite_tac[] >>
+     simp[eval_exprs_nil, vyperStateTheory.bind_def, vyperStateTheory.return_def]) >>
+  `value_has_type (BaseTV AddressT) v` by
+    (`expr_body_pre ce fp.jc_cx env dst (es with gas_obs := used ++ [])` by simp[] >>
+     qpat_assum `!tail. monad_bind (eval_expr _ dst) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         exprSimSourceTheory.expr_body_pre_word_value)) >>
+     disch_then (qspecl_then [`ce`, `env`] mp_tac) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `value_has_type (BaseTV (UintT 256)) v'` by
+    (`expr_body_pre ce fp.jc_cx env amt (ee with gas_obs := used' ++ [])` by simp[] >>
+     qpat_assum `!tail. monad_bind (eval_expr _ amt) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     qpat_assum `monad_bind (eval_expr _ _) _ _ = _`
+       (mp_then Any mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV)
+         exprSimSourceTheory.expr_body_pre_word_value)) >>
+     disch_then (qspecl_then [`ce`, `env`] mp_tac) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `eval_operand addr_op u = SOME (typed_val_to_w256 (BaseTV AddressT) v)` by
+    (irule exprSimPrecompilesTheory.expr_post_typed_stack_operand >>
+     qpat_assum `expr_post _ _ _ _ dst _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `eval_operand val_op u' = SOME (typed_val_to_w256 (BaseTV (UintT 256)) v')` by
+    (irule exprSimPrecompilesTheory.expr_post_typed_stack_operand >>
+     qpat_assum `expr_post _ _ _ _ amt _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `(!z. addr_op = Var z ==> not_fresh_at s1 z) /\
+   (!l. addr_op <> Label l)` by
+    metis_tac[exprSimSourceTheory.expr_body_pre_lower_value_word_shape] >>
+  `wb_frame ce ee ee' s1 u u'` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_frame] >>
+  `eval_operand addr_op u' = SOME (typed_val_to_w256 (BaseTV AddressT) v)` by
+    (irule abiEncodeArgsSimTheory.abi_args_operand_kept >>
+     metis_tac[]) >>
+  first_x_assum irule >>
+  simp[exprSimSendTheory.address_typed_dest, exprSimSendTheory.uint256_typed_dest] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`Lit 0w`, `s1'`] >> simp[venomStateTheory.eval_operand_def]
+QED
+Finalise intcall_send_expr_step
 
 Theorem intcall_extcall_step:
   (!e'. expr_size e' < expr_size e ==>
