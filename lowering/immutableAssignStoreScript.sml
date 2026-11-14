@@ -8,6 +8,21 @@ Ancestors
   vyperTypeValues exprLoweringProps venomInst compileEnv
 Libs monadsyntax
 
+Theorem immutable_transfers_record_restore:
+  !n off r. (immutable_transfers T T source_word target_word n off r
+    with <|vs_memory := r.vs_memory; vs_immutables := r.vs_immutables|>) = r
+Proof
+  Induct >> simp[immutableCopyExecutionTheory.immutable_transfers_def] >>
+  rpt gen_tac >>
+  first_x_assum (qspecl_then [`off+32`,
+    `immutable_word_transfer T T source_word target_word off r`] mp_tac) >>
+  qmatch_goalsub_abbrev_tac `immutable_transfers T T _ _ n _ rr` >>
+  qmatch_goalsub_abbrev_tac `tt with <|vs_memory := _; vs_immutables := _|>` >>
+  simp[Abbr `rr`, immutableCopyExecutionTheory.immutable_word_transfer_def,
+       venomExecSemanticsTheory.istore_def, venomStateTheory.mstore_def,
+       venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem immutable_assign_direct_store:
   compile_assign_value cenv dst LocCode src F src_loc dty sty mem_size sa = ((),sb) /\
   cenv.ce_imm_alloca = imm /\
@@ -248,17 +263,8 @@ Proof
   drule compile_store_immutable_bytestring_optional_path >>
   disch_then (qspecl_then [`s`,`len`,`func`,`ctx`] mp_tac) >>
   simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
-  `!n off r. (immutable_transfers T T (n2w a) (n2w b) n off r
-      with <|vs_memory := r.vs_memory; vs_immutables := r.vs_immutables|>) = r` by
-    (Induct >> simp[immutableCopyExecutionTheory.immutable_transfers_def] >>
-     rpt gen_tac >>
-     first_x_assum (qspecl_then [`off+32`,
-       `immutable_word_transfer T T (n2w a) (n2w b) off r`] mp_tac) >>
-     qmatch_goalsub_abbrev_tac `immutable_transfers T T _ _ n _ rr` >>
-     qmatch_goalsub_abbrev_tac `tt with <|vs_memory := _; vs_immutables := _|>` >>
-     simp[Abbr `rr`, immutableCopyExecutionTheory.immutable_word_transfer_def,
-          venomExecSemanticsTheory.istore_def, venomStateTheory.mstore_def,
-          venomStateTheory.venom_state_component_equality]) >>
+  assume_tac (Q.INST [`source_word` |-> `n2w a`, `target_word` |-> `n2w b`]
+    immutable_transfers_record_restore) >>
   qexists_tac `t` >>
   qpat_x_assum `t with <|vs_vars := _; vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = _`
     mp_tac >>

@@ -50,7 +50,7 @@ Proof
        asmSemTheory.asm_state_component_equality, asmSemTheory.asm_next_def]
 QED
 
-Theorem prune_inefficient_jumps_fst[local]:
+Theorem prune_inefficient_jumps_fst:
   FST (prune_inefficient_jumps (a :: b :: c :: rest)) =
   if asm_jump_to_next a b c then FST (prune_inefficient_jumps (c :: rest))
   else a :: FST (prune_inefficient_jumps (b :: c :: rest))

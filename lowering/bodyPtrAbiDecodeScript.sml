@@ -8,17 +8,18 @@
  *)
 Theory bodyPtrAbiDecode
 Ancestors
+  abiDecodePtrExprComplete abiDecodePtrExpr
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
 
-(* RESIDUAL (train 16 hold-out, argon 2026-11-12): the harvested proof below
-   needs abiDecodePtrSupportedTarget, which the constructor split made
-   unprovable until supported_program_deploy is threaded through and
-   declaration_abi_decode_target gains its ErrorDecl clause.  It returns
-   right after train 16.  Harvested proof (61e271717):
-
+Theorem abi_decode_expr_ptr_ok:
+  !cx v11 b typ es.
+    (type_builtin_args_length_ok (AbiDecode b) (LENGTH es) ==>
+     body_exprs_ptr_ok cx es) ==>
+    body_expr_ptr_ok cx (TypeBuiltin v11 (AbiDecode b) typ es)
+Proof
   rpt gen_tac >> strip_tac >>
   simp[Once body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
   rename1 `expr_body_pre cenv cx env (TypeBuiltin ann (AbiDecode b) typ args) st` >>
@@ -28,15 +29,15 @@ val _ = Parse.hide "body";
   `body_expr_ptr_ok cx e` by fs[Once body_expr_ptr_ok_def] >>
   `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e st` by
     (fs[Once body_expr_ptr_ok_def] >> metis_tac[]) >>
-  conj_tac
-  >- (irule abi_decode_unary_sim_ptr >> metis_tac[]) >>
-  irule abi_decode_unary_vv_sim_ptr >> metis_tac[]
-*)
-Theorem abi_decode_expr_ptr_ok:
-  !cx v11 b typ es.
-    (type_builtin_args_length_ok (AbiDecode b) (LENGTH es) ==>
-     body_exprs_ptr_ok cx es) ==>
-    body_expr_ptr_ok cx (TypeBuiltin v11 (AbiDecode b) typ es)
-Proof
+  rename1 `body_inv decls ctx cenv cx` >>
+  Cases_on `supported_program_deploy decls`
+  >- (conj_tac
+      >- (irule abi_decode_unary_sim_ptr >> metis_tac[]) >>
+      irule abi_decode_unary_vv_sim_ptr >> metis_tac[]) >>
+  (* RESIDUAL: without supported_program_deploy a constructor body may decode
+     to a target outside the flat scalar tuples the pointer sims cover, and
+     expr_body_pre does not say which body is running.  This branch stays
+     admitted until the AbiDecode whitelist widening replaces
+     supported_occurring_abi_decode_target. *)
   cheat
 QED

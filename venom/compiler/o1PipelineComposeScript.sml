@@ -72,7 +72,7 @@ Proof
 QED
 
 (* Every pass of the walk before CFGNormalization keeps the fuel. *)
-Theorem pass_fuel_walk_I:
+Theorem pass_fuel_walk_I[local]:
   n < 8 ==> pass_fuel (EL n o1_fn_passes) C = I
 Proof
   strip_tac >>

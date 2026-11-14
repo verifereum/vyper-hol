@@ -140,63 +140,7 @@ Proof
   qexists_tac `j` >> simp[] >> irule scfg_result_terminal >> simp[]
 QED
 
-Theorem scfg_bypass_runs_forward:
-  !n s r t. scfg_bypass_hyp fn a b fn' /\ fn_entry_state fn s0 /\
-  scfg_bprefix C fn s0 s /\ s.vs_inst_idx = 0 /\
-  scfg_bypass_aligned a b s t /\
-  run_blocks n C fn s = r /\ terminates r ==>
-  ?k. frame_result_rel r (run_blocks k C fn' t)
-Proof
-  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
-  namedCases_on `n` ["", "n0"] >- gvs[Once run_blocks_def, terminates_def] >>
-  qpat_x_assum `run_blocks _ _ _ _ = _` mp_tac >>
-  rewrite_tac[run_blocks_unfold] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
-  simp[] >> strip_tac >- gvs[terminates_def] >>
-  rename1 `lookup_block _ _ = SOME bb` >>
-  `lookup_block t.vs_current_bb fn'.fn_blocks = SOME (scfg_bypass_block a b bb)` by
-    (drule scfg_bypass_lookup_eq >>
-     disch_then (qspec_then `t.vs_current_bb` mp_tac) >>
-     fs[scfg_bypass_aligned_def, scfg_ctrl_def]) >>
-  Cases_on `run_block n0 C bb s` >> gvs[]
-  >- (Cases_on `v.vs_halted` >> gvs[]
-      >- metis_tac[venomExecPropsTheory.run_block_OK_not_halted] >>
-      drule_all scfg_bypass_run_block_OK_forward >>
-      disch_then (qx_choosel_then [`v1`, `w`] strip_assume_tac) >>
-      qpat_assum `scfg_bprefix C fn v w`
-        (mp_then Any mp_tac scfg_bprefix_cancel_bounded) >>
-      disch_then (qspec_then `n0` mp_tac) >>
-      disch_then (qspec_then `run_blocks n0 C fn v` mp_tac) >>
-      simp[] >> strip_tac >>
-      `scfg_bprefix C fn s0 w` by
-        metis_tac[scfg_bprefix_single, scfg_bprefix_trans] >>
-      `w.vs_inst_idx = 0` by
-        (qpat_assum `run_block _ _ (scfg_bypass_block _ _ _) _ = OK _`
-           (mp_then Any assume_tac venomExecPropsTheory.run_block_OK_inst_idx_0) >>
-         gvs[scfg_bypass_aligned_def, scfg_ctrl_def]) >>
-      `?k. frame_result_rel (run_blocks n0 C fn v) (run_blocks k C fn' v1)` by
-        (qpat_assum `run_blocks m C fn w = _`
-           (fn th => once_rewrite_tac[GSYM th]) >>
-         first_x_assum irule >> simp[] >> decide_tac) >>
-      `!e. run_blocks k C fn' v1 <> Error e` by
-        (drule frame_result_rel_terminates >>
-         Cases_on `run_blocks k C fn' v1` >> simp[terminates_def]) >>
-      `?j. run_blocks j C fn' t = run_blocks k C fn' v1` by
-        metis_tac[scfg_bstep_continue, venomExecPropsTheory.run_block_OK_not_halted] >>
-      metis_tac[]) >>
-  drule scfg_bypass_run_block_terminal_forward >>
-  disch_then (drule_at (Pat `run_block _ _ _ _ = _`)) >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `scfg_result _ q` >>
-  `terminates q /\ (!u. q <> OK u)` by
-    (Cases_on `q` >> gvs[scfg_result_def, terminates_def]) >>
-  `?j. run_blocks j C fn' t = q` by
-    (irule scfg_run_block_terminal >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  qexists_tac `j` >> simp[] >> irule scfg_result_terminal >> simp[]
-QED
-
-Theorem scfg_bypass_runs_forward_fuel_from_terminal:
+Theorem scfg_bypass_runs_forward_fuel_from_terminal[local]:
   (!s bb t k r.
     scfg_bypass_hyp fn a b fn' /\ fn_entry_state fn s0 /\
     scfg_bprefix C fn s0 s /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -261,20 +205,6 @@ QED
 
 Finalise scfg_bypass_runs_forward_fuel_from_terminal
 
-Theorem scfg_bypass_fn_bisim:
-  scfg_bypass_hyp fn a b fn' ==> fn_bisim fn fn'
-Proof
-  strip_tac >> rewrite_tac[fn_bisim_def] >>
-  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[scfg_bypass_entry_eq] >>
-  conj_tac >- (fs[scfg_bypass_hyp_def] >> drule do_merge_jump_metadata >> simp[fn_identity_metadata_eq_def]) >>
-  conj_tac >- simp[] >> rpt strip_tac >>
-  `scfg_bypass_aligned a b s s` by metis_tac[scfg_bypass_initial_aligned] >>
-  `scfg_bprefix ctx fn s s /\ s.vs_inst_idx = 0` by
-    fs[scfg_bprefix_rules, fn_entry_state_def] >>
-  FIRST [irule scfg_bypass_runs_forward, irule scfg_bypass_runs_backward] >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
 Theorem scfg_bypass_fn_bisim_fuel:
   scfg_bypass_hyp fn a b fn' ==> fn_bisim_fuel I fn fn'
 Proof
@@ -289,4 +219,21 @@ Proof
   irule scfg_bypass_runs_forward_fuel_from_terminal >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[scfg_bypass_run_block_terminal_forward_fuel]
+QED
+
+Theorem scfg_bypass_fn_bisim:
+  scfg_bypass_hyp fn a b fn' ==> fn_bisim fn fn'
+Proof
+  strip_tac >> drule scfg_bypass_fn_bisim_fuel >>
+  rewrite_tac[fn_bisim_def, fn_bisim_fuel_def] >> strip_tac >>
+  rpt conj_tac >- simp[] >- simp[] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `fuel` >>
+      first_x_assum (qspecl_then [`ctx`, `s`, `fuel`] mp_tac) >>
+      simp[combinTheory.I_THM]) >>
+  `scfg_bypass_aligned a b s s` by metis_tac[scfg_bypass_initial_aligned] >>
+  `scfg_bprefix ctx fn s s /\ s.vs_inst_idx = 0` by
+    fs[scfg_bprefix_rules, fn_entry_state_def] >>
+  rpt strip_tac >> irule scfg_bypass_runs_backward >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED

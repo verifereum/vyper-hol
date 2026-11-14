@@ -6,7 +6,7 @@ Ancestors
   vyperState venomState compileEnv loweringStateRelDefs finite_map exprSimDefs venomExecSemantics fragExec
   vyperLookup vyperScopePreservation exprSimPopNestedLocalMemory exprSimProps
   appendStorageGhostPtr bodyPtrPopNestedLiveSource bodyPtrPopTargetDefs
-  stmtPoppedKeys exprSimHypsDefs
+  stmtPoppedKeys exprSimHypsDefs popTargetPre targetPlaceSim
   bodyPtrPopNestedLiveHandoff reasonCopySourcePtr
   exprSimPopNestedBase exprSimPopNestedLocalHandoff exprSimPopNestedLocalSuffix
   exprSimPopNestedLocalSource exprLowering exprLoweringProps stmtLoweringMono
@@ -203,7 +203,7 @@ QED
 
 Theorem pop_normal_target_continuation:
   expr_body_pre cenv cx env (Pop ann bt) es /\
-  target_root bt = NameTarget id /\ local_target_live cx id bt /\
+  target_root bt = NameTarget id /\
   compile_get_target_ptr compile_expr cenv bt sa = ((hdr,loc,pt),sm) /\
   compile_expr cenv ty (Pop ann bt) sa = (vv,sb) /\
   fn_has_code sm sb func /\ ci_mono sa sm /\ local_ptrs_reserved cenv sa /\
@@ -238,12 +238,6 @@ Theorem pop_normal_target_continuation:
 Proof
   strip_tac >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by fs[target_post_def] >>
-  `!s path t entry err.
-     eval_target_place cx bt s = (INL (MemoryPlace id path),t) /\
-     lookup_scopes id t.scopes = SOME entry /\
-     evaluate_subscripts entry.type entry.value path = INR err ==>
-     read_popped entry.type path entry.popped = NONE` by
-    metis_tac[local_target_live_no_popped_fallback] >>
   drule gas_marked_exec_ptr_exec >> strip_tac >>
   `!path entry err. p = MemoryPlace id path /\
      lookup_scopes id tend.scopes = SOME entry /\
@@ -257,10 +251,15 @@ Proof
         rewrite_tac[gasSummaryTheory.gas_marked_exec_def] >>
         disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >> simp[]) >>
      gvs[] >>
-     qpat_x_assum `!s path t entry err. _`
-       (qspecl_then [`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-                     `path`, `tend with gas_obs := []`, `entry`, `err`] mp_tac) >>
-     simp[]) >>
+     `target_pre cenv cx env bt
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+       (irule target_pre_of_pop >>
+        simp[immutable_root_def, exprSimSourceTheory.expr_body_pre_gas_obs] >>
+        metis_tac[]) >>
+     `?cap. type_place_target env bt = SOME (Type (ArrayT ann (Dynamic cap)))` by
+       fs[expr_body_pre_def, Once well_typed_expr_def] >>
+     `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by simp[] >>
+     drule_all local_target_live_no_popped_fallback >> simp[]) >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
   `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by simp[] >>
   drule_all memory_target_encoding_handoff >> strip_tac >>

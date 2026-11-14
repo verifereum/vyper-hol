@@ -1,6 +1,6 @@
 (*
  * Seam of pop_expr_ptr_ok (bodyPtrPop): pop on a nested target rooted at
- * a storage or transient variable whose indices are pure
+ * a storage or transient variable, including effectful indices
  * (self.s.a.pop(), self.b[i].pop(), self.m[k].pop()).  The pointer twin
  * of S1's exprSimPopNestedBase.pop_nested_storage_pure_sim, with the
  * target's fragment judgment the pointer twin pop_target_frag_ptr.
@@ -20,11 +20,9 @@ Ancestors
      nested_pop_compile_eq, nested_pop_compile_storage_eq): SLOAD/TLOAD of
      the length, the guard, SUB, SSTORE/TSTORE of the new length, the
      element's slot.
-   - Pure indices leave storage alone, so the target's place is live when
-     the pop reads it: targetPlaceLive's nested_pop_eval_target_live_post
-     gives storage_read_live for the length slot and the popped element's
-     slots, so stor_taint_ok makes the length word untainted (its bytes
-     are not dead) and the popped slots dead after the length store.
+   - The target's declared region stays live at its end state;
+     nested_pop_target_storage_preserved supplies storage well-formedness
+     after the indices. stor_taint_ok then makes the length word untainted.
    - The root storage pop's pointer case, at a declared variable's slot,
      is bodyPtrPopRootOutcome's compile_pop_storage_normalized_ptr, built
      from the proved bodyPtrPopRoot*, bodyPtrPop*Transfer,
@@ -42,8 +40,7 @@ Theorem pop_nested_storage_pure_vv_ptr:
     expr_body_pre cenv cx env (Pop ann bt) es /\
     target_root bt = TopLevelNameTarget (src,id) /\
     get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME vd /\
-    EVERY pure_expr (target_indices bt) ==>
+    find_var_decl_by_name id ts = SOME vd ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
   metis_tac[pop_storage_pure_compose]

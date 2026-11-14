@@ -170,7 +170,10 @@ Resume log_scalar_members_finish_seq_ptr[compose]:
      `not_fresh_at final x` by metis_tac[] >>
      qpat_assum `!x. not_fresh_at final x ==> _` (qspec_then `x` mp_tac) >>
      qpat_assum `!x. not_fresh_at st x ==> _ /\ _ /\ _` (qspec_then `x` mp_tac) >>
-     simp[Abbr `u1`] >> rpt strip_tac >> gvs[lookup_var_def]) >>
+     qpat_assum `not_fresh_at final x` mp_tac >>
+     qpat_assum `not_fresh_at st x` mp_tac >>
+     qunabbrev_tac `u1` >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> gvs[lookup_var_def]) >>
   suspend "post"
 QED
 Resume log_scalar_members_finish_seq_ptr[post]:

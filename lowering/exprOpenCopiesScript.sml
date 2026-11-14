@@ -15,7 +15,7 @@ Ancestors
   supportedExprForms supportedTypes typedCopyMetadata list rich_list pair alist finite_map venomInst
   structFieldsProps  vyperTypeInvariants vyperTypeSystem
 
-Theorem compile_copy_memory_open[local]:
+Theorem compile_copy_memory_open:
   !dst src n sa r sb.
     ~block_is_terminated sa /\ compile_copy_memory dst src n sa = (r,sb) ==>
     ~block_is_terminated sb
