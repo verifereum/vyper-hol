@@ -159,18 +159,18 @@ Proof
 QED
 
 Theorem frame_continue_rel[local]:
-  asm_frame_rel prog data es0 a es /\
+  asm_frame_rel gas_tail prog data es0 a es /\
   step es = (INL (),es1) /\
   LENGTH es1.contexts = LENGTH es.contexts /\
   asm_evm_rel (prog ++ [AsmDataItem data]) a1 es1 /\
   a1.as_call_ctx = a.as_call_ctx /\
   a1.as_requests = a.as_requests /\ call_trace es1 = call_trace es /\
   a1.as_outcomes = MAP SND (call_trace es1) /\
-  a1.as_gas_readings = gas_readings es1 ==>
-  asm_frame_rel prog data es0 a1 es1
+  a1.as_gas_readings = gas_readings es1 ++ gas_tail ==>
+  asm_frame_rel gas_tail prog data es0 a1 es1
 Proof
   strip_tac >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `asm_frame_rel gas_tail _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >>
   `!addr. c.msgParams.outputTo <> Code addr` by
     metis_tac[frame_rel_output_to] >>
@@ -186,6 +186,10 @@ Proof
     (mp_tac (Q.INST [`d` |-> `LENGTH es.contexts`, `B` |-> `es.rollback`,
                     `s` |-> `es`, `t` |-> `es1`, `x` |-> `()`]
        step_continuing_collision_current) >> simp[]) >>
+  `RTC (\a b. LENGTH a.contexts >= LENGTH es0.contexts /\
+              step a = (INL (), b)) es0 es1` by
+    (irule (cj 2 relationTheory.RTC_RULES_RIGHT1) >>
+     qexists_tac `es` >> gvs[]) >>
   Cases_on `es1.contexts` >> gvs[same_frame_rel_def] >>
   PairCases_on `h` >> gvs[] >>
   `?d1. es1.msdomain = Collect d1` by
@@ -194,7 +198,7 @@ Proof
 QED
 
 Theorem frame_terminal_transplant[local]:
-  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  asm_frame_rel gas_tail prog data es0 a es /\ es.contexts = (c,rb)::rest /\
   (!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   step (es with contexts := [(c,rb)]) = (INR e,t) /\
@@ -202,10 +206,10 @@ Theorem frame_terminal_transplant[local]:
   ?r es' lgs. run_call es = SOME (r,es') /\
     frame_outcome es0 r es' e ct.returnData lgs /\
     (e = NONE ==> lgs = ct.logs /\ es'.rollback = t.rollback) /\
-    call_requests es = []
+    call_requests es = [] /\ gas_readings es = []
 Proof
   strip_tac >>
-  qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `asm_frame_rel gas_tail _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >> gvs[] >>
   `!addr. c.msgParams.outputTo <> Code addr` by
     metis_tac[frame_rel_output_to] >>
@@ -218,7 +222,7 @@ Proof
       `step es = (INR e,t)` by gvs[] >>
       `run_call es = SOME (INR e,t)` by
         (irule run_call_terminal_step >> simp[]) >>
-      `call_trace es = []` by
+      `call_trace es = [] /\ gas_readings es = []` by
         (drule frame_obs_terminal >> simp[]) >>
       qexistsl_tac [`INR e`,`t`,`ct.logs`] >>
       simp[frame_outcome_def, call_requests_def]) >>
@@ -231,7 +235,7 @@ Proof
        (mp_tac o AP_TERM ``LENGTH : context list -> num``) >> simp[]) >>
   `run_call es = SOME (INL (),es')` by
     (irule run_call_terminal_step >> simp[]) >>
-  `call_trace es = []` by (drule frame_obs_terminal >> simp[]) >>
+  `call_trace es = [] /\ gas_readings es = []` by (drule frame_obs_terminal >> simp[]) >>
   drule_all frame_outcome_mid >> strip_tac >>
   qexistsl_tac [`INL ()`,`es'`,`c.logs ++ lgs`] >>
   simp[call_requests_def]
@@ -255,7 +259,7 @@ Proof
 QED
 
 Theorem frame_starved_lift:
-  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  asm_frame_rel gas_tail prog data es0 a es /\ es.contexts = (c,rb)::rest /\
   (!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
@@ -271,15 +275,20 @@ Proof
   `LENGTH t.contexts = 1` by
     (irule frame_terminal_singleton_length >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `?op. frame_inst_raises es exc op` by
+    (irule step_transplant_starved >> gvs[wf_state_def] >> metis_tac[]) >>
+  `frame_inst_raises es0 exc op` by
+    (irule frameGasTheory.frame_inst_raises_mid >> qexists_tac `es` >>
+     fs[asm_frame_rel_def] >> gvs[]) >>
   Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
   drule (SRULE [MEM] frame_terminal_transplant) >>
   disch_then drule >> simp[vfm_abort_def] >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[frame_resource_starved_def] >>
+  goal_assum (drule_at Any) >> simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
   metis_tac[]
 QED
 
 Theorem frame_terminal_lift:
-  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  asm_frame_rel gas_tail prog data es0 a es /\ es.contexts = (c,rb)::rest /\
   (!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   step (es with contexts := [(c,rb)]) = (INR e,t) /\
@@ -287,7 +296,7 @@ Theorem frame_terminal_lift:
   ?r es' lgs. run_call es = SOME (r,es') /\
     frame_outcome es0 r es' e (FST (HD t.contexts)).returnData lgs /\
     (e = NONE ==> lgs = (FST (HD t.contexts)).logs /\
-                  es'.rollback = t.rollback) /\ call_requests es = []
+                  es'.rollback = t.rollback) /\ call_requests es = [] /\ gas_readings es = []
 Proof
   strip_tac >> Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
   drule (SRULE [MEM] frame_terminal_transplant) >>
@@ -295,7 +304,7 @@ Proof
 QED
 
 Theorem frame_terminal_rel_lift[local]:
-  asm_frame_rel prog data es0 a es /\ es.contexts = (c,rb)::rest /\
+  asm_frame_rel gas_tail prog data es0 a es /\ es.contexts = (c,rb)::rest /\
   (!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   step (es with contexts := [(c,rb)]) = (INR e,t) /\
@@ -306,7 +315,7 @@ Theorem frame_terminal_rel_lift[local]:
     (e = NONE ==> lgs = a1.as_logs /\
       es'.rollback.accounts = a1.as_accounts /\
       es'.rollback.toDelete = a1.as_pending_deletions /\
-      es'.rollback.tStorage = a1.as_transient) /\ call_requests es = []
+      es'.rollback.tStorage = a1.as_transient) /\ call_requests es = [] /\ gas_readings es = []
 Proof
   strip_tac >> drule_all frame_terminal_lift >> strip_tac >>
   Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
@@ -447,8 +456,115 @@ Proof
   metis_tac[frame_asm_group_observers, MEM]
 QED
 
+Theorem frame_asm_terminal_primitives[local]:
+  MEM r [asm_binop f a; asm_unop g a; asm_ternop h a;
+    asm_push_val w a; asm_pop a; asm_dup n a; asm_swap n a;
+    asm_state_unop k a; asm_mload a; asm_mstore a; asm_mstore8 a;
+    asm_sload a; asm_sstore a; asm_tload a; asm_tstore a;
+    asm_jump pc a; asm_jumpi pc a; asm_return_op a; asm_revert_op a;
+    asm_log n a; asm_sha3 a; asm_copy_to_mem bytes a;
+    asm_returndatacopy a; asm_extcodecopy a; asm_mcopy a] /\
+  (r = AsmRevert a1 \/ r = AsmFault a1) ==>
+  a1.as_gas_readings = a.as_gas_readings
+Proof
+  simp[MEM] >> strip_tac >>
+  gvs[asm_binop_def, asm_unop_def, asm_ternop_def, asm_push_val_def,
+    asm_pop_def, asm_dup_def, asm_swap_def, asm_state_unop_def,
+    asm_mload_def, asm_mstore_def, asm_mstore8_def, asm_sload_def,
+    asm_sstore_def, asm_tload_def, asm_tstore_def, asm_jump_def,
+    asm_jumpi_def, asm_return_op_def, asm_revert_op_def, asm_log_def,
+    asm_sha3_def, asm_copy_to_mem_def, asm_returndatacopy_def,
+    asm_extcodecopy_def, asm_mcopy_def, asm_expand_memory_def,
+    asm_next_def, AllCaseEqs()]
+QED
+
+Theorem frame_asm_terminal_groups[local]:
+  name <> "GAS" /\ ~is_evm_call_name name /\ name <> "SELFDESTRUCT" /\
+  MEM (SOME r) [asm_step_arith name a; asm_step_compare name a;
+    asm_step_bitwise name a; asm_step_memory name a;
+    asm_step_control pc name a; asm_step_extcall name a;
+    asm_step_copy name a; asm_step_context name a] /\
+  (r = AsmRevert a1 \/ r = AsmFault a1) ==>
+  a1.as_gas_readings = a.as_gas_readings
+Proof
+  simp[MEM, is_evm_call_name_def] >> strip_tac >>
+  all_tac
+  >- suspend "arith" >- suspend "arith"
+  >- suspend "compare" >- suspend "compare"
+  >- suspend "bitwise" >- suspend "bitwise"
+  >- suspend "memory" >- suspend "memory"
+  >- suspend "control" >- suspend "control"
+  >- suspend "extcall" >- suspend "extcall"
+  >- suspend "copy" >- suspend "copy"
+  >- suspend "context" >> suspend "context"
+QED
+Resume frame_asm_terminal_groups[arith]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_arith_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[compare]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_compare_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[bitwise]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_bitwise_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[memory]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_memory_def, asm_pop_def, asm_push_val_def,
+    asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[control]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_control_def, asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[extcall]:
+  markerLib.RESUME_TAC >> rpt strip_tac >> gvs[asm_step_extcall_def]
+QED
+Resume frame_asm_terminal_groups[copy]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_copy_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[context]:
+  markerLib.RESUME_TAC >>
+  qspec_then `\v. !r a1. v = SOME r /\
+    (r = AsmRevert a1 \/ r = AsmFault a1) ==>
+    a1.as_gas_readings = a.as_gas_readings` mp_tac frame_context_pred >>
+  disch_then (qspecl_then [`name`,`a`] mp_tac) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  (impl_tac >-
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[] >>
+     conj_tac >> simp_tac std_ss [] >>
+     metis_tac[frame_asm_terminal_primitives, MEM])) >>
+  disch_then (qspecl_then [`r`,`a1`] mp_tac) >> simp[]
+QED
+Finalise frame_asm_terminal_groups[local]
+
+Theorem frame_asm_terminal_readings[local]:
+  (!name. inst = AsmOp name ==>
+    ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT") /\
+  (asm_step labels pc inst a = AsmRevert a1 \/
+   asm_step labels pc inst a = AsmFault a1) ==>
+  a1.as_gas_readings = a.as_gas_readings
+Proof
+  Cases_on `inst` >> simp[asm_step_def] >> strip_tac >>
+  gvs[asm_next_def, AllCaseEqs()] >>
+  gvs[asm_step_op_def, AllCaseEqs()] >>
+  gvs[asm_dup_def, asm_swap_def, asm_log_def, asm_expand_memory_def,
+      asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_groups, MEM]
+QED
+
 Theorem frame_plain_singleton_sim[local]:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   es.contexts = (c,rb)::rest /\
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
@@ -479,8 +595,8 @@ Proof
   metis_tac[frame_rel_singleton]
 QED
 
-Theorem frame_plain_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+Theorem frame_plain_step_progress:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
   EL a.as_pc prog <> AsmOp "STATICCALL" /\
@@ -489,7 +605,16 @@ Theorem frame_plain_step:
   EL a.as_pc prog <> AsmOp "CREATE2" /\
   EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
   EL a.as_pc prog <> AsmOp "GAS" ==>
-  asm_frame_step_ok prog data es0 a es
+  asm_frame_step_ok gas_tail prog data es0 a es /\
+  (!a1 r t. run_call es = SOME (r,t) /\
+    ~frame_resource_starved es0 r t /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?u es1. step es = (INL (),u) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH es.contexts /\
+                 step x = (INL (),y)) u es1 /\
+      run_call es1 = run_call es /\
+      asm_frame_rel gas_tail prog data es0 a1 es1)
 Proof
   strip_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
@@ -497,10 +622,14 @@ Proof
     gvs[asm_frame_rel_def] >>
   drule_all frame_local_opcode >> strip_tac >>
   drule_all frame_plain_singleton_sim >> strip_tac
-  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
-      irule frame_starved_lift >> metis_tac[]) 
-  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
-      irule frame_starved_lift >> metis_tac[]) >>
+  >- (`?r es'. run_call es = SOME (r,es') /\
+        frame_resource_starved es0 r es' /\ call_requests es = []` by
+        (irule frame_starved_lift >> metis_tac[]) >>
+      simp[asm_frame_step_ok_def] >> metis_tac[])
+  >- (`?r es'. run_call es = SOME (r,es') /\
+        frame_resource_starved es0 r es' /\ call_requests es = []` by
+        (irule frame_starved_lift >> metis_tac[]) >>
+      simp[asm_frame_step_ok_def] >> metis_tac[]) >>
   Cases_on `asm_step (SND (compute_label_offsets prog))
     (build_offset_to_pc prog) (EL a.as_pc prog) a` >>
   gvs[asm_frame_step_ok_def]
@@ -510,7 +639,7 @@ Proof
   >> suspend "fault"
 QED
 
-Resume frame_plain_step[ok]:
+Resume frame_plain_step_progress[ok]:
   drule_all (SRULE [MEM] frame_continue_transplant) >> strip_tac >>
   `next_opcode (FST (HD es.contexts)) <> SOME Gas /\
    ~observable_call (FST (HD es.contexts))` by simp[] >>
@@ -523,13 +652,16 @@ Resume frame_plain_step[ok]:
   `a'.as_requests = a.as_requests /\ a'.as_outcomes = a.as_outcomes /\
    a'.as_gas_readings = a.as_gas_readings /\ a'.as_call_ctx = a.as_call_ctx` by
     (irule frame_asm_step_observers >> metis_tac[]) >>
-  disj2_tac >> goal_assum (drule_at Any) >>
-  irule frame_continue_rel >> simp[] >>
-  conj_tac >- gvs[asm_frame_rel_def] >>
-  conj_tac >- gvs[asm_frame_rel_def] >>
-  qexistsl_tac [`a`,`es`] >> simp[]
+  `asm_frame_rel gas_tail prog data es0 a' es1` by
+    (irule frame_continue_rel >> simp[] >>
+     conj_tac >- gvs[asm_frame_rel_def] >>
+     conj_tac >- gvs[asm_frame_rel_def] >>
+     qexistsl_tac [`a`,`es`] >> simp[]) >>
+  conj_tac >- (disj2_tac >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `es1` >>
+  simp[relationTheory.RTC_REFL]
 QED
-Resume frame_plain_step[halt]:
+Resume frame_plain_step_progress[halt]:
   drule (SRULE [MEM] frame_terminal_rel_lift) >>
   disch_then drule >> simp[vfm_abort_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
@@ -537,22 +669,52 @@ Resume frame_plain_step[halt]:
     ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT"` by
     (drule_all frame_local_instruction >> strip_tac >>
      gvs[asm_frame_prog_ok_def] >> metis_tac[]) >>
-  `a'.as_requests = a.as_requests` by
+  `a'.as_requests = a.as_requests /\
+   a'.as_gas_readings = a.as_gas_readings` by
     metis_tac[frame_asm_step_observers] >>
   disj2_tac >> goal_assum (drule_at Any) >>
   gvs[asm_frame_rel_def]
 QED
-Resume frame_plain_step[revert]:
+Resume frame_plain_step_progress[revert]:
   drule (SRULE [MEM] frame_terminal_rel_lift) >>
   disch_then drule >> simp[vfm_abort_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
-  disj2_tac >> metis_tac[]
+  `!name. EL a.as_pc prog = AsmOp name ==>
+    ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT"` by
+    (drule_all frame_local_instruction >> strip_tac >>
+     gvs[asm_frame_prog_ok_def] >> metis_tac[]) >>
+  `a'.as_gas_readings = a.as_gas_readings` by
+    (irule frame_asm_terminal_readings >> metis_tac[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  gvs[asm_frame_rel_def] >> metis_tac[]
 QED
-Resume frame_plain_step[fault]:
+Resume frame_plain_step_progress[fault]:
   drule_all (SRULE [MEM] frame_terminal_lift) >> strip_tac >>
-  disj2_tac >> metis_tac[]
+  `!name. EL a.as_pc prog = AsmOp name ==>
+    ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT"` by
+    (drule_all frame_local_instruction >> strip_tac >>
+     gvs[asm_frame_prog_ok_def] >> metis_tac[]) >>
+  `a'.as_gas_readings = a.as_gas_readings` by
+    (irule frame_asm_terminal_readings >> metis_tac[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  gvs[asm_frame_rel_def] >> metis_tac[]
 QED
-Finalise frame_plain_step[local]
+Finalise frame_plain_step_progress
+
+Theorem frame_plain_step[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog <> AsmOp "CALL" /\
+  EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL a.as_pc prog <> AsmOp "CREATE" /\
+  EL a.as_pc prog <> AsmOp "CREATE2" /\
+  EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
+  EL a.as_pc prog <> AsmOp "GAS" ==>
+  asm_frame_step_ok gas_tail prog data es0 a es
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 frame_plain_step_progress))
+QED
 
 Theorem frame_rel_readings_update[local]:
   asm_evm_rel p a es ==>
@@ -573,16 +735,23 @@ Proof
        asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def]
 QED
 
-Theorem frame_gas_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+Theorem asm_frame_gas_step:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
-  EL a.as_pc prog <> AsmOp "CALL" /\
-  EL a.as_pc prog <> AsmOp "STATICCALL" /\
   EL a.as_pc prog = AsmOp "GAS" ==>
-  asm_frame_step_ok prog data es0 a es
+  (?r es'. run_call es = SOME (r, es') /\
+           frame_resource_starved es0 r es' /\ call_requests es = []) \/
+  ?es1 w a1.
+    step es = (INL (), es1) /\ run_call es1 = run_call es /\
+    gas_readings es = w :: gas_readings es1 /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (AsmOp "GAS") a = AsmOK a1 /\
+    asm_frame_rel gas_tail prog data es0 a1 es1
 Proof
   strip_tac >>
-  `EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  `EL a.as_pc prog <> AsmOp "CALL" /\
+   EL a.as_pc prog <> AsmOp "STATICCALL" /\
+   EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
    EL a.as_pc prog <> AsmOp "CREATE" /\
    EL a.as_pc prog <> AsmOp "CREATE2" /\
    EL a.as_pc prog <> AsmOp "SELFDESTRUCT"` by simp[] >>
@@ -596,13 +765,13 @@ Proof
     ~is_data_inst (EL j prog))` by metis_tac[frame_local_instruction] >>
   `LENGTH (es with contexts := [(c,rb)]).contexts = 1` by simp[] >>
   drule_all asm_evm_gas_step >> strip_tac
-  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
+  >- (disj1_tac >>
       irule frame_starved_lift >> metis_tac[])
-  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
+  >- (disj1_tac >>
       irule frame_starved_lift >> metis_tac[]) >>
   suspend "continue"
 QED
-Resume frame_gas_step[continue]:
+Resume asm_frame_gas_step[continue]:
   rename1 `step (es with contexts := [(c,rb)]) = (INL (),t)` >>
   drule_all frame_continue_transplant >> strip_tac >>
   `LENGTH es1.contexts = LENGTH es.contexts /\
@@ -612,29 +781,44 @@ Resume frame_gas_step[continue]:
     (qpat_x_assum `asm_evm_rel _ _ es1` mp_tac >>
      simp[asm_evm_rel_def] >> Cases_on `es1.contexts` >> simp[] >>
      PairCases_on `h` >> simp[] >> strip_tac >> gvs[]) >>
-  `a.as_gas_readings = w::gas_readings es1` by
+  `a.as_gas_readings = w::(gas_readings es1 ++ gas_tail)` by
     gvs[asm_frame_rel_def] >>
   drule frame_gas_asm_step >> strip_tac >>
-  simp[asm_frame_step_ok_def] >> disj2_tac >>
-  goal_assum (drule_at Any) >>
+  disj2_tac >>
+  qexistsl_tac [`es1`, `w`,
+    `a with <|as_stack := w :: a.as_stack; as_pc := a.as_pc + 1;
+               as_gas_readings := gas_readings es1 ++ gas_tail|>`] >>
+  simp[] >>
   irule frame_continue_rel >> simp[] >>
   conj_tac >- gvs[asm_frame_rel_def] >>
   conj_tac
   >- (drule frame_rel_readings_update >>
-      disch_then (qspec_then `gas_readings es1` mp_tac) >> simp[]) >>
+      disch_then (qspec_then `gas_readings es1 ++ gas_tail` mp_tac) >> simp[]) >>
   qexistsl_tac [`a`,`es`] >> simp[]
 QED
-Finalise frame_gas_step[local]
+Finalise asm_frame_gas_step
+
+Theorem frame_gas_step[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog <> AsmOp "CALL" /\
+  EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog = AsmOp "GAS" ==>
+  asm_frame_step_ok gas_tail prog data es0 a es
+Proof
+  strip_tac >> drule_all asm_frame_gas_step >>
+  strip_tac >> gvs[asm_frame_step_ok_def] >> metis_tac[]
+QED
 
 Theorem asm_frame_noncall_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
   EL as.as_pc prog <> AsmOp "CALL" /\ EL as.as_pc prog <> AsmOp "STATICCALL" /\
   EL as.as_pc prog <> AsmOp "DELEGATECALL" /\
   EL as.as_pc prog <> AsmOp "CREATE" /\
   EL as.as_pc prog <> AsmOp "CREATE2" /\
   EL as.as_pc prog <> AsmOp "SELFDESTRUCT" ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es
 Proof
   Cases_on `EL as.as_pc prog = AsmOp "GAS"`
   >- metis_tac[frame_gas_step] >>
