@@ -1,6 +1,7 @@
 (* Structural boundary for combined memory, immutable and log effects. *)
 Theory o1LowerDloadJointInternalEffects
 Ancestors
+  o1SafeUpto
   o1LowerDloadPtrDiscipline o1LowerDloadJointStorageWrite o1LowerDloadJointMemoryWrite
   o1LowerDloadJointRangeRead o1LowerDloadJointAssign o1LowerDloadShared
   o1LowerDloadJointRangeCopy
@@ -97,7 +98,7 @@ QED
 
 Theorem ld_joint_istore_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = ISTORE /\ inst.inst_operands = [p;vop] /\
   eval_operand p s = SOME x /\ eval_operand vop s = SOME v ==>
@@ -107,8 +108,8 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
   `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
     metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
   `MEM inst (fn_insts fn)` by
@@ -148,7 +149,7 @@ QED
 
 Theorem ld_joint_istore_step[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = ISTORE /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
@@ -173,7 +174,7 @@ Proof
     fs[ld_joint_boundary_def] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `w2n x+32 <= lo` by
     (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
      gvs[access_ok_def, source_memory_write_ranges_def, mem_write_ops_def,
@@ -201,7 +202,7 @@ QED
 
 Theorem ld_joint_log_scalar[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: REVERSE (p::sz::tops) /\
   MEM op (sz::tops) ==>
@@ -210,7 +211,7 @@ Proof
   rpt gen_tac >> disch_tac >> gns[] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
   `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
     metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
   `ptr_use_ok P (fn_pv P fn) inst` by
@@ -238,7 +239,7 @@ Proof
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn op = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      gs[taint_ok_def, MEM_REVERSE] >> metis_tac[]) >>
@@ -250,7 +251,7 @@ QED
 
 Theorem ld_joint_log_read[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: REVERSE (p::sz::tops) /\
   LENGTH tops = w2n tc /\ eval_operand p s = SOME x /\
@@ -273,7 +274,7 @@ Proof
   `eval_operands tops t = SOME topics` by metis_tac[] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn p = {}` by
     (qpat_assum `taint_ok _ _ _ _` mp_tac >>
      gvs[taint_ok_def, MEM_REVERSE] >> metis_tac[]) >>
@@ -283,7 +284,7 @@ Proof
     (w2n l=0 \/ (w2n x=w2n y /\ w2n x+w2n l<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
-    (drule ld_joint_read_operand_range >>
+    (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
      disch_then (qspecl_then [`x`,`<|iao_ofst := p; iao_size := SOME sz; iao_max_size := SOME sz|>`,`p`,`w2n l`] mp_tac) >>
      simp[mem_read_ops_def, REVERSE_APPEND] >>
      disch_then irule >> simp[retpc_use_ok_def, MEM_REVERSE] >>
@@ -312,7 +313,7 @@ QED
 
 Theorem ld_joint_log_step[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = LOG /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
@@ -366,7 +367,7 @@ QED
 
 Theorem ld_joint_internal_effect_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ o1_ctx_shape C /\
   active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [ISTORE; LOG] /\ step_inst fuel C inst s = OK s1 /\

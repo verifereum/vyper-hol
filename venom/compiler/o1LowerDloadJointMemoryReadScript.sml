@@ -1,6 +1,7 @@
 (* Source-indexed masked memory reads. *)
 Theory o1LowerDloadJointMemoryRead
 Ancestors
+  o1SafeUpto
   o1LowerDloadMemoryConsumer o1LowerDloadJointShift
   o1LowerDloadRelocationKernel o1LowerDloadEnvironment o1LowerDloadOccurrence
   ptrDiscipline venomState venomExecSemantics list rich_list byte words
@@ -59,7 +60,7 @@ QED
 
 Theorem ld_joint_mload_read:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = MLOAD /\ inst.inst_operands = [p] /\
   eval_operand p s = SOME x ==>
@@ -71,7 +72,7 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    metis_tac[ptr_discipline_def] >>
+    metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn p = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. p = Var v ==> MEM v (fn_ir_vars fn)` by
@@ -121,7 +122,7 @@ QED
 
 Theorem ld_joint_mload_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = MLOAD /\ step_inst fuel C inst s = OK s1 ==>
   ?out x y. s1 = update_var out x s /\
@@ -150,7 +151,7 @@ QED
 Theorem ld_joint_mload_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = MLOAD /\ ~in_revert_forward fn s /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>

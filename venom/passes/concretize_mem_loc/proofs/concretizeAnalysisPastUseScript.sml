@@ -1,5 +1,6 @@
 Theory concretizeAnalysisPastUse
 Ancestors
+  concretizeLayoutCutSafe o1SafeUpto
   concretizeAnalysisUsedDemand concretizeAnalysisIncomingDemand
   concretizeAnalysisTemporalDemand frameOriginHistory ptrDiscipline
   concretizePtrIncomingOrigins frameOriginCacheReach frameWriteOwnership
@@ -7,7 +8,7 @@ Ancestors
   frameActivationSeparation frameActivationCache venomInst o1PassContract cfgWf venomWf finite_map list arithmetic
 
 Theorem joint_write_past_owner_generator:
-  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   l <= m /\ m < LENGTH es /\ activation_depth (EL l (q0::qs)) = d /\
@@ -35,7 +36,7 @@ Proof
     metis_tac[joint_origin_history_erasure] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[origin_frame_erasure] >>
-  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `access_ok lo G fn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
     d owner aid (b,sz)` by metis_tac[LESS_EQ_REFL] >>
   `?q'. joint_transition C (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -72,12 +73,14 @@ Resume joint_write_past_owner_generator[local]:
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP om _ = _`)) >>
      goal_assum (drule_at (Pat `mem_write_ops _ = _`)) >>
-     goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >> simp[]) >>
+     fs[layout_cut_safe_def] >>
+     goal_assum (drule_at (Pat `ptr_discipline_upto _ _ _ _`)) >> simp[]) >>
   qexists_tac `m` >>
   goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
 QED
 
 Resume joint_write_past_owner_generator[incoming]:
+  `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   drule_all joint_incoming_used_generator >>
   disch_then (qspec_then `mems` strip_assume_tac) >>
   `activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -101,8 +104,8 @@ Resume joint_write_past_owner_generator[incoming]:
 QED
 
 Resume joint_write_past_owner_generator[dynamic]:
-  qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-  simp[ptr_discipline_def] >> strip_tac >>
+  qpat_x_assum `layout_cut_safe _ _ _ _ _ _` mp_tac >>
+  simp[layout_cut_safe_def, ptr_discipline_upto_def] >> strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[]) >>
@@ -122,7 +125,7 @@ Proof
 QED
 
 Theorem joint_untainted_cache_past_owner_generator:
-  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ j <= LENGTH es /\
   activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
@@ -164,7 +167,7 @@ Proof
 QED
 
 Theorem joint_untainted_cache_used:
-  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ n <= LENGTH es /\
   activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
@@ -194,7 +197,7 @@ Proof
 QED
 
 Theorem joint_untainted_demand_owner_used:
-  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ n <= j /\ j <= LENGTH es /\
   activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
@@ -221,7 +224,7 @@ Proof
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+  goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `byte NOTIN joint_mem_taint _`)) >> simp[] >>
   metis_tac[]
 QED
