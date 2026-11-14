@@ -1355,18 +1355,12 @@ Proof
   Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
 QED
 
-(* Private storage aggregates use the general place assignment proof,
-   which obtains storage separation from the execution's finite horizon. *)
+(* Private storage aggregates use direct dense or sparse copy providers;
+   each obtains storage separation from the execution's finite horizon. *)
 Theorem body_assign_toplevel_copy[local]:
-  !cx nsid e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es' mut ty
+  !cx nsid e tops ctx func cenv env env' ret_ty lctx RetQ es res es' mut ty
    slot.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings
-      (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\
-       read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_ok cx (TopLevelNameTarget nsid)) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
        occurs_abi_decode_target target tops) /\
@@ -1393,6 +1387,16 @@ Proof
   disch_then drule >> simp[] >> disch_then drule >>
   disch_then drule >> strip_tac >> gvs[] >>
   drule_all body_assign_copy_rhs_pre >> strip_tac >>
+  drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
+  `0 < type_slot_size tvt` by
+    gvs[valueEncodingPropsTheory.type_memory_size_slots] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `expr_sim ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_ok_def] >>
+  `!ann t args. e = TypeBuiltin ann Empty t args ==> t = expr_type e` by
+    (rpt strip_tac >> gvs[type_stmt_def, atarget_accepts_def,
+       well_typed_expr_def, type_builtin_result_ok_def, expr_type_def,
+       AllCaseEqs()]) >>
   `supported_storage_type tops (expr_type e)` by
     (`supported_program tops` by fs[body_inv_def] >>
      drule supported_variable_decl_mem >> strip_tac >>
@@ -1400,7 +1404,25 @@ Proof
      simp[supported_declaration_header_def]) >>
   `lowered_value_type cenv e = expr_type e` by
     (drule_all storage_rhs_lowered_type >> simp[]) >>
-  irule bodyAssignPlaceTheory.body_assign_place_case >> metis_tac[])
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)`
+  >- (`~is_bytestring_type (expr_type e) /\ ~has_length_word (expr_type e)` by
+        metis_tac[topcopy_not_bytestring, topcopy_no_length_word] >>
+      `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+      irule compile_assign_storage_sparse_stmt_frag >> asm_rewrite_tac[] >>
+      qexistsl_tac [`env`, `id_str`, `off`, `tr`, `tops`, `tvt`,
+                    `expr_type e`] >>
+      asm_rewrite_tac[] >>
+      rpt strip_tac >> drule_all expr_body_pre_eval_gas >> strip_tac >>
+      gvs[value_runtime_typed_def]) >>
+  irule compile_assign_storage_copy_stmt_frag >> asm_rewrite_tac[] >>
+  qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
+  asm_rewrite_tac[] >>
+  rpt strip_tac >> drule_all expr_body_pre_eval_gas >> strip_tac >>
+  gvs[value_runtime_typed_def])
 QED
 
 (* A local assigned to takes memory: its type is a widening of the assigned
