@@ -1568,6 +1568,24 @@ Proof
   metis_tac[memory_rhs_read_annotation_typed]
 QED
 
+Theorem expr_body_pre_read_lowered_typed:
+  !ce cx env e es raw ee v er.
+    expr_body_pre ce cx env e es /\
+    eval_expr cx e es = (INL raw,ee) /\
+    read_result cx raw ee = (INL v,er) ==>
+    ?dv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv /\
+         value_has_type dv v
+Proof
+  rpt strip_tac >>
+  `value_runtime_typed env (lowered_value_type ce e) v` by
+    (irule memory_rhs_read_lowered_typed_unwidened >>
+     qexistsl [`cx`, `es`, `er`] >> simp[bind_def]) >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        env_consistent_def, env_context_consistent_def] >>
+  gvs[value_runtime_typed_def]
+QED
+
 Theorem lowered_zero_bytestring_read_empty:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
