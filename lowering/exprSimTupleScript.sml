@@ -584,7 +584,7 @@ QED
 
 (* The element's pointer in memory: the element lies inside the base's
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
-Theorem tuple_elem_ptr[local]:
+Theorem tuple_elem_ptr:
   !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
     stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
