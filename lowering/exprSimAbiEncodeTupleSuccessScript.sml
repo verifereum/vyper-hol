@@ -181,12 +181,12 @@ Theorem abi_encode_tuple_staging_split:
   compile_alloc_buffer n st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce st /\
   n < dimword (:256) /\
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) ==>
   ?addressed.
-    stmt_state_rel ctx func ce cx es addressed /\
+    stmt_state_rel H ctx func ce cx es addressed /\
     run_inst_seq (emitted_insts allocated staged) addressed = OK actual /\
     addressed.vs_memory = s.vs_memory /\ copy_static actual = copy_static addressed /\
     FLOOKUP addressed.vs_allocas st.cs_next_id = SOME (b,n) /\
@@ -220,12 +220,12 @@ Theorem abi_encode_tuple_staging_state_rel:
   compile_alloc_buffer n st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce st /\
   n < dimword (:256) /\
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   abi_decode_frame b n s actual /\
   FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) ==>
-  stmt_state_rel ctx func ce cx es actual
+  stmt_state_rel H ctx func ce cx es actual
 Proof
   strip_tac >>
   drule_all abi_encode_tuple_staging_split >>
@@ -250,7 +250,7 @@ Theorem abi_encode_tuple_staging_origin_frame:
   compile_alloc_buffer n st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es' s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es' s /\ local_ptrs_reserved ce st /\
   n < dimword (:256) /\
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   abi_decode_frame b n s actual /\
@@ -293,7 +293,7 @@ Theorem abi_encode_tuple_staging_pure_frame:
   compile_alloc_buffer n st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce st /\
   n < dimword (:256) /\
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   abi_decode_frame b n s actual /\
@@ -334,7 +334,7 @@ Theorem abi_encode_tuple_staging_cursor:
   compile_alloc_buffer n st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es' s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es' s /\ local_ptrs_reserved ce st /\
   n < dimword (:256) /\
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   abi_decode_frame b n s actual /\
@@ -342,7 +342,7 @@ Theorem abi_encode_tuple_staging_cursor:
   wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
-  stmt_state_rel ctx func ce cx es'
+  stmt_state_rel H ctx func ce cx es'
     (actual with vs_inst_idx := LENGTH staged.cs_current_insts) /\
   wb_frame ce es es' origin s0
     (actual with vs_inst_idx := LENGTH staged.cs_current_insts)
