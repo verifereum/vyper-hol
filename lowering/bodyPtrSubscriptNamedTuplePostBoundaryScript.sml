@@ -15,9 +15,9 @@ Proof
 QED
 
 Theorem fresh_add_stmt_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ~not_fresh_at sa out ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     (update_var out w s with vs_inst_idx := n)
 Proof
   strip_tac >> rewrite_tac[stmt_state_rel_inst_idx] >>

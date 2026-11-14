@@ -52,27 +52,30 @@ Theorem ifexp_selected_marked_endpoint_mem:
   (!gs v st. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
      (INL v,st) ==> ?tv. evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v) /\
   gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
-  vv_post ctx func ce cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
   vv_store_bound cx t (lowered_value_type ce e) (ee with gas_obs := []) raw vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?tv v u. gas_marked_exec T (ctx,func) (conditional_result cx raw)
       (ee with gas_obs := [],s) [] (INL tv) (ee with gas_obs := []) (OK u) /\
-    expr_post ctx func ce cx e es sa sb s0 (ee with gas_obs := []) v op u /\
+    expr_post H ctx func ce cx e es sa sb s0 (ee with gas_obs := []) v op u /\
     read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
     vv_store_bound cx t t (ee with gas_obs := []) tv
       (LocatedValue t (mk_ptr op LocMemory)) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
-    vv_at ce cx t sa sb (ee with gas_obs := []) tv (LocatedValue t (mk_ptr op LocMemory)) u
+    vv_at ce cx t sa sb (ee with gas_obs := []) tv (LocatedValue t (mk_ptr op LocMemory)) u /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule vv_post_read_ok >> strip_tac >>
   `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -85,10 +88,11 @@ Proof
      qexistsl_tac [`gas_explicit marks s0.vs_gas_readings`,`ee with gas_obs := []`] >>
      simp[bind_def]) >>
   drule ifexp_selected_arm_path_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
   `gas_marked_exec T (ctx,func) (read_result cx raw)
     (ee with gas_obs := [],s) [] (INL v) (ee with gas_obs := []) (OK u)` by

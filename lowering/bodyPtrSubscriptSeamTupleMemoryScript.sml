@@ -53,7 +53,7 @@ Proof
 QED
 
 Theorem tuple_memory_child_address:
-  stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
   vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
   read_result cx tv es1 = (INL (ArrayV (TupleV vs)),es1) /\
   eval_operand (vv_operand bvv) q = SOME w /\ vv_loc bvv = LocMemory /\
@@ -112,7 +112,7 @@ Proof
 QED
 
 Theorem tuple_child_placement:
-  stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
   vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
   read_result cx tv es1 = (INL (ArrayV (TupleV vs)),es1) /\
   read_result cx tv' es1 = (INL (EL k vs),es1) /\
@@ -194,9 +194,9 @@ Theorem tuple_memory_selected_ptr:
   w2n (w + n2w off) = w2n w + off /\
   t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\ op_taint tn' dst = {} /\
   (!x b sz. vv_operand vv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-    ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
-  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst LocMemory)) ee H tn' t /\
-  ptr_buf_ok cenv child dst H t
+    ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
+  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst LocMemory)) ee HG tn' t /\
+  ptr_buf_ok cenv child dst HG t
 Proof
   strip_tac >>
   `ptr_mem_ok cx (TupleT tys) (ArrayV (TupleV vs)) (vv_operand vv) G tn s` by
@@ -204,7 +204,7 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   `off + type_memory_size (EL k tvs) <= type_memory_size_list tvs` by
     (drule tuple_element_interval >> simp[type_memory_size_list_sum] >> gvs[]) >>
-  `ptr_buf_ok cenv child dst H t` by
+  `ptr_buf_ok cenv child dst HG t` by
     (irule ptr_buf_ok_offset >>
      qexistsl_tac [`G`, `obj`, `off`, `s`, `vv_operand vv`, `w`] >>
      simp[] >> rpt strip_tac >> gvs[]) >>

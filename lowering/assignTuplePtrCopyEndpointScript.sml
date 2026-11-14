@@ -38,8 +38,8 @@ Proof
 QED
 
 Theorem ghost_inv_inst_idx:
-  ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_inst_idx := k) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
   Cases_on `d` >> simp[return_buf_ptr_def] >>
@@ -55,7 +55,7 @@ Theorem emit_allocated_mcopy_endpoint_ptr:
   lookup_var p s = SOME (n2w b) /\ lookup_var q s = SOME a /\
   b < dimword (:256) /\ n < dimword (:256) /\
   ptr_covers G tn p s n /\ ptr_covers G tn q s n /\
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
   not_local_ptr cenv es.scopes p /\
@@ -71,8 +71,8 @@ Theorem emit_allocated_mcopy_endpoint_ptr:
        val_in_memory tv v (w2n a) m) ==>
   ?u G' tn'.
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK u) /\
-    ghost_inv d cenv cx es G' tn' u /\
-    stmt_state_rel ctx func cenv cx es u /\
+    ghost_inv H d cenv cx es G' tn' u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     (!m. mem_agree_outside tn'.t_mem u.vs_memory m ==> val_in_memory tv v b m) /\
     u = (mcopy b (w2n a) n s with vs_inst_idx := SUC s.vs_inst_idx) /\
     (!x. lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\

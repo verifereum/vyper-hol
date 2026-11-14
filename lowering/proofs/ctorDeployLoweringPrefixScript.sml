@@ -238,13 +238,18 @@ Proof
     fs[e2eDeployDefsTheory.deploy_state_rel_def] >>
   `LENGTH tx.args = LENGTH args` by
     (drule deploy_prefix_constructor_binding >> strip_tac >> gvs[]) >>
-  simp[load_contract_def, GSYM e2eDeployDefsTheory.deploy_evaluation_context_def] >>
+  Cases_on `evaluate_module_constants_trace (deploy_evaluation_context tops am tx)
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,[])|>)
+    tx.target (constants_order [(NONE,tops)])` >>
+  gvs[evaluate_all_constants_def, evaluate_module_constants_def] >>
+  simp[load_contract_def, load_contract_trace_def, GSYM e2eDeployDefsTheory.deploy_evaluation_context_def] >>
   `deploy_evaluation_context tops
      (am with <|exports updated_by CONS (tx.target,[]);
                 immutables updated_by CONS (tx.target,imms)|>) tx =
    deploy_evaluation_context tops am tx` by
     simp[e2eDeployDefsTheory.deploy_evaluation_context_def] >>
-  simp[call_external_function_def] >>
+  simp[call_external_function_trace_def] >>
   simp[send_call_value_def, e2eDeployDefsTheory.deploy_evaluation_context_def,
        initial_evaluation_context_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.bind_def, vyperStateTheory.check_def,

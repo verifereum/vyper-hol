@@ -10,7 +10,7 @@ Ancestors
 
 Theorem reason_storage_alloc_buffer_resources:
   !ctx func cenv cx es s cc cd buf n ty tv p t' PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
     local_ptrs_reserved cenv cc /\ fn_inst_ids_distinct func /\
     n < dimword(:256) /\
@@ -20,7 +20,7 @@ Theorem reason_storage_alloc_buffer_resources:
     ?s1 out w G1 tn1.
       buf.buf_operand = Var out /\
       step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
-      stmt_state_rel ctx func cenv cx es s1 /\
+      stmt_state_rel H ctx func cenv cx es s1 /\
       local_ptrs_reserved cenv cd /\
       G1 = step_prov PG G (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s1 /\
       tn1 = step_taint (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out]) s s1 tn /\
@@ -104,13 +104,13 @@ QED
 
 Theorem reason_storage_allocated_mstore_state_rel:
   !ctx func cenv cx es s inst b n a w.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) /\
     b <= a /\ a + 32 <= b + n /\
     (!name off len. local_region cenv es.scopes s name off len ==>
       regions_disjoint b n off len) ==>
-    stmt_state_rel ctx func cenv cx es (mstore a w s)
+    stmt_state_rel H ctx func cenv cx es (mstore a w s)
 Proof
   rpt strip_tac >> irule literal_mstore_state_rel >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
@@ -121,7 +121,7 @@ QED
 
 Theorem reason_storage_add_source:
   !ctx func cenv cx es s cc cd src result a d ty tv p t' PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
     emit_op ADD [src; Lit d] cc = (result,cd) /\
     eval_operand src s = SOME a /\
     (!z. p.ptr_operand = Var z ==> not_fresh_at cc z) /\
@@ -134,7 +134,7 @@ Theorem reason_storage_add_source:
       run_inst_seq (emitted_insts cc cd) s = OK u /\
       G1 = step_prov PG G (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) u /\
       tn1 = step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s u tn /\
-      stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
+      stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
       eval_operand result u = SOME (a+d) /\
       eval_operand p.ptr_operand u = eval_operand p.ptr_operand s /\
       ptr_vv_ok cx ty tv (LocatedValue t' p) es G1 tn1 u /\
@@ -152,7 +152,7 @@ Proof
   `~not_fresh_at cc x` by simp[Abbr `x`, not_fresh_at_def] >>
   `not_local_ptr cenv es.scopes x` by
     (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es (update_var x (a+d) s)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var x (a+d) s)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   `local_ptrs_reserved cenv cd` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `cc` >> simp[]) >>
@@ -199,7 +199,7 @@ Finalise reason_storage_add_source
    resources; its ghost changes only memory taint. *)
 Theorem reason_storage_selector_resources:
   !ctx func cenv cx es s cc cd buf out b n aid ty tv p t' G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] cc = ((),cd) /\
     buf.buf_operand = Var out /\ lookup_var out s = SOME (n2w b) /\
     b+n < dimword(:256) /\ 32 <= n /\
@@ -215,7 +215,7 @@ Theorem reason_storage_selector_resources:
       run_inst_seq (emitted_insts cc cd) s = OK u /\
       step_inst_base (mk_inst cc.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) s = OK u /\
       tn1 = step_taint (mk_inst cc.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) s u tn /\
-      stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
+      stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
       eval_operand p.ptr_operand u = eval_operand p.ptr_operand s /\
       ptr_vv_ok cx ty tv (LocatedValue t' p) es G tn1 u /\
       (!tr sty stv base. storage_holds cx tr sty stv base es s ==>
@@ -233,7 +233,7 @@ Proof
      irule step_MSTORE >> simp[eval_operand_def]) >>
   `run_inst_seq (emitted_insts cc cd) s = OK (mstore b 0x08c379a0w s)` by
     (drule emitted_insts_emit_void >> strip_tac >> simp[run_inst_seq_def]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore b 0x08c379a0w s)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore b 0x08c379a0w s)` by
     (irule reason_storage_allocated_mstore_state_rel >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`b`, `mk_inst aid ALLOCA [Lit (n2w n)] [out]`, `n`] >>
@@ -284,7 +284,7 @@ QED
 Finalise reason_storage_selector_resources
 
 Theorem reason_storage_encoder_prefix_path_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   compile_alloc_buffer n cc = (buf,c1) /\
   emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
   emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
@@ -306,7 +306,7 @@ Theorem reason_storage_encoder_prefix_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = c4.cs_current_bb /\
     t.vs_inst_idx = LENGTH c4.cs_current_insts /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv c4 /\
+    stmt_state_rel H ctx func cenv cx es t /\ local_ptrs_reserved cenv c4 /\
     lookup_var out t = SOME (n2w b) /\
     lookup_var x t = SOME (n2w b + 32w) /\
     lookup_var out2 t = SOME (n2w b2) /\

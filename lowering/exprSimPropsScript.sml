@@ -538,6 +538,13 @@ Proof
   asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
+Theorem word_size_monotone:
+  !n m. n <= m ==> word_size n <= word_size m
+Proof
+  rpt strip_tac >> simp[vfmConstantsTheory.word_size_def] >>
+  irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]
+QED
+
 Theorem le_word_size_mul:
   !n. n <= 32 * word_size n
 Proof

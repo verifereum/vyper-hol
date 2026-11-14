@@ -81,16 +81,6 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem inst_seq_ptr_ghost_unique:
-  !is s G tn g1 t1 g2 t2.
-  inst_seq_ptr D lo ctx fn PG G tn is s g1 t1 /\
-  inst_seq_ptr D lo ctx fn PG G tn is s g2 t2 ==>
-  g1 = g2 /\ t1 = t2
-Proof
-  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >>
-  Cases_on `step_inst_base h s` >> simp[] >> metis_tac[]
-QED
-
 Theorem inst_seq_ptr_append_tail:
   !pre s t G tn gm tm post gf tf.
   EVERY (\i. ~is_terminator i.inst_opcode) pre /\

@@ -229,7 +229,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_alloca_run_memory_effects:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
@@ -255,7 +255,7 @@ Proof
   strip_tac >> drule run_inst_seq_four_endpoint >> strip_tac >>
   drule_all alloca_step_site >> strip_tac >>
   `lookup_var out s1 = SOME (n2w b)` by gvs[eval_operand_def] >>
-  `stmt_state_rel ctx func cenv cx es s3` by
+  `stmt_state_rel H ctx func cenv cx es s3` by
     (irule alloca_store_offset_state_rel >> metis_tac[]) >>
   `?c. FLOOKUP t.vs_allocas (id+3) = SOME (c,sz) /\
     c+sz < dimword (:256) /\ eval_operand (Var q) t = SOME (n2w c)` by
@@ -276,7 +276,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_memory_effects:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -331,7 +331,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_local_exterior:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -345,7 +345,7 @@ Theorem revert_reason_prefix_local_exterior:
   i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule revert_reason_prefix_state_rel >> metis_tac[]) >>
   `local_region cenv es.scopes t name a sz` by
     (irule revert_reason_prefix_local_region_frame >> metis_tac[]) >>
@@ -443,7 +443,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_return_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
      cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      !k. k < 3 ==> x <> STRING #"%" (toString (v+k))) /\
@@ -451,7 +451,7 @@ Theorem revert_reason_prefix_return_frame:
   inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
   return_buf_ptr d cenv Gf tnf t /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-    op_taint tnf (Var x) = {}) /\ stor_taint_ok cx tnf t
+    op_taint tnf (Var x) = {}) /\ stor_taint_ok H cx tnf t
 Proof
   strip_tac >> drule revert_reason_prefix_ghost_observations >> strip_tac >>
   drule revert_reason_prefix_data_frame >> strip_tac >>
@@ -468,7 +468,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_ghost_inv:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -477,10 +477,10 @@ Theorem revert_reason_prefix_ghost_inv:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
      cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      !k. k < 3 ==> x <> STRING #"%" (toString (v+k))) /\
-  64+ms < dimword (:256) /\ ghost_inv d cenv cx es G tn s /\
+  64+ms < dimword (:256) /\ ghost_inv H d cenv cx es G tn s /\
   run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
   inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
-  ghost_inv d cenv cx es Gf tnf t
+  ghost_inv H d cenv cx es Gf tnf t
 Proof
   strip_tac >>
   `!k. k < 2 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))`
@@ -515,7 +515,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_ghost_kept:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -534,7 +534,7 @@ Proof
   `!k. k < 2 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))`
     by (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   drule_all revert_reason_prefix_memory_effects >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule revert_reason_prefix_state_rel >> metis_tac[]) >>
   `alloca_inv t` by fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   irule ghost_kept_exterior_frame >>

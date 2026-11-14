@@ -7,7 +7,7 @@ Ancestors
 (* u is the unadvanced ALLOCA endpoint; k is the counted endpoint's cursor. *)
 Theorem unwrap_alloc_output_coverage:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
   buf.buf_operand = Var out /\
   step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s = OK u ==>
   ptr_covers
@@ -23,7 +23,7 @@ QED
 
 Theorem unwrap_alloc_old_coverage:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
   buf.buf_operand = Var out /\
   step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s = OK u /\
   p <> out /\ ptr_covers G tn p s sz ==>
@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem unwrap_alloc_taint_frame:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w nb)] [out]) (fn_insts func) /\
   nb < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w nb)] [out]) s = OK u ==>
@@ -84,7 +84,7 @@ QED
 
 Theorem unwrap_alloc_old_entry_taint:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  vv_post ctx func cenv cx e es sa sm s0 es' result vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' result vv s /\
   nb < dimword (:256) /\ sa.cs_next_id <= sm.cs_next_id /\
   FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
   buf.buf_operand = Var out /\
@@ -94,7 +94,7 @@ Theorem unwrap_alloc_old_entry_taint:
    <=> i IN tn.t_mem)
 Proof
   strip_tac >> drule_all unwrap_alloc_old_entry_separation >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[vv_post_def] >>
   drule unwrap_alloc_generated_code >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >> gvs[] >>
   drule_all unwrap_alloc_taint_frame >>

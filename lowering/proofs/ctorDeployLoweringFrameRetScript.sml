@@ -7,7 +7,7 @@ Ancestors
   bodySim stmtSimReturn immutableDeployExecution nonreentrantSource loweringHalt
   moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperContext vyperStorageLayoutSafety
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomState venomInst gasStorage vyperStorageFootprint
 
 Theorem ctor_return_gas_edge[local]:
   ~s.vs_halted /\
@@ -166,8 +166,8 @@ Proof
 QED
 
 Theorem constructor_return_q_gas_obs:
-  constructor_return_q func cenv cx rt cap nr nkey v (es with gas_obs := tail) r <=>
-  constructor_return_q func cenv cx rt cap nr nkey v es r
+  constructor_return_q H func cenv cx rt cap nr nkey v (es with gas_obs := tail) r <=>
+  constructor_return_q H func cenv cx rt cap nr nkey v es r
 Proof
   Cases_on `nr` >> simp[constructor_return_q_def, state_rel_gas_obs] >>
   simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
@@ -235,18 +235,20 @@ Theorem constructor_exit_gas_path:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+          storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+          nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
   stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   ?final. gas_path ctx func s 0 (Halt final) /\
-    constructor_return_q func cenv cx rt cap nr nkey NoneV
+    constructor_return_q H func cenv cx rt cap nr nkey NoneV
       (es with scopes := []) (Halt final)
 Proof
   strip_tac >> `nr ==> ut` by simp[] >>
   drule_all ctor_exit_code >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `constructor_return_q _ _ _ _ _ _ _ _ es0 _` >>
+  qmatch_goalsub_abbrev_tac `constructor_return_q _ _ _ _ _ _ _ _ _ es0 _` >>
   qabbrev_tac `es1 = if nr then
     es with tStorage := (cx.txn.target =+
       update_storage (n2w nkey) 0w (es.tStorage cx.txn.target)) es.tStorage
@@ -282,8 +284,69 @@ Proof
   simp[constructor_return_q_def] >> qexistsl_tac [`s1`, `codepos`] >> simp[]
 QED
 
+(* A zero-GAS path to a halt fixes the halting state. *)
+Theorem gas_path_halt_unique:
+  gas_path ctx func s n (Halt f) /\ gas_path ctx func s m (Halt g) ==> f = g
+Proof
+  strip_tac >>
+  `?a. run_from a ctx func s = Halt f` by
+    (irule gas_path_exit >> simp[exit_result_def] >> metis_tac[]) >>
+  `?b. run_from b ctx func s = Halt g` by
+    (irule gas_path_exit >> simp[exit_result_def] >> metis_tac[]) >>
+  `run_from (a + b) ctx func s = Halt f /\
+   run_from (a + b) ctx func s = Halt g` by
+    (conj_tac >| [
+       irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `a` >> simp[],
+       irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `b` >> simp[]]) >>
+  gvs[]
+QED
+
+(* constructor_exit_gas_path for every horizon of a family P at once: the
+   halting state is the run's, so one witness serves every horizon. *)
+Theorem constructor_exit_gas_path_horizons:
+  !P H0 ctx func cenv body_cenv cx es s nr nkey ut rt cap imm st_exit
+   st_epilogue st_final.
+  cenv.ce_is_ctor /\ same_frame cenv body_cenv /\
+  st_exit.cs_current_insts = [] /\
+  (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
+    st_exit = ((), st_epilogue) /\
+  compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
+  fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
+  rt + cap < dimword(:256) /\
+  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256)) /\
+  (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
+    (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
+  (!H. P H ==>
+       stmt_state_rel H ctx func body_cenv cx es s /\
+       (nr ==> storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H))) /\
+  P H0 /\ ~s.vs_halted /\
+  s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 ==>
+  ?final. gas_path ctx func s 0 (Halt final) /\
+    !H. P H ==>
+      constructor_return_q H func cenv cx rt cap nr nkey NoneV
+        (es with scopes := []) (Halt final)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!H. P H ==> ?f. gas_path ctx func s 0 (Halt f) /\
+     constructor_return_q H func cenv cx rt cap nr nkey NoneV
+       (es with scopes := []) (Halt f)` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     `nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+        storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+        nkey < dimword (:256)` by (strip_tac >> fs[]) >>
+     drule_all constructor_exit_gas_path >> strip_tac >>
+     qexists_tac `final` >> simp[]) >>
+  first_assum drule >> strip_tac >>
+  qexists_tac `f` >> rw[] >>
+  first_x_assum drule >> strip_tac >>
+  `f' = f` by metis_tac[gas_path_halt_unique] >>
+  gvs[]
+QED
+
 (* Return NONE jumps to the constructor exit. The entire path has zero
-   GAS readings, including the optional unlock and deployment epilogue. *)
+   GAS readings, including the deployment epilogue. Deployment
+   constructors take no lock (deploy_ctor_entry_body_resources), so the
+   exit is stated without the unlock. *)
 Theorem constructor_return_none_frag:
   cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
   cenv.ce_ctor_exit_label = SOME exit_lbl /\ same_frame cenv body_cenv /\
@@ -291,16 +354,20 @@ Theorem constructor_return_none_frag:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st_exit = ((), st_epilogue) /\
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
-  fn_has_code st_exit st_final func /\ rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  fn_has_code st_exit st_final func /\ rt + cap < dimword(:256) /\ ~nr /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
   stmt_frag ctx func cx lctx
-    (constructor_return_q func cenv cx rt cap nr nkey) body_cenv
+    (\H. constructor_return_q H func cenv cx rt cap nr nkey) body_cenv
     (stmt_env body_cenv lctx NoneT (Return NONE))
     (eval_stmt cx (Return NONE)) es
 Proof
   strip_tac >>
+  `nr = F` by fs[] >> pop_assum SUBST_ALL_TAC >>
+  `st_epilogue = st_exit` by
+    (qpat_x_assum `(if F then _ else _) _ = _` mp_tac >>
+     simp[comp_return_def]) >>
+  pop_assum SUBST_ALL_TAC >>
   `body_cenv.ce_return_pc = NONE /\
    body_cenv.ce_ctor_exit_label = SOME exit_lbl` by
     gvs[same_frame_def, compile_env_component_equality] >>
@@ -311,30 +378,50 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   drule emit_inst_extends >> strip_tac >>
-  `stmt_state_rel H ctx func body_cenv cx es (jump_to st_exit.cs_current_bb s0)` by
-    simp[stmt_state_rel_jump_to] >>
-  `?final. gas_path ctx func (jump_to st_exit.cs_current_bb s0) 0 (Halt final) /\
-    constructor_return_q func cenv cx rt cap nr nkey NoneV
-      (es with scopes := []) (Halt final)` by
-    (irule constructor_exit_gas_path >> simp[jump_to_def] >>
-     conj_tac
-     >- (qexistsl_tac [`imm`, `st_epilogue`, `st_exit`, `st_final`, `T`] >> simp[]) >>
-     qexists_tac `body_cenv` >> gvs[jump_to_def]) >>
+  `!tail. eval_stmt cx (Return NONE) (es with gas_obs := tail) =
+     (INR (ReturnException NoneV), es with gas_obs := tail)` by
+    simp[Once evaluate_def, raise_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+      disj1_tac >> simp[gas_bad_storage_at_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+     es.storage_trace` by fs[storage_trace_domain_def] >>
   `gas_path ctx func s0 0 (OK (jump_to st_exit.cs_current_bb s0))` by
     (irule emit_jump_zero_path >> simp[] >>
      qexistsl_tac [`sa`, `sj`] >> simp[]) >>
+  `?final. gas_path ctx func (jump_to st_exit.cs_current_bb s0) 0
+       (Halt final) /\
+     !H. valid_horizon cx st0 H es.storage_trace ==>
+       constructor_return_q H func cenv cx rt cap F nkey NoneV
+         (es with scopes := []) (Halt final)` by
+    (qspecl_then [`\H. valid_horizon cx st0 H es.storage_trace`,
+       `storage_trace_horizon es.storage_trace`, `ctx`, `func`, `cenv`,
+       `body_cenv`, `cx`, `es`, `jump_to st_exit.cs_current_bb s0`, `F`,
+       `nkey`, `ut`, `rt`, `cap`, `imm`, `st_exit`, `st_exit`, `st_final`]
+       mp_tac constructor_exit_gas_path_horizons >>
+     impl_tac
+     >- (`~(jump_to st_exit.cs_current_bb s0).vs_halted /\
+          (jump_to st_exit.cs_current_bb s0).vs_current_bb =
+            st_exit.cs_current_bb /\
+          (jump_to st_exit.cs_current_bb s0).vs_inst_idx = 0` by
+           simp[jump_to_def] >>
+         simp[stmt_state_rel_jump_to, comp_return_def] >>
+         rpt strip_tac >> res_tac >> fs[]) >>
+     simp[]) >>
   `gas_path ctx func s0 0 (Halt final)` by
     (drule_all gas_path_then >> simp[]) >>
-  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `Halt final`] >>
   conj_tac
-  >- simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def, raise_def] >>
-  simp[exit_result_def, stmt_exit_def] >> gen_tac >> disj2_tac >>
-  `constructor_return_q func cenv cx rt cap nr nkey NoneV
+  >- simp[gas_marked_exec_def, gas_marked_path_def] >>
+  simp[exit_result_def, stmt_exit_def] >> rpt strip_tac >> disj2_tac >>
+  res_tac >>
+  `constructor_return_q H func cenv cx rt cap F nkey NoneV
      ((es with scopes := []) with gas_obs := tail) (Halt final)` by
-    pure_asm_rewrite_tac[constructor_return_q_gas_obs] >>
-  gvs[]
+    (pure_rewrite_tac[constructor_return_q_gas_obs] >> first_assum ACCEPT_TAC) >>
+  pop_assum mp_tac >> simp[]
 QED
 
 Theorem constructor_frame_ret_ok:
@@ -348,22 +435,21 @@ Theorem constructor_frame_ret_ok:
     compile_constructor_epilogue runtime_size immutables_len imm
       st_epilogue = ((), st_final) /\
     fn_has_code st_exit st_final func /\
-    runtime_size + immutables_len < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe cx /\
-            cx.nonreentrant_slot = SOME nkey) /\
+    runtime_size + immutables_len < dimword(:256) /\ ~nr /\
     (immutables_len <> 0 ==>
       cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
     frame_ret_ok ctx func cx
-      (constructor_return_q func cenv cx runtime_size immutables_len nr nkey)
+      (\H. constructor_return_q H func cenv cx runtime_size immutables_len
+             nr nkey)
       cenv NoneT
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac [frame_ret_ok_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `eo`
   >- (irule constructor_return_none_frag >> simp[] >>
-      qexistsl [`imm`, `st_epilogue`, `st_exit`, `st_final`, `ut`] >>
-      simp[]) >>
+      qexistsl [`imm`, `st_epilogue`, `st_exit`, `st_final`] >>
+      fs[]) >>
   gvs[vyperTypeSystemTheory.type_stmt_def]
 QED
 

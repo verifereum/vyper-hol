@@ -17,7 +17,7 @@ QED
 
 Theorem convert_call_unwrap_identity[local]:
   compile_expr ce ty (Call ann (IntCall fid) args drv) sa = (vv,sm) /\
-  vv_post ctx func ce cx (Call ann (IntCall fid) args drv)
+  vv_post H ctx func ce cx (Call ann (IntCall fid) args drv)
     es sa sm s0 ee tv vv s /\ is_bytestring_type ann /\
   unwrap_value ce vv sm = (op,sb) ==>
   sb = sm /\
@@ -38,12 +38,12 @@ QED
 
 Theorem convert_call_read_post[local]:
   compile_expr ce ty (Call ann (IntCall fid) args drv) sa = (vv,sm) /\
-  vv_post ctx func ce cx (Call ann (IntCall fid) args drv)
+  vv_post H ctx func ce cx (Call ann (IntCall fid) args drv)
     es sa sm s0 ee tv vv s /\ is_bytestring_type ann /\
   unwrap_value ce vv sm = (op,sb) /\
   read_result cx tv ee = (INL v,ee) ==>
   sb = sm /\
-  expr_post ctx func ce cx (Call ann (IntCall fid) args drv)
+  expr_post H ctx func ce cx (Call ann (IntCall fid) args drv)
     es sa sb s0 ee v op s
 Proof
   strip_tac >> drule_all convert_call_unwrap_identity >> strip_tac >> gvs[] >>
@@ -60,14 +60,14 @@ Theorem convert_call_marked_read_window:
     (lowered_value_type ce (Call ann (IntCall fid) args drv)) = SOME ltv /\
   type_memory_bytes ce (lowered_value_type ce (Call ann (IntCall fid) args drv)) =
     type_memory_size ltv /\
-  vv_post ctx func ce cx (Call ann (IntCall fid) args drv)
+  vv_post H ctx func ce cx (Call ann (IntCall fid) args drv)
     es sa sm s0 ee tv vv s /\
   vv_store_bound cx ann (lowered_value_type ce (Call ann (IntCall fid) args drv))
     ee tv vv s /\
   ~s.vs_halted ==>
   ?v. sb = sm /\
     gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s) [] (INL v) ee (OK s) /\
-    expr_post ctx func ce cx (Call ann (IntCall fid) args drv)
+    expr_post H ctx func ce cx (Call ann (IntCall fid) args drv)
       es sa sb s0 ee v op s /\
     (!w. eval_operand op s = SOME w ==>
       w2n w + type_memory_bytes ce

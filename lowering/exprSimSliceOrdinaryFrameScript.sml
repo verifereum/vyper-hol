@@ -6,7 +6,7 @@ Ancestors
 
 Theorem slice_dynamic_payload_two_operands:
   expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env' es1 /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx (BaseT bt) sa sb es v src s /\
   evaluate_type (get_tenv cx) (BaseT bt) = SOME vt /\
   ~is_word_type (BaseT bt) /\ eval_operand src s = SOME p /\
@@ -15,8 +15,8 @@ Theorem slice_dynamic_payload_two_operands:
   local_ptrs_reserved cenv sb /\ sb.cs_next_id <= sc.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!z. src = Var z ==> not_fresh_at sb z) /\ (!l. src <> Label l) /\
-  expr_post ctx func cenv cx start es sb sc s es1 v1 op1 t /\
-  expr_post ctx func cenv cx len es1 sc sd t es2 v2 op2 u ==>
+  expr_post H ctx func cenv cx start es sb sc s es1 v1 op1 t /\
+  expr_post H ctx func cenv cx len es1 sc sd t es2 v2 op2 u ==>
   expr_val_at cenv cx (BaseT bt) sa sc es1 v src t /\
   mem_bytes_at (w2n p + 32) (LENGTH bs) u.vs_memory = bs
 Proof
@@ -33,8 +33,8 @@ Proof
 QED
 
 Theorem slice_captured_operand_two_posts:
-  expr_post ctx func cenv cx e1 es sb sc s es1 v1 op1 t /\
-  expr_post ctx func cenv cx e2 es1 sc sd t es2 v2 op2 u /\
+  expr_post H ctx func cenv cx e1 es sb sc s es1 v1 op1 t /\
+  expr_post H ctx func cenv cx e2 es1 sc sd t es2 v2 op2 u /\
   (!z. op = Var z ==> not_fresh_at sb z /\ not_fresh_at sc z) /\
   (!l. op <> Label l) /\ eval_operand op s = SOME w ==>
   eval_operand op u = SOME w
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem slice_fixed_payload_two_operands:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   FLOOKUP s.vs_allocas aid = SOME (b,32) /\
@@ -56,8 +56,8 @@ Theorem slice_fixed_payload_two_operands:
   (!name off sz. local_region cenv es.scopes s name off sz ==>
                  b + 32 <= off \/ off + sz <= b) /\
   mem_bytes_at b (LENGTH bs) s.vs_memory = bs /\
-  expr_post ctx func cenv cx start es sb sc s es1 v1 op1 t /\
-  expr_post ctx func cenv cx len es1 sc sd t es2 v2 op2 u ==>
+  expr_post H ctx func cenv cx start es sb sc s es1 v1 op1 t /\
+  expr_post H ctx func cenv cx len es1 sc sd t es2 v2 op2 u ==>
   mem_bytes_at b (LENGTH bs) u.vs_memory = bs
 Proof
   strip_tac >>
@@ -84,8 +84,8 @@ QED
 
 (* Fix the post chain before choosing the operand to be framed. *)
 Theorem slice_two_posts_operands:
-  expr_post ctx func cenv cx e1 es sb sc s es1 v1 op1 t /\
-  expr_post ctx func cenv cx e2 es1 sc sd t es2 v2 op2 u ==>
+  expr_post H ctx func cenv cx e1 es sb sc s es1 v1 op1 t /\
+  expr_post H ctx func cenv cx e2 es1 sc sd t es2 v2 op2 u ==>
   !op w. (!z. op = Var z ==> not_fresh_at sb z /\ not_fresh_at sc z) /\
     (!l. op <> Label l) /\ eval_operand op s = SOME w ==>
     eval_operand op u = SOME w
@@ -94,7 +94,7 @@ Proof
 QED
 
 Theorem slice_post_operands:
-  expr_post ctx func cenv cx e es sb sc s es1 v op1 t ==>
+  expr_post H ctx func cenv cx e es sb sc s es1 v op1 t ==>
   !op w. (!z. op = Var z ==> not_fresh_at sb z) /\
     (!l. op <> Label l) /\ eval_operand op s = SOME w ==>
     eval_operand op t = SOME w

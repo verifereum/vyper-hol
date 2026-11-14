@@ -10,7 +10,7 @@ Ancestors
  abiDecoderContract abiEncoderRegisteredEffect
  ctorDeployLoweringEntryCanonical abiDecoderCoherence abiEncoderProps context
   slotCopyExecution ctorDeployMemoryRunMemEntryRegistration fragGasPathMem abiEncoderWindowMembers
-  fragGasOriginPtr fragGasOriginPtrLoop
+  fragGasOriginPtr fragGasOriginPtrLoop memSafeRun unitTransformDefs contextCodegenRel codegenRel
 
 val RegisterAddressAddMode = ``\checked.
  emit_op ADD [a;b] st = (out,middle) /\
@@ -92,9 +92,6 @@ Proof
     Cases_on `first_prov G [a;b]` >>
     simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
  conj_tac >- (drule_all prefix_register_address_add_run >> simp[update_var_def]) >>
- conj_tac >-
-   (qpat_x_assum `!D' explicit. gas_origin_ptr_path _ _ _ _` mp_tac >>
-    simp[update_var_def]) >>
  strip_tac >> `alloca_history func initial` by metis_tac[] >>
  drule_all ctor_checked_arg_add_reach >> strip_tac >> gvs[update_var_def]
 QED
@@ -181,9 +178,6 @@ Proof
  conj_tac >-
    (drule_all (SRULE [] (Q.INST
      [`w` |-> `abi_decode_load DLOAD a s`] prefix_register_address_dload_run)) >>
-    simp[update_var_def]) >>
- conj_tac >-
-   (qpat_x_assum `checked ==> !D' explicit. gas_origin_ptr_path _ _ _ _` mp_tac >>
     simp[update_var_def]) >>
  strip_tac >>
  `w2n a + 32 <= LENGTH initial.vs_data_section /\ alloca_history func initial` by metis_tac[] >>

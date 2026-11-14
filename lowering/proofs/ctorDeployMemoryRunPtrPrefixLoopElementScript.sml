@@ -693,6 +693,7 @@ Proof
   simp[] >>
   conj_tac
   >- simp[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
+  conj_tac >- simp[update_var_def] >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `op` >>
       fs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,

@@ -5,8 +5,8 @@ Ancestors
   loweringPosts compileEnv venomState words arithmetic finite_map list
 
 Theorem concat_args_pre_ptr:
-  expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   not_fresh_at sa dv /\ not_fresh_at sa ov /\
   lookup_var dv s0 = SOME (n2w (B+32)) /\ lookup_var ov s0 = SOME ow /\

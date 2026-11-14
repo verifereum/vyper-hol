@@ -41,14 +41,14 @@ Theorem ctor_source_landing_world:
   actual.vs_call_ctx.cc_address = tx.target /\
   actual.vs_logs = [] /\ actual.vs_requests = [] /\
   actual.vs_pending_deletions = [] ==>
-  storage_rel (deploy_evaluation_context tops am tx) tx.target
+  storage_rel H tx.target
     (es0 with outcomes := SOME os) actual /\
-  transient_rel (deploy_evaluation_context tops am tx) tx.target
+  transient_rel H tx.target
     (es0 with outcomes := SOME os) actual /\
-  accounts_rel (deploy_evaluation_context tops am tx)
+  accounts_rel H (deploy_evaluation_context tops am tx)
     (es0 with outcomes := SOME os) actual /\
   logs_rel cenv tx.target (es0 with outcomes := SOME os) actual /\
-  LIST_REL (request_agree (deploy_evaluation_context tops am tx))
+  LIST_REL (request_agree H (deploy_evaluation_context tops am tx))
     (es0 with outcomes := SOME os).requests actual.vs_requests /\
   (es0 with outcomes := SOME os).pending_deletions = actual.vs_pending_deletions
 Proof

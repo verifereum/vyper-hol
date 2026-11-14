@@ -10,7 +10,7 @@ Theorem augassign_field_load_clean_ptr:
   emit_op ADD [Var p; Lit (n2w (struct_field_offset flds fld))] sa = (Var dst,sn) /\
   emit_op MLOAD [Var dst] sn = (Var out,s1) /\
   fn_has_code sa sn func /\ fn_has_code sn s1 func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\ lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -23,13 +23,13 @@ Theorem augassign_field_load_clean_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK t) /\
+    stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\
     lookup_var dst t = SOME (a + n2w (struct_field_offset flds fld)) /\
-    ptr_covers H tm dst t 32 /\ lookup_var out t = SOME (val_to_w256 fv) /\
-    op_taint tm (Var out) = {} /\ op_prov H (Var out) = NONE /\
+    ptr_covers HG tm dst t 32 /\ lookup_var out t = SOME (val_to_w256 fv) /\
+    op_taint tm (Var out) = {} /\ op_prov HG (Var out) = NONE /\
     ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     local_ptrs_reserved cenv s1 /\ not_fresh_at s1 dst /\ not_fresh_at s1 out /\

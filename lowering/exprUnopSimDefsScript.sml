@@ -11,6 +11,7 @@ Definition unop_frag_def:
       (!z. x = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
+      (?H. valid_horizon cx st0 H es0.storage_trace) /\
       (!H. valid_horizon cx st0 H es0.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es0 s0 /\
         storage_well_formed_on cx es0 (FST H)) /\

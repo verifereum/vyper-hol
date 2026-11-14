@@ -59,7 +59,7 @@ Theorem reason_normalized_finish_resources_ptr:
   ptr_covers G tn payload s (32+m) /\ ptr_covers G tn outer s (64+m) /\
   n = 32 + 32 * word_size (LENGTH str) /\ n <= m /\ n < dimword (:256) /\
   val_store_size tv (StringV str) <= n /\ b < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [tuple] /\ not_local_ptr cenv es.scopes tuple /\
   inst.inst_id < sm.cs_next_id /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,m) /\
@@ -162,7 +162,7 @@ Theorem reason_normalized_suffix_path_ptr:
   ptr_covers G tn payload s (32+m) /\ ptr_covers G tn outer s (64+m) /\
   n = 32 + 32 * word_size (LENGTH str) /\ n <= m /\ n < dimword (:256) /\
   val_store_size tv (StringV str) <= n /\ b < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [tuple] /\ not_local_ptr cenv es.scopes tuple /\
   inst.inst_id < sm.cs_next_id /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,m) /\

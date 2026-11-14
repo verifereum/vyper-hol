@@ -12,7 +12,7 @@ Theorem aggregate_owned_child_copy_windows:
   evaluate_type (get_tenv cx) sty = SOME stv /\
   ~is_bytestring_type sty /\ type_memory_size stv <> 0 /\
   eval_operand p.ptr_operand s = SOME sw /\
-  stmt_state_rel ctx func ce cx ee s /\ alloca_inv s /\
+  stmt_state_rel H ctx func ce cx ee s /\ alloca_inv s /\
   FLOOKUP s.vs_allocas parent = SOME (b,n) /\
   parent < sa.cs_next_id /\ off + type_memory_size dtv <= n ==>
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
@@ -34,7 +34,7 @@ Proof
     b+off + type_memory_size dtv <= w2n sw)` by
     (irule aggregate_allocated_source_bounds >>
      qexistsl_tac [`b'`, `aid`, `b`] >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `aid <> parent`)) >> simp[]) >>
   fs[alloca_inv_def, alloca_next_valid_def] >>
   `b'+sz <= s.vs_alloca_next /\ b+n <= s.vs_alloca_next` by

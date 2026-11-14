@@ -10,7 +10,7 @@ Theorem buffer_memory_vv_post_cond[local]:
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -25,7 +25,7 @@ Theorem buffer_memory_vv_post_cond[local]:
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
-    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
+    vv_post H ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -42,7 +42,7 @@ QED
 Theorem selector_buffer_vv_post:
   LENGTH bs = 4 /\
   val_in_memory (BaseTV (BytesT (Dynamic 4))) (BytesV bs) b t.vs_memory /\
-  stmt_state_rel ctx fn cenv cx es t /\
+  stmt_state_rel H ctx fn cenv cx es t /\
   eval_operand buf.buf_operand t = SOME (n2w b) /\
   b + 64 < dimword (:256) /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,64) /\
@@ -59,7 +59,7 @@ Theorem selector_buffer_vv_post:
     mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
   (~expr_has_effect (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args) ==>
    pure_frame cenv fn es sa s t) ==>
-  vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args)
+  vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args)
     es sa sb s es (Value (BytesV bs))
     (LocatedValue (BaseT (BytesT (Dynamic 4))) (base_ptr buf))
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)
