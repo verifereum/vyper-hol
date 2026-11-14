@@ -884,16 +884,12 @@ Proof
              update_var_def, FLOOKUP_UPDATE]) >>
      `op_taint q0 (Var x) = {} /\ op_taint q0 (Var dst) = {}` by
        simp[Abbr `q0`, prefix_dload_output_taint, prefix_guard_taint_other] >>
-     `op_taint q1 (Var y) = {} /\ op_taint q1 (Var x) = {} /\
-      op_taint q1 (Var dst) = {}` by
-       (simp[Abbr `q1`, prefix_guard_taint_other] >>
-        Cases_on `signed` >> Cases_on `left` >>
-        simp[Abbr `jj`, prefix_scalar_shift_clean, prefix_guard_taint_other]) >>
-     `op_taint q2 (Var z) = {} /\ op_taint q2 (Var x) = {} /\
-      op_taint q2 (Var dst) = {}` by
+     `op_taint q1 (Var x) = {} /\ op_taint q1 (Var dst) = {}` by
+       (Cases_on `signed` >> Cases_on `left` >>
+        simp[Abbr `q1`, Abbr `jj`, prefix_guard_taint_other]) >>
+     `op_taint q2 (Var x) = {} /\ op_taint q2 (Var dst) = {}` by
        (Cases_on `signed` >>
-        simp[Abbr `q2`, Abbr `hh`, prefix_guard_taint_other,
-             prefix_guard_output_taint, prefix_scalar_eq_clean]) >>
+        simp[Abbr `q2`, Abbr `hh`, prefix_guard_taint_other]) >>
      (* DLOAD at s *)
      `step_inst 0 ctx (mk_inst iid DLOAD [src] [x]) s = OK l` by
        (simp[step_inst_non_invoke, Abbr `l`, Abbr `w`] >>
