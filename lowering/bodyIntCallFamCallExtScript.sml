@@ -1208,6 +1208,241 @@ Proof
 QED
 
 
+Theorem intcall_ext_operands_cps[local]:
+  (!e. expr_size e < expr_size (Call ann (ExtCall stat skip (fname,ats,rt) opts) (a::rest) NONE) ==>
+    intcall_expr_producer fp e /\ intcall_forced_producer fp e /\ intcall_map_producer fp e) /\
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  expr_body_pre ce fp.jc_cx env
+    (Call ann (ExtCall stat skip (fname,ats,rt) opts) (a::rest) NONE) es /\
+  supported_expr fp.jc_tops
+    (Call ann (ExtCall stat skip (fname,ats,rt) opts) (a::rest) NONE) /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner
+    (int_calls_expr (Call ann (ExtCall stat skip (fname,ats,rt) opts) (a::rest) NONE)) /\
+  lower_value compile_expr ce (BaseT AddressT) a sa = (addr_op,s1) /\
+  compile_ext_call_args compile_expr ce (DROP (LENGTH ats) rest)
+    (MAP (lowered_value_type ce) (TAKE (LENGTH ats) rest))
+    (TAKE (LENGTH ats) rest) s1 = (arg_vvs,s2) /\
+  compile_ext_call_kwargs compile_expr ce rt opts (DROP (LENGTH ats) rest) s2 =
+    ((value_op,gas_op,default_op),s3) /\
+  fn_has_code sa s1 fp.jc_func /\ fn_has_code s1 s2 fp.jc_func /\
+  fn_has_code s2 s3 fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_admissible
+    (bind (bind (eval_expr fp.jc_cx a) (read_result fp.jc_cx))
+      (\target. bind (eval_exprs fp.jc_cx (TAKE (LENGTH ats) rest))
+        (\posvs. bind (eval_exprs fp.jc_cx (DROP (LENGTH ats) rest)) (kont target posvs))))
+    expr_vv_res_ok es /\
+  (!target posvs kwvs esA esB tB ee t target_addr cells.
+    (?used. !tail. bind (eval_expr fp.jc_cx a) (read_result fp.jc_cx)
+      (es with gas_obs := used ++ tail) = (INL target,esA with gas_obs := tail)) /\
+    dest_AddressV target = SOME target_addr /\
+    eval_operand addr_op t = SOME (w2w target_addr) /\ safe_operand s3 addr_op /\
+    (?used. !tail. eval_exprs fp.jc_cx (TAKE (LENGTH ats) rest)
+      (esA with gas_obs := used ++ tail) = (INL posvs,esB with gas_obs := tail)) /\
+    MAP (\(vv,ty,tv,v). vv) cells = arg_vvs /\
+    MAP (\(vv,ty,tv,v). ty) cells = MAP (lowered_value_type ce) (TAKE (LENGTH ats) rest) /\
+    MAP (\(vv,ty,tv,v). v) cells = posvs /\
+    EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+      fp.jc_ctx fp.jc_func ce fp.jc_cx ee s3 t) cells /\
+    extrequest_kwargs_post fp.jc_ctx fp.jc_func ce fp.jc_cx rt opts (DROP (LENGTH ats) rest)
+      esB s2 tB s3 value_op gas_op default_op [] [] [] kwvs ee t /\
+    wb_frame ce es ee sa s t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    sa.cs_next_var <= s3.cs_next_var /\ sa.cs_next_id <= s3.cs_next_id /\
+    intcall_expr_cont fp ce env es sa s ee s3 t ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func) (kont target posvs kwvs)
+      (ee,t) Q (\r ef z. expr_exit r z)) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (bind (bind (eval_expr fp.jc_cx a) (read_result fp.jc_cx))
+      (\target. bind (eval_exprs fp.jc_cx (TAKE (LENGTH ats) rest))
+        (\posvs. bind (eval_exprs fp.jc_cx (DROP (LENGTH ats) rest)) (kont target posvs))))
+    (es,s) Q (\r ef z. expr_exit r z)
+Proof
+  strip_tac >>
+  drule exprExtRequestShapeTheory.extrequest_body_typed >> strip_tac >>
+  `expr_body_pre ce fp.jc_cx env a es` by
+    (irule exprExtRequestShapeTheory.extrequest_body_pre_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+     gvs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
+  `expr_type a = BaseT AddressT` by
+    (qpat_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
+     simp[NoAsms, Once vyperTypeSystemTheory.well_typed_expr_def]) >>
+  suspend "operand_support"
+QED
+
+Resume intcall_ext_operands_cps[operand_support]:
+  `supported_pure_exprs fp.jc_tops (a::rest)` by
+    (fs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_call_pop_rejected,
+        supportedExprsTheory.supported_external_call_contract]) >>
+  `supported_expr fp.jc_tops a` by
+    fs[supportedExprsTheory.supported_pure_exprs_every,
+       supportedExprsTheory.supported_expr_def] >>
+  `supported_pure_expr fp.jc_tops a` by
+    fs[supportedExprsTheory.supported_pure_exprs_every] >>
+  `int_calls_expr a = []` by
+    metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls] >>
+  `calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr a)` by simp[] >>
+  `intcall_forced_producer fp a` by
+    (first_x_assum (qspec_then `a` mp_tac) >>
+     simp[vyperASTTheory.expr_size_def]) >>
+  irule intcall_ext_target_cps >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  simp[] >> qexists `env` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  suspend "target_endpoint"
+QED
+Resume intcall_ext_operands_cps[target_endpoint]:
+  `gas_admissible
+    (bind (eval_exprs fp.jc_cx (TAKE (LENGTH ats) rest))
+      (\posvs. bind (eval_exprs fp.jc_cx (DROP (LENGTH ats) rest)) (kont v posvs)))
+    expr_vv_res_ok ee` by
+    (drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >> simp[]) >>
+  `EVERY (intcall_expr_producer fp) rest` by
+    (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum (qspec_then `e` mp_tac) >>
+     drule exprCallBoundsTheory.expr_list_member_bound >>
+     simp[vyperASTTheory.expr_size_def] >> rpt strip_tac >> fs[]) >>
+  `EVERY (supported_expr fp.jc_tops) rest /\
+   EVERY (\e. calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) rest` by
+    (fs[supportedExprsTheory.supported_pure_exprs_every, listTheory.EVERY_MEM] >>
+     metis_tac[supportedExprsTheory.supported_expr_def,
+       bodyExprPreFactsTheory.supported_pure_int_calls,
+       vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_nil]) >>
+  `EVERY (\e. !mid. expr_sim_inv ce fp.jc_cx env mid ==>
+    expr_body_pre ce fp.jc_cx env e mid) rest` by
+    (drule exprExtRequestStagesSourceTheory.extrequest_operand_body_pre >> simp[]) >>
+  irule intcall_ext_positional_cps >>
+  first_assum (irule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`)) >>
+  qexists `[]` >> simp[listTheory.TAKE_DROP] >>
+  qexists `env` >>
+  `intcall_expr_res fp ce env ee s1 u /\ ~u.vs_halted /\
+   u.vs_current_bb = s1.cs_current_bb /\ u.vs_inst_idx = LENGTH s1.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  simp[] >>
+  conj_tac >- metis_tac[rich_listTheory.EVERY_TAKE] >>
+  conj_tac >- metis_tac[rich_listTheory.EVERY_TAKE] >>
+  conj_tac >- metis_tac[rich_listTheory.EVERY_TAKE] >>
+  reverse conj_tac >-
+    (fs[] >> metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+  rpt gen_tac >> strip_tac >>
+  suspend "positional_endpoint"
+QED
+Resume intcall_ext_operands_cps[positional_endpoint]:
+  rename1 `intcall_expr_cont fp ce env ee s1 u pos_end s2 pos_state` >>
+  `gas_admissible (bind (eval_exprs fp.jc_cx (DROP (LENGTH ats) rest))
+    (kont v (MAP (\(vv,ty,tv,v). v) cells))) expr_vv_res_ok pos_end` by
+    (drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >> simp[]) >>
+  `LENGTH opts = LENGTH (DROP (LENGTH ats) rest)` by
+    (fs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_call_pop_rejected,
+        supportedExprsTheory.supported_external_call_contract]) >>
+  `intcall_expr_res fp ce env pos_end s2 pos_state /\ ~pos_state.vs_halted /\
+   pos_state.vs_current_bb = s2.cs_current_bb /\
+   pos_state.vs_inst_idx = LENGTH s2.cs_current_insts /\
+   expr_sim_inv ce fp.jc_cx env pos_end` by
+    (fs[intcall_expr_cont_def, intcall_expr_res_def] >> metis_tac[]) >>
+  `EVERY (\e. ~expr_has_effect e) (DROP (LENGTH ats) rest)` by
+    (fs[] >> metis_tac[rich_listTheory.EVERY_DROP]) >>
+  `!i ef. i < LENGTH (DROP (LENGTH ats) rest) /\
+    extrequest_kwargs_reach fp.jc_cx (DROP (LENGTH ats) rest) pos_end i ef ==>
+    expr_body_pre ce fp.jc_cx env (EL i (DROP (LENGTH ats) rest)) ef` by
+    (rpt strip_tac >> irule exprExtRequestStagesSourceTheory.extrequest_kwargs_reach_pre >>
+     simp[] >> conj_tac >- metis_tac[rich_listTheory.EVERY_DROP] >>
+     qexists `pos_end` >> simp[]) >>
+  irule intcall_ext_kwargs_cps >>
+  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
+  qexistsl [`[]`, `[]`, `[]`, `env`] >>
+  simp[exprExtRequestStrongCaptureTheory.extrequest_strong_captures_def] >>
+  conj_tac >- metis_tac[rich_listTheory.EVERY_DROP] >>
+  conj_tac >- metis_tac[rich_listTheory.EVERY_DROP] >>
+  conj_tac >- metis_tac[rich_listTheory.EVERY_DROP] >>
+  reverse conj_tac >- suspend "kwarg_types" >>
+  rpt gen_tac >> strip_tac >>
+  suspend "kwargs_endpoint"
+QED
+Resume intcall_ext_operands_cps[kwarg_types]:
+  qpat_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
+  simp[NoAsms, Once vyperTypeSystemTheory.well_typed_expr_def] >>
+  strip_tac >> rpt strip_tac >>
+  `i < LENGTH opts /\ i < LENGTH (DROP (LENGTH ats) rest)` by fs[] >>
+  `EL i (MAP expr_type (DROP (LENGTH ats) rest)) =
+   EL i (MAP (ext_call_kw_type rt) opts)` by simp[] >>
+  qpat_x_assum `EL i (MAP expr_type _) = _` mp_tac >>
+  simp[listTheory.EL_MAP, listTheory.LENGTH_DROP] >>
+  Cases_on `EL i opts` >> fs[vyperTypeSystemTheory.ext_call_kw_type_def]
+QED
+Resume intcall_ext_operands_cps[kwargs_endpoint]:
+  rename1 `intcall_expr_cont fp ce env pos_end s2 pos_state kw_end s3 kw_state` >>
+  `ci_mono sa s1` by
+    (mp_tac (Q.SPECL [`ce`, `BaseT AddressT`, `a`, `sa`]
+      exprLoweringPropsTheory.ci_mono_lower_value_compile_expr) >> simp[]) >>
+  `ci_mono s1 s2` by
+    (qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` mp_tac >>
+     mp_tac (Q.SPECL [`TAKE (LENGTH (ats:type list)) rest`,
+       `MAP (lowered_value_type ce) (TAKE (LENGTH (ats:type list)) rest)`,
+       `compile_expr`, `ce`, `DROP (LENGTH (ats:type list)) rest`, `s1`]
+       exprLoweringPropsTheory.ci_mono_compile_ext_call_args) >>
+     simp[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono]) >>
+  qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SRULE [exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
+  `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id` by
+    fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.locals_kept_def,
+       exprLoweringPropsTheory.ci_mono_def] >>
+  `MAP FDOM ee.scopes = MAP FDOM pos_end.scopes` by
+    fs[exprExtRequestHistoryTheory.extrequest_history_frame_def,
+       exprExtRequestReadProbeTheory.extrequest_read_frame_def] >>
+  `intcall_expr_cont fp ce env es sa s pos_end s2 pos_state` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_expr_cont_trans >> metis_tac[]) >>
+  `intcall_expr_cont fp ce env es sa s kw_end s3 kw_state` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_expr_cont_trans >> metis_tac[]) >>
+  `pos_end with gas_obs := [] = pos_end` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `EVERY (extrequest_snapshot_cell_protected fp.jc_prot fp.jc_morig.vs_memory
+      fp.jc_ctx fp.jc_func ce fp.jc_cx kw_end s3 kw_state) cells` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     irule exprExtRequestSnapshotStoreInterfaceTheory.extrequest_snapshot_cell_protected_history >>
+     qpat_assum `extrequest_history_frame _ _ pos_end _ _ kw_end _ _`
+       (irule_at Any) >>
+     fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
+  drule_all exprExtRequestTargetCpsTheory.extrequest_target_address >> strip_tac >>
+  `is_word_type (expr_type a)` by simp[compileEnvTheory.is_word_type_def] >>
+  `safe_operand s1 addr_op` by
+    (drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >>
+     simp[compileEnvTheory.is_word_type_def] >> strip_tac >>
+     Cases_on `addr_op` >> fs[exprSafeOperandTheory.safe_operand_def]) >>
+  `safe_operand s2 addr_op` by
+    (irule exprSafeOperandTheory.safe_operand_mono >> qexists `s1` >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `safe_operand s3 addr_op` by
+    metis_tac[exprSafeOperandTheory.safe_operand_mono] >>
+  `wb_frame ce ee pos_end s1 u pos_state` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_frame] >>
+  `eval_operand addr_op pos_state = SOME (w2w addr)` by
+    (Cases_on `addr_op` >>
+     gvs[exprSafeOperandTheory.safe_operand_def, venomStateTheory.eval_operand_def] >>
+     metis_tac[exprSimWordArgsTheory.wb_frame_vars]) >>
+  `eval_operand addr_op kw_state = SOME (w2w addr)` by
+    (Cases_on `addr_op` >>
+     gvs[exprSafeOperandTheory.safe_operand_def, venomStateTheory.eval_operand_def] >>
+     metis_tac[exprSimWordArgsTheory.wb_frame_vars]) >>
+  `wb_frame ce es kw_end sa s kw_state` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_frame] >>
+  qpat_x_assum `!target posvs kwvs esA esB tB ee t target_addr cells. _`
+    (qspecl_then [`v`, `MAP (\(vv,ty,tv,v). v) cells`, `vs`,
+      `ee`, `pos_end`, `pos_state`, `kw_end`, `kw_state`, `addr`, `cells`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  conj_tac >- (qexists `used'` >> simp[]) >>
+  conj_tac >- (qexists `used` >> gvs[]) >>
+  simp[vyperValueTheory.dest_AddressV_def, byteTheory.word_of_bytes_be_def,
+       byteTheory.word_of_bytes_word_to_bytes, dividesTheory.compute_divides,
+       fcpLib.INDEX_CONV ``dimindex(:160)``]
+QED
+Finalise intcall_ext_operands_cps
+
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
    producer hypothesis, then reuse the canonical suffix:
