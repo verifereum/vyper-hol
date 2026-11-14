@@ -29,6 +29,8 @@ Ancestors
   vyperMembershipMatrixTest
   (* more interface contracts on concrete inputs; raw RETURN's copy *)
   e2eBoundaryTest groupedDispatchProps rawReturnCopy
+  (* internal-call argument provenance *)
+  bodyIntCallPostProvenance
   (* compiled creation code and events, the event endpoints' admission audit *)
   vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
   eventEndpointAudit
