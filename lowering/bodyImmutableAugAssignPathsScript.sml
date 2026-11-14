@@ -31,7 +31,7 @@ Proof
   Cases_on `emit_void MSTORE [Lit (n2w off);res_op] s3` >> simp[oneTheory.one]
 QED
 
-Theorem immutable_augassign_load_frame:
+Theorem immutable_augassign_load_frame_fields:
   emit_op MLOAD [Lit (n2w off)] sa = (op,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ ~s0.vs_halted /\
@@ -45,6 +45,8 @@ Theorem immutable_augassign_load_frame:
       (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
       t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
       t.vs_memory = s0.vs_memory /\
+      t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+      t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx /\
       (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   strip_tac >>
@@ -65,6 +67,27 @@ Proof
   simp[emit_op_def,comp_bind_def,comp_ignore_bind_def,comp_return_def,
        fresh_var_def,fresh_id_def,emit_def] >> strip_tac >> gvs[] >>
   simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE,not_fresh_at_def,eval_operand_def]
+QED
+
+Theorem immutable_augassign_load_frame:
+  emit_op MLOAD [Lit (n2w off)] sa = (op,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\ off < dimword (:256) /\
+  mload off s0 = word ==>
+  ?t. gas_marked_path F ctx func s0 0 (OK t) /\
+      stmt_state_rel H ctx func cenv cx es t /\ eval_operand op t = SOME word /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved cenv sb /\
+      (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+      t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+      t.vs_memory = s0.vs_memory /\
+      (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  strip_tac >> drule_all immutable_augassign_load_frame_fields >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >> simp[]
 QED
 
 (* An MSTORE into a constructor immutable's word keeps every alloca's
@@ -97,7 +120,7 @@ Proof
   gvs[local_region_def, mstore_def, lookup_var_def] >> metis_tac[]
 QED
 
-Theorem immutable_augassign_store_post_path:
+Theorem immutable_augassign_store_post_path_fields:
   emit_void MSTORE [Lit (n2w off); op] st = ((),sf) /\
   fn_has_code st sf func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
@@ -119,6 +142,8 @@ Theorem immutable_augassign_store_post_path:
   ?fin last. write_place cx (ImmutablePlace cenv.ce_module id []) w ee =
       (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
+    last.vs_accounts = s.vs_accounts /\ last.vs_transient = s.vs_transient /\
+    last.vs_requests = s.vs_requests /\ last.vs_call_ctx = s.vs_call_ctx /\
     stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) fin last
 Proof
   strip_tac >>
@@ -165,4 +190,34 @@ Proof
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
   gvs[mstore_def, lookup_var_def]
+QED
+
+Theorem immutable_augassign_store_post_path:
+  emit_void MSTORE [Lit (n2w off); op] st = ((),sf) /\
+  fn_has_code st sf func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  body_inv tops ctx cenv cx /\ cx.in_deploy /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\
+  FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty /\
+  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ is_word_type ty /\
+  value_has_type tv w /\ off < dimword (:256) /\
+  eval_operand op s = SOME (typed_val_to_w256 tv w) /\
+  (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
+          lookup_var x s = SOME wd) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s.vs_allocas aid = SOME b) /\
+  alloca_frame cenv es sa s0 cenv ee s ==>
+  ?fin last. write_place cx (ImmutablePlace cenv.ce_module id []) w ee =
+      (INL (),fin) /\
+    gas_marked_path F ctx func s 0 (OK last) /\
+    stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) fin last
+Proof
+  strip_tac >> drule_all immutable_augassign_store_post_path_fields >>
+  disch_then (qspec_then `lctx`
+    (qx_choosel_then [`fin`, `last`] strip_assume_tac)) >>
+  qexistsl_tac [`fin`, `last`] >> simp[]
 QED
