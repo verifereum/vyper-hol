@@ -375,7 +375,7 @@ QED
 
 Theorem compile_dynarray_append_word_static:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
   eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
   fresh_vars_wrt s0 ss /\ ss.vs_call_ctx.cc_static /\
   cap < dimword (:256) /\

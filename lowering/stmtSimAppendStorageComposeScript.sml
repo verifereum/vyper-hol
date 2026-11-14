@@ -725,7 +725,7 @@ QED
    reads. *)
 Theorem append_storage_word_abort_path[local]:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
