@@ -32,7 +32,7 @@ Proof
   fs[vyperInterpreterTheory.code_slice_source_SOME, is_extcode_def]
 QED
 
-Theorem slice_ordinary_actions[local]:
+Theorem slice_ordinary_actions:
   ~is_extcode src ==>
   eval_expr cx (Builtin ann (Slice n) [src; start; len]) =
   do v <- bind (eval_expr cx src) (read_result cx);

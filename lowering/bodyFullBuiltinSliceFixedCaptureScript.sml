@@ -36,7 +36,19 @@ Theorem slice_fixed_capture_full_run:
     w2n p+32 < dimword (:256) /\ w2n p+32 <= t.vs_alloca_next /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-      op_taint tn' (Var x) = op_taint tn (Var x))
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    u with <|vs_vars := s.vs_vars;vs_allocas := s.vs_allocas;
+      vs_alloca_next := s.vs_alloca_next;vs_inst_idx := s.vs_inst_idx|> = s /\
+    (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+      stmt_state_rel H' ctx func cenv cx es u) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+      regions_disjoint (w2n p) 32 b len) /\
+    (!name b len. local_region cenv es.scopes u name b len ==>
+      regions_disjoint (w2n p) 32 b len) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!j. j < s.vs_alloca_next /\ j IN tn'.t_mem ==> j IN tn.t_mem)
 Proof
   strip_tac >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
@@ -48,7 +60,7 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split] >>
   mp_tac (Q.INST [`n` |-> `32`,`sb` |-> `sm`]
-    (INST_TYPE [alpha |-> ``:256``] alloc_buffer_origin_ptr_path)) >>
+    (INST_TYPE [alpha |-> ``:256``, beta |-> alpha] alloc_buffer_origin_ptr_path)) >>
   impl_tac >- simp[dimword_def] >>
   disch_then (qx_choose_then `root` (qx_choose_then `p`
     (qx_choose_then `u` (qx_choose_then `G1`
@@ -127,5 +139,6 @@ Proof
      gvs[lookup_var_def,op_taint_def]) >>
   qexistsl_tac [`root`,`p`,`u`,`t`,`G1`,`tn2`] >>
   asm_simp_tac bool_ss [] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp[Abbr `t`,mstore_def,write_memory_with_expansion_def]
+  simp[Abbr `t`,mstore_def,write_memory_with_expansion_def] >>
+  rpt strip_tac >> simp[] >> decide_tac
 QED
