@@ -8,6 +8,7 @@ Ancestors
   exprLoweringProps emitHelperProps codegenRel contextCodegenRel bodyFullUnwrapRun
   exprSimPtrLiteralOps bodyPtrBytestringBuiltinsUintArithmetic
   bodyMemBiUint2StrBlocks bodyFullGhostFrame fragGasOriginPtrLoop bodyFullUnwrapSlotPost
+  lowerDloadPtrOrdinary exprSimPtrTopLevelImmutableCopy
 
 val _ = temp_delsimps ["copy_allocas_update", "copy_allocas_inst_idx",
                         "copy_update_inst_idx", "copy_mstore_inst_idx"];
@@ -471,4 +472,89 @@ Proof
   Cases_on `b+n+32-LENGTH str <= j`
   >- (disj1_tac >> first_x_assum irule >> decide_tac) >>
   decide_tac
+QED
+
+Theorem u2s_pointer_arith_seq_cons:
+  MEM opc [ADD; SUB] /\ op_prov G (Var p) = SOME region /\
+  op_prov G delta = NONE /\ op_taint tn (Var p) = {} /\ op_taint tn delta = {} /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  step_inst_base (mk_inst id opc [Var p;delta] [out]) s = OK (update_var out w s) /\
+  inst_seq_ptr D lo ctx fn PG (G |+ (out,region))
+    (tn with t_var := tn.t_var |+ (out,{})) ys
+    (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx fn PG G tn (mk_inst id opc [Var p;delta] [out]::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_prov PG G (mk_inst id opc [Var p;delta] [out]) (update_var out w s) =
+     G |+ (out,region) /\
+   step_taint (mk_inst id opc [Var p;delta] [out]) s (update_var out w s) tn =
+     tn with t_var := tn.t_var |+ (out,{})` by
+    (fs[] >>
+     simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def, mk_inst_def] >>
+     simp[step_taint_def, set_var_taint_def, out_taint_def, imm_taint_def,
+          adopt_reset_def, mk_inst_def, update_var_def,
+          mem_taint_def, store_taint_def, step_writes_def,
+          source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+          new_site_bytes_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
+     Cases_on `eval_operand (Var p) s` >> simp[taint_component_equality]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id opc [Var p;delta] [out]) s` by
+    (fs[] >>
+     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     gvs[update_var_def, FLOOKUP_DEF] >> metis_tac[]) >>
+  simp[Once inst_seq_ptr_def, mk_inst_def] >> gvs[mk_inst_def]
+QED
+
+Theorem u2s_pointer_assign_seq_cons:
+  op_prov G op = SOME region /\ op_taint tn op = {} /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out w s) /\
+  inst_seq_ptr D lo ctx fn PG (G |+ (out,region))
+    (tn with t_var := tn.t_var |+ (out,{})) ys
+    (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx fn PG G tn (mk_inst id ASSIGN [op] [out]::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_prov PG G (mk_inst id ASSIGN [op] [out]) (update_var out w s) =
+     G |+ (out,region) /\
+   step_taint (mk_inst id ASSIGN [op] [out]) s (update_var out w s) tn =
+     tn with t_var := tn.t_var |+ (out,{})` by
+    (`eval_operand op s = SOME w` by
+       (gvs[step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs(), update_var_def,
+            venom_state_component_equality] >>
+        qpat_x_assum `_ |+ _ = _` (mp_tac o Q.AP_TERM `\m. FLOOKUP m out`) >>
+        simp[FLOOKUP_UPDATE]) >>
+     mp_tac (Q.INST [`i` |-> `mk_inst id ASSIGN [op] [out]`, `a` |-> `w`]
+       assign_ghost_updates) >>
+     simp[mk_inst_def, set_prov_def, set_var_taint_def]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id ASSIGN [op] [out]) s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     gvs[update_var_def, FLOOKUP_DEF] >> metis_tac[]) >>
+  simp[Once inst_seq_ptr_def, mk_inst_def] >> gvs[mk_inst_def]
+QED
+
+Theorem u2s_clean_mstore_seq_cons:
+  lookup_var p s = SOME addr /\ eval_operand value s = SOME w /\
+  op_taint tn value = {} /\ ptr_covers G tn p s 32 /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  inst_seq_ptr D lo ctx fn PG G
+    (tn with t_mem := tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) ys
+    (mstore (w2n addr) w s with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx fn PG G tn (mk_inst id MSTORE [Var p;value] []::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MSTORE [Var p;value] []) s =
+     OK (mstore (w2n addr) w s)` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def] >>
+  `step_prov PG G (mk_inst id MSTORE [Var p;value] []) (mstore (w2n addr) w s) = G /\
+   step_taint (mk_inst id MSTORE [Var p;value] []) s (mstore (w2n addr) w s) tn =
+     tn with t_mem := tn.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}` by
+    (irule toplevel_immutable_mstore_ghost_frame >> simp[]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id MSTORE [Var p;value] []) s` by
+    (irule exprPtrUnwrapCopyEdgesTheory.ptr_inst_ok_mstore_tainted >>
+     simp[eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def, mk_inst_def] >> gvs[mk_inst_def]
 QED
