@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalLoad
-Ancestors concretizeLayoutLoadProduction frameRelocationLoadSteps list
+Ancestors concretizeLayoutCutSafe concretizeLayoutLoadProduction frameRelocationLoadSteps list
   frameRelocationEnvironment concretizeLayoutReaderContext frameResolvedTrace
   venomExecSemantics
   frameRelocationTaintOrder frameRelocationGuardedValues frameRelocationGhostCopy
@@ -27,8 +27,8 @@ Theorem concretize_word_load_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
@@ -121,14 +121,6 @@ Finalise concretize_word_load_local_complete
 val _ = if null (hyp concretize_word_load_local_complete) then ()
         else raise Fail "complete load export has hypotheses";
 
-Theorem mload_taint_update[local]:
-  inst.inst_opcode = MLOAD /\ inst.inst_operands = [opd] /\
-  inst.inst_outputs = [v] /\ eval_operand opd s = SOME dst ==>
-  step_taint inst s (update_var v value s) tn =
-    tn with t_var := tn.t_var |+ (v,mem_word_taint tn.t_mem (w2n dst))
-Proof
-  strip_tac >> irule word_load_taint_update >> simp[]
-QED
 
 Theorem concretize_mload_local_complete:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -136,7 +128,7 @@ Theorem concretize_mload_local_complete:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
@@ -177,7 +169,7 @@ Theorem concretize_iload_local_complete:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\

@@ -297,6 +297,10 @@ Proof
   `state_rel fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   `?os. es.outcomes = SOME os` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   drule_all eval_send_outcome_typed >> strip_tac >>
+  `~s.vs_call_ctx.cc_static` by fs[loweringStateRelDefsTheory.state_rel_def] >>
+  Cases_on `eval_operand gas s` >> gvs[] >>
+  drule_all send_call_step >> strip_tac >>
+  `IS_SOME (eval_operand gas s)` by simp[] >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
   strip_tac >> gvs[] >> metis_tac[]
 QED

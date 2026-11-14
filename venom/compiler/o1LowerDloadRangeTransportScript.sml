@@ -18,6 +18,16 @@ Proof
   Cases_on `p+k < LENGTH s.vs_memory` >> simp[] >> decide_tac
 QED
 
+(* Byte-indexed transport also covers padding and zero-length slices. *)
+Theorem read_memory_eq_from_bytes:
+  (!q. q < n ==>
+    read_byte (a+q) s.vs_memory = read_byte (b+q) t.vs_memory) ==>
+  read_memory a n s = read_memory b n t
+Proof
+  strip_tac >> irule LIST_EQ >> simp[ld_read_memory_length] >>
+  rpt strip_tac >> simp[ld_read_memory_element]
+QED
+
 Theorem ld_memory_agree_slice_element:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
   ((p=q /\ p+len<=lo) \/
@@ -150,13 +160,4 @@ Proof
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_write_geometry >>
   disch_then irule >>
   simp[ld_read_memory_length] >> metis_tac[ADD_COMM]
-QED
-
-(* Checked padding/empty edge cases; the copy theorem above has no
-   non-overlap premise and the write theorem separates distinct sites. *)
-Theorem ld_read_memory_padding_probe[local]:
-  read_memory 1 4 (s with vs_memory := [7w;8w]) = [8w;0w;0w;0w] /\
-  read_memory 100 0 s = []
-Proof
-  simp[read_memory_def] >> EVAL_TAC
 QED

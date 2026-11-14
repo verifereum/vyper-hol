@@ -893,7 +893,9 @@ Resume aggregate_make_tuple_member_sim[child_steps]:
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
   qmatch_asmsub_abbrev_tac `eval_operand (Var d) r` >>
   `lookup_var d r = SOME (n2w (b+off))` by
-    gvs[venomStateTheory.eval_operand_def, wordsTheory.word_add_n2w] >>
+    (qpat_assum `eval_operand (Var d) r = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomStateTheory.eval_operand_def, wordsTheory.word_add_n2w]) >>
   `not_fresh_at sn d` by
     simp[Abbr `d`, not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
   `!z. op = Var z ==> not_fresh_at su z` by

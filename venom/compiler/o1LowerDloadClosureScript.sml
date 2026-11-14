@@ -122,3 +122,21 @@ Proof
   simp[SUBSET_DEF, fn_pv_def] >>
   metis_tac[roots_in_pointer_derived_vars, FINITE_ptr_roots]
 QED
+
+Theorem pointer_derived_vars_least:
+  FINITE roots /\ roots SUBSET A /\
+  (!inst u v. MEM inst (fn_insts fn) /\
+    is_pointer_preserving_op inst.inst_opcode /\
+    MEM (Var u) inst.inst_operands /\ u IN A /\
+    MEM v inst.inst_outputs ==> v IN A) ==>
+  pointer_derived_vars fn roots SUBSET A
+Proof
+  strip_tac >>
+  qspecl_then [`fn`, `SET_TO_LIST roots`, `A`] mp_tac
+    pointerConfinedPropsTheory.pointer_use_vars_least >>
+  (impl_tac
+   >- (conj_tac
+       >- (simp[MEM_SET_TO_LIST] >> metis_tac[SUBSET_DEF]) >>
+       metis_tac[fn_insts_def, fn_insts_blocks_MEM])) >>
+  simp[pointer_derived_vars_def, SUBSET_DEF]
+QED

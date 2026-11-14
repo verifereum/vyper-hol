@@ -1,5 +1,6 @@
 Theory o1LowerDloadSuppliedSegmentTransport
 Ancestors
+  o1SafeUpto
   o1LowerDloadSuppliedSegmentExec o1LowerDloadSuppliedSegmentControl
   o1LowerDloadSuppliedSegmentInputs o1LowerDloadSuppliedSegmentEnvironment
   o1LowerDloadScratchExtension o1LowerDloadScratchMemory
@@ -11,7 +12,7 @@ Ancestors
 
 Theorem ld_joint_dloadbytes_destination:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dst;src;sz] /\
   eval_operand dst s = SOME p /\ eval_operand src s = SOME x /\
@@ -24,11 +25,11 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn dst = {}` by
     metis_tac[ld_data_load_inputs_untainted, MEM] >>
   `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
-  drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
+  drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >>
   simp[mem_write_ops_def, source_memory_write_ranges_def,
        fixed_source_write_range_def, sized_source_write_range_def, eval_operand_def] >>
   metis_tac[]
@@ -36,7 +37,7 @@ QED
 
 Theorem ld_joint_supply_dloadbytes_transport:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dst;src;sz] /\
   inst.inst_outputs = [] /\ step_inst fuel C inst s = OK s1 /\
@@ -47,21 +48,26 @@ Theorem ld_joint_supply_dloadbytes_transport:
   code_layout_valid t /\
   w2n x + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword(:256) ==>
   ?q. eval_operand dst t = SOME q /\
-    let t2 = update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t;
-        t3 = write_memory_with_expansion (w2n q)
-          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) t2
-    in LENGTH es = 2 /\ step_inst fuel C' (EL 0 es) t = OK t2 /\
-       step_inst fuel C' (EL 1 es) t2 = OK t3 /\
+    LENGTH es = 2 /\ step_inst fuel C' (EL 0 es) t = OK (update_var bv (x + n2w (LENGTH
+      t.vs_code - LENGTH t.vs_data_section)) t) /\
+       step_inst fuel C' (EL 1 es) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH
+         t.vs_data_section)) t) = OK (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv
+            (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)) /\
        ld_env_agree sites fn (occurrence_step a HP H inst s1)
-         (step_taint inst s s1 tn) s1 t3 /\
+         (step_taint inst s s1 tn) s1 (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv
+            (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)) /\
        ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
-         s1.vs_memory t3.vs_memory
+         s1.vs_memory (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv
+            (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)).vs_memory
 Proof
   strip_tac >>
   drule_all ld_joint_dloadbytes_destination >>
   disch_then (qx_choose_then `q` assume_tac) >>
   `eval_operand src t = SOME x /\ eval_operand sz t = SOME z` by
-    (drule ld_joint_dloadbytes_inputs_clean >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_dloadbytes_inputs_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[] >> metis_tac[]) >>
   `s.vs_data_section = t.vs_data_section` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s1 = write_memory_with_expansion (w2n p)
@@ -104,7 +110,7 @@ QED
 
 Theorem ld_joint_supply_dload_transport:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
   inst.inst_outputs = [out] /\ step_inst fuel C inst s = OK s1 /\
@@ -119,28 +125,70 @@ Theorem ld_joint_supply_dload_transport:
   b+32 < dimword(:256) /\
   ld_joint_geometry sites X1 lo owners /\
   FLOOKUP X1 key = SOME ((EL 0 es).inst_id,b) ==>
-  let t1 = update_var av (n2w b)
+  LENGTH es = 4 /\
+     step_inst fuel C' (EL 0 es) t = OK (update_var av (n2w b)
         (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
            t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
                     vs_alloca_next := t.vs_alloca_next+32|>
-         else t);
-      t2 = update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t1;
-      bs = TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w);
-      t3 = write_memory_with_expansion b bs t2;
-      t4 = update_var out (word_of_bytes T (0w:bytes32) bs) t3
-  in LENGTH es = 4 /\
-     step_inst fuel C' (EL 0 es) t = OK t1 /\
-     step_inst fuel C' (EL 1 es) t1 = OK t2 /\
-     step_inst fuel C' (EL 2 es) t2 = OK t3 /\
-     step_inst fuel C' (EL 3 es) t3 = OK t4 /\
+         else t)) /\
+     step_inst fuel C' (EL 1 es) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t)) = OK (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section))
+           (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))) /\
+     step_inst fuel C' (EL 2 es) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH
+       t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))) = OK (write_memory_with_expansion b (TAKE 32 (DROP (w2n x) t.vs_data_section
+           ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH
+           t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t)))) /\
+     step_inst fuel C' (EL 3 es) (write_memory_with_expansion b (TAKE 32 (DROP (w2n x)
+       t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH
+       t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t)))) = OK (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n x)
+           t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32 (DROP
+           (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH
+           t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))) /\
      ld_env_agree sites fn (occurrence_step a HP H inst s1)
-       (step_taint inst s s1 tn) s1 t4 /\
+       (step_taint inst s s1 tn) s1 (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP
+         (w2n x) t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32
+         (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH
+         t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))) /\
      ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
-       s1.vs_memory t4.vs_memory
+       s1.vs_memory (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n x)
+         t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32 (DROP
+         (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH
+         t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))).vs_memory
 Proof
   strip_tac >> (
   `eval_operand off t = SOME x` by
-    (drule ld_joint_dload_inputs_clean >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_dload_inputs_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[] >> metis_tac[]) >>
   `s.vs_data_section = t.vs_data_section` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s1 = update_var out (word_of_bytes T (0w:bytes32)

@@ -1684,3 +1684,102 @@ Proof
   gvs[post_value_type_def, lowered_value_type_def, expr_type_def] >>
   Cases_on `is_word_type ty \/ is_bytestring_type ty` >> gvs[]
 QED
+
+Theorem compile_expr_value_type:
+  !cenv ty e sa vv sb.
+    ~call_result_expr e /\ compile_expr cenv ty e sa = (vv,sb) ==>
+    vv_type vv = expr_type e
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `e` >>
+  gns[call_result_expr_def, expr_type_def]
+  >~ [`compile_expr _ _ (Builtin _ _ _) _ = _`] >- suspend "builtin"
+  >~ [`compile_expr _ _ (Call _ _ _ _) _ = _`] >- suspend "call"
+  >~ [`compile_expr _ _ (Subscript _ _ _) _ = _`] >- suspend "subscript"
+  >~ [`compile_expr _ _ (Literal _ _) _ = _`] >- suspend "literal" >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_name_vv_def, compile_attribute_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, expr_type_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[contextTheory.vv_type_def, comp_bind_def, comp_ignore_bind_def,
+           comp_return_def, expr_type_def, LET_THM] >>
+       rpt (pairarg_tac >> gvs[])) >>
+  rpt strip_tac >> gvs[contextTheory.vv_type_def, expr_type_def]
+QED
+
+Resume compile_expr_value_type[literal]:
+  rename1 `compile_expr cenv ty (Literal ann lit) sa = (vv,sb)` >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >> Cases_on `lit` >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_literal_vv_def, expr_type_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[contextTheory.vv_type_def, comp_bind_def, comp_return_def, LET_THM] >>
+       rpt (pairarg_tac >> gvs[])) >>
+  rpt strip_tac >> gvs[contextTheory.vv_type_def] >>
+  rename1 `compile_literal_vv ann (BoolL b) sa = (vv,sb)` >>
+  Cases_on `b` >>
+  gvs[compile_literal_vv_def, comp_return_def, contextTheory.vv_type_def]
+QED
+
+Resume compile_expr_value_type[builtin]:
+  rename1 `compile_expr cenv ty (Builtin ann bi args) sa = (vv,sb)` >>
+  Cases_on `bi` >> gvs[call_result_expr_def] >>
+  rename1 `compile_expr cenv ty (Builtin ann (MakeArray topt bd) args) sa = (vv,sb)` >>
+  `~names_builtin (MakeArray topt bd) args` by
+    (Cases_on `args` >> simp[names_builtin_def] >>
+     rename1 `h::rest` >> Cases_on `h` >> simp[names_builtin_def] >>
+     Cases_on `rest` >> simp[names_builtin_def] >>
+     rename1 `Name _ _ :: h :: rest` >> Cases_on `h` >> simp[names_builtin_def] >>
+     Cases_on `rest` >> simp[names_builtin_def] >>
+     rename1 `Name _ _ :: Name _ _ :: h :: rest` >>
+     Cases_on `h` >> simp[names_builtin_def] >>
+     Cases_on `rest` >> simp[names_builtin_def]) >>
+  gvs[compile_expr_builtin_dispatch] >>
+  qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[Once compile_builtin_dispatch_component_eq, as_ptr_val_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[contextTheory.vv_type_def, as_ptr_val_def,
+           comp_bind_def, comp_return_def, LET_THM] >>
+       rpt (pairarg_tac >> gvs[])) >>
+  rpt strip_tac >>
+  gvs[contextTheory.vv_type_def, as_ptr_val_def, comp_bind_def, comp_return_def,
+      AllCaseEqs()] >>
+  qmatch_asmsub_abbrev_tac `as_ptr_val ann LocMemory compiled = _` >>
+  Cases_on `compiled` >> gvs[as_ptr_val_def, contextTheory.vv_type_def]
+QED
+
+Resume compile_expr_value_type[subscript]:
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_subscript_def, comp_bind_def, comp_return_def, expr_type_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[contextTheory.vv_type_def, comp_bind_def, comp_return_def, LET_THM] >>
+       rpt (pairarg_tac >> gvs[])) >>
+  rpt strip_tac >> gvs[contextTheory.vv_type_def]
+QED
+
+Resume compile_expr_value_type[call]:
+  rename1 `compile_expr cenv ty (Call ann target args drv) sa = (vv,sb)` >>
+  Cases_on `target` >> gvs[call_result_expr_def] >>
+  rename1 `compile_expr cenv ty (Call ann (ExtCall static skip sigv kwargs) args drv) sa = (vv,sb)` >>
+  PairCases_on `sigv` >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_call_def, expr_type_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[contextTheory.vv_type_def, LET_THM] >>
+       rpt (pairarg_tac >> gvs[])) >>
+  rpt strip_tac >> gvs[contextTheory.vv_type_def]
+QED
+
+Finalise compile_expr_value_type;

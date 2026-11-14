@@ -1,5 +1,6 @@
 Theory concretizeAnalysisIncomingDemand
 Ancestors
+  concretizeLayoutCutSafe o1SafeUpto
   concretizeAnalysisTemporalDemand frameDemandTaint frameJointRevert frameJointTaint
   frameJointTrace frameJointDemand frameJointTransition frameActivationCache unitTransformDefs
   frameIncomingArgument frameOpenCall concretizeAnalysisScanCoverage concretizeAnalysisWriteSafety
@@ -30,7 +31,7 @@ QED
 
 Theorem joint_incoming_production_argument:
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
-  o1_ctx_shape ctx /\ ptr_discipline lo ctx vs0 /\
+  o1_ctx_shape ctx /\ ptr_discipline_upto lo ncut ctx vs0 /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
   ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid u nm ops.
@@ -67,7 +68,7 @@ Proof
   `Allocation aid IN bp_bases
       (bp_analyze_fuel (concretize_memloc_fuel (EL k stk).cf_fn)
         (cfg_analyze (EL k stk).cf_fn) (EL k stk).cf_fn) u` by
-    (fs[ptr_discipline_def] >>
+    (fs[layout_cut_safe_def, ptr_discipline_upto_def] >>
      `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
        (fs[EVERY_MEM] >> metis_tac[]) >>
      metis_tac[origin_frame_saved_production_coverage]) >>
@@ -81,7 +82,7 @@ Theorem concretize_untainted_incoming_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   FLOOKUP om v = SOME (OriginParameter param,(b,sz)) /\
@@ -110,6 +111,7 @@ Proof
     metis_tac[trace_config_at] >>
   `joint_origin_history vs0 C stk PG G tn current inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
+  `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   drule_all joint_incoming_production_argument >> strip_tac >>
   qabbrev_tac `d = LENGTH stk - SUC k` >>
   qabbrev_tac `owner = (EL k stk).cf_fn` >>
@@ -169,14 +171,14 @@ Proof
   goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `callee_first _ _`)) >>
-  goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+  goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   qexistsl_tac [`byte`,`j`] >> gvs[]
 QED
 
 (* Incoming provenance selects the suspended owner, not the physical writer. *)
 Theorem joint_incoming_used_generator:
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
-  o1_ctx_shape ctx /\ ptr_discipline lo ctx vs0 /\
+  o1_ctx_shape ctx /\ ptr_discipline_upto lo ncut ctx vs0 /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
   ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid owner d.

@@ -2,6 +2,7 @@
    These lemmas do not assert existence of a callee execution. *)
 Theory o1LowerDloadEndpointConsumer
 Ancestors
+  o1SafeUpto
   o1LowerDloadRunnerBoundary o1LowerDloadJointReturnBoundary
   o1LowerDloadPhiEntry o1LowerDloadEntryFetch venomWf venomInst
   o1LowerDloadJointRelation o1LowerDloadOccurrence o1LowerDloadEnvironment
@@ -13,10 +14,10 @@ Theorem ld_return_endpoint_consume:
     ld_joint_boundary vs C C' lo D (f::stk) PG G tn fn ri sr tr
       n a (ofr::U) B HP H sites X (caller'::ts) /\
     step_inst kr C ri sr = IntRet ir se /\
-    sr.vs_call_ctx.cc_address = A0 /\
+    sr.vs_call_ctx.cc_address = A0 /\ gas_cut ncut vs sr /\
     step_inst kr C' ri tr = IntRet jr tr /\ r' = IntRet jr tr) /\
   A0 = f.cf_state.vs_call_ctx.cc_address /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ wf_function f.cf_fn /\
+  ptr_discipline_upto lo ncut C vs /\ opaque_use_ok fn /\ wf_function f.cf_fn /\
   active_inst f.cf_fn f.cf_inst f.cf_state /\ f.cf_inst.inst_opcode = INVOKE /\
   bind_outputs f.cf_inst.inst_outputs ir.iret_values
     (adopt_return_fmp ir (merge_callee_state f.cf_state se)) = SOME s1 ==>

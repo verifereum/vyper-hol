@@ -15,13 +15,6 @@ Proof
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
 QED
 
-Theorem prefix_preheader_update_index[local]:
-  update_var x w (s with vs_inst_idx := k) =
-  (update_var x w s) with vs_inst_idx := k
-Proof
-  simp[update_var_def]
-QED
-
 Theorem prefix_preheader_mstore_index[local]:
   mstore a w (s with vs_inst_idx := k) =
   (mstore a w s) with vs_inst_idx := k
@@ -250,7 +243,7 @@ Proof
   `a+(32*n+32) = a+32*(n+1)` by decide_tac >>
   asm_rewrite_tac[] >>
   Cases_on `a+32*(n+1) <= data_size` >>
-  simp[step_inst_base_def, bool_to_word_def]
+  simp[step_inst_base_opcode_eqs, bool_to_word_def]
 QED
 
 Theorem prefix_bool_preheader_limit_continuation:
@@ -1025,48 +1018,6 @@ Resume prefix_bool_preheader_guards_cut[frames]:
 QED
 
 Finalise prefix_bool_preheader_guards_cut
-
-(* An interface test: the continuation consumes only observable cut facts;
-   no intermediate state expression or ghost transformer is reconstructed. *)
-Theorem prefix_bool_preheader_guards_consumer[local]:
-  isPREFIX [mk_inst iid DLOAD [Var src] [cnt];
-    mk_inst (iid+1) GT [Var cnt;Lit(n2w max_count)] [cmp0];
-    mk_inst (iid+2) ISZERO [Var cmp0] [ok0];
-    mk_inst (iid+3) ASSERT [Var ok0] [];
-    mk_inst (iid+4) MUL [Var cnt;Lit 32w] [vm];
-    mk_inst (iid+5) ADD [Var vm;Lit 32w] [va];
-    mk_inst (iid+6) ADD [Var src;Var va] [vend];
-    mk_inst (iid+7) GT [Var vend;Lit(n2w data_size)] [cmp1];
-    mk_inst (iid+8) ISZERO [Var cmp1] [ok1];
-    mk_inst (iid+9) ASSERT [Var ok1] []]
-    (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ALL_DISTINCT [src;cnt;cmp0;ok0;vm;va;vend;cmp1;ok1] /\
-  eval_operand (Var src) s = SOME(n2w a) /\ op_taint tn (Var src) = {} /\
-  FLOOKUP G src = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  max_count < dimword(:256) /\ a+32*(max_count+1) < dimword(:256) /\
-  data_size < dimword(:256) ==>
-  (!t H q. t.vs_inst_idx = s.vs_inst_idx+10 /\
-     allocas_from lo t /\ t.vs_allocas = s.vs_allocas /\
-     eval_operand (Var src) t = SOME(n2w a) /\
-     FLOOKUP H src = NONE /\ op_taint q (Var src) = {} /\
-     FLOOKUP H cnt = NONE /\ op_taint q (Var cnt) = {} ==>
-     !f. ptr_safe_block D lo f ctx fn PG H q bb t) ==>
-  !f. ptr_safe_block D lo f ctx fn PG G tn bb s
-Proof
-  strip_tac >>
-  drule_all prefix_bool_preheader_guards_cut >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
-  simp[] >>
-  IF_CASES_TAC >> simp[]
-  >- (disch_then (qx_choose_then `t` (qx_choose_then `H`
-        (qx_choose_then `q` strip_assume_tac))) >>
-      strip_tac >>
-      `eval_operand (Var src) t = SOME(n2w a) /\
-       FLOOKUP H src = NONE /\ op_taint q (Var src) = {}`
-        by metis_tac[ALL_DISTINCT, MEM] >>
-      metis_tac[]) >>
-  metis_tac[]
-QED
 
 Theorem prefix_bool_preheader_initialize_execution[local]:
   ALL_DISTINCT [src;dst;loaded;ip] /\
