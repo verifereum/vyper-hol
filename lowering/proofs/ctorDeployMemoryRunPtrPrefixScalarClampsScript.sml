@@ -812,7 +812,7 @@ Proof
       op_taint q1 (Var dst) = {}` by
        (simp[Abbr `q1`, prefix_guard_taint_other] >>
         Cases_on `signed` >> Cases_on `left` >>
-        simp[Abbr `jj`, prefix_scalar_shift_clean]) >>
+        simp[Abbr `jj`, prefix_scalar_shift_clean, prefix_guard_taint_other]) >>
      `op_taint q2 (Var z) = {} /\ op_taint q2 (Var x) = {} /\
       op_taint q2 (Var dst) = {}` by
        (Cases_on `signed` >>
@@ -855,11 +855,17 @@ Proof
      (* range check at idx+2 *)
      `step_inst_base hh (r with vs_inst_idx := s.vs_inst_idx+2) =
         OK (t with vs_inst_idx := s.vs_inst_idx+2)` by
-       (qpat_x_assum `valid` mp_tac >> Cases_on `signed` >>
+       (Cases_on `signed`
+        >- (qspecl_then [`Var x`,`Var y`,`w`,`shifted`,`iid+2`,`z`,
+              `r with vs_inst_idx := s.vs_inst_idx+2`] mp_tac
+              emitHelperPropsTheory.step_EQ >>
+            simp[Abbr `hh`, Abbr `t`, Abbr `valid`, GSYM update_var_idx,
+                 eval_op_inst_idx] >> fs[]) >>
+        qspecl_then [`Var y`,`shifted`,`iid+2`,`z`,
+          `r with vs_inst_idx := s.vs_inst_idx+2`] mp_tac
+          emitHelperPropsTheory.step_ISZERO >>
         simp[Abbr `hh`, Abbr `t`, Abbr `valid`, GSYM update_var_idx,
-             eval_op_inst_idx,
-             Q.SPECL [`Var x`,`Var y`,`w`,`shifted`] emitHelperPropsTheory.step_EQ,
-             Q.SPECL [`Var y`,`shifted`] emitHelperPropsTheory.step_ISZERO]) >>
+             eval_op_inst_idx] >> fs[]) >>
      `step_inst 0 ctx hh (r with vs_inst_idx := s.vs_inst_idx+2) =
         OK (t with vs_inst_idx := s.vs_inst_idx+2)` by
        (qpat_x_assum `step_inst_base hh _ = _` mp_tac >>
