@@ -26,7 +26,7 @@ Proof
   simp[ptr_covers_def, lookup_var_def]
 QED
 
-Theorem ghost_inv_at_inst_idx[simp]:
+Theorem ghost_inv_at_inst_idx:
   ghost_inv_at D lo d cenv cx es G tn (s with vs_inst_idx := k) <=>
   ghost_inv_at D lo d cenv cx es G tn s
 Proof
