@@ -171,11 +171,12 @@ Proof
        source_memory_write_ranges_def]
 QED
 
-Theorem inv_crossed_predecessor_total:
+(* INVOKE's all-effects barrier excludes the three static-write fault cases. *)
+Theorem inv_crossed_predecessor_total_observation:
   inst_wf x /\ inst_shape_ok x /\
   ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
   inv_memory_observation y.inst_opcode /\ ~dft_must_order x y /\
-  ~s.vs_call_ctx.cc_static /\
+  (~s.vs_call_ctx.cc_static \/ y.inst_opcode = INVOKE) /\
   (!op. MEM op x.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
   ?t. ev_step orc p d fuel ctx x s = OK t
 Proof
@@ -186,4 +187,15 @@ Proof
       >- metis_tac[inv_oracle_alloca_total] >>
       irule inv_oracle_nofail_total >> simp[]) >>
   irule inv_oracle_static_class_total >> simp[]
+QED
+
+Theorem inv_crossed_predecessor_total:
+  inst_wf x /\ inst_shape_ok x /\
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  inv_memory_observation y.inst_opcode /\ ~dft_must_order x y /\
+  ~s.vs_call_ctx.cc_static /\
+  (!op. MEM op x.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
+  ?t. ev_step orc p d fuel ctx x s = OK t
+Proof
+  metis_tac[inv_crossed_predecessor_total_observation]
 QED
