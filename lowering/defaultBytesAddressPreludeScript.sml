@@ -104,3 +104,126 @@ Proof
     FLOOKUP_UPDATE, loweringStateRelDefsTheory.not_fresh_at_def] >>
   metis_tac[LESS_EQ_REFL]
 QED
+
+Theorem default_bytes_address_joint:
+  emit_op ADD [Lit 4w; Lit (n2w (off-4))] sa = (head,sb) /\
+  emit_op CALLDATALOAD [head] sb = (offset,sc) /\
+  emit_op ADD [Lit 4w;offset] sc = (src,sd) /\
+  fn_has_code sa sd fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H u.
+    t = s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sd.cs_current_insts|> /\
+    ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    eval_operand src t =
+      SOME ((4w+abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) s):bytes32) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H,u)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `cs_extends sa sb /\ cs_extends sb sc /\ cs_extends sc sd` by
+    metis_tac[prefix_register_address_emit_shape] >>
+  `fn_has_code sa sb fn /\ fn_has_code sb sc fn /\ fn_has_code sc sd fn` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all (Q.INST [`left` |-> `Lit (4w:bytes32)`,
+      `right` |-> `Lit ((n2w(off-4)):bytes32)`, `a` |-> `4w:bytes32`,
+      `b` |-> `(n2w(off-4)):bytes32`] (SPEC_ALL default_bytes_scalar_add_boundary)
+    |> SRULE [eval_operand_def, op_prov_def, op_taint_def]) >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`]
+    (qx_choose_then `H1` (qx_choose_then `u1` strip_assume_tac))) >>
+  qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ _ (OK t1,H1,u1)` >>
+  `eval_operand head t1 = SOME ((4w+n2w(off-4)):bytes32) /\
+    op_taint u1 head = {}` by
+    simp[Abbr `t1`, eval_operand_def, update_var_def, op_taint_def] >>
+  `~t1.vs_halted /\ t1.vs_current_bb = sb.cs_current_bb /\
+    t1.vs_inst_idx = LENGTH sb.cs_current_insts /\ allocas_from lo t1` by
+    (qpat_assum `emit_op ADD _ sa = _`
+       (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+     gvs[Abbr `t1`, update_var_def, ptrDisciplineTheory.allocas_from_def] >>
+     metis_tac[]) >>
+  `!x. head = Var x ==> not_fresh_at sb x` by
+    (qpat_assum `emit_op ADD _ sa = _`
+      (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def,
+       ASCIInumbersTheory.toString_11]) >>
+  drule_all calldata_load_overwrite_trace_uniform >>
+  disch_then (qspecl_then [`PG`,`H1`]
+    (qx_choose_then `t2` (qx_choose_then `H2` (qx_choose_then `u2` strip_assume_tac)))) >>
+  `t2 = (update_var ("%" ++ toString sb.cs_next_var)
+    (abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) t1) t1)
+      with vs_inst_idx := LENGTH sc.cs_current_insts` by
+    (qpat_assum `emit_op CALLDATALOAD _ _ = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     `step_inst_base (mk_inst sb.cs_next_id CALLDATALOAD [head]
+       ["%" ++ toString sb.cs_next_var]) t1 =
+       OK (update_var ("%" ++ toString sb.cs_next_var)
+         (abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) t1) t1)` by
+       (qpat_assum `eval_operand head t1 = _`
+          (mp_then Any mp_tac step_CALLDATALOAD) >>
+        simp[abi_decode_load_def, abi_decode_source_def]) >>
+     gvs[run_inst_seq_def] >>
+     gvs[venom_state_component_equality, update_var_def]) >>
+  `allocas_from lo t2` by
+    (fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+  `eval_operand (Lit (4w:bytes32)) t2 = SOME 4w /\
+    op_taint u2 (Lit (4w:bytes32)) = {} /\
+    op_prov H2 (Lit (4w:bytes32)) = NONE` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  qpat_assum `emit_op ADD _ sc = _`
+    (mp_then Any mp_tac default_bytes_scalar_add_boundary) >>
+  disch_then (qspecl_then [`u2`,`t2`,`lo`,`fn`,`ctx`,`abi_decode_load CALLDATALOAD
+    ((4w+n2w(off-4)):bytes32) t1`,`4w`,`PG`,`H2`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `t3` (qx_choose_then `H3`
+    (qx_choose_then `u3` strip_assume_tac))) >>
+  qexistsl [`t3`,`H3`,`u3`] >>
+  `abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) t1 =
+    abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) s` by
+    simp[Abbr `t1`, abi_decode_load_def, abi_decode_source_def, update_var_def] >>
+  `t3 = s with <|vs_vars := t3.vs_vars;
+    vs_inst_idx := LENGTH sd.cs_current_insts|>` by
+    gvs[Abbr `t1`, update_var_def] >>
+  `sa.cs_current_bb = sd.cs_current_bb` by
+    metis_tac[prefix_register_address_emit_shape] >>
+  `~t3.vs_halted /\ t3.vs_current_bb = sd.cs_current_bb /\
+    t3.vs_inst_idx = LENGTH sd.cs_current_insts` by
+    gvs[update_var_def, Abbr `t1`] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x /\ not_fresh_at sc x` by
+    (qpat_assum `emit_op ADD _ sa = _`
+       (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+     qpat_assum `emit_op CALLDATALOAD _ sb = _`
+       (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+     rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t2 = lookup_var x s` by
+    (rpt strip_tac >>
+     qpat_assum `t2 = _` SUBST1_TAC >>
+     qpat_assum `emit_op CALLDATALOAD _ _ = _`
+       (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+     `not_fresh_at sb x` by metis_tac[] >>
+     `x <> "%" ++ toString sb.cs_next_var` by
+       (qpat_x_assum `not_fresh_at sb x` mp_tac >>
+        pure_rewrite_tac[loweringStateRelDefsTheory.not_fresh_at_def] >>
+        disch_then (qspec_then `sb.cs_next_var` mp_tac) >> simp[]) >>
+     simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x t1 = _ /\ _` 
+       (qspec_then `x` mp_tac) >>
+     fs[lookup_var_def] >> metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t3 = lookup_var x s /\
+    FLOOKUP H3 x = FLOOKUP G x /\ op_taint u3 (Var x) = op_taint tn (Var x)` by
+    (fs[op_taint_def] >> metis_tac[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK t3,H3,u3)` by
+    (rpt gen_tac >>
+     metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND]) >>
+  metis_tac[]
+QED
