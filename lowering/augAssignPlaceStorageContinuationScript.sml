@@ -99,7 +99,7 @@ Proof
      qpat_assum `storage_trace_frame (bind (eval_expr cx e) (read_result cx))`
        (fn frame =>
        qpat_assum `bind (eval_expr cx e) (read_result cx) (mid with gas_obs := _) =
-                   (INL rhs,ee)`
+                   (INL _,ee)`
          (fn eq => mp_tac (MATCH_MP vyperStorageTraceTheory.storage_trace_frame_prefix
                              (CONJ frame eq)))) >>
      simp[]) >>
