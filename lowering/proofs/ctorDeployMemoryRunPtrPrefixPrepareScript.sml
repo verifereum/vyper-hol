@@ -255,7 +255,7 @@ Proof
     simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `frag_exec ctx st last (\s. s = initial)
      (\t. t = initial with vs_inst_idx := LENGTH last.cs_current_insts) (K F)` by
-    (irule frag_exec_run_inst_seq >> simp[run_inst_seq_def, step_inst_base_def,
+    (irule frag_exec_run_inst_seq >> simp[run_inst_seq_def, step_inst_base_opcode_eqs,
        is_terminator_def, mk_inst_def]) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   fs[fresh_vars_wrt_def] >>
