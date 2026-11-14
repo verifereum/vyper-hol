@@ -4,6 +4,7 @@ Ancestors
   abiDecoderBytesRuntime abiDecoderBytesPhases abiDecodePtrBytesTail
   abiDecoderBytesPrefix abiDecodePtrBytesMember abiDecodePtrRead
   abiDecoderBytesBound abiDecoderGuard abiDecoderGuards abiDecoderContract abiEncoder
+  abiBoundedBytesExecution
   bodyPtrBopScalarCompile
   bodyPtrBopScalarOutcome bodyPtrBopScalarSeq fragExecMem instMemFrontier
   emitHelperProps exprLoweringProps compileEnv emitHelper memSafeRun
@@ -153,6 +154,40 @@ Proof
   metis_tac[]
 QED
 
+Theorem abi_decode_bytes_prefix_checked_mem_ok:
+  abi_decode_bytes_position_prefix pos MLOAD (Var src) hi n st = ((addr,cnt),en) /\
+  hi <> Lit 0w /\ fresh_vars_wrt st s /\
+  eval_operand pos s = SOME (n2w p) /\ p < dimword(:256) /\
+  eval_operand hi s = SOME (n2w h) /\ lookup_var src s = SOME b /\
+  w2n b+h < dimword(:256) /\ w2n b+h <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts st en) s
+Proof
+  strip_tac >> Cases_on `p+32 <= h`
+  >- (drule_all abi_decode_bytes_prefix_mem_ok >> simp[]) >>
+  qpat_assum `abi_decode_bytes_position_prefix _ _ _ _ _ _ = _`
+    (mp_tac o REWRITE_RULE [abi_decode_bytes_position_prefix_trace]) >> strip_tac >>
+  `h < dimword(:256)` by decide_tac >>
+  drule_all abi_decode_bytes_head_total >> strip_tac
+  >- (rename1 `run_inst_seq (emitted_insts st head_st) s = Abort _ rejected` >>
+      `?A. bop_scalar_seq {} UNIV (emitted_insts st head_st) A /\
+          UNIV SUBSET A /\ head IN A` by
+        (irule (abi_decode_bytes_head_scalar |>
+           Q.INST [`R` |-> `{}:string set`, `A` |-> `UNIV`]) >>
+         simp[] >> metis_tac[]) >>
+      `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+      drule_all abi_decode_count_guard_shape >> strip_tac >>
+      drule abi_decode_bytes_payload_guard_fragment_shape >> strip_tac >>
+      drule abi_decode_bytes_head_fragment_shape >> strip_tac >>
+      `inst_extends head_st en` by
+        (fs[compile_abi_dec_addr_def] >>
+         metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
+      `emitted_insts st en = emitted_insts st head_st ++ emitted_insts head_st en` by
+        (irule emitted_insts_append >> fs[inst_extends_def]) >>
+      pop_assum SUBST1_TAC >> match_mp_tac run_inst_seq_mem_ok_append >>
+      conj_tac >- metis_tac[bop_scalar_seq_mem_ok] >> simp[]) >>
+  gvs[w2n_n2w]
+QED
+
 Theorem abi_decode_bytes_runtime_pointer_scalar:
   emit_op ADD [cnt;Lit 31w] st = (up,c1) /\
   emit_op NOT [Lit 31w] c1 = (mask,c2) /\
@@ -225,7 +260,7 @@ Proof
   conj_tac >- metis_tac[bop_scalar_seq_mem_ok] >> simp[]
 QED
 
-Theorem abi_decode_bytes_member_mem_ok:
+Theorem abi_decode_bytes_member_checked_mem_ok:
   compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
     (DecBytestring n) st = ((),en) /\ hi <> Lit 0w /\
   fresh_vars_wrt st s /\ lookup_var src s = SOME b /\
@@ -234,43 +269,38 @@ Theorem abi_decode_bytes_member_mem_ok:
   p < dimword(:256) /\ n+31 < dimword(:256) /\
   w2n b+h < dimword(:256) /\ w2n b+h <= s.vs_alloca_next /\
   w2n d+(32+32*((n+31) DIV 32)) < dimword(:256) /\
-  w2n d+(32+32*((n+31) DIV 32)) <= s.vs_alloca_next /\
-  run_inst_seq (emitted_insts st en) s = OK u ==>
+  w2n d+(32+32*((n+31) DIV 32)) <= s.vs_alloca_next ==>
   run_inst_seq_mem_ok (emitted_insts st en) s
+
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `h < dimword(:256) /\ n < dimword(:256) /\
-   eval_operand (Var src) s = SOME b` by
-    (simp[eval_operand_def] >> decide_tac) >>
-  drule_all abi_decode_bytes_member_success_bounds >> strip_tac >>
-  `w2n b+p < dimword(:256)` by decide_tac >>
-  `b+n2w p = n2w (w2n b+p)` by
-    rewrite_tac[GSYM word_add_n2w, n2w_w2n] >>
-  qabbrev_tac `c = w2n (mload (w2n b+p) s)` >>
-  `c <= n /\ p+32+c <= h` by fs[Abbr `c`, w2n_n2w] >>
+  `h < dimword(:256) /\ n < dimword(:256)` by decide_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_bytes_prefix_phases,
     abi_decode_source_opcode_def, comp_bind_def, operand_distinct, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> Cases_on `ac` >> gvs[] >>
   rename1 `abi_decode_bytes_position_prefix _ _ _ _ _ st = ((addr,cnt),ready)` >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
-  `eval_operand (Var src) s = SOME (n2w (w2n b)) /\
-   abi_decode_load MLOAD (n2w (w2n b+p):bytes32) s = n2w c` by
-    simp[eval_operand_def, abi_decode_load_def, Abbr `c`] >>
-  qpat_assum `abi_decode_bytes_position_prefix _ _ _ _ _ _ = _`
-    (mp_then Any (qspecl_then [`s`, `p`, `c`, `b`] mp_tac)
-      (abi_decode_bytes_position_prefix_sequence |>
-      Q.INST [`b` |-> `source_offset`] |>
-      Q.INST [`source_offset` |-> `w2n b`, `p` |-> `p`, `c` |-> `c`, `s` |-> `s`])) >>
-  (impl_tac >- (simp[] >> qexists_tac `h` >> simp[])) >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st ready) s = OK prepared` >>
-  `run_inst_seq_mem_ok (emitted_insts st ready) s` by
-    (qpat_assum `abi_decode_bytes_position_prefix _ _ _ _ _ _ = _`
-       (mp_then Any (qspecl_then [`s`, `p`, `h`, `b`] mp_tac)
-         (abi_decode_bytes_prefix_mem_ok |>
-         Q.INST [`b` |-> `b`, `p` |-> `p`, `h` |-> `h`, `s` |-> `s`])) >>
-     (impl_tac >- (simp[] >> decide_tac)) >> simp[]) >>
   drule_all abi_decode_bytes_position_prefix_shape >> strip_tac >>
+  drule abi_decode_bytes_runtime_tail_shape >> strip_tac >>
+  `emitted_insts st en = emitted_insts st ready ++ emitted_insts ready en` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts st ready) s` by
+    (mp_tac (abi_decode_bytes_prefix_checked_mem_ok |>
+       Q.INST [`st` |-> `st`, `en` |-> `ready`, `pos` |-> `pos`,
+         `hi` |-> `hi`, `n` |-> `n`, `src` |-> `src`, `addr` |-> `addr`,
+         `cnt` |-> `cnt`, `s` |-> `s`, `p` |-> `p`, `h` |-> `h`, `b` |-> `b`]) >>
+     (impl_tac >- simp[]) >> simp[]) >>
+  mp_tac (abi_decode_bytes_position_prefix_total |>
+    Q.INST [`b` |-> `source_offset`] |>
+    Q.INST [`source_offset` |-> `w2n (b:bytes32)`, `pos` |-> `pos`,
+      `opc` |-> `MLOAD`, `base_op` |-> `Var src`, `hi` |-> `hi`,
+      `n` |-> `n`, `st` |-> `st`, `st'` |-> `ready`, `addr` |-> `addr`,
+      `cnt` |-> `cnt`, `s` |-> `s`, `p` |-> `p`, `h` |-> `h`]) >>
+  (impl_tac >- simp[eval_operand_def]) >> strip_tac
+  >- (qpat_assum `emitted_insts st en = _` SUBST1_TAC >>
+      match_mp_tac run_inst_seq_mem_ok_append >> simp[]) >>
+  rename1 `run_inst_seq (emitted_insts st ready) s = OK prepared` >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode)
       (emitted_insts st ready)` by fs[EVERY_MEM] >>
   `prepared.vs_alloca_next = s.vs_alloca_next` by
@@ -285,11 +315,24 @@ Proof
        Q.INST [`destination_operand` |-> `Var dst`, `addr` |-> `addr`,
          `cnt` |-> `cnt`, `st` |-> `ready`, `en` |-> `en`, `s` |-> `prepared`,
          `a` |-> `w2n (b:bytes32)+p`, `c` |-> `c`,
-         `destination_offset` |-> `w2n (d:bytes32)`,
-         `n` |-> `n`]) >>
+         `destination_offset` |-> `w2n (d:bytes32)`, `n` |-> `n`]) >>
      (impl_tac >- (simp[] >> decide_tac)) >> simp[]) >>
-  drule abi_decode_bytes_runtime_tail_shape >> strip_tac >>
-  `emitted_insts st en = emitted_insts st ready ++ emitted_insts ready en` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  pop_assum SUBST1_TAC >> match_mp_tac run_inst_seq_mem_ok_append >> simp[]
+  qpat_assum `emitted_insts st en = _` SUBST1_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> simp[]
+QED
+
+Theorem abi_decode_bytes_member_mem_ok:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecBytestring n) st = ((),en) /\ hi <> Lit 0w /\
+  fresh_vars_wrt st s /\ lookup_var src s = SOME b /\
+  lookup_var dst s = SOME d /\
+  eval_operand pos s = SOME (n2w p) /\ eval_operand hi s = SOME (n2w h) /\
+  p < dimword(:256) /\ n+31 < dimword(:256) /\
+  w2n b+h < dimword(:256) /\ w2n b+h <= s.vs_alloca_next /\
+  w2n d+(32+32*((n+31) DIV 32)) < dimword(:256) /\
+  w2n d+(32+32*((n+31) DIV 32)) <= s.vs_alloca_next /\
+  run_inst_seq (emitted_insts st en) s = OK u ==>
+  run_inst_seq_mem_ok (emitted_insts st en) s
+Proof
+  metis_tac[abi_decode_bytes_member_checked_mem_ok]
 QED
