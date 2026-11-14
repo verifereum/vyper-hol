@@ -1,9 +1,9 @@
 (* Joint execution of the actual word-array membership control blocks. *)
 Theory bodyFullBopRestWordControl
 Ancestors
-  bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLookups
+  bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLookups bodyPtrBopInLoopLayout
   bodyPtrBopInLoopContract bodyPtrBopInLiteralSuffix bodyPtrBopInScalarTransport
-  fragGasEmitCtrl fragGasSeqPtr fragGasOriginPtr stmtAppendStorageRunPtr
+  exprLoweringProps fragExecMem fragGasEmitCtrl fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrLoop stmtAppendStorageRunPtr
   gasEvents gasCount ptrSafeRun memSafeRun instMemFrontier
   ptrDiscipline unitTransformDefs contextCodegenRel codegenRel fragGasOrigin fragGasPathPtr list
   venomExecSemantics venomExecProps venomInst venomState finite_map
@@ -641,3 +641,159 @@ Resume rest_word_membership_increment_joint[frame]:
 QED
 
 Finalise rest_word_membership_increment_joint
+
+Theorem rest_word_membership_init_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  idx = "%" ++ toString (sa.cs_next_var+1) /\
+  result = "%" ++ toString sa.cs_next_var /\
+  e = jump_to (fresh_label_output "in_entry" sa.cs_next_label) s /\
+  t = update_var result 0w (update_var idx 0w e) /\
+  G2 = DRESTRICT (DRESTRICT G (COMPL {idx})) (COMPL {result}) /\
+  tn2 = tn with t_var := (tn.t_var |+ (idx,{})) |+ (result,{}) /\
+  u = jump_to (fresh_label_output "in_cond" (sa.cs_next_label+1)) t ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G2,tn2) /\
+  membership_loop_frame sa G tn s G2 tn2 u /\
+  membership_loop_registers sa 0 0w G2 tn2 u /\
+  ~u.vs_halted /\ u.vs_inst_idx = 0 /\ allocas_from lo u
+Proof
+  strip_tac >>
+  `?old_bb entry_bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME old_bb /\
+    get_instruction old_bb s.vs_inst_idx = SOME
+      (mk_inst sa.cs_next_id JMP [Label (fresh_label_output "in_entry" sa.cs_next_label)] []) /\
+    lookup_block e.vs_current_bb fn.fn_blocks = SOME entry_bb /\
+    entry_bb.bb_instructions =
+      [mk_inst (sa.cs_next_id+1) ASSIGN [Lit 0w] [idx];
+       mk_inst (sa.cs_next_id+2) ASSIGN [Lit 0w] [result];
+       mk_inst (sa.cs_next_id+3) JMP
+         [Label (fresh_label_output "in_cond" (sa.cs_next_label+1))] []]` by
+    suspend "layout" >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK e,G,tn)` by
+    (qpat_x_assum `e = jump_to _ _` SUBST1_TAC >>
+     irule fragGasOriginPtrLoopTheory.jmp_origin_ptr_path >> metis_tac[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (e,G,tn) []
+     (OK (t with vs_inst_idx := 2),G2,tn2)` by suspend "assigns" >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (t with vs_inst_idx := 2,G2,tn2) [] (OK u,G2,tn2)` by
+    (`u = jump_to (fresh_label_output "in_cond" (sa.cs_next_label+1))
+        (t with vs_inst_idx := 2)` by simp[jump_to_def] >>
+     pop_assum SUBST1_TAC >>
+     irule fragGasOriginPtrLoopTheory.jmp_origin_ptr_path >>
+     simp[update_var_def, jump_to_def, allocas_from_def] >>
+     conj_tac
+     >- (qexistsl_tac [`entry_bb`,`sa.cs_next_id+3`] >>
+         gvs[update_var_def, jump_to_def, get_instruction_def]) >>
+     gvs[allocas_from_def]) >>
+  conj_tac
+  >- metis_tac[gas_origin_ptr_path_append, APPEND] >>
+  suspend "post"
+QED
+
+Resume rest_word_membership_init_joint[layout]:
+  gvs[SRULE [] membership_loop_layout] >>
+  fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM, jump_to_def] >>
+  simp[get_instruction_def, EL_APPEND_EQN]
+QED
+
+Resume rest_word_membership_init_joint[assigns]:
+  qabbrev_tac `code =
+    [mk_inst (sa.cs_next_id+1) ASSIGN [Lit 0w] [idx];
+     mk_inst (sa.cs_next_id+2) ASSIGN [Lit 0w] [result]]` >>
+  `run_inst_seq code e = OK t` by
+    simp[Abbr `code`, run_inst_seq_def, step_inst_base_opcode_eqs,
+         mk_inst_def, eval_operand_def] >>
+  `run_inst_seq_mem_ok code e` by
+    (irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+     simp[Abbr `code`, inst_mem_below_frontier_def, inst_dload_in_section_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def, mk_inst_def]) >>
+  `inst_seq_ptr D lo ctx fn PG G tn code e G2 tn2` by suspend "init_seq_ptr" >>
+  `~e.vs_halted /\ e.vs_inst_idx = 0` by simp[jump_to_def] >>
+  `isPREFIX code (DROP e.vs_inst_idx entry_bb.bb_instructions) /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_gas_origin_ptr_path >>
+  disch_then (qspec_then `explicit` mp_tac) >>
+  simp[Abbr `code`, mk_inst_def, is_terminator_def]
+QED
+
+Resume rest_word_membership_init_joint[post]:
+  simp[membership_loop_frame_def, membership_loop_registers_def,
+       jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       FLOOKUP_DRESTRICT, op_prov_def, op_taint_def, allocas_from_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `x <> idx /\ x <> result` by
+        (gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+         first_assum (qspec_then `0` mp_tac) >>
+         first_x_assum (qspec_then `1` mp_tac) >> simp[]) >> gvs[]) >>
+  gvs[allocas_from_def]
+QED
+
+Resume rest_word_membership_init_joint[init_seq_ptr]:
+  qabbrev_tac `a = mk_inst (sa.cs_next_id+1) ASSIGN [Lit 0w] [idx]` >>
+  qabbrev_tac `b = mk_inst (sa.cs_next_id+2) ASSIGN [Lit 0w] [result]` >>
+  qabbrev_tac `v = update_var idx 0w e` >>
+  qabbrev_tac `q = tn with t_var := tn.t_var |+ (idx,{})` >>
+  `step_prov PG G a v = DRESTRICT G (COMPL {idx}) /\
+   step_taint a e v tn = q` by suspend "init_first_ghost" >>
+  `step_prov PG (DRESTRICT G (COMPL {idx})) b
+      (update_var result 0w (v with vs_inst_idx := 1)) = G2 /\
+   step_taint b (v with vs_inst_idx := 1)
+      (update_var result 0w (v with vs_inst_idx := 1)) q = tn2` by
+    suspend "init_second_ghost" >>
+  `e.vs_inst_idx = 0` by simp[jump_to_def] >>
+  `code = [a;b] /\ step_inst_base a e = OK v /\
+   step_inst_base b (v with vs_inst_idx := 1) =
+     OK (update_var result 0w (v with vs_inst_idx := 1))` by
+    simp[Abbr `code`, Abbr `a`, Abbr `b`, Abbr `v`,
+         step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
+  qpat_x_assum `G2 = DRESTRICT _ _` kall_tac >>
+  qpat_x_assum `tn2 = tn with t_var := _` kall_tac >>
+  qpat_x_assum `code = [a;b]` SUBST1_TAC >>
+  pure_once_rewrite_tac [inst_seq_ptr_def] >>
+  qpat_assum `step_inst_base a e = _` (fn th => rewrite_tac [th, exec_result_case_def]) >> BETA_TAC >>
+  qpat_assum `step_prov PG G a v = _` (fn th => rewrite_tac [th]) >>
+  qpat_assum `step_taint a e v tn = _` (fn th => rewrite_tac [th]) >>
+  qpat_assum `e.vs_inst_idx = 0` (fn th => rewrite_tac [th]) >>
+  simp_tac std_ss [] >>
+  pure_once_rewrite_tac [inst_seq_ptr_def] >>
+  qpat_assum `step_inst_base b _ = _` (fn th => rewrite_tac [th, exec_result_case_def]) >> BETA_TAC >>
+  qpat_assum `step_prov PG _ b _ = _` (fn th => rewrite_tac [th]) >>
+  qpat_assum `step_taint b _ _ q = _` (fn th => rewrite_tac [th]) >>
+  pure_rewrite_tac [inst_seq_ptr_def] >>
+
+  simp[Abbr `a`, Abbr `b`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
+       op_taint_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+       eval_operand_def, Abbr `v`, update_var_def, jump_to_def, allocas_from_def] >>
+  gvs[allocas_from_def]
+QED
+
+Resume rest_word_membership_init_joint[init_first_ghost]:
+  simp[Abbr `a`, Abbr `v`, Abbr `q`, mk_inst_def,
+       step_prov_def, set_prov_def, out_prov_def,
+       first_prov_def, op_prov_def, step_taint_def,
+       mem_taint_def, out_taint_def, store_taint_def, adopt_reset_def,
+       imm_taint_def, op_taint_def, taint_component_equality,
+       new_site_bytes_def, step_writes_def, written_taint_def,
+       eval_operand_def, update_var_def, range_bytes_def,
+       source_memory_write_ranges_def, FLOOKUP_DEF, set_var_taint_def] >> SET_TAC[]
+QED
+
+Resume rest_word_membership_init_joint[init_second_ghost]:
+  simp[Abbr `b`, Abbr `q`, Abbr `v`, mk_inst_def,
+       step_prov_def, set_prov_def, out_prov_def,
+       first_prov_def, op_prov_def, step_taint_def,
+       mem_taint_def, out_taint_def, store_taint_def, adopt_reset_def,
+       imm_taint_def, op_taint_def, taint_component_equality,
+       new_site_bytes_def, step_writes_def, written_taint_def,
+       eval_operand_def, update_var_def, range_bytes_def,
+       source_memory_write_ranges_def, FLOOKUP_DEF, set_var_taint_def] >> SET_TAC[]
+QED
+
+Finalise rest_word_membership_init_joint
