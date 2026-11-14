@@ -173,6 +173,7 @@ QED
 
 Resume sha256_typed_effectful_path_mem[abort]:
   markerLib.RESUME_TAC >>
+  `expr_post H ctx func cenv cx e es sa sm s0 es1 v x s` by metis_tac[] >>
   drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_run >>
   simp[] >> strip_tac >>
   `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
@@ -185,6 +186,7 @@ Resume sha256_typed_effectful_path_mem[abort]:
 QED
 Resume sha256_typed_effectful_path_mem[success]:
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def] >>
+  `expr_post H ctx func cenv cx e es sa sm s0 es1 v x s` by metis_tac[] >>
   drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
   simp[] >> strip_tac >> gvs[] >>
   `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
@@ -192,9 +194,11 @@ Resume sha256_typed_effectful_path_mem[success]:
        es sa sb s0 (es1 with outcomes := SOME remaining) (Value r)
        (StackValue (BaseT (BytesT (Fixed 32))) op) t` by
     (rpt strip_tac >>
-     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
-     drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `H'` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (mp_then (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       mp_tac sha256_typed_post_run) >>
      simp[] >> strip_tac >> gvs[]) >>
   `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
@@ -202,7 +206,11 @@ Resume sha256_typed_effectful_path_mem[success]:
   disch_then (qspecl_then [`ctx`,`func`,`bb`] mp_tac) >> simp[] >>
   strip_tac >>
   `alloca_inv s` by
-    (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (mp_tac o MATCH_MP expr_post_state) >>
+     simp[stmt_state_rel_def, state_rel_def]) >>
   `alloca_history func
      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))` by
     (irule alloca_history_run_inst_seq >> goal_assum (drule_at Any) >>
@@ -424,17 +432,18 @@ Proof
      else case expr_type e of
        BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
      | _ => compile_sha256_word x sm)`, `env`] >> simp[] >>
-  reverse conj_tac
-  >- (conj_tac
-      >- (rpt strip_tac >>
-          qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-          simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[]) >>
-      conj_tac >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
+  gvs[] >> rpt conj_tac
+  >~ [`compile_expr _ _ _ _ = _`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[])
+  >~ [`cs_appends _`]
+  >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
       Cases_on `bty` >> gvs[is_bytes_or_string_type_def,
         is_bytestring_type_def, hash_suffix_appends, SF ETA_ss] >>
       rename1 `expr_type e = BaseT (BytesT bd)` >>
-      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss]) >>
-      gvs[]) >>
+      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss])
+  >>
   rpt strip_tac >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val _ compiled` >>
