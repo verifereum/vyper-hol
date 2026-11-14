@@ -210,7 +210,8 @@ Resume prefix_entry_register_suffix_sizes[head]:
   `compile_decode_args next [build_positional_arg (ce0 with ce_vars := vars) (h0,h1)]
     (SUM (MAP abi_member_head_size (TAKE i atys))) DLOAD (Lit 0w) 0 sa = ((),sd)` by
     (pure_rewrite_tac[ctor_positional_arg_vars] >> first_assum ACCEPT_TAC) >>
-  drule_at (Pat `compile_decode_args _ _ _ _ _ _ _ = _`) prefix_entry_register_one_slot_sizes >>
+  drule_at (Pat `compile_decode_args _ _ _ _ _ _ _ = _`)
+    (BETA_RULE (SPEC_ALL prefix_entry_register_one_slot_sizes_coverage_mode)) >>
   disch_then (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_scopes _ _ = _`)) >>
@@ -218,7 +219,7 @@ Resume prefix_entry_register_suffix_sizes[head]:
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `_ = enc _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (MemLoc _ _)`)) >>
-  disch_then (qspecl_then [`tn`,`lo`,`PG`,`G`,`D`] mp_tac) >>
+  disch_then (qspecl_then [`tn`,`lo`,`F`,`PG`,`G`,`D`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> simp[NoAsms] >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `middle` (qx_choose_then `MG` (qx_choose_then `mt`
     (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
