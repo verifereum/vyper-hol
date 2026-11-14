@@ -51,8 +51,7 @@ val IMMS_IH_TAC =
      lock_if_nr_def, unlock_if_nr_def]};
 fun IMMS_STEP_WITH extra = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CONV,
   unfolds = [switch_BoolV_def, ignore_bind_def],
-  intros = [evalWalkLib.TRANSITIVITY_TAC imms_relation] @ extra @
-    [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
+  intros = extra @ [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
       (List.filter (is_eq o concl) (map (BETA_RULE o ASSUME) asl)) (asl,w))],

@@ -176,10 +176,22 @@ val PROTECTED_FORWARD_IH =
   evalWalkLib.FORWARD_IH_TAC {normalise = SIMP_RULE (srw_ss())
     [oneTheory.one, FST, SND, lock_if_nr_def, is_view_mut_def, ignore_bind_def,
      lookup_immutable_stk, get_module_code_stk, lookup_immutable_def]};
+(* Close transitivity without scanning unrelated execution hypotheses. *)
+val PROTECTED_TRANSITIVITY =
+  let
+    fun beta tm = rhs (concl (QCONV (DEPTH_CONV BETA_CONV) tm))
+    val key = beta ``!s t u. ^protected_relation s t /\
+      ^protected_relation t u ==> ^protected_relation s u``
+  in fn g as (_,w) =>
+    if can (match_term key) (beta w) then
+      (POP_ASSUM_LIST (K all_tac) >> BETA_TAC >>
+       rpt strip_tac >> metis_tac[]) g
+    else NO_TAC g
+  end;
 val PROTECTED_STEP = evalWalkLib.STEP
   {net = protected_frame_net, at = RAND_CONV,
    unfolds = [switch_BoolV_def, ignore_bind_def],
-   intros = [evalWalkLib.TRANSITIVITY_TAC protected_relation,
+   intros = [PROTECTED_TRANSITIVITY,
      CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac,
      conj_tac, CONV_TAC (RAND_CONV ETA_CONV)],
    fallbacks = [PROTECTED_IH, evalWalkLib.NORMALISE_IH_TAC PROTECTED_IH,

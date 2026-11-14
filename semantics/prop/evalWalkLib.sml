@@ -116,18 +116,6 @@ fun unfold_conv ths =
     fun spine tm = (c ORELSEC RATOR_CONV spine) tm
   in spine end;
 
-(* Close transitivity without scanning unrelated execution hypotheses. *)
-fun TRANSITIVITY_TAC relation =
-  let
-    fun beta tm = rhs (concl (QCONV (DEPTH_CONV BETA_CONV) tm))
-    val key = beta ``!s t u. ^relation s t /\ ^relation t u ==> ^relation s u``
-  in fn g as (_,w) =>
-    if can (match_term key) (beta w) then
-      (POP_ASSUM_LIST (K all_tac) >> BETA_TAC >>
-       rpt strip_tac >> metis_tac[]) g
-    else NO_TAC g
-  end;
-
 (* One walk step on a goal whose computation the conversion at reaches. *)
 fun STEP {net, at, unfolds, intros, fallbacks} =
   let val unfold = unfold_conv unfolds in
