@@ -29,9 +29,12 @@ Theorem intcall_log_topics_memory:
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   run_inst_seq (emitted_insts sm st) s = OK u ==>
   u.vs_memory = s.vs_memory
