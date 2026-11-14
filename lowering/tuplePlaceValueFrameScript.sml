@@ -8,6 +8,8 @@ Ancestors
   stmtLowering exprLowering compileEnv loweringPosts stmtSimDefs venomState
   vyperInterpreter vyperState vyperValue vyperTypeSystem exprSimHypsDefs
 
+Libs horizonTypeLib
+
 Theorem tuple_place_value_run_frame:
   !H0 ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
@@ -73,11 +75,17 @@ Proof
 QED
 
 Resume tuple_place_value_run_frame[memory]:
+  `storage_place_region cx p` by
+    (Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def,
+       vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+     Cases_on `b` >> gvs[slot_loc_def]) >>
   Cases_on `is_word_type dty`
   >- suspend "memory_word" >>
-  drule_all tuple_place_memory_forward_frame >> strip_tac >>
+  drule_all (at_horizon_named "H"
+    (at_horizon_named "H0" tuple_place_memory_forward_frame)) >> strip_tac >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff t` by
     (rpt strip_tac >>
      qpat_assum `!H. stmt_state_rel H _ _ _ _ ee s ==> _` drule >> strip_tac >>
@@ -96,7 +104,8 @@ Resume tuple_place_value_run_frame[memory_word]:
     gvs[compile_assign_value_def] >>
   `eval_operand op s = SOME (typed_val_to_w256 stv v)` by fs[expr_val_rel_def] >>
   qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 stv v) s` >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff u` by
     (rpt strip_tac >> Cases_on `p`
      >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])

@@ -447,7 +447,7 @@ Proof
   `eval_phis (jump_to target d) dest.bb_instructions = OK (jump_to target d)` by
     (Cases_on `dest.bb_instructions` >- simp[eval_phis_def] >>
      Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, phi_prefix_length_def]) >>
-  simp[] >> disj2_tac >>
+  simp[] >>
   Cases_on `fuel` >- simp[ptr_safe_blocks_def] >>
   simp[Once ptr_safe_blocks_def] >>
   gvs[ptr_safe_run_def, Abbr `gg`, jump_to_def] >>

@@ -156,9 +156,11 @@ Proof
   `d + 32 + j * type_memory_bytes ce ty < dimword (:256) /\
    type_memory_bytes ce ty < dimword (:256)` by decide_tac >>
   `!a. slot <= a /\ a < slot + 32 ==> a NOTIN tn.t_mem` by ASM_SET_TAC[] >>
-  drule_all calldata_array_element_setup_original_pc_ptr >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`PG`,`ARB`,`D`] strip_assume_tac) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all (Q.INST [`H` |-> `ARB`] calldata_array_element_setup_original_pc_ptr) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`PG`,`ARB`,`D`]
+    (qx_choose_then `H` (qx_choose_then `u`
+      (qx_choose_then `child` strip_assume_tac)))) >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   `LENGTH (emitted_insts st middle) + initial.vs_inst_idx = LENGTH middle.cs_current_insts` by
     (qpat_assum `inst_extends st middle` mp_tac >>
      simp_tac list_ss [inst_extends_def] >> strip_tac >> simp[]) >>

@@ -3,6 +3,7 @@ Theory tuplePlaceBranchReady
 Ancestors
   tuplePlacePointerReady tuplePlaceFramedStore tuplePlaceOwnedValueFrame
   tuplePlaceEqualMemory tuplePlaceBorrowStore
+Libs horizonTypeLib
 
 Theorem tuple_place_pointer_word_store:
   tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
@@ -51,8 +52,8 @@ Proof
   drule_all tuple_place_index_fit >> strip_tac >>
   drule_all tuple_place_pointer_source_facts >> strip_tac >>
   `expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s` by
-    (irule tuple_place_pointer_value_rel >>
-     metis_tac[]) >>
+    (`i < LENGTH ltys` by simp[] >>
+     drule_all tuple_place_pointer_value_rel >> simp[]) >>
   `EL i ltys = EL i tys` by
     metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
   `value_has_type (EL i tvs) (EL i vs)` by
@@ -61,7 +62,7 @@ Proof
         vyperTypeDefaultsTheory.values_have_types_LIST_REL,
         listTheory.LIST_REL_EL_EQN] >>
      qpat_x_assum `!n. _ ==> value_has_type _ _` (qspec_then `i` mp_tac) >> simp[]) >>
-  irule tuple_place_word_run_frame >>
+  irule (at_horizon_named "H0" tuple_place_word_run_frame) >>
   qpat_assum `stmt_state_rel H0 _ _ _ _ ee s` (irule_at Any) >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
@@ -115,9 +116,9 @@ Proof
   drule_all tuple_place_pointer_element_facts >> strip_tac >>
   drule_all tuple_place_pointer_source_facts >> strip_tac >>
   `expr_val_rel cx (EL i tys) (EL i vs) (EL i elems) s` by
-    (irule tuple_place_pointer_value_rel >> metis_tac[]) >>
+    (drule_all tuple_place_pointer_value_rel >> simp[]) >>
   `tuple_place_snapshot cenv cx ee lo sa.cs_next_id tys tys tvs w s` by
-    (irule tuple_place_pointer_snapshot >> metis_tac[]) >>
+    (drule_all tuple_place_pointer_snapshot >> simp[]) >>
   drule_all tuple_place_snapshot_element_bounds >> strip_tac >>
   `!sw. eval_operand (EL i elems) s = SOME sw ==>
     ?b len. b <= w2n sw /\ w2n sw+type_memory_size (EL i tvs) <= b+len /\
@@ -179,9 +180,9 @@ Proof
   drule_all tuple_place_pointer_element_facts >> strip_tac >>
   drule_all tuple_place_pointer_source_facts >> strip_tac >>
   `expr_val_rel cx (EL i tys) (EL i vs) (EL i elems) s` by
-    (irule tuple_place_pointer_value_rel >> metis_tac[]) >>
+    (drule_all tuple_place_pointer_value_rel >> simp[]) >>
   `tuple_place_snapshot cenv cx ee lo sa.cs_next_id tys tys tvs w s` by
-    (irule tuple_place_pointer_snapshot >> metis_tac[]) >>
+    (drule_all tuple_place_pointer_snapshot >> simp[]) >>
   `w2n w + SUM (MAP type_memory_size (TAKE i tvs)) +
      type_memory_size (EL i tvs) <= s.vs_alloca_next` by
     (drule_all tuple_place_snapshot_element_bounds >> strip_tac
@@ -189,8 +190,7 @@ Proof
              venomMemDefsTheory.alloca_inv_def,
              venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
      `b+sz <= s.vs_alloca_next` by
-       (irule bodyMemoryDefsTheory.body_local_region_frontier >>
-        goal_assum (drule_at Any) >> metis_tac[]) >> decide_tac) >>
+       (drule_all bodyMemoryDefsTheory.body_local_region_frontier >> simp[]) >> decide_tac) >>
   `!sw. eval_operand (EL i elems) s = SOME sw ==>
     w2n sw + type_memory_size (EL i tvs) <= s.vs_alloca_next` by
     (rpt strip_tac >> `i <= i` by simp[] >>
@@ -261,7 +261,7 @@ Proof
   drule_all tuple_place_pointer_source_facts >> strip_tac >>
   drule_all tuple_place_pointer_owned_region >> strip_tac >>
   `expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s` by
-    (irule tuple_place_pointer_value_rel >> metis_tac[]) >>
+    (drule_all tuple_place_pointer_value_rel >> simp[]) >>
   `SUM (MAP type_memory_size (TAKE i ltvs)) + type_memory_size (EL i ltvs)
      <= type_memory_size_list ltvs` by
     (simp[valueEncodingProofsTheory.type_memory_size_list_sum] >>
