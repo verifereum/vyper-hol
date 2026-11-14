@@ -176,6 +176,14 @@ Theorem rest_word_membership_tail_clean_reads:
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_taint (Tu H) (vv_operand vv) = {} /\
        ptr_mem_ok cx (ArrayT ety pbd) (ArrayV av) (vv_operand vv) (Gu H) (Tu H) u /\
+       expr_val_at cenv cx (ArrayT ety pbd) sa sm ee (ArrayV av) (vv_operand vv) u /\
+       (0 < type_memory_size (ArrayTV et pbd) ==>
+         w2n w + type_memory_size (ArrayTV et pbd) <= u.vs_alloca_next) /\
+       (!off n src dst t G' T'. vv_operand vv = Var src /\
+         0 < n /\ off + n <= type_memory_size (ArrayTV et pbd) /\
+         lookup_var dst t = SOME (w + n2w off) /\
+         FLOOKUP G' dst = FLOOKUP (Gu H) src /\ op_taint T' (Var dst) = {} ==>
+         ptr_covers G' T' dst t n) /\
        (!i. i < LENGTH ws ==>
          let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
          mem_word_taint (Tu H).t_mem a = {} /\ mload a u = EL i ws) /\
@@ -300,11 +308,38 @@ Resume rest_word_membership_tail_clean_reads[runtime_memory]:
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.expr_val_rel_def,
        bodyPtrDefsTheory.ptr_vv_ok_def, bodyPtrDefsTheory.ptr_val_ok_def,
        compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
-  qexists_tac `w` >> simp[] >> suspend "memory_reads"
+  `expr_val_at cenv cx (ArrayT ety pbd) sa sm ee (ArrayV av) (vv_operand vv) u` by
+    (`vv_at cenv cx (ArrayT ety pbd) sa sm ee tv vv u` by
+       (fs[loweringPostsTheory.vv_post_def] >> gvs[]) >>
+     Cases_on `vv`
+     >- gvs[loweringPostsTheory.vv_at_def, contextTheory.vv_operand_def] >>
+     gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+     drule_all bodyPtrBopInRepresentationTheory.membership_memory_value_at >> simp[]) >>
+  `stmt_state_rel H ctx fn cenv cx ee u` by fs[loweringPostsTheory.vv_post_def] >>
+  `~is_word_type (ArrayT ety pbd)` by simp[compileEnvTheory.is_word_type_def] >>
+  `val_footprint (ArrayTV et pbd) (ArrayV av) = type_memory_size (ArrayTV et pbd)` by
+    simp[loweringPostsTheory.val_footprint_def] >>
+  `(0 < type_memory_size (ArrayTV et pbd) ==>
+     w2n w + type_memory_size (ArrayTV et pbd) <= u.vs_alloca_next)` by
+    (drule_all externalReturnBoundsTheory.expr_val_at_frontier >> simp[] >> metis_tac[]) >>
+  `!off n src dst t G' T'. vv_operand vv = Var src /\
+    0 < n /\ off + n <= type_memory_size (ArrayTV et pbd) /\
+    lookup_var dst t = SOME (w + n2w off) /\
+    FLOOKUP G' dst = FLOOKUP (Gu H) src /\ op_taint T' (Var dst) = {} ==>
+    ptr_covers G' T' dst t n` by
+    (rpt strip_tac >>
+      `expr_val_at cenv cx (ArrayT ety pbd) sa sm ee (ArrayV av) (Var src) u` by metis_tac[] >>
+      `ptr_val_ok cx (ArrayT ety pbd) (ArrayV av) (Var src) (Gu H) (Tu H) u` by
+        gvs[bodyPtrDefsTheory.ptr_val_ok_def] >>
+      `lookup_var src u = SOME w` by gvs[venomStateTheory.eval_operand_def] >>
+      `off + n <= val_footprint (ArrayTV et pbd) (ArrayV av)` by simp[] >>
+      drule_all typedCopyPtrTheory.expr_val_at_ptr_offset_read_covers >> simp[]) >>
+  qexists_tac `w` >> fs[] >> suspend "memory_reads"
 QED
 
 Resume rest_word_membership_tail_clean_reads[memory_reads]:
-  markerLib.RESUME_TAC >> (
+  markerLib.RESUME_TAC >> (gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   `!mem. mem_agree_outside (Tu H).t_mem u.vs_memory mem ==>
     val_in_memory (ArrayTV et pbd) (ArrayV av) (w2n w) mem` by
     (fs[bodyPtrDefsTheory.ptr_mem_ok_def] >> metis_tac[]) >>
