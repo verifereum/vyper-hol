@@ -1,7 +1,7 @@
 (* Total source normalization and counted finish assembly. *)
 Theory rawCallFinishTotalPtr
 Ancestors
-  rawCallFinishStepPtr rawCallFinishCodePtr rawCallFinishSuffixPtr
+  rawCallFinishStepPtr rawCallShapePtr rawCallFinishSuffixPtr
   rawCallSourceDomainPtr rawCallSourceActionPtr gasSummary exprSimOperands
   exprLoweringProps bodyPtrDefs wordArgsPtr exprSimWordArgs
   emitHelperProps fragGasPathPtr

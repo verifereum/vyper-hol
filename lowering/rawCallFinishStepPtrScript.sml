@@ -1,7 +1,7 @@
 (* One emitted oracle CALL edge, shared by every raw-call result shape. *)
 Theory rawCallFinishStepPtr
 Ancestors
-  rawCallFinishCodePtr rawCallFinishBridgePtr rawCallOracleProofPtr
+  rawCallShapePtr rawCallFinishBridgePtr rawCallOracleProofPtr
   rawCallFinishSuffixPtr
 
 Theorem raw_call_emit_checked_full:

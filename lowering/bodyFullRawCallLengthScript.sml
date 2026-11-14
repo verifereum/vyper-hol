@@ -1,7 +1,7 @@
 (* The compiled length word is stored at one endpoint for every dead mask. *)
 Theory bodyFullRawCallLength
 Ancestors
-  rawCallBufferPtr rawCallShapePtr rawCallFinishCodePtr fragGasCopyLoop
+  rawCallBufferPtr rawCallShapePtr  fragGasCopyLoop
   instSeqComposePtr fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrDead
   fragExecMem fragExecPtr fragExec instIdxIndep
   ptrSafetyTransport ptrDiscipline bodyPtrDefs ghostPcTransportPtr
