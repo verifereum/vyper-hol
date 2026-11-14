@@ -3,9 +3,8 @@
  * A piece of bodyPtrExprCases: the pointer twin of S1's case
  * (bodySimExprCases), over bodyPtrPreds's predicates.
  *
- * As S1's body_subscript_case: a base the lowering lays out at another
- * type than its own (a widening internal call) is the residual
- * bodyPtrSubscriptWidenedResidual.  The rest by place_type of the base, as
+ * As S1's body_subscript_case, the subscript precondition fixes the base's
+ * result type to its annotation. Dispatch by place_type of the base, as
  * S1's compile_subscript_case: a mapping (bodyPtrSubscriptSeamMap, over the
  * base's mapping judgment from body_expr_ptr_ok's mapping clause), a tuple
  * (bodyPtrSubscriptSeamTuple), an array whose index frames its base in
@@ -24,7 +23,7 @@ Ancestors
   bodyPtrSubscriptSeamTuple bodyPtrSubscriptSeamArrayMemory
   bodyPtrSubscriptSeamArrayCode bodyPtrSubscriptSeamMap
   bodyPtrSubscriptArrayPlaceResidual bodyPtrSubscriptMapMap
-  bodyPtrSubscriptWidenedResidual
+  bodySimExprCases
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
@@ -88,14 +87,8 @@ Proof
         old_ih_tac (metis_tac[expr_map_pre_not_read]) >>
       metis_tac[subscript_map_map_ptr]) >>
   rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
-  >- (qspecl_then [`cx`,`v8`,`e1`,`e2`] mp_tac
-        body_subscript_widened_call_base_ptr >>
-      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-      disch_then (qspecl_then [`d`,`PG`,`tops`,`ctx`,`func`,`cenv`,`env`,
-                               `ty`,`es`] mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      disch_then ACCEPT_TAC) >>
+  `post_value_type cenv e1 = expr_type e1` by
+    metis_tac[expr_body_pre_subscript_base_type] >>
   `expr_vv_sim_ptr d ctx PG func cenv cx ty (Subscript v8 e1 e2) es`
     suffices_by (strip_tac >> asm_rewrite_tac[] >>
                  irule expr_sim_ptr_of_vv >> conj_tac

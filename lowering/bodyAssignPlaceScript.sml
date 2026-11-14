@@ -88,7 +88,7 @@ Theorem body_target_idx_case[local]:
 Proof
   Induct using base_assignment_target_induct >>
   simp[body_base_target_ok_def, target_idx_case_def] >> rpt strip_tac >>
-  gvs[expr_sim_case_def, expr_vv_case_def, body_expr_ok_def] >> metis_tac[]
+  gvs[expr_sim_case_def, expr_vv_case_def, Once body_expr_ok_def] >> metis_tac[]
 QED
 
 Theorem body_target_case[local]:
@@ -322,7 +322,7 @@ Proof
   metis_tac[supported_legacy_root_decl]
 QED
 
-Theorem body_assign_immutable_target[local]:
+Theorem body_assign_immutable_target:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
   immutable_root cx t ==>
@@ -344,7 +344,7 @@ Proof
   fs[immutable_root_def] >> metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE]
 QED
 
-Theorem body_immutable_target_type[local]:
+Theorem body_immutable_target_type:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   supported_immutable_type tops nsid = SOME ity /\
   type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) ==>

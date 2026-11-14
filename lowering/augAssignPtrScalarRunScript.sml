@@ -126,7 +126,8 @@ Theorem scalar_seq_success_clean:
 Proof
   Induct >- simp[inst_seq_ptr_def, run_inst_seq_def] >>
   rpt gen_tac >> simp[scalar_code_def, inst_seq_ptr_def, run_inst_seq_def] >>
-  strip_tac >> Cases_on `step_inst_base h s` >> gvs[] >>
+  strip_tac >> Cases_on `step_inst_base h s` >>
+  qpat_x_assum `!A G tn s H tm t. _` (fn ih => gvs[] >> assume_tac ih) >>
   rename1 `step_inst_base h s = OK u` >>
   `!w. w IN A UNION set h.inst_outputs ==>
     op_prov (step_prov PG G h u) (Var w) = NONE /\

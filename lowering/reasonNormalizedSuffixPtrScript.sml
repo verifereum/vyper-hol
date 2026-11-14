@@ -130,7 +130,14 @@ Resume reason_normalized_finish_resources_ptr[finish]:
      rpt strip_tac >> gvs[]) >>
   `!p. MEM p [outer;payload;tuple;slot] ==> not_fresh_at sb p` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sc` >>
-     simp[] >> gvs[] >> metis_tac[]) >>
+     simp[] >>
+     qpat_assum `!p. MEM p [src;tuple;payload;outer] ==> not_fresh_at sm p` mp_tac >>
+     qpat_assum `!y. not_fresh_at sm y ==> not_fresh_at sc y` mp_tac >>
+     qpat_assum `not_fresh_at sc (STRING _ _)` mp_tac >>
+     qpat_assum `buf.buf_operand = Var slot` mp_tac >>
+     qpat_assum `buf.buf_operand = Var (STRING _ _)` mp_tac >>
+     qpat_assum `MEM p [outer;payload;tuple;slot]` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[MEM] >> metis_tac[]) >>
   qexistsl_tac [`Gf'`, `tnf'`, `sf'`, `a'`] >> simp[] >>
   qpat_x_assum `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf)` mp_tac >>
   qpat_x_assum `gas_path_ptr D 0 ctx func PG Gf tnf sf 0 Gf' tnf' (OK sf')` mp_tac >>
@@ -174,8 +181,9 @@ Theorem reason_normalized_suffix_path_ptr:
   w2n outer_addr+(64+m) < dimword (:256) ==>
   ?Gf tnf sf. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (Abort Revert_abort sf)
 Proof
-  strip_tac >> drule_all reason_normalized_finish_resources_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  strip_tac >> mp_tac (SPEC_ALL reason_normalized_finish_resources_ptr) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then strip_assume_tac >>
   `32 + 32 * word_size (LENGTH str) <= m` by gvs[] >>
   drule_all reason_finish_capacity_bounds >> strip_tac >>
   `mload (w2n (n2w b : bytes32)) sf = n2w (LENGTH str) /\

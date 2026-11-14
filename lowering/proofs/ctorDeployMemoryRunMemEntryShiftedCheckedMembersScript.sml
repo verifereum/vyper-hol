@@ -185,8 +185,12 @@ Proof
   `fn_has_code middle end_st func` by
     (mp_tac (Q.SPECL [`middle`, `end_st`, `final`, `func`] fn_has_code_split) >> simp[]) >>
   `frag_ids middle end_st SUBSET ids` by
-    (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
-     gvs[frag_ids_def, SUBSET_DEF, IN_COUNT, IN_DIFF] >> decide_tac) >>
+    (qpat_assum `frag_ids st final SUBSET ids` mp_tac >>
+     qpat_assum `st.cs_next_id < middle.cs_next_id` mp_tac >>
+     qpat_assum `end_st.cs_next_id <= final.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[frag_ids_def, SUBSET_DEF, IN_COUNT, IN_DIFF] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `alloca_inv prepared /\ alloca_frontier_inv_from r ctx func site prepared /\
    ctor_actual_scratch func ids D N prepared /\ D+N <= prepared.vs_alloca_next` by
     (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
@@ -360,7 +364,11 @@ Resume ctor_checked_members_run_cons_from[tail_run]:
   disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
   (impl_tac >- (asm_x "tail" kall_tac >>
-    asm_simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >> metis_tac[])) >>
+    asm_simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >> conj_tac
+    >- (qpat_assum `hi = Lit 0w \/ _` mp_tac >>
+        qpat_assum `!h. eval_operand hi initial = _ ==> _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+    first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   asm_x "tail" kall_tac >> suspend "compose"
 QED

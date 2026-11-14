@@ -21,9 +21,7 @@ Ancestors
 (* The memory half of the pointer twin of S1's
    compile_subscript_array_framed_base_case (exprSimSubscriptArray): a
    static array with no dynamic array inside it, lowered to a memory
-   pointer and laid out at its own type (an internal call whose site widens
-   the callee's return type is the residual
-   bodyPtrSubscriptWidenedResidual), whose source result is no storage
+   pointer and laid out at its own type, whose source result is no storage
    place, and whose index leaves the source locals and immutables as they
    were.  compile_subscript lowers the base, then the index (lower_value at
    ty), then compile_array_subscript with is_dynamic = F: the bounds check

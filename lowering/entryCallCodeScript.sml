@@ -197,7 +197,8 @@ Proof
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_multi_op)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_void)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_store_multi_results) >>
-  gvs[] >> metis_tac[]
+  qpat_x_assum `!flags tys st x st'. _` drule_all >> strip_tac >>
+  metis_tac[]
 QED
 
 Theorem entry_code_ext_call_args:
