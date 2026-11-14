@@ -2248,6 +2248,79 @@ Finalise intcall_extcall_expr_step
    Inferring allocation bounds inside its universal continuation loses that
    path.  The global expression root and a copy of its pure induction
    would inherit unrelated aggregate/subscript admission tags. *)
+Theorem intcall_send_word_cps[local]:
+  intcall_forced_producer fp e /\ intcall_frame_ok fp /\
+  body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  expr_body_pre ce fp.jc_cx env e es /\ is_word_type (expr_type e) /\
+  supported_expr fp.jc_tops e /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+  lower_value compile_expr ce (expr_type e) e sa = (op,sb) /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  gas_admissible (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+    expr_vv_res_ok es /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!v ee u.
+    expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u /\
+    intcall_expr_cont fp ce env es sa s ee sb u /\ ee.gas_obs = [] /\
+    (?used. !tail. bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+      (es with gas_obs := used ++ tail) = (INL v,ee with gas_obs := tail)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (kont v) (ee,u) Q (\r ee z. expr_exit r z)) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+    (es,s) Q (\r ee z. expr_exit r z)
+Proof
+  strip_tac >>
+  `gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
+     expr_res_ok es` by metis_tac[slice_gas_admissible_expr_head] >>
+  `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) (es,s)
+    (\res ee u. ?v. res = INL v /\
+      expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u /\
+      intcall_expr_cont fp ce env es sa s ee sb u)
+    (\res ee r. ?ex. res = INR ex /\ expr_exit (INR ex) r)` by
+    (fs[intcall_forced_producer_def] >>
+     first_x_assum (drule_all_then mp_tac) >>
+     strip_tac >> irule slice_gas_outcome_conseq >>
+     goal_assum (drule_at Any) >>
+     qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+     qpat_x_assum `!v ee u. _` kall_tac >>
+     rpt conj_tac >> rpt gen_tac >> Cases_on `res` >>
+     simp[exprSimDefsTheory.expr_exit_def] >> strip_tac >>
+     gvs[loweringPostsTheory.expr_post_def, intcall_expr_cont_def,
+         intcall_expr_res_def] >>
+     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  irule slice_gas_outcome_bind_value >>
+  qexists `\v ee u. expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u /\
+    intcall_expr_cont fp ce env es sa s ee sb u` >>
+  reverse conj_tac
+  >- (BETA_TAC >> irule slice_gas_outcome_conseq >>
+      goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> fs[] >>
+  qexists `gas_explicit marks s.vs_gas_readings` >>
+  gvs[gasSummaryTheory.gas_marked_exec_def]
+QED
+
+(* Assembly opening retained for C1.2.3.
+Theorem intcall_send_expr_step[local]:
+  (!e'. expr_size e' < expr_size (Call a (Send flag) args NONE) ==>
+        intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
+        intcall_map_producer fp e') ==>
+  intcall_expr_producer fp (Call a (Send flag) args NONE)
+Proof
+  strip_tac >> rewrite_tac[intcall_expr_producer_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule exprSimSendTheory.send_pre_types >> strip_tac >>
+  drule exprSimSendTheory.compile_expr_send_stack >> strip_tac >> gvs[] >>
+  drule_all exprSimSendTheory.compile_expr_send >> strip_tac >>
+  FAIL_TAC "send_operand_entry"
+QED
+*)
+
 Theorem intcall_extcall_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
