@@ -18,7 +18,7 @@ Ancestors
   (* analysis roll-up *)
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
-  vyperLoweringHol
+  vyperLoweringHol e2eOutcomesDefs
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
   (* passes: FMP lowering composition, memory merging *)
