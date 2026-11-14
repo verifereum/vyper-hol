@@ -108,24 +108,29 @@ Proof
 QED
 
 Theorem aggregate_outcome_map[local]:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
-  (!res ee t. Q res ee t ==> Q' (SUM_MAP f I res) ee t) /\
-  (!res ee r. R res ee r ==> R' (SUM_MAP f I res) ee r) ==>
-  gas_outcome memory tops (ctx,func) (bind source (return o f)) (es,s) Q' R'
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  (!H res ee t. Q H res ee t ==> Q' H (SUM_MAP f I res) ee t) /\
+  (!H res ee r. R H res ee r ==> R' H (SUM_MAP f I res) ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 (bind source (return o f)) (es,s)
+    Q' R'
 Proof
   strip_tac >>
   `ignore_bind (bind source (return o f)) (return ()) =
    ignore_bind source (return ())` by
     (simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >>
      gen_tac >> Cases_on `source x` >> Cases_on `q` >> simp[]) >>
+  `!st. SND (bind source (return o f) st) = SND (source st)` by
+    (gen_tac >> simp[bind_def, return_def] >>
+     Cases_on `source st` >> Cases_on `q` >> simp[]) >>
   gvs[gas_outcome_def] >> qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> fs[gasStorageTheory.gas_bad_storage_at_def])
+  >- (disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
       qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >>
       simp[bind_def, return_def] >>
       Cases_on `res` >> gvs[] >> metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem aggregate_struct_action[local]:
@@ -167,19 +172,114 @@ Proof
 QED
 
 Theorem aggregate_outcome_source_run[local]:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R ==>
-  gas_outcome memory tops (ctx,func) source (es,s)
-    (\res ee t. Q res ee t /\
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s)
+    (\H res ee t. Q H res ee t /\
        ?gs. source (es with gas_obs := gs) = (res,ee)) R
 Proof
   simp[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       first_x_assum (qspec_then `[]` assume_tac) >>
       gvs[] >> metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+(* buffer_alloc_counted for every valid horizon: the ALLOCA run is one
+   function of the start state, so its endpoint is the same for each H. *)
+Theorem buffer_alloc_counted_horizons[local]:
+  compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  sz < dimword (:256) /\ valid_horizon cx st0 H0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?inst x t b. buf.buf_operand = Var x /\ MEM inst (fn_insts func) /\
+    inst.inst_id = sa.cs_next_id /\ inst.inst_outputs = [x] /\
+    inst.inst_id < sm.cs_next_id /\ not_fresh_at sm x /\
+    local_ptrs_reserved ce sm /\ (!scopes. not_local_ptr ce scopes x) /\
+    gas_marked_path F ctx func s0 0 (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es t) /\
+    lookup_var x t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
+    b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) /\
+    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+      FLOOKUP t.vs_allocas aid = SOME a) /\
+    (!aid p n. aid < sa.cs_next_id /\
+      FLOOKUP s0.vs_allocas aid = SOME (p,n) ==>
+      regions_disjoint b sz p n) /\
+    (!name p n. local_region ce es.scopes t name p n ==>
+      regions_disjoint b sz p n) /\
+    (!name p n. local_region ce es.scopes t name p n <=>
+      local_region ce es.scopes s0 name p n)
+Proof
+  strip_tac >>
+  `stmt_state_rel H0 ctx func ce cx es s0` by simp[] >>
+  drule_all buffer_alloc_provenance >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all (Q.SPEC `H0` literal_alloc_buffer_run) >> strip_tac >>
+  rename1 `run_inst_seq _ s0 = OK u` >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es u` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func ce cx es s0` by
+       (qpat_x_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s0` irule >>
+        first_assum ACCEPT_TAC) >>
+     mp_tac (Q.SPECL [`H`,`func`,`ce`,`cx`,`es`,`sa`,`sm`,`buf`,`sz`,`s0`,`ctx`]
+       (INST_TYPE [alpha |-> ``:256``] literal_alloc_buffer_run)) >>
+     (impl_tac >- simp[]) >> strip_tac >> gvs[]) >>
+  `emitted_insts sa sm =
+     [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)]] /\
+   sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def,
+          compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `?bb. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sm)
+          (DROP s0.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[listTheory.DROP_APPEND]) >>
+  `gas_path ctx func s0 0
+     (OK (u with vs_inst_idx := LENGTH sm.cs_current_insts))` by
+    (drule_all tuple_run_inst_seq_gas_path >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb` by
+    (qmatch_asmsub_abbrev_tac `emitted_insts sa sm = [ai]` >>
+     `step_inst 0 ctx ai s0 = OK u` by
+       (fs[run_inst_seq_def, venomExecSemanticsTheory.step_inst_non_invoke,
+           Abbr `ai`, venomInstTheory.mk_inst_def, AllCaseEqs()]) >>
+     `~is_terminator ai.inst_opcode` by
+       simp[Abbr `ai`, venomInstTheory.mk_inst_def,
+            venomInstTheory.is_terminator_def] >>
+     drule_all venomInstProofsTheory.step_preserves_control_flow >>
+     drule_all venomInstProofsTheory.step_preserves_halted >> simp[]) >>
+  `!name p n. local_region ce es.scopes u name p n <=>
+               local_region ce es.scopes s0 name p n` by
+    (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+     qexists_tac `sa` >> simp[]) >>
+  qexistsl_tac [`inst`, `x`, `u with vs_inst_idx := LENGTH sm.cs_current_insts`,
+                `w2n w`] >>
+  gvs[gas_marked_path_def, stmt_state_rel_inst_idx,
+      venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def, local_region_def,
+      wordsTheory.n2w_w2n] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!aid b len. aid < _ /\ _ ==> _` irule >>
+      qexists_tac `aid` >> simp[]) >>
+  rpt gen_tac >>
+  qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _`
+    (qspecl_then [`name`, `p'`, `n`] mp_tac) >> simp[]
 QED
 
 Theorem compile_struct_lit_vv_case:
@@ -191,6 +291,13 @@ Theorem compile_struct_lit_vv_case:
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   rw[expr_vv_case_def, expr_vv_sim_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
@@ -211,7 +318,11 @@ Proof
     (gvs[expr_body_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all buffer_alloc_counted >> strip_tac >>
+  drule buffer_alloc_counted_horizons >>
+  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
+  disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
@@ -220,10 +331,11 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
-  disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `nocalls`, `st0`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
-    irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
+    `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
+    irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep) >>
+    goal_assum (drule_at (Pat `stmt_state_rel _ ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -240,8 +352,8 @@ Proof
   `eval_expr cx (StructLit ann nsid fields) (es with gas_obs := gs) =
     (INL (Value (StructV (ZIP (MAP FST fields,vs)))),ee)` by
     (drule aggregate_eval_struct >> simp[]) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
   rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env (StructLit ann nsid fields) (es with gas_obs := gs)` by simp[] >>
   `ann = StructT nsid` by
@@ -264,7 +376,9 @@ Proof
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
-    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+    (rpt strip_tac >>
+     `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
+     drule_all aggregate_buffer_clearance >> simp[]) >>
   `~expr_has_effect (StructLit (StructT nsid) nsid fields) ==>
      pure_frame cenv func es sa s0 s` by
     (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
@@ -318,6 +432,13 @@ QED
 
 Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
   gvs[exprLoweringTheory.tuple_literal_types_def, listTheory.MAP_MAP_o] >>
@@ -343,15 +464,20 @@ Resume compile_make_array_vv_case[tuple]:
     fs[wordsTheory.dimword_def] >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
+  drule buffer_alloc_counted_horizons >>
+  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
+  disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >> gvs[] >>
   drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_sim >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
-  disch_then (qspecl_then [`ctx`,`nocalls`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`ctx`,`nocalls`,`st0`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
-    irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
+    `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
+    irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep) >>
+    goal_assum (drule_at (Pat `stmt_state_rel _ ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -367,8 +493,8 @@ Resume compile_make_array_vv_case[tuple]:
   `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
     (drule_all aggregate_eval_make_tuple >> simp[]) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
   rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env
     (Builtin (TupleT tys) (MakeArray NONE bnd) args)
@@ -384,7 +510,9 @@ Resume compile_make_array_vv_case[tuple]:
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
-    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+    (rpt strip_tac >>
+     `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
+     drule_all aggregate_buffer_clearance >> simp[]) >>
   `~expr_has_effect (Builtin (TupleT tys) (MakeArray NONE bnd) args) ==>
      pure_frame cenv func es sa s0 s` by
     (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
@@ -428,6 +556,13 @@ QED
 
 Resume compile_make_array_vv_case[array]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
@@ -449,18 +584,23 @@ Resume compile_make_array_vv_case[array]:
     (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
+  drule buffer_alloc_counted_horizons >>
+  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
+  disch_then (qspecl_then [`s0`,`func`,`ctx`,`cenv`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >> gvs[] >>
   drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[wordsTheory.dimword_def] >>
-  disch_then (qspecl_then [`env`,`es`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env`,`es`,`ctx`,`nocalls`,`st0`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
-      (irule aggregate_alloca_immutable_sep >>
-       goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
+      (`stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
+       irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep) >>
+       goal_assum (drule_at (Pat `stmt_state_rel _ ctx _ _ _ _ _`)) >>
        qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
        goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
        simp[venomInstTheory.mk_inst_def] >>
@@ -481,8 +621,8 @@ Resume compile_make_array_vv_case[array]:
   `eval_expr cx (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)
     (es with gas_obs := gs) = (INL (Value (ArrayV (make_array_value tv bnd vs))),ee)` by
     (simp[bind_def, return_def]) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
   rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env
     (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)
@@ -501,7 +641,9 @@ Resume compile_make_array_vv_case[array]:
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_bytes cenv (ArrayT x bnd) <= lb \/ lb + len <= b` by
-    (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+    (rpt strip_tac >>
+     `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
+     drule_all aggregate_buffer_clearance >> simp[]) >>
   `~expr_has_effect (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args) ==>
      pure_frame cenv func es sa s0 s` by
     (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
@@ -696,15 +838,22 @@ Proof
     gvs[expr_sim_pre_def, well_typed_expr_def, type_builtin_result_ok_def] >>
   gvs[] >>
   qexistsl_tac [`[]`, `default_value tv`, `es`, `s0`] >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s0` by simp[] >>
+     drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >> simp[NoAsms]) >>
   gvs[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
       lower_value_def, compile_expr_type_builtin_dispatch, comp_bind_def] >>
   gvs[Once compile_expr_def, unwrap_value_def, comp_return_def] >>
-  conj_tac >- (irule (cj 1 gas_path_rules) >> simp[]) >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+  rpt strip_tac >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+   storage_well_formed_on cx es (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
+  simp[cj 1 gas_path_rules, expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   metis_tac[typed_val_to_w256_default_word]
 QED
@@ -847,6 +996,13 @@ Theorem compile_empty_memory_sim:
     ~is_word_type t ==> expr_vv_ok cenv (TypeBuiltin ann Empty t args)
 Proof
   rw[expr_vv_ok_def, expr_vv_sim_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   drule empty_eval_all_tails >> strip_tac >> gvs[] >>
   `ann = t` by
     gvs[expr_sim_pre_def, well_typed_expr_def, type_builtin_result_ok_def] >>
@@ -858,22 +1014,31 @@ Proof
     (gvs[expr_sim_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all empty_type_buffer_size >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by simp[] >>
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s0` by simp[] >>
+     drule_all compile_builtin_empty_complex_run >> strip_tac >> gvs[]) >>
   drule_all empty_complex_gas_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
-     (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`t.vs_gas_readings`,
-       `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[NoAsms]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (default_value tv))`, `es`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
-  simp[] >>
+  simp[] >> disj1_tac >> rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H)` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
+     (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (`stmt_state_rel H ctx func cenv cx es t` by simp[] >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`t.vs_gas_readings`,
+       `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[NoAsms]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   drule_all empty_type_default_memory >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es t` by simp[] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `TypeBuiltin ann Empty ann []`,
              `p` |-> `base_ptr buf`] (SPEC_ALL buffer_memory_vv_post))) >>
@@ -890,6 +1055,11 @@ Proof
       first_x_assum irule >> decide_tac) >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
   simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+   storage_well_formed_on cx es (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
+  conj_tac >- simp[] >>
   rpt strip_tac >>
   `local_region cenv es.scopes s0 n lb lsz` by
     (irule exprSimPropsTheory.local_region_frame >> conj_tac
@@ -981,8 +1151,11 @@ Proof
    t = BaseT DecimalT` by
     (Cases_on `t` >> gvs[] >> rename1 `BaseT bt` >> Cases_on `bt` >> gvs[]) >>
   qexistsl_tac [`[]`, `v`, `es`, `s0`] >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s0` by simp[] >>
+     drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >> simp[NoAsms]) >>
   gvs[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def] >>
@@ -991,8 +1164,12 @@ Proof
   gvs[lower_value_def, compile_expr_type_builtin_dispatch, comp_bind_def] >>
   gvs[Once compile_expr_def, unwrap_value_def, comp_return_def,
       type_bounds_def, type_bits_def, is_signed_type_def] >>
-  (conj_tac >- (irule (cj 1 gas_path_rules) >> simp[])) >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+  rpt strip_tac >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+   storage_well_formed_on cx es (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
+  simp[cj 1 gas_path_rules, expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
        typed_val_to_w256_def, val_to_w256_def] >>
   simp[integerTheory.INT_SUB] >>
