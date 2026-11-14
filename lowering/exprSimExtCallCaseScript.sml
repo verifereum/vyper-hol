@@ -1224,7 +1224,40 @@ Theorem extcall_return_values:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `ret_type = NoneT`
+  >- (drule extcall_return_type_bounds >> strip_tac >> gvs[] >>
+      `~has_default /\ default_opt = NONE` by
+        (fs[extcall_returned_def, extcall_default_ready_def] >>
+         Cases_on `default_opt` >> gvs[]) >>
+      gnvs[LET_THM, comp_return_def] >>
+      fs[extcall_returned_def] >>
+      `!bs. evaluate_abi_decode_return (get_tenv cx) NoneT bs = INL NoneV` by
+        (simp[vyperABITheory.evaluate_abi_decode_return_def,
+              vyperABITheory.evaluate_abi_decode_returndata_def] >> EVAL_TAC >>
+         simp[wordsTheory.ONE_LT_dimword, wordsTheory.ZERO_LT_dimword]) >>
+      `gas_marked_path F ctx func t 0 (OK t)` by
+        simp[fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
+      `ee with gas_obs := [] = ee` by
+        (qpat_x_assum `ee.gas_obs = []` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[evaluation_state_component_equality]) >>
+      qexists_tac `[]` >>
+      simp[gas_summary_at_def, gas_marked_exec_def, lift_sum_runtime_def,
+           bind_def, return_def] >>
+      qexistsl_tac [`INL (Value NoneV)`, `ee`, `OK t`] >> simp[] >>
+      simp[vv_post_def, post_value_type_def, expr_type_def,
+           vv_holds_def, vv_at_def, vyperStateTheory.read_result_def, return_def,
+           expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def,
+           vyperValueTheory.evaluate_type_def, is_word_type_def,
+           valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
+           val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
+      qpat_x_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
+      simp[wb_frame_def] >> metis_tac[]) >>
+  Cases_on `has_default`
+  >- (Cases_on `returnData = []`
+      >- metis_tac[extcall_return_values_default_empty] >>
+      metis_tac[extcall_return_values_default_nonempty]) >>
+  metis_tac[extcall_return_values_no_default]
 QED
 
 Theorem bind_return_left[local]:
