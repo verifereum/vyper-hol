@@ -49,7 +49,7 @@ Proof
   simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
 QED
 
-Theorem log_topics_straight:
+Theorem log_topics_straight[local]:
   !xs sa ops sb. compile_log_topic_ops xs sa = (ops,sb) ==>
   inst_extends sa sb /\ same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)

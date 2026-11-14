@@ -21,7 +21,7 @@ Ancestors
   exprSimAbiEncodeObliviousContext exprSimAbiEncodeObliviousSimulation loweringPosts
   abiEncoderProps fragGasMode exprSimHashBoundary loweringStateRelDefs allocLimits
   stmtSimLogArgs stmtSimLogSuffix valueEncodingDefs freshWrites eventLogSplitProps
-  supportedTypes stmtSimLogSuffixCode logComposeFacts placeMemoryCodeLayout
+  supportedTypes stmtSimLogSuffixCode logComposeFacts placeMemoryCodeLayout logEventCodePtr
 
 Theorem log_declared_suffix_path:
 body_inv tops ctx cenv cx /\
@@ -206,7 +206,7 @@ Resume log_declared_suffix_path[topics_frame]:
      irule (Q.INST [`ctx` |-> `ctx`, `func` |-> `func`, `es` |-> `es`,
        `ee` |-> `es`, `sb` |-> `sm`, `s` |-> `s`] log_frame_placement) >> simp[] >>
      qexistsl_tac [`ctx`, `es`, `func`, `s`, `sm`] >> simp[]) >>
-  drule log_topics_straight >> strip_tac >>
+  drule log_topics_compiler_interval >> strip_tac >>
   `same_blocks sm st /\ st.cs_current_bb = sm.cs_current_bb` by
     fs[inst_extends_def, same_blocks_def] >>
   Cases_on `SND (split_log_ops ops flags) = []`
@@ -1429,7 +1429,8 @@ Resume log_declared_suffix_path[encoder_immutable_frame]:
      qpat_assum `!i q k. FLOOKUP encoded.vs_allocas i = SOME (q,k) /\ _ ==> _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      `venomMemDefs$regions_disjoint (off,type_memory_size tv) (db,outcap)` by
-       metis_tac[log_buffer_clear_of_immutable,venomMemDefsTheory.regions_disjoint_def] >>
+       (drule_all log_buffer_clear_of_immutable >> strip_tac >>
+        simp[venomMemDefsTheory.regions_disjoint_def]) >>
      irule abi_encoder_window_effect_bytes >>
      qexistsl_tac [`window_alloca_sites func (frag_ids s3 s4)`,
        `[(db,LENGTH (enc enc_ty enc_val))]`] >>
