@@ -60,7 +60,8 @@ Resume empty_memory_vv_sim_ptr[run]:
      drule_all compile_builtin_empty_complex_run >> strip_tac >> gvs[]) >>
   `!a n. a+n <= w2n (THE (eval_operand buf.buf_operand t)) \/
     w2n (THE (eval_operand buf.buf_operand t))+type_memory_bytes cenv typ <= a ==>
-    mem_bytes_at a n t.vs_memory = mem_bytes_at a n s0.vs_memory` by simp[] >>
+    mem_bytes_at a n t.vs_memory = mem_bytes_at a n s0.vs_memory` by
+    (simp[] >> metis_tac[]) >>
   `?HG0 th0. inst_seq_ptr (cx_dead H0 cx) 0 ctx func PG G0 tn0
     (emitted_insts sa sb) s0 HG0 th0` by
     (drule_all empty_buffer_framed_certificate >>
