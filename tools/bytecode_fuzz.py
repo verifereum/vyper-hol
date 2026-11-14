@@ -10,7 +10,8 @@ JSON with the native runner (tools/build_native_json_parity.py) and compares.
 Run it with the canonical oracle venv's `vyper` first on PATH (see
 bytecode/README.md). Programs Python Vyper rejects are
 discarded; programs the HOL frontend, check_contract or the compiler rejects
-are coverage gaps, counted separately from divergences. check_contract runs
+are coverage gaps, counted separately from divergences, and so are
+mismatches on programs outside supported_program ("outside"). check_contract runs
 through `holbuild run` on bytecode/native/check_programs.sml,
 after the driver brings vyperCheckContractFrontendLib up to date with
 `holbuild build`. Every program that is not a PASS is kept in the output
@@ -119,7 +120,9 @@ class Program:
         if calls and rng.random() < 0.15:
             fname, argtys, _ = rng.choice(calls)
             return f"self.{fname}({', '.join(self.expr(t, env, depth - 1) for t in argtys)})"
-        if rng.random() < 0.1:
+        # Aggregate ternaries place their branch buffers unlike Vyper
+        # (vyper-hol#933, #936), a held byte-only gap.
+        if ty not in (SARRAY, DARRAY) and rng.random() < 0.1:
             return f"({sub()} if {self.expr('bool', env, depth - 1)} else {sub()})"
         if ty == "uint256" and rng.random() < 0.2:
             arrays = [n for n, t in env.items() if t in (SARRAY, DARRAY)]
@@ -353,8 +356,8 @@ def export(source: Path):
 def classify(line):
     """Map a runner line to (name, category, detail)."""
     tag, rest = line.split(" ", 1)
-    name, _, detail = rest.partition(": ")
-    name = name.split(" ")[0]
+    head, _, detail = rest.partition(": ")
+    name, *fields = head.split(" ")
     if tag == "PASS":
         return name, "pass", ""
     if tag == "REJECT":
@@ -362,7 +365,8 @@ def classify(line):
     if detail == "compiler returned NONE":
         return name, "compiler-gap", detail
     if detail.startswith(("deploy differs", "runtime differs")):
-        return name, "divergence", detail
+        # Outside supported_program the bytes carry no proof obligation.
+        return name, "outside" if "sp=F" in fields else "divergence", detail
     return name, "runner-error", detail
 
 
@@ -483,7 +487,7 @@ def main():
     print(json.dumps({"seed": args.seed, "generated": args.count, **counts}, indent=2))
     for error, n in vyper_errors.most_common(5):
         print(f"vyper-reject x{n}: {error}")
-    for category in ("divergence", "runner-error", "compiler-gap", "frontend-gap", "checker-gap"):
+    for category in ("divergence", "runner-error", "outside", "compiler-gap", "frontend-gap", "checker-gap"):
         details = Counter(d.split(" (")[0] for c, d in verdicts.values() if c == category)
         for detail, n in details.most_common(5):
             print(f"{category} x{n}: {detail[:160]}")
