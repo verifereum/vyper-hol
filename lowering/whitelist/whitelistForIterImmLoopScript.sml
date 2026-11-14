@@ -1115,10 +1115,8 @@ Theorem immutable_array_entry_run:
     FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
     array_caller_frame caller s s2 /\ gas_marked_path F ctx func s 0 (OK s2)
 Proof
-  strip_tac >> (qpat_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _`
-    (mp_then (Pat `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _`) mp_tac immutable_array_entry_run_framed) >>
-  disch_then (fn th => drule_all th)) >>
-  strip_tac >> qexists_tac `s2` >> simp[]
+  disch_then (strip_assume_tac o MATCH_MP immutable_array_entry_run_framed) >>
+  qexists_tac `s2` >> simp[]
 QED
 
 (* The length operand is a literal for Fixed and an immutable load result for
