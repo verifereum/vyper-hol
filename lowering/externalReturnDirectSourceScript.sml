@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem typed_expression_live_window:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   expr_val_at ce cx ty sa sb es v op s /\ expr_val_rel cx ty v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   value_has_type tv v /\ 0 < val_footprint tv v /\
@@ -68,7 +68,7 @@ Proof
 QED
 
 Theorem nominal_return_expression_window:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   expr_val_at ce cx ty sa sb es v op s /\ expr_val_rel cx ty v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   value_has_type tv v /\ 0 < val_footprint tv v /\
@@ -182,7 +182,7 @@ QED
 Finalise return_bytes_typed_singleton_window
 
 Theorem bytes_return_expression_window:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   expr_val_at ce cx ty sa sb es v op s /\ expr_val_rel cx ty v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   0 < val_footprint tv v /\
@@ -217,7 +217,7 @@ Proof
 QED
 
 Theorem direct_return_expression_window:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   expr_val_at ce cx ty sa sb es v op s /\ expr_val_rel cx ty v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   0 < val_footprint tv v /\ ~is_word_type ret /\
