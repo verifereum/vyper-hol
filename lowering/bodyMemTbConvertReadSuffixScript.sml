@@ -1,7 +1,7 @@
 (* A bounded bytestring read followed by memory-free scalar instructions. *)
 Theory bodyMemTbConvertReadSuffix
 Ancestors
-  bodyMemTbConvertLoadMemory bodyUnopFragMemory freshWrites
+  bodyMemTbConvertLoadMemory fragGasSeqAbort freshWrites
   exprSimConvertFromBytes exprLowering exprLoweringProps emitHelperProps
   list rich_list compileEnv emitHelper fragExecMem vyperTypeSystem
   fragGasPathMem fragGasMode fragGasSeqMem fragExec venomInst venomState

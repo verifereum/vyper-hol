@@ -5,7 +5,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarChecks bodyPtrTypeBuiltinsScalarArithmetic
   fragGasCopyLoop fragGasSeqPtr ptrSafetyTransport ptrSafeRun exprLowering exprLoweringProps
   compileEnv ptrDiscipline venomExecSemantics venomState venomInst finite_map list
-  freshWrites exprSimConvert convertScalarProps bodyUnopFragMemory
+  freshWrites exprSimConvert convertScalarProps
   fragGasOriginPtr fragGasOrigin memSafeRun gasEvents gasCount fragGasPathPtr fragExec
   codegenRel venomExecProofs venomInstProofs fragExecMem instIdxIndep fragGasFresh
 

@@ -33,7 +33,7 @@ Theory freshWrites
 Ancestors
   exprSimProps
   list rich_list finite_map pred_set
-  fragExec varsExt
+  fragExec fragExecMem instMemFrontier memSafeRun varsExt
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState
 
@@ -406,4 +406,14 @@ Proof
   disch_then drule >> strip_tac >> asm_rewrite_tac[] >>
   conj_tac >- (qexists_tac `A` >> asm_rewrite_tac[]) >>
   simp[rich_listTheory.IS_PREFIX_APPEND3]
+QED
+
+(* Fresh-write opcodes touch no memory and read no data section. *)
+Theorem writes_fresh_mem_ok:
+  !sa code s. writes_fresh sa code ==> run_inst_seq_mem_ok code s
+Proof
+  rpt strip_tac >> irule run_inst_seq_mem_ok_every >>
+  fs[writes_fresh_def, EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> rw[fresh_write_op_def] >>
+  gvs[below_frontier_no_ranges, inst_dload_in_section_other]
 QED
