@@ -581,6 +581,8 @@ Theorem return_default_codesize_joint:
     op_taint tn1 out = {}
 Proof
   strip_tac >>
+  drule_all extCallCodeCheckTheory.extcall_extcodesize_exact_edge >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
   qabbrev_tac `x = STRING #"%" (toString a.cs_next_var)` >>
   qabbrev_tac `cw:bytes32 = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)` >>
   `out = Var x /\ b.cs_current_bb = a.cs_current_bb /\
@@ -596,43 +598,30 @@ Proof
     finite_mapTheory.FLOOKUP_UPDATE, op_taint_def]
 QED
 Resume return_default_codesize_joint[path]:
-  gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
-  conj_tac >- simp[] >>
-  qexistsl_tac [`[mk_inst a.cs_next_id EXTCODESIZE [addr] [x]]`, `a`] >>
-  simp[mk_inst_def, is_terminator_def] >>
-  conj_tac >- (simp[run_inst_seq_mem_ok_def,
-    unitTransformDefsTheory.inst_mem_below_frontier_def,
-    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
-    source_memory_read_ranges_def, source_memory_write_ranges_def,
-    run_inst_seq_def] >> simp[GSYM mk_inst_def]) >>
-  simp[run_inst_seq_def, GSYM mk_inst_def, inst_seq_ptr_def] >>
-  conj_tac >- suspend "ptr" >>
+  gen_tac >>
+  `LENGTH b.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  `out' = x` by gvs[] >>
+  qpat_x_assum `!D lo. _` (qspecl_then [`D`, `lo`] mp_tac) >>
+  simp[GSYM mk_inst_def, Abbr `cw`] >>
   simp[step_prov_def, out_prov_def, set_prov_def,
     step_taint_def, out_taint_def, set_var_taint_def, mem_taint_def,
     new_site_bytes_def, step_writes_def, written_taint_def, adopt_reset_def,
     store_taint_def, imm_taint_def, range_bytes_def, mk_inst_def,
     finite_mapTheory.FLOOKUP_DEF] >>
-  conj_tac >- suspend "ptr_record" >>
-  simp[update_var_def, source_memory_write_ranges_def, pred_setTheory.EXTENSION] >>
+  simp[update_var_def, source_memory_write_ranges_def] >>
   `({i | ?aid b sz. aid NOTIN FDOM s.vs_allocas /\
       (aid IN FDOM s.vs_allocas /\ s.vs_allocas ' aid = (b,sz)) /\
       b <= i /\ i < b + sz}:num set) = {}` by
     (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  simp[taint_component_equality]
-QED
-Resume return_default_codesize_joint[ptr_record]:
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
-    source_memory_read_ranges_def, source_memory_write_ranges_def,
-    mk_inst_def, GSYM op_taint_def] >>
-  rpt strip_tac >> gvs[GSYM mk_inst_def, step_inst_non_invoke,
-    update_var_def, allocas_from_def]
-QED
-Resume return_default_codesize_joint[ptr]:
-  simp[run_inst_seq_mem_ok_def,
-    unitTransformDefsTheory.inst_mem_below_frontier_def,
-    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
-    source_memory_read_ranges_def, source_memory_write_ranges_def,
-    run_inst_seq_def] >> simp[GSYM mk_inst_def]
+  simp[GSYM taint_component_equality] >> strip_tac >>
+  qpat_x_assum `gas_origin_ptr_edge _ _ _ _`
+    (mp_then Any mp_tac (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)) >>
+  simp[] >> disch_then irule >>
+  `<|t_mem := tn.t_mem; t_var := tn.t_var |+ (x,{});
+      t_stor := tn.t_stor; t_trans := tn.t_trans; t_imm := tn.t_imm|> =
+      (tn with t_var := tn.t_var |+ (x,{}))` by simp[taint_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]
 QED
 Finalise return_default_codesize_joint
 
