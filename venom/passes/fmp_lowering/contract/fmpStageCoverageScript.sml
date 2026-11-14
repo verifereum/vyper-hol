@@ -82,10 +82,12 @@ Proof
   metis_tac[fmp_stage_actual_witness, fmp_stage_lowered_entry_label]
 QED
 
-Theorem fmp_lowering_stage_lowered_mem:
+Theorem fmp_lowering_stage_lowered_mem_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
-  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' /\
   o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
   fmp_variant_room (SOME fmp) C' vs' /\ max_live_eom C = SOME eom ==>
   mem_inv (lowered_mem_fact eom) C' vs'
@@ -102,4 +104,15 @@ Proof
   `active_inst fn inst s` by metis_tac[scfg_frame_reachable_active] >>
   `fmp_cov D C C' vs vs' fmp eom stk fn s` by metis_tac[fmp_stage_coverage] >>
   metis_tac[fmp_cov_mem]
+QED
+
+Theorem fmp_lowering_stage_lowered_mem:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs' /\
+  o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+  fmp_variant_room (SOME fmp) C' vs' /\ max_live_eom C = SOME eom ==>
+  mem_inv (lowered_mem_fact eom) C' vs'
+Proof
+  simp[o1_run_state_ok_def] >> metis_tac[fmp_lowering_stage_lowered_mem_static]
 QED

@@ -34,6 +34,7 @@ Ancestors
   dftGasToListReachBoundary ctxLookupAgreeHelpers ptrDiscipline
   contextCodegenRel passSimulationDefs venomExecProofs venomExecSemantics
   unitTransformDefs venomState venomInst venomWf list
+  o1RequestContract
 
 (* The step lemmas name the relation's fmp0 and raw0 by equations; unwind
    them so drule_all matches the relation as the runner states it. *)
@@ -318,7 +319,10 @@ Proof
       qpat_x_assum `fmp_stage_result _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       Cases_on `run_blocks (SUC k) C' callee' cs'` >>
       simp[fmp_stage_result_def, dead_result_rel_def] >> strip_tac >>
-      simp[Once step_inst_def, dead_result_rel_def]) >>
+      simp[Once step_inst_def, dead_result_rel_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `step_inst (SUC k) C' inv' t = Abort _ _` mp_tac >>
+      simp[Once step_inst_def] >> strip_tac >> gvs[]) >>
   rpt strip_tac >>
   `~vs.vs_halted` by metis_tac[fmp_stage_ctx_live] >>
   `~s1.vs_halted` by metis_tac[fmp_frame_reachable_not_halted] >>
@@ -381,7 +385,11 @@ QED
 Theorem fmp_runner_entry[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   terminates (run_context fuel C vs) ==>
-  dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs')
+  dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs') /\
+  (!a se a' te.
+     run_context fuel C vs = Abort a se /\
+     run_context fuel C' vs' = Abort a' te ==>
+     LIST_REL (request_agree_except D) se.vs_requests te.vs_requests)
 Proof
   strip_tac >>
   `?name. C.ctx_entry = SOME name` by
@@ -442,10 +450,12 @@ Proof
   gvs[entry_fn_no_return_def, EVERY_MEM] >> res_tac >> gvs[]
 QED
 
-Theorem fmp_lowering_stage_sim:
+Theorem fmp_lowering_stage_sim_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
-  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' /\
   o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
   fmp_variant_room (SOME fmp) C' vs' ==>
   ctx_sim_fuel I D C C'
@@ -455,7 +465,47 @@ Proof
   `?eom. max_live_eom C = SOME eom` by
     (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
      simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
-  irule fmp_runner_entry >> simp[fmp_stage_ctx_def] >> metis_tac[]
+  metis_tac[fmp_runner_entry, fmp_stage_ctx_def]
+QED
+
+Theorem fmp_lowering_stage_sim:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs' /\
+  o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+  fmp_variant_room (SOME fmp) C' vs' ==>
+  ctx_sim_fuel I D C C'
+    (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs'
+Proof
+  simp[o1_run_state_ok_def] >> metis_tac[fmp_lowering_stage_sim_static]
+QED
+
+Theorem fmp_lowering_stage_abort_rq_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' /\
+  o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+  fmp_variant_room (SOME fmp) C' vs' ==>
+  ctx_abort_rq D C C'
+    (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs'
+Proof
+  strip_tac >>
+  `?eom. max_live_eom C = SOME eom` by
+    (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
+     simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
+  rw[ctx_abort_rq_def] >>
+  `terminates (run_context fuel C
+     (vs' with <|vs_fmp := fmp; vs_initial_fmp := fmp|>))` by
+    simp[terminates_def] >>
+  `fmp_stage_ctx rpolicy D C C'
+     (vs' with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) vs' fmp eom` by
+    simp[fmp_stage_ctx_def] >>
+  drule_all fmp_runner_entry >> simp[] >> strip_tac >>
+  qexists_tac `fuel` >>
+  Cases_on `run_context fuel C' vs'` >> gvs[dead_result_rel_def] >>
+  metis_tac[LIST_REL_imp_request_prefix_rel]
 QED
 
 Theorem fmp_stage_invoke_sim:
