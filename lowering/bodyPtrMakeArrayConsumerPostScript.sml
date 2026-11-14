@@ -3,6 +3,7 @@
    Runtime-code consumers must still retain the caller's ~ce_is_ctor premise. *)
 Theory bodyPtrMakeArrayConsumerPost
 Ancestors
+  exprSimPtrProps
   bodyPtrMakeArrayDispatch bodyPtrMakeArrayAddFrame exprOperandVar bodyPtrDefs emitHelper
   compileEnv loweringStateRelDefs context exprLowering vyperStorageBackend vyperTypeValues ptrDiscipline loweringPosts venomState
 
