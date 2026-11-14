@@ -739,23 +739,7 @@ Theorem body_plan_ret_step:
       shared_state_rel vs1 as1
 Proof
   strip_tac >> gather_plan_tac >>
-  `inst.inst_opcode <> INVOKE` by
-    (strip_tac >>
-     qspecl_then [`fuel`, `ctx`, `inst`, `vs`, `ret`, `vs1`] mp_tac
-       step_inst_invoke_not_intret >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     qpat_x_assum `step_inst fuel ctx inst vs = _`
-       (fn th => REWRITE_TAC [th])) >>
-  `inst.inst_opcode = RET` by
-    (qspecl_then [`fuel`, `ctx`, `inst`, `vs`] mp_tac step_inst_non_invoke >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     qpat_x_assum `step_inst fuel ctx inst vs = _` SUBST1_TAC >>
-     disch_then (assume_tac o SYM) >>
-     drule step_inst_base_intret_opcodes >>
-     qpat_x_assum `codegen_ready_inst inst` mp_tac >>
-     simp[codegen_ready_inst_def, is_pre_codegen_opcode_def,
-          is_unlowered_fmp_opcode_def] >>
-     rpt strip_tac >> fs[is_raw_fmp_opcode_def]) >>
+  `inst.inst_opcode = RET` by metis_tac[codegen_ready_intret_opcode] >>
   `MEM inst (fn_insts (reachable_fn fn))` by
     (qspecl_then [`fn`, `bb`, `inst`] mp_tac reachable_fn_mem_inst >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>

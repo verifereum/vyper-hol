@@ -63,7 +63,7 @@
 
 Theory codegenCorrectness
 Ancestors
-  codegenEntryRel codegenEntrySim codegenAsmRunCall
+  codegenEntryRel codegenEntrySim codegenAsmRunCall fnFramePrefixDriver
   asmToBytecodeProps venomToAsmProps codegen vfmExecution
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel

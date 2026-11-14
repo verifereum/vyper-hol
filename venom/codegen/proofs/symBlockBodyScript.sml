@@ -460,22 +460,6 @@ Proof
   strip_tac >> simp[sym_body_result_def]
 QED
 
-Theorem codegen_ready_intret_opcode:
-  !fuel ctx inst vs rv vs1.
-  codegen_ready_inst inst /\ step_inst fuel ctx inst vs = IntRet rv vs1 ==>
-  inst.inst_opcode = RET
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by metis_tac[step_inst_invoke_not_intret] >>
-  gvs[step_inst_non_invoke] >>
-  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
-  gvs[stackPlanGenTheory.codegen_ready_inst_def,
-      stackPlanGenTheory.is_pre_codegen_opcode_def,
-      stackPlanGenTheory.is_unlowered_fmp_opcode_def,
-      venomInstTheory.is_raw_fmp_opcode_def] >>
-  strip_tac >> gvs[venomInstTheory.is_raw_fmp_opcode_def]
-QED
-
 Theorem sym_body_halt_step:
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
