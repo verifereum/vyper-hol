@@ -622,43 +622,7 @@ Proof
      `k < LENGTH o1_fn_passes /\ k <= LENGTH o1_fn_passes /\
       SUC k <= LENGTH o1_fn_passes` by simp[o1_fn_passes_el] >>
      simp[o1_pre_def] >> metis_tac[]) >>
-  (* the facts LowerDload, ConcretizeMemLoc and FmpLowering read *)
-  `ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) (o1_walk_view rpolicy 0)
-     (stage 0) (stage 1) /\
-   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) (o1_walk_view rpolicy 1)
-     (stage 1) (stage 2) /\
-   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2)
-     (stage 2) (stage 3)` by
-    (qpat_assum `!k. k < LENGTH _ ==> _`
-       (fn th => assume_tac (spec_stage `0` th) >> assume_tac (spec_stage `1` th) >>
-                 assume_tac (spec_stage `2` th)) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `o1_ctx_shape (stage 0) /\ o1_ctx_shape (stage 1) /\ o1_ctx_shape (stage 2) /\
-   EVERY (o1_fn_row 0) (stage 0).ctx_functions /\
-   EVERY (o1_fn_row 1) (stage 1).ctx_functions /\
-   EVERY (o1_fn_row 2) (stage 2).ctx_functions` by
-    (qpat_assum `!k. k <= LENGTH _ ==> o1_ctx_shape _`
-       (fn th => assume_tac (spec_stage `0` th) >> assume_tac (spec_stage `1` th) >>
-                 assume_tac (spec_stage `2` th)) >>
-     qpat_assum `!k. k <= LENGTH _ ==> EVERY _ _`
-       (fn th => assume_tac (spec_stage `0` th) >> assume_tac (spec_stage `1` th) >>
-                 assume_tac (spec_stage `2` th)) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `EVERY make_ssa_input_ok (stage 0).ctx_functions /\
-   EVERY make_ssa_input_ok (stage 2).ctx_functions` by
-    fs[EVERY_MEM, o1_fn_row_def] >>
-  `callee_first names (stage 1).ctx_functions` by
-    metis_tac[make_ssa_src_stage_callee_first] >>
-  `callee_first names (stage 2).ctx_functions` by
-    metis_tac[lower_dload_stage_callee_first] >>
-  `o1_safe_upto D lo n (stage 1) w` by
-    (drule_all make_ssa_stage_safe_upto >> simp[]) >>
-  `EVERY ssa_form (stage 1).ctx_functions` by
-    metis_tac[make_ssa_stage_wf_ssa, venomWfTheory.wf_ssa_def, EVERY_MEM] >>
-  `EVERY ssa_form (stage 2).ctx_functions` by
-    metis_tac[lower_dload_stage_ssa_form] >>
-  `o1_ptr_safe_upto D lo n (stage 2) w /\ alloca_frontier_upto n (stage 2) w` by
-    (drule_all lower_dload_stage_safe_upto >> simp[]) >>
+  drule_all o1_walk_before_layout_safety >> strip_tac >>
   `fmp_free_ctx (stage 3) /\ callee_first names (stage 3).ctx_functions` by
     (`reserved_intervals_wf (stage 2).ctx_global_reserved /\
       EVERY (\fn. fn.fn_eom = NONE) (stage 2).ctx_functions /\

@@ -214,7 +214,7 @@ Proof
 QED
 
 (* The raw safety facts actually supplied to ConcretizeMemLoc. *)
-Theorem o1_walk_before_layout_safe_upto:
+Theorem o1_walk_before_layout_safety:
   (!k. k < LENGTH o1_fn_passes ==>
     ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
       (stage k) (stage (SUC k))) /\
@@ -222,6 +222,9 @@ Theorem o1_walk_before_layout_safe_upto:
   (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   callee_first names (stage 0).ctx_functions /\
   dead_wf D /\ o1_run_state_ok w /\ o1_safe_upto D lo n (stage 0) w ==>
+  callee_first names (stage 1).ctx_functions /\
+  o1_safe_upto D lo n (stage 1) w /\
+  EVERY ssa_form (stage 1).ctx_functions /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) (stage 2) (stage 3) /\
   o1_ctx_shape (stage 2) /\
@@ -279,4 +282,26 @@ Proof
   drule lower_dload_function_supply_labels >> strip_tac >>
   `(stage 2).ctx_entry = (stage 1).ctx_entry` by fs[ctx_pass_stage_def] >>
   simp[] >> metis_tac[]
+QED
+
+Theorem o1_walk_before_layout_safe_upto:
+  (!k. k < LENGTH o1_fn_passes ==>
+    ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  callee_first names (stage 0).ctx_functions /\
+  dead_wf D /\ o1_run_state_ok w /\ o1_safe_upto D lo n (stage 0) w ==>
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) (stage 2) (stage 3) /\
+  o1_ctx_shape (stage 2) /\
+  EVERY make_ssa_input_ok (stage 2).ctx_functions /\
+  callee_first names (stage 2).ctx_functions /\
+  EVERY ssa_form (stage 2).ctx_functions /\
+  o1_ptr_safe_upto D lo n (stage 2) w /\ alloca_frontier_upto n (stage 2) w /\
+  (?name fn lbl. (stage 2).ctx_entry = SOME name /\
+    lookup_function name (stage 2).ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl)
+Proof
+  strip_tac >> drule_all o1_walk_before_layout_safety >> simp[]
 QED
