@@ -1,4 +1,4 @@
-Theory bodyPtrTypeBuiltinsExtract32HeaderFrame
+Theory extract32PrepareFrame
 Ancestors
   bodyPtrSignedConvertSourceFrame exprSimExtract32Post exprSimCopy
   exprSimWordArgs loweringPosts exprLoweringProps compileEnv venomState

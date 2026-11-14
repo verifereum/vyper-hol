@@ -1,7 +1,7 @@
 (* Shared physical preparation for the joint Extract32 judgment. *)
 Theory bodyFullExtract32Prepare
 Ancestors
-  bodyFullUnwrapRun bodyFullGhostFrame bodyPtrTypeBuiltinsExtract32HeaderFrame
+  bodyFullUnwrapRun bodyFullGhostFrame extract32PrepareFrame
   bodyPtrSignedConvertSourceCompile bodyMemTbExtract32Source
   exprPtrCtorImmStore typedCopyLoopHeaderPtr bodyPtrSignedConvertLoad
   bodyPtrSignedConvertSourcePrefix exprSimExtract32Post
