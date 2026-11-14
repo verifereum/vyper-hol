@@ -5,7 +5,7 @@ Ancestors
   dftGasInvTerminalReach dftGasInvForwardActive dftGasInvCrossingProbe
   dftGasInvPairedHistory dftGasOracleDefs dftRunRel dftScheduleOrder
   dftDefs o1PassContract unitMemInv unitShapeDefs contextCodegenRel
-  venomExecSemantics
+  venomExecSemantics staticAbortMemDefs
 
 Theorem dft_ev_lowered_inv_static:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
