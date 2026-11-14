@@ -2689,3 +2689,207 @@ Resume rb_compile_call_internal[multi]:
   irule rb_step_return >> simp[rb_value_ok_def, rb_base_ptr]
 QED
 Finalise rb_compile_call_internal
+
+Theorem rb_compile_call_selfdestruct:
+  rb_env_ok ce /\
+  (!e ty. MEM e args ==> rb_step rb_value_ok (cfn ce ty e)) ==>
+  rb_step rb_value_ok (compile_call cfn ce ret_ty ty SelfDestructTarget args default_ret)
+Proof
+  strip_tac >> Cases_on `args` >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  pure_rewrite_tac[compile_call_def] >> BETA_TAC
+  >- suspend "invalid" >>
+  Cases_on `t` >> pure_rewrite_tac[compile_call_def, LET_THM] >> BETA_TAC
+  >- suspend "valid" >>
+  suspend "invalid"
+QED
+Resume rb_compile_call_selfdestruct[invalid]:
+  markerLib.RESUME_TAC >>
+  (simp[LET_THM] >> ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_emit_inst >> simp[]) >>
+   pure_rewrite_tac[GSYM comp_return_def] >>
+   CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+   irule rb_step_return >> simp[rb_value_ok_def])
+QED
+Resume rb_compile_call_selfdestruct[valid]:
+  simp[] >> ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_lower_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_selfdestruct >> simp[]) >>
+  pure_rewrite_tac[GSYM comp_return_def] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+  irule rb_step_return >> simp[rb_value_ok_def]
+QED
+Finalise rb_compile_call_selfdestruct
+
+Theorem rb_compile_call_send:
+  rb_env_ok ce /\
+  (!e ty. MEM e args ==> rb_step rb_value_ok (cfn ce ty e)) ==>
+  rb_step rb_value_ok (compile_call cfn ce ret_ty ty (Send has_gas) args default_ret)
+Proof
+  strip_tac >> Cases_on `args` >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  simp[compile_call_def]
+  >- suspend "invalid" >>
+  Cases_on `t` >> simp[]
+  >- suspend "invalid" >>
+  Cases_on `LENGTH t' = (if has_gas then 1 else 0)` >> simp[]
+  >- suspend "valid" >> suspend "invalid"
+QED
+Resume rb_compile_call_send[invalid]:
+  markerLib.RESUME_TAC >>
+  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_emit_inst >> simp[]) >>
+   pure_rewrite_tac[GSYM comp_return_def] >>
+   CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+   irule rb_step_return >> simp[rb_value_ok_def])
+QED
+Resume rb_compile_call_send[valid]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_lower_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_lower_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- suspend "gas" >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_op >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_void >> simp[]) >>
+  gen_tac >> pure_rewrite_tac[GSYM comp_return_def] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+  irule rb_step_return >> simp[rb_value_ok_def]
+QED
+Resume rb_compile_call_send[gas]:
+  Cases_on `t'` >> simp[]
+  >- (pure_rewrite_tac[GSYM comp_return_def] >>
+      CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+      irule rb_step_return >> simp[]) >>
+  Cases_on `t` >> simp[]
+  >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+      irule rb_lower_value >> simp[]) >>
+  pure_rewrite_tac[GSYM comp_return_def] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+  irule rb_step_return >> simp[]
+QED
+Finalise rb_compile_call_send
+
+Theorem rb_compile_call_create:
+  (!dst src info. rb_operand_ok dst /\ rb_operand_ok src ==>
+     rb_step rb_operand_ok (compile_abi_encode_to_buf dst src info)) /\
+  rb_env_ok ce /\
+  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step rb_value_ok
+    (compile_call cfn ce ret_ty ty (CreateTarget ck has_salt rof meta) args default_ret)
+Proof
+  strip_tac >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  simp[compile_call_def] >> irule rb_as_stack_val >>
+  irule rb_compile_create_call >> simp[]
+QED
+
+Theorem rb_compile_call_raw_log:
+  rb_env_ok ce /\
+  (!e ty. MEM e args ==> rb_step rb_value_ok (cfn ce ty e)) /\
+  (!topics e. MEM topics args /\ MEM e (raw_log_topic_exprs topics) ==>
+     rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step rb_value_ok (compile_call cfn ce ret_ty ty RawLog args default_ret)
+Proof
+  strip_tac >> Cases_on `args` >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  simp[compile_call_def]
+  >- suspend "invalid" >>
+  Cases_on `t` >> simp[]
+  >- suspend "invalid" >>
+  Cases_on `t'` >> simp[]
+  >- suspend "valid" >> suspend "invalid"
+QED
+Resume rb_compile_call_raw_log[invalid]:
+  markerLib.RESUME_TAC >>
+  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_emit_inst >> simp[]) >>
+   pure_rewrite_tac[GSYM comp_return_def] >>
+   CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+   irule rb_step_return >> simp[rb_value_ok_def])
+QED
+Resume rb_compile_call_raw_log[valid]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `EVERY rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_multi_exprs >> gvs[]) >>
+  gen_tac >> strip_tac >>
+  Cases_on `expr_type h' = BaseT (BytesT (Fixed 32))` >> simp[]
+  >- suspend "fixed" >> suspend "dynamic"
+QED
+Resume rb_compile_call_raw_log[fixed]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_buffer_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_alloc_buffer) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_lower_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_void >> gvs[rb_buffer_ok_def]) >>
+  gen_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_inst >> gvs[rb_buffer_ok_def, EVERY_MEM, MEM_REVERSE]) >>
+  pure_rewrite_tac[GSYM comp_return_def] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+  irule rb_step_return >> simp[rb_value_ok_def]
+QED
+Resume rb_compile_call_raw_log[dynamic]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_lower_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_op >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_op >> simp[]) >>
+  gen_tac >> strip_tac >>
+  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_emit_inst >> gvs[rb_buffer_ok_def, EVERY_MEM, MEM_REVERSE]) >>
+   pure_rewrite_tac[GSYM comp_return_def] >>
+   CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+   irule rb_step_return >> simp[rb_value_ok_def])
+QED
+Finalise rb_compile_call_raw_log
