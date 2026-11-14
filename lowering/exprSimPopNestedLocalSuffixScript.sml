@@ -137,5 +137,5 @@ Proof
   simp[] >>
   `k + (type_memory_size etv * (LENGTH vs - 1) + 32) =
    k + 32 + (LENGTH vs - 1) * type_memory_size etv` by simp[] >>
-  pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC
+  pop_assum SUBST1_TAC >> fs[]
 QED
