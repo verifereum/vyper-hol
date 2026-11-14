@@ -4,7 +4,8 @@ Ancestors
   contextPlanLayoutProps unitMemInv ptrDiscipline stepWriteFootprint
   memSafeRun lowerDloadDefs
 
-(* The source DLOAD bound is needed only at reached CODECOPY reads. *)
+(* HELD ADMISSION SEQ-4285: the reached CODECOPY bound awaits its O1
+   pipeline transport proof. Pure ADDs may execute before a failing call. *)
 Theorem o1_pipeline_code_end_offset_ok:
   !D lo rpolicy unit out vs_out.
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\

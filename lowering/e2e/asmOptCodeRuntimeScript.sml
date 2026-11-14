@@ -6,7 +6,7 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect e2eEntry o1PassContract
   e2eComposition e2eProducers o1PipelineCorrect loweringShapeProps loweringShapeSource
   runtimeSymSrcUnit codegenAsmOpt contextCodegenRel ptrDiscipline immutableCodeLayout
-  lowerDloadDefs
+  lowerDloadDefs o1CodeEndOffset
 
 Theorem source_typing_ok_code_update:
   source_typing_ok tops am tx /\ LENGTH c < 2 ** 256 ==>
