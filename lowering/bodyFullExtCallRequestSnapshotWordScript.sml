@@ -158,6 +158,36 @@ Proof
   gvs[vv_at_def]
 QED
 
+Theorem extcall_capture_located_memory_transport:
+  !ce cx src sa sb sc ee ef raw tag p s u v sv dv w func cut.
+    vv_at ce cx src sa sb ee raw (LocatedValue tag p) s /\
+    p.ptr_location = LocMemory /\
+    read_result cx raw ee = (INL v,ee) /\
+    evaluate_type (get_tenv cx) src = SOME sv /\
+    eval_operand p.ptr_operand s = SOME w /\
+    val_in_memory dv v (w2n w) s.vs_memory /\ val_wf dv v /\
+    val_footprint sv v = val_footprint dv v /\
+    wb_frame ce ee ef sb s u /\ pure_frame ce func ee cut s u /\
+    FST (read_result cx raw ef) = FST (read_result cx raw ee) /\
+    (!z. eval_operand p.ptr_operand s = SOME z ==>
+         eval_operand p.ptr_operand u = SOME z) /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+               FLOOKUP u.vs_allocas aid = SOME row) /\
+    (!n b sz. local_region ce ef.scopes u n b sz <=>
+               local_region ce ee.scopes s n b sz) /\
+    sb.cs_next_id <= sc.cs_next_id ==>
+    val_in_memory dv v (w2n w) u.vs_memory /\
+    vv_at ce cx src sa sc ef raw (LocatedValue tag p) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (drule_all extcall_capture_memory_bytes_frame >> strip_tac >>
+      irule exprSimPropsTheory.val_in_memory_footprint_agree >>
+      simp[] >> qexists_tac `s.vs_memory` >> gvs[]) >>
+  irule extcall_capture_located_at_frame >>
+  qexistsl_tac [`ee`, `s`, `sb`] >> simp[]
+QED
+
 (* No-copy composites retain their ownership type even when a memory
    bytestring's value interpretation changes capacity. *)
 Theorem extcall_request_nonword_snapshot_capture:
