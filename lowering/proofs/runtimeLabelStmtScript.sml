@@ -239,3 +239,38 @@ Proof
       simp[rb_step_return, rb_value_ok_def, rb_base_ptr]) >>
   gvs[rb_expr_contract_def]
 QED
+
+Theorem rb_compile_range_bound_checks:
+  rb_operand_ok start /\ rb_operand_ok stop /\ rb_operand_ok rounds ==>
+  rb_step (K T) (compile_range_bound_checks start stop rounds bound signed)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_range_bound_checks_def] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (Cases_on `signed` >> simp[rb_emit_op]) >>
+  gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  simp[rb_emit_void]
+QED
+
+Theorem rb_compile_iter_elem_copy:
+  rb_env_ok ce /\ rb_operand_ok elem /\ rb_operand_ok item ==>
+  rb_step (K T) (compile_iter_elem_copy ce elem item n loc slots tty ety)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_iter_elem_copy_def] >>
+  Cases_on `slots` >> simp[]
+  >- (irule rb_ignore >> simp[rb_compile_slot_to_memory, rb_step_return]) >>
+  Cases_on `loc <> LocMemory` >> simp[]
+  >- (Cases_on `n <= 32` >> simp[]
+      >- (irule rb_bind_ptr_load >> BETA_TAC >>
+          gvs[rb_env_ok_def, rb_emit_void]) >>
+      Cases_on `loc` >> simp[rb_emit_void, rb_compile_copy_memory,
+        rb_compile_imm_copy_to_memory] >>
+      gvs[rb_env_ok_def, rb_compile_imm_copy_to_memory]) >>
+  Cases_on `is_word_type tty` >> simp[]
+  >- (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      simp[rb_emit_void]) >>
+  simp[rb_compile_store_memory]
+QED
