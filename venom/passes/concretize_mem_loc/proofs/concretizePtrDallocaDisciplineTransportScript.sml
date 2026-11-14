@@ -50,25 +50,25 @@ Proof
   metis_tac[NOT_LESS]
 QED
 
-Theorem ptr_dalloca_compare_transport[local]:
+Theorem ptr_dalloca_compare_transport_positive[local]:
   access_ok lo G fn inst s /\
-  ptr_dalloca_ghost_vars G V s Gt Vt t /\
-  (!v b sz. FLOOKUP Gt v = SOME (b,sz) ==> dyn <= b) /\
-  (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b ==>
-    FLOOKUP Gt v = SOME (b,sz)) ==>
+  ptr_dalloca_ghost_vars G V s Gout Vt t /\
+  (!v b sz. FLOOKUP Gout v = SOME (b,sz) ==> dyn <= b) /\
+  (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
+    FLOOKUP Gout v = SOME (b,sz)) ==>
   !u w. (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
          inst.inst_opcode = EQ) /\ inst.inst_operands = [Var u; Var w] /\
-    (u IN FDOM Gt \/ w IN FDOM Gt) ==>
-    ?b sz x y. FLOOKUP Gt u = SOME (b,sz) /\ FLOOKUP Gt w = SOME (b,sz) /\
+    (u IN FDOM Gout \/ w IN FDOM Gout) ==>
+    ?b sz x y. FLOOKUP Gout u = SOME (b,sz) /\ FLOOKUP Gout w = SOME (b,sz) /\
       0 < sz /\ eval_operand (Var u) t = SOME x /\
       eval_operand (Var w) t = SOME y /\
       b <= w2n x /\ w2n x <= b + sz /\
       b <= w2n y /\ w2n y <= b + sz
 Proof
   strip_tac >> rpt gen_tac >> disch_tac >>
-  `FDOM Gt SUBSET FDOM G` by
+  `FDOM Gout SUBSET FDOM G` by
     (simp[SUBSET_DEF, TO_FLOOKUP] >> gen_tac >>
-     Cases_on `FLOOKUP Gt x` >> simp[] >>
+     Cases_on `FLOOKUP Gout x` >> simp[] >>
      drule_all ptr_dalloca_ghost_prov >> simp[]) >>
   `?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
       0 < sz /\ eval_operand (Var u) s = SOME x /\
@@ -77,14 +77,54 @@ Proof
       b <= w2n y /\ w2n y <= b + sz` by
     (fs[access_ok_def, SUBSET_DEF] >> metis_tac[]) >>
   `dyn <= b` by
-    (Cases_on `FLOOKUP Gt u`
-     >- (fs[TO_FLOOKUP] >> Cases_on `FLOOKUP Gt w` >> fs[] >>
-         rename1 `FLOOKUP Gt w = SOME site` >> PairCases_on `site` >>
+    (Cases_on `FLOOKUP Gout u`
+     >- (fs[TO_FLOOKUP] >> Cases_on `FLOOKUP Gout w` >> fs[] >>
+         rename1 `FLOOKUP Gout w = SOME site` >> PairCases_on `site` >>
          drule_all ptr_dalloca_ghost_prov >> strip_tac >> fs[] >> metis_tac[]) >>
-     rename1 `FLOOKUP Gt u = SOME site` >> PairCases_on `site` >>
+     rename1 `FLOOKUP Gout u = SOME site` >> PairCases_on `site` >>
      drule_all ptr_dalloca_ghost_prov >> strip_tac >> fs[] >> metis_tac[]) >>
-  `FLOOKUP Gt u = SOME (b,sz) /\ FLOOKUP Gt w = SOME (b,sz)` by metis_tac[] >>
+  `FLOOKUP Gout u = SOME (b,sz) /\ FLOOKUP Gout w = SOME (b,sz)` by metis_tac[] >>
   fs[ptr_dalloca_ghost_vars_def, eval_operand_def] >> metis_tac[]
+QED
+
+Theorem ptr_dalloca_access_transport_positive:
+  access_ok lo G fn inst s /\ lo <= eom /\
+  ptr_dalloca_ghost_vars G tn.t_var s Gout tnt.t_var t /\
+  (in_revert_forward fn s ==> in_revert_forward ft t) /\
+  (!v b sz. FLOOKUP Gout v = SOME (b,sz) ==> dyn <= b) /\
+  (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
+    FLOOKUP Gout v = SOME (b,sz)) /\
+  (!off len. MEM (off,len) (source_memory_read_ranges inst t) /\ len <> 0 ==>
+    ?off_s. MEM (off_s,len) (source_memory_read_ranges inst s) /\
+    ((off = off_s /\ (!ops. mem_read_ops inst = SOME ops ==>
+        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
+     (off + len <= eom /\ (!ops. mem_read_ops inst = SOME ops ==>
+        op_prov Gout ops.iao_ofst = NONE)))) /\
+  (!off len. MEM (off,len) (source_memory_write_ranges inst t) /\ len <> 0 ==>
+    ?off_s. MEM (off_s,len) (source_memory_write_ranges inst s) /\
+    ((off = off_s /\ (!ops. mem_write_ops inst = SOME ops ==>
+        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
+     (off + len <= eom /\ (!ops. mem_write_ops inst = SOME ops ==>
+        op_prov Gout ops.iao_ofst = NONE)))) ==>
+  access_ok eom Gout ft inst t
+Proof
+  strip_tac >> rewrite_tac[access_ok_def] >> reverse conj_tac
+  >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_compare_transport_positive >>
+      simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  strip_tac >>
+  `~in_revert_forward fn s` by metis_tac[] >>
+  qpat_x_assum `access_ok _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[access_ok_def]) >>
+  disch_then (CONJUNCTS_THEN2 (drule_then strip_assume_tac) kall_tac) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_range_transport >>
+      simp[] >> goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`G`, `source_memory_write_ranges inst s`,
+                   `source_memory_write_ranges inst t`] >> fs[] >> gvs[]) >>
+  rpt gen_tac >> disch_tac >> irule ptr_dalloca_range_transport >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`G`, `source_memory_read_ranges inst s`,
+               `source_memory_read_ranges inst t`] >> fs[] >> gvs[]
 QED
 
 Theorem ptr_dalloca_access_transport:
@@ -108,23 +148,11 @@ Theorem ptr_dalloca_access_transport:
         op_prov Gt ops.iao_ofst = NONE)))) ==>
   access_ok eom Gt ft inst t
 Proof
-  strip_tac >> rewrite_tac[access_ok_def] >> reverse conj_tac
-  >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_compare_transport >>
-      simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   strip_tac >>
-  `~in_revert_forward fn s` by metis_tac[] >>
-  qpat_x_assum `access_ok _ _ _ _ _`
-    (mp_tac o REWRITE_RULE[access_ok_def]) >>
-  disch_then (CONJUNCTS_THEN2 (drule_then strip_assume_tac) kall_tac) >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_range_transport >>
-      simp[] >> goal_assum (drule_at Any) >> simp[] >>
-      qexistsl_tac [`G`, `source_memory_write_ranges inst s`,
-                   `source_memory_write_ranges inst t`] >> fs[] >> gvs[]) >>
-  rpt gen_tac >> disch_tac >> irule ptr_dalloca_range_transport >>
-  simp[] >> goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`G`, `source_memory_read_ranges inst s`,
-               `source_memory_read_ranges inst t`] >> fs[] >> gvs[]
+  match_mp_tac (Q.INST [`Gout` |-> `Gt`, `lo` |-> `lo`, `G` |-> `G`,
+    `fn` |-> `fn`, `s` |-> `s`, `tn` |-> `tn`, `tnt` |-> `tnt`,
+    `dyn` |-> `dyn`] ptr_dalloca_access_transport_positive) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem ptr_dalloca_taint_transport:

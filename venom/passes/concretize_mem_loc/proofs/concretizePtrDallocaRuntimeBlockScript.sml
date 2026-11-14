@@ -1,22 +1,8 @@
 Theory concretizePtrDallocaRuntimeBlock
 Ancestors
   concretizePtrDallocaGhostInterface o1FrameLockstep contextCodegenRel
+  makeSsaCurrentPhiBatchRuntime
   venomExecSemantics venomState venomInst ptrDiscipline finite_map pred_set list
-
-Theorem ptr_dalloca_eval_phis_effect:
-  !insts s s' x op.
-    eval_phis s insts = OK s' /\
-    phi_eff s.vs_prev_bb x insts = SOME op ==>
-    lookup_var x s' = eval_operand op s
-Proof
-  Induct >> simp[eval_phis_def, phi_eff_def, phi_read_def, eval_operand_def] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
-  >- (simp[] >> rpt strip_tac >> gvs[eval_operand_def]) >>
-  simp[AllCaseEqs()] >> rpt strip_tac >>
-  gvs[eval_one_phi_def, AllCaseEqs()] >>
-  Cases_on `x = out` >> gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  first_x_assum irule >> simp[phi_eff_def]
-QED
 
 Theorem ptr_dalloca_runtime_phis:
   ptr_dalloca_ghost_vars G tn.t_var s Gt tnt.t_var t /\
@@ -46,11 +32,11 @@ Proof
   >~ [`lookup_var v s1 = lookup_var v t1`]
   >- (rename1 `FLOOKUP Gt u = SOME site` >>
       `lookup_var v s1 = eval_operand (Var u) s` by
-        (irule ptr_dalloca_eval_phis_effect >>
-         goal_assum (drule_at Any) >> simp[]) >>
+        (mp_tac (Q.INST [`s` |-> `s`, `x` |-> `v`]
+           (Q.SPECL [`ins`, `s1`] current_phi_batch_lookup)) >> simp[]) >>
       `lookup_var v t1 = eval_operand (Var u) t` by
-        (irule ptr_dalloca_eval_phis_effect >>
-         goal_assum (drule_at Any) >> simp[]) >>
+        (mp_tac (Q.INST [`s` |-> `t`, `x` |-> `v`]
+           (Q.SPECL [`inst`, `t1`] current_phi_batch_lookup)) >> simp[]) >>
       gvs[eval_operand_def]) >>
   metis_tac[]
 QED
