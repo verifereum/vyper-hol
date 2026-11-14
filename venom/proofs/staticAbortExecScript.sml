@@ -20,7 +20,7 @@ Proof
       Cases_on `eval_operands inst.inst_operands s` >>
       gvs[exec_write2_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[eval_operands_def])
-  >> `static_shadow_result_rel (step_inst_base inst s) (Error "probe")` by
+  >> `static_shadow_result_rel (step_inst_base inst s) (Error "")` by
        (irule static_shadow_forbidden >> simp[]) >>
   gvs[step_inst_non_invoke] >>
   Cases_on `step_inst_base inst s` >> gvs[static_shadow_result_rel_def]
