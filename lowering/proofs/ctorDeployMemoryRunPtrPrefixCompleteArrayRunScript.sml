@@ -19,7 +19,7 @@ Ancestors
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryCompleteScalar
   venomState venomExecSemantics venomMemDefs valueEncodingProps
   ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -36,73 +36,6 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
     abi_encoder_registered_effect (ctor_actual_sites func ids) [(d,outsz)] base s /\
     s.vs_gas_readings = base.vs_gas_readings /\ s.vs_code = base.vs_code``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  qabbrev_tac `iv = STRING #"%" (toString first)` >>
-  qabbrev_tac `cv = STRING #"%" (toString (first+1))` >>
-  qabbrev_tac `cmp = STRING #"%" (toString (first+2))` >>
-  qabbrev_tac `done = STRING #"%" (toString (first+3))` >>
-  `ALL_DISTINCT [iv;cv;cmp;done]` by
-    simp[Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
-  `!opr x. abi_decoder_operand_live next opr /\ MEM x [iv;cv;cmp;done] ==>
-    opr <> Var x` by
-    (pure_rewrite_tac[MEM] >> rpt gen_tac >> strip_tac >>
-     gvs[Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
-     irule abi_decoder_live_excludes_output >> qexists_tac `next` >> simp[]) >>
-  `~MEM slot_var [iv;cv;cmp;done] /\
-   (!x. MEM x [iv;cv;cmp;done] ==> src <> Var x)` by metis_tac[] >>
-  `j <= LENGTH vs /\ mload slot s = n2w j` by fs[] >>
-  `checked ==> gas_path_mem ctx func s 0
-     (OK (jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
-       (abi_decode_header_state iv cv cmp done j (LENGTH vs) s))) /\
-     alloca_history func (jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
-       (abi_decode_header_state iv cv cmp done j (LENGTH vs) s))` by
-    (strip_tac >>
-     `alloca_history func s /\ w2n srcaddr + 32 <= LENGTH s.vs_data_section` by simp[] >>
-     `w2n srcaddr < dimword(:256)` by simp[w2n_lt] >>
-     `slot < dimword(:256)` by decide_tac >>
-     `src <> Var iv /\ iv <> cv` by
-       (conj_tac >- simp[] >> fs[ALL_DISTINCT]) >>
-     `eval_operand src s = SOME (n2w (w2n srcaddr)) /\
-      abi_decode_load DLOAD (n2w (w2n srcaddr):bytes32) s = n2w (LENGTH vs)` by simp[n2w_w2n] >>
-     drule_all ctor_checked_header_path >>
-     disch_then (qspec_then `ctx` strip_assume_tac) >> simp[]) >>
-  `eval_operand src s = SOME (n2w (w2n srcaddr)) /\
-   abi_decode_load DLOAD (n2w (w2n srcaddr):bytes32) s = n2w (LENGTH vs)` by simp[n2w_w2n] >>
-  `lookup_block hdr func.fn_blocks = SOME
-    <|bb_label := hdr;bb_instructions := abi_decode_header_insts hid
-      (Var slot_var) src DLOAD iv cv cmp done body_lbl exit_lbl|> /\
-   (!lbl. MEM lbl [body_lbl;exit_lbl] ==> ?bb.
-     lookup_block lbl func.fn_blocks = SOME bb /\ phi_prefix_length bb.bb_instructions = 0)` by
-    (gvs[abi_decode_loop_cfg_def,Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >> metis_tac[]) >>
-  drule_all prefix_loop_header_operand_pair >>
-  disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
-  drule_all deploy_ctor_array_header_observation >>
-  disch_then (qspec_then `if j < LENGTH vs then body_lbl else exit_lbl` assume_tac) >>
-  rule_assum_tac BETA_RULE >>
-  qexistsl [`H`,`qt`] >>
-  asm_simp_tac bool_ss [Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
-  conj_tac >- (rpt strip_tac >>
-    `abi_decoder_operand_live next (Var x)` by
-      simp[abi_decoder_operand_live_def,IN_DEF] >>
-    `~MEM x [STRING #"%" (toString first); STRING #"%" (toString (first+1));
-       STRING #"%" (toString (first+2)); STRING #"%" (toString (first+3))]` by
-      (strip_tac >> qpat_x_assum `!opr x. _` (qspecl_then [`Var x`,`x`] mp_tac) >> simp[]) >>
-    qpat_x_assum `!x. ~MEM x _ ==> _` drule >> simp[]) >>
-  conj_tac >-
-    (gen_tac >> strip_tac >> namedCases_on `opr` ["w","x","lab"]
-     >- simp[eval_operand_def,op_taint_def]
-     >- (`~MEM x [STRING #"%" (toString first); STRING #"%" (toString (first+1));
-          STRING #"%" (toString (first+2)); STRING #"%" (toString (first+3))]` by
-          (strip_tac >> qpat_x_assum `!opr x. _` (qspecl_then [`Var x`,`x`] mp_tac) >> simp[]) >>
-         qpat_x_assum `!x. ~MEM x _ ==> _` drule >> simp[]) >>
-     simp[eval_operand_def,op_taint_def,jump_to_def,abi_decode_header_state_def,update_var_def]) >>
-  simp[jump_to_def,abi_decode_header_state_def,update_var_def]
-QED
-*)
 Theorem prefix_complete_array_header_pair_mode:
   (^Ok) k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot initial j j s /\
@@ -148,45 +81,94 @@ Theorem prefix_complete_array_header_pair_mode:
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
-  cheat
-QED
-
-
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  strip_tac >> drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
-  `eval_operand (Var slot_var) s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
-    (`!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>
-        eval_operand op s = SOME w` by
-       (rpt strip_tac >> drule_all deploy_ctor_array_observation_operand >> simp[]) >>
-     fs[abi_decoder_ranges_def, eval_operand_def, Excl "enc_def"] >> conj_tac >> first_x_assum irule >> simp[]) >>
-  `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-    (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
-    fs[abi_decode_source_def, Excl "enc_def"] >>
-  `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword(:256)` by
-    fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
-  drule_all canonical_dynamic_array_count_load >> strip_tac >>
-  `abi_decode_load DLOAD (n2w sb:bytes32) s = n2w (LENGTH vs)` by
-    (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
-  `checked ==> alloca_history func s /\ w2n (n2w sb:bytes32) + 32 <= LENGTH s.vs_data_section` by
+  strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qabbrev_tac `iv = STRING #"%" (toString first)` >>
+  qabbrev_tac `cv = STRING #"%" (toString (first+1))` >>
+  qabbrev_tac `cmp = STRING #"%" (toString (first+2))` >>
+  qabbrev_tac `done = STRING #"%" (toString (first+3))` >>
+  `ALL_DISTINCT [iv;cv;cmp;done]` by
+    simp[Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
+  `!opr x. abi_decoder_operand_live next opr /\ MEM x [iv;cv;cmp;done] ==>
+    opr <> Var x` by
+    (pure_rewrite_tac[MEM] >> rpt gen_tac >> strip_tac >>
+     gvs[Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
+     irule abi_decoder_live_excludes_output >> qexists_tac `next` >> simp[]) >>
+  `~MEM slot_var [iv;cv;cmp;done] /\
+   (!x. MEM x [iv;cv;cmp;done] ==> src <> Var x)` by metis_tac[] >>
+  `j <= LENGTH vs /\ mload slot s = n2w j` by fs[] >>
+  `checked ==> gas_path_mem ctx func s 0
+     (OK (jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
+       (abi_decode_header_state iv cv cmp done j (LENGTH vs) s))) /\
+     alloca_history func (jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
+       (abi_decode_header_state iv cv cmp done j (LENGTH vs) s))` by
     (strip_tac >>
-     `has_type (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
-       fs[abi_decoder_metadata_def,vyperABITheory.vyper_to_abi_type_def,Excl "enc_def"] >>
-     `32 <= LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs))` by
-       (irule canonical_dynamic_array_head_min >> simp[contractABITheory.is_dynamic_def]) >>
-     `sb < dimword(:256)` by decide_tac >>
-     fs[w2n_n2w,Excl "enc_def"] >> decide_tac) >>
-  drule_all prefix_complete_array_header_pair_mode >>
-  disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
-  goal_assum (drule_at Any) >> fs[]
+     `alloca_history func s /\ w2n srcaddr + 32 <= LENGTH s.vs_data_section` by simp[] >>
+     `w2n srcaddr < dimword(:256)` by simp[w2n_lt] >>
+     `slot < dimword(:256)` by decide_tac >>
+     `src <> Var iv /\ iv <> cv` by
+       (conj_tac >- simp[] >> fs[ALL_DISTINCT]) >>
+     `eval_operand src s = SOME (n2w (w2n srcaddr)) /\
+      abi_decode_load DLOAD (n2w (w2n srcaddr):bytes32) s = n2w (LENGTH vs)` by simp[n2w_w2n] >>
+     drule_all ctor_checked_header_path >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >> simp[]) >>
+  `eval_operand src s = SOME (n2w (w2n srcaddr)) /\
+   abi_decode_load DLOAD (n2w (w2n srcaddr):bytes32) s = n2w (LENGTH vs)` by simp[n2w_w2n] >>
+  `lookup_block hdr func.fn_blocks = SOME
+    <|bb_label := hdr;bb_instructions := abi_decode_header_insts hid
+      (Var slot_var) src DLOAD iv cv cmp done body_lbl exit_lbl|> /\
+   (!lbl. MEM lbl [body_lbl;exit_lbl] ==> ?bb.
+     lookup_block lbl func.fn_blocks = SOME bb /\ phi_prefix_length bb.bb_instructions = 0)` by
+    (gvs[abi_decode_loop_cfg_def,Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >> metis_tac[]) >>
+  `checked ==> run_inst_seq_mem_ok (TAKE 4 (abi_decode_header_insts hid
+     (Var slot_var) src DLOAD iv cv cmp done body_lbl exit_lbl)) s` by
+    (strip_tac >>
+     `w2n srcaddr + 32 <= LENGTH s.vs_data_section` by simp[] >>
+     `w2n srcaddr < dimword(:256)` by simp[w2n_lt] >>
+     `slot < dimword(:256)` by decide_tac >>
+     `src <> Var iv` by simp[] >>
+     metis_tac[ctor_checked_header_prefix_mem_ok]) >>
+  drule_all prefix_loop_header_operand_path >>
+  disch_then (mp_tac o Q.INST [`D` |-> `Ddead`] o SPEC_ALL) >>
+  strip_tac >>
+  TRY (qpat_x_assum `t = jump_to _ _` SUBST_ALL_TAC) >>
+  `checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
+       (abi_decode_header_state iv cv cmp done j (LENGTH vs) s)),H,qt)` by
+    metis_tac[] >>
+  drule_all deploy_ctor_array_header_observation >>
+  disch_then (qspec_then `if j < LENGTH vs then body_lbl else exit_lbl` assume_tac) >>
+  rule_assum_tac BETA_RULE >>
+  qexistsl [`H`,`qt`] >>
+  asm_simp_tac bool_ss [Abbr `iv`,Abbr `cv`,Abbr `cmp`,Abbr `done`] >>
+  conj_tac >- (rpt strip_tac >>
+    `abi_decoder_operand_live next (Var x)` by
+      simp[abi_decoder_operand_live_def,IN_DEF] >>
+    `~MEM x [STRING #"%" (toString first); STRING #"%" (toString (first+1));
+       STRING #"%" (toString (first+2)); STRING #"%" (toString (first+3))]` by
+      (strip_tac >> qpat_x_assum `!opr x. _` (qspecl_then [`Var x`,`x`] mp_tac) >> simp[]) >>
+    qpat_x_assum `!x. ~MEM x _ ==> _` drule >> simp[]) >>
+  conj_tac >-
+    (gen_tac >> strip_tac >> namedCases_on `opr` ["w","x","lab"]
+     >- simp[eval_operand_def,op_taint_def]
+     >- (`~MEM x [STRING #"%" (toString first); STRING #"%" (toString (first+1));
+          STRING #"%" (toString (first+2)); STRING #"%" (toString (first+3))]` by
+          (strip_tac >> qpat_x_assum `!opr x. _` (qspecl_then [`Var x`,`x`] mp_tac) >> simp[]) >>
+         qpat_x_assum `!x. ~MEM x _ ==> _` drule >> simp[]) >>
+     simp[eval_operand_def,op_taint_def,jump_to_def,abi_decode_header_state_def,update_var_def]) >>
+  simp[jump_to_def,abi_decode_header_state_def,update_var_def]
 QED
-*)
+
+
+Theorem prefix_complete_array_position_cfg_zero[local]:
+  abi_decode_position_loop_cfg func hdr body_lbl exit_lbl hid ip src opc (Lit 0w) hv ==>
+  abi_decode_loop_cfg func hdr body_lbl exit_lbl hid ip src opc
+    (STRING #"%" (toString hv)) (STRING #"%" (toString (hv+1)))
+    (STRING #"%" (toString (hv+2))) (STRING #"%" (toString (hv+3)))
+Proof
+  simp[abi_decode_position_loop_cfg_def,abi_decode_loop_cfg_def,
+    abi_decode_position_header_zero]
+QED
+
 Theorem prefix_complete_array_header_reach_pair_mode:
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src dst
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
@@ -226,7 +208,39 @@ Theorem prefix_complete_array_header_reach_pair_mode:
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
-  cheat
+  strip_tac >> drule abi_decoder_recursive_data_facts >> strip_tac >>
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
+  `eval_operand (Var slot_var) s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
+    (`!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>
+        eval_operand op s = SOME w` by
+       (rpt strip_tac >> drule_all deploy_ctor_array_observation_operand >> simp[]) >>
+     fs[abi_decoder_ranges_def, eval_operand_def, Excl "enc_def"] >> conj_tac >> first_x_assum irule >> simp[]) >>
+  `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+    fs[abi_decode_source_def, Excl "enc_def"] >>
+  `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword(:256)` by
+    fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
+  drule_all canonical_dynamic_array_count_load >> strip_tac >>
+  `abi_decode_load DLOAD (n2w sb:bytes32) s = n2w (LENGTH vs)` by
+    (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  `checked ==> alloca_history func s /\ w2n (n2w sb:bytes32) + 32 <= LENGTH s.vs_data_section` by
+    (strip_tac >>
+     `has_type (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+       fs[abi_decoder_metadata_def,vyperABITheory.vyper_to_abi_type_def,Excl "enc_def"] >>
+     `32 <= LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs))` by
+       (irule canonical_dynamic_array_head_min >> simp[contractABITheory.is_dynamic_def]) >>
+     `sb < dimword(:256)` by decide_tac >>
+     fs[w2n_n2w,Excl "enc_def"] >> decide_tac) >>
+  drule prefix_complete_array_position_cfg_zero >> strip_tac >>
+  `header_var + 4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
+  drule_all prefix_complete_array_header_pair_mode >>
+  disch_then (mp_tac o SPEC_ALL) >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  goal_assum (drule_at Any) >> fs[]
 QED
 
 
@@ -248,7 +262,10 @@ val Frame = ``\(s,G,tn,B) (t,H,qt,A).
 
 val FrameMode = ``\X Y. (^Frame) X Y /\
   (checked ==> gas_path_mem ctx func (FST X) 0 (OK (FST Y)) /\
-    alloca_history func (FST Y))``;
+    alloca_history func (FST Y) /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (FST X,FST (SND X),FST (SND (SND X))) []
+      (OK (FST Y),FST (SND Y),FST (SND (SND Y))))``;
 
 Theorem prefix_complete_array_frame_transitive_mode:
   transitive (^FrameMode)
@@ -256,8 +273,11 @@ Proof
   simp_tac bool_ss [transitive_def] >>
   map_every qx_gen_tac [`x`,`y`,`z`] >>
   PairCases_on `x` >> PairCases_on `y` >> PairCases_on `z` >>
-  simp_tac std_ss [] >> strip_tac >> rpt conj_tac >>
-  metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF,gas_path_mem_then,ADD_0]
+  simp_tac std_ss [] >> strip_tac >>
+  reverse conj_tac
+  >- (strip_tac >> fs[] >> rpt strip_tac >>
+      metis_tac[gas_path_mem_then,ADD_0,gas_origin_ptr_path_trans]) >>
+  rpt conj_tac >> metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF]
 QED
 
 
@@ -406,7 +426,9 @@ Theorem prefix_complete_array_body_pair_mode:
     prepared.vs_memory = (FST X).vs_memory /\
     (^Frame) X (prepared,H,qt,SND (SND (SND X))) /\
     (checked ==> gas_path_mem ctx func (FST X) 0 (OK prepared) /\
-                 alloca_history func prepared)
+                 alloca_history func prepared /\
+                 !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+                   (FST X,FST (SND X),FST (SND (SND X))) [] (OK prepared,H,qt))
 Proof
   PairCases_on `X` >> simp_tac std_ss [] >> strip_tac >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
@@ -450,7 +472,9 @@ Proof
   drule_all prefix_loop_setup_execution_pair >> simp_tac std_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `abi_decode_sim ctx func X0 prepared` >>
   `(checked ==> gas_path_mem ctx func X0 0 (OK prepared) /\
-                alloca_history func prepared)` by
+                alloca_history func prepared /\
+                !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+                  (X0,X1,X2) [] (OK prepared,H,qt))` by
     (strip_tac >> gvs[Excl "enc_def"] >>
      `run_inst_seq_mem_ok (emitted_insts st middle) X0` by
        (drule ctor_checked_array_setup_mem_ok_at_index >> disch_then irule >>
@@ -468,6 +492,9 @@ Proof
        (drule prefix_loop_element_setup_code >> simp[LET_THM] >>
         strip_tac >> Cases_on `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` >>
         gvs[mk_inst_def,is_terminator_def]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+        i.inst_opcode <> GAS) (emitted_insts st middle)` by
+       (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         (emitted_insts st middle)` by
        (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
@@ -475,7 +502,16 @@ Proof
      drule_all abi_decode_array_element_setup_shape >> strip_tac >>
      `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
      drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     `X0 with vs_inst_idx := LENGTH st.cs_current_insts = X0` by
+       simp[venom_state_component_equality] >>
+     `!D'. inst_seq_ptr D' lo ctx func PG X1 X2 (emitted_insts st middle) X0 H qt` by
+       (gen_tac >>
+        qpat_assum `!D' k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+          (qspecl_then [`D'`,`LENGTH st.cs_current_insts`] mp_tac) >>
+        pop_assum (fn th => rewrite_tac[th])) >>
+     simp[Abbr `prepared`] >> rpt strip_tac >>
+     irule emitted_origin_ptr_path >> metis_tac[]) >>
   drule_all prefix_complete_array_setup_ambient >> strip_tac >>
   `(^Ok) k ctx func site ids D N d
      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
@@ -581,8 +617,8 @@ Proof
     (drule prefix_complete_array_header_support >> simp[]) >>
   `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
     phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_loop_cfg_def,abi_decode_header_insts_def,
-      phi_prefix_length_def,mk_inst_def]) >>
+    (fs[abi_decode_position_loop_cfg_def,abi_decode_position_header_zero,
+      abi_decode_header_insts_def,phi_prefix_length_def,mk_inst_def]) >>
   `mem_bytes_at (sb + abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j)
     (LENGTH (enc (vyper_to_abi_type env ty) (EL j avs))) prepared.vs_data_section =
     enc (vyper_to_abi_type env ty) (EL j avs)` by simp[Excl "enc_def"] >>
@@ -647,7 +683,7 @@ Proof
     irule ctor_checked_array_child_section_at_index >>
     qpat_assum `abi_decoder_metadata _ _ (ArrayT _ _) _ _ _ _` (irule_at Any) >>
     asm_simp_tac (srw_ss()) [contractABITheory.enc_def,LET_THM] >>
-    qpat_assum `abi_decoder_ranges DLOAD _ _ _ _ _ _ _ _ _ _ initial` (irule_at Any) >>
+    qpat_assum `abi_decoder_ranges DLOAD _ _ _ _ _ _ _ _ _ _ _ initial` (irule_at Any) >>
     qexists_tac `sf` >> simp[Excl "enc_def"])) >>
   strip_tac >> suspend "compose"
 QED
@@ -699,7 +735,11 @@ Resume prefix_complete_array_body_iteration_pair_mode[compose]:
   strip_tac >>
   qpat_assum `checked ==> gas_path_mem _ _ X0 _ _ /\ _` drule >> strip_tac >>
   qpat_assum `checked ==> gas_path_mem _ _ prepared _ _ /\ _` drule >> strip_tac >>
-  metis_tac[gas_path_mem_then,ADD_0]
+  qpat_assum `checked ==> !D explicit. gas_origin_ptr_path _ (prepared,_,_) _ _` drule >>
+  strip_tac >> rpt conj_tac
+  >- metis_tac[gas_path_mem_then,ADD_0]
+  >- metis_tac[] >>
+  metis_tac[gas_origin_ptr_path_trans]
 QED
 
 Finalise prefix_complete_array_body_iteration_pair_mode
@@ -782,8 +822,14 @@ Proof
      disch_then (qspec_then `ctx` assume_tac) >>
      `get_instruction bb prepared.vs_inst_idx = SOME (mk_inst id JMP [Label hdr] [])` by
        simp[get_instruction_def,EL_APPEND_EQN] >>
+     `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (prepared,G,tn) []
+        (OK (jump_to hdr prepared),G,tn)` by
+       (rpt gen_tac >> match_mp_tac (Q.INST [`iid` |-> `id`] jmp_origin_ptr_path) >>
+        asm_rewrite_tac[]) >>
      `(checked ==> gas_path_mem ctx func prepared 0 (OK (jump_to hdr prepared)) /\
-       alloca_history func (jump_to hdr prepared))` by
+       alloca_history func (jump_to hdr prepared) /\
+       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (prepared,G,tn) []
+         (OK (jump_to hdr prepared),G,tn))` by
        (strip_tac >> `alloca_history func prepared` by simp[] >>
         drule_all ctor_checked_jump_path >> simp[]) >>
      `(!fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn (jump_to hdr prepared)) ==>
