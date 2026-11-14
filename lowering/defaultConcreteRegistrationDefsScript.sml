@@ -79,6 +79,7 @@ Definition default_registration_invariant_def:
       args all_tvs specs cef sa ce st off rest tvs s G tn owners <=>
     LENGTH owners <= LENGTH args /\
     LENGTH args = LENGTH all_tvs /\ LENGTH specs = LENGTH args /\
+    MAP (\(name,prim,dyn,sz,info). sz) specs = MAP tv_abi_size all_tvs /\
     ALL_DISTINCT (MAP FST args) /\
     LIST_REL (\(name,ty) tv. evaluate_type (type_env tops) ty = SOME tv)
       args all_tvs /\
@@ -144,6 +145,18 @@ Proof
   gvs[TAKE_LENGTH_TOO_LONG]
 QED
 
+Theorem default_registration_slot_sizes:
+  !args tvs specs.
+  LENGTH args = LENGTH tvs /\
+  LIST_REL (default_registration_slot tops ce) (ZIP (args,tvs)) specs ==>
+  MAP (\(name,prim,dyn,sz,info). sz) specs = MAP tv_abi_size tvs
+Proof
+  Induct >> Cases_on `tvs` >> Cases_on `specs` >> simp[] >>
+  gen_tac >> rename1 `default_registration_slot _ _ (arg,tv) spec` >>
+  PairCases_on `arg` >> PairCases_on `spec` >>
+  simp[default_registration_slot_def] >> metis_tac[]
+QED
+
 (* A genuine empty-prefix construction: every hypothesis is a source/compiler
    or state resource, and none is a runtime execution or endpoint assertion. *)
 Theorem default_registration_invariant_initial:
@@ -167,7 +180,8 @@ Theorem default_registration_invariant_initial:
     args all_tvs specs cef sa ce st 4 specs all_tvs s G tn []
 Proof
   simp[default_registration_invariant_def,
-       compile_register_positional_args_def, comp_return_def]
+       compile_register_positional_args_def, comp_return_def] >>
+  metis_tac[default_registration_slot_sizes]
 QED
 
 (* Type-check the exact partial application supplied as R to the list fold.
@@ -180,4 +194,16 @@ Theorem default_registration_fold_cursor:
 Proof
   simp[default_registration_invariant_def, default_registration_resources_def] >>
   rpt strip_tac >> simp[LENGTH_DROP]
+QED
+
+Theorem default_registration_invariant_prefix_size:
+  default_registration_invariant tops cx ctx fn site k initial ce0 start
+    args all_tvs specs cef sa ce st off rest tvs s G tn owners ==>
+  off = 4 + SUM (MAP (\(name,prim,dyn,sz,info). sz)
+    (TAKE (LENGTH owners) specs))
+Proof
+  simp[default_registration_invariant_def] >> strip_tac >>
+  `TAKE (LENGTH owners) (MAP (\(name,prim,dyn,sz,info). sz) specs) =
+   TAKE (LENGTH owners) (MAP tv_abi_size all_tvs)` by simp[] >>
+  gvs[MAP_TAKE]
 QED
