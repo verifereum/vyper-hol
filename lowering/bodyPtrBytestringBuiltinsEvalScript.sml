@@ -1,5 +1,6 @@
 Theory bodyPtrBytestringBuiltinsEval
 Ancestors
+  exprSimSource
   bodyPtrBytestringBuiltinsUnary bodyPtrBytestringBuiltinsPrefix fragGasPathPtr fragGasSeqPtr
 
 Theorem gas_outcome_ptr_eval_evidence:
@@ -132,30 +133,4 @@ Proof
   first_assum (irule_at (Pat `expr_sim_ptr _ _ _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
-QED
-
-Theorem operand_eval_evidence_semantics:
-  expr_body_pre cenv cx env e es /\
-  (?marks ee0. ee = ee0 with gas_obs := [] /\
-    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
-      (es with gas_obs := gas_explicit marks readings ++ tail) =
-      (INL v,ee0 with gas_obs := tail)) ==>
-  expr_sim_inv cenv cx env ee /\
-  expr_result_typed env e (Value v) /\
-  (is_word_type (expr_type e) ==>
-    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-      value_has_type tyv v)
-Proof
-  strip_tac >>
-  first_x_assum (qspec_then `[]` assume_tac) >>
-  qpat_x_assum `ee = _` SUBST_ALL_TAC >>
-  qpat_assum `_ = (INL v,_)`
-    (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] exprSimSourceTheory.expr_body_pre_eval)) >>
-  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
-  simp[exprSimSourceTheory.expr_body_pre_gas_obs] >> strip_tac >>
-  simp[] >> strip_tac >>
-  qpat_assum `_ = (INL v,_)`
-    (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] exprSimSourceTheory.expr_body_pre_word_value)) >>
-  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
-  simp[exprSimSourceTheory.expr_body_pre_gas_obs]
 QED

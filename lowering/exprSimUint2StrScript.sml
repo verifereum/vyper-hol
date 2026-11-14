@@ -15,6 +15,8 @@
 Theory exprSimUint2Str
 Ancestors
   exprSimHashBoundary
+  exprLowering exprLoweringProps exprBopLowering vyperAST vyperContext valueEncoding
+  vyperValue vfmConstants exprSimSource exprWordOperand vyperTyping integer
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   arithmetic list ASCIInumbers numposrep logroot
@@ -3279,4 +3281,86 @@ Proof
   gvs[exprLoweringTheory.as_ptr_val_def] >>
   irule (SRULE [cs_appends_def] uint2str_suffix_appends) >>
   goal_assum (drule_at Any)
+QED
+
+Theorem uint2str_compile_cut:
+  compile_expr cenv ty (Builtin ann (Uint2Str n) [e]) sa = (vv,sb) ==>
+  ?op sm. lower_value compile_expr cenv ty e sa = (op,sm) /\
+    as_ptr_val ann LocMemory
+      (compile_uint2str op n (type_memory_bytes cenv ann) sm) = (vv,sb)
+Proof
+  `!bt args. names_builtin bt args ==> bt <> Uint2Str n` by
+    (ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
+  `~names_builtin (Uint2Str n) [e]` by metis_tac[] >>
+  simp[compile_expr_builtin_dispatch] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> metis_tac[]
+QED
+
+Theorem uint2str_code_appends:
+  cs_appends (\sm. as_ptr_val ann LocMemory
+    (compile_uint2str x n N sm))
+Proof
+  rw[cs_appends_def] >>
+  Cases_on `compile_uint2str x n N sm` >> gvs[as_ptr_val_def] >>
+  mp_tac (Q.INST [`op` |-> `x`, `sz` |-> `N`] uint2str_suffix_appends) >>
+  simp[cs_appends_def] >> metis_tac[]
+QED
+
+Theorem u2s_builtin_result_requirements:
+  expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) args) es /\
+  X < dimword(:256) /\ 78 <= n /\
+  sz = type_memory_bytes cenv (BaseT (StringT n)) ==>
+  ~is_word_type (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) /\
+  evaluate_type (get_tenv cx)
+    (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) =
+      SOME (BaseTV (StringT n)) /\
+  type_memory_bytes cenv
+    (lowered_value_type cenv (Builtin (BaseT (StringT n)) (Uint2Str n) args)) =
+      type_memory_size (BaseTV (StringT n)) /\
+  type_memory_size (BaseTV (StringT n)) = sz /\ 32 <= sz /\
+  sz+n < dimword(:256) /\
+  val_wf (BaseTV (StringT n)) (StringV (num_to_dec_string X)) /\
+  LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT n)) /\
+  val_footprint (BaseTV (StringT n)) (StringV (num_to_dec_string X)) <= sz
+Proof
+  strip_tac >> drule_all uint2str_result_memory_bounds >> strip_tac >>
+  drule uint2str_body_capacity >> strip_tac >>
+  `LENGTH (num_to_dec_string X) <= n` by
+    (mp_tac (Q.INST [`x` |-> `X`] uint256_decimal_length) >>
+     fs[dimword_def] >> decide_tac) >>
+  simp[expr_type_def, is_word_type_def, evaluate_type_def,
+       type_slot_size_def, lowered_value_type_def, type_memory_size_def, type_memory_bytes_def,
+       word_size_def] >>
+  gvs[type_memory_bytes_def, word_size_def, dimword_def] >> decide_tac
+QED
+
+Theorem uint2str_operand_endpoint:
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT k) /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  ?a. v = IntV (&a) /\ a < dimword(:256) /\
+    eval_operand op t = SOME (n2w a) /\ expr_sim_inv cenv cx env ee
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all operand_eval_evidence_semantics >> strip_tac >>
+  `?i. v = IntV i /\ 0 <= i /\ Num i < 2 ** k /\
+       k <= 256 /\ 0 < k /\ k MOD 8 = 0` by
+    (fs[is_word_type_def, evaluate_type_def] >> Cases_on `v` >>
+     gvs[is_word_type_def, evaluate_type_def, value_has_type_def]) >>
+  gvs[] >> qexists_tac `Num i` >> simp[] >>
+  conj_tac
+  >- (rewrite_tac[dimword_def] >>
+      irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** k` >>
+      simp[EXP_BASE_LE_MONO]) >>
+  `~(i < 0)` by intLib.ARITH_TAC >>
+  drule expr_post_word_operand >>
+  simp[is_word_type_def, evaluate_type_def, loweringSliceTheory.word_value_def, val_to_w256_def,
+    integer_wordTheory.i2w_def]
 QED

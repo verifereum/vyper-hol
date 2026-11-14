@@ -90,33 +90,3 @@ Resume compile_uint2str_counted_ptr[ptr]:
 QED
 
 Finalise compile_uint2str_counted_ptr
-
-(* The family caller uses this concrete builtin/type, not an arbitrary
-   expression satisfying additional representation assumptions. *)
-Theorem u2s_builtin_result_requirements:
-  expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) args) es /\
-  X < dimword(:256) /\ 78 <= n /\
-  sz = type_memory_bytes cenv (BaseT (StringT n)) ==>
-  ~is_word_type (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) /\
-  evaluate_type (get_tenv cx)
-    (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) args)) =
-      SOME (BaseTV (StringT n)) /\
-  type_memory_bytes cenv
-    (lowered_value_type cenv (Builtin (BaseT (StringT n)) (Uint2Str n) args)) =
-      type_memory_size (BaseTV (StringT n)) /\
-  type_memory_size (BaseTV (StringT n)) = sz /\ 32 <= sz /\
-  sz+n < dimword(:256) /\
-  val_wf (BaseTV (StringT n)) (StringV (num_to_dec_string X)) /\
-  LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT n)) /\
-  val_footprint (BaseTV (StringT n)) (StringV (num_to_dec_string X)) <= sz
-Proof
-  strip_tac >> drule_all uint2str_result_memory_bounds >> strip_tac >>
-  drule uint2str_body_capacity >> strip_tac >>
-  `LENGTH (num_to_dec_string X) <= n` by
-    (mp_tac (Q.INST [`x` |-> `X`] uint256_decimal_length) >>
-     fs[dimword_def] >> decide_tac) >>
-  simp[expr_type_def, is_word_type_def, evaluate_type_def,
-       type_slot_size_def, lowered_value_type_def, type_memory_size_def, type_memory_bytes_def,
-       word_size_def] >>
-  gvs[type_memory_bytes_def, word_size_def, dimword_def] >> decide_tac
-QED
