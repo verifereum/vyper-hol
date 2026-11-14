@@ -290,6 +290,10 @@ Resume ecmul_vv_sim_mem[tail]:
      at_horizon `!H. valid_horizon cx st0 H es2.storage_trace ==>
                      expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
        `H` >>
+     `storage_well_formed_on cx es2 (FST H)` by
+       (qpat_assum `expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 _ u`
+         (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+          REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
      drule_at (Pat `compile_ecmul_point _ _ _ = _`)
        (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`] ecmul_points_path_mem) >>
      simp[exprLoweringTheory.lowered_value_type_def,
@@ -389,6 +393,10 @@ Resume ecadd_vv_sim_mem[typed]:
      at_horizon `!H. valid_horizon cx st0 H es2.storage_trace ==>
                      expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\ _`
        `H` >>
+     `storage_well_formed_on cx es2 (FST H)` by
+       (qpat_assum `expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 _ u`
+         (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+          REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
      drule_at (Pat `compile_ecadd_points _ _ _ = _`)
        (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd [a;b]`] ecadd_points_path_mem) >>
      simp[exprLoweringTheory.lowered_value_type_def,
