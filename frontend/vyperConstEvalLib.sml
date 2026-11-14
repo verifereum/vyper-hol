@@ -1,6 +1,6 @@
 structure vyperConstEvalLib :> vyperConstEvalLib = struct
 
-open HolKernel boolLib vyperConstEvalTheory
+open HolKernel boolLib vyperConstEvalTheory vyperPinFoldTheory
 
 (* EVAL computes eval_constant of a closed expression with cv_eval.
    eval_constant has no rewrites in EVAL (it is defined [nocompute]), so
@@ -15,6 +15,9 @@ fun eval_constant_conv tm =
   else raise mk_HOL_ERR "vyperConstEvalLib" "eval_constant_conv" "open term"
 
 val () = computeLib.add_convs [(eval_constant_tm, 1, eval_constant_conv)]
+val pin_fold_expr_tm =
+  prim_mk_const {Thy = "vyperPinFold", Name = "pin_fold_expr"}
+val () = computeLib.add_convs [(pin_fold_expr_tm, 1, eval_constant_conv)]
 local open intReduce wordsLib in end
 
 end
