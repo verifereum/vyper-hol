@@ -162,25 +162,26 @@ QED
 Finalise rb_compile_external_call_kwargs
 
 Theorem rb_compile_dynarray_append:
-  !base v ce ws sz dty sty cap prim load store. rb_operand_ok base /\ rb_operand_ok v ==>
+  !base v ce ws sz dty sty cap prim loc.
+  rb_operand_ok base /\ rb_operand_ok v /\
+  (case ce.ce_imm_alloca of NONE => T | SOME op => rb_operand_ok op) ==>
   rb_step (K T)
-    (compile_dynarray_append ce base v ws sz dty sty cap prim load store)
+    (compile_dynarray_append ce base v ws sz dty sty cap prim loc)
 Proof
   rpt strip_tac >> pure_rewrite_tac[compile_dynarray_append_def, LET_THM] >>
   BETA_TAC >>
-  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_ptr_load >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
-  >- (Cases_on `prim` >> simp[rb_emit_void] >>
-      Cases_on `(case store of SSTORE => LocStorage | TSTORE => LocTransient
-                   | _ => LocMemory) = LocMemory` >> simp[]
+  >- (Cases_on `prim` >> simp[rb_compile_ptr_store] >>
+      Cases_on `loc = LocMemory` >> simp[]
       >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_store_memory, rb_step_return]) >>
-      simp[cj 1 rb_slots]) >>
-  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_void]
+      Cases_on `loc = LocCode` >> simp[rb_compile_imm_store_words, cj 1 rb_slots]) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_compile_ptr_store]
 QED
 
 Theorem rb_compile_dynarray_pop:

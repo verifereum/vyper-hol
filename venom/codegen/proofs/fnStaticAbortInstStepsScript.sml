@@ -101,7 +101,9 @@ Theorem body_abort_halt_step:
 Proof
   strip_tac >> abort_terminal_facts_tac >>
   drule_all gen_inst_halt_frame_sim_deep >>
-  simp[body_result_abort_def]
+  disch_then(qx_choosel_then [`n`,`out`] strip_assume_tac) >>
+  simp[body_result_abort_def] >>
+  qexistsl_tac [`n`,`out`] >> simp[]
 QED
 
 Theorem body_abort_abort_step:

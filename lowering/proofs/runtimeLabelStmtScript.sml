@@ -405,7 +405,7 @@ Resume compile_stmts_no_runtime_begin[append]:
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_store_memory, rb_step_return]) >>
   gen_tac >> strip_tac >> irule rb_bind_return >> BETA_TAC >>
-  irule rb_compile_dynarray_append >> gvs[]
+  irule rb_compile_dynarray_append >> gvs[rb_env_ok_def]
 QED
 Resume compile_stmts_no_runtime_begin[break]:
   gvs[rb_loop_ok_def, rb_emit_inst, rb_operand_ok_def]
