@@ -10,18 +10,6 @@ Proof
   simp[rename_current_operands_def] >> metis_tac[]
 QED
 
-Theorem current_fixed_owner_latest:
-  current_name_owner V H u /\ current_stack_owner V H (SND rs) /\
-  v IN V ==> (latest_current_name rs v,v) IN H
-Proof
-  PairCases_on `rs` >> simp[latest_current_name_def] >> strip_tac >>
-  Cases_on `ALOOKUP rs1 v`
-  >- (simp[] >> metis_tac[current_name_owner_identity]) >>
-  rename1 `ALOOKUP rs1 v = SOME ns` >> Cases_on `ns` >> simp[]
-  >- metis_tac[current_name_owner_identity] >>
-  drule_all current_stack_owner_lookup >> simp[]
-QED
-
 Theorem current_fixed_owner_push:
   push_current_name s rs v = (rt,t,n) /\
   current_name_owner V H u /\ current_stack_owner V H (SND rs) /\

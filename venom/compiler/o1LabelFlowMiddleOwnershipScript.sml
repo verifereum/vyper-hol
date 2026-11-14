@@ -131,18 +131,6 @@ QED
 
 Finalise visit_common_rename_owner
 
-Theorem current_stack_latest_owner:
-  current_name_owner V H s /\ current_stack_owner V H (SND rs) /\
-  v IN V ==> (latest_current_name rs v,v) IN H
-Proof
-  PairCases_on `rs` >> simp[latest_current_name_def] >> strip_tac >>
-  Cases_on `ALOOKUP rs1 v`
-  >- (simp[] >> metis_tac[current_name_owner_identity]) >>
-  rename1 `ALOOKUP rs1 v = SOME ns` >> Cases_on `ns` >> simp[]
-  >- metis_tac[current_name_owner_identity] >>
-  drule_all current_stack_owner_lookup >> simp[]
-QED
-
 Theorem current_rename_common_unique:
   current_rename_owner V H s rs /\ (n,v) IN H /\ (n,w) IN H ==>
   v = w

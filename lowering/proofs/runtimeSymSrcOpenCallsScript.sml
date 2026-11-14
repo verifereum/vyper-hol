@@ -6,16 +6,6 @@ Ancestors
   runtimeSymSrcContext runtimeSymSrcExternalCalls
   exprLowering compileEnv emitHelper loweringShapeDefs list venomInst stackPlanTypes
 
-Theorem runtime_sym_call_op[local]:
-  emit_op opc ops s = (v,s') ==>
-  opc <> CODESIZE /\ opc <> CODECOPY /\
-  EVERY (\op. ~is_label_operand op) ops /\
-  EVERY runtime_sym_inst (state_insts s) ==>
-  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
-Proof
-  metis_tac[runtime_sym_emit_op]
-QED
-
 Theorem runtime_sym_acc:
   runtime_sym_lower_value_clause tops ==> runtime_sym_acc_clause tops
 Proof
@@ -32,9 +22,9 @@ Proof
        qexists `s.cs_next_id` >> simp[runtime_sym_inst_def, mk_inst_def]) >>
       simp[is_label_operand_def])
   >~ [`emit_op GT [cs_op; Lit 0w] st2 = (op,s')`] >-
-     (dxrule runtime_sym_call_op >> simp[] >> strip_tac >>
-      drule runtime_sym_call_op >> simp[is_label_operand_def]) >>
-  drule runtime_sym_call_op >> simp[]
+     (dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
+      drule runtime_sym_emit_op_result >> simp[is_label_operand_def]) >>
+  drule runtime_sym_emit_op_result >> simp[]
 QED
 
 Theorem runtime_sym_call:

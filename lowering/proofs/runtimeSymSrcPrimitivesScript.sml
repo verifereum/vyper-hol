@@ -95,7 +95,7 @@ Proof
        runtime_sym_closed_make_array_elems, runtime_sym_closed_abi_encode_args,
        runtime_sym_closed_call, runtime_sym_context_contracts,
        runtime_sym_expr_primitives, runtime_sym_math,
-       runtime_sym_simple_contract, runtime_sym_misc_contract,
+       runtime_sym_simple_contract, runtimeSymSrcBuiltinMiscTheory.runtime_sym_misc_clauses,
        runtime_sym_abi_contract] >> rpt conj_tac
   >- (irule runtime_sym_multi_exprs >> simp[runtime_sym_closed_lower_value])
   >- (irule runtime_sym_make_array >> simp[runtime_sym_closed_make_array_elems])

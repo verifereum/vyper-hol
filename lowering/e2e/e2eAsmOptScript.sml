@@ -11,7 +11,7 @@
  * opt_entry_initial_venom_state_rel, opt_entry_code_layout_valid,
  * opt_entry_fields, opt_entry_codegen_asm_entry_rel,
  * opt_entry_asm_frame_rel, gas_variant_code_layout_valid,
- * o1_pipeline_memory_obligations_raw, o1_pipeline_label_flow_ok,
+ * o1_pipeline_memory_obligations_raw,
  * o1_pipeline_sym_unit_static_ok.
  * lower_vyper_runtime_unit_sym_src_ok is in runtimeSymSrcUnit.
  *)
@@ -254,21 +254,6 @@ Proof
 QED
 
 (* ===== The O1 pipeline's static and offset facts for the optimizer case ===== *)
-
-(* label_flow_ok survives O1: LowerDload's code_end ADD feeds only its own
-   CODECOPY, and the later passes copy such a pointer only by ASSIGN. *)
-Theorem o1_pipeline_label_flow_ok:
-  !rpolicy unit out.
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  label_flow_ok unit.cu_context /\
-  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-             ~MEM (Label "code_end") inst.inst_operands) ==>
-  label_flow_ok out.po_unit.cu_context
-Proof
-  ACCEPT_TAC o1_pipeline_label_flow_preserved
-QED
 
 (* O1 keeps the data segment and makes INVOKE targets well formed. *)
 Theorem o1_pipeline_sym_unit_static_ok:
