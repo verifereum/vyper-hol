@@ -1,7 +1,54 @@
 (* Seam 2 joint induction, a family leaf of the call step: every other call target (external calls and send; the rest are not supported_expr). *)
 Theory bodyIntCallFamCallExt
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallJointCallCore bodyIntCallJointPurePath
+  exprExtRequestHistory extcallProtFramePath
+
+Theorem intcall_ext_history_cont[local]:
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
+  extrequest_history_frame ce fp.jc_cx es sa s ee sb u /\
+  stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee u /\
+  expr_sim_inv ce fp.jc_cx env ee /\ ee.immutables = es.immutables /\
+  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) /\
+  ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  (!a k. fp.jc_prot a k ==>
+    mem_bytes_at a k u.vs_memory = mem_bytes_at a k s.vs_memory) ==>
+  intcall_expr_cont fp ce env es sa s ee sb u
+Proof
+  strip_tac >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
+   allocas_above fp.jc_lo s` by fs[intcall_expr_res_def] >>
+  `s.vs_alloca_next <= u.vs_alloca_next` by
+    metis_tac[gas_marked_path_alloca_next_mono] >>
+  `allocas_above fp.jc_lo u` by
+    metis_tac[gas_marked_path_allocas_above] >>
+  `!n b k. local_region ce es.scopes s n b k <=>
+            local_region ce ee.scopes u n b k` by
+    metis_tac[extrequest_history_local_regions] >>
+  `!op. fp.jc_reserved op ==> eval_operand op u = eval_operand op s` by
+    (rpt strip_tac >>
+     `?x w. op = Var x /\ lookup_var x fp.jc_oorig = SOME w` by
+       metis_tac[intcall_frame_ok_def] >>
+     `not_fresh_at sa x /\ eval_operand op s = SOME w` by
+       (fs[intcall_expr_res_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+     gvs[venomStateTheory.eval_operand_def] >>
+     metis_tac[extrequest_history_frame_def]) >>
+  `intcall_expr_res fp ce env ee sb u` by
+    (irule intcall_joint_res_frame >>
+     simp[] >> qexistsl [`es`, `s`, `sa`] >>
+     fs[extrequest_history_frame_def] >> metis_tac[]) >>
+  `locals_kept ce es ee s u` by
+    (`ee.scopes = es.scopes` by
+       fs[extrequest_history_frame_def, exprExtRequestReadProbeTheory.extrequest_read_frame_def] >>
+     `locals_kept ce es es s u` by
+       (irule exprSimPropsTheory.locals_kept_regions >>
+        fs[extrequest_history_frame_def] >> metis_tac[]) >>
+     fs[loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+     metis_tac[]) >>
+  fs[intcall_expr_cont_def, extrequest_history_frame_def,
+     loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
+QED
 
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
