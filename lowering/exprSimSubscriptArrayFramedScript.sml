@@ -185,6 +185,36 @@ Proof
 QED
 
 (* Expose the two child intervals and the bounds/element tail once. *)
+Theorem compile_expr_array_subscript_snapshot:
+  compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+  place_type cenv obj = ValPT (ArrayT et bd) ==>
+  ?bvv st1 captured st2 iop st3 dst loc.
+    compile_expr cenv ty obj st = (bvv, st1) /\
+    (if copies_subscript_base cenv obj idx
+     then compile_snapshot_vv cenv T bvv else comp_return bvv) st1 =
+      (captured, st2) /\
+    lower_value compile_expr cenv ty idx st2 = (iop, st3) /\
+    loc = (case vv_location captured of SOME l => l | NONE => LocMemory) /\
+    compile_array_subscript (vv_operand captured) iop
+      (case bd of Fixed _ => F | Dynamic _ => T)
+      (case bd of Fixed n => n | Dynamic _ => 0)
+      (word_scale loc) (elem_size_in_location cenv loc et)
+      (is_signed_type (expr_type idx))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc)
+      st3 = (dst, st') /\
+    vv = LocatedValue ann (mk_ptr dst loc)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       compile_subscript_def, lower_value_def,
+       exprCallBoundsTheory.expr_child_callback_def,
+       comp_bind_def, comp_return_def,
+       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem compile_expr_array_subscript:
   compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
   place_type cenv obj = ValPT (ArrayT et bd) /\
@@ -202,18 +232,9 @@ Theorem compile_expr_array_subscript:
       st2 = (dst, st') /\
     vv = LocatedValue ann (mk_ptr dst loc)
 Proof
-  strip_tac >>
-  qpat_x_assum `~copies_subscript_base _ _ _` (fn th =>
-    qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
-    simp[th, Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-         compile_subscript_def, lower_value_def,
-         exprCallBoundsTheory.expr_child_callback_def,
-         comp_bind_def, comp_return_def,
-         vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def]) >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  strip_tac >> drule_all compile_expr_array_subscript_snapshot >>
+  simp[comp_return_def] >> metis_tac[]
 QED
-
 
 Theorem straight_fresh_compile_array_subscript:
   (dyn ==> straight_fresh (loader base_op)) ==>
