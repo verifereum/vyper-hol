@@ -18,7 +18,7 @@ Ancestors
   vyperTypeInitialState vyperTypeInvariants
   vyperStorageFootprint vyperStorageBackend vyperLookupStorage vyperStorage
   immutableSectionRel vyperABIEntries
-  vfmState vfmExecution vfmExecutionProp vfmRunCall vfmTotalBalance
+  vfmState vfmExecution vfmExecutionProp vfmRunCall vfmTotalBalance vfmWfState
   vfmAccountFrame vfmContext loweringStateRelDefs While
   e2eCodeFrame vyperRuntimeImmutables storageLiveAgree vyperCallFiniteStorage
 
