@@ -1469,11 +1469,12 @@ Proof
   (impl_tac >- simp[]) >>
   strip_tac >>
   rewrite_tac[aug_place_stmt_source] >>
-  drule exprSimSubscriptMapTheory.gas_outcome_bind_result_exec >>
-  disch_then irule >> rpt conj_tac
+  drule (INST_TYPE [alpha |-> ``:unit``]
+    exprSimSubscriptMapTheory.gas_outcome_bind_result_exec) >>
+  disch_then match_mp_tac >> rpt conj_tac
   >- (rpt strip_tac >> fs[])
   >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
-      rename1 `expr_exit (INR ex) _` >> qexists_tac `ex` >>
+      rename1 `expr_exit (INR ex) _` >>
       simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
   >- (rpt gen_tac >> strip_tac >> suspend "base_normal")
   >- simp[aug_place_rest_trace_frame]
@@ -1622,11 +1623,11 @@ Resume compile_augassign_place_storage_case[base_normal]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   BETA_TAC >> rewrite_tac[place_type_value_def, bind_return] >> BETA_TAC >>
-  drule aug_place_bind_value_exec >>
-  disch_then irule >> rpt conj_tac
+  drule (INST_TYPE [alpha |-> ``:unit``] aug_place_bind_value_exec) >>
+  disch_then match_mp_tac >> rpt conj_tac
   >- (rpt strip_tac >> fs[])
   >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
-      rename1 `expr_exit (INR ex) _` >> qexists_tac `ex` >>
+      rename1 `expr_exit (INR ex) _` >>
       simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
   >- (rpt gen_tac >> strip_tac >> suspend "rhs_normal")
   >- simp[aug_place_store_trace_frame]
