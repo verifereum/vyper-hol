@@ -552,3 +552,63 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def, ghost_inv_at_def] >>
   fs[op_taint_def, ghost_inv_at_def]
 QED
+
+Theorem array_tail_bounds_uniform[local]:
+  array_bounds_check idx len sgn sa = ((),sb) /\
+  eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
+  fresh_vars_wrt sa s /\ ~ctx_has_dalloca ctx /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  op_taint tn idx = {} /\ op_taint tn len = {} /\ allocas_from lo s ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  ?G' tn'.
+    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn') /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+    (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
+      (t with vs_vars := s.vs_vars) = s /\
+      (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)) /\
+    (!t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t ==>
+      (t with vs_vars := s.vs_vars) = revert_state (set_returndata [] s) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x))
+Proof
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  drule_all array_bounds_check_certified >>
+  disch_then (qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac) >>
+  simp[] >> qexistsl [`G'`, `tn'`] >> simp[] >>
+  rpt strip_tac >>
+  drule_all array_bounds_check_certified >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique]
+QED
+
+
+Theorem array_tail_address_uniform[local]:
+  array_elem_ptr bop idx dyn ws esz sa = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+  fresh_vars_wrt sa s /\ op_taint tn bop = {} /\ op_taint tn idx = {} /\
+  op_prov G idx = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn') /\
+    op_taint tn' p = {} /\ op_prov G' p = op_prov G bop /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x /\
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz)
+Proof
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+  drule_all array_elem_ptr_certified >>
+  disch_then (qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac) >>
+  simp[] >> qexistsl [`H`, `tm`] >> simp[] >>
+  gen_tac >>
+  drule_all array_elem_ptr_certified >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique]
+QED
