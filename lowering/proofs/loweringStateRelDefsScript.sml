@@ -691,6 +691,7 @@ Definition call_ctx_rel_def:
      cc.cc_address = txn.target ∧
      cc.cc_callvalue = n2w txn.value ∧
      cc.cc_calldata = txn.calldata ∧
+     cc.cc_static = txn.is_static ∧
      tc.tc_origin = txn.origin ∧
      tc.tc_gasprice = n2w txn.gas_price ∧
      tc.tc_chainid = n2w txn.chain_id ∧
