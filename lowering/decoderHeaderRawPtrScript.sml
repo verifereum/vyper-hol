@@ -57,13 +57,13 @@ Proof
   drule_all (Q.INST [`s` |-> `s with vs_inst_idx := LENGTH sa.cs_current_insts`,
     `t` |-> `t with vs_inst_idx := LENGTH sa.cs_current_insts`]
     (SPEC_ALL calldata_array_header_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] strip_assume_tac) >>
-  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   `eval_operand (Var root) s = SOME (n2w d) /\
    abi_decoder_operand_live sa.cs_next_var (Var root)` by
     simp[eval_operand_def, calldata_operand_live_not_fresh] >>
   drule_all calldata_array_header_repeat_sequence >> strip_tac >>
-  qexistsl_tac [`H`,`u`] >>
+  qexistsl_tac [`HG`,`u`] >>
   gvs[cj 4 control_moves_keep_vars, allocas_from_def] >> metis_tac[]
 QED
 

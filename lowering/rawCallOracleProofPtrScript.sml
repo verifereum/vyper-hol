@@ -82,11 +82,7 @@ Theorem oracle_effect_stmt_frame[local]:
   ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
   t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-  t.vs_fmp = s.vs_fmp /\
-  ((ctx_has_dalloca ctx \/
-    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
-    t.vs_initial_fmp = s.vs_initial_fmp /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
+  t.vs_fmp = s.vs_fmp ==>
   stmt_state_rel H ctx func cenv cx ee t
 Proof
   strip_tac >> irule stmt_state_rel_allocas_frame >> simp[] >>
@@ -154,13 +150,10 @@ Proof
   drule_all oracle_call_checked_step >> disch_then (qspec_then `PG` strip_assume_tac) >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_labels = s.vs_labels /\
    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-   s'.vs_fmp = s.vs_fmp /\ s'.vs_initial_fmp = s.vs_initial_fmp /\
-   s'.vs_data_section = s.vs_data_section /\
+   s'.vs_fmp = s.vs_fmp /\ s'.vs_data_section = s.vs_data_section /\
    s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
    s'.vs_halted = s.vs_halted` by
     (qpat_x_assum `s' = _` mp_tac >> simp[venom_state_component_equality]) >>
-  `LENGTH s.vs_memory <= LENGTH s'.vs_memory` by
-    simp[venomMemPropsTheory.write_memory_with_expansion_nondecreasing] >>
   `local_ptrs_rel func cenv es.scopes s /\
    immutables_rel cenv cx.txn.target cenv.ce_module F es s /\
    not_scope_ptr cenv es.scopes out` by

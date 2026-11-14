@@ -211,7 +211,7 @@ Proof
         rw[abi_builtin_allocate_state_def] >>
       irule fmp_room_fields >>
       qexists_tac `abi_builtin_allocate_state inst.inst_id n s` >>
-      gvs[abi_builtin_allocate_state_def]) >>
+      gvs[abi_builtin_allocate_state_def] >> IF_CASES_TAC >> gvs[]) >>
   rpt strip_tac >> drule_all log_encode_allocate_sizes >> simp[]
 QED
 

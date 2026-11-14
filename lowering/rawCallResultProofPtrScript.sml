@@ -1226,8 +1226,8 @@ Proof
   >- (irule exprLoweringPropsTheory.alloca_room_fields >> qexists_tac `s` >>
       simp[venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def]) >>
   conj_tac
-  >- (irule exprLoweringPropsTheory.fmp_room_write_memory >>
-      fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  >- (irule exprLoweringPropsTheory.fmp_room_fields >> qexists_tac `s` >>
+      simp[venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def]) >>
   conj_tac
   >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
       qexistsl_tac [`s`, `es`] >>

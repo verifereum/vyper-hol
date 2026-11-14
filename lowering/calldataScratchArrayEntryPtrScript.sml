@@ -104,7 +104,10 @@ Theorem calldata_scratch_array_constructor_entry_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_scratch_array_initialize_clean_ptr >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`D`]
+    (qx_choose_then `actual` (qx_choose_then `slot`
+      (qx_choose_then `H` (qx_choose_then `u`
+        (qx_choose_then `q` strip_assume_tac)))))) >>
   `fresh_vars_wrt limit_st actual /\ abi_decoder_budget first last b cap actual` by
     fs[abi_scratch_effect_def] >>
   `allocas_from lower actual` by
