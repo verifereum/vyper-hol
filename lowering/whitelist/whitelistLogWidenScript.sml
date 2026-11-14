@@ -31,42 +31,13 @@ Libs
 
 (* ===== The source encoding ignores a bytestring argument's bound ===== *)
 
-Theorem event_arg_compatible_cases[local]:
-  (!fty aty. event_arg_compatible fty aty ==>
-     aty = fty \/
-     (?n m. fty = BaseT (StringT n) /\ aty = BaseT (StringT m)) \/
-     (?n m. fty = BaseT (BytesT (Dynamic n)) /\
-            aty = BaseT (BytesT (Dynamic m))) \/
-     (?t b. fty = ArrayT t b) \/ (?ts. fty = TupleT ts)) /\
-  (!fs ats. event_arg_compatible_list fs ats ==> T)
-Proof
-  logWidenTacticsLib.compatible_cases
-QED
-
-Theorem scalar_event_arg_compatible:
-  !fty aty tenv.
-    supported_scalar_type fty /\ event_arg_compatible fty aty ==>
-    supported_scalar_type aty /\
-    vyper_to_abi_type tenv aty = vyper_to_abi_type tenv fty /\
-    (!v. vyper_to_abi tenv aty v = vyper_to_abi tenv fty v) /\
-    (!v. encode_event_topic aty v = encode_event_topic fty v)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule (CONJUNCT1 event_arg_compatible_cases) >> strip_tac >>
-  gvs[supported_scalar_type_def, supported_word_type_def,
-      supported_string_type_def] >>
-  rw[supported_string_type_def, encode_event_topic_def,
-     is_event_bytestring_type_def] >>
-  Cases_on `v` >> simp[]
-QED
-
 Theorem compatible_topics_eq[local]:
   !tys atys flags vals.
     EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
     encode_indexed_event_topics flags atys vals =
     encode_indexed_event_topics flags tys vals
 Proof
-  logWidenTacticsLib.topics_eq scalar_event_arg_compatible
+  logWidenTacticsLib.topics_eq stmtSimLogSourceTheory.scalar_event_arg_compatible
 QED
 
 Theorem compatible_non_indexed[local]:
@@ -85,7 +56,7 @@ Theorem compatible_abi_eq[local]:
     vyper_to_abi_types tenv atys = vyper_to_abi_types tenv tys /\
     vyper_to_abi_list tenv atys vals = vyper_to_abi_list tenv tys vals
 Proof
-  logWidenTacticsLib.abi_eq scalar_event_arg_compatible
+  logWidenTacticsLib.abi_eq stmtSimLogSourceTheory.scalar_event_arg_compatible
 QED
 
 (* log_source_event_encoded with the metadata at the field types tys and
@@ -110,7 +81,7 @@ Proof
   strip_tac >>
   `EVERY supported_scalar_type atys` by
     (gvs[EVERY_EL, LIST_REL_EL_EQN] >>
-     metis_tac[scalar_event_arg_compatible]) >>
+     metis_tac[stmtSimLogSourceTheory.scalar_event_arg_compatible]) >>
   `LENGTH atys = LENGTH tys /\ LENGTH vals = LENGTH atys` by
     metis_tac[LIST_REL_LENGTH] >>
   qspecl_then [`atys`, `flags`, `vals`] mp_tac log_scalar_topics_exist >>
@@ -191,7 +162,7 @@ Proof
   strip_tac >>
   `EVERY supported_scalar_type (MAP expr_type args)` by
     (gvs[EVERY_EL, LIST_REL_EL_EQN] >>
-     metis_tac[scalar_event_arg_compatible]) >>
+     metis_tac[stmtSimLogSourceTheory.scalar_event_arg_compatible]) >>
   `LENGTH flags = LENGTH args` by
     (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>
   qpat_x_assum `!e tail s. _` (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
@@ -203,7 +174,7 @@ Proof
   `LENGTH flags = LENGTH args` by simp[] >>
   `LIST_REL (\fty e. is_bytestring_type fty <=>
        is_bytestring_type (lowered_value_type cenv e)) tys args` by
-    logWidenTacticsLib.physical_tags (CONJUNCT1 event_arg_compatible_cases) >>
+    logWidenTacticsLib.physical_tags (CONJUNCT1 vyperEventArgCompatTheory.event_arg_compatible_cases) >>
   drule_all log_compile_structure_widen >> strip_tac >>
   qabbrev_tac `axs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `gas_admissible (eval_exprs cx args) log_args_res_ok es` by
@@ -256,12 +227,12 @@ Resume compile_log_ready_stmt_frag_widen[args_value]:
       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
       encode_event_topic aty v = encode_event_topic (SND arg) v) ds vs` by
-    logWidenTacticsLib.source_witness scalar_event_arg_compatible >>
+    logWidenTacticsLib.source_witness stmtSimLogSourceTheory.scalar_event_arg_compatible >>
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sm (es_end with gas_obs := []) t arg v /\
     supported_scalar_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
     (SND (split_log_ops ds flags)) (log_non_indexed_values flags vs)` by
-    logWidenTacticsLib.selected_data (CONJUNCT1 event_arg_compatible_cases) >>
+    logWidenTacticsLib.selected_data (CONJUNCT1 vyperEventArgCompatTheory.event_arg_compatible_cases) >>
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     (drule log_args_post_state >> simp[]) >>
   `local_ptrs_reserved cenv sm` by

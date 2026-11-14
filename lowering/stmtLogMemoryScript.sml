@@ -389,7 +389,7 @@ Proof
   strip_tac >>
   `EVERY supported_scalar_type (MAP expr_type args)` by
     (gvs[EVERY_EL, LIST_REL_EL_EQN] >>
-     metis_tac[scalar_event_arg_compatible]) >>
+     metis_tac[stmtSimLogSourceTheory.scalar_event_arg_compatible]) >>
   `LENGTH flags = LENGTH args` by
     (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>
   qpat_x_assum `!e tail s. _` (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
@@ -503,7 +503,7 @@ Resume compile_log_ready_stmt_frag_mem_widen[args_value]:
       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
       encode_event_topic aty v = encode_event_topic (SND arg) v) ds vs` by
-    logWidenTacticsLib.source_witness scalar_event_arg_compatible >>
+    logWidenTacticsLib.source_witness stmtSimLogSourceTheory.scalar_event_arg_compatible >>
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sm (es_end with gas_obs := []) t arg v /\
     supported_scalar_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
@@ -526,7 +526,7 @@ Resume compile_log_ready_stmt_frag_mem_widen[args_value]:
       (log_non_indexed_values flags vs) =
    vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags tys)
       (log_non_indexed_values flags vs)` by
-    logWidenTacticsLib.encoding_facts scalar_event_arg_compatible >>
+    logWidenTacticsLib.encoding_facts stmtSimLogSourceTheory.scalar_event_arg_compatible >>
   `encode_indexed_event_topics flags tys vs = SOME topics /\
    vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags tys)
       (log_non_indexed_values flags vs) = SOME avs` by metis_tac[] >>

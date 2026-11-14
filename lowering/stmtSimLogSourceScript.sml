@@ -6,6 +6,23 @@ Ancestors
   vyperTypeABI vyperEventCompatibility vyperTypeContract
 
 (* Source-only scalar conversion boundary. No compiler execution is unfolded. *)
+Theorem scalar_event_arg_compatible:
+  !fty aty tenv.
+    supported_scalar_type fty /\ event_arg_compatible fty aty ==>
+    supported_scalar_type aty /\
+    vyper_to_abi_type tenv aty = vyper_to_abi_type tenv fty /\
+    (!v. vyper_to_abi tenv aty v = vyper_to_abi tenv fty v) /\
+    (!v. encode_event_topic aty v = encode_event_topic fty v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (CONJUNCT1 vyperEventArgCompatTheory.event_arg_compatible_cases) >> strip_tac >>
+  gvs[supported_scalar_type_def, supported_word_type_def,
+      supported_string_type_def] >>
+  rw[supported_string_type_def, encode_event_topic_def,
+     is_event_bytestring_type_def] >>
+  Cases_on `v` >> simp[]
+QED
+
 Theorem log_scalar_abi_exists:
   supported_scalar_type ty /\ evaluate_type tenv ty = SOME tv /\
   value_has_type tv v ==>

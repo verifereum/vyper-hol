@@ -232,7 +232,7 @@ Theorem compile_log_ready_stmt_frag_ptr_widen:
 Proof
   strip_tac >>
   `EVERY supported_scalar_type (MAP expr_type args)` by
-    (gvs[EVERY_EL, LIST_REL_EL_EQN] >> metis_tac[scalar_event_arg_compatible]) >>
+    (gvs[EVERY_EL, LIST_REL_EL_EQN] >> metis_tac[stmtSimLogSourceTheory.scalar_event_arg_compatible]) >>
   `LENGTH flags = LENGTH args` by
     (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>
   simp[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
@@ -326,7 +326,7 @@ Resume compile_log_ready_stmt_frag_ptr_widen[success]:
       ptr_val_ok cx aty v (FST arg) G tn t /\
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
       encode_event_topic aty v = encode_event_topic (SND arg) v) ds vs` by
-    logWidenTacticsLib.source_witness scalar_event_arg_compatible >>
+    logWidenTacticsLib.source_witness stmtSimLogSourceTheory.scalar_event_arg_compatible >>
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sm (es_end with gas_obs := []) t arg v /\
     supported_scalar_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
@@ -387,7 +387,7 @@ Resume compile_log_ready_stmt_frag_ptr_widen[success]:
      (log_non_indexed_values flags vs) = SOME avs /\
    vyper_to_abi_types (get_tenv cx) (log_non_indexed_types flags tys) =
      vyper_to_abi_types (get_tenv cx) (log_non_indexed_types flags (MAP expr_type args))` by
-    logWidenTacticsLib.encoding_facts scalar_event_arg_compatible >>
+    logWidenTacticsLib.encoding_facts stmtSimLogSourceTheory.scalar_event_arg_compatible >>
   `EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) ds` by
     (gvs[EVERY_EL, Abbr `axs`, Abbr `ds`, EL_ZIP, Excl "enc_def"] >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by

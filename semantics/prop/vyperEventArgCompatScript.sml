@@ -57,3 +57,16 @@ end
 Theorem event_arg_compatible_def = clauses;
 
 Theorem event_arg_compatible_ind = ind;
+
+Theorem event_arg_compatible_cases:
+  (!fty aty. event_arg_compatible fty aty ==>
+     aty = fty \/
+     (?n m. fty = BaseT (StringT n) /\ aty = BaseT (StringT m)) \/
+     (?n m. fty = BaseT (BytesT (Dynamic n)) /\
+            aty = BaseT (BytesT (Dynamic m))) \/
+     (?t b. fty = ArrayT t b) \/ (?ts. fty = TupleT ts)) /\
+  (!fs ats. event_arg_compatible_list fs ats ==> T)
+Proof
+  ho_match_mp_tac event_arg_compatible_ind >> rw[event_arg_compatible_def]
+QED
+
