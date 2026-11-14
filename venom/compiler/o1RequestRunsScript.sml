@@ -49,42 +49,41 @@ QED
 (* ===== The walk ===== *)
 
 Theorem make_ssa_run_rq_1:
-  o1_run_rq_contract_gas rpolicy D 0
+  o1_run_rq_contract_gas rpolicy D fmp 0
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[make_ssa_run_contract_1, o1_run_contract_def] >>
+  simp[o1_run_rq_contract_gas_def, o1_fn_passes_def] >> irule o1_stage_contract_rq_lift >>
+  reverse conj_tac >- (mp_tac make_ssa_run_contract_1 >> simp[o1_run_contract_def, o1_fn_passes_def]) >>
   `EL 0 o1_fn_passes = CFP_Simple VP_MakeSSA` by simp[o1_fn_passes_def] >>
   simp[o1_inv_def, o1_walk_src_inv_def] >> rpt strip_tac >>
   irule bisim_stage_abort_rq >> metis_tac[make_ssa_stage_bisim]
 QED
 
 Theorem fmp_lowering_run_rq:
-  o1_run_rq_contract_gas rpolicy D 3
+  o1_run_rq_contract_gas rpolicy D fmp 3
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[fmp_lowering_run_contract, o1_run_contract_def] >>
-  `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
-  simp[o1_inv_def, o1_pre_def, o1_static_inv_def, fmp_free_ctx_def] >>
+  simp[o1_run_rq_contract_gas_def, o1_fn_passes_def,
+       o1_stage_rq_contract_gas_def, fmp_variant_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_all fmp_lowering_stage_seal_only >> strip_tac >>
-  simp[ctx_abort_rq_def] >> metis_tac[request_prefix_rel_refl]
+  `o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+   code_layout_valid vs'` by fs[o1_run_state_ok_def] >>
+  drule_all o1_static_stage_fmp_lowering >> simp[]
 QED
 
 Theorem make_ssa_run_rq_2:
-  o1_run_rq_contract_gas rpolicy D 4
+  o1_run_rq_contract_gas rpolicy D fmp 4
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[make_ssa_run_contract_2, o1_run_contract_def] >>
+  simp[o1_run_rq_contract_gas_def, o1_fn_passes_def] >> irule o1_stage_contract_rq_lift >>
+  reverse conj_tac >- (mp_tac make_ssa_run_contract_2 >> simp[o1_run_contract_def, o1_fn_passes_def]) >>
   `EL 4 o1_fn_passes = CFP_Simple VP_MakeSSA` by simp[o1_fn_passes_def] >>
   simp[o1_inv_def] >> rpt strip_tac >>
   irule bisim_stage_abort_rq >> metis_tac[make_ssa_stage_bisim]
 QED
 
 Theorem simplify_cfg_run_rq:
-  o1_run_rq_contract_gas rpolicy D 5
+  o1_run_rq_contract_gas rpolicy D fmp 5
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[simplify_cfg_stage_walk, o1_run_contract_def] >>
+  simp[o1_run_rq_contract_gas_def, o1_fn_passes_def] >> irule o1_stage_contract_rq_lift >>
+  reverse conj_tac >- (mp_tac simplify_cfg_stage_walk >> simp[o1_run_contract_def, o1_fn_passes_def]) >>
   simp[o1_fn_passes_def, o1_inv_def] >> rpt strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
@@ -94,20 +93,20 @@ Proof
 QED
 
 Theorem sue_run_rq:
-  o1_run_rq_contract_gas rpolicy D 6
+  o1_run_rq_contract_gas rpolicy D fmp 6
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[sue_stage_walk, o1_run_contract_def] >>
+  simp[o1_run_rq_contract_gas_def, o1_fn_passes_def] >> irule o1_stage_contract_rq_lift >>
+  reverse conj_tac >- (mp_tac sue_stage_walk >> simp[o1_run_contract_def, o1_fn_passes_def]) >>
   simp[o1_fn_passes_def, o1_inv_def, o1_pre_def, o1_ssa_inv_def] >>
   rpt strip_tac >>
   irule bisim_stage_abort_rq >> metis_tac[sue_stage_bisim]
 QED
 
 Theorem cfg_norm_run_rq:
-  o1_run_rq_contract_gas rpolicy D 8
+  o1_run_rq_contract_gas rpolicy D fmp 8
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[cfg_norm_stage_walk, o1_run_contract_def] >>
+  simp[o1_run_rq_contract_gas_def, o1_fn_passes_def] >> irule o1_stage_contract_rq_lift >>
+  reverse conj_tac >- (mp_tac cfg_norm_stage_walk >> simp[o1_run_contract_def, o1_fn_passes_def]) >>
   simp[o1_fn_passes_def, o1_inv_def, o1_ssa_inv_def] >> rpt strip_tac >>
   irule bisim_stage_abort_rq >> metis_tac[cfg_norm_stage_bisim]
 QED
