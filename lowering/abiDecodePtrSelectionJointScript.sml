@@ -9,7 +9,7 @@ Ancestors
   emitHelperProps exprLoweringProps bodyPtrDefs ptrDiscipline compileEnv
   venomState venomExecSemantics venomInst words list rich_list arithmetic
 
-Theorem abi_decode_getelemptr_joint_code:
+Theorem abi_decode_getelemptr_joint_code[local]:
   compile_getelemptr_abi pos dyn off MLOAD (Var src) hi sa = (v,sb) /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

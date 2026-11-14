@@ -154,7 +154,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem abi_decode_bytes_prefix_checked_mem_ok:
+Theorem abi_decode_bytes_prefix_checked_mem_ok[local]:
   abi_decode_bytes_position_prefix pos MLOAD (Var src) hi n st = ((addr,cnt),en) /\
   hi <> Lit 0w /\ fresh_vars_wrt st s /\
   eval_operand pos s = SOME (n2w p) /\ p < dimword(:256) /\

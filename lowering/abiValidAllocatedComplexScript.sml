@@ -11,7 +11,7 @@ Ancestors
   abiDecoderCoherence abiDecoderMemberInfos abiDecodeRanges abiEncoder vyperABI valueEncoding
   abiMalformedMemberSetup
 
-Theorem abi_valid_allocated_complex_guard_run:
+Theorem abi_valid_allocated_complex_guard_run[local]:
   abi_decode_complex_head_guard src hi H st = ((),middle) /\
   fn_has_code st middle func /\
   abi_malformed_entry HZ ctx func cenv cx es st sites dstid live

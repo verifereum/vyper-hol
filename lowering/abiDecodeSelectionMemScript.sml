@@ -6,7 +6,7 @@ Ancestors
   abiDecoderGuard abiEncoder emitHelperProps exprLoweringProps
   compileEnv venomState venomExecSemantics words list rich_list arithmetic
 
-Theorem abi_decode_selection_prefix_mem_ok:
+Theorem abi_decode_selection_prefix_mem_ok[local]:
   emit_op ADD [pos; Lit (n2w off)] sa = (head,c1) /\
   compile_abi_dec_addr (Var src) head c1 = (addr,c2) /\
   emit_op MLOAD [addr] c2 = (offset,c3) /\
