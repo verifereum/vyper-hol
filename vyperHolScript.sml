@@ -32,6 +32,7 @@ Ancestors
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix
+  codegenStaticAbort
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps

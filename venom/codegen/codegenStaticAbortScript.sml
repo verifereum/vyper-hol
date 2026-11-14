@@ -1,6 +1,10 @@
 Theory codegenStaticAbort
 Ancestors
-  contextStaticAbortRel staticAbortExec codegenCorrectness codegenRequestPrefix
+  contextStaticAbortRel
+  staticAbortExec
+  fnStaticAbortSim
+  codegenCorrectness
+  codegenRequestPrefix
 
 (* Static-prefix spill corruption permits an earlier ASSERT revert. The
    source Error branch accepts either EVM exception; its provenance is
