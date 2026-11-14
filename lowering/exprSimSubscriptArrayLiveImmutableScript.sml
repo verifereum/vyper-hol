@@ -7,7 +7,7 @@ Ancestors
   exprSimHypsDefs exprSimSource loweringPosts vyperPlaceTyping vyperValueOperation
   vyperTypeSystem compileEnv loweringStateRelDefs finite_map words
 
-Theorem live_immutable_array_suffix_summary:
+Theorem live_immutable_array_suffix_summary_family:
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),t) /\
@@ -16,13 +16,16 @@ Theorem live_immutable_array_suffix_summary:
   (!itv v. FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
      NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (itv,v) ==>
      ?v'. evaluate_subscripts itv v path = INL v') /\
-  vv_post H ctx func cenv cx obj es sa sb s0 t (PlaceR (ImmutablePlace src id path))
-    (LocatedValue (ArrayT et bd) p) u /\
-  expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+  P Hw /\
+  (!H. P H ==>
+    vv_post H ctx func cenv cx obj es sa sb s0 t (PlaceR (ImmutablePlace src id path))
+      (LocatedValue (ArrayT et bd) p) u /\
+    expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+    stmt_state_rel H ctx func cenv cx es s0) /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
   (!l. p.ptr_operand <> Label l) /\
   (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
-  expr_sim_inv cenv cx env t /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  expr_sim_inv cenv cx env t /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
   MAP FDOM es.scopes = MAP FDOM t.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -37,13 +40,15 @@ Theorem live_immutable_array_suffix_summary:
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
   gas_summary_at F (ctx,func) []
     (select_result cx (ArrayT et bd) (PlaceR (ImmutablePlace src id path)) (ValueSubscript iv)) (ee,s)
-    (\res ee' q. ?child. res = INL child /\
-      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
-        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+    (\res ee' q. ?child. res = INL child /\ ee' = ee /\
+      (!H. P H ==> vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+        (LocatedValue ann (mk_ptr dst p.ptr_location)) q) /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee' outcome. expr_exit res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `!H. P H ==> _` (qspec_then `Hw` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
@@ -51,7 +56,7 @@ Proof
   drule_all framed_array_index_post_view >> strip_tac >>
   `expr_sim_inv cenv cx env ee` by
     (drule_all exprSimSourceTheory.expr_body_pre_eval_result >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ee s` by fs[expr_post_def] >>
+  `stmt_state_rel Hw ctx func cenv cx ee s` by fs[expr_post_def] >>
   `vv_place_ptr cenv cx t u (PlaceR (ImmutablePlace src id path))
      (LocatedValue (ArrayT et bd) p)` by fs[vv_post_def] >>
   drule_all expr_body_pre_place_metadata >> strip_tac >>
@@ -68,7 +73,7 @@ Proof
   suspend "current_array"
 QED
 
-Resume live_immutable_array_suffix_summary[current_array]:
+Resume live_immutable_array_suffix_summary_family[current_array]:
   drule_all live_immutable_captured_array_view >> strip_tac >>
   `?av. v = ArrayV av` by
     (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
@@ -115,13 +120,15 @@ Resume live_immutable_array_suffix_summary[current_array]:
   suspend "readonly_endpoint"
 QED
 
-Resume live_immutable_array_suffix_summary[readonly_endpoint]:
-  `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+Resume live_immutable_array_suffix_summary_family[readonly_endpoint]:
+  `!H q. P H /\ (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
        q.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx ee q ==>
        vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee
          (PlaceR (ImmutablePlace src id path)) (LocatedValue (ArrayT et bd) p) q` by
     (rpt strip_tac >>
+     qpat_assum `!H. P H ==> _` (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      `!w. eval_operand p.ptr_operand u = SOME w ==> eval_operand p.ptr_operand q = SOME w` by
        (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >> simp[] >>
         qexistsl_tac [`sc`,`s`] >> simp[] >>
@@ -138,22 +145,63 @@ Resume live_immutable_array_suffix_summary[readonly_endpoint]:
   suspend "counted_suffix"
 QED
 
-Resume live_immutable_array_suffix_summary[counted_suffix]:
+Resume live_immutable_array_suffix_summary_family[counted_suffix]:
   qpat_x_assum `ann = et` SUBST_ALL_TAC >>
   qpat_x_assum `iv = IntV i` SUBST_ALL_TAC >>
-  irule live_immutable_represented_suffix_summary >>
+  irule live_immutable_represented_suffix_summary_family >>
   simp[SF SFY_ss] >>
-  reverse conj_tac >- gvs[] >>
-  qexistsl_tac [`iop`,`iw`,`sc`] >> simp[] >>
-  qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
-  simp[] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
-      gvs[not_fresh_at_def]) >>
-  conj_tac
-  >- (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  gvs[]
+  reverse conj_tac >-
+    (reverse conj_tac >- gvs[] >>
+     qexistsl_tac [`iop`,`iw`,`sc`] >> simp[] >>
+     qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >> simp[] >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
+       gvs[not_fresh_at_def]) >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  metis_tac[expr_post_def]
 QED
 
-Finalise live_immutable_array_suffix_summary
+Finalise live_immutable_array_suffix_summary_family
+
+Theorem live_immutable_array_suffix_summary:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),t) /\
+  eval_expr cx idx t = (INL ir,ee) /\ read_result cx ir ee = (INL iv,ee) /\
+  ee.gas_obs = [] /\
+  (!itv v. FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+     NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (itv,v) ==>
+     ?v'. evaluate_subscripts itv v path = INL v') /\
+  vv_post H ctx func cenv cx obj es sa sb s0 t (PlaceR (ImmutablePlace src id path))
+    (LocatedValue (ArrayT et bd) p) u /\
+  expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
+  (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  expr_sim_inv cenv cx env t /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
+  MAP FDOM es.scopes = MAP FDOM t.scopes /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sc.cs_next_id /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale p.ptr_location) (elem_size_in_location cenv p.ptr_location et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT et bd) (PlaceR (ImmutablePlace src id path)) (ValueSubscript iv)) (ee,s)
+    (\res ee' q. ?child. res = INL child /\
+      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  strip_tac >>
+  mp_tac (live_immutable_array_suffix_summary_family |>
+    Q.INST [`P` |-> `(\h. h = H)`, `Hw` |-> `H`]) >>
+  (impl_tac >- (simp[] >> gvs[])) >>
+  simp[gasSummaryTheory.gas_summary_at_def] >> metis_tac[]
+QED
