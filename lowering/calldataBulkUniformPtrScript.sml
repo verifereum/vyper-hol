@@ -9,12 +9,6 @@ Ancestors moduleLoweringProps rich_list venomInstProps decoderNavigationPtr frag
   abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderContract abiDecoderGuards
   abiDecoderReentry
 
-Theorem calldata_zero_base_addr[local]:
-  compile_abi_dec_addr (Lit 0w) pos st = (pos,st)
-Proof
-  simp[compile_abi_dec_addr_def, comp_return_def]
-QED
-
 Theorem calldata_bulk_payload_endpoint_ptr_uniform_origin:
   abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD (Lit 0w) sa = ((),sb) /\
   lookup_var root s = SOME (n2w d) /\ eval_operand src s = SOME a /\
