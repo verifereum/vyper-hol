@@ -1,6 +1,7 @@
 (* Counted memory execution of the allocation, call and finish policies. *)
 Theory rawCallTailMemory
 Ancestors
+  rawCallShapePtr
   rawCallAllocatedOracleMemory rawCallResultPathMemory rawCallFinishPathMemory
   rawCallFinishPostMemory exprSimRawCall exprSimRawCallCalldata exprSafeOperand localPtrsProps
   exprSimProps exprLoweringProps exprSimMemDefs fragGasPathMem builtinSystem

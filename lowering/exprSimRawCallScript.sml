@@ -219,30 +219,6 @@ QED
 
 Finalise raw_call_tuple_build_no_restore_run
 
-Theorem raw_call_nonrevert_finish_code:
-  compile_raw_call_finish to_op dp dl gas val call_ty n F ov op sa = (result,sb) ==>
-  ?ok sc. (case call_ty of
-      DelegateCall => emit_op DELEGATECALL [gas;to_op;dp;dl;op;Lit (n2w n)]
-    | StaticCall => emit_op STATICCALL [gas;to_op;dp;dl;op;Lit (n2w n)]
-    | RegularCall => emit_op CALL [gas;to_op;val;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
-    (if n > 0 then
-       do z <- emit_op RETURNDATASIZE [];
-          cmp <- emit_op LT [z;Lit (n2w n)];
-          cap <- compile_select cmp z (Lit (n2w n));
-          emit_void MSTORE [ov;cap];
-          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
-          emit_void MSTORE [buf.buf_operand;ok];
-          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
-          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
-          return buf.buf_operand od
-     else return ok) sc = (result,sb)
-Proof
-  simp[compile_raw_call_finish_def, comp_bind_def] >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  qexistsl_tac [`success`, `s'`] >>
-  gvs[comp_ignore_bind_def, comp_bind_def, arithmeticTheory.ADD_ASSOC]
-QED
-
 Theorem raw_call_nonrevert_suffix_code:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
