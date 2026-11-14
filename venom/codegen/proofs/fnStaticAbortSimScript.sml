@@ -2,7 +2,8 @@ Theory fnStaticAbortSim
 Ancestors
   staticAbortDefs fnBlockPlanStatic fnPlanPrefix contextCodegenRel
   codegen unitShapeDefs stackPlanGen stackPlanTypes planExec asmSem asmIR
-  symbolResolve list
+  symbolResolve list staticAbortPrefix fnBlockBodyHelpers fnPlanLineage
+  staticAbortTrace venomInst
 
 (* Only planner provenance and concrete stack shape survive memory overlap.
    Operand labels must resolve: an unknown label is an assembly error,
@@ -64,5 +65,33 @@ Theorem generated_static_abort_prefix:
         | AsmDataLabel _ => F
         | _ => T
 Proof
-  rpt strip_tac
+  rpt gen_tac >> strip_tac >>
+  `codegen_ready_fn fn` by
+    metis_tac[codegen_ready_def, EVERY_MEM] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    (fs[lookup_block_def] >> drule stackPlanGenTheory.FIND_SOME_MEM >> simp[]) >>
+  `EVERY codegen_ready_inst bb.bb_instructions` by
+    (fs[codegen_ready_fn_def, EVERY_MEM] >> metis_tac[]) >>
+  `EVERY inst_shape_ok bb.bb_instructions` by
+    (fs[unit_shape_ok_def, EVERY_MEM, fn_shape_ok_def] >>
+     metis_tac[MEM_fn_insts_blocks, fn_insts_def]) >>
+  `non_param_insts bb =
+     DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions` by
+    metis_tac[non_param_insts_drop, codegen_ready_fn_def] >>
+  `LENGTH (get_params bb.bb_instructions) <= i` by
+    fs[block_plan_state_def] >>
+  drule fnPlanLineageTheory.dfs_block_state_lineage_state >> strip_tac >>
+  rename1 `generate_context_plan _ = SOME cplan` >>
+  `ps0 with <|ps_cleanup_height := ps0.ps_cleanup_height;
+              ps_cleanup_promised := ps0.ps_cleanup_promised|> = ps0` by simp[] >>
+  `?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 4 /\
+    static_abort_exception (SND (compute_label_offsets prog))
+      (build_offset_to_pc prog) prog n ast out` suffices_by
+    simp[static_abort_exception_def, static_abort_trace_def, static_abort_safe_at_def] >>
+  gvs[] >> irule static_abort_block_prefix >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  first_assum (irule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `dfs_block_state _ _ _ _ _ _ _`)) >>
+  rpt (first_assum (irule_at Any)) >>
+  qexistsl [`rest`, `ps_after`, `ps0.ps_cleanup_promised`, `ps0.ps_cleanup_height`] >> simp[] >> metis_tac[]
 QED
