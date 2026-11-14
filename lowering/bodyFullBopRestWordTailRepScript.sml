@@ -1,7 +1,8 @@
 Theory bodyFullBopRestWordTailRep
 Ancestors
   bodyFullBopRestWordCtorHeader bodyFullBopRestWordTailFrame
-  bodyPtrBopInLiveMemory exprSimBopRestWordLoads exprSimBopRestWordIndex
+  bodyPtrBopInLiveMemory bodyPtrBopInSlotLoad bodyPtrBopInHeaderContents
+  exprSimBopRestWordStorage exprSimBopRestWordLoads exprSimBopRestWordIndex
   vyperArray vyperAssignPreservesType vyperTyping vyperValueOperation exprLowering list words
 
 (* Enumerate logical indices, rather than the stored sparse entries. *)
@@ -181,6 +182,17 @@ Theorem rest_word_membership_tail_clean_reads:
        (!cap. bd = Dynamic cap ==>
          mem_word_taint (Tu H).t_mem (w2n w) = {} /\
          mload (w2n w) u = n2w (LENGTH ws))) /\
+   (!tr. vv_location vv = SOME (if tr then LocTransient else LocStorage) ==>
+     ?w. eval_operand (vv_operand vv) u = SOME w /\
+       op_taint (Tu H) (vv_operand vv) = {} /\
+       storage_holds cx tr (ArrayT ety pbd) tv w ee u /\
+       (!i. i < LENGTH ws ==>
+         let k = w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i) in
+         key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor) k = {} /\
+         (if tr then tload k u else sload k u) = EL i ws) /\
+       (!cap. bd = Dynamic cap ==>
+         key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor) w = {} /\
+         (if tr then tload w u else sload w u) = n2w (LENGTH ws))) /\
    (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_prov (Gu H) (vv_operand vv) = NONE /\ op_taint (Tu H) (vv_operand vv) = {} /\
@@ -212,7 +224,8 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- (Cases_on `bd` >> gvs[] >> decide_tac) >>
   conj_tac >- (irule rest_word_membership_indexed_words >> metis_tac[]) >>
-  conj_tac >- simp[] >> conj_tac >- suspend "runtime_memory" >> suspend "ctor"
+  conj_tac >- simp[] >> conj_tac >- suspend "runtime_memory" >>
+  conj_tac >- suspend "runtime_slot" >> suspend "ctor"
 QED
 
 Resume rest_word_membership_tail_clean_reads[ctor]:
@@ -293,6 +306,51 @@ Resume rest_word_membership_tail_clean_reads[memory_reads]:
       gvs[]) >>
   gen_tac >> disch_tac >> gvs[] >>
   metis_tac[rest_word_membership_robust_header])
+QED
+
+Resume rest_word_membership_tail_clean_reads[runtime_slot]:
+  gen_tac >> strip_tac >>
+  `vv_holds cenv cx (ArrayT ety pbd) tv vv ee u` by
+    (fs[loweringPostsTheory.vv_post_def] >> metis_tac[]) >>
+  Cases_on `vv` >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+  rename1 `LocatedValue ann p` >>
+  `?w. eval_operand p.ptr_operand u = SOME w /\
+    storage_holds cx tr (ArrayT ety pbd) tv w ee u` by
+    (Cases_on `tr` >>
+     gvs[loweringPostsTheory.vv_holds_def] >> metis_tac[]) >>
+  qexists_tac `w` >>
+  `op_taint (Tu H) p.ptr_operand = {}` by
+    gvs[bodyPtrDefsTheory.ptr_vv_ok_def] >>
+  simp[] >> suspend "slot_reads"
+QED
+
+Resume rest_word_membership_tail_clean_reads[slot_reads]:
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      `i < array_length (ArrayTV et pbd) av /\
+       array_index (ArrayTV et pbd) av (&i) =
+         SOME (THE (array_index (ArrayTV et bd) av (&i))) /\
+       (case pbd of Fixed _ => 0 | Dynamic _ => 1) =
+         (case bd of Fixed _ => 0 | Dynamic _ => 1)` by
+        (Cases_on `bd` >> Cases_on `av` >>
+         gvs[value_has_type_def, array_length_def, array_index_def]) >>
+      `key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor)
+         (w + n2w ((case pbd of Fixed _ => 0 | Dynamic _ => 1) + i)) = {}` by
+        (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)
+           membership_storage_array_key_clean >>
+         disch_then drule >> simp[] >> metis_tac[]) >>
+      ` (if tr then tload (w + n2w ((case pbd of Fixed _ => 0 | Dynamic _ => 1) + i)) u
+          else sload (w + n2w ((case pbd of Fixed _ => 0 | Dynamic _ => 1) + i)) u) =
+          typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))` by
+        (irule rest_word_storage_array_load >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      gvs[value_has_type_def, array_length_def, array_index_def, rest_word_storage_array_load]) >>
+  gen_tac >> disch_tac >> gvs[] >>
+  `key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor) w = {} /\
+   (if tr then tload w u else sload w u) =
+     n2w (array_length (ArrayTV et (Dynamic pcap)) av)` by
+    (drule_all membership_located_slot_header >> simp[]) >>
+  Cases_on `av` >> gvs[value_has_type_def, array_length_def]
 QED
 
 Finalise rest_word_membership_tail_clean_reads
