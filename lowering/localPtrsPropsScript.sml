@@ -218,6 +218,13 @@ Proof
   rw[not_local_ptr_def, not_scope_ptr_def]
 QED
 
+Theorem log_local_region_inst_idx[simp]:
+  local_region ce scopes (s with vs_inst_idx := k) name b sz <=>
+  local_region ce scopes s name b sz
+Proof
+  simp[local_region_def, lookup_var_def]
+QED
+
 Theorem local_ptrs_rel_inst_idx:
   !func cenv sc s n.
     local_ptrs_rel func cenv sc (s with vs_inst_idx := n) <=>
