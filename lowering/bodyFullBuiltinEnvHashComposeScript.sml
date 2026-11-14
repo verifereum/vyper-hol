@@ -204,7 +204,10 @@ Resume hash_builtin_value_from_suffixes[suffix]:
     `expr_body_pre cenv cx env e (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ [])` by simp[] >>
     drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.expr_body_pre_eval) >> simp[]) >>
  `?i. v = IntV i /\ 0 <= i /\ i < 2 ** 256` by
-   (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+   (qpat_x_assum `expr_result_typed env e (Value v)` mp_tac >>
+    qpat_x_assum `expr_type e = BaseT (UintT 256)` mp_tac >>
+    rpt (pop_assum kall_tac) >> rpt strip_tac >>
+    gvs[vyperTypeExprResultTheory.expr_result_typed_def,
         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
         vyperTypeInvariantsTheory.value_result_typed_def,
         vyperValueTheory.evaluate_type_def] >>
