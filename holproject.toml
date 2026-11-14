@@ -20,6 +20,14 @@ roots = [
   "lowering/whitelist/whitelistForIterScript.sml",
   "lowering/whitelist/whitelistScopesScript.sml",
   "lowering/whitelist/whitelistLogWidenScript.sml",
+  # joint-body decoder and encoder providers awaiting their call/return leaves
+  "lowering/extcallReturnCompletedCutScript.sml",
+  "lowering/extcallReturnCountedRejectScript.sml",
+  "lowering/extcallReturnDecodeSummaryScript.sml",
+  "lowering/extcallReturnDecoderOwnershipScript.sml",
+  "lowering/extcallReturnDefaultTypesScript.sml",
+  "lowering/extcallReturnFrameBridgeScript.sml",
+  "lowering/abiEncoderWindowJointPhasesScript.sml",
   # hand-written tests of the semantics, frontend and test runner
   "tests/vyperTestsHolScript.sml",
   # concrete checks of the lowering and compiler
