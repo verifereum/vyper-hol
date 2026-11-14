@@ -287,7 +287,8 @@ Theorem nonreentrant_entry_success_joint:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   alloca_history func s_reg /\
-  (!H. stmt_state_rel H ctx func cenv cx es_reg s_reg /\
+  (!H : (bool # 'a word # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es_reg s_reg /\
        ghost_inv H NONE cenv cx es_reg G_reg tn_reg s_reg) ==>
   ?s_lock G_lock tn_lock.
     gas_path ctx func s_reg 0 (OK s_lock) /\
@@ -308,7 +309,8 @@ Theorem nonreentrant_entry_success_joint:
     s_lock.vs_gas_readings = s_reg.vs_gas_readings /\
     s_lock.vs_code = s_reg.vs_code /\ s_lock.vs_labels = s_reg.vs_labels /\
     (mut <> View ==> ~cx.txn.is_static) /\
-    (!H. storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+    (!H : (bool # 'a word # type_value) list # num list.
+       storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
        stmt_state_rel H ctx func cenv cx es_lock s_lock /\
        ghost_inv H NONE cenv cx es_lock G_lock tn_lock s_lock)
 Proof
@@ -378,7 +380,8 @@ Proof
      (OK (u with vs_inst_idx := s_reg.vs_inst_idx +
        LENGTH (transient_lock_code nkey (mut = View) sa)))` by
     (drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
-  `!H. storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+  `!H : (bool # 'a word # type_value) list # num list.
+    storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
     stmt_state_rel H ctx func cenv cx es_lock u /\
     ghost_inv H NONE cenv cx es_lock G' tn' u` by
     (rpt strip_tac >>
@@ -386,7 +389,8 @@ Proof
        `s` |-> `s_reg`, `G` |-> `G_reg`, `tn` |-> `tn_reg`,
        `sb` |-> `body_sa`, `iv` |-> `mut = View`]
        (SPEC_ALL nonreentrant_lock_relations)) >> simp[]) >>
-  `!H. storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+  `!H : (bool # 'a word # type_value) list # num list.
+    storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
     stmt_state_rel H ctx func cenv cx es_lock
       (u with vs_inst_idx := s_reg.vs_inst_idx +
         LENGTH (transient_lock_code nkey (mut = View) sa)) /\
