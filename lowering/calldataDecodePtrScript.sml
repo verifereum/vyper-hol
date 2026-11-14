@@ -140,7 +140,7 @@ Proof
   mp_tac (Q.INST [`R` |-> `{}:num set`] step_taint_memory_bound) >> simp[]
 QED
 
-Theorem calldata_bytestring_overwrite_endpoint_core_uniform_joint:
+Theorem calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
@@ -171,6 +171,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform_joint:
     tn'.t_mem SUBSET tn.t_mem /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn') /\
     (alloca_inv s /\ w2n dw + C <= s.vs_alloca_next ==>
       alloca_inv s' /\
       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -375,6 +376,8 @@ Proof
     (simp[Abbr `tn5`] >> irule decoder_step_taint_memory_no_new_site >>
      simp[Abbr `i4`, written_taint_def, mk_inst_def]) >>
   `tn5.t_mem SUBSET tn.t_mem` by metis_tac[SUBSET_TRANS] >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn [i0;i1;i2;i3;i4] s G5 tn5` by
+    (gen_tac >> suspend "bytes_ptr") >>
   `alloca_inv s /\ w2n dw + C <= s.vs_alloca_next ==>
      alloca_inv (copied with vs_inst_idx := LENGTH sb.cs_current_insts) /\
      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -391,6 +394,8 @@ Proof
   simp[lookup_var_def] >>
   conj_tac
   >- metis_tac[] >>
+  reverse conj_tac
+  >- (gvs[emitted_insts_def, DROP_PREFIX, Abbr `i4`]) >>
   gen_tac >> disch_tac >>
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
      !k. k < LENGTH [i0;i1;i2;i3;i4] ==> get_instruction bb (LENGTH sa.cs_current_insts + k) =
@@ -509,7 +514,7 @@ Proof
   fs[allocas_from_def] >> first_assum MATCH_ACCEPT_TAC
 QED
 
-Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_joint]:
+Resume calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint[bytes_joint]:
   strip_tac >> conj_tac
   >- (irule localPtrsPropsTheory.alloca_inv_fields >>
       qexists_tac `s` >> simp[]) >>
@@ -522,8 +527,6 @@ Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_joint]:
      fs[rich_listTheory.IS_PREFIX_APPEND] >> gvs[DROP_APPEND]) >>
   `run_inst_seq_mem_ok [i0;i1;i2;i3;i4] s` by
     (simp[run_inst_seq_mem_ok_def] >> suspend "bytes_mem") >>
-  `!D. inst_seq_ptr D lo ctx fn PG G tn [i0;i1;i2;i3;i4] s G5 tn5` by
-    (gen_tac >> suspend "bytes_ptr") >>
   rpt gen_tac >>
   mp_tac run_inst_seq_gas_origin_ptr_path >>
   disch_then (qspecl_then [`[i0;i1;i2;i3;i4]`, `s`, `copied`, `G`, `tn`,
@@ -536,7 +539,7 @@ Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_joint]:
     simp[emitted_insts_def, DROP_PREFIX, mk_inst_def]) >> simp[]
 QED
 
-Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_mem]:
+Resume calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint[bytes_mem]:
   simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`,
     unitTransformDefsTheory.inst_mem_below_frontier_def,
     memSafeRunTheory.inst_dload_in_section_def,
@@ -546,7 +549,7 @@ Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_mem]:
     [Var p; src; Lit (n2w C)] []) s3` >> gvs[mk_inst_def]
 QED
 
-Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_ptr]:
+Resume calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint[bytes_ptr]:
   simp[Once inst_seq_ptr_def] >> conj_tac
   >- (simp[ptr_inst_ok_def, Abbr `i0`, step_inst_non_invoke,
            access_ok_def, taint_ok_def, mk_inst_def,
@@ -645,7 +648,48 @@ Resume calldata_bytestring_overwrite_endpoint_core_uniform_joint[bytes_ptr]:
   gvs[]
 QED
 
-Finalise calldata_bytestring_overwrite_endpoint_core_uniform_joint
+Finalise calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint
+
+Theorem calldata_bytestring_overwrite_endpoint_core_uniform_joint:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecBytestring m) sa = ((),sb) /\
+  C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
+  m < dimword (:256) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  abi_decode_load CALLDATALOAD sw s = n2w len /\ len <= m /\
+  not_fresh_at sa p /\ (!q. src = Var q ==> not_fresh_at sa q) /\
+  run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
+  op_taint tn src = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) s' = SOME dw /\ eval_operand src s' = SOME sw /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p s' C /\
+    (!i. w2n dw <= i /\ i < w2n dw + C ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (alloca_inv s /\ w2n dw + C <= s.vs_alloca_next ==>
+      alloca_inv s' /\
+      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK s',G',tn'))
+Proof
+  strip_tac >> drule_all calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`s'`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED
 
 Theorem calldata_bytestring_overwrite_endpoint_core_uniform:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -679,7 +723,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core_uniform:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_bytestring_overwrite_endpoint_core_uniform_joint >>
+  strip_tac >> drule_all calldata_bytestring_overwrite_endpoint_core_uniform_sequence_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
