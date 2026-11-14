@@ -565,4 +565,3 @@ Proof
   strip_tac >> Cases_on `prim` >>
   simp[compile_load_memory_def, outcomes_free_return, outcomes_free_emit_ops]
 QED
-

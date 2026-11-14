@@ -294,4 +294,3 @@ Proof
   fs[sym_unit_static_ok_def, unit_wf_def, venom_wf_def] >>
   metis_tac[]
 QED
-

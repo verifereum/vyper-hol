@@ -47,7 +47,7 @@ Proof
       simp[] >>
       `concretize_inst_with_positions p oldi = oldi` by
         (irule concretize_positions_other_opcode >> simp[]) >>
-      gvs[] >> metis_tac[]) 
+      gvs[] >> metis_tac[])
   >- (rpt strip_tac >> drule concretize_positions_var_operand >> strip_tac >>
       gvs[concretize_code_end] >> metis_tac[]) >>
   `concretize_inst_with_positions p oldi = oldi` by

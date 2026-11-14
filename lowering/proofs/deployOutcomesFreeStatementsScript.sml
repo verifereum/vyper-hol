@@ -259,7 +259,7 @@ Resume outcomes_free_compile_statements_mutual[append]:
   qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
   irule outcomes_free_stmt_append >> simp[] >> rpt conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) 
+  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[])
   >- (rpt strip_tac >> first_x_assum irule >> Cases_on `loc` >>
       simp[compileEnvTheory.load_opc_for_def, compileEnvTheory.store_opc_for_def]) >>
   rpt strip_tac >> simp[lower_value_def] >>

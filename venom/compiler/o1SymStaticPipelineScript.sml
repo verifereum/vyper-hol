@@ -23,7 +23,7 @@ Proof
   `ir_supply_covers_fn s fn` by
     metis_tac[fn_pass_step_def, ir_supply_covers_unit_member] >>
   fs[fn_pass_step_def] >> Cases_on `pass` >> Cases_on `v` >>
-  gvs[execute_configured_fn_pass_def, AllCaseEqs()] 
+  gvs[execute_configured_fn_pass_def, AllCaseEqs()]
   >- metis_tac[concretize_context_runtime_reflect]
   >- metis_tac[cfg_norm_function_supply_runtime_reflect]
   >- metis_tac[dft_runtime_reflect]

@@ -336,4 +336,3 @@ Proof
   qpat_assum `compile_word_copy_loop_base _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_word_copy_loop_base) >> simp[]
 QED
-

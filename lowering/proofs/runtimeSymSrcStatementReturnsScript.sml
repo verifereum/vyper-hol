@@ -288,4 +288,3 @@ Proof
        simp[] >> strip_tac >> asm "typed" drule_all >> strip_tac) >>
   asm "external_return" (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
 QED
-
