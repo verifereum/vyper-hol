@@ -15,6 +15,10 @@
 Theory bodyFullExprCore
 Ancestors
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord
+  bodyFullBopInLiteralOperands bodyFullBopInLiteralTail exprSimBopInLiteralWord
+  exprSimWordArgs freshWrites exprSimHyps gasShadowCompileStmtHelpers
+  exprSimUnopProps fragExec gasExemptCert vyperStorageTrace gasOutcomeFull
+  vyperStorageFootprint
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
   exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
@@ -233,5 +237,102 @@ Theorem bop_in_literal_word_sim_full:
       cenv cx ty (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
       es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all literal_body_typing >> strip_tac >>
+  drule_all literal_body_evaluate_types >> strip_tac >>
+  `body_exprs_full_ok cx (e1::elems)` by
+    (simp[Once body_exprs_full_ok_def] >> rpt strip_tac >>
+     first_x_assum irule >> simp[builtin_args_length_ok_def] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `is_ArrayT a` by gvs[vyperASTTheory.is_ArrayT_def] >>
+  drule_all literal_lower_value >> strip_tac >>
+  `wb_args_shape cenv expr_type (e1::elems)` by
+    (irule literal_args_shape >> metis_tac[]) >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  `cs_extends sm sb` by
+    (Cases_on `bop = In` >> gvs[] >>
+     metis_tac[literal_membership_straight, exprSimUnopPropsTheory.straight_fresh_cs_extends]) >>
+  `fn_has_code sa sm func` by
+    metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
+  `!shadow_xs shadow_sm.
+    lower_word_args cenv expr_type (MAP gas_shadow_expr (e1::elems)) shadow_sa =
+      (shadow_xs,shadow_sm) ==> fn_has_code shadow_sa shadow_sm shadow_func` by
+    (rpt strip_tac >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+     simp[NoAsms, gas_shadow_expr_def, gas_shadow_builtin_def] >>
+     disch_then (mp_then Any strip_assume_tac literal_lower_value) >>
+     qpat_x_assum `(bop = In \/ bop = NotIn) /\ is_ArrayT a ==> _` mp_tac >>
+     simp[] >> strip_tac >>
+     `shadow_sm = sm'` by gvs[] >>
+     `cs_extends sm' shadow_sb` by
+       (Cases_on `bop = In` >> gvs[] >>
+        metis_tac[literal_membership_straight, straight_fresh_cs_extends]) >>
+     irule fn_has_code_mid >>
+     reverse conj_tac
+     >- (qexistsl_tac [`shadow_sb`, `shadow_sa`] >>
+         simp[compileEnvTheory.cs_extends_refl]) >>
+     `!args ss oo ff.
+        lower_word_args cenv expr_type args ss = (oo,ff) ==> cs_extends ss ff` by
+       (Induct >> simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
+        rpt gen_tac >> simp[lower_word_args_cons] >> rpt strip_tac >>
+        metis_tac[cj 2 compile_expr_grows, compileEnvTheory.cs_extends_trans]) >>
+     metis_tac[]) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!e. MEM e (e1::elems) ==> MEM e (e1::elems)` by simp[] >>
+  drule_all (Q.SPEC `e1::elems` bop_in_literal_operands_clean_full) >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ PrefixPost _` >>
+  drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
+  irule gas_outcome_full_bind_all >> BETA_TAC >>
+  conj_tac >- simp[storage_trace_frame_return] >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_values >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_values >> metis_tac[]) >>
+  conj_tac >- simp[evaluate_storage_trace_frame] >>
+  qexists_tac `\H res ee G tn u. PrefixPost H res ee G tn u /\
+    ~u.vs_halted /\ ee.gas_obs = []` >> reverse conj_tac
+  >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
+      BETA_TAC >> conj_tac >- simp[] >>
+      rpt gen_tac >> disch_tac >> Cases_on `res` >>
+      gvs[exprSimDefsTheory.expr_exit_INL, stmtSimPropsTheory.expr_exit_INR_type]) >>
+  map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s1`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+      mid.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (strip_assume_tac o BETA_RULE) >>
+  qunabbrev_tac `PrefixPost` >> RULE_ASSUM_TAC BETA_RULE >>
+  qpat_x_assum `(?vs. _)` strip_assume_tac >>
+  Cases_on `vs` >- gvs[] >>
+  rename1 `LIST_REL _ (needle::xs) (v::vs)` >>
+  disj1_tac >> qexists_tac `v::vs` >> simp[] >>
+  `fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
+  `EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs)` by
+    (qpat_assum `EVERY (\x. _ /\ (!l. x <> Label l)) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
+  simp[expr_type_def, post_value_type_def, is_word_type_def] >>
+  irule (SRULE [is_word_type_def] bop_in_literal_continuation_full) >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (`(mid with gas_obs := []) = mid` by
+        simp[evaluation_state_component_equality] >>
+      simp[] >> rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
+      simp[] >> strip_tac >>
+      simp[EXISTS_MEM, EVERY_MEM])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qexistsl_tac [`expr_type e1`,`needle`,`sm`,`tv`,`xs`] >>
+      simp[NoAsms] >>
+      gvs[is_word_type_def]) >>
+  first_assum ACCEPT_TAC
 QED
