@@ -9,7 +9,8 @@ Theorem code_slice_length_literal:
   slice_operands_ok (Slice n) [Builtin ct (Acc Code) [a]; start; len] ==>
   ?lt j. len = Literal lt (IntL j) /\ 1 <= j /\ j <= &n
 Proof
-  Cases_on `len` >> simp[vyperTypeSystemTheory.slice_operands_ok_def] >>
+  Cases_on `len` >>
+  simp_tac (srw_ss()) [vyperTypeSystemTheory.slice_operands_ok_def] >>
   Cases_on `l` >> simp[]
 QED
 

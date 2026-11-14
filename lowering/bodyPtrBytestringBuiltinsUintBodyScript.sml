@@ -291,7 +291,7 @@ Proof
   simp[get_instruction_def, u2s_body_def, u2s_inst_def, mk_inst_def] >>
   qexists_tac `safe_div xw 10w` >>
   conj_tac >- (rpt strip_tac >> gvs[op_taint_def, op_prov_def]) >>
-  conj_tac >- simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+  conj_tac >- simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
   irule uint_assign_counted_prefix >>
   simp[get_instruction_def, u2s_body_def, u2s_inst_def, mk_inst_def,
        update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>

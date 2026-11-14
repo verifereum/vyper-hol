@@ -588,7 +588,9 @@ Proof
   `inst_extends prepared sb` by metis_tac[inst_extends_trans] >>
   `emitted_insts prepared sb = emitted_insts prepared child_end ++ emitted_insts child_end sb /\
    emitted_insts sa sb = emitted_insts sa prepared ++ emitted_insts prepared sb` by
-    (conj_tac >> irule emitted_insts_append >> gvs[inst_extends_def]) >>
+    (conj_tac >> irule emitted_insts_append >>
+     rpt (qhdtm_x_assum `inst_extends` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >> simp[inst_extends_def]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sa prepared) /\
    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts prepared sb)` by

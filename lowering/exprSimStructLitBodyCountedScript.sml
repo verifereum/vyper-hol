@@ -11,23 +11,22 @@ Ancestors
 (* Keep the constructor allocation available to enclosing projections. *)
 Theorem compile_struct_lit_body_value_owned:
   !ctx func cenv cx ann nsid fields env ty es sa vv sb s0.
-    let e = StructLit ann nsid fields in
-      exprs_case F ctx func cenv cx (MAP SND fields) /\
-      acyclic_struct_metadata cenv.ce_struct_fields /\
-      expr_body_pre cenv cx env e es /\ compile_expr cenv ty e sa = (vv,sb) /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\
-      gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-      s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-        (\res ee s. ?rv. res = INL rv /\
-          vv_post ctx func cenv cx e es sa sb s0 ee rv vv s /\
-          (!v. rv = Value v ==> vv_own cenv cx (expr_type e) sa sb ee rv vv s) /\
-          s.vs_current_bb = sb.cs_current_bb /\
-          s.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+    exprs_case F ctx func cenv cx (MAP SND fields) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    expr_body_pre cenv cx env (StructLit ann nsid fields) es /\ compile_expr cenv ty (StructLit ann nsid fields) sa = (vv,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    gas_admissible (eval_expr cx (StructLit ann nsid fields)) expr_vv_res_ok es /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (StructLit ann nsid fields)) (es,s0)
+      (\res ee s. ?rv. res = INL rv /\
+        vv_post ctx func cenv cx (StructLit ann nsid fields) es sa sb s0 ee rv vv s /\
+        (!v. rv = Value v ==> vv_own cenv cx (expr_type (StructLit ann nsid fields)) sa sb ee rv vv s) /\
+        s.vs_current_bb = sb.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `compile_expr ce ty (StructLit ann nsid fields) sa = (vv,sb)` >>
@@ -254,7 +253,7 @@ QED
 Resume compile_struct_lit_body_case[vv]:
   simp[expr_vv_case_def, expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  drule_all (SIMP_RULE std_ss [LET_THM] compile_struct_lit_body_value_owned) >>
+  drule_all compile_struct_lit_body_value_owned >>
   strip_tac >> irule counted_outcome_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> metis_tac[]
 QED

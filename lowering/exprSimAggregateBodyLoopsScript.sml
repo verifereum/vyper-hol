@@ -728,8 +728,8 @@ Proof
   (impl_tac >- (simp[] >> rpt strip_tac >> gvs[] >> drule eval_exprs_length >> simp[])) >>
   strip_tac >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
-  rpt gen_tac >> disch_then assume_tac >>
-  gvs[SF CONJ_ss] >>
+  rpt gen_tac >> POP_ASSUM_LIST (K all_tac) >>
+  disch_then strip_assume_tac >> gvs[SF CONJ_ss] >>
   fs[GSYM tuple_in_memory_replicate_elems] >>
   rpt conj_tac >> first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED

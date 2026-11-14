@@ -522,8 +522,7 @@ QED
 Theorem FOLDL_block_pass_SND:
   !f bbs c0 acc0.
     SND (FOLDL (\(changed, acc) bb.
-      let (bb_changed, new_bb) = f bb in
-      (changed \/ bb_changed, acc ++ [new_bb])) (c0, acc0) bbs) =
+      (changed \/ FST (f bb), acc ++ [SND (f bb)])) (c0, acc0) bbs) =
     acc0 ++ MAP (\bb. SND (f bb)) bbs
 Proof
   gen_tac >> Induct_on `bbs` >> fs[] >> rpt gen_tac >>

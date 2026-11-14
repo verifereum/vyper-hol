@@ -2597,7 +2597,8 @@ Theorem native_defined_ordinary_suffix_demand_support:
     MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
       (LENGTH (get_params bb.bb_instructions)+p+k))
 Proof
-  metis_tac[native_defined_ordinary_suffix_production]
+  rpt gen_tac >>
+  disch_then (ACCEPT_TAC o CONJUNCT2 o MATCH_MP native_defined_ordinary_suffix_production)
 QED
 
 Theorem native_supported_ordinary_suffix_joint[local]:

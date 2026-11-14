@@ -208,7 +208,7 @@ Resume concat_result_vv_sim_ptr[traversal]:
   (impl_tac >- first_assum ACCEPT_TAC) >> disch_then SUBST1_TAC >>
   irule gas_outcome_ptr_values_bind >>
   first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
-  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+  reverse conj_tac >- (rpt strip_tac >> pop_assum mp_tac >> simp[]) >>
   rpt gen_tac >> disch_then (qx_choose_then `vs` (map_every assume_tac o CONJUNCTS) o BETA_RULE) >>
   suspend "continuation"
 QED

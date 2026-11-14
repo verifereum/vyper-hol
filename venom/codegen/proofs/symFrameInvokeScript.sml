@@ -416,15 +416,17 @@ Theorem sym_mstore_slot:
          FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> Cases_on `sv` >>
-  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
-       sval_val_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+  (simp[sym_mstore_def, Excl "GENLIST_NUMERALS"] >>
+   simp[sym_step_concrete_def, asm_op_arity_def, asm_op_arity_table_def,
+        log_table_def, sval_val_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
+        mem_labels_hit_def, Excl "GENLIST_NUMERALS"] >>
+   simp[asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
        asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
-       asmSemTheory.asm_step_memory_def, asm_mstore_def,
-       asm_op_arity_table_def, log_table_def,
-       asm_next_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, Excl "GENLIST_NUMERALS", mem_sval_at_store_label,
-       mem_sval_at_clear, asmSymBridgeTheory.cleared_labels_lookup, mstore_labels_lookup,
-       in_mem_range_def] >>
+       asmSemTheory.asm_step_memory_def, Excl "GENLIST_NUMERALS"] >>
+   simp[sym_lift_def, asm_mstore_def, asm_next_def, Excl "GENLIST_NUMERALS"] >>
+  simp[mem_sval_at_store_label, mem_sval_at_clear,
+       asmSymBridgeTheory.cleared_labels_lookup, mstore_labels_lookup, in_mem_range_def,
+       Excl "GENLIST_NUMERALS"]) >>
   pure_once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   simp[mem_sval_at_store_label, mstore_labels_lookup, Excl "GENLIST_NUMERALS"]
 QED
