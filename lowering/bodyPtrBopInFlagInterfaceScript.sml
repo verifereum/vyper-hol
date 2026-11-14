@@ -1,7 +1,17 @@
 Theory bodyPtrBopInFlagInterface
 Ancestors bodyPtrBopInFlagCertificate exprBopFlag exprBopLowering exprLowering
   exprBopSimDefs exprSimDefs exprSimProps exprSimSource loweringSlice compileEnv vyperAST
-  vyperValueOperation vyperValue vyperTyping vyperState valueEncoding
+  vyperValueOperation vyperValue vyperTyping vyperTypeSystem vyperState valueEncoding
+
+Theorem membership_flag_typed_inputs:
+  (bop = In \/ bop = NotIn) /\ well_typed_binop ann bop ty (FlagT fid) /\
+  evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
+  evaluate_type tenv (FlagT fid) = SOME tv2 /\ value_has_type tv2 v2 ==>
+  ?m. value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\ m <= 256
+Proof
+  strip_tac >> gvs[well_typed_binop_def] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >> metis_tac[]
+QED
 
 Theorem membership_flag_source_run:
   (bop = In \/ bop = NotIn) /\
