@@ -101,9 +101,15 @@ Theorem extcall_call_full:
           w2n ro + cap <= b + sz /\
           (!i. w2n ro <= i /\ i < w2n ro + MIN cap (LENGTH returnData) ==>
               i NOTIN tn'.t_mem)) ==>
-       gas_outcome_full (DF, lo, explicit, ctx, func, PG) (cx_tops cx) cx st0
-         (k returnData) (ee', t', G', tn') Q
-         (\H res ee gt r. expr_exit res r)) ==>
+       ?res r G'' tn''.
+         (!tail. k returnData (ee' with gas_obs := tail) =
+           (res, ee' with gas_obs := tail)) /\
+         (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+             (t', G', tn') [] (r, G'', tn'') /\
+           ((?t''. r = OK t'' /\
+               Q H res (ee' with gas_obs := []) G'' tn'' t'') \/
+            (exit_result r /\ expr_exit res r)))) ==>
     gas_outcome_full (DF, lo, explicit, ctx, func, PG) (cx_tops cx) cx st0
       (do accounts <- get_accounts;
           check (ext_call_precheck_ok skip ret_type target accounts)
