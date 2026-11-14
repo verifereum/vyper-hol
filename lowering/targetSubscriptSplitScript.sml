@@ -944,7 +944,7 @@ Proof
   drule read_result_state >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem target_subscript_memory_array_ready[local]:
+Theorem target_subscript_memory_array_ready:
   expr_sim_inv cenv cx env es /\
   target_post ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path)) bvt rb s /\
@@ -1112,7 +1112,7 @@ Proof
   drule_all attribute_type_runtime_step >> strip_tac >> metis_tac[]
 QED
 
-Theorem target_subscript_pre_result_well_formed[local]:
+Theorem target_subscript_pre_result_well_formed:
   target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
   well_formed_vtype (get_tenv cx) vt
 Proof
