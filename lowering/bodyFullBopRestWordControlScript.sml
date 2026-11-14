@@ -797,3 +797,269 @@ Resume rest_word_membership_init_joint[init_second_ghost]:
 QED
 
 Finalise rest_word_membership_init_joint
+
+Theorem rest_word_membership_search_suffix_joint_all:
+  !i s Gs Ts.
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  (!x. needle = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\ LENGTH ws < dimword (:256) /\
+  (!H:num. guard H ==>
+    eval_operand needle s0 = SOME w /\ op_prov (G0 H) needle = NONE /\
+    op_taint (T0 H) needle = {} /\
+    eval_operand len s0 = SOME (n2w (LENGTH ws)) /\
+    op_prov (G0 H) len = NONE /\ op_taint (T0 H) len = {}) /\
+  (!i s Gs Ts. i < LENGTH ws /\
+    (!H:num. guard H ==>
+      membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+      membership_loop_registers sa i 0w (Gs H) (Ts H) s /\
+      ~s.vs_halted /\ allocas_from lo s /\
+      s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+      s.vs_inst_idx = 0) ==>
+    ?t Gt Tt. !H:num. guard H ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+        (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+      membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+      membership_loop_registers sa i 0w (Gt H) (Tt H) t /\
+      ~t.vs_halted /\ allocas_from lo t /\
+      t.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+      t.vs_inst_idx = 2+(if 0 < skip then 1 else 0)+
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
+      eval_operand (Var ("%" ++ toString (sa.cs_next_var+4+
+        (if 0 < skip then 1 else 0)+
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) t = SOME (EL i ws) /\
+      op_prov (Gt H) (Var ("%" ++ toString (sa.cs_next_var+4+
+        (if 0 < skip then 1 else 0)+
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) = NONE /\
+      op_taint (Tt H) (Var ("%" ++ toString (sa.cs_next_var+4+
+        (if 0 < skip then 1 else 0)+
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) = {}) /\
+  i <= LENGTH ws /\
+  (!H:num. guard H ==>
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+    membership_loop_registers sa i 0w (Gs H) (Ts H) s /\
+    ~s.vs_halted /\ allocas_from lo s /\
+    s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
+    s.vs_inst_idx = 0) ==>
+  ?t Gt Tt j. !H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+    membership_loop_registers sa j (bool_to_word (MEM w (DROP i ws))) (Gt H) (Tt H) t /\
+    ~t.vs_halted /\ allocas_from lo t /\ t.vs_inst_idx = 0 /\
+    t.vs_current_bb = fresh_label_output "in_exit" (sa.cs_next_label+5)
+Proof
+  measureInduct_on `LENGTH ws-i` >> rpt strip_tac >>
+  qabbrev_tac `ci = mk_inst (sa.cs_next_id+4) EQ
+    [Var ("%" ++ toString (sa.cs_next_var+1));len]
+    ["%" ++ toString (sa.cs_next_var+2)]` >>
+  qabbrev_tac `cv = update_var ("%" ++ toString (sa.cs_next_var+2))
+    (bool_to_word ((n2w i:bytes32) = n2w (LENGTH ws))) s` >>
+  qabbrev_tac `cs = jump_to (if (n2w i:bytes32) = n2w (LENGTH ws) then
+    fresh_label_output "in_exit" (sa.cs_next_label+5) else
+    fresh_label_output "in_body" (sa.cs_next_label+2)) cv` >>
+  qabbrev_tac `CG = \H:num. step_prov PG (Gs H) ci cv` >>
+  qabbrev_tac `CT = \H:num. step_taint ci s cv (Ts H)` >>
+  `!H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK cs,CG H,CT H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (CG H) (CT H) cs /\
+    membership_loop_registers sa i 0w (CG H) (CT H) cs /\
+    ~cs.vs_halted /\ allocas_from lo cs /\ cs.vs_inst_idx = 0 /\
+    cs.vs_current_bb = (if (n2w i:bytes32) = n2w (LENGTH ws) then
+      fresh_label_output "in_exit" (sa.cs_next_label+5) else
+      fresh_label_output "in_body" (sa.cs_next_label+2))` by suspend "condition" >>
+  Cases_on `i = LENGTH ws`
+  >- (qexistsl_tac [`cs`,`CG`,`CT`,`i`] >> gvs[bool_to_word_def] >> metis_tac[]) >>
+  `i < LENGTH ws /\ (n2w i:bytes32) <> n2w (LENGTH ws)` by
+    (`i < LENGTH ws /\ i < dimword (:256)` by decide_tac >> simp[wordsTheory.n2w_11]) >>
+  `?ls LG LTs. !H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (cs,CG H,CT H) [] (OK ls,LG H,LTs H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (LG H) (LTs H) ls /\
+    membership_loop_registers sa i 0w (LG H) (LTs H) ls /\
+    ~ls.vs_halted /\ allocas_from lo ls /\
+    ls.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    ls.vs_inst_idx = 2+(if 0 < skip then 1 else 0)+
+      (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
+    eval_operand (Var ("%" ++ toString (sa.cs_next_var+4+
+      (if 0 < skip then 1 else 0)+
+      (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) ls = SOME (EL i ws) /\
+    op_prov (LG H) (Var ("%" ++ toString (sa.cs_next_var+4+
+      (if 0 < skip then 1 else 0)+
+      (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) = NONE /\
+    op_taint (LTs H) (Var ("%" ++ toString (sa.cs_next_var+4+
+      (if 0 < skip then 1 else 0)+
+      (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) = {}` by
+    (first_x_assum (irule o SPEC_ALL) >> simp[] >> metis_tac[]) >>
+  suspend "loaded"
+QED
+
+Resume rest_word_membership_search_suffix_joint_all[condition]:
+  rpt strip_tac >>
+  `eval_operand len s = SOME (n2w (LENGTH ws)) /\
+   op_prov (Gs H) len = NONE /\ op_taint (Ts H) len = {}` by
+    metis_tac[membership_loop_frame_operand] >>
+  `membership_loop_registers sa i 0w (Gs H) (Ts H) s /\
+   membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+   ~s.vs_halted /\ allocas_from lo s /\
+   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
+   s.vs_inst_idx = 0` by metis_tac[] >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+    (s,Gs H,Ts H) [] (OK cs,CG H,CT H) /\
+   membership_loop_frame sa (G0 H) (T0 H) s0 (CG H) (CT H) cs /\
+   membership_loop_registers sa i 0w (CG H) (CT H) cs` by
+    (map_every (fn q => qunabbrev_tac q) [`CG`,`CT`,`cs`,`cv`,`ci`] >>
+     BETA_TAC >>
+     irule (SIMP_RULE bool_ss [] (Q.GENL [`dst`,`ins`,`t`,`G1`,`tn1`,`target`]
+       rest_word_membership_condition_joint)) >> metis_tac[]) >>
+  simp[] >> gvs[Abbr `cs`, Abbr `cv`, jump_to_def, update_var_def, allocas_from_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume rest_word_membership_search_suffix_joint_all[loaded]:
+  qabbrev_tac `delta = if 0 < skip then 1 else 0` >>
+  qabbrev_tac `width = if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1` >>
+  qabbrev_tac `bi = mk_inst (sa.cs_next_id+(8+delta+width)) EQ
+    [Var ("%" ++ toString (sa.cs_next_var+(4+delta+width)));needle]
+    ["%" ++ toString (sa.cs_next_var+(5+delta+width))]` >>
+  qabbrev_tac `bv = update_var ("%" ++ toString (sa.cs_next_var+(5+delta+width)))
+    (bool_to_word (EL i ws = w)) ls` >>
+  qabbrev_tac `bs = jump_to (if EL i ws = w then
+    fresh_label_output "in_found" (sa.cs_next_label+3) else
+    fresh_label_output "in_incr" (sa.cs_next_label+4)) bv` >>
+  qabbrev_tac `BG = \H:num. step_prov PG (LG H) bi bv` >>
+  qabbrev_tac `BT = \H:num. step_taint bi ls bv (LTs H)` >>
+  `!H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (ls,LG H,LTs H) [] (OK bs,BG H,BT H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (BG H) (BT H) bs /\
+    membership_loop_registers sa i 0w (BG H) (BT H) bs /\
+    ~bs.vs_halted /\ bs.vs_inst_idx = 0 /\ allocas_from lo bs /\
+    bs.vs_current_bb = (if EL i ws = w then
+      fresh_label_output "in_found" (sa.cs_next_label+3) else
+      fresh_label_output "in_incr" (sa.cs_next_label+4))` by suspend "compare" >>
+  `DROP i ws = EL i ws :: DROP (SUC i) ws` by
+    metis_tac[rich_listTheory.DROP_CONS_EL] >>
+  Cases_on `EL i ws = w`
+  >- suspend "found" >>
+  suspend "increment"
+QED
+
+Resume rest_word_membership_search_suffix_joint_all[compare]:
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!i s Gs Ts. _` kall_tac >>
+  qpat_x_assum `!y. LENGTH ws-y < _ ==> _` kall_tac >>
+  rpt (qpat_x_assum `!h:num. guard h ==> _`
+       (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `eval_operand needle ls = SOME w /\ op_prov (LG H) needle = NONE /\
+   op_taint (LTs H) needle = {}` by metis_tac[membership_loop_frame_operand] >>
+  `membership_loop_frame sa (G0 H) (T0 H) s0 (LG H) (LTs H) ls /\
+   membership_loop_registers sa i 0w (LG H) (LTs H) ls /\
+   ~ls.vs_halted /\ allocas_from lo ls` by metis_tac[] >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+    (ls,LG H,LTs H) [] (OK bs,BG H,BT H) /\
+   membership_loop_frame sa (G0 H) (T0 H) s0 (BG H) (BT H) bs /\
+   membership_loop_registers sa i 0w (BG H) (BT H) bs /\
+   ~bs.vs_halted /\ bs.vs_inst_idx = 0 /\ allocas_from lo bs` by
+    (map_every qunabbrev_tac [`BG`,`BT`,`bs`,`bv`,`bi`,`delta`,`width`] >> BETA_TAC >>
+     irule (SIMP_RULE bool_ss [] (Q.GENL
+       [`delta`,`width`,`lhs`,`rhs`,`dst`,`eid`,`yes`,`no`,`ins`,`t`,`G1`,`tn1`,`u`]
+       (Q.INST [`cond_site` |-> `F`] rest_word_membership_compare_segment_joint))) >>
+     rule_assum_tac (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
+     pure_asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> metis_tac[]) >>
+  simp[] >> simp[Abbr `bs`, jump_to_def]
+QED
+
+Resume rest_word_membership_search_suffix_joint_all[found]:
+  qabbrev_tac `ft = update_var ("%" ++ toString sa.cs_next_var) 1w bs` >>
+  qabbrev_tac `fu = jump_to (fresh_label_output "in_exit" (sa.cs_next_label+5)) ft` >>
+  qabbrev_tac `FG = \H:num. DRESTRICT (BG H) (COMPL {"%" ++ toString sa.cs_next_var})` >>
+  qabbrev_tac `FT = \H:num. (BT H) with t_var := (BT H).t_var |+ ("%" ++ toString sa.cs_next_var,{})` >>
+  qexistsl_tac [`fu`,`FG`,`FT`,`i`] >> gen_tac >> disch_tac >>
+  qpat_x_assum `!i s Gs Ts. _` kall_tac >>
+  qpat_x_assum `!y. LENGTH ws-y < _ ==> _` kall_tac >>
+  rpt (qpat_x_assum `!h:num. guard h ==> _`
+       (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+     (bs,BG H,BT H) [] (OK fu,FG H,FT H) /\
+   membership_loop_frame sa (G0 H) (T0 H) s0 (FG H) (FT H) fu /\
+   membership_loop_registers sa i 1w (FG H) (FT H) fu /\
+   ~fu.vs_halted /\ fu.vs_inst_idx = 0 /\ allocas_from lo fu` by
+    (map_every qunabbrev_tac [`FG`,`FT`,`fu`,`ft`] >> BETA_TAC >>
+     irule (SIMP_RULE bool_ss [] (Q.GENL
+       [`delta`,`width`,`dst`,`ins`,`t`,`G1`,`tn1`,`u`]
+       rest_word_membership_found_joint)) >>
+     pure_asm_rewrite_tac [] >> metis_tac[]) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+     (s,Gs H,Ts H) [] (OK fu,FG H,FT H)` by
+    metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans] >>
+  `fu.vs_current_bb = fresh_label_output "in_exit" (sa.cs_next_label+5)` by
+    simp[Abbr `fu`, jump_to_def] >>
+  pure_asm_rewrite_tac [MEM, bool_to_word_def] >> simp[]
+QED
+
+Resume rest_word_membership_search_suffix_joint_all[increment]:
+  qabbrev_tac `ix = "%" ++ toString (sa.cs_next_var+1)` >>
+  qabbrev_tac `nd = "%" ++ toString (sa.cs_next_var+6+delta+width)` >>
+  qabbrev_tac `ia = mk_inst (sa.cs_next_id+12+delta+width) ADD [Var ix;Lit 1w] [nd]` >>
+  qabbrev_tac `ib = mk_inst (sa.cs_next_id+13+delta+width) ASSIGN [Var nd] [ix]` >>
+  qabbrev_tac `it = update_var nd (n2w (SUC i)) bs` >>
+  qabbrev_tac `iv = update_var ix (n2w (SUC i)) (it with vs_inst_idx := 1)` >>
+  qabbrev_tac `iu = jump_to (fresh_label_output "in_cond" (sa.cs_next_label+1)) iv` >>
+  qabbrev_tac `IG1 = \H:num. step_prov PG (BG H) ia it` >>
+  qabbrev_tac `IT1 = \H:num. step_taint ia bs it (BT H)` >>
+  qabbrev_tac `IG2 = \H:num. step_prov PG (IG1 H) ib iv` >>
+  qabbrev_tac `IT2 = \H:num. step_taint ib (it with vs_inst_idx := 1) iv (IT1 H)` >>
+  `!H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (bs,BG H,BT H) [] (OK iu,IG2 H,IT2 H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (IG2 H) (IT2 H) iu /\
+    membership_loop_registers sa (SUC i) 0w (IG2 H) (IT2 H) iu /\
+    ~iu.vs_halted /\ iu.vs_inst_idx = 0 /\ allocas_from lo iu /\
+    iu.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1)` by
+    suspend "advance" >>
+  qpat_x_assum `!y. LENGTH ws-y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (qspecl_then [`iu`,`IG2`,`IT2`] mp_tac) >>
+  (impl_tac >-
+    (pure_asm_rewrite_tac [] >> rewrite_tac [] >>
+     conj_tac >- decide_tac >>
+     gen_tac >> disch_tac >>
+     qpat_x_assum `!h:num. guard h ==> gas_origin_ptr_path _ (bs,_,_) _ (OK iu,_,_) /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     pure_asm_rewrite_tac [] >> rewrite_tac [])) >>
+  disch_then (qx_choose_then `fin` (qx_choose_then `GF` (qx_choose_then `TF`
+    (qx_choose_then `j` assume_tac)))) >>
+  qexistsl_tac [`fin`,`GF`,`TF`,`j`] >> gen_tac >> disch_tac >>
+  qpat_x_assum `!i s Gs Ts. _` kall_tac >>
+  rpt (qpat_x_assum `!h:num. guard h ==> _`
+       (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK fin,GF H,TF H)` by
+    metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans] >>
+  pure_asm_rewrite_tac [MEM] >> simp[]
+QED
+
+Resume rest_word_membership_search_suffix_joint_all[advance]:
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!i s Gs Ts. _` kall_tac >>
+  qpat_x_assum `!y. LENGTH ws-y < _ ==> _` kall_tac >>
+  rpt (qpat_x_assum `!h:num. guard h ==> _`
+       (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (bs,BG H,BT H) [] (OK iu,IG2 H,IT2 H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (IG2 H) (IT2 H) iu /\
+    membership_loop_registers sa (SUC i) 0w (IG2 H) (IT2 H) iu /\
+    ~iu.vs_halted /\ iu.vs_inst_idx = 0 /\ allocas_from lo iu` by
+    (map_every qunabbrev_tac [`IG2`,`IT2`,`IG1`,`IT1`,`iu`,`iv`,`it`,`ia`,`ib`,`ix`,`nd`,`delta`,`width`] >>
+     BETA_TAC >>
+     irule (SIMP_RULE bool_ss [] (Q.GENL
+       [`delta`,`width`,`idx`,`dst`,`a`,`b`,`t`,`G1`,`tn1`,`v`,`G2`,`tn2`,`u`]
+       rest_word_membership_increment_joint)) >>
+     pure_asm_rewrite_tac [] >> metis_tac[]) >>
+  pure_asm_rewrite_tac [] >> simp[Abbr `iu`, jump_to_def]
+QED
+
+Finalise rest_word_membership_search_suffix_joint_all
