@@ -14,6 +14,7 @@ Theory bodyIntCallSeams
 Ancestors
   bodyIntCallSeamDefs bodyIntCallSeamArgs bodyIntCallSeamReturn bodyIntCallNonreentrantLock
   bodyIntCallJointPackage bodyIntCallJointInd vyperTypeCallStackSoundness
+  bodyIntCallNrBodyCode
   bodyIntCallArgSequence bodyIntCallCompilerListTags bodyIntCallCompilerSeparation
   bodyIntCallCopyFrame bodyIntCallDecoderCountedClosure bodyIntCallEncoderActualCopy
   bodyIntCallEncoderCountedExport bodyIntCallLocalArrayProducer bodyIntCallMcopyFrame
