@@ -154,7 +154,6 @@ Proof
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  pop_assum (qx_choose_then `H0` assume_tac) >>
   drule stmt_env_annassign >> strip_tac >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>
   qpat_x_assum `!st0 c st1. _ ==> expr_vv_sim_mem _ _ _ _ _ _ _` drule >>
@@ -195,7 +194,8 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func c cx es salloc` by
     (mp_tac (Q.SPECL [`cx`, `st0`, `es.storage_trace`, `ctx`, `func`, `c`,
-        `es`, `s0`, `salloc`, `H0`] stmt_state_rel_lift_family) >>
+        `es`, `s0`, `salloc`, `H0`]
+        (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_lift_family)) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   qabbrev_tac `p = STRING #"%" (toString sa.cs_next_var)` >>
@@ -226,7 +226,8 @@ Proof
      drule emit_inst_extends >> simp[]) >>
   irule annassign_raw_rhs_outcome_mem >>
   conj_tac
-  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  >- (rpt strip_tac >>
+      qpat_assum `!gs tv es1. eval_expr _ _ _ = _ ==> _` drule >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   qexists_tac `tyv` >>
   qpat_assum `evaluate_type (get_tenv cx) vtyp = SOME tyv`
@@ -240,7 +241,9 @@ Proof
        t.vs_current_bb = sB.cs_current_bb /\
        t.vs_inst_idx = LENGTH sB.cs_current_insts /\
        alloca_history func t /\ salloc.vs_alloca_next <= t.vs_alloca_next` by
-    (rpt strip_tac >> res_tac >> gvs[]) >>
+    (rpt strip_tac >> res_tac >>
+     gvs[vv_store_bound_def, read_result_def, return_def] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
                   vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H1` mp_tac) >>

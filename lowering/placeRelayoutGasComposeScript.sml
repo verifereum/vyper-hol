@@ -77,10 +77,9 @@ Proof
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`INR ex`, `mid`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      BETA_TAC >> simp[] >> rpt strip_tac >>
-      `?ex'. INR ex = INR ex' /\ R H (INR ex') (mid with gas_obs := []) r` by
-        metis_tac[] >>
-      gvs[]) >>
+      BETA_TAC >> disj2_tac >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >> fs[] >> metis_tac[sumTheory.INR_11]) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ left (err, ef) (callee, tf)` >>
   rewrite_tac[gas_outcome_def] >>
@@ -110,14 +109,13 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[Once evaluate_def] >>
   irule gas_outcome_bind_result_exec >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
-  rpt conj_tac
-  >~ [`storage_trace_frame _`]
+  conj_tac
   >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[storage_trace_frame_read_result] >> gen_tac >>
       irule storage_trace_frame_bind_all >>
-      simp[evaluate_storage_trace_frame, storage_trace_frame_write_place])
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+      simp[evaluate_storage_trace_frame, storage_trace_frame_write_place]) >>
+  qexistsl_tac [`Ra`, `Qa`] >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- (rpt strip_tac >> rename1 `gas_marked_exec _ _ _ _ _ (INL pv) _ _` >>
       reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
@@ -130,6 +128,7 @@ Proof
          mid.storage_trace` by fs[storage_trace_domain_def] >>
       `?v. pv = Value v` by metis_tac[sumTheory.INL_11] >> gvs[] >>
       simp[read_result_def, bind_return] >>
-      qpat_x_assum `!marks v mid t. _` irule >> metis_tac[]) >>
-  metis_tac[]
+      qpat_x_assum `!marks v mid t. _` irule >> metis_tac[])
+  >- metis_tac[] >>
+  first_assum ACCEPT_TAC
 QED

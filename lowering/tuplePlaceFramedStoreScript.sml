@@ -59,20 +59,6 @@ Proof
      qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >> strip_tac >>
      Cases_on `b` >> gvs[]) >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p ==>
-       stmt_state_rel H ctx func cenv cx ff u` by
-    (gen_tac >> strip_tac >>
-     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >> Cases_on `p`
-     >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
-         drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])
-     >- (rename1 `MemoryPlace id path` >>
-         `loc = LocMemory` by fs[place_ptr_rel_def] >>
-         gvs[Abbr `u`] >> irule place_store_word_memory_state >>
-         qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-         qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-         qpat_assum `evaluate_type _ dty = _` (irule_at Any) >> simp[])
-     >> gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
-     drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[]) >>
   `gas_marked_path F ctx func s 0 (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
    (!x. lookup_var x u = lookup_var x s) /\
    u.vs_allocas = s.vs_allocas /\ ~u.vs_halted /\
@@ -95,5 +81,19 @@ Proof
          drule_all abi_word_type_size >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
      gvs[Abbr `u`, sstore_def, tstore_def]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
-  simp[stmt_state_rel_inst_idx, lookup_var_def]
+  (simp[stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >> Cases_on `p`
+      >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
+          drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])
+      >- (rename1 `MemoryPlace id path` >>
+          `loc = LocMemory` by fs[place_ptr_rel_def] >>
+          gvs[Abbr `u`] >> irule place_store_word_memory_state >>
+          qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+          qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+          qpat_assum `evaluate_type _ dty = _` (irule_at Any) >> simp[])
+      >> gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
+      drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[]) >>
+  fs[lookup_var_def])
 QED

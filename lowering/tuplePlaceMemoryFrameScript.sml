@@ -258,17 +258,18 @@ Resume tuple_place_memory_forward_frame[staged_post]:
   disch_then (qspecl_then [`ee.scopes`, `sa`, `cenv`] mp_tac) >>
   simp[] >> (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then strip_assume_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
-       stmt_state_rel H ctx func cenv cx ee r` by
-    (qpat_assum `(r with <|vs_vars := _; vs_inst_idx := _;
+  qpat_assum `(r with <|vs_vars := _; vs_inst_idx := _;
        vs_allocas := _; vs_alloca_next := _|>) = s`
-       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexists_tac `H0` >> fs[]) >>
+    (strip_assume_tac o SRULE [venom_state_component_equality]) >>
   qexistsl_tac [`r`, `t`] >>
-  qpat_x_assum `!H. _ ==> stmt_state_rel H _ _ _ _ ee r` (fn th => simp[th]) >>
+  (simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+      conj_tac >- (qexists_tac `H0` >> asm_rewrite_tac[]) >>
+      qexists_tac `s` >> fs[]) >>
   (conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- (fs[] >> metis_tac[]) >>
   map_every qx_gen_tac [`aid`, `ob`, `ol`, `oa`, `on`] >> strip_tac >>
   `mem_bytes_at oa on t.vs_memory = mem_bytes_at oa on u.vs_memory` by
     (irule typed_copy_effect_bytes >>
@@ -276,7 +277,7 @@ Resume tuple_place_memory_forward_frame[staged_post]:
   `mem_bytes_at oa on u.vs_memory = mem_bytes_at oa on s.vs_memory` by
     (qpat_x_assum `!a len. _ ==> mem_bytes_at a len u.vs_memory = _` irule >>
      asm "old_scratch_sep"
-       (qspecl_then [`aid`, `ob`, `ol`, `oa`, `on`] mp_tac) >> simp[]) >> simp[])
+       (qspecl_then [`aid`, `ob`, `ol`, `oa`, `on`] mp_tac) >> simp[]) >> simp[]))
 QED
 
 Resume tuple_place_memory_forward_frame[staged_immutables]:

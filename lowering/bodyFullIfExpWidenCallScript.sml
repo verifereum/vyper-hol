@@ -159,9 +159,10 @@ Resume ifexp_widened_call_copy_ghost_frame[kept]:
   conj_tac >- (rpt strip_tac >>
     `off+sz <= B \/ B+N <= off` by metis_tac[] >>
     `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
-  (rpt strip_tac >>
+  conj_tac >- (rpt strip_tac >>
     `b+sz <= B \/ B+N <= b` by metis_tac[] >>
-    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[])
+    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
+  rpt strip_tac >> `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]
 QED
 
 Resume ifexp_widened_call_copy_ghost_frame[value]:
@@ -303,7 +304,7 @@ Theorem ifexp_widened_call_alloc_resources_frame:
     ptr_buf_ok cenv e op0 G s) /\
   (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok cenv e p.ptr_operand G s) /\
-  vv_store_bound cx t (lowered_value_type cenv e) ee tv vv s /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
   (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
     ?v. read_result cx tv ee = (INL v,ee) /\
       !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
@@ -329,7 +330,7 @@ Theorem ifexp_widened_call_alloc_resources_frame:
     ptr_buf_ok cenv e op0 Gq q) /\
   (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok cenv e p.ptr_operand Gq q) /\
-  vv_store_bound cx t (lowered_value_type cenv e) ee tv vv q /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv q /\
   (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
     ?v. read_result cx tv ee = (INL v,ee) /\
       !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
@@ -371,8 +372,8 @@ Resume ifexp_widened_call_alloc_resources_frame[locbuf]:
 QED
 
 Resume ifexp_widened_call_alloc_resources_frame[bound]:
-  Cases_on `vv` >> gvs[vv_store_bound_def, vv_operand_def] >>
-  rpt strip_tac >> res_tac >> decide_tac
+  irule vv_store_bound_frame_mem_src >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Resume ifexp_widened_call_alloc_resources_frame[ctor]:
@@ -454,7 +455,7 @@ Theorem ifexp_widened_call_arm_step_full:
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
        ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
+    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -483,7 +484,7 @@ Theorem ifexp_widened_call_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-      expr_store_bound cx (expr_type e) v op z /\
+      expr_store_bound cx (post_value_type cenv e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
       alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
@@ -617,7 +618,7 @@ Theorem ifexp_widened_call_arm_step_full:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      vv_post H ctx func cenv cx e es1 sa sm u ee tva vv z /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn z) /\
-  vv_store_bound cx t (lowered_value_type cenv e) ee tva vv z /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tva vv z /\
   z.vs_current_bb = sm.cs_current_bb /\
   z.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~z.vs_halted /\
   alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\

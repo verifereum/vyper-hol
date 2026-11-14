@@ -10,7 +10,7 @@ Ancestors
   exprLowering compileEnv loweringPosts vyperAST vyperState context fragGasMode
   memoryLayoutDefs memoryLayoutSource exprSimIfExpWidenedAggregate
 
-Theorem compile_selected_ifexp_post_path:
+Theorem compile_selected_ifexp_post_path_fields:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   eval_expr cx e es = (INL tvv,ee) /\
@@ -40,14 +40,16 @@ Theorem compile_selected_ifexp_post_path:
     (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   Cases_on `is_word_type (expr_type e) \/
     same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
-  >- (irule compile_nocopy_ifexp_post_path >> metis_tac[]) >>
+  >- (irule compile_nocopy_ifexp_post_path_fields >> metis_tac[]) >>
   fs[] >> Cases_on `is_bytestring_type (expr_type e)`
-  >- (irule compile_bytes_ifexp_post_path >> metis_tac[expr_has_effect_thm]) >>
+  >- (irule compile_bytes_ifexp_post_path_fields >> metis_tac[expr_has_effect_thm]) >>
   `lowered_value_type ce e <> expr_type e` by
     (strip_tac >> fs[same_memory_layout_def, punnable_reflexive]) >>
   `~tuple_memory_layout_eq (expr_type e) (lowered_value_type ce e)` by
@@ -89,7 +91,43 @@ Proof
   pairarg_tac >> simp[comp_bind_def] >>
   simp[compile_store_memory_def, comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> simp[comp_return_def] >> strip_tac >>
-  gvs[] >> irule changed_aggregate_post_path >> metis_tac[expr_has_effect_thm]
+  gvs[] >> irule changed_aggregate_post_path_fields >> metis_tac[expr_has_effect_thm]
+QED
+
+Theorem compile_selected_ifexp_post_path:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
+  expr_body_pre ce cx env e es /\
+  eval_expr cx e es = (INL tvv,ee) /\
+  read_result cx tvv ee = (INL v,ee) /\
+  compile_expr ce ty e sc = (vv,sa) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sc /\ local_ptrs_reserved ce origin /\
+  local_ptrs_reserved ce sa /\ local_ptrs_rel func ce es.scopes s0 /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+    type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+    type_memory_size tv < dimword (:256)) ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+      es origin sb s0 ee v op q /\
+    (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
+      (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all compile_selected_ifexp_post_path_fields >>
+  strip_tac >> qexists_tac `q` >> simp[]
 QED
 
 Theorem selected_ifexp_arm_outcome:
@@ -101,7 +139,9 @@ Theorem selected_ifexp_arm_outcome:
   gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sc /\ local_ptrs_rel func ce es.scopes s0 /\
-  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sc.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sc.cs_current_insts /\
   acyclic_struct_metadata ce.ce_struct_fields /\
@@ -113,16 +153,16 @@ Theorem selected_ifexp_arm_outcome:
   (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
     type_memory_bytes ce (expr_type e) = type_memory_size tv /\
     type_memory_size tv < dimword (:256)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (conditional_result cx)) (es,s0)
-    (\res ee t. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
+    (\H res ee t. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
         es sc sb s0 ee v op t /\
       (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) sc sb ee tv
         (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   `cs_extends sc sa /\ sc.cs_next_var <= sa.cs_next_var /\
@@ -138,18 +178,31 @@ Proof
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
   simp[expr_vv_sim_def] >> disch_then drule_all >>
   strip_tac >> irule gas_outcome_bind_result_exec >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_conditional_result] >>
+  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
   reverse conj_tac >- (simp[] >> metis_tac[]) >>
   rpt gen_tac >> simp[] >> strip_tac >>
   `gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0) marks
     (INL v) (mid with gas_obs := []) (OK t)` by
     fs[gas_marked_exec_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_conditional_result]) >>
+  qabbrev_tac `H = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    fs[Abbr `H`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `vv_post H ctx func ce cx e es sc sa s0 (mid with gas_obs := []) v vv t /\
+   t.vs_current_bb = sa.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sa.cs_current_insts` by metis_tac[] >>
   drule_all conditional_marked_read_success >> strip_tac >>
   gvs[] >>
   `expr_vv_res_ok (INL tv)` by
     (drule_all gas_marked_continuation_admissible >>
      simp[gas_admissible_def] >> disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  `vv_post H ctx func ce cx e es sc sa s0 (mid with gas_obs := []) v vv t` by
+    metis_tac[] >>
   drule vv_post_read_ok >> strip_tac >>
   `read_result cx v (mid with gas_obs := []) = (INL v',mid with gas_obs := [])` by
     (drule_at (Pat `read_result _ _ _ = _`) conditional_readable_admissible >>
@@ -169,10 +222,11 @@ Proof
     (fs[vv_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
-  drule_at (Pat `eval_expr _ _ _ = _`) compile_selected_ifexp_post_path >>
+  qpat_assum `vv_post H _ _ _ _ _ (_ with gas_obs := _) _ _ _ _ _ _ _`
+    (mp_then (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+      compile_selected_ifexp_post_path_fields) >>
+  disch_then (drule_at (Pat `eval_expr _ _ _ = _`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
-  simp[] >>
-  disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
   simp[] >>
@@ -181,11 +235,20 @@ Proof
   `expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
     es sc sb s0 (mid with gas_obs := []) v' op q` by
     (fs[expr_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL tv`, `mid with gas_obs := []`, `OK q`] >>
   simp[gas_marked_exec_def] >>
   drule conditional_result_gas_obs >> simp[] >>
-  rpt strip_tac >> irule exprSimIfExpWidenedProvenanceTheory.vv_at_conditional_result >>
+  strip_tac >> disj1_tac >> qx_gen_tac `H'` >> strip_tac >>
+  conj_tac
+  >- (`vv_post H' ctx func ce cx e es sc sa s0 (mid with gas_obs := []) v vv t` by
+        metis_tac[] >>
+      irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+        expr_post_fields_transport) >>
+      conj_tac >- fs[vv_post_def] >>
+      reverse conj_tac >- (qexists_tac `H` >> simp[]) >>
+      qexists_tac `t` >> simp[] >> fs[vv_post_def]) >>
+  strip_tac >> irule exprSimIfExpWidenedProvenanceTheory.vv_at_conditional_result >>
   metis_tac[]
 QED
