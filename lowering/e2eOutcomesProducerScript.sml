@@ -112,11 +112,13 @@ Proof
   qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
   Cases_on `frame_resource_starved es r es'` >> simp[] >>
-  irule gas_readings_rel_T_mono >>
   qspecl_then [`policy`, `tops`, `runtime_bc`, `am`, `tx`, `ret`, `es`, `r`, `es'`]
-    mp_tac call_guard_gas_link >>
-  simp[] >> strip_tac >> goal_assum drule >>
-  gen_tac >> BETA_TAC >> rpt strip_tac >>
+    mp_tac (INST_TYPE [alpha |-> ``:256``] call_guard_gas_link) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `gas_readings_rel _ _ T` (fn bridge =>
+    match_mp_tac (MATCH_MP
+      (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_T_mono) bridge)) >>
+  gen_tac >> BETA_TAC >> ntac 2 strip_tac >>
   first_x_assum drule >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   `?deploy_bc. compile_vyper (K SOME) policy tops = SOME (deploy_bc,runtime_bc)` by
@@ -137,7 +139,8 @@ Proof
   >- (fs[vyper_call_staging_def] >> rpt strip_tac >>
       qpat_assum `!H'. _ ==> ctx_sim _ _ _ _ _ /\ ctx_abort_rq _ _ _ _ _ /\ _`
         (qspec_then `H'` mp_tac) >> simp[]) >>
-  disch_then (qx_choosel_then [`r1`, `es1`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`r1`, `es1`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `r1 = r /\ es1 = es'` by fs[] >>
   qpat_x_assum `r1 = r` SUBST_ALL_TAC >> qpat_x_assum `es1 = es'` SUBST_ALL_TAC >>
   qpat_x_assum `_ \/ _` mp_tac >> simp[] >> strip_tac >>
@@ -155,6 +158,15 @@ Proof
      drule call_external_trace_result >> simp[]) >>
   `~source_exempt tops (res,am_f,rqs)` by
     (drule call_external_trace_result >> fs[vyper_closed_world_def] >> metis_tac[]) >>
+  `regions_consistent (FST H) /\
+   storage_locks_separated (FST H) (SND H) /\
+   storage_well_formed_on
+     (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am []) (FST H)` by fs[vyper_closed_world_def] >>
+  `source_typing_ok tops am tx /\ supported_program tops /\
+   call_state_rel tops (assemble prog) am tx es` by fs[vyper_call_staging_def] >>
+  `EVERY (\p. ~computed_precompile (FST p)) (call_trace es)` by
+    fs[vyper_closed_world_def] >>
   `storage_observations_ok
     (initial_evaluation_context am.sources am.layouts tx NONE) H obs` by
     (mp_tac (SPEC_ALL aligned_trace_storage_observations |> Q.INST
@@ -164,17 +176,25 @@ Proof
         `res` |-> `res`, `am'` |-> `am_f`, `rqs` |-> `rqs`,
         `obs` |-> `obs`, `trace` |-> `call_trace es`]) >>
      impl_tac
-     >- (fs[vyper_call_staging_def, vyper_closed_world_def] >>
+     >- (asm_rewrite_tac[] >>
          conj_tac
          >- (map_every qx_gen_tac [`pre`, `source_rq`, `source_co`, `sfx`] >> strip_tac >>
-             qpat_assum `!tail' res am' rqs obs obs_pre rq outcome sfx H. _`
-               (qspecl_then [`tail`, `res`, `am_f`, `rqs`, `obs`,
+             qpat_assum `!tail' res am' rqs obs_pre rq outcome sfx H. _`
+               (qspecl_then [`tail`, `res`, `am_f`, `rqs`,
                  `pre`, `source_rq`, `source_co`, `sfx`, `H`] mp_tac) >>
-             impl_tac >- gvs[] >> strip_tac >>
+             impl_tac >- gvs[] >>
+             disch_then (map_every assume_tac o CONJUNCTS) >>
+             qpat_x_assum `?fuel ss. _`
+               (qx_choose_then `fuel` (qx_choose_then `ss`
+                 (map_every assume_tac o CONJUNCTS))) >>
              Cases_on `computed_precompile source_rq` >- metis_tac[] >>
-             fs[] >> Cases_on `source_co = failed_outcome source_rq`
-             >- simp[failed_outcome_def] >>
-             fs[] >> disj2_tac >>
+             Cases_on `source_co = failed_outcome source_rq`
+             >- gvs[failed_outcome_def] >>
+             qpat_assum `~computed_precompile source_rq` (fn no_pc =>
+               qpat_assum `source_co <> failed_outcome source_rq` (fn no_fail =>
+                 RULE_L_ASSUM_TAC
+                   (CONJUNCTS o SIMP_RULE (srw_ss()) [no_pc,no_fail]))) >>
+             disj2_tac >>
              `ctx_sim (cx_dead H
                 (initial_evaluation_context am.sources am.layouts tx NONE))
                 unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cplan es) /\
@@ -184,12 +204,15 @@ Proof
               o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cplan es)` by
                (qpat_assum `!H'. _ ==> ctx_sim _ _ _ _ _ /\ ctx_abort_rq _ _ _ _ _ /\ _`
                   (qspec_then `H` mp_tac) >> simp[]) >>
-             gvs[] >>
+             `recorded_outcomes_count pre < LENGTH vs.vs_outcomes` by gvs[] >>
              drule_all source_compiled_request_alignment >> strip_tac >>
              qexists_tac `EL (recorded_outcomes_count pre) (call_requests es)` >> gvs[]) >>
          rpt strip_tac >>
-         irule guard_compiled_trace_storage >> simp[vyper_call_staging_def] >>
-         metis_tac[]) >>
+         mp_tac (SPEC_ALL guard_compiled_trace_storage |> Q.INST
+           [`es` |-> `es`, `am` |-> `am`, `tx` |-> `tx`,
+            `ret` |-> `ret`, `policy` |-> `policy`, `tops` |-> `tops`,
+            `runtime_bc` |-> `runtime_bc`, `H` |-> `H`,
+            `rq` |-> `rq`, `co` |-> `co`]) >> simp[]) >>
      simp[]) >>
   `!st. storage_well_formed_on
       (initial_evaluation_context am.sources am.layouts tx NONE) st (FST H) ==>
