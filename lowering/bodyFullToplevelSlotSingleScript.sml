@@ -303,7 +303,7 @@ Proof
   metis_tac[ADD_COMM]
 QED
 
-Theorem toplevel_slot_single_allocation_bounds[local]:
+Theorem toplevel_slot_single_allocation_bounds:
   compile_expr cenv ty (TopLevelName ann nsid) si = (vv,sm) /\
   compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
   stmt_state_rel H ctx func cenv cx ee s /\ nb < dimword (:256) /\
@@ -355,7 +355,7 @@ Proof
   metis_tac[ADD_COMM]
 QED
 
-Theorem toplevel_slot_single_allocation_separation[local]:
+Theorem toplevel_slot_single_allocation_separation:
   compile_expr cenv ty (TopLevelName ann nsid) sa = (vv,sm) /\
   vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sm s0 ee tv vv s /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
