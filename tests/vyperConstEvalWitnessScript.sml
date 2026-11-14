@@ -19,6 +19,7 @@ val () = holbuild_extra_deps [
   "../tests/fixtures/check_contract/constant_undecodable_bound.json",
   "../tests/fixtures/check_contract/constant_nested/main.json",
   "../tests/fixtures/check_contract/constant_widened.json",
+  "../tests/fixtures/check_contract/constant_widened_subscript.json",
   "../tests/fixtures/check_contract/constant_undecodable_import/main.json",
   "../tests/fixtures/check_contract/constant_minmax_bound.json",
   "../tests/fixtures/check_contract/constant_interface_stub.json"];
@@ -59,6 +60,17 @@ in
 end;
 
 val uint256 = ``BaseT (UintT 256)``;
+
+(* The pin widens each literal's annotation to the list element type;
+   decoding must retain that bound rather than derive it from the payload. *)
+val widened_subscript = translate "constant_widened_subscript.json";
+val () = contains "widened list literals"
+  ``Builtin (ArrayT (BaseT (BytesT (Dynamic 2))) (Fixed 2))
+      (MakeArray (SOME (BaseT (BytesT (Dynamic 2)))) (Fixed 2))
+      [Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w]);
+       Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w; 98w])]``
+  widened_subscript;
+Theorem constant_widened_subscript_translation = widened_subscript;
 
 (* Runtime-safe evaluation has different values and coverage from the pin's
    AST folder. These witnesses keep that distinction explicit. *)
