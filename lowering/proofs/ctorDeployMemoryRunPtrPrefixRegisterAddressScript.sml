@@ -451,33 +451,6 @@ Proof
   qexistsl [`src`,`middle`,`prepared`,`H`,`qt`] >> gvs[]
 QED
 
-Theorem prefix_register_member_source_split[local]:
-  has_types (pre ++ aty::post) (pvs ++ av::rest) /\ LENGTH pre = LENGTH pvs /\
-  mem_bytes_at 0 (LENGTH (enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::rest))))
-    initial.vs_data_section = enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::rest)) /\
-  LENGTH (enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::rest))) < dimword (:256) ==>
-  has_type aty av /\
-  mem_bytes_at (abi_tuple_child_offset (pre ++ aty::post) (pvs ++ av::rest) (LENGTH pre))
-    (LENGTH (enc aty av)) initial.vs_data_section = enc aty av /\
-  abi_tuple_child_offset (pre ++ aty::post) (pvs ++ av::rest) (LENGTH pre) +
-    LENGTH (enc aty av) <= LENGTH (enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::rest))) /\
-  (is_dynamic aty ==> abi_decode_load DLOAD (n2w (SUM (MAP abi_member_head_size pre)) : bytes32) initial =
-    n2w (abi_tuple_child_offset (pre ++ aty::post) (pvs ++ av::rest) (LENGTH pre))) /\
-  (~is_dynamic aty ==> abi_tuple_child_offset (pre ++ aty::post) (pvs ++ av::rest) (LENGTH pre) =
-    SUM (MAP abi_member_head_size pre))
-Proof
-  strip_tac >>
-  `mem_bytes_at 0 (LENGTH (enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::rest))))
-     (abi_decode_source DLOAD initial) = enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::rest))`
-    by gvs[abi_decode_source_def, Excl "enc_def"] >>
-  drule_all abi_tuple_child_offset_source >>
-  pure_rewrite_tac[abi_decode_source_def, ADD_CLAUSES] >> strip_tac >>
-  drule_all abi_tuple_child_offset_ranges >> strip_tac >>
-  drule_all (SIMP_RULE bool_ss [ADD_CLAUSES]
-    (Q.INST [`sb` |-> `0`] abi_decoder_canonical_member_inputs)) >>
-  strip_tac >> gvs[abi_decode_source_def, Excl "enc_def"]
-QED
-
 
 
 

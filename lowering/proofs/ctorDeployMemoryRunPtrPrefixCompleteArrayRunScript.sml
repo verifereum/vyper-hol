@@ -346,26 +346,11 @@ Proof
   simp[SUBSET_REFL] >> rpt conj_tac >> metis_tac[eval_operand_def]
 QED
 
-Theorem prefix_complete_array_header_frame_pair:
-  (^Pk) /\ (^LoopAt) hdr 0 j X ==>
-  ?Y. (^LoopAt) (if j < LENGTH vs then st.cs_current_bb else exit_lbl) 0 j Y /\
-    (^Frame) X Y
-Proof
-  mp_tac (prefix_complete_array_header_frame_pair_mode |> Q.INST [`checked` |-> `F`]) >> simp[]
-QED
-
 Theorem prefix_complete_array_terminal_pair_mode:
   (^PkMode) /\ (^LoopAtMode) hdr 0 (LENGTH vs) X ==>
   ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FrameMode) X Y
 Proof
   strip_tac >> drule_all prefix_complete_array_header_frame_pair_mode >> simp[]
-QED
-
-Theorem prefix_complete_array_terminal_pair:
-  (^Pk) /\ (^LoopAt) hdr 0 (LENGTH vs) X ==>
-  ?Y. (^LoopAt) exit_lbl 0 (LENGTH vs) Y /\ (^Frame) X Y
-Proof
-  strip_tac >> drule_all prefix_complete_array_header_frame_pair >> simp[]
 QED
 
 Theorem prefix_complete_array_setup_ambient:
