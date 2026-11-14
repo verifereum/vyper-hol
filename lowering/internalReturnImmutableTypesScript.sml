@@ -1,7 +1,7 @@
 (* Declared immutable types control the footprint of stored immutables. *)
 Theory internalReturnImmutableTypes
 Ancestors
-  bodyMemoryDefs immutableLocationProps exprSimPopImmutableTarget
+  bodyMemoryDefs immutableLocationProps bodyStorageMetadata
   vyperTypeInvariants compileVyper bodySim exprSimHypsDefs vyperState
 
 Theorem internal_return_immutable_separation:
@@ -44,7 +44,11 @@ Proof
     (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
      metis_tac[bare_globals_complete_def]) >>
   `cenv.ce_module_var_type (NONE,name) = SOME ity` by
-    (drule_all body_imm_var_type >> simp[]) >>
+    (`ALL_DISTINCT
+        (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+      cenv.ce_module_var_type (NONE,name) =
+        build_var_type_map tops (NONE,name)` by fs[body_inv_def] >>
+     drule_all build_maps_variable >> simp[]) >>
   `evaluate_type (get_tenv cx) ity = SOME itv` by
     (Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
      fs[env_immutables_consistent_def, get_source_immutables_def] >> metis_tac[]) >>
