@@ -101,7 +101,8 @@ QED
 Resume typed_store_prefix_mutual[dispatch]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   Cases_on `is_word_type dt`
-  >- (pure_once_rewrite_tac[compile_store_memory_typed_def] >> simp[] >>
+  >- (pure_once_rewrite_tac[compile_store_memory_typed_def] >>
+      asm_rewrite_tac[] >>
       simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
            emit_op_def, emit_void_def, fresh_id_def,
            fresh_var_def, emit_def, mk_inst_def] >> strip_tac >>

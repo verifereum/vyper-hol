@@ -9,6 +9,7 @@ Ancestors
   loweringHalt vyperABI contractABI abiBuiltinAllocation
 
 Theorem log_emit_continuation:
+  ~cx.txn.is_static /\
   emit_inst LOG
     (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) [] sa =
       ((),sb) /\
@@ -40,6 +41,7 @@ Proof
 QED
 
 Theorem log_emit_empty_suffix:
+  ~cx.txn.is_static /\
   emit_inst LOG
     (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [Lit 0w;Lit 0w]) [] sa =
       ((),sb) /\ LENGTH topic_ops < dimword (:256) /\
@@ -59,6 +61,7 @@ Proof
 QED
 
 Theorem log_emit_encoded_suffix:
+  ~cx.txn.is_static /\
   emit_inst LOG
     (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) [] sa =
       ((),sb) /\ LENGTH topic_ops < dimword (:256) /\
@@ -90,6 +93,7 @@ Proof
 QED
 
 Theorem log_empty_suffix_finish[local]:
+  ~cx.txn.is_static /\
   compile_log_topic_ops raw sm = (ops,st) /\
   run_inst_seq (emitted_insts sm st) s = OK u /\
   wb_frame ce es es sm s u /\ u.vs_memory = s.vs_memory /\
@@ -129,6 +133,7 @@ Proof
 QED
 
 Theorem log_success_empty_run[local]:
+  ~cx.txn.is_static /\
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
@@ -264,6 +269,7 @@ Proof
 QED
 
 Theorem log_data_emit_run[local]:
+  ~cx.txn.is_static /\
   cap = SUM (MAP (type_memory_bytes ce) (MAP SND xs)) /\
   srccap = MAX 32 cap /\
   outcap = MAX 32 (abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs))) /\
@@ -400,6 +406,7 @@ Proof
 QED
 
 Theorem log_success_suffix_run:
+  ~cx.txn.is_static /\
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
@@ -535,3 +542,184 @@ Finalise log_success_suffix_run
 
 val _ = if null (hyp log_success_suffix_run) then ()
   else raise Fail "open theorem: log_success_suffix_run";
+
+Theorem log_static_empty_run[local]:
+  cx.txn.is_static /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
+  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
+  SND (split_log_ops xs flags) = [] /\
+  compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  LENGTH flags = LENGTH xs /\
+  EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
+  LIST_REL (log_arg_rel ce cx sa sm es s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
+  encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics ==>
+  ?t. run_inst_seq (emitted_insts sm sb) s = Abort ExHalt_abort t
+Proof
+  strip_tac >> drule_all compile_log_empty_trace >> strip_tac >>
+  `emit_inst LOG
+    (Lit (n2w (LENGTH (Lit (n2w h)::ops))) ::
+      REVERSE (Lit (n2w h)::ops) ++ [Lit 0w;Lit 0w]) [] st = ((),sb)` by gvs[] >>
+  drule_all compile_split_log_topics_run >> strip_tac >>
+  `eval_operands (Lit (n2w h)::ops) t = SOME (n2w h::topics)` by
+    (drule log_operands_values >> simp[eval_operands_def, eval_operand_def]) >>
+  `run_inst_seq (emitted_insts st sb) t =
+     Abort ExHalt_abort (halt_state (set_returndata [] t))` by
+    (irule (Q.INST [`topic_ops` |-> `Lit (n2w h)::ops`,
+                    `ptr_op` |-> `Lit 0w`, `len_op` |-> `Lit 0w`,
+                    `off` |-> `0w`, `sz` |-> `0w`, `cenv` |-> `ce`,
+                    `ctx` |-> `ctx`, `func` |-> `func`, `cx` |-> `cx`,
+                    `es` |-> `es`]
+             compile_log_emit_static_run) >>
+     simp[eval_operand_def] >> conj_tac
+     >- (qexistsl_tac [`h`,`ops`,`n2w h::topics`] >> fs[]) >>
+     qexistsl_tac [`ce`,`ctx`,`cx`,`es`,`func`] >> simp[]) >>
+  drule log_topics_inst_extends >> strip_tac >>
+  drule inst_extends_emit_inst >> strip_tac >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem log_static_data_emit_run[local]:
+  cx.txn.is_static /\
+  cap = SUM (MAP (type_memory_bytes ce) (MAP SND xs)) /\
+  srccap = MAX 32 cap /\
+  outcap = MAX 32 (abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs))) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs)) /\
+  compile_alloc_buffer srccap source_st = (srcbuf,start) /\
+  fn_has_code source_st start func /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_alloc_buffer outcap stored_st = (dst,prepared) /\
+  fn_has_code stored_st prepared func /\
+  compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
+  fn_has_code prepared end_st func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce source_st /\
+  fresh_vars_wrt limit_st s /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  LIST_REL (\arg v. log_arg_rel ce cx sa source_st es s arg v /\
+    supported_scalar_type (SND arg) /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  EVERY (\p. (!z. FST p = Var z ==> not_fresh_at source_st z) /\ (!l. FST p <> Label l)) xs /\
+  EVERY supported_scalar_type (MAP SND xs) /\ cap < dimword (:256) /\
+  abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs)) < dimword (:256) /\
+  eval_operands topic_ops s = SOME topics /\
+  EVERY (abi_decoder_operand_live source_st.cs_next_var) topic_ops /\
+  emit_inst LOG (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++
+    [out;dst.buf_operand]) [] end_st = ((),final) ==>
+  ?t. run_inst_seq (emitted_insts source_st final) s = Abort ExHalt_abort t /\
+      inst_extends source_st final
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all log_data_prepare_run >>
+  disch_then (qx_choose_then `avs` (qx_choose_then `actual` (qx_choose_then `db`
+    (MAP_EVERY assume_tac o CONJUNCTS)))) >>
+  `eval_operands topic_ops actual = SOME topics` by
+    (drule_all log_operands_live_transport >> simp[]) >>
+  `run_inst_seq (emitted_insts end_st final) actual =
+     Abort ExHalt_abort (halt_state (set_returndata [] actual))` by
+    (drule_all compile_log_emit_static_run >> simp[]) >>
+  drule inst_extends_emit_inst >> strip_tac >>
+  `inst_extends source_st final` by
+    (irule inst_extends_trans >> qexists_tac `end_st` >> simp[]) >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem log_static_suffix_run:
+  cx.txn.is_static /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
+  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
+  compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  fresh_vars_wrt limit_st s /\ sb.cs_next_var <= limit_st.cs_next_var /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
+  EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
+  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
+    supported_scalar_type (SND arg) /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
+  encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
+  SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
+  abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sm sb) s = Abort ExHalt_abort t
+Proof
+  strip_tac >> drule_all split_log_ops_data_types >> strip_tac >>
+  drule_all log_selected_frontier >> disch_then (qspec_then `h` strip_assume_tac) >>
+  Cases_on `SND (split_log_ops xs flags) = []`
+  >- (`log_non_indexed_values flags vs = []` by
+        (qpat_x_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ arg v /\ _) _ _`
+           mp_tac >> simp[]) >>
+      `LIST_REL (log_arg_rel ce cx sa sm es s)
+         (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+        simp[] >>
+      drule_all log_static_empty_run >> simp[]) >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    (gvs[LIST_REL_EL_EQN, EVERY_EL] >> metis_tac[]) >>
+  drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
+    compile_log_data_trace)) >> strip_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[Excl "enc_def"] >>
+  disch_then (qx_choose_then `src` (qx_choose_then `s1` (qx_choose_then `s2`
+    (qx_choose_then `dst` (qx_choose_then `s3` (qx_choose_then `len`
+      (qx_choose_then `s4` strip_assume_tac))))))) >>
+  suspend "data"
+QED
+
+Resume log_static_suffix_run[data]:
+  qpat_x_assum `!ty sb lctx. _` kall_tac >>
+  `EVERY supported_scalar_type (MAP SND xs)` by
+    (gvs[EVERY_MAP, LIST_REL_EL_EQN, EVERY_EL] >> metis_tac[LIST_REL_LENGTH]) >>
+  `EVERY supported_scalar_type (MAP SND (SND (split_log_ops xs flags)))` by
+    (simp[EVERY_MAP] >> irule log_split_data_every >>
+     simp[GSYM EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"]) >>
+  `EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
+    gvs[EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"] >>
+  qpat_assum `MAP SND _ = _` (fn th =>
+    qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _`
+      (assume_tac o REWRITE_RULE [GSYM th])) >>
+  drule_all log_data_stage_code >> strip_tac >>
+  `st.cs_next_var <= limit_st.cs_next_var` by
+    (drule log_output_buffer_shape >> strip_tac >>
+     drule_all compile_log_store_data_shape >> strip_tac >>
+     drule abi_encoder_counters >> strip_tac >>
+     imp_res_tac log_output_buffer_shape >> decide_tac) >>
+  `LIST_REL (log_arg_rel ce cx sa sm es s)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all compile_split_log_topics_run >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  drule_all log_selected_typed >> strip_tac >>
+  `local_ptrs_reserved ce st` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[Excl "enc_def"]) >>
+  `fresh_vars_wrt limit_st u` by (drule_all log_topics_fresh >> simp[Excl "enc_def"]) >>
+  `eval_operands (Lit (n2w h)::ops) u = SOME (n2w h::topics)` by
+    (drule log_operands_values >> simp[eval_operands_def, eval_operand_def, Excl "enc_def"]) >>
+  qpat_x_assum `ce.ce_event_info _ = _` kall_tac >>
+  qpat_x_assum `log_eval_view _ _ _ _ _` kall_tac >>
+  qpat_x_assum `LIST_REL (\arg v. _ /\ _) xs vs` kall_tac >>
+  qpat_x_assum `EVERY supported_scalar_type (MAP SND xs)` kall_tac >>
+  qpat_x_assum `encode_indexed_event_topics _ _ _ = _` kall_tac >>
+  qpat_x_assum `EVERY (\p. _ /\ _) xs` kall_tac >>
+  qpat_x_assum `LIST_REL (log_arg_rel _ _ _ _ _ _) _ _` kall_tac >>
+  qpat_x_assum `MAP SND _ = _` (SUBST_ALL_TAC o SYM) >>
+  gvs[Excl "enc_def"] >>
+  drule_all (SRULE [Excl "enc_def"] (GEN_ALL
+    (Q.INST [`topic_ops` |-> `Lit (n2w h)::ops`] log_static_data_emit_run))) >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  drule log_topics_inst_extends >> strip_tac >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[] >> metis_tac[]
+QED
+Finalise log_static_suffix_run

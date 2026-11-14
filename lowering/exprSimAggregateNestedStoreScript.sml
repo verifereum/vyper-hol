@@ -202,8 +202,9 @@ Resume aggregate_store_nested_path[same_layout]:
   `val_in_memory tv v (w2n sw) s.vs_memory` by
     (qpat_x_assum `_ \/ _` strip_assume_tac >- gvs[] >>
      `memory_layout_key dty = memory_layout_key (post_value_type ce e)` by
-       (Cases_on `dty` >> Cases_on `post_value_type ce e` >>
-        fs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+       (Cases_on `dty` >> fs[tuple_memory_layout_eq_def] >>
+        Cases_on `post_value_type ce e` >>
+        fs[tuple_memory_layout_eq_def] >> simp[memory_layout_key_tuple]) >>
      drule_all memory_layout_key_evaluated >> strip_tac >>
      irule memory_value_rel_val_in_memory >> simp[] >>
      irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>

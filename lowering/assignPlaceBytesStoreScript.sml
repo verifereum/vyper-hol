@@ -245,87 +245,6 @@ Resume assign_place_wrapped_memory_suffix_run[load]:
 QED
 Finalise assign_place_wrapped_memory_suffix_run
 
-(* Kept local here while placeStoreSlots' public interface is frozen.  This
-   is store_slots_bytes_count_path's statement and proof, unchanged. *)
-Theorem assign_place_bytes_count_path[local]:
-  compile_bytestring_word_count src sa = (cnt,sm) /\
-  eval_operand src s = SOME sw /\
-  mem_word_at (w2n sw) s.vs_memory = n2w L /\
-  L + 63 < dimword (:256) /\ fn_has_code sa sm func /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?u. gas_marked_path F ctx func s 0 (OK u) /\
-      eval_operand cnt u = SOME (n2w (1 + word_size L)) /\
-      u.vs_memory = s.vs_memory /\
-      (!off len. typedMemoryCopy$typed_copy_state_frame sa off len s u) /\
-      ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sm.cs_current_insts
-Proof
-  strip_tac >>
-  qpat_x_assum `compile_bytestring_word_count _ _ = _` mp_tac >>
-  simp[compile_bytestring_word_count_def, comp_bind_def] >>
-  pairarg_tac >> pairarg_tac >> strip_tac >> gvs[] >>
-  rename1 `emit_op MLOAD [src] sa = (loaded,a)` >>
-  pairarg_tac >> gvs[] >>
-  rename1 `emit_op ADD [loaded; Lit 63w] a = (sum,b)` >>
-  `ci_mono sa a /\ ci_mono a b /\ ci_mono b sm` by
-    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono] >>
-  `fn_has_code sa a func /\ fn_has_code a b func /\ fn_has_code b sm func` by
-    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split,
-                                  cs_extends_trans]) >>
-  `?t. gas_marked_path F ctx func s 0 (OK t) /\
-       eval_operand loaded t = SOME (n2w L) /\
-       t.vs_memory = s.vs_memory /\
-       (!off len. typedMemoryCopy$typed_copy_state_frame sa off len s t) /\
-       ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
-       t.vs_inst_idx = LENGTH a.cs_current_insts` by
-    (irule place_store_emit_op_path >> simp[] >>
-     qexistsl_tac [`[src]`, `MLOAD`] >>
-     simp[is_terminator_def, step_inst_base_opcode_eqs, mk_inst_def,
-          exec_read1_def, GSYM mem_word_at_eq_mload]) >>
-  suspend "rest"
-QED
-Resume assign_place_bytes_count_path[rest]:
-  `?r. gas_marked_path F ctx func t 0 (OK r) /\
-       eval_operand sum r = SOME (n2w (L + 63)) /\
-       r.vs_memory = t.vs_memory /\
-       (!off len. typedMemoryCopy$typed_copy_state_frame a off len t r) /\
-       ~r.vs_halted /\ r.vs_current_bb = b.cs_current_bb /\
-       r.vs_inst_idx = LENGTH b.cs_current_insts` by
-    (irule place_store_emit_op_path >> simp[] >>
-     qexistsl_tac [`[loaded; Lit 63w]`, `ADD`] >>
-     simp[is_terminator_def, step_inst_base_opcode_eqs, mk_inst_def,
-          exec_pure2_def, eval_operand_def, GSYM wordsTheory.word_add_n2w]) >>
-  `(n2w (L + 63):bytes32) >>> 5 = n2w (1 + word_size L)` by
-    (once_rewrite_tac[GSYM wordsTheory.w2n_11] >>
-     simp[Excl "w2n_11", wordsTheory.w2n_lsr, wordsTheory.w2n_n2w,
-          arithmeticTheory.LESS_MOD, vfmConstantsTheory.word_size_def] >>
-     qspec_then `L + 31` mp_tac (SRULE [] (Q.SPEC `32` arithmeticTheory.DIVISION)) >>
-     qspec_then `L + 63` mp_tac (SRULE [] (Q.SPEC `32` arithmeticTheory.DIVISION)) >>
-     rpt strip_tac >>
-     `(L + 31) DIV 32 + 1 < dimword (:256)` by intLib.ARITH_TAC >>
-     simp[arithmeticTheory.LESS_MOD] >> intLib.ARITH_TAC) >>
-  `?u. gas_marked_path F ctx func r 0 (OK u) /\
-       eval_operand cnt u = SOME (n2w (1 + word_size L)) /\
-       u.vs_memory = r.vs_memory /\
-       (!off len. typedMemoryCopy$typed_copy_state_frame b off len r u) /\
-       ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
-       u.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    (irule place_store_emit_op_path >> simp[] >>
-     qexistsl_tac [`[Lit 5w; sum]`, `SHR`] >>
-     simp[is_terminator_def, step_inst_base_opcode_eqs, mk_inst_def,
-          exec_pure2_def, eval_operand_def]) >>
-  qexists_tac `u` >> simp[] >> conj_tac
-  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
-      qexists_tac `t` >> simp[] >>
-      irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
-      qexists_tac `r` >> simp[]) >>
-  rpt gen_tac >>
-  metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_trans,
-            typedMemoryCopyTheory.typed_copy_state_frame_mono]
-QED
-Finalise assign_place_bytes_count_path
-
 Theorem assign_place_bytes_storage_run:
   (loc = LocStorage \/ loc = LocTransient) /\
   is_bytestring_type sty /\ is_bytestring_type dty /\
@@ -425,7 +344,7 @@ Proof
               pairTheory.SND] >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     (fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
-  drule_all assign_place_bytes_count_path >>
+  drule_all store_slots_bytes_count_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `eval_operand src u = SOME sw /\
    eval_operand dst u = SOME (root+n2w delta)` by

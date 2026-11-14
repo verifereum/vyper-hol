@@ -20,7 +20,7 @@ Proof
   >- (drule_all step_fresh_write_op >> strip_tac >>
       gvs[venom_state_component_equality]) >>
   gvs[MEM] >>
-  gvs[step_inst_base_def, exec_read1_def, exec_write2_def, AllCaseEqs(),
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def, AllCaseEqs(),
       update_var_def] >>
   (conj_tac >- simp[mstore_def, mcopy_def,
      write_memory_with_expansion_def, LET_THM]) >>

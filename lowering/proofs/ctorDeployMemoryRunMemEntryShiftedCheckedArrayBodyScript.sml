@@ -262,7 +262,9 @@ Proof
   `frag_ids middle end_st SUBSET ids` by
     (irule SUBSET_TRANS >> qexists `frag_ids st end_st` >>
      simp[] >> simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) ctor_checked_array_child_at_index_from >>
+  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+    (mp_then (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
+      mp_tac ctor_checked_array_child_at_index_from) >>
   disch_then (drule_at (Pat `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>

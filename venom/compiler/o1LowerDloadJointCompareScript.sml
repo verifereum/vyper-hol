@@ -1,6 +1,7 @@
 (* Comparison transport uses same positive-size occurrence, not global order. *)
 Theory o1LowerDloadJointCompare
 Ancestors
+  o1SafeUpto
   o1LowerDloadPtrDiscipline o1LowerDloadJointScalar o1LowerDloadJointGeometry o1LowerDloadJointAssign
   o1LowerDloadAddressArithmetic o1LowerDloadJointRelation
   finite_map words arithmetic ptrDiscipline o1LowerDloadOccurrence
@@ -26,7 +27,7 @@ QED
 
 Theorem ld_joint_compare_operand_results:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [LT;GT;EQ] /\ inst.inst_operands = [p;q] /\
   eval_operand p s = SOME x /\ eval_operand q s = SOME y ==>
@@ -38,7 +39,7 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    metis_tac[ptr_discipline_def] >>
+    metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn p = {} /\ op_taint tn q = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      gvs[taint_ok_def, MEM] >> metis_tac[]) >>
@@ -68,8 +69,8 @@ Proof
      disch_then (fn th => mp_tac (Q.SPEC `p` th) >> mp_tac (Q.SPEC `q` th)) >>
      simp[occurrence_param_ok_def] >> rpt strip_tac >> gvs[]) >>
   `?P. FDOM G SUBSET fn_pv P fn /\ ptr_use_ok P (fn_pv P fn) inst` by
-    (qpat_assum `ptr_discipline _ _ _`
-       (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
+    (qpat_assum `ptr_discipline_upto _ _ _ _`
+       (strip_assume_tac o MATCH_MP ptr_discipline_upto_fn_ptr_ok) >>
      drule frame_reachable_prov_support >>
      disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
      qexists_tac `P` >> simp[] >>
@@ -124,7 +125,7 @@ QED
 
 Theorem ld_joint_compare_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [LT; GT; EQ] /\
   step_inst fuel C inst s = OK s1 ==>
@@ -158,7 +159,7 @@ QED
 Theorem ld_joint_compare_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\
   MEM inst.inst_opcode [LT; GT; EQ] /\
   step_inst fuel C inst s = OK s1 /\

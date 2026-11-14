@@ -148,9 +148,8 @@ Proof
       return_unlock_state_def, comp_return_def, emit_void_def,
       comp_bind_def, fresh_id_def, emit_def, emitted_insts_def,
       DROP_LENGTH_APPEND, IS_PREFIX_APPEND] >>
-  simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
-       step_inst_base_def, exec_write2_def, eval_operand_def,
-       arithmeticTheory.ADD1] >>
+  (simp[mk_inst_def, is_terminator_def, run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, arithmeticTheory.ADD1]) >>
   simp[venom_state_component_equality]
 QED
 

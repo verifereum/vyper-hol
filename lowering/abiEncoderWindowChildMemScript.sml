@@ -209,11 +209,17 @@ Theorem window_dynamic_child_call_mem:
       [(d+off,LENGTH (enc at av))] s actual /\ mem_cont_sim ctx func s actual
 Proof
   strip_tac >>
-  `fn_has_code st en func` by fs[abi_encoder_window_pre_def] >>
+  `fn_has_code st en func` by
+    (qhdtm_assum `abi_encoder_window_pre`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_encoder_window_pre_def]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all abi_encoder_dynamic_child_context >> strip_tac >>
   `alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
    s.vs_current_bb = st.cs_current_bb /\
-   s.vs_inst_idx = LENGTH st.cs_current_insts` by fs[abi_encoder_window_pre_def] >>
+   s.vs_inst_idx = LENGTH st.cs_current_insts` by
+    (qhdtm_assum `abi_encoder_window_pre`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_encoder_window_pre_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all window_child_prefix_run_mem >> strip_tac >>
   rename1 `window_phase ctx func st prepared {} [] s prep` >>
   `cs_extends child_end en` by

@@ -298,22 +298,6 @@ Proof
   PairCases_on `h` >> gvs[frame_gas_left_def, wf_context_def]
 QED
 
-Theorem run_call_tr_forward[local]:
-  !n r s t d.
-    run_call_tr n (r,s) = (INL (),t) /\ ISL r /\ d <= n ==>
-    RTC (\a b. LENGTH a.contexts >= d /\ step a = (INL (),b)) s t
-Proof
-  recInduct run_call_tr_ind >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >> Cases_on `r` >> gvs[] >>
-  qpat_x_assum `run_call_tr _ _ = _` mp_tac >>
-  simp[Once run_call_tr_def] >>
-  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
-  strip_tac >> Cases_on `step s` >> rename1 `(q,v)` >>
-  Cases_on `q` >> gvs[]
-  >- simp[RTC_RULES] >>
-  gvs[Once run_call_tr_def]
-QED
-
 Theorem frame_next_reaches:
   !es es1. frame_next es es1 ==>
     RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
@@ -321,12 +305,7 @@ Theorem frame_next_reaches:
 Proof
   rw[frame_next_def]
   >- simp[RTC_RULES] >>
-  gvs[run_call_eq_tr] >>
-  `run_call_tr (SUC (LENGTH es.contexts)) (INL (),v) = (INL (),es1)` by
-    simp[Once run_call_tr_def] >>
-  drule run_call_tr_forward >>
-  disch_then (qspec_then `LENGTH es.contexts` mp_tac) >>
-  simp[] >> strip_tac >> simp[RTC_RULES]
+  irule run_call_enter_return_rtc >> metis_tac[]
 QED
 
 Theorem frame_next_inst_at:

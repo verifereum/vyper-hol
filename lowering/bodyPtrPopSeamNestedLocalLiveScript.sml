@@ -31,7 +31,7 @@ Ancestors
      ghost_inv's ptr_covers covers the local with: the MLOAD/MSTORE access
      checks and the element pointer's ptr_mem_ok/ptr_buf_ok.
    - The pop suffix's counted pieces: bodyPtrPopMemoryHeader,
-     bodyPtrPopLengthGuard, bodyPtrPopMemoryStore, bodyPtrPopLengthStore,
+     bodyPtrPopLengthGuard, bodyPtrPopMemoryStore,
      bodyPtrPopInteriorPointer, bodyPtrPopLiveElement (listed at
      bodyPtrPopSeamLocalRoot's pop_local_root_vv_ptr).
    - The new length word is a dynarray_len_at offset of the local; the

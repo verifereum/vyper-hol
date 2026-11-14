@@ -708,7 +708,8 @@ Proof
   drule_all array_code_body_prefix >> strip_tac >>
   drule array_code_initialization_fields >> strip_tac >>
   `!j ei s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-      ainst bod st j ei s /\ j < LENGTH vs ==>
+      ainst bod st j ei s /\
+      alloca_frame cenv es st s0 cenv ei s /\ j < LENGTH vs ==>
       val_in_memory tv (EL j vs) (w2n arr_base + j * stride) s.vs_memory /\
       ret_pc_ok bc sb0 s` by
     (rpt strip_tac >> drule_all array_invariant_layout >> simp[]) >>

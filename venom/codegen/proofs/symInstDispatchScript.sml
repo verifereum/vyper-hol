@@ -111,7 +111,9 @@ Proof
     metis_tac[generate_inst_plan_pre_codegen_none, optionTheory.NOT_SOME_NONE] >>
   drule_all sym_shaped_prepared_emission_families >>
   simp[optionTheory.IS_SOME_EXISTS, listTheory.MEM] >> strip_tac >> simp[]
-  >- (drule_all sym_named_inst_symbolic_run >>
+  >- ((qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`
+      (mp_then (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) mp_tac sym_named_inst_symbolic_run) >>
+      disch_then (fn th => drule_all th)) >>
       `inst.inst_opcode <> ASSERT_UNREACHABLE` by
         metis_tac[venom_to_evm_name_def, optionTheory.NOT_SOME_NONE] >> simp[])
   >- (drule_all_then strip_assume_tac sym_generated_assign_sim >>

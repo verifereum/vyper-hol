@@ -14,7 +14,7 @@
 Theory evmStepTransplant
 Ancestors
   callTrace frameOutcome frameGas vfmExecution vfmExecutionProp vfmSameFrame
-  vfmStepLength vfmHandleStep vfmContextLength vfmRunCall
+  vfmStepLength vfmHandleStep vfmContextLength vfmRunCall vfmStoragePredicates
 
 Definition transplant_local_def:
   transplant_local (m : 'a execution) <=>
@@ -912,19 +912,6 @@ Proof
   rw[] >> gvs[]
 QED
 
-(* inc_pc_or_jump fails only on a bad jump target. *)
-Theorem inc_pc_or_jump_not_resource[local]:
-  inc_pc_or_jump op s = (INR e, t) ==>
-  e <> SOME OutOfGas /\ e <> SOME StackOverflow /\ e <> SOME Reverted
-Proof
-  rw[inc_pc_or_jump_def, bind_def, ignore_bind_def, get_current_context_def,
-     set_current_context_def, return_def, assert_def, fail_def] >>
-  gvs[AllCaseEqs()] >>
-  Cases_on `(FST (HD s.contexts)).jumpDest` >>
-  gvs[bind_def, ignore_bind_def, set_current_context_def, return_def,
-      assert_def, fail_def, AllCaseEqs()]
-QED
-
 (* A step of a call frame that pushes no context and runs out of gas or
    stack, or reverts: the instruction it runs, the one parsed at the pc,
    raises that at the frame's depth. *)
@@ -978,7 +965,7 @@ Proof
   simp[ignore_bind_def, bind_def] >>
   Cases_on `step_inst op s1` >> rename1 `step_inst op s1 = (r1,s2)` >>
   Cases_on `r1` >> simp[]
-  >- (strip_tac >> drule inc_pc_or_jump_not_resource >> gvs[]) >>
+  >- (strip_tac >> drule inc_pc_or_jump_inr_eq >> strip_tac >> gvs[]) >>
   strip_tac >> disch_tac >> gvs[] >>
   `~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]` by
     (irule transplant_lookup_allowed >> qexists_tac `c` >> gvs[]) >>

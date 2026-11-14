@@ -484,8 +484,9 @@ Proof
     (fs[inst_ir_vars_def, inst_uses_def] >>
      `!x y ys. venomInst$operand_vars (x::y::ys) =
         venomInst$operand_vars [x] ++ venomInst$operand_vars (y::ys)` by
-       (rpt gen_tac >> Cases_on `x` >>
-        simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+       (rpt gen_tac >>
+        mp_tac (Q.INST [`xs` |-> `[x]`, `ys` |-> `y::ys`]
+          operand_vars_APPEND) >> simp[]) >>
      gvs[EVERY_APPEND]) >>
   `EVERY (\v. MEM v q.irs_used_vars)
       (venomInst$operand_vars [resolve_block_assigns (REVERSE mid) p']) /\

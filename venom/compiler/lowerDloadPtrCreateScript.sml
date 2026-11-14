@@ -38,7 +38,8 @@ Theorem dload_create_success_inputs:
    (i.inst_opcode = CREATE2 /\ ?v a z salt. i.inst_operands = [v;a;z;salt]))
 Proof
   strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  (gvs[step_inst_non_invoke] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
   simp[] >> rpt strip_tac >> gvs[eval_operands_def] >> metis_tac[]
 QED
 

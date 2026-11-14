@@ -32,10 +32,12 @@ QED
 
 Theorem primitive_append_nonterminator_open:
   compile_dynarray_append cenv bop vop scale elem_size dt vt cap T
-    load_opc store_opc sb = ((),sf) /\ ~is_terminator store_opc ==>
+    (if tr then LocTransient else LocStorage) sb = ((),sf) ==>
   ~block_is_terminated sf
 Proof
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  Cases_on `tr` >>
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>

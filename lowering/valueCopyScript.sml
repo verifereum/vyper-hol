@@ -297,7 +297,7 @@ Proof
        GSYM mem_word_at_eq_mload] >>
   qmatch_goalsub_abbrev_tac
     `update_var _ w4 (update_var _ w3 (update_var _ w2 (update_var _ w1 _)))` >>
-  simp[update_var_def, mcopy_def, write_memory_with_expansion_def, LET_THM] >>
+  (simp[update_var_def] >> simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def, update_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[]

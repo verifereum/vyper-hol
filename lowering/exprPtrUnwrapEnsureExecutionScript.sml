@@ -80,7 +80,13 @@ Proof
       qexistsl [`root`, `d`, `a`, `G0`, `tn0`, `Gf`, `tnf`, `t`, `sm`, `buf`, `u`] >>
       qpat_x_assum `t = _` kall_tac >>
       qpat_x_assum `tnf.t_mem = _` kall_tac >>
-      gvs[slot_copy_runtime_frame_def, WORD_ADD_0] >> metis_tac[ADD_COMM]) >>
+      qhdtm_assum `slot_copy_runtime_frame`
+        (strip_assume_tac o PURE_REWRITE_RULE [slot_copy_runtime_frame_def]) >>
+      qpat_x_assum `!op. slot_copy_external sm op ==> _` mp_tac >>
+      qpat_x_assum `!a'. _ ==> mem_bytes_at a' 1 t.vs_memory = _` mp_tac >>
+      qpat_x_assum `!a' k. _ ==> mem_bytes_at a' k t.vs_memory = _` mp_tac >>
+      gvs[] >> rpt strip_tac >>
+      simp[WORD_ADD_0] >> metis_tac[ADD_COMM]) >>
   drule_all unwrap_ensure_slot_loop >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   drule unwrap_loop_ghost_projections >> strip_tac >>

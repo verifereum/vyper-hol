@@ -331,6 +331,9 @@ Resume concat_args_sim_mem[post]:
      ntac 3 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
   qpat_x_assum `_ ==> pure_args` (fn th => rewrite_tac[th]) >>
   qunabbrev_tac `pure_args` >>
+  qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` kall_tac >>
+  qpat_x_assum `~EXISTS expr_has_effect args ==> _` kall_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   simp[] >> conj_tac
   >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >> simp[]) >>
   conj_tac

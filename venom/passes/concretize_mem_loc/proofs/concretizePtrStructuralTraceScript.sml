@@ -306,7 +306,8 @@ Theorem ptr_chrono_nop_memory_fields[local]:
     a.po_state.vs_returndata = b.po_state.vs_returndata
 Proof
   ho_match_mp_tac ptr_chrono_step_ind >> simp[ptr_observe_def] >>
-  rpt strip_tac >> gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_def]
+  rpt strip_tac >>
+  gvs[is_terminator_def, step_inst_non_invoke, step_inst_base_opcode_eqs]
 QED
 
 Theorem ptr_chrono_nop_interval_fields[local]:

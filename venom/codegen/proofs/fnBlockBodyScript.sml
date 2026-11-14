@@ -151,9 +151,9 @@ QED
 
 Theorem block_rest_exec[local]:
   (!t. exec_block fuel ctx bb vs <> OK t) /\
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as
     (exec_block fuel ctx bb vs) ==>
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as
     (block_rest fuel ctx fn bb vs)
 Proof
   rw[block_rest_def] >> Cases_on `exec_block fuel ctx bb vs` >> fs[]
@@ -183,13 +183,13 @@ val body_resource_finish_tac =
 Theorem body_run_resource[local]:
   !d k prefix_ops rest_ops ps vs as.
     d = LENGTH bb.bb_instructions - k /\
-    gen_fn_sim_resource_at safe q fuel /\ gen_fn_frame_sim_resource_at safe q fuel /\
+    gen_fn_sim_at safe q fuel /\ gen_fn_frame_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
       ra pc_ret rest mem0 ==>
-    body_result_resource safe (OPTION_MAP (\F.
+    body_result safe (OPTION_MAP (\F.
       (d + 1) * (LENGTH prog + F unit cpl prog + 8)) q)
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as
       (block_rest fuel ctx fn bb vs)
@@ -204,7 +204,7 @@ Proof
           decide_tac) >>
       strip_tac >> drule block_rest_error >>
       disch_then (fn th => REWRITE_TAC [th]) >>
-      simp[body_result_resource_def]) >>
+      simp[body_result_def]) >>
   `?inst. EL k bb.bb_instructions = inst` by
     (qexists_tac `EL k bb.bb_instructions` >> REWRITE_TAC []) >>
   drule_all body_inv_inst >> strip_tac >>
@@ -409,7 +409,7 @@ QED
 Resume body_run_resource[error]:
   rename1 `step_inst fuel ctx inst vs = Error e` >>
   other_tac ``Error e`` >>
-  simp[body_result_resource_def]
+  simp[body_result_def]
 QED
 
 Finalise body_run_resource
@@ -431,7 +431,7 @@ Finalise body_run_resource
    by its instruction lemma, in the fnFrameDeep form (operands at any
    depth, repeated dead_stack_marker slots): gen_inst_frame_sim_deep,
    gas_inst_frame_sim_owned_deep, gen_invoke_frame_sim_deep with
-   gen_fn_sim_at fuel for the callee, the halt, abort and return steps,
+   gen_fn_sim_at_simple fuel for the callee, the halt, abort and return steps,
    revert_forward_frame_sim_deep.  Their static premises at the planner
    state ps come from fnBlockPlanStatic$block_plan_state_static, the slot
    alias is carried through each step by fnAliasStep$alias_step_preserve,
@@ -439,14 +439,14 @@ Finalise body_run_resource
    memory premises come from Inv (codegen_memory_obligations,
    reachability_closed).  A JMP or JNZ ends the block at a successor
    whose code is placed (dfs_block_code_placed), entered with the
-   lineage entry from this block, so gen_fn_frame_sim_at fuel finishes
+   lineage entry from this block, so gen_fn_frame_sim_at_simple fuel finishes
    the run and its assembly steps are added to the block's. *)
 Theorem block_body_frame_sim_resource:
   !safe q fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
    ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
    rest mem0.
-    gen_fn_sim_resource_at safe q fuel /\ gen_fn_frame_sim_resource_at safe q fuel /\
+    gen_fn_sim_at safe q fuel /\ gen_fn_frame_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
@@ -521,7 +521,7 @@ Theorem block_body_frame_sim_resource:
        operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
     (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
     ==>
-    body_result_resource safe (OPTION_MAP (\F.
+    body_result safe (OPTION_MAP (\F.
       (LENGTH bb.bb_instructions - k + 1) * (LENGTH prog + F unit cp prog + 8)) q)
       lo o2pc prog cp ctx fn mem0 pc_ret rest as
       (block_rest fuel ctx fn bb vs)
@@ -549,92 +549,6 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem block_body_frame_sim_cost:
-  !q fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
-   spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
-   ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
-   rest mem0.
-    gen_fn_sim_cost_at q fuel /\ gen_fn_frame_sim_cost_at q fuel /\
-    ctx = unit.cu_context /\
-    lo = SND (compute_label_offsets prog) /\
-    o2pc = build_offset_to_pc prog /\
-    generate_context_plan ctx = SOME cp /\
-    codegen_assembly rpolicy unit = SOME prog /\
-    unit_shape_ok unit /\
-    i < LENGTH ctx.ctx_functions /\
-    EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
-    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
-    (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
-       MEM inst (fn_insts f) /\
-       inst.inst_opcode = INVOKE /\
-       inst.inst_operands = Label callee_name :: args /\
-       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
-       fn_has_retpc callee) /\
-    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
-    codegen_context_obligations Inv ctx cp /\
-    reachability_closed Inv ctx /\
-    (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\
-    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
-           (fcg_analyze ctx) fn.fn_name /\
-    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
-    spill_base = r.sr_spill_base /\
-    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
-      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
-    fn_ops = r.sr_plan /\
-    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
-    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
-    fn_reachable fn bb.bb_label /\
-    lineage_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
-      bb.bb_label ps_l /\
-    dfs_block_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
-      bb.bb_label ps_dfs /\
-    generate_block_plan liveness dfg cfg fn bb ps_dfs =
-      SOME (block_ops, ps_dfs_after) /\
-    generate_block_plan liveness dfg cfg fn bb
-      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
-      SOME (block_ops, ps_after) /\
-    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
-    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
-    (?prefixL prefixD core.
-       ps_after.ps_stack = prefixL ++ core /\
-       ps_dfs_after.ps_stack = prefixD ++ core /\
-       (!v. MEM v (live_vars_at liveness bb.bb_label
-                     (LENGTH bb.bb_instructions)) ==>
-          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
-    block_plan_state liveness dfg cfg fn bb
-      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
-      k ps /\
-    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions)
-      (k - LENGTH (get_params bb.bb_instructions))
-      (DROP (k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
-      ps = SOME (rest_ops, ps_after) /\
-    block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
-    phi_prefix_length bb.bb_instructions <= k /\
-    (!i j. revert_forward_pair bb i j ==> k <= i \/ j < k) /\
-    vs.vs_inst_idx = k /\
-    asm_block_at prog pc0 (execute_plan cp.cp_initial_fmp block_ops) /\
-    as.as_pc = pc0 + LENGTH (execute_plan cp.cp_initial_fmp
-                                 (SOLabel bb.bb_label :: prefix_ops)) /\
-    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
-    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
-       operand_val (frame_view fn ra vs) lo at =
-       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
-    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
-    ==>
-    body_result_cost (OPTION_MAP (\F.
-      (LENGTH bb.bb_instructions - k + 1) * (LENGTH prog + F unit cp prog + 8)) q)
-      lo o2pc prog cp ctx fn mem0 pc_ret rest as
-      (block_rest fuel ctx fn bb vs)
-Proof
-  mp_tac (Q.SPEC `F` block_body_frame_sim_resource) >> simp[]
-QED
 
 (* Exact unbounded interface, obtained without a second semantic induction. *)
 Theorem block_body_frame_sim:
@@ -642,7 +556,7 @@ Theorem block_body_frame_sim:
    spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
    ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
    rest mem0.
-    gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+    gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
@@ -734,8 +648,9 @@ Theorem block_body_frame_sim:
                shared_state_rel vs' as')
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  irule (SRULE [gen_fn_sim_cost_none, gen_fn_frame_sim_cost_none,
-                body_result_def] (Q.SPEC `NONE` block_body_frame_sim_cost)) >>
+  irule (SRULE [GSYM gen_fn_sim_at_simple_def, GSYM gen_fn_frame_sim_at_simple_def,
+                body_result_def, cost_le_def]
+    (Q.SPECL [`F`, `NONE`] block_body_frame_sim_resource)) >>
   simp[SF SFY_ss] >> conj_tac
   >- (qexists `Inv` >> simp[]) >>
   rpt (goal_assum (drule_at Any)) >>

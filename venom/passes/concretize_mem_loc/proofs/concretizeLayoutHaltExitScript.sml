@@ -2,7 +2,13 @@ Theory concretizeLayoutHaltExit
 Ancestors concretizeLayoutSupplement ptrDiscipline pred_set
 
 Theorem concretize_supplement_halt_exit:
-  taint_within D C vs0 /\ final_taint vs0 C s tn R /\
+  tn.t_stor SUBSET
+    D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET
+    D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address) /\
+  tn.t_imm SUBSET D.d_imm s.vs_immutables /\ R SUBSET D.d_ret s.vs_returndata /\
   concretize_supplement D tn s t /\
   s.vs_halted = t.vs_halted /\ s.vs_logs = t.vs_logs /\
   s.vs_pending_deletions = t.vs_pending_deletions /\
@@ -12,9 +18,6 @@ Theorem concretize_supplement_halt_exit:
   dead_result_rel D (Halt s) (Halt t)
 Proof
   strip_tac >>
-  qpat_x_assum `taint_within _ _ _` mp_tac >>
-  pure_rewrite_tac[taint_within_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
   gvs[concretize_supplement_def, dead_result_rel_def] >>
   rpt conj_tac
   >- (gvs[accounts_agree_except_def] >> gen_tac >>

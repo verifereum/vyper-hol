@@ -69,14 +69,6 @@ Proof
   Cases >> simp[every_state_insts_return, (UNDISCH opcode_every_membership_or)]
 QED
 
-Theorem call_free_list_membership_in:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_list_membership_in v xs st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_list_membership_in) >> simp[]
-QED
-
 Theorem opcode_every_list_membership_notin:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -92,14 +84,6 @@ Proof
   >- simp[(UNDISCH opcode_every_membership_eqs)] >>
   Cases >> simp[every_state_insts_return, every_state_insts_bind,
     opcode_every_emit_op, (UNDISCH opcode_every_membership_and)]
-QED
-
-Theorem call_free_list_membership_notin:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_list_membership_notin v xs st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_list_membership_notin) >> simp[]
 QED
 
 Theorem opcode_every_array_membership_loop[local]:
@@ -139,12 +123,4 @@ Proof
   ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- (rpt CASE_TAC >> simp[(UNDISCH opcode_every_ptr_load), every_state_insts_return]) >>
   gen_tac >> ho_match_mp_tac (UNDISCH opcode_every_array_membership_loop) >> simp[(UNDISCH opcode_every_ptr_load)]
-QED
-
-Theorem call_free_var_array_membership:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_var_array_membership ce v vv t isin st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_var_array_membership) >> simp[]
 QED

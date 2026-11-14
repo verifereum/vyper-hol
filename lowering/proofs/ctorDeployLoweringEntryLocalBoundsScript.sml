@@ -116,7 +116,16 @@ Proof
  `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
    FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b` by
    (rpt gen_tac >> strip_tac >>
-    Cases_on `inst.inst_id = st.cs_next_id` >> gvs[FLOOKUP_UPDATE] >>
+    qpat_assum `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz) ==> q <= b`
+      (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+    qpat_assum `q <= initial.vs_alloca_next` mp_tac >>
+    qpat_assum `MEM inst (fn_insts func)` mp_tac >>
+    qpat_assum `inst.inst_opcode = ALLOCA` mp_tac >>
+    qpat_assum `FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz)` mp_tac >>
+    qpat_assum `a.vs_allocas = _` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `inst.inst_id = st.cs_next_id` >> simp[FLOOKUP_UPDATE] >>
     metis_tac[]) >>
  `ce' = ce with ce_vars := ce.ce_vars |+
    (name,PtrVar (Var (STRING #"%" (toString st.cs_next_var))) (type_memory_bytes ce ty))` by simp[] >>

@@ -1,20 +1,23 @@
 (* Terminal abort observations do not compare payload states. *)
 Theory o1LowerDloadAbortResult
 Ancestors
+  o1SafeUpto
   o1LowerDloadForwardAbort o1LowerDloadJointScalar o1LowerDloadJointRelation
   ptrDiscipline o1PassContract venomExecSemantics venomState venomInst
-  list option
+  list option gasEvents
 
 Theorem ld_joint_forward_abort_result:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = Abort reason s1 ==>
   ?fn' bb' t1. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = Abort reason t1 /\
+    gas_events_block fuel C fn.fn_name bb s = [] /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
     dead_result_rel D (Abort reason s1) (Abort reason t1)
 Proof
   strip_tac >> drule_all ld_joint_forward_abort >>

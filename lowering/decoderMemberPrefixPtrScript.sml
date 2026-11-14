@@ -543,7 +543,11 @@ Proof
      qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_getelemptr_abi_def, calldata_pos_addr, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-     (conj_tac >- metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
+     (conj_tac >-
+       (rpt (qpat_x_assum `emit_op _ _ _ = _`
+          (mp_tac o MATCH_MP inst_extends_emit_op)) >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        metis_tac[inst_extends_trans])) >>
      imp_res_tac emit_op_same_blocks >> fs[same_blocks_def]) >>
   `inst_extends mid sb /\ same_blocks mid sb` by
     metis_tac[inst_extends_emit_op, emit_op_same_blocks] >>

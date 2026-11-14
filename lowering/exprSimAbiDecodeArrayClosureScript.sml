@@ -677,8 +677,8 @@ Proof
          strip_tac >> disj2_tac >> rpt strip_tac >>
          qpat_assum `lookup_block st1.cs_current_bb fn.fn_blocks = SOME _`
            (fn eq => fs[eq]) >>
-         gvs[abiDecoderExecutionTheory.abi_decode_backedge_insts_def,
-             venomExecSemanticsTheory.phi_prefix_length_def, mk_inst_def]) >>
+         simp_tac (srw_ss()) [abiDecoderExecutionTheory.abi_decode_backedge_insts_def,
+           venomExecSemanticsTheory.phi_prefix_length_def, mk_inst_def]) >>
       `abi_decode_sites middle.cs_next_id st1.cs_next_id SUBSET
         abi_decode_sites loop_st.cs_next_id last.cs_next_id` by
         (simp_tac (srw_ss()) [abi_decode_sites_def, SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>

@@ -98,6 +98,28 @@ Proof
   >> metis_tac[]
 QED
 
+(* A projection contained in an owned interval keeps the same allocation. *)
+Theorem vv_own_memory_slice:
+ !ce cx sty cty sa sb es raw child ann op dst s sv cv stv ctv w dw k.
+  vv_own ce cx sty sa sb es raw (LocatedValue ann (mk_ptr op LocMemory)) s /\
+  read_result cx raw es = (INL sv,es) /\
+  read_result cx child es = (INL cv,es) /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) cty = SOME ctv /\
+  eval_operand op s = SOME w /\ eval_operand dst s = SOME dw /\
+  w2n dw = w2n w + k /\
+  k + val_footprint ctv cv <= val_footprint stv sv ==>
+  vv_own ce cx cty sa sb es child (LocatedValue cty (mk_ptr dst LocMemory)) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_own_def, mk_ptr_def] >> strip_tac
+  >~ [`FLOOKUP s.vs_allocas aid = SOME (b,sz)`]
+  >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
+      simp[] >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> decide_tac
+QED
+
 Theorem vv_post_vars_frame:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   (t with vs_vars := s.vs_vars) = s /\

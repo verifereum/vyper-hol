@@ -91,23 +91,6 @@ Proof
   simp[opcode_every_emit_void, (UNDISCH opcode_every_assign_value)]
 QED
 
-Theorem call_free_stmt_annassign:
-  (!ce ty e st.
-    ~supported_expr_exists expr_call_root e /\
-    ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_expr ce ty e st)))) ==>
-  !ce lc ty id vt e.
-  ~supported_stmt_expr_exists expr_call_root (AnnAssign id vt e) /\
-  ~supported_stmt_expr_exists expr_shape_root (AnnAssign id vt e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_stmt ce lc ty (AnnAssign id vt e) st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] opcode_every_stmt_annassign) >> simp[]
-QED
-
 Theorem opcode_every_stmt_assign_base:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -139,23 +122,6 @@ Proof
   Cases_on `dst_loc_opt` >> simp[opcode_every_emit_void, (UNDISCH opcode_every_assign_value)]
 QED
 
-Theorem call_free_stmt_assign_base:
-  (!ce ty e st.
-    ~supported_expr_exists expr_call_root e /\
-    ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_expr ce ty e st)))) ==>
-  !ce lc ty bt e.
-  ~supported_stmt_expr_exists expr_call_root (Assign (BaseTarget bt) e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Assign (BaseTarget bt) e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_stmt ce lc ty (Assign (BaseTarget bt) e) st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] opcode_every_stmt_assign_base) >> simp[]
-QED
-
 Theorem opcode_every_stmt_assign_tuple:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -181,23 +147,6 @@ Proof
   ho_match_mp_tac every_state_insts_bind >> conj_tac >- simp[] >>
   gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- simp[(UNDISCH opcode_every_unwrap_value)] >> simp[]
-QED
-
-Theorem call_free_stmt_assign_tuple:
-  (!ce ty e st.
-    ~supported_expr_exists expr_call_root e /\
-    ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_expr ce ty e st)))) ==>
-  !ce lc ty targets e.
-  ~supported_stmt_expr_exists expr_call_root (Assign (TupleTarget targets) e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Assign (TupleTarget targets) e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_stmt ce lc ty (Assign (TupleTarget targets) e) st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] opcode_every_stmt_assign_tuple) >> simp[]
 QED
 
 Theorem opcode_every_stmt_augassign:
@@ -240,23 +189,6 @@ Proof
       simp[(UNDISCH opcode_every_unwrap_value)]])
 QED
 
-Theorem call_free_stmt_augassign:
-  (!ce ty e st.
-    ~supported_expr_exists expr_call_root e /\
-    ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_expr ce ty e st)))) ==>
-  !ce lc ty vt bt bop e.
-  ~supported_stmt_expr_exists expr_call_root (AugAssign vt bt bop e) /\
-  ~supported_stmt_expr_exists expr_shape_root (AugAssign vt bt bop e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_stmt ce lc ty (AugAssign vt bt bop e) st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] opcode_every_stmt_augassign) >> simp[]
-QED
-
 Theorem opcode_every_stmt_append:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -295,21 +227,4 @@ Proof
   gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- simp[every_state_insts_return] >> gen_tac >>
   match_mp_tac (UNDISCH opcode_every_dynarray_append) >> simp[]
-QED
-
-Theorem call_free_stmt_append:
-  (!ce ty e st.
-    ~supported_expr_exists expr_call_root e /\
-    ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_expr ce ty e st)))) ==>
-  !ce lc ty target e.
-  ~supported_stmt_expr_exists expr_call_root (Append target e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Append target e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_stmt ce lc ty (Append target e) st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] opcode_every_stmt_append) >> simp[]
 QED

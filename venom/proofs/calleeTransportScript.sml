@@ -80,6 +80,13 @@ Proof
   simp[merge_callee_state_def]
 QED
 
+Theorem merge_callee_state_callee_inst_idx[simp]:
+  merge_callee_state caller (callee with vs_inst_idx := i) =
+  merge_callee_state caller callee
+Proof
+  simp[merge_callee_state_def]
+QED
+
 (* ===== Exact record transport ===== *)
 
 Theorem merge_callee_state_id[simp]:

@@ -13,7 +13,7 @@ Ancestors
   targetPlaceSim targetPlaceSimCases targetPlaceLive vyperTypeEnv vyperTypeInvariants
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
-  venomExecSemantics venomInst venomState emitHelper emitHelperProps
+  venomExecSemantics venomInst venomState emitHelper emitHelperProps loweringHalt
   exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
@@ -143,6 +143,39 @@ Proof
   fs[nested_pop_suffix_def, run_inst_seq_def, nested_pop_step_load,
      pop_step_ISZERO, pop_step_ASSERT, eval_operand_def,
      lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def]
+QED
+
+Theorem nested_pop_suffix_static[local]:
+  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+  eval_operand hdr s = SOME slot /\
+  (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6]) /\
+  s.vs_call_ctx.cc_static /\
+  (if tr then tload slot s else sload slot s) <> 0w ==>
+  ?a s'. run_inst_seq
+    (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6) s = Abort a s'
+Proof
+  Cases_on `hdr` >> simp[eval_operand_def] >> strip_tac >>
+  fs[nested_pop_suffix_def, run_inst_seq_def, nested_pop_step_load,
+     pop_step_ISZERO, pop_step_ASSERT, pop_step_SUB_lit,
+     eval_operand_def, lookup_var_def, update_var_def,
+     FLOOKUP_UPDATE, bool_to_word_def] >>
+  Cases_on `tr` >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst k opc [h; Var x3] []) ss` >>
+  `?v1 v2. eval_operand h ss = SOME v1 /\
+           eval_operand (Var x3) ss = SOME v2` by
+    simp[Abbr `h`, Abbr `ss`, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `step_inst_base (mk_inst k TSTORE [h; Var x3] []) ss =
+     if ss.vs_call_ctx.cc_static then
+       Abort ExHalt_abort (halt_state (set_returndata [] ss))
+     else OK (tstore v1 v2 ss)` by
+    (irule loweringHaltTheory.step_TSTORE >> simp[]) >>
+  `step_inst_base (mk_inst k SSTORE [h; Var x3] []) ss =
+     if ss.vs_call_ctx.cc_static then
+       Abort ExHalt_abort (halt_state (set_returndata [] ss))
+     else OK (sstore v1 v2 ss)` by
+    (irule emitHelperPropsTheory.step_SSTORE >> simp[]) >>
+  gvs[Abbr `opc`, Abbr `ss`]
 QED
 
 Theorem nested_pop_suffix_run:
@@ -871,8 +904,8 @@ Proof
        (es with gas_obs := tail) = (res,es' with gas_obs := tail)` by
     metis_tac[nested_pop_storage_gas_obs] >>
   `stmt_state_rel ctx func cenv cx es t` by fs[target_post_def] >>
-  `~cx.txn.is_static /\ ~t.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+  `cx.txn.is_static = t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
   drule_all nested_pop_storage_natural_region >> strip_tac >>
   drule_all nested_pop_live_array_agree >> strip_tac >>
@@ -892,6 +925,10 @@ Proof
       drule nested_pop_suffix_shape >> strip_tac >> suspend "empty") >>
   `0 < w2n (lookup_storage slot (vyperStorageBackend$get_storage cx es tr))` by
     (Cases_on `lookup_storage slot (vyperStorageBackend$get_storage cx es tr)` >> gvs[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      drule nested_pop_suffix_shape >> strip_tac >> suspend "static") >>
+  `~t.vs_call_ctx.cc_static` by metis_tac[] >>
   simp[] >> strip_tac >> gvs[] >>
   drule nested_pop_suffix_shape >> strip_tac >> suspend "positive"
 QED
@@ -911,6 +948,29 @@ Resume nested_pop_storage_live_suffix_sim[empty]:
   qpat_x_assum `!tail. pop_place _ _ _ = _`
     (mp_tac o REWRITE_RULE [pop_place_def, check_def, ignore_bind_def]) >>
   simp[]
+QED
+
+Resume nested_pop_storage_live_suffix_sim[static]:
+  `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+   (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6])` by
+    (fs[] >> metis_tac[]) >>
+  ` (if tr then tload (root + n2w delta) t else sload (root + n2w delta) t) <> 0w` by
+    metis_tac[] >>
+  drule_all nested_pop_suffix_static >>
+  disch_then (qspecl_then [`sm.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
+  `?j. gas_marked_path F ctx func t 0 (Abort a (s' with vs_inst_idx := j))` by
+    (irule nested_pop_suffix_abort_path >> simp[] >> metis_tac[]) >>
+  simp[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `es`,
+    `Abort a (s' with vs_inst_idx := j)`] >>
+  simp[expr_exit_def, exit_result_def] >>
+  qpat_x_assum `!tail. pop_place _ _ _ = _`
+    (mp_tac o REWRITE_RULE [pop_place_def, check_def, ignore_bind_def]) >>
+  Cases_on `tr` >>
+  fs[vyperStorageBackendTheory.get_storage_backend_eq,
+     vyperStorageBackendTheory.write_storage_slot_eq,
+     vyperStorageBackendTheory.get_storage_def,
+     bind_def, assert_def, return_def, raise_def]
 QED
 
 Resume nested_pop_storage_live_suffix_sim[positive]:

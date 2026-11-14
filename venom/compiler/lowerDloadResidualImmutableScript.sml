@@ -279,9 +279,14 @@ Proof
    ((step_taint i t (istore q y t) un).t_imm SUBSET
       (step_taint i s (istore p x s) tn).t_imm)` by
     fs[ld_shared_state_def] >>
-  gvs[ld_normal_data_def, ld_empty_outputs_prov_tvar,
-      ld_alloc_account_def, istore_def, mstore_def, allocas_from_def, op_taint_def] >>
-  asm_rewrite_tac[]
+  simp[ld_normal_data_def, ld_empty_outputs_prov_tvar] >>
+  qpat_x_assum `ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f`
+    (strip_assume_tac o PURE_REWRITE_RULE [ld_normal_data_def]) >>
+  fs[ld_alloc_account_def, allocas_from_def, op_taint_def] >>
+  simp[istore_def, mstore_def, allocas_from_def, op_taint_def,
+       ld_empty_outputs_prov_tvar] >>
+  gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ld_istore_owned_backward:

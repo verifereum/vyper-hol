@@ -8,7 +8,9 @@
 
 Theory contextCodegenRel
 Ancestors
-  codegenRel venomExecSemantics venomWf fcgDefs fmpWfDefs
+  codegenRel venomExecSemantics venomWf fcgDefs fmpWfDefs words list pair
+Libs
+  BasicProvers
 
 (* A byte in any function's half-open spill interval. *)
 Definition context_spill_byte_def:
@@ -439,4 +441,31 @@ Theorem source_memory_read_byte_INVOKE[simp]:
   ~source_memory_read_byte (inst with inst_opcode := INVOKE) vs i
 Proof
   simp[source_memory_read_byte_def]
+QED
+
+Theorem memory_range_of_operands_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (memory_range_of_operands off_op len_op s)
+Proof
+  rw[memory_range_of_operands_def] >> every_case_tac >> simp[w2n_lt]
+QED
+
+Theorem dret_memory_read_ranges_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (dret_memory_read_ranges inst s)
+Proof
+  rw[dret_memory_read_ranges_def] >> every_case_tac >>
+  simp[EVERY_MAP, EVERY_MEM, FORALL_PROD, w2n_lt]
+QED
+
+Theorem source_memory_read_ranges_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (source_memory_read_ranges inst s)
+Proof
+  `32 < dimword(:256)` by
+    simp[dimword_def, venomLayoutTheory.dimindex_256] >>
+  Cases_on `inst.inst_opcode` >> simp[source_memory_read_ranges_def] >>
+  every_case_tac >>
+  simp[memory_range_of_operands_word_bounds,
+       dret_memory_read_ranges_word_bounds, w2n_lt]
 QED

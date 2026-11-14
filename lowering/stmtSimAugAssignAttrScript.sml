@@ -24,6 +24,7 @@
 
 Theory stmtSimAugAssignAttr
 Ancestors
+  targetPlaceSim
   fragGasMode exprSimMemoryPath stmtSimDeclGas gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
   exprBopSimDefs exprBopSimProps exprSafeOperand exprWordOperand
   exprSimFieldLayout

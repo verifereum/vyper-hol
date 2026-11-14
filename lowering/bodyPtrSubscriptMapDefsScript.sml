@@ -128,8 +128,7 @@ QED
 
 (* Only a top-level name and a subscript name a mapping (bodySim's
    expr_map_pre_shape), so the mapping clauses of bodyPtrPreds'
-   body_expr_ptr_ok and bodyPtrPredsAt's body_expr_ptr_ok_at hold of every
-   other form by simp. *)
+   body_expr_ptr_ok holds of every other form by simp. *)
 Theorem expr_map_pre_other[simp]:
   !cenv cx env e es.
     (!ty id. e <> TopLevelName ty id) /\ (!ty e1 e2. e <> Subscript ty e1 e2) ==>

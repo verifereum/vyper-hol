@@ -31,6 +31,16 @@ Proof
        ignore_bind_def, check_def, assert_def, return_def]
 QED
 
+Theorem append_storage_static:
+  cx.txn.is_static /\
+  w2n (lookup_storage slot (get_storage cx es tr)) < cap ==>
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
+    (INR (Error (RuntimeError "write in static context")), es)
+Proof
+  strip_tac >> simp[append_storage_writes, ignore_bind_def, bind_def,
+                    write_storage_slot_eq]
+QED
+
 Theorem append_storage_word_success:
   ~cx.txn.is_static /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\
@@ -159,25 +169,27 @@ QED
 (* No allocation or copy-loop code is emitted in the primitive branch. *)
 Theorem compile_dynarray_append_word_parts:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    load_opc store_opc s0 = ((),s9) <=>
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) <=>
   ?lop valid dop off pop nop s1 s2 s3 s4 s5 s6 s7 s8.
-    emit_op load_opc [bop] s0 = (lop,s1) /\
+    emit_op (if tr then TLOAD else SLOAD) [bop] s0 = (lop,s1) /\
     emit_op LT [lop; Lit (n2w cap)] s1 = (valid,s2) /\
     emit_void ASSERT [valid] s2 = ((),s3) /\
     emit_op ADD [bop; Lit 1w] s3 = (dop,s4) /\
     emit_op MUL [lop; Lit 1w] s4 = (off,s5) /\
     emit_op ADD [dop; off] s5 = (pop,s6) /\
-    emit_void store_opc [pop; vop] s6 = ((),s7) /\
+    emit_void (if tr then TSTORE else SSTORE) [pop; vop] s6 = ((),s7) /\
     emit_op ADD [lop; Lit 1w] s7 = (nop,s8) /\
-    emit_void store_opc [bop; nop] s8 = ((),s9)
+    emit_void (if tr then TSTORE else SSTORE) [bop; nop] s8 = ((),s9)
 Proof
-  eq_tac
-  >- (simp[compile_dynarray_append_def, comp_ignore_bind_def, comp_bind_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-      metis_tac[pairTheory.PAIR, pairTheory.pair_CASES, oneTheory.one]) >>
-  strip_tac >>
-  simp[compile_dynarray_append_def, comp_ignore_bind_def,
-       comp_bind_def, comp_return_def]
+  Cases_on `tr` >>
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def] >>
+  (eq_tac
+   >- (simp[comp_ignore_bind_def, comp_bind_def] >>
+       rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+       metis_tac[pairTheory.PAIR, pairTheory.pair_CASES, oneTheory.one]) >>
+   strip_tac >>
+   simp[comp_ignore_bind_def, comp_bind_def, comp_return_def])
 QED
 
 Theorem append_storage_store_run:
@@ -321,7 +333,7 @@ QED
 
 Theorem compile_dynarray_append_word_run:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
   eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
   fresh_vars_wrt s0 ss /\ cap < dimword (:256) /\
   len = w2n (if tr then tload slot ss else sload slot ss) /\ len < cap /\
@@ -361,9 +373,62 @@ Proof
   metis_tac[append_storage_store_frame]
 QED
 
+Theorem compile_dynarray_append_word_static:
+  compile_dynarray_append cenv bop vop 1 1 dt st cap T
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
+  eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
+  fresh_vars_wrt s0 ss /\ ss.vs_call_ctx.cc_static /\
+  cap < dimword (:256) /\
+  w2n (if tr then tload slot ss else sload slot ss) < cap ==>
+  ?g. run_inst_seq (emitted_insts s0 s9) ss = Abort ExHalt_abort g
+Proof
+  pure_rewrite_tac [compile_dynarray_append_word_parts] >> strip_tac >>
+  drule_all append_storage_guard_run >> strip_tac >>
+  qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s0 s3) ss = OK ss3` >>
+  `eval_operand bop ss3 = SOME slot /\ eval_operand vop ss3 = SOME w` by
+    metis_tac[] >>
+  drule_all append_storage_address_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s3 s6) ss3 = OK ss6` >>
+  `eval_operand vop ss6 = SOME w` by metis_tac[] >>
+  `ss6.vs_call_ctx.cc_static` by
+    (qpat_x_assum `state_frame ss6 = state_frame ss3`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     qpat_x_assum `state_frame ss3 = state_frame ss`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     simp[state_frame_def]) >>
+  `run_inst_seq (emitted_insts s6 s7) ss6 =
+    Abort ExHalt_abort (halt_state (set_returndata [] ss6))` by
+    (`emitted_insts s6 s7 =
+       [mk_inst s6.cs_next_id (if tr then TSTORE else SSTORE) [pop;vop] []]` by
+       (qspecl_then [`if tr then TSTORE else SSTORE`, `[pop;vop]`, `s6`, `s7`]
+          mp_tac emitted_insts_emit_void >> simp[]) >>
+     Cases_on `tr` >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+          eval_operands_def]) >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends s0 s3 /\ inst_extends s3 s6 /\ inst_extends s7 s9` by
+    metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts s6 s9) ss6 =
+   run_inst_seq (emitted_insts s6 s7) ss6` by
+    (irule run_inst_seq_emit_extend_err >> simp[]) >>
+  `inst_extends s6 s9` by
+    (irule inst_extends_trans >> qexists_tac `s7` >> simp[]) >>
+  `run_inst_seq (emitted_insts s3 s9) ss3 =
+   run_inst_seq (emitted_insts s6 s9) ss6` by
+    (irule run_inst_seq_emit_extend >> simp[]) >>
+  `inst_extends s3 s9` by
+    (irule inst_extends_trans >> qexists_tac `s6` >> simp[]) >>
+  `run_inst_seq (emitted_insts s0 s9) ss =
+   run_inst_seq (emitted_insts s3 s9) ss3` by
+    (irule run_inst_seq_emit_extend >> simp[]) >>
+  qexists_tac `halt_state (set_returndata [] ss6)` >>
+  simp[]
+QED
+
 Theorem compile_dynarray_append_word_abort:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) /\
   eval_operand bop ss = SOME slot /\ fresh_vars_wrt s0 ss /\
   cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot ss else sload slot ss) ==>

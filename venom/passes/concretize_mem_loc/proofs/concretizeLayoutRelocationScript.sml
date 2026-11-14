@@ -1,5 +1,6 @@
 Theory concretizeLayoutRelocation
 Ancestors
+  concretizeLayoutCutSafe
   concretizeLayoutOwnerPairs concretizeLayoutPositions frameRelocationBinding frameDemandTaint
   frameActivationCache frameJointTrace frameJointDemand frameJointTaint
   frameJointTransition ptrDiscipline o1PassContract o1ScheduleDecomp
@@ -14,7 +15,7 @@ Theorem concretize_relocation_write_demand_noncollision:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\
   n < LENGTH es /\
   (!k d owner aid base size. k <= LENGTH es /\
@@ -72,7 +73,7 @@ Resume concretize_relocation_write_demand_noncollision[distinct]:
      asm "reader" (irule_at Any) >>
      asm "writer" (irule_at Any) >>
      goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >>
      goal_assum (drule_at (Pat `canonical_metadata _ _ (Allocation aid') _ _`)) >>
      goal_assum (drule_at (Pat `canonical_metadata _ _ (Allocation aid) _ _`)) >>
@@ -93,7 +94,7 @@ Theorem concretize_relocation_demand_write_complement:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\
   n < LENGTH es /\
   (!k d owner aid base size. k <= LENGTH es /\
@@ -126,7 +127,7 @@ Theorem concretize_positions_write_demand_noncollision:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   fixed_region_reserved lo C /\
   joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\ n < LENGTH es /\
   joint_relocation_demand lo (concretize_positions C') q0 es qs n a z /\
@@ -148,7 +149,7 @@ Theorem concretize_positions_demand_write_complement:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   fixed_region_reserved lo C /\
   joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\ n < LENGTH es /\
   (!w. w IN target_writes ==> ?byte.

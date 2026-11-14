@@ -189,10 +189,11 @@ Proof
            (mp_tac o Q.AP_TERM `\m. FLOOKUP m x`) >>
          simp[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
      qexists `v` >> simp[] >>
+     qpat_x_assum `MEM (ao_peephole_inst _ _ _ _ _ _) _` kall_tac >>
      gvs[MEM] >> gvs[ao_peephole_inst_def] >>
      metis_tac[ao_opt_shift_correct, ao_opt_signextend_correct,
                ao_opt_exp_correct, ao_opt_addsub_correct,
-               ao_opt_and_correct, ao_opt_muldiv_correct]) >>
+               ao_opt_and_correct, ao_opt_muldiv_correct, MEM]) >>
   drule_all ao_singleton_write_chunk >>
   disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
   qexistsl [`w`, `u`] >> metis_tac[]

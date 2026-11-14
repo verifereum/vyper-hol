@@ -22,8 +22,7 @@ Ancestors
      (pop_memory_header_load), bodyPtrPopLengthGuard
      (pop_length_guard_path, pop_length_guard_empty_path,
      pop_length_guard_ghost), bodyPtrPopMemoryStore
-     (pop_clean_header_store_path), bodyPtrPopLengthStore
-     (pop_region_taint_pop_header), bodyPtrPopInteriorPointer
+     (pop_clean_header_store_path), bodyPtrPopInteriorPointer
      (pop_emit_interior_pointer_path), bodyPtrPopLiveElement.
    - ghost_inv's val_in_memory for the local, under any memory agreeing
      outside tn.t_mem, makes the length word untainted.

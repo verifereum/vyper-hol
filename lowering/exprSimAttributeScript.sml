@@ -12,7 +12,7 @@
  *                           expr_vv_case and expr_sim_case, for
  *                           compile_expr_sim and the body simulation;
  *                           compile_attribute_vv_sim follows
- *   attr_add_frag, attr_add_path, attr_extends, stmt_state_rel_region_lt,
+ *   attr_add_frag, attr_add_path_frame, attr_extends, stmt_state_rel_region_lt,
  *   immutable_holds_read, field_ptr_w2n — the offset's fragment and the
  *                           pointer facts, which exprSimTuple shares
  *
@@ -502,7 +502,7 @@ Proof
 QED
 
 (* The offset's ADD as a target path with no GAS reads. *)
-Theorem attr_add_path:
+Theorem attr_add_path_frame:
   !ctx func cenv cx e es ty sa vv sm off dst sn s0 es' tv t.
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -516,7 +516,8 @@ Theorem attr_add_path:
       t'.vs_inst_idx = LENGTH sn.cs_current_insts /\
       vv_post ctx func cenv cx e es sa sn s0 es' tv vv t' /\
       eval_operand (vv_operand vv) t' = SOME w /\
-      eval_operand dst t' = SOME (w + n2w off)
+      eval_operand dst t' = SOME (w + n2w off) /\
+      (t' with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|>) = t
 Proof
   rpt strip_tac >>
   `?w. eval_operand (vv_operand vv) t = SOME w` by
@@ -538,10 +539,10 @@ Proof
       drule emit_op_zero_path >> simp[is_terminator_def] >>
       disch_then irule >> simp[] >> gen_tac >>
       irule step_ADD >> simp[eval_operand_def]) >>
-  simp[] >> simp[update_var_def]
+  simp[] >> simp[update_var_def, venom_state_component_equality]
 QED
 
-Theorem attr_source[local]:
+Theorem attr_source:
   !cx ann obj fld.
     eval_expr cx (Attribute ann obj fld) =
     bind (eval_expr cx obj)
@@ -551,7 +552,7 @@ Proof
 QED
 
 (* The field's selection reads no gas observation. *)
-Theorem attr_select_gas_obs[local]:
+Theorem attr_select_gas_obs:
   !cx ty tv fld ee r.
     select_result cx ty tv (AttrSubscript fld) ee = (r, ee) ==>
     !tail. select_result cx ty tv (AttrSubscript fld)
@@ -601,7 +602,7 @@ Proof
   simp[return_def, raise_def]
 QED
 
-Theorem attr_operand_admissible[local]:
+Theorem attr_operand_admissible:
   !cenv cx env e es.
     expr_body_pre cenv cx env e es ==>
     gas_admissible (eval_expr cx e) expr_vv_res_ok es
@@ -631,7 +632,7 @@ Proof
 QED
 
 (* The source facts at the base's actual end state. *)
-Theorem attr_base_facts[local]:
+Theorem attr_base_facts:
   !cenv cx env ann obj fld es sid es0 btv es1.
     expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
     expr_body_pre cenv cx env obj es0 /\ expr_type obj = StructT sid /\
@@ -706,7 +707,7 @@ Proof
             `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
             `btv`,`fe with gas_obs := []`] attr_base_facts) >>
   simp[] >> strip_tac >>
-  drule_all attr_add_path >> strip_tac >>
+  drule_all attr_add_path_frame >> strip_tac >>
   rename1 `gas_path ctx func t 0 (OK t1)` >>
   `?v. read_result cx btv (fe with gas_obs := []) =
        (INL v, fe with gas_obs := [])` by

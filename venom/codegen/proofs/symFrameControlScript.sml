@@ -6233,8 +6233,9 @@ Proof
   gvs[listTheory.LENGTH_EQ_NUM_compute, compute_operands_def,
       python_stack_operands_def, ir_specific_operand_order_def] >>
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, AllCaseEqs(),
-       eval_operands_def, asm_op_arity_def, asm_op_arity_table_def] >>
+  (simp[Once step_inst_def] >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
+       asm_op_arity_def, asm_op_arity_table_def]) >>
   rpt strip_tac >> gvs[] >>
   metis_tac[]
 QED

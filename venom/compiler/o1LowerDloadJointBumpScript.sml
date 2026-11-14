@@ -1,6 +1,7 @@
 (* Scalar BUMP writes two variables in operational order. *)
 Theory o1LowerDloadJointBump
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointScalar o1LowerDloadJointVarsUpdate
   o1LowerDloadJointRelation ptrDiscipline pointerConfinedDefs memLocDefs
   unitShapeDefs venomInst list o1LowerDloadEnvironment
@@ -9,7 +10,7 @@ Ancestors
 
 Theorem ld_joint_bump_operands_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = BUMP ==>
   !op. MEM op inst.inst_operands ==>
@@ -58,7 +59,7 @@ QED
 
 Theorem ld_joint_bump_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ inst.inst_opcode = BUMP /\
   step_inst fuel C inst s = OK s1 ==>
   ?p q base sz. inst.inst_outputs = [p;q] /\
@@ -88,7 +89,7 @@ QED
 Theorem ld_joint_bump_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = BUMP /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>

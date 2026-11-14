@@ -4,7 +4,7 @@
  * the start of the function's region.
  *
  * TOP-LEVEL:
- *   fn_entry_block_step - gen_fn_sim_at (SUC fuel) from both function
+ *   fn_entry_block_step - gen_fn_sim_at_simple (SUC fuel) from both function
  *                         theorems at fuel
  *)
 
@@ -121,7 +121,7 @@ Theorem entry_body_frame_sim_resource[local]:
   !safe q fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
    Inv ra pc_ret rest mem0.
-  gen_fn_sim_resource_at safe q fuel /\ gen_fn_frame_sim_resource_at safe q fuel /\
+  gen_fn_sim_at safe q fuel /\ gen_fn_frame_sim_at safe q fuel /\
   ctx = unit.cu_context /\ lo = SND (compute_label_offsets prog) /\
   o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
@@ -170,7 +170,7 @@ Theorem entry_body_frame_sim_resource[local]:
     operand_val (frame_view fn ra vs) lo at =
     operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
   (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
-  body_result_resource safe (OPTION_MAP (\F.
+  body_result safe (OPTION_MAP (\F.
     (LENGTH (HD fn.fn_blocks).bb_instructions -
      LENGTH (get_params (HD fn.fn_blocks).bb_instructions) + 1) *
     (LENGTH prog + F unit cp prog + 8)) q)
@@ -214,7 +214,7 @@ Proof
 QED
 
 (* As for fn_block_frame_step, but for the entry block, which
-   gen_fn_frame_sim_at excludes.
+   gen_fn_frame_sim_at_simple excludes.
 
    Why it should hold: region i's plan is the function planner's output
    for some label counter (fnEntryPlan$region_fn_plan) and starts with
@@ -236,12 +236,12 @@ QED
    changes those fields (fnRunFields$run_blocks_intret_fields) and
    fn_entry_state_rel equates them with as's. *)
 Theorem fn_entry_block_step_resource:
-  !safe q fuel. gen_fn_sim_resource_at safe q fuel /\ gen_fn_frame_sim_resource_at safe q fuel ==>
-    gen_fn_sim_resource_at safe (OPTION_MAP (\F unit cp prog.
+  !safe q fuel. gen_fn_sim_at safe q fuel /\ gen_fn_frame_sim_at safe q fuel ==>
+    gen_fn_sim_at safe (OPTION_MAP (\F unit cp prog.
       fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
 Proof
   rpt gen_tac >> strip_tac >>
-  rewrite_tac[gen_fn_sim_resource_at_def] >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[gen_fn_sim_at_def] >> rpt gen_tac >> strip_tac >>
   drule_all entry_step_shape >> strip_tac >>
   drule_all region_fn_plan >> strip_tac >>
   drule_all entry_block_plan >> strip_tac >>
@@ -299,7 +299,7 @@ Resume fn_entry_block_step_resource[body]:
 
   impl_tac
   >- (unabbrev_all_tac >> gvs[fn_entry_state_rel_def] >> metis_tac[]) >>
-  simp_tac std_ss [body_result_resource_def] >> strip_tac >> suspend "outcomes"
+  simp_tac std_ss [body_result_def] >> strip_tac >> suspend "outcomes"
 QED
 
 Resume fn_entry_block_step_resource[outcomes]:
@@ -310,7 +310,7 @@ Resume fn_entry_block_step_resource[outcomes]:
     cost_le (OPTION_MAP (\F.
       fn_sim_coefficient unit.cu_context prog * (F unit cplan prog + 1)) q) (n + m)` by
     (Cases_on `q` >> simp[cost_le_def] >> rpt strip_tac >>
-     rename1 `gen_fn_sim_resource_at safe (SOME budget) fuel` >>
+     rename1 `gen_fn_sim_at safe (SOME budget) fuel` >>
      qspecl_then [`LENGTH (HD fn.fn_blocks).bb_instructions -
        LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`,
        `context_inst_count ctx`, `LENGTH prog`, `budget unit cplan prog`, `7`]
@@ -348,17 +348,11 @@ QED
 
 Finalise fn_entry_block_step_resource
 
-Theorem fn_entry_block_step_cost:
-  !q fuel. gen_fn_sim_cost_at q fuel /\ gen_fn_frame_sim_cost_at q fuel ==>
-    gen_fn_sim_cost_at (OPTION_MAP (\F unit cp prog.
-      fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
-Proof
-  mp_tac (Q.SPEC `F` fn_entry_block_step_resource) >> simp[]
-QED
 
 Theorem fn_entry_block_step:
-  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel ==>
-         gen_fn_sim_at (SUC fuel)
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel ==>
+         gen_fn_sim_at_simple (SUC fuel)
 Proof
-  mp_tac (Q.SPEC `NONE` fn_entry_block_step_cost) >> simp[]
+  mp_tac (Q.SPECL [`F`, `NONE`] fn_entry_block_step_resource) >>
+  simp[GSYM gen_fn_sim_at_simple_def, GSYM gen_fn_frame_sim_at_simple_def]
 QED

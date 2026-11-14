@@ -238,7 +238,9 @@ Proof
   Induct >- simp[reduce_depth_plan_def, plan_ref_def] >>
   rw[Once reduce_depth_plan_def, AllCaseEqs()] >>
   gvs[plan_ref_def] >>
-  metis_tac[plan_pair_bind_no_ref, do_spill_at_no_ref, plan_ref_def]
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac do_spill_at_no_ref >>
+  gvs[plan_ref_def] >> metis_tac[]
 QED
 
 Theorem reduce_depth_plan_fst_no_ref:

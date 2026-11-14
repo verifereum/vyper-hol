@@ -1364,8 +1364,8 @@ Proof
      Cases_on `tr` >>
      simp[venomInstTheory.mk_inst_def] >>
      simp[venomInstTheory.is_terminator_def] >>
-     simp[venomExecSemanticsTheory.step_inst_base_def,
-          venomStateTheory.eval_operands_def]) >>
+     (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+      simp[venomStateTheory.eval_operands_def])) >>
   Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def]
 QED
 

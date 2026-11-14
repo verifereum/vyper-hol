@@ -1,6 +1,7 @@
 (* Masked shared-store writes at occurrence boundaries. *)
 Theory o1LowerDloadJointStorageWrite
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointStorageRead o1LowerDloadJointMemoryWrite
   o1LowerDloadJointScalar o1LowerDloadJointAssign o1LowerDloadShared
   o1LowerDloadJointRelation o1LowerDloadEnvironment o1LowerDloadOccurrence
@@ -45,7 +46,7 @@ QED
 
 Theorem ld_joint_store_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [SSTORE; TSTORE] /\ inst.inst_operands = [kop;vop] /\
   eval_operand kop s = SOME key /\ eval_operand vop s = SOME v ==>
@@ -54,11 +55,11 @@ Theorem ld_joint_store_operands[local]:
 Proof
   strip_tac >>
   `!op. MEM op inst.inst_operands ==> op_prov H op = NONE` by
-    (drule ld_joint_scalar_no_provenance >>
+    (drule ld_joint_scalar_no_provenance >> disch_then (qspec_then `ncut` mp_tac) >>
      gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn kop = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[MEM, taint_ok_def] >>
      metis_tac[]) >>
@@ -125,7 +126,7 @@ QED
 
 Theorem ld_joint_storage_store_step[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [SSTORE; TSTORE] /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
@@ -163,7 +164,7 @@ QED
 
 Theorem ld_joint_storage_store_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ o1_ctx_shape C /\
   active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [SSTORE; TSTORE] /\ step_inst fuel C inst s = OK s1 /\

@@ -6,7 +6,7 @@ Ancestors
 
 Theorem append_storage_aggregate_suffix_mono:
   compile_dynarray_append cenv bop vop 1 n dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   cs_extends sa sf /\ sa.cs_next_var <= sf.cs_next_var
 Proof
   strip_tac >>
@@ -19,7 +19,7 @@ Theorem append_storage_aggregate_code_frame:
   compile_alloc_buffer sz sb = (buf,sc) /\
   compile_store_memory cenv op buf.buf_operand elem vt sc = ((),sd) /\
   compile_dynarray_append cenv (Lit slot) buf.buf_operand 1 n elem elem cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sd = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sd = ((),sf) /\
   fn_has_code sa sf func ==>
   cs_extends sa sb /\ cs_extends sb sc /\ cs_extends sc sd /\ cs_extends sd sf /\
   fn_has_code sa sb func /\ fn_has_code sb sc func /\
@@ -40,7 +40,7 @@ QED
 
 Theorem append_storage_aggregate_suffix_open:
   compile_dynarray_append cenv bop vop 1 n dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   ~block_is_terminated sf
 Proof
   strip_tac >> drule (iffLR append_storage_copy_suffix_parts) >>

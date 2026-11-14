@@ -1,12 +1,13 @@
 (* Terminal endpoints retain the runner's original boundary witnesses. *)
 Theory o1LowerDloadRunnerEndpoints
 Ancestors
+  o1SafeUpto
   o1LowerDloadRunner o1LowerDloadUnchangedFetch o1LowerDloadBranchExec
   o1LowerDloadForwardInversion contextCodegenRel
   o1LowerDloadJointReturn o1LowerDloadHaltResult o1LowerDloadAbortResult
   o1LowerDloadJointIdentity o1LowerDloadExceptional
   o1LowerDloadRunnerBoundary o1LowerDloadJointRelation o1PassContract
-  ptrDiscipline venomExecSemantics venomInstProps venomInst opcodeClass list
+  ptrDiscipline venomExecSemantics venomInstProps venomInst opcodeClass list gasEvents
 
 val ldPacket = fst (strip_comb (fst (dest_imp
   (concl ld_runner_packet_terminates))));
@@ -14,12 +15,13 @@ val ldPacket = fst (strip_comb (fst (dest_imp
 Theorem ld_runner_branch_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ ~s.vs_halted /\
   is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = r' /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address (OK s1) r'
 Proof
   strip_tac >> drule_all ld_terminator_ok_branch >> strip_tac >>
@@ -31,6 +33,9 @@ Proof
   `s1.vs_call_ctx = s.vs_call_ctx` by metis_tac[ld_step_ok_call_ctx] >>
   qexistsl_tac [`fn'`,`bb'`,`OK t1`] >> simp[] >> conj_tac
   >- (simp[Once exec_block_def]) >>
+  conj_tac
+  >- (simp[Once gas_events_block_def, gas_events_step_def] >>
+      fs[is_terminator_def]) >>
   simp[] >> qexistsl_tac [`fuel`,`inst`,`s`,`t`,`n`,`G`,`tn`,`B`,`H`,`sites`,`X`] >>
   fs[]
 QED
@@ -38,12 +43,13 @@ QED
 Theorem ld_runner_ret_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = RET /\
   step_inst fuel C inst s = IntRet ir s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = r' /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address (IntRet ir s1) r'
 Proof
   strip_tac >> drule_all ld_joint_ret_step >> strip_tac >>
@@ -51,6 +57,7 @@ Proof
   drule_all ld_joint_unchanged_fetch >> strip_tac >>
   qexistsl_tac [`fn'`,`bb'`,`IntRet jr t`] >> simp[] >> conj_tac
   >- (simp[Once exec_block_def]) >>
+  conj_tac >- simp[Once gas_events_block_def, gas_events_step_def] >>
   simp[] >> qexistsl_tac [`fuel`,`inst`,`n`,`G`,`tn`,`B`,`H`,`sites`,`X`] >>
   simp[]
 QED
@@ -58,7 +65,7 @@ QED
 Theorem ld_runner_halt_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ taint_within D C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ taint_within_upto D ncut C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx = SOME inst) /\
@@ -66,6 +73,7 @@ Theorem ld_runner_halt_endpoint:
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = r' /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address (Halt s1) r'
 Proof
   strip_tac >>
@@ -73,18 +81,22 @@ Proof
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by
     (drule step_inst_halt_opcodes >> rpt strip_tac >> gvs[]) >>
   drule_all ld_joint_unchanged_fetch >> strip_tac >>
-  qexistsl_tac [`fn'`,`bb'`,`Halt t1`] >> simp[Once exec_block_def]
+  `inst.inst_opcode <> GAS` by
+    (drule step_inst_halt_opcodes >> rpt strip_tac >> gvs[]) >>
+  qexistsl_tac [`fn'`,`bb'`,`Halt t1`] >>
+  simp[Once exec_block_def, Once gas_events_block_def, gas_events_step_def]
 QED
 
 Theorem ld_runner_abort_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
   step_inst fuel C inst s = Abort reason s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = r' /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address (Abort reason s1) r'
 Proof
   strip_tac >>
@@ -107,19 +119,24 @@ Proof
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by
     (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
   drule_all ld_joint_unchanged_fetch >> strip_tac >>
-  qexistsl_tac [`fn'`,`bb'`,`Abort reason t1`] >> simp[Once exec_block_def]
+  `inst.inst_opcode <> GAS` by
+    (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
+  qexistsl_tac [`fn'`,`bb'`,`Abort reason t1`] >>
+  simp[Once exec_block_def, Once gas_events_block_def, gas_events_step_def]
 QED
 
 Theorem ld_runner_forward_abort_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = Abort reason s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = r' /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
+    gas_events_block fuel C fn.fn_name bb s = [] /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address (Abort reason s1) r'
 Proof
   strip_tac >> drule_all ld_joint_forward_abort_result >> strip_tac >>
@@ -129,13 +146,15 @@ QED
 Theorem ld_runner_forward_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = r /\ terminates r ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = r' /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
+    gas_events_block fuel C fn.fn_name bb s = [] /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address r r'
 Proof
   strip_tac >>

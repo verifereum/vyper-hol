@@ -130,7 +130,7 @@ Theorem add_operand_swap:
   inst.inst_opcode = ADD /\ inst.inst_operands = [a;b] ==>
   step_inst_base (inst with inst_operands := [b;a]) s = step_inst_base inst s
 Proof
-  strip_tac >> simp[step_inst_base_def, exec_pure2_def] >>
+  strip_tac >> simp[step_inst_base_opcode_eqs, exec_pure2_def] >>
   Cases_on `eval_operand a s` >> Cases_on `eval_operand b s` >>
   simp[WORD_ADD_COMM]
 QED

@@ -66,26 +66,6 @@ Proof
   metis_tac[mm_outputs_covered_blocks]
 QED
 
-Theorem mm_groups_supply_mono[local]:
-  apply_groups_inst_supply mode ns rm s inst = (out,t) ==>
-  list_subset s.irs_used_vars t.irs_used_vars
-Proof
-  rw[apply_groups_inst_supply_def, AllCaseEqs()] >>
-  gvs[list_subset_def, EVERY_MEM, fresh_inst_id_def] >>
-  drule fresh_ir_var_contract >> strip_tac >>
-  gvs[list_subset_def, EVERY_MEM]
-QED
-
-Theorem mm_memzero_supply_mono[local]:
-  apply_memzero_inst_supply ns rm s inst = (out,t) ==>
-  list_subset s.irs_used_vars t.irs_used_vars
-Proof
-  rw[apply_memzero_inst_supply_def, AllCaseEqs()] >>
-  gvs[list_subset_def, EVERY_MEM, fresh_inst_id_def] >>
-  drule fresh_ir_var_contract >> strip_tac >>
-  gvs[list_subset_def, EVERY_MEM]
-QED
-
 Theorem mm_groups_supply_context[local]:
   apply_groups_inst_supply mode ns rm s inst = (out,t) /\
   ALL_DISTINCT (L ++ inst.inst_outputs ++ R) /\
@@ -122,20 +102,6 @@ Proof
   >- metis_tac[mm_context_coverage]
   >> drule fresh_ir_var_contract >> strip_tac >> gvs[] >>
   metis_tac[mm_context_fresh, mm_context_coverage]
-QED
-
-Theorem mm_flat_map_supply_mono[local]:
-  (!s inst out t. f s inst = (out,t) ==>
-    list_subset s.irs_used_vars t.irs_used_vars) ==>
-  !xs s ys t. mm_flat_map_supply f s xs = (ys,t) ==>
-    list_subset s.irs_used_vars t.irs_used_vars
-Proof
-  strip_tac >> Induct >>
-  simp[mm_flat_map_supply_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[]
-  >- simp[list_subset_def, EVERY_MEM]
-  >> first_x_assum drule >> strip_tac >>
-  gvs[list_subset_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem mm_flat_map_supply_context[local]:
@@ -262,40 +228,6 @@ Proof
   drule_all mm_mode_supply_context >> strip_tac >>
   drule_all mm_mode_supply_context >> strip_tac >>
   drule_all mm_mode_supply_context >> simp[]
-QED
-
-Theorem mm_mode_supply_mono[local]:
-  transform_block_mode_supply dfg mode s bb = (bb',t) ==>
-  list_subset s.irs_used_vars t.irs_used_vars
-Proof
-  rw[transform_block_mode_supply_def, AllCaseEqs()] >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `mm_flat_map_supply f` >>
-  irule (INST_TYPE [alpha |-> ``:instruction``, beta |-> ``:instruction``]
-    mm_flat_map_supply_mono) >>
-  qexistsl_tac [`f`, `bb.bb_instructions`, `insts`] >>
-  simp[Abbr `f`] >> metis_tac[mm_groups_supply_mono]
-QED
-
-Theorem mm_memzero_supply_mono_block[local]:
-  transform_block_memzero_supply dfg s bb = (bb',t) ==>
-  list_subset s.irs_used_vars t.irs_used_vars
-Proof
-  rw[transform_block_memzero_supply_def, AllCaseEqs()] >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `mm_flat_map_supply f` >>
-  irule (INST_TYPE [alpha |-> ``:instruction``, beta |-> ``:instruction``]
-    mm_flat_map_supply_mono) >>
-  qexistsl_tac [`f`, `bb.bb_instructions`, `insts`] >>
-  simp[Abbr `f`] >> metis_tac[mm_memzero_supply_mono]
-QED
-
-Theorem mm_block_supply_mono[local]:
-  transform_block_supply dfg s bb = (bb',t) ==>
-  list_subset s.irs_used_vars t.irs_used_vars
-Proof
-  rw[transform_block_supply_def, AllCaseEqs()] >>
-  drule mm_memzero_supply_mono_block >> strip_tac >>
-  imp_res_tac mm_mode_supply_mono >>
-  gvs[list_subset_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem mm_index_supply_context:

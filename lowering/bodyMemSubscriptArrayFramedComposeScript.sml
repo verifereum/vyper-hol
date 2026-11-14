@@ -313,6 +313,7 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_preparati
      rpt strip_tac >> simp[]) >>
   `?w0. eval_operand p.ptr_operand t = SOME w0` by
     (qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
      simp[vv_post_def, vv_holds_def, vyperASTTheory.expr_type_def] >>
      rpt strip_tac >> metis_tac[]) >>
   `eval_operand p.ptr_operand t' = SOME w0` by
@@ -320,7 +321,10 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_preparati
      qexistsl_tac [`sm`,`t`] >> simp[] >>
      qpat_x_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, wb_frame_def] >> metis_tac[]) >>
-  `w0 = w` by metis_tac[optionTheory.SOME_11] >>
+  `w0 = w` by
+    (qpat_assum `eval_operand p.ptr_operand t' = SOME w0` mp_tac >>
+     qpat_assum `eval_operand p.ptr_operand t' = SOME w` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   suspend "suffix_application"
 QED
 Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_application]:

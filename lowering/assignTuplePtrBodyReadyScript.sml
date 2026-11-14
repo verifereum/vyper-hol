@@ -1,6 +1,7 @@
 (* Body-level readiness facts, shared by the tuple branch adapters. *)
 Theory assignTuplePtrBodyReady
 Ancestors
+  targetPlaceSim
   bodySimStmtCases bodyPtrPreds bodySim exprSimHyps exprSimHypsDefs
   compileVyper vyperCompiler exprSimSource vyperTypeExprResult
   vyperTypeExprSoundness vyperTypeInvariants vyperTyping

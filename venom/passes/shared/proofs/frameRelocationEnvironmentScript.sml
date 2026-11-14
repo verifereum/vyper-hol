@@ -42,7 +42,7 @@ Theorem relocation_env_reader_execution:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK post` mp_tac >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
   fs[relocation_env_def]
   >- (asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
       simp[exec_read0_def] >> strip_tac >> gvs[] >>

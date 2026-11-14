@@ -85,7 +85,8 @@ Theorem dload_expanded_step_blocks:
   v.vs_current_bb = t.vs_current_bb /\ v.vs_prev_bb = t.vs_prev_bb
 Proof
   simp[] >> strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]
+  (gvs[step_inst_non_invoke] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()])
   >- (gvs[exec_alloca_def, AllCaseEqs(), update_var_def])
   >- (gvs[exec_pure2_def, AllCaseEqs(), update_var_def])
   >- (gvs[write_memory_with_expansion_def]) >>
