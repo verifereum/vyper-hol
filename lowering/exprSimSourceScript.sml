@@ -17,6 +17,175 @@ Ancestors
 Libs
   pairLib monadsyntax
 
+Theorem no_ifexp_eval_value_dichotomy:
+  !e cx.
+    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+    expr_writes_ok (\_. F) e ==>
+    (!s rv t. eval_expr cx e s = (INL rv,t) ==> !v. rv <> Value v) \/
+    (!s rv t. eval_expr cx e s = (INL rv,t) ==> ?v. rv = Value v)
+Proof
+  measureInduct_on `expr_size e` >> rpt gen_tac >> strip_tac >>
+  Cases_on `e` >> gns[supported_expr_exists_def, expr_writes_ok_def]
+  >~ [`eval_expr cx (Name ann name)`] >- suspend "name"
+  >~ [`eval_expr cx (TopLevelName ann nid)`] >- suspend "toplevel"
+  >~ [`eval_expr cx (FlagMember ann nid fld)`] >- suspend "flag"
+  >~ [`eval_expr cx (Literal ann lit)`] >- suspend "literal"
+  >~ [`eval_expr cx (StructLit ann nid fields)`] >- suspend "struct"
+  >~ [`eval_expr cx (Builtin ann bi args)`] >- suspend "builtin"
+  >~ [`eval_expr cx (TypeBuiltin ann bi typ args)`] >- suspend "typebuiltin"
+  >~ [`eval_expr cx (Call ann target args dflt)`] >- suspend "call"
+  >~ [`eval_expr cx (Subscript ann obj idx)`] >- suspend "subscript"
+  >~ [`eval_expr cx (Attribute ann obj fld)`] >- suspend "attribute"
+QED
+
+Resume no_ifexp_eval_value_dichotomy[name]:
+  disj1_tac >> rpt gen_tac >>
+  simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, check_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[toplevel]:
+  disj1_tac >> rpt gen_tac >> PairCases_on `nid` >>
+  simp[Once evaluate_def] >> strip_tac >>
+  drule lookup_global_result_shape >> strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[literal]:
+  disj2_tac >> simp[Once evaluate_def, return_def]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[struct]:
+  disj2_tac >> PairCases_on `nid` >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[typebuiltin]:
+  disj2_tac >> simp[Once evaluate_def, bind_def, ignore_bind_def,
+                   return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[flag]:
+  disj2_tac >> PairCases_on `nid` >>
+  simp[Once evaluate_def, lookup_flag_mem_def, vyperMiscTheory.option_CASE_rator,
+       bind_def, ignore_bind_def,
+                   return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[builtin]:
+  disj2_tac >> simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[attribute]:
+  qpat_x_assum `!y. _` (qspec_then `obj` mp_tac) >> simp[expr_size_def] >>
+  disch_then (qspec_then `cx` mp_tac) >> simp[] >> strip_tac
+  >- (disj1_tac >> rpt gen_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      rename1 `eval_expr cx obj _ = (INL base_res,_)` >>
+      `!v. base_res <> Value v` by metis_tac[] >>
+      Cases_on `base_res` >> gvs[select_result_def] >>
+      drule extend_place_result_shape >> strip_tac >> gvs[]) >>
+  disj2_tac >> rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  rename1 `eval_expr cx obj _ = (INL base_res,_)` >>
+  `?v. base_res = Value v` by metis_tac[] >>
+  gvs[select_result_def, bind_def, return_def, AllCaseEqs()]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[subscript]:
+  Cases_on `subscript_reads_base cx obj idx`
+  >- (disj2_tac >> rpt gen_tac >>
+      simp[Once evaluate_def, bind_def, return_def, select_result_def,
+           AllCaseEqs()] >> rpt strip_tac >>
+      gvs[select_result_def, bind_def, return_def, AllCaseEqs()]) >>
+  qpat_x_assum `!y. _` (qspec_then `obj` mp_tac) >> simp[expr_size_def] >>
+  disch_then (qspec_then `cx` mp_tac) >> simp[] >> strip_tac
+  >- (disj1_tac >> rpt gen_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      rename1 `eval_expr cx obj _ = (INL base_res,_)` >>
+      `!v. base_res <> Value v` by metis_tac[] >>
+      Cases_on `base_res` >> gvs[select_result_def] >>
+      drule extend_place_result_shape >> strip_tac >> gvs[]) >>
+  disj2_tac >> rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  rename1 `eval_expr cx obj _ = (INL base_res,_)` >>
+  `?v. base_res = Value v` by metis_tac[] >>
+  gvs[select_result_def, bind_def, return_def, AllCaseEqs()]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call]:
+  qpat_x_assum `!y. _` kall_tac >> disj2_tac >> Cases_on `target`
+  >~ [`Call ann (Send has_gas) args dflt`] >- suspend "call_send"
+  >~ [`Call ann (IntCall nid) args dflt`] >- suspend "call_internal"
+  >~ [`Call ann (ExtCall static skip sig opts) args dflt`] >- suspend "call_external"
+  >~ [`Call ann (RawCallTarget flags) args dflt`] >- suspend "call_raw"
+  >~ [`Call ann (RawCallCalldataTarget flags) args dflt`] >- suspend "call_calldata"
+  >~ [`Call ann RawLog args dflt`] >- suspend "call_log"
+  >~ [`Call ann RawRevert args dflt`] >- suspend "call_revert"
+  >~ [`Call ann SelfDestructTarget args dflt`] >- suspend "call_selfdestruct"
+  >~ [`Call ann (CreateTarget kind salt rof code_ofs) args dflt`] >- suspend "call_create"
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_internal]:
+  PairCases_on `nid` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_log]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_revert]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_selfdestruct]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_send]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule eval_send_success_value >> simp[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_external]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule eval_ext_call_success_value >> simp[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_raw]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule eval_raw_call_success_value >> simp[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_calldata]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule eval_raw_call_success_value >> simp[]
+QED
+
+Resume no_ifexp_eval_value_dichotomy[call_create]:
+  Cases_on `kind` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule eval_create_success_value >> simp[]
+QED
+
+Finalise no_ifexp_eval_value_dichotomy;
+
 Theorem expr_sim_pre_gas_obs[simp]:
   expr_sim_pre cenv cx env e (es with gas_obs := gs) <=>
   expr_sim_pre cenv cx env e es
