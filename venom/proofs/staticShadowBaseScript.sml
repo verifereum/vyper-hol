@@ -1,6 +1,6 @@
 Theory staticShadowBase
 Ancestors
-  staticShadowControl staticShadowCopy staticShadowForbidden staticShadowDynamic
+  staticShadowCall staticShadowControl staticShadowCopy staticShadowForbidden staticShadowDynamic
   staticShadowFrame staticShadowPrim staticShadowDefs venomExecSemantics venomCallOracleDefs
   extCallOracle venomState venomInst list finite_map
 Libs
@@ -173,4 +173,14 @@ Proof
            simp[static_shadow_memory_writes, mstore_def, mstore8_def],
          ALL_TAC] >>
   simp[static_shadow_result_rel_def]
+QED
+
+Theorem static_shadow_base:
+  s.vs_call_ctx.cc_static /\ static_shadow_rel s sh ==>
+  static_shadow_result_rel (step_inst_base inst s) (step_inst_base inst sh)
+Proof
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]`
+  >- (irule static_shadow_calls >> simp[]) >>
+  irule static_shadow_base_noncall >> simp[]
 QED
