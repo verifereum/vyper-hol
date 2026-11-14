@@ -1,7 +1,8 @@
 (* Pure compiler boundaries for the post-CALL consumers. *)
 Theory rawCallFinishCodePtr
 Ancestors
-  rawCallResultProofPtr loweringShapeRules exprLoweringProps emitHelperProps
+  rawCallShapePtr loweringShapeRules exprLoweringProps emitHelperProps
+  builtinSystem builtinSimple context emitHelper venomInst venomState
   fragExec compileEnv loweringStateRelDefs
 Libs monadsyntax
 
@@ -101,7 +102,7 @@ Theorem raw_call_reverting_code_groups:
     fn_has_code sa sc func /\ fn_has_code sj se func /\
     fn_has_code sf sk func /\ fn_has_code sn sb func
 Proof
-  strip_tac >> drule raw_call_reverting_finish_steps >> strip_tac >>
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_reverting_finish_steps >> strip_tac >>
   rename1 `fresh_label "call_failed" sc = (bad,s1)` >>
   `ci_mono sa sc` by
     (Cases_on `ct` >> gvs[] >> metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
@@ -147,7 +148,7 @@ Theorem raw_call_nonrevert_code_groups:
      else return ok) sc = (result,sb) /\
     ci_mono sa sc /\ ci_mono sc sb /\ fn_has_code sa sc func /\ fn_has_code sc sb func
 Proof
-  strip_tac >> drule raw_call_nonrevert_finish_code >> strip_tac >>
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_nonrevert_finish_code >> strip_tac >>
   `ci_mono sa sc` by
     (Cases_on `ct` >> gvs[] >> metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
   `ci_mono sc sb` by

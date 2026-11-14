@@ -7,7 +7,59 @@ Ancestors
   exprSimSource vyperTypeCallGraph exprSimWordArgs compileEnv
   exprSimPrecompiles exprSimHash vyperTypeExtCallSoundness
 Libs
-  pairLib
+  pairLib monadsyntax
+
+Theorem raw_call_nonrevert_finish_code:
+  compile_raw_call_finish addr dp dl gas value ct n F ov op sa = (result,sb) ==>
+  ?ok sc. (case ct of
+      DelegateCall => emit_op DELEGATECALL [gas;addr;dp;dl;op;Lit (n2w n)]
+    | StaticCall => emit_op STATICCALL [gas;addr;dp;dl;op;Lit (n2w n)]
+    | RegularCall => emit_op CALL [gas;addr;value;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok) sc = (result,sb)
+Proof
+  simp[compile_raw_call_finish_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  qexistsl_tac [`success`, `s'`] >>
+  gvs[comp_ignore_bind_def, comp_bind_def, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem raw_call_reverting_finish_steps:
+  compile_raw_call_finish addr dp dl gas value ct n T ov op sa = (result,sb) ==>
+  ?ok sc fail s1 pass s2 s3 fblock s4 rds s5 buf s6 s7 s8 pblock s9.
+    (case ct of
+       DelegateCall => emit_op DELEGATECALL [gas;addr;dp;dl;op;Lit (n2w n)]
+     | StaticCall => emit_op STATICCALL [gas;addr;dp;dl;op;Lit (n2w n)]
+     | RegularCall => emit_op CALL [gas;addr;value;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    fresh_label "call_failed" sc = (fail,s1) /\
+    fresh_label "call_ok" s1 = (pass,s2) /\
+    emit_inst JNZ [ok;Label pass;Label fail] [] s2 = ((),s3) /\
+    new_block fail s3 = (fblock,s4) /\
+    emit_op RETURNDATASIZE [] s4 = (rds,s5) /\
+    compile_alloc_buffer 0 s5 = (buf,s6) /\
+    emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds] s6 = ((),s7) /\
+    emit_inst REVERT [buf.buf_operand;rds] [] s7 = ((),s8) /\
+    new_block pass s8 = (pblock,s9) /\
+    (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [ov;cap]; return ov od
+     else return (Lit 0w)) s9 = (result,sb)
+Proof
+  simp[compile_raw_call_finish_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED
 
 Theorem raw_call_typed_data_dynamic:
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) ==>
