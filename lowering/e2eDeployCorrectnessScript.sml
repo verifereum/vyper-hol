@@ -194,6 +194,8 @@ QED
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code. *)
+(* RESTATED ADMITTED THEOREM SEQ-3665: creation_resource_starved is the
+   deployment escape; the finalizer proof remains open. *)
 Theorem e2e_deploy_correctness_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\

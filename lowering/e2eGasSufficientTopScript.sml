@@ -17,6 +17,8 @@ val _ = Parse.hide "tops";
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code, as for
    vyper_call_correct_asm_opt.  PLANNED ADMISSION. *)
+(* RESTATED ADMITTED THEOREM SEQ-4002: gas_source_exempt and frame_raises
+   state the gas contract; the finalizer proof remains open. *)
 Theorem vyper_call_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -46,6 +48,8 @@ QED
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code, as for
    e2e_deploy_correctness_asm_opt.  PLANNED ADMISSION. *)
+(* RESTATED ADMITTED THEOREM SEQ-4002: deploy_gas_source_exempt states the
+   deployment gas contract; the finalizer proof remains open. *)
 Theorem e2e_deploy_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
