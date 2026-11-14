@@ -82,11 +82,11 @@ Proof
   qexists_tac `inst` >> simp[] >> gvs[]
 QED
 
-Theorem concretize_extcodecopy_local_complete:
+Theorem concretize_extcodecopy_local_complete_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -179,19 +179,19 @@ Proof
   (conj_tac >- suspend "taint") >>
   gvs[] >> fs[relocation_env_def, relocation_reader_context_def, write_memory_with_expansion_def]
 QED
-Resume concretize_extcodecopy_local_complete[fn]:
+Resume concretize_extcodecopy_local_complete_static[fn]:
   drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   drule_all ptr_frame_current_static >> strip_tac >> fs[EVERY_MEM] >> metis_tac[]
 QED
-Resume concretize_extcodecopy_local_complete[step]:
+Resume concretize_extcodecopy_local_complete_static[step]:
   drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
   gvs[joint_transition_ordinary, step_inst_def]
 QED
-Resume concretize_extcodecopy_local_complete[geometry]:
-  irule concretize_clean_write_geometry >> simp[] >>
+Resume concretize_extcodecopy_local_complete_static[geometry]:
+  irule concretize_clean_write_geometry_static >> simp[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `fn_ptr_ok _ _`)) >>
@@ -203,7 +203,7 @@ Resume concretize_extcodecopy_local_complete[geometry]:
   simp[mem_write_ops_def, step_writes_def, source_memory_write_ranges_def,
        sized_source_write_range_def, write_memory_with_expansion_def] >> metis_tac[]
 QED
-Resume concretize_extcodecopy_local_complete[relation]:
+Resume concretize_extcodecopy_local_complete_static[relation]:
   `(guarded_bytes (retpc_var fn) rv (step_taint inst s post tn) :
      string -> bytes32 -> bytes32 -> bool) = guarded_bytes (retpc_var fn) rv tn` by
     (irule EQ_EXT >> gen_tac >> irule EQ_EXT >> gen_tac >> irule EQ_EXT >> gen_tac >>
@@ -215,10 +215,60 @@ Resume concretize_extcodecopy_local_complete[relation]:
   (conj_tac >- metis_tac[]) >> (conj_tac >- metis_tac[]) >>
   fs[local_rel_def, write_memory_with_expansion_def, dead_result_rel_memory_frame]
 QED
-Resume concretize_extcodecopy_local_complete[taint]:
+Resume concretize_extcodecopy_local_complete_static[taint]:
   irule clean_copy_taint_order >> simp[] >>
   goal_assum (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   qexistsl_tac [`w2n dst`, `w2n dstT`, `w2n sz`, `xs`] >>
   simp[step_writes_def, source_memory_write_ranges_def, sized_source_write_range_def] >> metis_tac[]
 QED
-Finalise concretize_extcodecopy_local_complete
+Finalise concretize_extcodecopy_local_complete_static
+
+Theorem concretize_extcodecopy_local_complete:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  relocation_env s t /\ relocation_reader_context s t /\
+  s.vs_code = t.vs_code /\ s.vs_data_section = t.vs_data_section /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
+    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
+  inst.inst_opcode = EXTCODECOPY /\ inst.inst_operands = [opa;opd;ops;opn] /\
+  eval_operand opa s = SOME addr /\ eval_operand opd s = SOME dst /\
+  eval_operand ops s = SOME src /\ eval_operand opn s = SOME sz /\
+  relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un ==>
+  ?tpost. step_inst_base inst t = OK tpost /\
+    local_rel (\u. F)
+      (guarded_ptr (retpc_var fn)
+        (activation_lookup (0:num) (concretize_positions C')
+          (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+      (guarded_bytes (retpc_var fn) rv (step_taint inst s post tn))
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
+    step_prov PG G inst post = G /\
+    relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (step_taint inst s post tn) (step_taint inst t tpost un) /\
+    relocation_env post tpost /\ relocation_reader_context post tpost /\
+    post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section
+Proof
+  mp_tac concretize_extcodecopy_local_complete_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

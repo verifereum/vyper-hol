@@ -34,10 +34,10 @@ QED
 
 (* Decorate a finite source abort once, initialize the selected driver at
    the actual scheduled function, and retain its request observation. *)
-Theorem layout_stage_request_finite_abort:
+Theorem layout_stage_request_finite_abort_static[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -90,16 +90,42 @@ Proof
   `?r'. finite_run C' fn' s r' /\
     layout_request_OutR D lo vs C C' q0 (MAP FST path) (MAP SND path)
       ass qe q0 0 qe (0 + LENGTH path) fn s fn' s (Abort a post) r'` by
-    (irule layout_stage_request_selected_run >> metis_tac[]) >>
+    (irule layout_stage_request_selected_run_static >> metis_tac[]) >>
   drule layout_request_OutR_abort >> strip_tac >>
   qexistsl [`fn'`, `b`, `post'`] >>
   metis_tac[layout_driver_row_entry_label]
 QED
 
-Theorem concretize_stage_abort_rq:
+Theorem layout_stage_request_finite_abort:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  C.ctx_entry = SOME name /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl /\
+  s = vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |> /\
+  finite_run C fn s (Abort a post) ==>
+  ?fn' b post'. lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn' = SOME lbl /\ finite_run C' fn' s (Abort b post') /\
+    LIST_REL (request_agree_except D) post.vs_requests post'.vs_requests
+Proof
+  mp_tac layout_stage_request_finite_abort_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_stage_abort_rq_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -124,7 +150,7 @@ Proof
   `?fn' b post'. lookup_function name C'.ctx_functions = SOME fn' /\
     fn_entry_label fn' = SOME lbl /\ finite_run C' fn' s (Abort b post') /\
     LIST_REL (request_agree_except D) t.vs_requests post'.vs_requests` by
-    (irule layout_stage_request_finite_abort >>
+    (irule layout_stage_request_finite_abort_static >>
      simp[Abbr `s`] >> metis_tac[]) >>
   `C'.ctx_entry = SOME name` by fs[ctx_pass_stage_def] >>
   drule (cj 3 finite_execution_realizable) >> strip_tac >>
@@ -132,4 +158,23 @@ Proof
   conj_tac
   >- (first_x_assum (qspec_then `n` mp_tac) >> simp[Abbr `s`]) >>
   irule LIST_REL_imp_request_prefix_rel >> simp[]
+QED
+
+Theorem concretize_stage_abort_rq:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions ==>
+  ctx_abort_rq D C C' vs vs
+Proof
+  mp_tac concretize_stage_abort_rq_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

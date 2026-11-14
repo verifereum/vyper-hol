@@ -40,11 +40,11 @@ Proof
   drule_all context_layout_local_lookup_find >> metis_tac[]
 QED
 
-Theorem concretize_common_call_activation_disjoint:
+Theorem concretize_common_call_activation_disjoint_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ c < n /\ n <= j /\ j <= LENGTH es /\
@@ -71,7 +71,7 @@ Proof
      pure_asm_rewrite_tac[] >> metis_tac[]) >>
   `?itemsA. static_alloca_items caller = SOME itemsA /\
      MEM (Allocation aidA,szA) itemsA` by
-    (irule activation_cache_source_static_item >>
+    (irule activation_cache_source_static_item_static >>
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      simp[] >> metis_tac[]) >>
@@ -90,18 +90,18 @@ Proof
     (irule (iffRL lookup_function_member_iff) >>
      gvs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def]) >>
   drule_all ctx_pass_stage_lookup >> strip_tac >>
-  drule_all concretize_common_call_activation_livesets >> strip_tac >>
+  drule_all concretize_common_call_activation_livesets_static >> strip_tac >>
   `joint_config_reachable vs0 C (EL n (q0::qs))` by
     (drule joint_trace_edge_at >> disch_then (qspec_then `n-1` mp_tac) >>
      `SUC (n-1) = n /\ n-1 < LENGTH es` by decide_tac >>
      pure_asm_rewrite_tac[] >> metis_tac[]) >>
   `?itemsB. static_alloca_items ownerB = SOME itemsB /\
      MEM (Allocation aidB,szB) itemsB` by
-    (irule activation_cache_source_static_item >>
+    (irule activation_cache_source_static_item_static >>
      goal_assum (drule_at (Pat `activation_cache _ _ ownerB _ _`)) >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ (EL n _)`)) >>
      simp[] >> metis_tac[]) >>
-  drule_all joint_open_call_activation_summary >> strip_tac >>
+  drule_all joint_open_call_activation_summary_static >> strip_tac >>
   `MEM invoke (fn_insts caller)` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_call_iff] >>
@@ -139,6 +139,34 @@ Proof
     (drule_all concretize_import_canonical_metadata >>
      simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]) >>
   metis_tac[canonical_metadata_unique]
+QED
+
+Theorem concretize_common_call_activation_disjoint:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  joint_trace vs0 C q0 es qs q /\ c < n /\ n <= j /\ j <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
+  joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+  (!k. c < k /\ k <= n ==> LENGTH stk0 < activation_depth (EL k (q0::qs))) /\
+  activation_cache (EL n (q0::qs)) dB ownerB aidB (bB,szB) /\ LENGTH stk0 < dB /\
+  bB <= byteB /\ byteB < bB + szB /\
+  EL j (q0::qs) = JointConfig stkJ PGJ GJ tnJ reader instJ sJ omsJ omJ hsJ hJ /\
+  byteA IN joint_reads (EL j (q0::qs)) /\ lo <= byteA /\
+  byteA NOTIN joint_mem_taint (EL j (q0::qs)) /\ ~in_revert_forward reader sJ /\
+  (!k. n <= k /\ k < j ==> byteA NOTIN joint_writes (EL k (q0::qs)) (EL k es)) /\
+  activation_cache (EL j (q0::qs)) (LENGTH stk0) caller aidA (bA,szA) /\
+  bA <= byteA /\ byteA < bA + szA /\
+  canonical_metadata C C' (Allocation aidA) pA szA /\
+  canonical_metadata C C' (Allocation aidB) pB szB ==>
+  pA + szA <= pB \/ pB + szB <= pA
+Proof
+  mp_tac concretize_common_call_activation_disjoint_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem concretize_common_call_disjoint:

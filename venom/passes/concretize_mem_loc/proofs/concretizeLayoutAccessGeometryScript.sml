@@ -44,7 +44,8 @@ Theorem memory_offset_taint_empty:
 Proof
   strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[mem_write_ops_def, mem_read_ops_def, AllCaseEqs()] >>
+  gvs[mem_write_ops_def, mem_read_ops_def] >>
+  gvs[AllCaseEqs()] >>
   fs[taint_ok_def] >>
   spose_not_then assume_tac >>
   qmatch_asmsub_rename_tac `op_taint tn addr <> {}` >>
@@ -52,11 +53,11 @@ Proof
   metis_tac[MEM_REVERSE, MEM]
 QED
 
-Theorem concretize_memory_access_geometry:
+Theorem concretize_memory_access_geometry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
@@ -120,7 +121,7 @@ Proof
      disch_then irule >> metis_tac[]) >>
   PairCases_on `tok` >> gvs[] >>
   `w2n off+len <= b+sz` by decide_tac >>
-  drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range >>
+  drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range_static >>
   disch_then drule_all >> strip_tac >>
   `?d owner.
     activation_cache (JointConfig stk PG (SND o_f rv) tn fn inst s oms om hs h)
@@ -132,6 +133,45 @@ Proof
   `lo <= b` by metis_tac[joint_activation_cache_lower_bound] >>
   qexists_tac `y` >> simp[] >>
   qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[]
+QED
+
+Theorem concretize_memory_access_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  len <> 0 /\ ops.iao_ofst = opd /\ eval_operand opd s = SOME off /\
+  ((MEM (w2n off,len) (source_memory_write_ranges inst s) /\
+    mem_write_ops inst = SOME ops) \/
+   (MEM (w2n off,len) (source_memory_read_ranges inst s) /\
+    mem_read_ops inst = SOME ops)) ==>
+  ?offT. eval_operand opd t = SOME offT /\
+    ((w2n off+len <= lo /\ w2n offT = w2n off) \/
+     (?d owner aid b sz.
+       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+         d owner aid (b,sz) /\ lo <= b /\ b <= w2n off /\
+       w2n off+len <= b+sz /\
+       w2n offT = concretize_positions C' owner aid + (w2n off-b)))
+Proof
+  mp_tac concretize_memory_access_geometry_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()

@@ -75,11 +75,11 @@ Proof
   metis_tac[active_invoke_argument_generators]
 QED
 
-Theorem concretize_untainted_incoming_read_liveat:
+Theorem concretize_untainted_incoming_read_liveat_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
@@ -160,7 +160,7 @@ Proof
   `activation_cache (EL n (q0::qs)) d owner aid (b,sz)` by
     (qpat_x_assum `!t. _ ==> _ /\ activation_cache _ _ _ _ _`
        (qspec_then `n` mp_tac) >> simp[]) >>
-  irule concretize_cached_generator_liveat >>
+  irule concretize_cached_generator_liveat_static >>
   goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
@@ -171,6 +171,41 @@ Proof
   goal_assum (drule_at (Pat `callee_first _ _`)) >>
   goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
   qexistsl_tac [`byte`,`j`] >> gvs[]
+QED
+
+Theorem concretize_untainted_incoming_read_liveat:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
+  EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
+  FLOOKUP om v = SOME (OriginParameter param,(b,sz)) /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  b <= byte /\ byte < b + sz /\ lo <= byte /\ byte IN joint_reads (EL j (q0::qs)) /\
+  byte NOTIN joint_mem_taint (EL j (q0::qs)) /\ ~in_revert_forward current s /\
+  (!t. n <= t /\ t < j ==> byte NOTIN joint_writes (EL t (q0::qs)) (EL t es)) ==>
+  ?k aid owner d.
+    k < LENGTH stk /\ owner = (EL k stk).cf_fn /\ d = LENGTH stk - SUC k /\
+    FLOOKUP (EL k stk).cf_state.vs_allocas aid = SOME (b,sz) /\
+    activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
+    (!p observed bp sizes mems pallocas la us.
+      activation_location (EL n (q0::qs)) d owner p /\
+      o1_walk_view rpolicy 2 C' owner observed /\
+      bp = bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner /\
+      sizes = (\a. if context_alloca_size owner
+        (imported_mems_used observed.cu_context owner) a = 0 then NONE
+        else SOME (context_alloca_size owner (imported_mems_used observed.cu_context owner) a)) /\
+      (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+      ml_iterate_fuel (concretize_memloc_fuel owner) bp mems sizes pallocas
+        (cfg_analyze owner) owner FEMPTY FEMPTY = (la,us) ==>
+      MEM (Allocation aid) (ml_lookup la p))
+Proof
+  mp_tac concretize_untainted_incoming_read_liveat_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 (* Incoming provenance selects the suspended owner, not the physical writer. *)

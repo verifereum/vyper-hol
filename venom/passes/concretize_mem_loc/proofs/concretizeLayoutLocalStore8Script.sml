@@ -25,11 +25,11 @@ Proof
   Cases_on `opd = Var v` >> gvs[]
 QED
 
-Theorem concretize_mstore8_execution_geometry:
+Theorem concretize_mstore8_execution_geometry_static[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -92,7 +92,7 @@ Proof
   qpat_x_assum `!a z. _ /\ ~_ ==> _` mp_tac >> simp[]
 QED
 
-Resume concretize_mstore8_execution_geometry[value]:
+Resume concretize_mstore8_execution_geometry_static[value]:
   `?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
@@ -113,8 +113,8 @@ Resume concretize_mstore8_execution_geometry[value]:
      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
      qexists_tac `inst` >> simp[]) >> metis_tac[]
 QED
-Resume concretize_mstore8_execution_geometry[address]:
-  irule concretize_memory_access_geometry >> simp[] >>
+Resume concretize_mstore8_execution_geometry_static[address]:
+  irule concretize_memory_access_geometry_static >> simp[] >>
   conj_tac
   >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME (Lit 1w);
                     iao_max_size := SOME (Lit 1w) |>` >>
@@ -125,7 +125,7 @@ Resume concretize_mstore8_execution_geometry[address]:
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
-Resume concretize_mstore8_execution_geometry[memory]:
+Resume concretize_mstore8_execution_geometry_static[memory]:
   markerLib.RESUME_TAC >> (all_tac >>
   `(!i. i < 1 ==>
       w2n dst+i IN joint_writes (EL c (q0::qs)) (EL c es) /\
@@ -156,15 +156,133 @@ Resume concretize_mstore8_execution_geometry[memory]:
     (asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac) >>
   `joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
    z NOTIN range_bytes (step_writes inst t t)` by
-    (irule concretize_positions_demand_write_complement >>
+    (irule concretize_positions_demand_write_complement_static >>
      conj_tac >- metis_tac[] >> asm_rewrite_tac[] >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
   gvs[range_bytes_def] >> decide_tac)
 QED
-Finalise concretize_mstore8_execution_geometry
+Finalise concretize_mstore8_execution_geometry_static
 
+Theorem concretize_mstore8_execution_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [opd;opv] /\
+  eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value ==>
+  ?dstT. eval_operand opd t = SOME dstT /\ eval_operand opv t = SOME value /\
+    step_inst_base inst t = OK (mstore8 (w2n dstT) value t) /\
+    post = mstore8 (w2n dst) value s /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      w2n dst <= a /\ a < w2n dst+1 ==>
+      w2n dstT <= z /\ z < w2n dstT+1 /\ a-w2n dst = z-w2n dstT) /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      ~(w2n dst <= a /\ a < w2n dst+1) ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
+      ~(w2n dstT <= z /\ z < w2n dstT+1))
+Proof
+  mp_tac concretize_mstore8_execution_geometry_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+
+Theorem concretize_mstore8_local_complete_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
+    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [opd;opv] /\
+  eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value /\
+  inst.inst_outputs = [] /\
+  relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un ==>
+  ?tpost. step_inst_base inst t = OK tpost /\
+    local_rel (\u. F)
+      (guarded_ptr (retpc_var fn)
+        (activation_lookup (0:num) (concretize_positions C')
+          (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+      (guarded_bytes (retpc_var fn) rv (step_taint inst s post tn))
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
+    (post with vs_memory := s.vs_memory) = s /\
+    (tpost with vs_memory := t.vs_memory) = t /\
+    step_prov PG G inst post = G /\
+    relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (step_taint inst s post tn) (step_taint inst t tpost un)
+Proof
+  strip_tac >> drule_all concretize_mstore8_execution_geometry_static >> strip_tac >>
+  `demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+     (\a. read_byte a post.vs_memory)
+     (\z. read_byte z (mstore8 (w2n dstT) value t).vs_memory)` by suspend "demand" >>
+  qexists_tac `mstore8 (w2n dstT) value t` >> asm_rewrite_tac[] >>
+  conj_tac >- suspend "local" >>
+  conj_tac >- simp[mstore8_def] >>
+  conj_tac >- simp[mstore8_def] >>
+  conj_tac >- simp[step_prov_def, set_prov_def, DRESTRICT_UNIV] >>
+  irule relocation_taint_le_mstore8 >> simp[] >>
+  goal_assum (drule_at (Pat `relocation_taint_le _ _ _`)) >> metis_tac[]
+QED
+Resume concretize_mstore8_local_complete_static[demand]:
+  rewrite_tac[mstore8_as_write_memory] >>
+  qpat_x_assum `post = _` (fn th => rewrite_tac[th, mstore8_as_write_memory]) >>
+  irule demand_agree_write_memory >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `joint_relocation_demand lo (concretize_positions C') q0 es qs c` >>
+  metis_tac[local_rel_demand]
+QED
+Resume concretize_mstore8_local_complete_static[local]:
+  qpat_x_assum `local_rel _ _ _ _ _ s t` mp_tac >>
+  qpat_x_assum `demand_agree _ _ _` mp_tac >>
+  simp[local_rel_def, variable_domains_def, variables_agree_on_def,
+       local_values_def, lookup_var_def, mstore8_def,
+       guarded_bytes_def, copy_bytes_def, op_taint_def, step_taint_def,
+       set_var_taint_def, finite_mapTheory.DRESTRICT_UNIV,
+       dead_result_rel_memory_frame]
+QED
+Finalise concretize_mstore8_local_complete_static
 
 Theorem concretize_mstore8_local_complete:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -210,36 +328,10 @@ Theorem concretize_mstore8_local_complete:
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un)
 Proof
-  strip_tac >> drule_all concretize_mstore8_execution_geometry >> strip_tac >>
-  `demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
-     (\a. read_byte a post.vs_memory)
-     (\z. read_byte z (mstore8 (w2n dstT) value t).vs_memory)` by suspend "demand" >>
-  qexists_tac `mstore8 (w2n dstT) value t` >> asm_rewrite_tac[] >>
-  conj_tac >- suspend "local" >>
-  conj_tac >- simp[mstore8_def] >>
-  conj_tac >- simp[mstore8_def] >>
-  conj_tac >- simp[step_prov_def, set_prov_def, DRESTRICT_UNIV] >>
-  irule relocation_taint_le_mstore8 >> simp[] >>
-  goal_assum (drule_at (Pat `relocation_taint_le _ _ _`)) >> metis_tac[]
+  mp_tac concretize_mstore8_local_complete_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
-Resume concretize_mstore8_local_complete[demand]:
-  rewrite_tac[mstore8_as_write_memory] >>
-  qpat_x_assum `post = _` (fn th => rewrite_tac[th, mstore8_as_write_memory]) >>
-  irule demand_agree_write_memory >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  qexists_tac `joint_relocation_demand lo (concretize_positions C') q0 es qs c` >>
-  metis_tac[local_rel_demand]
-QED
-Resume concretize_mstore8_local_complete[local]:
-  qpat_x_assum `local_rel _ _ _ _ _ s t` mp_tac >>
-  qpat_x_assum `demand_agree _ _ _` mp_tac >>
-  simp[local_rel_def, variable_domains_def, variables_agree_on_def,
-       local_values_def, lookup_var_def, mstore8_def,
-       guarded_bytes_def, copy_bytes_def, op_taint_def, step_taint_def,
-       set_var_taint_def, finite_mapTheory.DRESTRICT_UNIV,
-       dead_result_rel_memory_frame]
-QED
-Finalise concretize_mstore8_local_complete
 
 val _ = if List.all (null o hyp)
   [concretize_mstore8_execution_geometry, concretize_mstore8_local_complete]

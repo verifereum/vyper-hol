@@ -9,11 +9,11 @@ Ancestors concretizeLayoutCommonCall concretizeAnalysisWriteLiveset
   ptrDiscipline o1PassContract ctxLookupAgreeHelpers concretizeMemLocDefs
   venomInst venomWf list pair finite_map arithmetic
 
-Theorem concretize_common_call_write_activation_disjoint:
+Theorem concretize_common_call_write_activation_disjoint_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ c < n /\ n < LENGTH es /\
@@ -38,7 +38,7 @@ Proof
     metis_tac[joint_trace_edge_at] >>
   `?itemsB. static_alloca_items caller = SOME itemsB /\
      MEM (Allocation aidB,szB) itemsB` by
-    (irule activation_cache_source_static_item >>
+    (irule activation_cache_source_static_item_static >>
      goal_assum (drule_at (Pat `activation_cache _ _ caller _ _`)) >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      simp[] >> metis_tac[]) >>
@@ -60,7 +60,7 @@ Proof
   suspend "livesets"
 QED
 
-Resume concretize_common_call_write_activation_disjoint[livesets]:
+Resume concretize_common_call_write_activation_disjoint_static[livesets]:
   `(EL (LENGTH stkN - SUC (LENGTH stk0)) stkN).cf_fn = caller /\
    (EL (LENGTH stkN - SUC (LENGTH stk0)) stkN).cf_inst = invoke /\
    (EL (LENGTH stkN - SUC (LENGTH stk0)) stkN).cf_state = s0 /\
@@ -85,13 +85,13 @@ Resume concretize_common_call_write_activation_disjoint[livesets]:
       MEM (s0.vs_current_bb,s0.vs_inst_idx) addrsB` by
     (qpat_assum `EL n (_::_) = _`
        (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-     drule_all concretize_write_owner_liveset >> simp[]) >>
+     drule_all concretize_write_owner_liveset_static >> simp[]) >>
   `?addrsA. FLOOKUP (context_mem_livesets (concretize_memloc_fuel caller)
       observed.cu_context caller
       (bp_analyze_fuel (concretize_memloc_fuel caller) (cfg_analyze caller) caller)
       (cfg_analyze caller)) (Allocation aidA) = SOME addrsA /\
       MEM (s0.vs_current_bb,s0.vs_inst_idx) addrsA` by
-    (irule concretize_open_call_activation_liveset_context >>
+    (irule concretize_open_call_activation_liveset_context_static >>
      goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_transition _ _ NONE _`)) >>
@@ -101,15 +101,15 @@ Resume concretize_common_call_write_activation_disjoint[livesets]:
      qexists_tac `byteA` >> simp[] >> metis_tac[]) >>
   `?itemsA. static_alloca_items ownerA = SOME itemsA /\
      MEM (Allocation aidA,szA) itemsA` by
-    (irule activation_cache_source_static_item >>
+    (irule activation_cache_source_static_item_static >>
      goal_assum (drule_at (Pat `activation_cache _ _ ownerA _ _`)) >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      simp[] >> metis_tac[]) >>
-  drule_all joint_open_call_activation_summary >> strip_tac >>
+  drule_all joint_open_call_activation_summary_static >> strip_tac >>
   suspend "numeric"
 QED
 
-Resume concretize_common_call_write_activation_disjoint[numeric]:
+Resume concretize_common_call_write_activation_disjoint_static[numeric]:
   qpat_x_assum `joint_trace _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!k. c < k /\ k <= n ==> _` kall_tac >>
   qpat_x_assum `joint_config_reachable _ _ _` kall_tac >>
@@ -152,4 +152,31 @@ Resume concretize_common_call_write_activation_disjoint[numeric]:
   metis_tac[canonical_metadata_unique]
 QED
 
-Finalise concretize_common_call_write_activation_disjoint
+Finalise concretize_common_call_write_activation_disjoint_static
+
+Theorem concretize_common_call_write_activation_disjoint:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  joint_trace vs0 C q0 es qs q /\ c < n /\ n < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
+  joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+  (!k. c < k /\ k <= n ==> LENGTH stk0 < activation_depth (EL k (q0::qs))) /\
+  EL n (q0::qs) = JointConfig stkN PGN GN tnN writer instN sN omsN omN hsN hN /\
+  ~in_revert_forward writer sN /\
+  byteB IN joint_writes (EL n (q0::qs)) (EL n es) /\ lo <= byteB /\
+  activation_cache (EL n (q0::qs)) (LENGTH stk0) caller aidB (bB,szB) /\
+  bB <= byteB /\ byteB < bB+szB /\
+  activation_cache (EL n (q0::qs)) dA ownerA aidA (bA,szA) /\ LENGTH stk0 < dA /\
+  bA <= byteA /\ byteA < bA+szA /\
+  canonical_metadata C C' (Allocation aidA) pA szA /\
+  canonical_metadata C C' (Allocation aidB) pB szB ==>
+  pA+szA <= pB \/ pB+szB <= pA
+Proof
+  mp_tac concretize_common_call_write_activation_disjoint_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

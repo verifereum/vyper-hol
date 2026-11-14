@@ -25,11 +25,11 @@ QED
 (* Leaf of the exhaustive base certificate: a terminator that halts, aborts
    or returns (STOP, RETURN, SINK, REVERT, INVALID, SELFDESTRUCT, RET). *)
 
-Theorem layout_canonical_terminal_exit:
+Theorem layout_canonical_terminal_exit_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -68,13 +68,13 @@ Proof
   >> suspend "ret"
 QED
 
-Resume layout_canonical_terminal_exit[halt]:
+Resume layout_canonical_terminal_exit_static[halt]:
   `step_inst 0 C i s = Halt post` by simp[step_inst_non_invoke] >>
   `?tpost. step_inst_base i t = Halt tpost /\
     dead_result_rel D (Halt post) (Halt tpost)` by
     (Cases_on `i.inst_opcode = RETURN`
      >- (drule_all (Q.INST [`fuel` |-> `0`, `fuel'` |-> `0`]
-           layout_return_halt) >> simp[step_inst_non_invoke]) >>
+           layout_return_halt_static) >> simp[step_inst_non_invoke]) >>
      Cases_on `i.inst_opcode = SELFDESTRUCT`
      >- (drule_all layout_selfdestruct_halt >> simp[]) >>
      `MEM i.inst_opcode [STOP; SINK]` by fs[] >>
@@ -83,7 +83,7 @@ Resume layout_canonical_terminal_exit[halt]:
   simp[layout_canonical_result_def]
 QED
 
-Resume layout_canonical_terminal_exit[abort]:
+Resume layout_canonical_terminal_exit_static[abort]:
   `?tpost. step_inst_base i t = Abort a tpost /\
     dead_result_rel D (Abort a post) (Abort a tpost)` by
     (Cases_on `i.inst_opcode = INVALID`
@@ -104,7 +104,7 @@ Resume layout_canonical_terminal_exit[abort]:
   simp[layout_canonical_result_def]
 QED
 
-Resume layout_canonical_terminal_exit[ret]:
+Resume layout_canonical_terminal_exit_static[ret]:
   `step_inst 0 C i s = IntRet ret post` by simp[step_inst_non_invoke] >>
   drule_all (Q.INST [`fuel` |-> `0`, `fuel'` |-> `0`]
     concretizeLayoutCallResultTheory.layout_ret_endpoint_produce) >>
@@ -113,4 +113,37 @@ Resume layout_canonical_terminal_exit[ret]:
   qexists `g` >> simp[]
 QED
 
-Finalise layout_canonical_terminal_exit
+Finalise layout_canonical_terminal_exit_static
+
+Theorem layout_canonical_terminal_exit:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  i.inst_opcode <> INVOKE /\
+  is_terminator i.inst_opcode /\
+  step_inst_base i s = r /\ (!p. r <> OK p) /\ (!e. r <> Error e) ==>
+  ?r'. step_inst_base j t = r' /\
+    layout_canonical_result D lo vs0 C C' q0 es qs ass qend q n r r'
+Proof
+  mp_tac layout_canonical_terminal_exit_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

@@ -4,11 +4,11 @@ Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   frameRelocationEnvironment frameOriginUpdates frameResolvedTrace
   venomExecSemantics venomState venomInst memSafeRun o1PassContract ptrDiscipline list
 
-Theorem layout_readcopy_trace_step:
+Theorem layout_readcopy_trace_step_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -54,7 +54,7 @@ Proof
     (REWRITE_RULE[GSYM concretize_local_obs_def, ETA_AX]
       (Q.INST [`D` |-> `<| d_stor := K (K UNIV); d_trans := K (K UNIV);
         d_imm := K UNIV; d_ret := K {} |>`]
-        (SPEC_ALL concretize_calldatacopy_local_complete))) >>
+        (SPEC_ALL concretize_calldatacopy_local_complete_static))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
@@ -82,4 +82,39 @@ Proof
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   simp[is_terminator_def, origin_set_def, finite_mapTheory.DRESTRICT_UNIV, ETA_AX] >>
   disch_then (qspec_then `tpost` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem layout_readcopy_trace_step:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
+  g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
+  g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+  g.lop_cursor < LENGTH es /\
+  EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
+  ~joint_read_exempt (EL g.lop_cursor (q0::qs)) /\
+  MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES] /\
+  inst.inst_operands = [opd;ops;opn] /\ inst.inst_outputs = [] /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = OK post ==>
+  ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
+    k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q
+      (INL g) (INL k) (OK post) (OK tpost)
+Proof
+  mp_tac layout_readcopy_trace_step_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

@@ -36,11 +36,11 @@ Proof
   `ku = kw` by (fs[] >> decide_tac) >> gvs[]
 QED
 
-Theorem concretize_comparison_geometry:
+Theorem concretize_comparison_geometry_static[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\
   joint_config_reachable vs0 C
@@ -79,8 +79,39 @@ Proof
     metis_tac[resolved_activation_lookup] >>
   `b+sz < dimword (:256)` by
     (drule_all joint_activation_cache_strict >> simp[]) >>
-  drule_all concretize_positions_activation_numeric >> strip_tac >>
+  drule_all concretize_positions_activation_numeric_static >> strip_tac >>
   simp[arithmeticTheory.ADD_COMM])
+QED
+
+Theorem concretize_comparison_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\
+  joint_config_reachable vs0 C
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  access_ok lo G fn inst s /\
+  (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
+  inst.inst_operands = [Var u; Var w] /\
+  (FLOOKUP rv u <> NONE \/ FLOOKUP rv w <> NONE) ==>
+  ?token aid b sz x z.
+    FLOOKUP rv u = SOME ((token,aid),(b,sz)) /\
+    FLOOKUP rv w = SOME ((token,aid),(b,sz)) /\
+    lookup_var u s = SOME x /\ lookup_var w s = SOME z /\
+    b <= w2n x /\ w2n x <= b+sz /\
+    b <= w2n z /\ w2n z <= b+sz /\
+    b+sz < dimword (:256) /\
+    activation_lookup (0:num) (concretize_positions C') (birth::ids)
+      (fn::MAP (\f. f.cf_fn) stk) (token,aid) + sz < dimword (:256)
+Proof
+  mp_tac concretize_comparison_geometry_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem disciplined_compare_vars[local]:
@@ -99,11 +130,11 @@ Proof
   metis_tac[])
 QED
 
-Theorem concretize_compare_local_complete:
+Theorem concretize_compare_local_complete_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -195,7 +226,7 @@ Proof
     (irule disciplined_compare_vars >> simp[] >>
      qexistsl_tac [`P`, `fn`, `w`] >> gvs[]) >>
   `FLOOKUP rv u <> NONE \/ FLOOKUP rv k <> NONE` by (fs[] >> metis_tac[]) >>
-  drule_at (Pat `ctx_pass_stage _ _ _ _ _`) concretize_comparison_geometry >>
+  drule_at (Pat `ctx_pass_stage _ _ _ _ _`) concretize_comparison_geometry_static >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `lifetime_ok _ _ _`)) >>
   disch_then (qspecl_then [`k`, `vs0`, `u`, `lo`] mp_tac) >>
@@ -228,6 +259,54 @@ Proof
   >- (irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[]) >>
   conj_tac >- (irule relocation_env_update_var >> simp[]) >>
   irule relocation_reader_context_update_var >> simp[])
+QED
+
+Theorem concretize_compare_local_complete:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
+  inst.inst_outputs = [v] /\ step_inst_base inst s = OK post /\
+  relocation_env s t /\ relocation_reader_context s t /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
+    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
+  relocation_taint_le
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un ==>
+  ?tpost. step_inst_base inst t = OK tpost /\
+    local_rel (\u. F)
+      (guarded_ptr (retpc_var fn)
+        (activation_lookup (0:num) (concretize_positions C')
+          (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (origin_set rv [v] NONE))
+      (guarded_bytes (retpc_var fn) (origin_set rv [v] NONE)
+        (step_taint inst s post tn))
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
+    step_prov PG (SND o_f rv) inst post = SND o_f (origin_set rv [v] NONE) /\
+    relocation_taint_le
+      (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (step_taint inst s post tn) (step_taint inst t tpost un) /\
+    relocation_env post tpost /\ relocation_reader_context post tpost
+Proof
+  mp_tac concretize_compare_local_complete_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

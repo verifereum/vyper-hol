@@ -106,11 +106,11 @@ Proof
   strip_tac >> drule_all revert_forward_at_opcode >> simp[]
 QED
 
-Theorem concretize_return_read_agreement:
+Theorem concretize_return_read_agreement_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -170,7 +170,7 @@ Proof
     (!i. i < w2n sz /\ w2n off+i NOTIN tn.t_mem ==>
       joint_relocation_demand lo (concretize_positions C') q0 es qs c
         (w2n off+i) (w2n offT+i))` by
-    (irule concretize_read_demand_geometry >> simp[] >>
+    (irule concretize_read_demand_geometry_static >> simp[] >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      simp[mem_read_ops_def, source_memory_read_ranges_def,
@@ -178,6 +178,41 @@ Proof
   qexists_tac `offT` >> simp[] >> rpt strip_tac >>
   drule local_rel_demand >> simp[demand_agree_def] >>
   metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem concretize_return_read_agreement:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  active_inst fn inst s /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = RETURN /\ inst.inst_operands = [opd;opn] /\
+  eval_operand opd s = SOME off /\ eval_operand opn s = SOME sz ==>
+  ?offT. eval_operand opd t = SOME offT /\ eval_operand opn t = SOME sz /\
+    (!i. i < w2n sz /\ w2n off+i NOTIN tn.t_mem ==>
+      codegenRel$read_byte (w2n off+i) s.vs_memory =
+      codegenRel$read_byte (w2n offT+i) t.vs_memory)
+Proof
+  mp_tac concretize_return_read_agreement_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

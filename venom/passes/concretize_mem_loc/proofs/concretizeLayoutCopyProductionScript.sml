@@ -56,11 +56,11 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem concretize_mcopy_execution_geometry:
+Theorem concretize_mcopy_execution_geometry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -189,7 +189,7 @@ Proof
     (asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac) >>
   `joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
    z NOTIN range_bytes (step_writes inst t t)` by
-    (irule concretize_positions_demand_write_complement >>
+    (irule concretize_positions_demand_write_complement_static >>
      conj_tac >- metis_tac[] >> asm_rewrite_tac[] >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >>
@@ -199,7 +199,7 @@ Proof
   asm_rewrite_tac[] >> simp[range_bytes_def] >> decide_tac))
 QED
 
-Resume concretize_mcopy_execution_geometry[size]:
+Resume concretize_mcopy_execution_geometry_static[size]:
   `?Q. fn_ptr_ok Q fn /\ (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
     (`?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
        (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
@@ -218,7 +218,7 @@ Resume concretize_mcopy_execution_geometry[size]:
      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
      qexists_tac `inst` >> simp[]) >> metis_tac[]
 QED
-Resume concretize_mcopy_execution_geometry[zero]:
+Resume concretize_mcopy_execution_geometry_static[zero]:
   `variable_domains s t` by metis_tac[local_rel_domains] >>
   `?dstT. eval_operand opd t = SOME dstT` by
     (Cases_on `eval_operand opd t` >> metis_tac[operand_domain_agreement, optionTheory.NOT_SOME_NONE]) >>
@@ -231,8 +231,8 @@ Resume concretize_mcopy_execution_geometry[zero]:
           source_memory_write_ranges_def, sized_source_write_range_def] >> decide_tac) >>
   irule joint_relocation_demand_retained >> metis_tac[]
 QED
-Resume concretize_mcopy_execution_geometry[destination]:
-  irule concretize_memory_access_geometry >> simp[] >>
+Resume concretize_mcopy_execution_geometry_static[destination]:
+  irule concretize_memory_access_geometry_static >> simp[] >>
   conj_tac
   >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME opn;
                     iao_max_size := SOME opn |>` >>
@@ -243,8 +243,8 @@ Resume concretize_mcopy_execution_geometry[destination]:
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
-Resume concretize_mcopy_execution_geometry[source]:
-  markerLib.RESUME_TAC >> (irule concretize_memory_access_geometry >> simp[] >>
+Resume concretize_mcopy_execution_geometry_static[source]:
+  markerLib.RESUME_TAC >> (irule concretize_memory_access_geometry_static >> simp[] >>
   conj_tac
   >- (qexists_tac `<| iao_ofst := ops; iao_size := SOME opn;
                     iao_max_size := SOME opn |>` >>
@@ -254,7 +254,56 @@ Resume concretize_mcopy_execution_geometry[source]:
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[])
 QED
-Finalise concretize_mcopy_execution_geometry
+Finalise concretize_mcopy_execution_geometry_static
+
+Theorem concretize_mcopy_execution_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = MCOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
+  eval_operand opn s = SOME sz ==>
+  ?dstT srcT tpost. eval_operand opd t = SOME dstT /\
+    eval_operand ops t = SOME srcT /\ eval_operand opn t = SOME sz /\
+    step_inst_base inst t = OK tpost /\
+    tpost = mcopy (w2n dstT) (w2n srcT) (w2n sz) t /\
+    post = mcopy (w2n dst) (w2n src) (w2n sz) s /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      w2n dst <= a /\ a < w2n dst+w2n sz ==>
+      w2n dstT <= z /\ z < w2n dstT+w2n sz /\
+      a-w2n dst = z-w2n dstT /\
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c
+        (w2n src+(a-w2n dst)) (w2n srcT+(z-w2n dstT))) /\
+    (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+      ~(w2n dst <= a /\ a < w2n dst+w2n sz) ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
+      ~(w2n dstT <= z /\ z < w2n dstT+w2n sz))
+Proof
+  mp_tac concretize_mcopy_execution_geometry_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
 
 val _ = if null (hyp concretize_mcopy_execution_geometry) then ()
         else raise Fail "copy geometry export has hypotheses";

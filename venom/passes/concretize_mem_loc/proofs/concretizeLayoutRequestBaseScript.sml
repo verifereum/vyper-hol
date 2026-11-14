@@ -91,6 +91,66 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
+Theorem layout_request_base_certificate_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (!inst s a post. step_inst_base inst s = Abort a post ==>
+    post.vs_requests = s.vs_requests) ==>
+  selected_base_certificate C C' q0 path
+    (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
+    (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
+Proof
+  strip_tac >> match_mp_tac layout_request_base_lift >> conj_tac
+  >- (drule_all layout_canonical_base_certificate_static >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `layout_request_state D s t` by metis_tac[layout_request_ES_requests] >>
+  `layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t` by
+    metis_tac[layout_request_ES_forget] >>
+  qpat_x_assum `layout_canonical_ES _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [layout_canonical_ES_def]) >>
+  Cases_on `r` >> Cases_on `r'` >>
+  gvs[layout_request_guard_def, concretizeLayoutCanonicalDeferredTheory.layout_deferred_noninvoke,
+      layout_canonical_OS_def, layout_canonical_result_def]
+  >- suspend "success"
+  >> metis_tac[layout_request_state_fields]
+QED
+
+Resume layout_request_base_certificate_static[success]:
+  rename1 `step_inst_base i s = OK post` >>
+  rename1 `step_inst_base j t = OK tpost` >>
+  Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+  >- (Cases_on `a`
+      >- (drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+            layout_canonical_external_success_requests_static >>
+          simp[] >> strip_tac >>
+          metis_tac[layout_request_state_def]) >>
+      rename1 `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (INR g)` >>
+      gvs[layout_canonical_step_witness_def, layout_canonical_block_witness_def,
+          layout_corridor_entry_def, layout_phase_normalize_def,
+          ranked_terminal_entry_def, ranked_terminal_corridor_def] >>
+      Cases_on `g.ltp_remaining = 0` >- gvs[] >>
+      first_x_assum (qspec_then `0` mp_tac) >> simp[] >> gvs[]) >>
+  metis_tac[layout_request_nonexternal_success]
+QED
+
+Finalise layout_request_base_certificate_static
+
 Theorem layout_request_base_certificate:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -116,37 +176,7 @@ Theorem layout_request_base_certificate:
     (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
-  strip_tac >> match_mp_tac layout_request_base_lift >> conj_tac
-  >- (drule_all layout_canonical_base_certificate >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  `layout_request_state D s t` by metis_tac[layout_request_ES_requests] >>
-  `layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t` by
-    metis_tac[layout_request_ES_forget] >>
-  qpat_x_assum `layout_canonical_ES _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [layout_canonical_ES_def]) >>
-  Cases_on `r` >> Cases_on `r'` >>
-  gvs[layout_request_guard_def, concretizeLayoutCanonicalDeferredTheory.layout_deferred_noninvoke,
-      layout_canonical_OS_def, layout_canonical_result_def]
-  >- suspend "success"
-  >> metis_tac[layout_request_state_fields]
+  mp_tac layout_request_base_certificate_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
-
-Resume layout_request_base_certificate[success]:
-  rename1 `step_inst_base i s = OK post` >>
-  rename1 `step_inst_base j t = OK tpost` >>
-  Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
-  >- (Cases_on `a`
-      >- (drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-            layout_canonical_external_success_requests >>
-          simp[] >> strip_tac >>
-          metis_tac[layout_request_state_def]) >>
-      rename1 `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (INR g)` >>
-      gvs[layout_canonical_step_witness_def, layout_canonical_block_witness_def,
-          layout_corridor_entry_def, layout_phase_normalize_def,
-          ranked_terminal_entry_def, ranked_terminal_corridor_def] >>
-      Cases_on `g.ltp_remaining = 0` >- gvs[] >>
-      first_x_assum (qspec_then `0` mp_tac) >> simp[] >> gvs[]) >>
-  metis_tac[layout_request_nonexternal_success]
-QED
-
-Finalise layout_request_base_certificate

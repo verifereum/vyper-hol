@@ -5,11 +5,11 @@ Ancestors concretizeLayoutLocalReturn concretizeLayoutPhaseOrigin
   concretizeLayoutReaderContext frameRelocationEnvironment
   venomExecSemantics venomInst list rich_list
 
-Theorem layout_return_halt:
+Theorem layout_return_halt_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -43,10 +43,32 @@ Proof
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   gvs[] >>
   `g.lop_cursor <= LENGTH es` by simp[] >>
-  drule_all concretize_return_read_agreement >> strip_tac >>
+  drule_all concretize_return_read_agreement_static >> strip_tac >>
   `concretize_local_obs s t` by metis_tac[local_rel_def] >>
   drule_all concretize_return_observation >> strip_tac >>
   qexists_tac `post'` >> simp[step_inst_non_invoke]
+QED
+
+Theorem layout_return_halt:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
+  g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  active_inst fn inst s /\ inst.inst_opcode = RETURN /\
+  taint_within D C vs0 /\ step_inst fuel C inst s = Halt post ==>
+  ?post'. step_inst fuel' C' inst t = Halt post' /\
+    dead_result_rel D (Halt post) (Halt post')
+Proof
+  mp_tac layout_return_halt_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

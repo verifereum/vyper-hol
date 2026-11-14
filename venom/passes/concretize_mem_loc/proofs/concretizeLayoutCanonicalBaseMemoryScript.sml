@@ -83,7 +83,7 @@ Theorem layout_canonical_ordinary_memory_success[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -136,13 +136,13 @@ Proof
      `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
      `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
      FIRST [(`MEM i.inst_opcode [MLOAD; ILOAD]` by simp[] >>
-         drule_all layout_word_load_trace_step),
-       drule_all layout_mcopy_trace_step, drule_all layout_istore_trace_step,
+         drule_all layout_word_load_trace_step_static),
+       drule_all layout_mcopy_trace_step_static, drule_all layout_istore_trace_step_static,
        (`calldata_reader_shape i` by simp[calldata_reader_shape_def] >>
          drule_all layout_calldata_reader_trace_step),
        (`MEM i.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES]` by simp[] >>
-         drule_all layout_readcopy_trace_step), drule_all layout_sha3_trace_step,
-       drule_all layout_log_trace_step,
+         drule_all layout_readcopy_trace_step_static), drule_all layout_sha3_trace_step_static,
+       drule_all layout_log_trace_step_static,
        (qpat_assum `i.inst_opcode = EXTCODECOPY` kall_tac >>
         rename1 `i.inst_operands = [opa;opd;ops;opn]` >>
         `?addr dst src sz. eval_operand opa s = SOME addr /\
@@ -150,7 +150,7 @@ Proof
           eval_operand opn s = SOME sz` by
           (qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
            simp[step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
-        drule_all layout_extcodecopy_trace_step),
+        drule_all layout_extcodecopy_trace_step_static),
        (qpat_assum `i.inst_opcode = RETURNDATACOPY` kall_tac >>
         rename1 `i.inst_operands = [opd;ops;opn]` >>
         `(?dst src sz. eval_operand opd s = SOME dst /\
@@ -159,11 +159,48 @@ Proof
           (qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
            simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >>
            gvs[write_memory_with_expansion_def, write_memory_def] >> metis_tac[]) >>
-        drule_all layout_returncopy_trace_step)] >> strip_tac >> metis_tac[]) >>
+        drule_all layout_returncopy_trace_step_static)] >> strip_tac >> metis_tac[]) >>
   qexists `tpost` >> conj_tac >- simp[] >>
   drule layout_canonical_ordinary_success >>
   disch_then (qspecl_then [`tpost`, `EL g.lop_cursor (MAP SND path)`, `post`, `k`, `i`] mp_tac) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem layout_canonical_memory_success_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  i.inst_opcode <> INVOKE /\
+  MEM i.inst_opcode [MLOAD; MCOPY; ILOAD; ISTORE; CALLDATALOAD; CALLDATASIZE;
+    CALLDATACOPY; CODECOPY; EXTCODECOPY; RETURNDATACOPY; DLOADBYTES; SHA3; LOG] /\
+  step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+Proof
+  strip_tac >>
+  Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
+  >- (qpat_x_assum `_ /\ in_revert_forward fn s` strip_assume_tac >>
+      drule_all layout_canonical_exempt_returncopy_success >> simp[]) >>
+  `i.inst_opcode = RETURNDATACOPY ==> ~in_revert_forward fn s` by metis_tac[] >>
+  drule_all layout_canonical_ordinary_memory_success >> simp[]
 QED
 
 Theorem layout_canonical_memory_success:
@@ -195,10 +232,7 @@ Theorem layout_canonical_memory_success:
   ?tpost. step_inst_base j t = OK tpost /\
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
 Proof
-  strip_tac >>
-  Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
-  >- (qpat_x_assum `_ /\ in_revert_forward fn s` strip_assume_tac >>
-      drule_all layout_canonical_exempt_returncopy_success >> simp[]) >>
-  `i.inst_opcode = RETURNDATACOPY ==> ~in_revert_forward fn s` by metis_tac[] >>
-  drule_all layout_canonical_ordinary_memory_success >> simp[]
+  mp_tac layout_canonical_memory_success_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

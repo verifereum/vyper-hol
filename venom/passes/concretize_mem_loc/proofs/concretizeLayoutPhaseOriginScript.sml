@@ -323,11 +323,11 @@ Proof
     layout_phase_entry_def, layout_ordinary_entry_def]
 QED
 
-Theorem layout_returncopy_pending_adapter:
+Theorem layout_returncopy_pending_adapter_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -367,7 +367,7 @@ Proof
   qpat_x_assum `layout_ordinary_trace _ _ _ _ _ _ g s` mp_tac >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ g s t` mp_tac >>
   simp[layout_ordinary_trace_def, layout_ordinary_state_def] >> rpt strip_tac >>
-  drule_all concretize_returncopy_local_complete >> strip_tac >>
+  drule_all concretize_returncopy_local_complete_static >> strip_tac >>
   `post.vs_initial_fmp = tpost.vs_initial_fmp` by
     metis_tac[step_inst_initial_fmp, step_inst_base_initial_fmp] >>
   `post.vs_params = s.vs_params /\ tpost.vs_params = t.vs_params` by
@@ -385,6 +385,43 @@ Proof
   irule layout_ordinary_state_intro >> simp[] >>
   goal_assum (drule_at (Pat `_ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexistsl_tac [`anns`, `birth`, `ids`, `rp`, `rv`] >> simp[]
+QED
+
+Theorem layout_returncopy_pending_adapter:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
+  g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
+  g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+  g.lop_cursor < LENGTH es /\ EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
+  ~joint_read_exempt (EL g.lop_cursor (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_operands = [opd;ops;opn] /\
+  eval_operand opd s = SOME dst /\ eval_operand ops s = SOME src /\
+  eval_operand opn s = SOME sz /\
+  get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
+  step_inst fuel C inst s = OK post /\ post.vs_inst_idx = s.vs_inst_idx /\
+  k.lop_pending /\ k.lop_origin = g.lop_origin /\
+  k.lop_cursor = SUC g.lop_cursor /\ k.lop_ids = g.lop_ids /\
+  k.lop_anns = g.lop_anns /\
+  k.lop_config = JointConfig stk PG G (step_taint inst s post tn) fn next
+    (layout_phase_normalize T post) oms om hs' h' /\
+  layout_ordinary_trace vs0 C q0 es qs q k post ==>
+  ?tpost. step_inst_base inst t = OK tpost /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q (INL g)
+      (INL (k with lop_target_taint := step_taint inst t tpost g.lop_target_taint))
+      (OK post) (OK tpost)
+Proof
+  mp_tac layout_returncopy_pending_adapter_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

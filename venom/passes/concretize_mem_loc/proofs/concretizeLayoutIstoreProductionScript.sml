@@ -63,11 +63,11 @@ Proof
   simp[] >> rpt strip_tac >> gvs[op_prov_def]
 QED
 
-Theorem concretize_istore_demand_geometry:
+Theorem concretize_istore_demand_geometry_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   fixed_region_reserved lo C /\ vs0.vs_allocas = FEMPTY /\
@@ -100,7 +100,7 @@ Proof
     (simp[range_bytes_def] >> decide_tac) >>
   `joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
    z NOTIN range_bytes [(w2n dst,32)]` by
-    (irule concretizeLayoutRelocationTheory.concretize_positions_demand_write_complement >>
+    (irule concretizeLayoutRelocationTheory.concretize_positions_demand_write_complement_static >>
      conj_tac
      >- (rpt strip_tac >> qexists_tac `w` >> simp[] >>
          simp[relocation_pair_def] >> fs[range_bytes_def] >> decide_tac) >>
@@ -108,6 +108,32 @@ Proof
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >> metis_tac[]) >>
   fs[range_bytes_def] >> decide_tac
+QED
+
+Theorem concretize_istore_demand_geometry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  fixed_region_reserved lo C /\ vs0.vs_allocas = FEMPTY /\
+  joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [opd;opv] /\
+  eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value /\
+  post = istore (w2n dst) value s /\ w2n dst + 32 <= lo ==>
+  (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+     w2n dst <= a /\ a < w2n dst+32 ==> z = a) /\
+  (!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
+     ~(w2n dst <= a /\ a < w2n dst+32) ==>
+     joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
+     ~(w2n dst <= z /\ z < w2n dst+32))
+Proof
+  mp_tac concretize_istore_demand_geometry_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem istore_demand_write:
@@ -148,11 +174,11 @@ Proof
   qexists_tac `R` >> simp[] >> metis_tac[]
 QED
 
-Theorem concretize_istore_demand_execution:
+Theorem concretize_istore_demand_execution_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
@@ -214,13 +240,13 @@ Proof
   `demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs c)
     (\a. read_byte a s.vs_memory) (\z. read_byte z t.vs_memory)` by
     metis_tac[frameRelocationLocalTheory.local_rel_demand] >>
-  drule_all concretize_istore_demand_geometry >> strip_tac >>
+  drule_all concretize_istore_demand_geometry_static >> strip_tac >>
   drule_all istore_demand_write >> strip_tac >>
   qexists_tac `valueT` >> asm_rewrite_tac[] >>
   gvs[step_inst_base_def, exec_write2_def]
 QED
 
-Resume concretize_istore_demand_execution[support]:
+Resume concretize_istore_demand_execution_static[support]:
   `?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
@@ -231,19 +257,19 @@ Resume concretize_istore_demand_execution[support]:
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[resolved_static_support]
 QED
-Resume concretize_istore_demand_execution[origins]:
+Resume concretize_istore_demand_execution_static[origins]:
   rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >>
       `MEM (Var v) inst.inst_operands` by metis_tac[] >>
       drule_all disciplined_retpc_operand_use >> simp[]) >>
   `v NOTIN fn_pv Q fn` by (fs[fn_ptr_ok_def] >> metis_tac[]) >> metis_tac[]
 QED
-Resume concretize_istore_demand_execution[erasure]:
+Resume concretize_istore_demand_execution_static[erasure]:
   Cases_on `opd` >> gvs[op_prov_def] >>
   `FLOOKUP rv s' = NONE` by metis_tac[listTheory.MEM] >>
   simp[finite_mapTheory.FLOOKUP_o_f]
 QED
-Resume concretize_istore_demand_execution[address]:
+Resume concretize_istore_demand_execution_static[address]:
   `op_taint tn opd = {}` by
     (fs[taint_ok_def] >> spose_not_then assume_tac >>
      first_x_assum (qspec_then `opd` mp_tac) >> simp[] >> metis_tac[]) >>
@@ -255,7 +281,47 @@ Resume concretize_istore_demand_execution[address]:
   simp[frameRelocationGuardedValuesTheory.clean_scalar_def] >>
   metis_tac[listTheory.MEM, op_taint_def]
 QED
-Finalise concretize_istore_demand_execution
+Finalise concretize_istore_demand_execution_static
+
+Theorem concretize_istore_demand_execution:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [opd;opv] /\
+  eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value ==>
+  ?valueT. eval_operand opd t = SOME dst /\
+    eval_operand opv t = SOME valueT /\
+    step_inst_base inst t = OK (istore (w2n dst) valueT t) /\
+    post = istore (w2n dst) value s /\ SND o_f rv = G /\
+    op_prov G opd = NONE /\ w2n dst+32 <= lo /\
+    word_agree_except (op_taint tn opv) value valueT /\
+    demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
+      (\a. read_byte a post.vs_memory)
+      (\z. read_byte z (istore (w2n dst) valueT t).vs_memory)
+Proof
+  mp_tac concretize_istore_demand_execution_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
 
 Theorem demand_taint_istore:
   inst.inst_opcode = ISTORE /\ inst.inst_operands = [opd;opv] /\

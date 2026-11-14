@@ -48,11 +48,11 @@ Proof
   drule_all selected_run_simulation >> simp[selected_run_match_def]
 QED
 
-Theorem layout_stage_selected_run_fuel:
+Theorem layout_stage_selected_run_fuel_static[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -84,8 +84,41 @@ Proof
     (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)` by
-    (irule layout_canonical_simulation_contract_fuel >> metis_tac[]) >>
+    (irule layout_canonical_simulation_contract_fuel_static >> metis_tac[]) >>
   drule_all selected_run_simulation_fuel >> simp[selected_run_match_fuel_def]
+QED
+
+Theorem layout_stage_selected_run_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs qend /\
+  decorated_run C fn s r q n w qe d /\
+  selected_segment C q0 path n q w qe /\
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
+  run_blocks fuel C fn s = r ==>
+  ?r'. run_blocks fuel C' fn' t = r' /\ finite_run C' fn' t r' /\
+    layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend
+      q n qe (n + LENGTH w) fn s fn' t r r'
+Proof
+  mp_tac layout_stage_selected_run_fuel_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem layout_segment_chain[local]:
@@ -216,10 +249,10 @@ Proof
 
 QED
 
-Theorem layout_stage_terminating_context_fuel:
+Theorem layout_stage_terminating_context_fuel_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -280,7 +313,7 @@ Proof
   `?r'. run_blocks fuel C' fn' s = r' /\ finite_run C' fn' s r' /\
     layout_canonical_OutR D lo vs C C' q0 (MAP FST path) (MAP SND path)
       ass qe q0 0 qe (0 + LENGTH path) fn s fn' s r r'` by
-    (qunabbrev_tac `r` >> irule layout_stage_selected_run_fuel >> metis_tac[]) >>
+    (qunabbrev_tac `r` >> irule layout_stage_selected_run_fuel_static >> metis_tac[]) >>
   `!ret t. r <> IntRet ret t` by
     (drule o1_ctx_shape_no_intret >>
      disch_then (qspecl_then [`fuel`, `vs`] mp_tac) >>
@@ -297,6 +330,26 @@ Proof
        (GEN_ALL concretize_positions_entry_label) >>
      simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def]) >>
   simp[Abbr `s`]
+QED
+
+Theorem layout_stage_terminating_context_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  terminates (run_context fuel C vs) ==>
+  dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs)
+Proof
+  mp_tac layout_stage_terminating_context_fuel_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

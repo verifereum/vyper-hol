@@ -67,11 +67,11 @@ Proof
   metis_tac[context_layout_local_lookup_find]
 QED
 
-Theorem concretize_same_activation_write_demand_disjoint:
+Theorem concretize_same_activation_write_demand_disjoint_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ n < LENGTH es /\ n <= j /\ j <= LENGTH es /\
@@ -110,7 +110,7 @@ Proof
   suspend "livesets"
 QED
 
-Resume concretize_same_activation_write_demand_disjoint[location]:
+Resume concretize_same_activation_write_demand_disjoint_static[location]:
   qpat_x_assum `joint_config_reachable _ _ _` mp_tac >>
   simp[joint_config_reachable_def] >> strip_tac >>
   drule joint_origin_history_erasure >> strip_tac >>
@@ -130,19 +130,19 @@ Resume concretize_same_activation_write_demand_disjoint[location]:
   simp[activation_location_def] >> metis_tac[]
 QED
 
-Resume concretize_same_activation_write_demand_disjoint[livesets]:
+Resume concretize_same_activation_write_demand_disjoint_static[livesets]:
   `?addrsB. FLOOKUP (context_mem_livesets (concretize_memloc_fuel owner)
       observed.cu_context owner
       (bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner)
       (cfg_analyze owner)) (Allocation aidB) = SOME addrsB /\ MEM loc addrsB` by
     (qpat_assum `EL n (_::_) = _`
        (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-     drule_all concretize_write_owner_liveset >> simp[]) >>
+     drule_all concretize_write_owner_liveset_static >> simp[]) >>
   `?addrsA. FLOOKUP (context_mem_livesets (concretize_memloc_fuel owner)
       observed.cu_context owner
       (bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner)
       (cfg_analyze owner)) (Allocation aidA) = SOME addrsA /\ MEM loc addrsA` by
-    (irule concretize_untainted_owner_read_liveset >> conj_tac >- simp[] >>
+    (irule concretize_untainted_owner_read_liveset_static >> conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `_ IN joint_reads _`)) >>
@@ -154,21 +154,21 @@ Resume concretize_same_activation_write_demand_disjoint[livesets]:
      simp[] >> metis_tac[]) >>
   `?itemsA. static_alloca_items owner = SOME itemsA /\
      MEM (Allocation aidA,szA) itemsA` by
-    (irule activation_cache_source_static_item >>
+    (irule activation_cache_source_static_item_static >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
      simp[]) >>
   `MEM (Allocation aidB,szB) itemsA` by
     (`?itemsB. static_alloca_items owner = SOME itemsB /\
         MEM (Allocation aidB,szB) itemsB` by
-       (irule activation_cache_source_static_item >>
+       (irule activation_cache_source_static_item_static >>
         goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
         goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
         simp[]) >> gvs[]) >>
   suspend "numeric"
 QED
 
-Resume concretize_same_activation_write_demand_disjoint[numeric]:
+Resume concretize_same_activation_write_demand_disjoint_static[numeric]:
   `!inst p s. MEM inst (fn_insts owner) /\ is_alloca_op inst.inst_opcode ==>
       ~MEM (Allocation inst.inst_id,p,s) (imported_mems_used observed.cu_context owner)` by
     (rpt strip_tac >> drule_all concretize_imports_exclude_local >>
@@ -194,4 +194,31 @@ Resume concretize_same_activation_write_demand_disjoint[numeric]:
   metis_tac[canonical_metadata_unique]
 QED
 
-Finalise concretize_same_activation_write_demand_disjoint
+Finalise concretize_same_activation_write_demand_disjoint_static
+
+Theorem concretize_same_activation_write_demand_disjoint:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  joint_trace vs0 C q0 es qs q /\ n < LENGTH es /\ n <= j /\ j <= LENGTH es /\
+  EL n (q0::qs) = JointConfig stkN PGN GN tnN writer instN sN omsN omN hsN hN /\
+  ~in_revert_forward writer sN /\
+  byteB IN joint_writes (EL n (q0::qs)) (EL n es) /\ lo <= byteB /\
+  EL j (q0::qs) = JointConfig stkJ PGJ GJ tnJ reader instJ sJ omsJ omJ hsJ hJ /\
+  byteA IN joint_reads (EL j (q0::qs)) /\ lo <= byteA /\
+  byteA NOTIN joint_mem_taint (EL j (q0::qs)) /\ ~in_revert_forward reader sJ /\
+  (!k. n <= k /\ k < j ==> byteA NOTIN joint_writes (EL k (q0::qs)) (EL k es)) /\
+  activation_cache (EL j (q0::qs)) d owner aidA (bA,szA) /\
+  activation_cache (EL n (q0::qs)) d owner aidB (bB,szB) /\
+  bA <= byteA /\ byteA < bA+szA /\ bB <= byteB /\ byteB < bB+szB /\ aidA <> aidB /\
+  canonical_metadata C C' (Allocation aidA) pA szA /\
+  canonical_metadata C C' (Allocation aidB) pB szB ==>
+  pA+szA <= pB \/ pB+szB <= pA
+Proof
+  mp_tac concretize_same_activation_write_demand_disjoint_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
