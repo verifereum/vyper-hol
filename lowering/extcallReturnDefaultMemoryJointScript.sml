@@ -2,6 +2,7 @@
 Theory extcallReturnDefaultMemoryJoint
 Ancestors
   extcallReturnDefaultWordJoint extcallReturnDefaultLengthJoint
+  extcallReturnDefaultMemoryFrame
   bodyFullUnwrapRun bodyFullUnwrapSlotPost fragGasCopyLoop allocaFootprint
   exprSimBufferStore fragExecPtr fragGasSeqPtr typedCopyPtr robustCopyTransportPtr
   compileEnv venomMemDefs fragExec exprLoweringProps codegenRel ptrDiscipline context emitHelperProps venomState venomInst venomExecSemantics
