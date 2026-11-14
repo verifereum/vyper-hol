@@ -302,6 +302,7 @@ Proof
          supported_declaration_headers_def, EVERY_MEM] >>
      qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _` drule >>
      simp[supported_declaration_header_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+     simp[supported_place_type_def, Once supported_nested_type_def] >>
      metis_tac[]) >>
   `EVERY (supported_place_type tops) (MAP (SND o FST) fields)` by
     (gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD, combinTheory.o_DEF] >>
