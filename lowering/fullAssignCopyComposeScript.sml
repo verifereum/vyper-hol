@@ -132,11 +132,6 @@ Theorem compile_assign_copy_frag_full:
     type_memory_bytes cenv typ = type_memory_size tvt /\
     cenv.ce_hashmap_info (src,id) = NONE /\
     cenv.ce_module_var_type (src,id) = SOME typ /\
-    slot + type_slot_size tvt <= dimword(:256) /\
-    (!mid' n' subs' k' tv'.
-       declared_storage_region cx mid' n' subs' = SOME (tr,k',tv') /\
-       (k',tv') <> (n2w slot,tvt) ==>
-       ranges_disjoint slot (type_slot_size tvt) (w2n k') (type_slot_size tv')) /\
     (!gs v es1.
        bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
          (INL v,es1) ==> value_has_type tvt v) /\
@@ -201,30 +196,30 @@ Theorem compile_assign_copy_frag_full:
          (~is_word_type (post_value_type cenv e) ==>
             ptr_buf_ok cenv e op G1 t) /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) ==>
-       ?ef u G2 tn2.
-         (!tail. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
-             (write_storage_slot cx tr (n2w slot) tvt v)
-             (ee with gas_obs := tail) = (INL (),ef with gas_obs := tail)) /\
-         (!H. valid_horizon cx st0 H ef.storage_trace ==>
-           gas_origin_ptr_path
-             (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-             (t,G1,tn1) [] (OK u,G2,tn2) /\
-           (?cenv''.
-             stmt_lands lctx sb (INL ()) u /\ ~u.vs_halted /\
-             (~block_is_terminated sb /\ cenv'' = cenv) /\
-             cenv_top_ext cenv cenv'' (ef with gas_obs := []).scopes /\
-             stmt_state_rel H ctx func cenv'' cx (ef with gas_obs := []) u /\
-             storage_well_formed_on cx (ef with gas_obs := []) (FST H) /\
-             return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-             s0.vs_alloca_next <= u.vs_alloca_next /\
-             ghost_inv_at (DF H) lo d cenv'' cx (ef with gas_obs := []) G2 tn2 u /\
-             (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-                lookup_var x u = SOME w) /\
-             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                FLOOKUP u.vs_allocas aid = SOME b) /\
-             (!x. not_fresh_at sa x ==>
-                FLOOKUP G2 x = FLOOKUP G0 x /\
-                op_taint tn2 (Var x) = op_taint tn0 (Var x))))) ==>
+       gas_outcome_full
+         (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (cx_tops cx) cx st0
+         (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+           (write_storage_slot cx tr (n2w slot) tvt v))
+         (ee,t,G1,tn1)
+         (\H res ef G2 tn2 u. ?cenv''.
+           stmt_lands lctx sb res u /\ ~u.vs_halted /\
+           (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+           cenv_top_ext cenv cenv'' ef.scopes /\
+           stmt_state_rel H ctx func cenv'' cx ef u /\
+           storage_well_formed_on cx ef (FST H) /\
+           return_buf_frame d cenv'' sb u /\ alloca_history func u /\
+           s0.vs_alloca_next <= u.vs_alloca_next /\
+           ghost_inv_at (DF H) lo d cenv'' cx ef G2 tn2 u /\
+           (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+              lookup_var x u = SOME w) /\
+           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+              FLOOKUP u.vs_allocas aid = SOME b) /\
+           (!x. not_fresh_at sa x ==>
+              FLOOKUP G2 x = FLOOKUP G0 x /\
+              op_taint tn2 (Var x) = op_taint tn0 (Var x)))
+         (\H res ef gt r.
+           !tail. stmt_exit_ptr (RetQ H) (ef with gas_obs := tail) res gt r)) ==>
     stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
@@ -317,11 +312,7 @@ Resume compile_assign_copy_frag_full[store]:
   fs[Abbr `Qrhs`] >>
   qpat_x_assum `!st0' sa' sb' shadow_sa' shadow_sb' s0' G0' tn0' sm shadow_sm op' vv' sV' shadow_vv shadow_sV marks v ee G1 tn1 t. _`
     drule_all >>
-  strip_tac >> irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G2`, `ef`, `INL ()`, `u`, `tn2`] >> simp[] >>
-  gen_tac >> strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ _ ef.storage_trace ==> _` drule >> simp[]
+  simp[]
 QED
 
 Finalise compile_assign_copy_frag_full
