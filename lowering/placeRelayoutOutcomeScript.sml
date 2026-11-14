@@ -80,12 +80,28 @@ Proof
     (qx_choose_then `H` assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `H` (drule_then strip_assume_tac)) >>
-  `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+  Cases_on `cx.txn.is_static /\ (loc = LocStorage \/ loc = LocTransient)`
+  >- (`cx.txn.is_static` by metis_tac[] >>
+      `loc = LocStorage \/ loc = LocTransient` by metis_tac[] >>
+      `res = INR (Error (RuntimeError "write in static context")) /\ ff = ee` by
+        (Cases_on `p` >>
+         gvs[vyperPlaceFramesTheory.write_storage_place_eq,
+             loweringPostsTheory.target_post_def,
+             loweringPostsTheory.place_ptr_rel_def,
+             loweringPostsTheory.slot_loc_def]) >>
+      `regions_consistent (FST H)` by
+        fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+      mp_tac (SPEC_ALL owned_target_relayout_store_static_exit) >>
+      (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
+      strip_tac >> qexists_tac `r` >>
+      fs[stmtSimDefsTheory.stmt_exit_def]) >>
   `res = INL ()` by
     (Cases_on `p`
      >- (gvs[vyperPlaceFramesTheory.write_storage_place_eq, AllCaseEqs(),
-             stmtSimDefsTheory.stmt_res_ok_def])
+             stmtSimDefsTheory.stmt_res_ok_def,
+             loweringPostsTheory.target_post_def,
+             loweringPostsTheory.place_ptr_rel_def,
+             loweringPostsTheory.slot_loc_def])
      >- metis_tac[memory_write_admissible_success] >>
      fs[loweringPostsTheory.target_post_def, loweringPostsTheory.place_ptr_rel_def]) >>
   qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
