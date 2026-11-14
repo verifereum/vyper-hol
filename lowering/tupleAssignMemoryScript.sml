@@ -18,7 +18,7 @@ Ancestors
   list rich_list finite_map valueEncoding vyperTyping vyperValue vyperTypeABI
   vyperInterpreter vyperState venomState venomInst
 Libs
-  monadsyntax
+  monadsyntax horizonTypeLib
 
 (* The code of x1, ..., xn = e with memory-backed elements, split at its
    stages, with the growth facts of each. *)
@@ -247,7 +247,8 @@ Resume assign_tuple_locals_memory_suffix_path[store_ready]:
      drule_all word_type_sizes >>
      disch_then (qspec_then `cenv` strip_assume_tac) >> simp[]) >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`H0`, `ids`, `T`] tupleLocalStoreRunTheory.tuple_store_mixed_locals_path)) >>
+    (Q.SPECL [`H0`, `ids`, `T`]
+       (at_horizon tupleLocalStoreRunTheory.tuple_store_mixed_locals_path))) >>
   disch_then ((MAP_EVERY assume_tac o CONJUNCTS)) >>
   qpat_x_assum `?t. stmt_state_rel H0 ctx _ _ _ es' _ /\ _`
     (qx_choose_then `sfv` (MAP_EVERY assume_tac o CONJUNCTS)) >>
