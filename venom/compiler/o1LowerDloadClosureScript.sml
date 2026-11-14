@@ -123,45 +123,6 @@ Proof
   metis_tac[roots_in_pointer_derived_vars, FINITE_ptr_roots]
 QED
 
-Theorem pointer_use_step_step_subset:
-  set vars SUBSET A /\
-  (!inst u v. MEM inst (fn_insts fn) /\
-    is_pointer_preserving_op inst.inst_opcode /\
-    MEM (Var u) inst.inst_operands /\ u IN A /\
-    MEM v inst.inst_outputs ==> v IN A) /\
-  pointer_use_step_step fn vars = SOME next ==>
-  set next SUBSET A
-Proof
-  simp[pointer_use_step_step_def, AllCaseEqs()] >> strip_tac >>
-  gvs[SUBSET_DEF, MEM_APPEND, MEM_FILTER, pointer_use_step_mem] >>
-  metis_tac[]
-QED
-
-Theorem pointer_use_vars_least:
-  set vars SUBSET A /\
-  (!inst u v. MEM inst (fn_insts fn) /\
-    is_pointer_preserving_op inst.inst_opcode /\
-    MEM (Var u) inst.inst_operands /\ u IN A /\
-    MEM v inst.inst_outputs ==> v IN A) ==>
-  set (pointer_use_vars fn vars) SUBSET A
-Proof
-  strip_tac >>
-  qabbrev_tac `f = \w:string list + string list.
-    case pointer_use_step_step fn (OUTL w) of
-      NONE => INR (OUTL w) | SOME vs => INL vs` >>
-  qspecl_then [`ISL`, `f`, `INL vars`] mp_tac
-    (OWHILE_INV_IND |> INST_TYPE [alpha |-> ``:string list + string list``]
-      |> Q.INST [`P` |-> `\w. set (case w of INL l => l | INR l => l) SUBSET A`]) >>
-  (impl_tac
-   >- (simp[] >> Cases >> simp[Abbr `f`] >> strip_tac >>
-       qmatch_goalsub_rename_tac `pointer_use_step_step fn items` >>
-       Cases_on `pointer_use_step_step fn items` >> simp[] >>
-       metis_tac[pointer_use_step_step_subset])) >>
-  disch_tac >> simp[pointer_use_vars_def] >>
-  Cases_on `OWHILE ISL f (INL vars)` >> simp[] >>
-  Cases_on `x` >> simp[] >> gvs[Abbr `f`] >> metis_tac[]
-QED
-
 Theorem pointer_derived_vars_least:
   FINITE roots /\ roots SUBSET A /\
   (!inst u v. MEM inst (fn_insts fn) /\
@@ -170,7 +131,12 @@ Theorem pointer_derived_vars_least:
     MEM v inst.inst_outputs ==> v IN A) ==>
   pointer_derived_vars fn roots SUBSET A
 Proof
-  strip_tac >> simp[pointer_derived_vars_def] >>
-  irule pointer_use_vars_least >> simp[SET_TO_LIST_INV] >>
-  first_x_assum ACCEPT_TAC
+  strip_tac >>
+  qspecl_then [`fn`, `SET_TO_LIST roots`, `A`] mp_tac
+    pointerConfinedPropsTheory.pointer_use_vars_least >>
+  (impl_tac
+   >- (conj_tac
+       >- (simp[MEM_SET_TO_LIST] >> metis_tac[SUBSET_DEF]) >>
+       metis_tac[fn_insts_def, fn_insts_blocks_MEM])) >>
+  simp[pointer_derived_vars_def, SUBSET_DEF]
 QED

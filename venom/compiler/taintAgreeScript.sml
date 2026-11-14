@@ -196,17 +196,6 @@ Proof
   simp[mem_taint_def]
 QED
 
-Theorem step_writes_source_subset:
-  range_bytes (step_writes inst s s') SUBSET
-  range_bytes (source_memory_write_ranges inst s)
-Proof
-  rw[step_writes_def] >>
-  rw[SUBSET_DEF, range_bytes_def, MEM_MAP] >>
-  PairCases_on `y` >> gvs[] >>
-  qexistsl_tac [`off`, `y1`] >> simp[] >>
-  gvs[arithmeticTheory.MIN_ALT] >> decide_tac
-QED
-
 Theorem written_taint_source_subset:
   step_inst_base inst s = OK s' /\
   (!op j. MEM op inst.inst_operands /\ j IN op_taint tn op ==> j < 32) ==>
@@ -2023,25 +2012,6 @@ Proof
   fs[taint_agree_def] >> simp[taint_agree_def] >>
   qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM `\u. u with vs_logs := u.vs_logs ++ [ev]`) >>
   simp[]
-QED
-
-Theorem step_taint_log_logs:
-  inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
-  step_taint inst s (s with vs_logs := logs) tn = tn
-Proof
-  strip_tac >>
-  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
-       imm_taint_def, adopt_reset_def, new_site_bytes_def,
-       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
-       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, DRESTRICT_UNIV,
-       taint_component_equality] >>
-  Cases_on `inst.inst_operands` >> simp[written_taint_def] >>
-  rename1 `inst.inst_operands = h::tl` >>
-  Cases_on `tl` >> simp[] >>
-  rename1 `inst.inst_operands = h::h2::tail` >>
-  Cases_on `tail` >> simp[] >>
-  rename1 `inst.inst_operands = h::h2::h3::rest` >>
-  Cases_on `rest` >> simp[]
 QED
 
 Theorem taint_agree_translated_log_step:

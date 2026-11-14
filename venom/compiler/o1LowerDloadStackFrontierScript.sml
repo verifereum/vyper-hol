@@ -119,7 +119,7 @@ Proof
   first_x_assum (qspec_then `SUC n'` mp_tac) >> simp[EL_MAP]
 QED
 
-Theorem ld_frame_reachable_alloca_inv:
+Theorem ld_frame_reachable_empty_alloca_inv[local]:
   !vs C stk PG G tn fn inst s.
   frame_reachable vs C stk PG G tn fn inst s ==>
   vs.vs_allocas = FEMPTY ==>
@@ -135,27 +135,27 @@ Proof
   >> suspend "ret"
 QED
 
-Resume ld_frame_reachable_alloca_inv[next]:
+Resume ld_frame_reachable_empty_alloca_inv[next]:
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
   `alloca_inv s'` by metis_tac[alloca_inv_step_inst] >>
   irule alloca_inv_fields >> qexists `s'` >> simp[]
 QED
 
-Resume ld_frame_reachable_alloca_inv[block]:
+Resume ld_frame_reachable_empty_alloca_inv[block]:
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
   `alloca_inv s'` by metis_tac[alloca_inv_step_inst] >>
   drule enters_block_alloca_fields >> strip_tac >>
   irule alloca_inv_fields >> qexists `s'` >> simp[]
 QED
 
-Resume ld_frame_reachable_alloca_inv[call]:
+Resume ld_frame_reachable_empty_alloca_inv[call]:
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
   drule enters_block_alloca_fields >> strip_tac >>
   irule alloca_inv_empty >>
   gvs[setup_callee_def, AllCaseEqs()]
 QED
 
-Resume ld_frame_reachable_alloca_inv[ret]:
+Resume ld_frame_reachable_empty_alloca_inv[ret]:
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
   qspec_then `\s. (s.vs_allocas, s.vs_alloca_next)` mp_tac
     bind_outputs_preserves >>
@@ -164,20 +164,20 @@ Resume ld_frame_reachable_alloca_inv[ret]:
   simp[adopt_return_fmp_def, merge_callee_state_def] >> strip_tac >>
   irule alloca_inv_fields >> qexists `f.cf_state` >> simp[]
 QED
-Finalise ld_frame_reachable_alloca_inv
+Finalise ld_frame_reachable_empty_alloca_inv
 
 Theorem ld_frame_reachable_current_alloca_inv:
   frame_reachable vs C stk PG G tn fn inst s /\ vs.vs_allocas = FEMPTY ==>
   alloca_inv s
 Proof
-  metis_tac[ld_frame_reachable_alloca_inv]
+  metis_tac[ld_frame_reachable_empty_alloca_inv]
 QED
 
 Theorem ld_frame_reachable_saved_alloca_inv:
   frame_reachable vs C stk PG G tn fn inst s /\ vs.vs_allocas = FEMPTY ==>
   EVERY (\f. alloca_inv f.cf_state) stk
 Proof
-  metis_tac[ld_frame_reachable_alloca_inv]
+  metis_tac[ld_frame_reachable_empty_alloca_inv]
 QED
 
 Theorem ld_frame_reachable_initial_frontier:
@@ -236,7 +236,7 @@ Theorem ld_frame_reachable_prov_site_bound:
 Proof
   strip_tac >>
   `alloca_inv s /\ EVERY (\f. alloca_inv f.cf_state) stk` by
-    metis_tac[ld_frame_reachable_alloca_inv] >>
+    metis_tac[ld_frame_reachable_empty_alloca_inv] >>
   drule_all frame_reachable_occurrence_annotation >> strip_tac >>
   drule ld_occ_saved_frontiers >> strip_tac >>
   gvs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>

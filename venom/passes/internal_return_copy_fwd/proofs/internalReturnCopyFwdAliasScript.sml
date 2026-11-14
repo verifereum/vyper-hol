@@ -8,16 +8,6 @@ Ancestors
   singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence occurrenceGeometry
   lowerDloadDescriptorObservation frameAllocationHistory
 
-Definition ircf_alias_value_def:
-  ircf_alias_value fn s G v <=>
-    !ai root sz. MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
-      ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
-      ircf_alias fn root v ==>
-      ?w. lookup_var v s = SOME w /\ lookup_var root s = SOME w /\
-        FLOOKUP s.vs_allocas ai.inst_id = SOME (w2n w,w2n sz) /\
-        FLOOKUP G v = SOME (w2n w,w2n sz)
-End
-
 Definition ircf_size_coherent_def:
   ircf_size_coherent fn s <=>
     !ai root sz b z. MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
