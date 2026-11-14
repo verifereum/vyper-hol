@@ -43,14 +43,6 @@ Proof
      return_reject_stmt_control] >> metis_tac[]
 QED
 
-Theorem return_reject_sites[local]:
-  abi_malformed_scratch_sites (start_relabel L ids st)
-    (start_swap st L ids en) func = abi_malformed_scratch_sites st en func
-Proof
-  simp[abi_malformed_scratch_sites_def, start_relabel_def, start_swap_def] >>
-  IF_CASES_TAC >> simp[]
-QED
-
 Theorem return_capped_observer_reject:
   rt = (if needs_external_call_wrap ty then TupleT [ty] else ty) /\
   cap = vyper_abi_size_bound env rt /\
@@ -85,7 +77,7 @@ Proof
   strip_tac >>
   `abi_malformed_scratch_sites (start_relabel L ids st)
       (start_swap st L ids en) obs = abi_malformed_scratch_sites st en func` by
-    (simp[return_reject_sites] >>
+    (simp[abi_malformed_scratch_sites_relabel] >>
      drule return_observer_alloca_structure >> simp[]) >>
   drule_all return_observer_input_entry >> strip_tac >>
   drule return_reject_entry_control >>

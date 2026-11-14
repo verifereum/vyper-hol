@@ -5,7 +5,7 @@ Theory abiMalformedRecursiveInterface
 Ancestors
   abiMalformedSiteFrame abiMalformedPruneState abiMalformedPrefix
   abiDecoderReentry abiDecoderVarExtend abiDecoderContract fragExec
-  venomExecSemantics exprLoweringProps compileEnv
+  venomExecSemantics exprLoweringProps exprSimAbiGasBridge compileEnv
   venomState venomMemDefs valueEncoding valueEncodingDefs finite_map pred_set words list arithmetic
 
 Definition abi_malformed_destination_def:
@@ -233,6 +233,14 @@ Definition abi_malformed_scratch_sites_def:
       ?inst. MEM inst (fn_insts func) /\ inst.inst_id = aid /\
              inst.inst_opcode = ALLOCA}
 End
+
+Theorem abi_malformed_scratch_sites_relabel:
+  abi_malformed_scratch_sites (start_relabel L ids st)
+    (start_swap st L ids en) func = abi_malformed_scratch_sites st en func
+Proof
+  simp[abi_malformed_scratch_sites_def, start_relabel_def, start_swap_def] >>
+  IF_CASES_TAC >> simp[]
+QED
 
 Theorem abi_malformed_scratch_sites_older:
   aid < st.cs_next_id ==>
