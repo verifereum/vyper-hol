@@ -350,13 +350,13 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem registration_source_parameter_inputs:
+Theorem registration_source_parameter_inputs_nr:
   supported_program tops /\ source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,F,args,[],ret,fbody) /\
+    SOME (mut,nr,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (package_external_fn tops ut nk (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
   ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
   dec_cenv_agrees ce (type_env tops) /\
@@ -397,12 +397,12 @@ Proof
     (qspec_then `i` mp_tac) >> simp[EL_MAP]
 QED
 
-Resume registration_source_parameter_inputs[params]:
+Resume registration_source_parameter_inputs_nr[params]:
   `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all source_typing_ok_params_ok >> simp[]
 QED
 
-Resume registration_source_parameter_inputs[coherent]:
+Resume registration_source_parameter_inputs_nr[coherent]:
   fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
   `evaluate_type (type_env tops) (EL n (MAP SND args)) = SOME (EL n tvs)` by
     (first_x_assum irule >> simp[]) >>
@@ -414,7 +414,101 @@ Resume registration_source_parameter_inputs[coherent]:
   drule_all registration_package_coherent >> simp[]
 QED
 
-Finalise registration_source_parameter_inputs
+Finalise registration_source_parameter_inputs_nr
+
+Theorem registration_source_parameter_inputs:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  dec_cenv_agrees ce (type_env tops) /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+  ?tvs.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
+      (MAP SND args) tvs /\
+    LIST_REL (abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields)
+      (MAP SND args) tvs /\
+    LIST_REL value_has_type tvs tx.args /\
+    (!i. i < LENGTH args ==> ?off.
+      FLOOKUP ce.ce_vars (FST (EL i args)) =
+        SOME (MemLoc off (type_memory_size (EL i tvs))))
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_source_parameter_inputs_nr)
+QED
+
+Theorem registration_owned_entry_inputs_nr:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+    vs_inst_idx := 0 |>) s /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  dec_cenv_agrees ce (type_env tops) /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+  s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\ s.vs_memory = [] /\
+  alloca_inv s /\ allocas_from 0 s /\ s.vs_call_ctx = vs.vs_call_ctx /\
+  alloca_frontier_inv unit.cu_context fn site s /\
+  unit_alloca_budget unit.cu_context < dimword (:256) /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
+  LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256) /\
+  ?tvs.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
+      (MAP SND args) tvs /\
+    LIST_REL (abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields)
+      (MAP SND args) tvs /\
+    LIST_REL value_has_type tvs tx.args /\
+    (!i. i < LENGTH args ==> ?off.
+      FLOOKUP ce.ce_vars (FST (EL i args)) =
+        SOME (MemLoc off (type_memory_size (EL i tvs)))) /\
+    (!i. i < LENGTH args ==>
+      type_memory_size (EL i tvs) < dimword (:256))
+Proof
+  strip_tac >>
+  drule_all registration_source_parameter_inputs_nr >> strip_tac >>
+  drule_all registration_initial_ptr_resources >>
+  disch_then (qspec_then `site` strip_assume_tac) >>
+  `calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+     tx.args vs.vs_call_ctx.cc_calldata` by
+    gvs[e2eDefsTheory.valid_vyper_call_def] >>
+  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
+        e2eDefsTheory.source_typing_ok_def,
+        vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
+     gvs[wordsTheory.dimword_def]) >>
+  asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
+  `tx.function_name <> "__default__"` by fs[e2eDefsTheory.valid_vyper_call_def] >>
+  drule_all registration_external_allocs_ok >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  rpt strip_tac >>
+  `evaluate_type (type_env tops) (SND (EL i args)) = SOME (EL i tvs)` by
+    (fs[LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
+  `type_memory_size (EL i tvs) < 2 ** 64` by
+    (irule registration_parameter_memory_limit >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `FST (EL i args)` >> simp[EL_MEM]) >>
+  `2 ** 64 < dimword (:256)` by
+    (rewrite_tac[wordsTheory.dimword_def, fcpTheory.index_bit0,
+       fcpTheory.finite_bit0, fcpTheory.index_one, fcpTheory.finite_one] >>
+     EVAL_TAC) >> decide_tac
+QED
 
 Theorem registration_owned_entry_inputs:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -455,35 +549,7 @@ Theorem registration_owned_entry_inputs:
     (!i. i < LENGTH args ==>
       type_memory_size (EL i tvs) < dimword (:256))
 Proof
-  strip_tac >>
-  drule_all registration_source_parameter_inputs >> strip_tac >>
-  drule_all registration_initial_ptr_resources >>
-  disch_then (qspec_then `site` strip_assume_tac) >>
-  `calldata_encodes (type_env tops) tx.function_name (MAP SND args)
-     tx.args vs.vs_call_ctx.cc_calldata` by
-    gvs[e2eDefsTheory.valid_vyper_call_def] >>
-  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
-        e2eDefsTheory.source_typing_ok_def,
-        vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
-     gvs[wordsTheory.dimword_def]) >>
-  asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
-  `tx.function_name <> "__default__"` by fs[e2eDefsTheory.valid_vyper_call_def] >>
-  drule_all registration_external_allocs_ok >> strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
-    metis_tac[source_typing_ok_type_def_keys_distinct] >>
-  rpt strip_tac >>
-  `evaluate_type (type_env tops) (SND (EL i args)) = SOME (EL i tvs)` by
-    (fs[LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
-  `type_memory_size (EL i tvs) < 2 ** 64` by
-    (irule registration_parameter_memory_limit >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexists_tac `FST (EL i args)` >> simp[EL_MEM]) >>
-  `2 ** 64 < dimword (:256)` by
-    (rewrite_tac[wordsTheory.dimword_def, fcpTheory.index_bit0,
-       fcpTheory.finite_bit0, fcpTheory.index_one, fcpTheory.finite_one] >>
-     EVAL_TAC) >> decide_tac
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_owned_entry_inputs_nr)
 QED
 
 (* A selected argument occupies its canonical tuple window, including dynamic
@@ -3266,16 +3332,16 @@ Proof
     exprLoweringPropsTheory.fmp_room_def, EXISTS_MEM] >> metis_tac[]
 QED
 
-Theorem registration_owned_locals_joint:
+Theorem registration_owned_locals_joint_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
   initial_venom_state_rel tops am tx vs /\
-  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,nr,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME env /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   set_external_package_target target
-    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (package_external_fn tops ut nk (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
   fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
@@ -3317,7 +3383,7 @@ Theorem registration_owned_locals_joint:
     (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
       !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
 Proof
-  strip_tac >> drule_all registration_owned_entry_inputs >>
+  strip_tac >> drule_all registration_owned_entry_inputs_nr >>
   disch_then (qspec_then `site` strip_assume_tac) >>
   drule_at (Pat `LIST_REL (abi_decoder_coherent _ _ _) _ _`)
     registration_owned_source_ready >>
@@ -3364,7 +3430,7 @@ Proof
   gvs[] >> first_assum ACCEPT_TAC
 QED
 
-Resume registration_owned_locals_joint[endpoint_locals]:
+Resume registration_owned_locals_joint_nr[endpoint_locals]:
   rewrite_tac[local_ptrs_rel_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
     `FLOOKUP env name = SOME entry` by gvs[vyperStateTheory.lookup_scopes_def, AllCaseEqs()] >>
@@ -3443,7 +3509,7 @@ Resume registration_owned_locals_joint[endpoint_locals]:
   metis_tac[regions_disjoint_def]
 QED
 
-Resume registration_owned_locals_joint[endpoint_domain]:
+Resume registration_owned_locals_joint_nr[endpoint_domain]:
   drule compile_register_positional_args_cenv >> strip_tac >>
   rpt strip_tac >>
   qpat_x_assum `!n. ~MEM n (MAP FST pos_args) ==> _`
@@ -3451,7 +3517,61 @@ Resume registration_owned_locals_joint[endpoint_domain]:
   simp[build_positional_args_FST]
 QED
 
-Finalise registration_owned_locals_joint[local]
+Finalise registration_owned_locals_joint_nr[local]
+
+Theorem registration_owned_locals_joint[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+  s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ?tvs s0 G0 tn0.
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+      (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+    local_ptrs_rel efn cenv [env] s0 /\
+    (!j. j < LENGTH args ==> ?aid q p n inst.
+      MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_outputs = [q] /\ inst.inst_id = aid /\
+      aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q s0 = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers G0 tn0 q s0 n /\ val_wf (EL j tvs) (EL j tx.args) /\
+      val_footprint (EL j tvs) (EL j tx.args) <= n /\
+      (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+    cenv = cenv0 with ce_vars := cenv.ce_vars /\
+    (!k. ~MEM k (MAP FST args) ==> FLOOKUP cenv.ce_vars k = NONE) /\
+    alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\ allocas_from 0 s0 /\
+    fresh_vars_wrt sa s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    tn0.t_stor = tn1.t_stor /\ tn0.t_trans = tn1.t_trans /\ tn0.t_imm = tn1.t_imm /\
+    s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+    s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+    s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+    s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+    s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_fmp = s1.vs_fmp /\
+    s0.vs_gas_readings = s1.vs_gas_readings /\
+    s0.vs_data_section = s1.vs_data_section /\
+    (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_operands = [Lit w] /\
+      FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_owned_locals_joint_nr)
+QED
 
 Theorem registration_owned_locals_endpoint_resources:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -3615,6 +3735,199 @@ Proof
   rpt strip_tac >> simp[storage_vars_rel_def, transient_vars_rel_def]
 QED
 
+Theorem registration_actual_endpoint_relations_nr:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,nr,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+    (INL (),es0) /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr,key,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  ~ctx_has_dalloca unit.cu_context /\
+  LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+  local_ptrs_rel efn cenv [env] s0 /\
+  (!j. j < LENGTH args ==> ?aid q p n.
+    FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
+    (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+  cenv = cenv0 with ce_vars := cenv.ce_vars /\
+  alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\
+  tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {} /\
+  s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+  s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+  s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+  s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+  s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_data_section = s1.vs_data_section /\
+  s0.vs_code = s1.vs_code /\
+  (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit w] /\
+    FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
+  stmt_state_rel H unit.cu_context efn cenv
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+  ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
+    es0 G0 tn0 s0
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST args)` by
+    (drule_all registration_source_parameter_inputs_nr >> simp[]) >>
+  drule send_call_value_accounts >> strip_tac >>
+  `es0.scopes = [env]` by simp[initial_state_def] >>
+  `unit_alloca_budget unit.cu_context < dimword (:256)` by
+    (drule_all registration_initial_ptr_resources >>
+     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
+  conj_tac >- suspend "actual_stmt" >>
+  irule registration_indexed_locals_ghost >>
+  conj_tac >- suspend "actual_return_pc" >> simp[] >>
+  qexistsl_tac [`args`, `type_env tops`, `tvs`, `tx.args`] >> simp[] >>
+  suspend "actual_ghost_locals"
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_ghost_locals]:
+  rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`q`, `p`, `n`] >> simp[] >>
+  `p + n <= s0.vs_alloca_next` by
+    metis_tac[venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.alloca_next_valid_def] >>
+  qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
+  simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_return_pc]:
+  `cenv.ce_return_pc = cenv0.ce_return_pc` by
+    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
+      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `cenv0.ce_return_pc = NONE` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
+     gvs[update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
+     rpt (pairarg_tac >> gvs[])) >> simp[]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_stmt]:
+  `cenv0.ce_module = NONE /\ ~cenv0.ce_is_ctor /\
+   cenv0.ce_imm_alloca = NONE /\
+   cenv0.ce_module_vars = add_immutable_locations
+     (get_struct_fields (make_struct_fields_map tops)) tops 0
+     (add_module_var_locations tops FEMPTY)` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
+     gvs[update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
+     rpt (pairarg_tac >> gvs[])) >>
+  `cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
+   cenv.ce_imm_alloca = NONE /\ cenv.ce_module_vars = cenv0.ce_module_vars` by
+    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
+      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `alloca_room unit.cu_context efn s0` by
+    (drule_all registration_frontier_alloca_room >> simp[]) >>
+  `fmp_room unit.cu_context efn s0` by
+    (irule registration_no_dalloca_fmp_room >> simp[] >>
+     drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
+       immutable_base_zero_def] >>
+  conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_state]:
+  `storage_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
+   transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    suspend "actual_module_locations" >>
+  `immutable_section_layout cenv tops` by
+    (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`, `args`, `ret`,
+       `fbody`, `F`] mp_tac
+       immutableLocationPropsTheory.immutable_build_compile_env_layout >>
+     qpat_x_assum `cenv.ce_module_vars = cenv0.ce_module_vars` mp_tac >>
+     qpat_x_assum `cenv0.ce_module_vars = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[immutableRelationTheory.immutable_section_layout_def,
+       build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
+  `immutables_rel cenv
+    (initial_evaluation_context am.sources am.layouts tx NONE).txn.target
+    cenv.ce_module cenv.ce_is_ctor es0 s0` by suspend "actual_immutables" >>
+  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
+  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
+  gvs[initial_venom_state_rel_def, venom_env_rel_def, state_rel_def,
+      initial_state_def, initial_evaluation_context_def] >>
+  `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
+  simp[storage_rel_def, transient_rel_def, contract_storage_def,
+       contract_transient_def, logs_rel_def, accounts_rel_def]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_immutables]:
+  simp[] >> irule immutableSectionRelTheory.immutables_section_rel_runtime_fallback >>
+  qexistsl_tac [`vs.vs_data_section`, `tops`] >> simp[] >>
+  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
+  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
+  gvs[initial_venom_state_rel_def, initial_state_def, e2eDefsTheory.account_immutables_def,
+      initial_evaluation_context_def]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_module_locations]:
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule source_typing_ok_vtype_keys_distinct >> strip_tac >>
+  `storage_vars_rel
+     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
+     (initial_evaluation_context am.sources am.layouts tx NONE) /\
+   transient_vars_rel
+     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
+     (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    (irule entry_storage_vars_rel >> simp[initial_evaluation_context_def] >>
+     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
+  `(!key slot.
+     (FLOOKUP (add_immutable_locations
+       (get_struct_fields (make_struct_fields_map tops)) tops 0
+       (add_module_var_locations tops FEMPTY)) key = SOME (StorageLoc slot) <=>
+      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (StorageLoc slot))) /\
+   (!key slot.
+     (FLOOKUP (add_immutable_locations
+       (get_struct_fields (make_struct_fields_map tops)) tops 0
+       (add_module_var_locations tops FEMPTY)) key = SOME (TransientLoc slot) <=>
+      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot)))` by
+    (conj_tac >> rpt gen_tac >> eq_tac
+     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[])
+     >- (strip_tac >> suspend "actual_insert")
+     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[]) >>
+     strip_tac >> suspend "actual_insert") >>
+  mp_tac (module_location_relations_cong |> Q.SPECL
+    [`cenv`, `cenv with ce_module_vars := add_module_var_locations tops FEMPTY`,
+     `initial_evaluation_context am.sources am.layouts tx NONE`]) >>
+  simp[]
+QED
+
+Resume registration_actual_endpoint_relations_nr[actual_insert]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  rename1 `FLOOKUP (add_module_var_locations tops FEMPTY) ky = SOME _` >>
+  `!vis name ty sl.
+    MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> ky` by
+    (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     drule_then (qspecl_then
+       [`FEMPTY`, `VariableDecl vis Immutable name ty sl`, `name`] mp_tac)
+       add_module_var_locations_mem >>
+     simp[vyperTypeContractTheory.toplevel_vtype_keys_toplevel_def] >>
+     Cases_on `sl` >> simp[add_module_var_locations_def]) >>
+  drule add_immutable_locations_lookup_unchanged >> simp[]
+QED
+
+Finalise registration_actual_endpoint_relations_nr
+
 Theorem registration_actual_endpoint_relations:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -3660,153 +3973,8 @@ Theorem registration_actual_endpoint_relations:
   ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
     es0 G0 tn0 s0
 Proof
-  strip_tac >>
-  `ALL_DISTINCT (MAP FST args)` by
-    (drule_all registration_source_parameter_inputs >> simp[]) >>
-  drule send_call_value_accounts >> strip_tac >>
-  `es0.scopes = [env]` by simp[initial_state_def] >>
-  `unit_alloca_budget unit.cu_context < dimword (:256)` by
-    (drule_all registration_initial_ptr_resources >>
-     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
-  conj_tac >- suspend "actual_stmt" >>
-  irule registration_indexed_locals_ghost >>
-  conj_tac >- suspend "actual_return_pc" >> simp[] >>
-  qexistsl_tac [`args`, `type_env tops`, `tvs`, `tx.args`] >> simp[] >>
-  suspend "actual_ghost_locals"
+  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_actual_endpoint_relations_nr)
 QED
-
-Resume registration_actual_endpoint_relations[actual_ghost_locals]:
-  rpt strip_tac >>
-  qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
-    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
-  qexistsl_tac [`q`, `p`, `n`] >> simp[] >>
-  `p + n <= s0.vs_alloca_next` by
-    metis_tac[venomMemDefsTheory.alloca_inv_def,
-      venomMemDefsTheory.alloca_next_valid_def] >>
-  qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
-  simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac
-QED
-
-Resume registration_actual_endpoint_relations[actual_return_pc]:
-  `cenv.ce_return_pc = cenv0.ce_return_pc` by
-    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
-      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
-  `cenv0.ce_return_pc = NONE` by
-    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
-     gvs[update_cenv_nonreentrant_def] >>
-     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
-     rpt (pairarg_tac >> gvs[])) >> simp[]
-QED
-
-Resume registration_actual_endpoint_relations[actual_stmt]:
-  `cenv0.ce_module = NONE /\ ~cenv0.ce_is_ctor /\
-   cenv0.ce_imm_alloca = NONE /\
-   cenv0.ce_module_vars = add_immutable_locations
-     (get_struct_fields (make_struct_fields_map tops)) tops 0
-     (add_module_var_locations tops FEMPTY)` by
-    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
-     gvs[update_cenv_nonreentrant_def] >>
-     rw[update_cenv_ret_abi_def, build_compile_env_def] >>
-     rpt (pairarg_tac >> gvs[])) >>
-  `cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
-   cenv.ce_imm_alloca = NONE /\ cenv.ce_module_vars = cenv0.ce_module_vars` by
-    (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
-      (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
-  `alloca_room unit.cu_context efn s0` by
-    (drule_all registration_frontier_alloca_room >> simp[]) >>
-  `fmp_room unit.cu_context efn s0` by
-    (irule registration_no_dalloca_fmp_room >> simp[] >>
-     drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
-       immutable_base_zero_def] >>
-  conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
-QED
-
-Resume registration_actual_endpoint_relations[actual_state]:
-  `storage_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
-   transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    suspend "actual_module_locations" >>
-  `immutable_section_layout cenv tops` by
-    (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`, `args`, `ret`,
-       `fbody`, `F`] mp_tac
-       immutableLocationPropsTheory.immutable_build_compile_env_layout >>
-     qpat_x_assum `cenv.ce_module_vars = cenv0.ce_module_vars` mp_tac >>
-     qpat_x_assum `cenv0.ce_module_vars = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[immutableRelationTheory.immutable_section_layout_def,
-       build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
-  `immutables_rel cenv
-    (initial_evaluation_context am.sources am.layouts tx NONE).txn.target
-    cenv.ce_module cenv.ce_is_ctor es0 s0` by suspend "actual_immutables" >>
-  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
-  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
-  gvs[initial_venom_state_rel_def, venom_env_rel_def, state_rel_def,
-      initial_state_def, initial_evaluation_context_def] >>
-  `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
-  simp[storage_rel_def, transient_rel_def, contract_storage_def,
-       contract_transient_def, logs_rel_def, accounts_rel_def]
-QED
-
-Resume registration_actual_endpoint_relations[actual_immutables]:
-  simp[] >> irule immutableSectionRelTheory.immutables_section_rel_runtime_fallback >>
-  qexistsl_tac [`vs.vs_data_section`, `tops`] >> simp[] >>
-  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
-  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
-  gvs[initial_venom_state_rel_def, initial_state_def, e2eDefsTheory.account_immutables_def,
-      initial_evaluation_context_def]
-QED
-
-Resume registration_actual_endpoint_relations[actual_module_locations]:
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule source_typing_ok_vtype_keys_distinct >> strip_tac >>
-  `storage_vars_rel
-     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
-     (initial_evaluation_context am.sources am.layouts tx NONE) /\
-   transient_vars_rel
-     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
-     (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    (irule entry_storage_vars_rel >> simp[initial_evaluation_context_def] >>
-     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
-  `(!key slot.
-     (FLOOKUP (add_immutable_locations
-       (get_struct_fields (make_struct_fields_map tops)) tops 0
-       (add_module_var_locations tops FEMPTY)) key = SOME (StorageLoc slot) <=>
-      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (StorageLoc slot))) /\
-   (!key slot.
-     (FLOOKUP (add_immutable_locations
-       (get_struct_fields (make_struct_fields_map tops)) tops 0
-       (add_module_var_locations tops FEMPTY)) key = SOME (TransientLoc slot) <=>
-      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot)))` by
-    (conj_tac >> rpt gen_tac >> eq_tac
-     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[])
-     >- (strip_tac >> suspend "actual_insert")
-     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[]) >>
-     strip_tac >> suspend "actual_insert") >>
-  mp_tac (module_location_relations_cong |> Q.SPECL
-    [`cenv`, `cenv with ce_module_vars := add_module_var_locations tops FEMPTY`,
-     `initial_evaluation_context am.sources am.layouts tx NONE`]) >>
-  simp[]
-QED
-
-Resume registration_actual_endpoint_relations[actual_insert]:
-  markerLib.RESUME_TAC >> rpt strip_tac >>
-  rename1 `FLOOKUP (add_module_var_locations tops FEMPTY) ky = SOME _` >>
-  `!vis name ty sl.
-    MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> ky` by
-    (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-     drule_then (qspecl_then
-       [`FEMPTY`, `VariableDecl vis Immutable name ty sl`, `name`] mp_tac)
-       add_module_var_locations_mem >>
-     simp[vyperTypeContractTheory.toplevel_vtype_keys_toplevel_def] >>
-     Cases_on `sl` >> simp[add_module_var_locations_def]) >>
-  drule add_immutable_locations_lookup_unchanged >> simp[]
-QED
-
-Finalise registration_actual_endpoint_relations
 
 Theorem registration_positional_args_joint[local]:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
