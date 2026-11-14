@@ -74,6 +74,7 @@ Proof
      irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s2` >> simp[] >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`es1`, `sm`, `s1`] >> fs[wb_frame_def]) >>
+  `storage_well_formed_on cx es2 (FST H)` by fs[expr_post_def] >>
   irule vv_post_word_intro >> simp[expr_type_def, expr_has_effect_thm] >>
   metis_tac[optionTheory.SOME_11]
 QED
@@ -353,6 +354,9 @@ Theorem extract32_expr_post_end_gas_obs:
   expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) v op s =
   expr_post H ctx func cenv cx e es sa sb s0 ee v op s
 Proof
+  `storage_well_formed_on cx (ee with gas_obs := gs) (FST H) <=>
+   storage_well_formed_on cx ee (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
   simp[expr_post_def, expr_val_at_def, expr_val_own_def, stmt_state_rel_def,
        state_rel_gas_obs, locals_kept_def, popped_kept_def]
 QED

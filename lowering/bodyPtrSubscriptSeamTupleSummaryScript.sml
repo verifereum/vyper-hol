@@ -22,17 +22,17 @@ Theorem tuple_normal_endpoint_ptr:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
   ptr_vv_ok cx (TupleT tys) btv bvv ee G tn s /\
   (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv obj (vv_operand bvv) G s) /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
   ?tv' G' tn' t.
     select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k))) ee = (INL tv',ee) /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
     t.vs_current_bb = sn.cs_current_bb /\ t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post ctx func cenv cx (Subscript ann obj idx) es sa sn s0 ee tv'
+    vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sn s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t /\
-    ghost_inv d cenv cx ee G' tn' t /\
+    ghost_inv H d cenv cx ee G' tn' t /\
     ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee G' tn' t /\
     (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Subscript ann obj idx) dst G' t) /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn'
@@ -88,22 +88,22 @@ Theorem tuple_summary_ok_ptr:
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   gas_marked_exec_ptr D (ctx,func) PG (eval_expr cx obj) (es,s0,G0,tn0)
     marks (INL btv) fe G tn (OK s) /\
-  vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv s /\
+  vv_post H ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv s /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d cenv cx (fe with gas_obs := []) G tn s /\
+  ghost_inv H d cenv cx (fe with gas_obs := []) G tn s /\
   ptr_vv_ok cx (TupleT tys) btv bvv (fe with gas_obs := []) G tn s /\
   (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv obj (vv_operand bvv) G s) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
   gas_summary_ptr_at D (ctx,func) PG marks (eval_expr cx (Subscript ann obj idx))
     (es,s0,G0,tn0)
-    (\res ee H tt t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (Subscript ann obj idx) es sa sn s0 ee tv
+    (\res ee HG tt t. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sn s0 ee tv
         (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t /\
       t.vs_current_bb = sn.cs_current_bb /\ t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-      ghost_inv d cenv cx ee H tt t /\
-      ptr_vv_ok cx ann tv (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee H tt t /\
-      (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Subscript ann obj idx) dst H t) /\
-      ghost_kept cenv es sa G0 tn0 s0 H tt) R
+      ghost_inv H d cenv cx ee HG tt t /\
+      ptr_vv_ok cx ann tv (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee HG tt t /\
+      (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Subscript ann obj idx) dst HG t) /\
+      ghost_kept cenv es sa G0 tn0 s0 HG tt) R
 Proof
   strip_tac >>
   `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =

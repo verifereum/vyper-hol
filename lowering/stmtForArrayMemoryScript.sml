@@ -8,6 +8,7 @@ Ancestors
   vyperState stmtForArrayMemoryRounds stmtForArrayMemoryEntry
   stmtForArrayMemorySupport stmtSimForArrayFrag stmtSimForArrayLoop
   loweringPosts bodyMemoryDefs stmtSimProps exprLoweringProps fragGasMode finite_map list arithmetic
+  gasStorage vyperStorageFootprint vyperStorageTrace
 
 Theorem compile_for_array_frag_mem:
   !d ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
@@ -24,7 +25,8 @@ Theorem compile_for_array_frag_mem:
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
   P es /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
-  (!ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!(H:(bool # bytes32 # type_value) list # num list) ei s.
+     P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     ?base. eval_operand (Var arr_ptr) s = SOME base /\
       w2n base + LENGTH vs * type_memory_size tv <= s.vs_alloca_next /\
       (!k. k < LENGTH vs ==>
@@ -54,6 +56,12 @@ Theorem compile_for_array_frag_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   rw[stmt_frag_mem_def] >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      fs[storage_trace_domain_def, evaluate_storage_trace_frame]) >>
+  qpat_x_assum `?H. _` strip_assume_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   `compile_stmt cenv lctx ty
     (For id et (Array (Name (ArrayT et (Fixed (LENGTH vs))) name)) (LENGTH vs) stmts) sa = ((),sb)` by
     (gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
@@ -70,7 +78,7 @@ Proof
   `?s1 dst s.
     exec_alloca ainst s0 (n2w (type_memory_bytes cenv et) : bytes32) = OK s1 /\
     s = jump_to cond (update_var idx 0w (jump_to entry s1)) /\
-    array_loop_inv ctx func cenv cx P vs id idx (Var arr_ptr) base' p dst
+    array_loop_inv ctx func cenv cx st0 P vs id idx (Var arr_ptr) base' p dst
       (type_memory_bytes cenv et) ainst cond sa 0 es s /\
     gas_path_mem ctx func s0 0 (OK s) /\
     (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
@@ -83,16 +91,16 @@ Proof
      conj_tac >- (qexists_tac `sa.cs_next_id + 1` >> simp[]) >>
      conj_tac >- (qexistsl_tac [`arr_sz`, `name`] >> simp[]) >>
      gvs[] >> goal_assum (drule_at Any)) >>
-  `array_round_inv d ctx func cenv cx P vs id idx (Var arr_ptr) base' p dst
+  `array_round_inv d ctx func cenv cx st0 P vs id idx (Var arr_ptr) base' p dst
      (type_memory_bytes cenv et) ainst cond sa s0 0 es s` by
     (simp[array_round_inv_def, array_round_frame_def] >>
      irule return_buf_frame_frame >> goal_assum (drule_at Any) >> gvs[]) >>
-  `gas_outcome T (cx_tops cx) (ctx,func)
+  `gas_outcome T (cx_tops cx) (ctx,func) cx st0
      (eval_for cx tv id stmts (MAP Value (DROP 0 vs))) (es,s)
-     (\res ee t. res = INL () /\
+     (\H res ee t. res = INL () /\
        array_round_done H d ctx func cenv cx sa s0 exit ee t)
-     (\res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
+     (\H res ee rr. ?ex. res = INR ex /\
+       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)` by
     (drule array_code_loop_outcome_mem >> disch_then irule >>
      gvs[] >> conj_tac
      >- (drule array_for_code_stmts >> strip_tac >>
@@ -109,10 +117,11 @@ QED
 
 Resume compile_for_array_frag_mem[element_layout]:
   rpt strip_tac >>
+  `P ei` by fs[array_loop_inv_def] >>
+  `?H'. stmt_state_rel H' ctx func cenv cx ei t` by
+    (fs[array_loop_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `!H ei s. P ei /\ _ ==> _` drule_all >> strip_tac >>
   gvs[array_loop_inv_def] >>
-  qpat_x_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ ei s ==> _`
-    (qspecl_then [`ei`, `t`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[] >>
   first_x_assum (qspec_then `k` mp_tac) >> simp[]
 QED
 
@@ -145,16 +154,16 @@ Resume compile_for_array_frag_mem[public_outcome]:
   irule array_for_source_prefix_mem >> simp[] >>
   `gas_marked_path T ctx func s0 0 (OK s)` by
     (irule gas_marked_path_from_mem >> simp[]) >>
-  `gas_outcome T (cx_tops cx) (ctx,func)
+  `gas_outcome T (cx_tops cx) (ctx,func) cx st0
      (eval_for cx tv id stmts (MAP Value vs)) (es,s0)
-     (\res ee t. res = INL () /\
+     (\H res ee t. res = INL () /\
        array_round_done H d ctx func cenv cx sa s0 exit ee t)
-     (\res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
+     (\H res ee rr. ?ex. res = INR ex /\
+       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)` by
     (irule stmtForArrayMemoryRoundSupportTheory.array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>
-  ` (\res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) =
-    (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr)` by
+  ` (\H res ee rr. ?ex. res = INR ex /\
+       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) =
+    (\H res ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr)` by
     (simp[FUN_EQ_THM] >> Cases_on `res` >>
      simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
   gvs[] >>

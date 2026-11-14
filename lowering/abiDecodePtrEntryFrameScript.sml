@@ -6,8 +6,8 @@ Ancestors
   stateFrame compileEnv venomState finite_map pred_set arithmetic
 
 Theorem abi_decode_ptr_prune_stmt_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel H ctx func cenv cx es
     (abi_decoder_prune_vars sa.cs_next_var s)
 Proof
   strip_tac >> irule stmt_state_rel_old_vars_frame_ptr >>

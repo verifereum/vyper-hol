@@ -6,6 +6,7 @@ Ancestors
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
   vyperEvent venomExecSemantics venomInst venomState venomMemDefs exprLowering exprLoweringProps
   exprSimHash builtinSystem emitHelper fragExec emitHelperProps venomExecProofs
+  vyperStorageFootprint vyperStorageTrace
 Libs
   pairLib
 
@@ -401,7 +402,8 @@ Theorem raw_log_dynamic_tail_core:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
@@ -455,6 +457,13 @@ Proof
      simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
   fs[mk_inst_def, run_inst_seq_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- (qmatch_goalsub_abbrev_tac `storage_well_formed_on cx es1 _` >>
+      `storage_well_formed_on cx es1 (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+         simp[Abbr `es1`]) >>
+      pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t'`] >>
   simp[lookup_var_def]
 QED
@@ -520,7 +529,8 @@ Theorem raw_log_fixed_tail_core:
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   LENGTH ops < dimword (:256) /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel H ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -572,6 +582,46 @@ Proof
   fs[mk_inst_def] >>
   simp[run_inst_seq_def, Once step_inst_base_def, exec_write2_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- (qmatch_goalsub_abbrev_tac `storage_well_formed_on cx es1 _` >>
+      `storage_well_formed_on cx es1 (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+         simp[Abbr `es1`]) >>
+      pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
   simp[lookup_var_def]
+QED
+
+Theorem raw_log_tail_trace_frame:
+  (!cx data vs.
+     storage_trace_frame
+       (do dv <- bind (eval_expr cx data) (read_result cx);
+           bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od)) /\
+  (!cx dv vs.
+     storage_trace_frame
+       (do bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od))
+Proof
+  conj_tac
+  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >> reverse conj_tac
+      >- (irule storage_trace_frame_bind_all >>
+          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+      gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
+  rpt gen_tac >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_lifts] >> gen_tac >>
+  irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+  irule storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED

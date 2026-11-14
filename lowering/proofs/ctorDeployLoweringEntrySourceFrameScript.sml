@@ -18,11 +18,17 @@ Theorem deploy_ctor_module_constants_frame:
  !mods am am'. evaluate_module_constants cx am addr mods = SOME am' ==>
  am' = (am with immutables := am'.immutables)
 Proof
- Induct >- simp[evaluate_module_constants_def] >>
+ Induct >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
  PairCases >> rpt gen_tac >>
- simp[evaluate_module_constants_def, AllCaseEqs()] >> strip_tac >>
- first_x_assum drule >> simp[merge_constants_def] >>
- strip_tac >> gvs[]
+ Cases_on `constants_env_trace (set_current_module cx h0) am addr h0 h1 FEMPTY` >>
+ rename1 `constants_env_trace _ _ _ _ _ _ = (res,observations)` >>
+ Cases_on `res` >>
+ simp[evaluate_module_constants_def, Once evaluate_module_constants_trace_def] >>
+ rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+ Cases_on `evaluate_module_constants_trace cx (merge_constants addr h0 cenv am) addr mods` >>
+ gvs[evaluate_module_constants_def] >> strip_tac >>
+ first_x_assum (qspecl_then [`merge_constants addr h0 cenv am`, `am'`] mp_tac) >>
+ simp[merge_constants_def]
 QED
 
 Theorem deploy_ctor_all_constants_frame:

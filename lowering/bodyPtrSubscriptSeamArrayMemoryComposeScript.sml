@@ -27,7 +27,7 @@ Theorem fixed_array_element_summary_ptr:
   expr_type obj = ArrayT et (Fixed n) /\ post_value_type cenv obj = expr_type obj /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
-  vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
+  vv_post H ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
     (LocatedValue ann p) sf /\
   ptr_vv_ok cx (ArrayT et (Fixed n)) r (LocatedValue ann p) ee G tn s /\
   p.ptr_location = LocMemory /\
@@ -49,17 +49,17 @@ Theorem fixed_array_element_summary_ptr:
     type_memory_size etv /\
   gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
   sf.vs_current_bb = sd.cs_current_bb /\ sf.vs_inst_idx = LENGTH sd.cs_current_insts /\
-  ghost_inv d cenv cx ee Gf tnf sf /\ ghost_kept cenv es sa G0 tn0 s0 Gf tnf ==>
+  ghost_inv H d cenv cx ee Gf tnf sf /\ ghost_kept cenv es sa G0 tn0 s0 Gf tnf ==>
   gas_summary_ptr_at D (ctx,func) PG []
     (select_result cx (ArrayT et (Fixed n)) r (ValueSubscript (IntV i))) (ee,s,G,tn)
-    (\res ee' H tm q. ?child. res = INL child /\
-      vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
+    (\res ee' HG tm q. ?child. res = INL child /\
+      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
         (LocatedValue et (mk_ptr (Var out) LocMemory)) q /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts /\
-      ghost_inv d cenv cx ee' H tm q /\
-      ptr_vv_ok cx et child (LocatedValue et (mk_ptr (Var out) LocMemory)) ee' H tm q /\
-      ptr_buf_ok cenv (Subscript et obj idx) (Var out) H q /\
-      ghost_kept cenv es sa G0 tn0 s0 H tm)
+      ghost_inv H d cenv cx ee' HG tm q /\
+      ptr_vv_ok cx et child (LocatedValue et (mk_ptr (Var out) LocMemory)) ee' HG tm q /\
+      ptr_buf_ok cenv (Subscript et obj idx) (Var out) HG q /\
+      ghost_kept cenv es sa G0 tn0 s0 HG tm)
     (\res ee' gt outcome. expr_exit res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

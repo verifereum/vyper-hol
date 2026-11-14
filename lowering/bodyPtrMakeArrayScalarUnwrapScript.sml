@@ -11,7 +11,7 @@ Ancestors
 
 Theorem scalar_stack_unwrap_endpoint:
   unwrap_value ce (StackValue t arg) sm = (op,sb) /\
-  vv_post ctx fn ce cx e es sa sm s0 es' tv (StackValue t arg) s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv (StackValue t arg) s /\
   read_result cx tv es' = (INL v,es') /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
@@ -19,16 +19,16 @@ Theorem scalar_stack_unwrap_endpoint:
   ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d ce cx es' G tn s /\
+  ghost_inv H d ce cx es' G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
   ptr_covers G tn dst s n ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    expr_post ctx fn ce cx e es sa sb s0 es' v op sf /\
+    expr_post H ctx fn ce cx e es sa sb s0 es' v op sf /\
     eval_operand op sf = SOME (typed_val_to_w256 ty v) /\
     op_taint tnf op = {} /\
     ptr_val_ok cx (expr_type e) v op Gf tnf sf /\
-    ghost_inv d ce cx es' Gf tnf sf /\
+    ghost_inv H d ce cx es' Gf tnf sf /\
     ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -39,24 +39,24 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`G`, `tn`, `s`] >>
   gvs[ptr_val_ok_def] >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def, expr_val_rel_def] >> metis_tac[]
 QED
 
 Theorem scalar_load_expr_post:
-  vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   read_result cx tv es' = (INL v,es') /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
   sa.cs_next_var <= sm.cs_next_var /\
   not_local_ptr ce es'.scopes tmp /\
   (!x. not_fresh_at sm x ==> x <> tmp) ==>
-  expr_post ctx fn ce cx e es sa sb s0 es' v (Var tmp)
+  expr_post H ctx fn ce cx e es sa sb s0 es' v (Var tmp)
     ((update_var tmp (typed_val_to_w256 ty v) s) with
       vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >>
-  `vv_post ctx fn ce cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`
+  `vv_post H ctx fn ce cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`
     by metis_tac[vv_post_read_result] >>
   irule expr_post_of_vv_post_load >>
   conj_tac >- simp[] >>
@@ -73,7 +73,7 @@ Proof
 QED
 
 Theorem scalar_external_unwrap_endpoint:
-  vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   read_result cx tv es' = (INL v,es') /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
@@ -94,18 +94,18 @@ Theorem scalar_external_unwrap_endpoint:
   (!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> tmp) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> tmp) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> tmp) /\
-  ghost_inv d ce cx es' G tn s /\
+  ghost_inv H d ce cx es' G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
   s.vs_current_bb = sb.cs_current_bb /\
   SUC s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   tmp <> dst /\ ptr_covers G tn dst s n ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    expr_post ctx fn ce cx e es sa sb s0 es' v (Var tmp) sf /\
+    expr_post H ctx fn ce cx e es sa sb s0 es' v (Var tmp) sf /\
     eval_operand (Var tmp) sf = SOME (typed_val_to_w256 ty v) /\
     op_taint tnf (Var tmp) = {} /\
     ptr_val_ok cx (expr_type e) v (Var tmp) Gf tnf sf /\
-    ghost_inv d ce cx es' Gf tnf sf /\
+    ghost_inv H d ce cx es' Gf tnf sf /\
     ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -123,7 +123,7 @@ Proof
   drule_all scalar_load_expr_post >>
   disch_then (qspec_then `sb` assume_tac) >>
   drule_at (Pat `get_instruction _ _ = _`) external_word_materialize_endpoint >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
@@ -137,7 +137,7 @@ Proof
 QED
 
 Theorem scalar_memory_unwrap_endpoint:
-  vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   read_result cx tv es' = (INL v,es') /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\ value_has_type ty v /\
@@ -153,17 +153,17 @@ Theorem scalar_memory_unwrap_endpoint:
   (!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> tmp) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> tmp) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> tmp) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   s.vs_current_bb = sb.cs_current_bb /\
   SUC s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   tmp <> dst /\ ptr_covers G tn dst s n ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    expr_post ctx fn ce cx e es sa sb s0 es' v (Var tmp) sf /\
+    expr_post H ctx fn ce cx e es sa sb s0 es' v (Var tmp) sf /\
     eval_operand (Var tmp) sf = SOME (typed_val_to_w256 ty v) /\
     op_taint tnf (Var tmp) = {} /\
     ptr_val_ok cx (expr_type e) v (Var tmp) Gf tnf sf /\
-    ghost_inv d ce cx es' Gf tnf sf /\
+    ghost_inv H d ce cx es' Gf tnf sf /\
     ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\

@@ -14,9 +14,9 @@ Ancestors
   vyperInterpreter fragExec venomMemDefs venomState list pair words arithmetic
 
 Definition log_prefix_ready_def:
-  log_prefix_ready env cx cenv func ids reserved requests final_cut suffix cs es ss credit prefix ptvs pvs <=>
+  log_prefix_ready H env cx cenv func ids reserved requests final_cut suffix cs es ss credit prefix ptvs pvs <=>
     runtime_consistent env cx es /\
-    env_scopes_consistent env cx es /\ state_well_typed es /\ state_rel_simple cenv cx es ss /\
+    env_scopes_consistent env cx es /\ state_well_typed es /\ state_rel_simple H cenv cx es ss /\
     local_ptrs_rel func cenv es.scopes ss /\ source_alloca_floor cenv es.scopes ids ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
@@ -30,14 +30,14 @@ Definition log_prefix_ready_def:
 End
 
 Definition log_argument_load_certificate_def:
-  log_argument_load_certificate env ctx func cenv cx es es1 e tv v src suffix cs load_cut save_cut final_cut
+  log_argument_load_certificate H env ctx func cenv cx es es1 e tv v src suffix cs load_cut save_cut final_cut
     before loaded reserved requests credit writes <=>
     fragment_path ctx func before loaded /\
     loaded.vs_current_bb = load_cut.cs_current_bb /\ loaded.vs_inst_idx = LENGTH load_cut.cs_current_insts /\
     loaded.vs_halted = before.vs_halted /\
     lowered_value_rel (lowered_value_type cenv e) tv v src loaded /\ abi_operand_before load_cut.cs_next_var src /\
     runtime_consistent env cx es1 /\ env_scopes_consistent env cx es1 /\ state_well_typed es1 /\
-    state_rel_simple cenv cx es1 loaded /\ local_ptrs_rel func cenv es1.scopes loaded /\
+    state_rel_simple H cenv cx es1 loaded /\ local_ptrs_rel func cenv es1.scopes loaded /\
     alloca_inv loaded /\ allocation_growth before loaded /\ cs.cs_next_var <= load_cut.cs_next_var /\
     (fresh_vars_wrt cs before ==> fresh_vars_wrt load_cut loaded) /\ compiler_id_history load_cut /\
     (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op loaded = eval_operand arg_op before) /\
@@ -52,9 +52,9 @@ Definition log_argument_load_certificate_def:
 End
 
 Definition log_argument_lowering_def:
-  log_argument_lowering tops env ctx func cenv cx ids reserved requests final_cut charge e <=>
+  log_argument_lowering H tops env ctx func cenv cx ids reserved requests final_cut charge e <=>
     !suffix cs src load_cut saved save_cut tv es es1 v ss credit prefix ptvs pvs.
-      log_prefix_ready env cx cenv func ids reserved requests final_cut (e::suffix) cs es ss credit prefix ptvs pvs /\
+      log_prefix_ready H env cx cenv func ids reserved requests final_cut (e::suffix) cs es ss credit prefix ptvs pvs /\
       eval_argument cx e es = (INL v,es1) /\ charge e es <= credit /\
       lower_value compile_expr cenv (expr_type e) e cs = (src,load_cut) /\
       compile_log_save_arg cenv (lowered_value_type cenv e) src suffix load_cut = (saved,save_cut) /\
@@ -63,7 +63,7 @@ Definition log_argument_lowering_def:
       (!request. MEM request (compiler_alloca_requests cs load_cut) ==> MEM request requests) /\
       cs_extends cs load_cut /\ cs_extends save_cut final_cut /\
       fn_has_code cs load_cut func /\ fn_has_code load_cut save_cut func /\ fn_has_code save_cut final_cut func ==>
-      ?loaded writes. log_argument_load_certificate env ctx func cenv cx es es1 e tv v src suffix
+      ?loaded writes. log_argument_load_certificate H env ctx func cenv cx es es1 e tv v src suffix
         cs load_cut save_cut final_cut ss loaded reserved requests (credit - charge e es) writes
 End
 

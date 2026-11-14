@@ -19,7 +19,7 @@ Theorem abi_encode_word_staging:
   emit_void MSTORE [buf.buf_operand; op] sm = ((),sh) /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   eval_operand op s = SOME w /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -27,7 +27,7 @@ Theorem abi_encode_word_staging:
     run_inst_seq (emitted_insts sa sm) s = OK allocated /\
     run_inst_seq (emitted_insts sm sh) allocated =
       OK (mstore (w2n addr) w allocated) /\
-    stmt_state_rel ctx func cenv cx es (mstore (w2n addr) w allocated) /\
+    stmt_state_rel H ctx func cenv cx es (mstore (w2n addr) w allocated) /\
     eval_operand buf.buf_operand allocated = SOME addr /\
     eval_operand op allocated = SOME w /\
     FLOOKUP allocated.vs_allocas sa.cs_next_id = SOME (w2n addr,32) /\
@@ -47,7 +47,7 @@ Proof
      OK (mstore (w2n addr) w allocated)` by
     (irule literal_emit_mstore_run >>
      qexistsl_tac [`buf.buf_operand`, `op`] >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore (w2n addr) w allocated)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (w2n addr) w allocated)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n addr`,
        `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -61,7 +61,7 @@ QED
 (* Resource-only view of a real ALLOCA site. No execution or scratch budget
    is assumed: both the reuse size and fresh room come from stmt_state_rel. *)
 Theorem abi_encode_allocate_resources:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) ==>
   let a = abi_builtin_allocate_state inst.inst_id sz s in
@@ -91,7 +91,7 @@ Proof
 QED
 
 Theorem abi_encode_word_output_resources:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
   FLOOKUP s.vs_allocas source_id = SOME (sb,32) /\
   source_id <> inst.inst_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -121,7 +121,7 @@ QED
 (* Typed source representation at the very same staging endpoint. The type
    and conversion premises are the successful source builtin's checks. *)
 Theorem abi_encode_word_expr_post:
-  expr_post ctx func cenv cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx e es origin sa s0 es' v op s /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
@@ -135,7 +135,7 @@ Theorem abi_encode_word_expr_post:
     run_inst_seq (emitted_insts sa sm) s = OK allocated /\
     run_inst_seq (emitted_insts sm sh) allocated =
       OK (mstore (w2n addr) (typed_val_to_w256 tv v) allocated) /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (mstore (w2n addr) (typed_val_to_w256 tv v) allocated) /\
     eval_operand buf.buf_operand allocated = SOME addr /\
     FLOOKUP allocated.vs_allocas sa.cs_next_id = SOME (w2n addr,32) /\
@@ -146,7 +146,7 @@ Theorem abi_encode_word_expr_post:
     LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) = 32
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s /\
+  `stmt_state_rel H ctx func cenv cx es' s /\
    eval_operand op s = SOME (typed_val_to_w256 tv v)` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   drule_all abi_encode_word_staging >> strip_tac >>
@@ -181,7 +181,7 @@ QED
 
 Theorem abi_encode_word_setup_resources:
   abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
-  fn_has_code st ready func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code st ready func /\ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\
   FLOOKUP s.vs_allocas source_id = SOME (sb,32) /\
   source_id <> st.cs_next_id /\
   32 <= maxlen /\
@@ -283,7 +283,7 @@ QED
 (* Producer checkpoint for the actual word branch. All semantic typing and
    conversion premises below are the successful operand and builtin results. *)
 Theorem abi_encode_word_prefix_resources:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es') /\
   evaluate_type_builtin cx (AbiEncode F mid0) (TupleT [expr_type e])
@@ -304,7 +304,7 @@ Theorem abi_encode_word_prefix_resources:
     let a = abi_builtin_allocate_state sh.cs_next_id outsz staged in
     run_inst_seq (emitted_insts sa sm) s = OK allocated /\
     run_inst_seq (emitted_insts sm sh) allocated = OK staged /\
-    stmt_state_rel ctx func ce cx es' staged /\
+    stmt_state_rel H ctx func ce cx es' staged /\
     eval_operand buf.buf_operand allocated = SOME addr /\
     enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e))
       (THE (vyper_to_abi (get_tenv cx) (expr_type e) v)) /\
@@ -345,7 +345,7 @@ QED
    declared-capacity or literal ABI typing premise is used. *)
 Theorem abi_encode_post_lowered_footprint:
   expr_body_pre ce cx env e es /\
-  expr_post ctx func ce cx e es0 origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es0 origin sa s0 es' v op s /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v ==>
@@ -379,7 +379,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_expr_window:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
   abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
@@ -398,7 +398,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_expr_bound:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   eval_operand op s = SOME w ==>
@@ -416,7 +416,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_expr_site_disjoint:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   eval_operand op s = SOME w /\ fn_inst_ids_distinct func /\
@@ -433,7 +433,7 @@ QED
    not an assumed ABI input. The raw word's valid bytes32 representative
    avoids imposing literal ABI validity (e.g. bytes0) on source values. *)
 Theorem abi_encode_args_single_word_input:
-  abi_args_post ctx func ce cx es sa sb s0 es' [e] [op] [v] s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' [e] [op] [v] s /\
   is_word_type (expr_type e) /\
   abi_decoder_operand_live next op ==>
   ?w. eval_operand op s = SOME w /\
@@ -452,7 +452,7 @@ Proof
 QED
 
 Theorem abi_encode_args_empty_store:
-  abi_args_post ctx func ce cx es sa sb s0 es' [] ops vs s ==>
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' [] ops vs s ==>
   compile_store_abi_tuple ce buf 0 (ZIP (ops,[])) sb = ((),sb) /\
   run_inst_seq (emitted_insts sb sb) s = OK s
 Proof
@@ -461,7 +461,7 @@ Proof
 QED
 
 Theorem abi_encode_args_single_word_store:
-  abi_args_post ctx func ce cx es sa sb s0 es' [e] [op] [v] s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' [e] [op] [v] s /\
   is_word_type (expr_type e) /\
   compile_store_abi_tuple ce buf off [(op,expr_type e)] sb = ((),final) /\
   abi_decoder_operand_live sb.cs_next_var op /\

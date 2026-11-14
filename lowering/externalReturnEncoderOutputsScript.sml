@@ -195,7 +195,7 @@ Theorem return_encoder_alloca_local_disjoint:
   fn_has_code mid en func /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_id IN frag_ids mid en /\ local_ptrs_reserved cenv mid /\
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) /\
   local_region cenv es.scopes u name lo len ==>
   venomMemDefs$regions_disjoint (lo,len) (b,sz)
