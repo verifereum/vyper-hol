@@ -1186,13 +1186,20 @@ Proof
            (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>) =
          gas_events_blocks f unit.cu_context fa
            (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)` by
-    (rpt strip_tac >>
-     irule (Q.INST [`B` |-> `pre.cu_context`] gas_transport_trans) >>
-     conj_tac
-     >- (rpt strip_tac >>
-         irule (Q.INST [`B` |-> `mid.cu_context`] gas_transport_trans) >>
-         rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
+    (qx_gen_tac `fr` >> strip_tac >>
+     mp_tac (Q.INST [`A` |-> `unit.cu_context`, `B` |-> `pre.cu_context`,
+                     `C` |-> `stage 0`, `w` |-> `w`, `f` |-> `fr`]
+               gas_transport_trans) >>
+     impl_tac
+     >- (conj_tac
+         >- (qx_gen_tac `fm` >> strip_tac >>
+             mp_tac (Q.INST [`A` |-> `unit.cu_context`, `B` |-> `mid.cu_context`,
+                             `C` |-> `pre.cu_context`, `w` |-> `w`, `f` |-> `fm`]
+                       gas_transport_trans) >>
+             impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+             disch_then ACCEPT_TAC) >>
+         conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `?fr0. terminates (run_context fr0 (stage 0) w)` by metis_tac[] >>
   `o1_inv D 0 (stage 0) w` by (fs[o1_inv_def] >> metis_tac[]) >>
   qpat_x_assum `LIST_REL _ raw_slots gobs /\ _ ==> _` mp_tac >>
