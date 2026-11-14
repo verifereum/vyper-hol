@@ -4,7 +4,7 @@ Ancestors
   exprLoweringProps exprLowering ptrDiscipline finite_map list pred_set
   compileEnv rich_list emitHelper loweringStateRelDefs
   venomExecSemantics venomState venomInst ptrSafeRun fragGasSeqPtr bodyPtrBopScalarStep
-  instIdxIndep
+  instIdxIndep arithmeticProps freshWrites varsExt fragGasFresh
 
 Theorem bop_bytes_eq_suffix_ptr:
   (bop = Eq \/ bop = NotEq) /\
@@ -107,3 +107,39 @@ Resume bop_bytes_eq_suffix_ptr[neq]:
 QED
 
 Finalise bop_bytes_eq_suffix_ptr
+
+Theorem bop_bytes_eq_suffix_run:
+  (bop = Eq \/ bop = NotEq) /\
+  (ty = BaseT AddressT \/ ?m. ty = BaseT (BytesT (Fixed m))) /\
+  compile_binop bop x y ty NONE NONE sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  (!z. y = Var z ==> not_fresh_at sa z) /\
+  fn_has_code sa sb func /\
+  eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2 /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+      gas_marked_path F ctx func s 0
+        (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+      eval_operand op u = SOME (bool_to_word (eval_compare bop ty w1 w2))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `straight_fresh (compile_binop bop x y ty NONE NONE)` by
+    (irule straight_fresh_compare >> fs[]) >>
+  `compile_compare bop x y ty sa = (op,sb)` by
+    (qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `bop = _ \/ _` strip_assume_tac >> simp[compile_binop_def]) >>
+  `eval_operand x (drop_fresh sa s) = SOME w1 /\
+   eval_operand y (drop_fresh sa s) = SOME w2` by
+    simp[eval_operand_drop_fresh] >>
+  qspecl_then [`bop`, `x`, `y`, `ty`, `drop_fresh sa s`, `sa`, `op`, `sb`,
+    `w1`, `w2`] mp_tac compile_compare_correct >>
+  (impl_tac >- (simp[fresh_vars_wrt_drop_fresh] >> fs[])) >> strip_tac >>
+  drule_all fragGasFreshTheory.straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qmatch_asmsub_rename_tac `vars_ext ss' target` >>
+  qexists_tac `target` >> simp[] >>
+  fs[vars_ext_def] >>
+  qpat_x_assum `target = ss' with vs_vars := _` SUBST1_TAC >>
+  simp[eval_operand_vars_ext]
+QED
