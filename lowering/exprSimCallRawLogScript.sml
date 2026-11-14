@@ -420,7 +420,7 @@ QED
 
 (* The dynamic payload's tail: the endpoint of the MLOAD/ADD/LOG run does
    not depend on the horizon, the posts hold at every valid one. *)
-Theorem raw_log_dynamic_tail_summary[local]:
+Theorem raw_log_dynamic_tail_summary:
   expr_has_effect e /\
   (!H. valid_horizon cx st0 H es2.storage_trace ==>
      expr_post H ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) ptr_op s) /\
@@ -581,7 +581,7 @@ QED
 Finalise raw_log_dynamic_tail_summary
 
 (* The 32-byte payload's tail: as above, around the MSTORE and the LOG. *)
-Theorem raw_log_fixed_tail_summary[local]:
+Theorem raw_log_fixed_tail_summary:
   expr_has_effect e /\
   (!H. valid_horizon cx st0 H es2.storage_trace ==>
      expr_post H ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) val_op s) /\
