@@ -105,6 +105,7 @@ Proof
 QED
 
 Theorem bop_bytestring_hash_operational_certificate:
+  ~t.vs_halted /\
   is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
   body_inv tops ctx cenv cx /\
   lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
@@ -211,7 +212,7 @@ Proof
     (qpat_assum `w = n2w b` (fn th => rewrite_tac[th]) >> simp[]) >>
   drule_all bop_hash_compile_emission >> strip_tac >>
   qpat_assum `emitted_insts _ _ = _` (fn th =>
-    rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+    rule_assum_tac (PURE_REWRITE_RULE [th]) >> assume_tac th) >>
   drule_all (GEN_ALL (REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]
     (Q.INST [`h` |-> `h'`,
              `iA` |-> `mk_inst aId ADD [Var p; Lit 32w] [q]`,
@@ -252,6 +253,15 @@ Proof
      simp[eval_operand_def] >> gvs[] >> decide_tac) >>
   drule_all bop_hash_compile_placement >> strip_tac >>
   drule bop_hash_compile_layout >> strip_tac >>
-  `~t.vs_halted` by gvs[stmt_state_rel_def, state_rel_def] >>
-  FAIL_TAC "hash suffix operational"
+  drule compile_bytestring_hash_shape >> strip_tac >>
+  qexistsl_tac [`hash_end`, `HGf`, `unf`] >>
+  simp[] >>
+  rpt strip_tac >>
+  qspecl_then [`DF H`, `emitted_insts cb sz`, `t`, `hash_end`] mp_tac
+    (Q.GEN `D` run_inst_seq_gas_origin_ptr_path) >>
+  simp[] >>
+  disch_then (qspecl_then [`HG`, `un`, `HGf`, `unf`] mp_tac) >>
+  simp[] >> disch_then irule >> simp[] >>
+  qexists_tac `bb` >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[] >> metis_tac[]
 QED
