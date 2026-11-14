@@ -19,7 +19,7 @@
  *)
 Theory exprSimBufferEmptyExec
 Ancestors
-  exprSimProps
+  exprSimProps abiEmptySequence loweringHalt emitHelper
   exprSimAlloc
   exprSimBuffer exprSimBufferEmpty builtinSimple exprSimBufferStore
   exprSimLiteralBuffer exprSimOps freshWrites valueEncodingProps
@@ -458,3 +458,44 @@ Proof
   drule compile_builtin_empty_complex_shape >> strip_tac >>
   irule frag_exec_run_inst_seq >> simp[] >> metis_tac[]
 QED
+
+Theorem empty_buffer_compile_prefix:
+  !sz header sa sb buf func.
+    compile_builtin_empty_complex sz header sa = (buf,sb) /\
+    fn_has_code sa sb func ==>
+    ?sm p. compile_alloc_buffer sz sa = (buf,sm) /\
+      buf.buf_operand = Var p /\ not_fresh_at sm p /\
+      (if header then emit_void MSTORE [Var p; Lit 0w]
+       else compile_zero_words (Var p) ((sz+31) DIV 32)) sm = ((),sb) /\
+      fn_has_code sa sm func /\
+      emitted_insts sa sm = [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]] /\
+      emitted_insts sa sb =
+        mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p] :: emitted_insts sm sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule empty_compile_decompose >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  drule compile_alloc_buffer_insts >> strip_tac >>
+  `inst_extends sm sb /\ sb.cs_blocks = sm.cs_blocks /\
+    sb.cs_current_bb = sm.cs_current_bb` by suspend "tail" >>
+  qexistsl_tac [`sm`, `STRING #"%" (toString sa.cs_next_var)`] >>
+  gvs[] >> rpt conj_tac
+  >- suspend "code"
+  >- simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
+  gvs[inst_extends_def] >>
+  simp_tac (srw_ss()) [Once emitted_insts_def] >>
+  qpat_x_assum `sb.cs_current_insts = _` (fn th => rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, APPEND] >> REFL_TAC
+QED
+Resume empty_buffer_compile_prefix[tail]:
+  Cases_on `header` >> gvs[]
+  >- (drule inst_extends_emit_void >> strip_tac >> simp[] >>
+      gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def]) >>
+  metis_tac[abi_empty_zero_words_shape]
+QED
+Resume empty_buffer_compile_prefix[code]:
+  fs[fn_has_code_def, inst_extends_def, emitted_blocks_def] >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[IS_PREFIX_APPEND, APPEND_ASSOC]
+QED
+Finalise empty_buffer_compile_prefix
