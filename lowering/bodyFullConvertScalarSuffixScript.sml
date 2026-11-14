@@ -88,39 +88,3 @@ Proof
   qexistsl_tac [`err`,`t with vs_inst_idx := j`,`H`,`th`] >>
   fs[exec_result_map_def]
 QED
-
-Theorem scalar_convert_endpoint_posts:
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v1 x t0 /\
-  ghost_inv_at D lo d cenv cx ee G tn t0 /\
-  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-  storage_well_formed_on cx ee (FST H) /\
-  is_word_type typ /\ evaluate_type (get_tenv cx) typ = SOME tv /\
-  value_has_type tv v /\
-  eval_operand op s = SOME (typed_val_to_w256 tv v) /\
-  local_ptrs_reserved cenv s1 /\
-  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==>
-          not_fresh_at s1 z) /\
-  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
-          not_fresh_at s1 z) /\
-  sa.cs_next_var <= s1.cs_next_var /\
-  state_frame s = state_frame (t0 with vs_inst_idx := s.vs_inst_idx) /\
-  s.vs_current_bb = sb.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  (!z. not_fresh_at s1 z ==>
-       lookup_var z s = lookup_var z t0 /\
-       FLOOKUP Gf z = FLOOKUP G z /\
-       op_taint tnf (Var z) = op_taint tn (Var z)) /\
-  tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-  tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-  op_taint tnf op = {} /\ op_prov Gf op = NONE ==>
-  expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
-    es sa sb s0 ee v op s /\
-  ghost_inv_at D lo d cenv cx ee Gf tnf s /\
-  ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tnf /\
-  storage_well_formed_on cx ee (FST H) /\
-  ptr_val_ok cx typ v op Gf tnf s /\
-  s.vs_current_bb = sb.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sb.cs_current_insts
-Proof
-  MATCH_ACCEPT_TAC scalar_convert_endpoint_frames
-QED
