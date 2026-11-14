@@ -697,19 +697,6 @@ Proof
   gvs[vv_post_def]
 QED
 
-Theorem arg_type_fits_bytestring_target[local]:
-  !t u. arg_type_fits t u /\ is_bytestring_type t ==> is_bytestring_type u
-Proof
-  rpt strip_tac >> Cases_on `t` >> gvs[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_bytestring_type_def]) >>
-  Cases_on `u` >> gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def] >>
-  rename1 `BaseT bu` >> Cases_on `bu` >>
-  gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def] >>
-  TRY (rename1 `BytesT bud` >> Cases_on `bud` >>
-       gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def])
-QED
-
 (* aggregate_make_tuple_sim at the tuple's declared member types tys
    (tuple_literal_types; a struct's field types, an array's element type),
    each of which its element fits (arg_type_fits).  A flat member is its
