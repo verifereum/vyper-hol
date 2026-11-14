@@ -1086,8 +1086,8 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem materialize_run_compact:
-  !caps cenv st cenv' st' func env s f0 mr.
+Theorem materialize_run_invariant:
+  !caps cenv st cenv' st' func env s f0 mr P.
     materialize_internal_params cenv caps st = (cenv',st') /\
     (!i. MEM i (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) ==>
          MEM i (fn_insts func)) /\
@@ -1098,11 +1098,54 @@ Theorem materialize_run_compact:
        regions_disjoint b1 sz1 b2 sz2) /\
     mat_inv func cenv env st s f0 mr /\
     s.vs_alloca_next + internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
-      < dimword (:256) ==>
+      < dimword (:256) /\ P cenv st caps s /\
+    (!ce cs us nm p tail off sz.
+       P ce cs ((nm,F,Var p)::tail) us /\
+       mat_inv func ce env cs us f0 mr /\
+       mat_pending ce env cs us f0 mr ((nm,F,Var p)::tail) /\
+       ALL_DISTINCT (MAP FST ((nm,F,Var p)::tail)) /\
+       FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) ==>
+       P (ce with ce_vars updated_by (\m. m |+ (nm,PtrVar (Var p) sz)))
+         cs tail us) /\
+    (!ce cs us mid ut nm p tail off sz.
+       P ce cs ((nm,T,Var p)::tail) us /\
+       mat_inv func ce env cs us f0 mr /\
+       mat_pending ce env cs us f0 mr ((nm,T,Var p)::tail) /\
+       ALL_DISTINCT (MAP FST ((nm,T,Var p)::tail)) /\
+       FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) /\
+       mid.cs_next_var = cs.cs_next_var + 1 /\
+       mid.cs_next_id = cs.cs_next_id + 2 /\
+       mid.cs_blocks = cs.cs_blocks /\ mid.cs_current_bb = cs.cs_current_bb /\
+       mid.cs_current_insts = cs.cs_current_insts ++
+         [mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)]
+            [STRING #"%" (toString cs.cs_next_var)];
+          mk_inst (cs.cs_next_id + 1) MSTORE
+            [Var (STRING #"%" (toString cs.cs_next_var));Var p] []] /\
+       MEM (mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)]
+              [STRING #"%" (toString cs.cs_next_var)]) (fn_insts func) /\
+       us.vs_alloca_next + sz < dimword (:256) /\
+       run_inst_seq
+         [mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)]
+            [STRING #"%" (toString cs.cs_next_var)];
+          mk_inst (cs.cs_next_id + 1) MSTORE
+            [Var (STRING #"%" (toString cs.cs_next_var));Var p] []] us = OK ut /\
+       mat_inv func
+         (ce with ce_vars updated_by (\m. m |+
+           (nm,PtrVar (Var (STRING #"%" (toString cs.cs_next_var))) sz)))
+         env mid ut f0 mr /\
+       mat_pending
+         (ce with ce_vars updated_by (\m. m |+
+           (nm,PtrVar (Var (STRING #"%" (toString cs.cs_next_var))) sz)))
+         env mid ut f0 mr tail /\ mat_frame cs us ut /\
+       ut.vs_alloca_next = us.vs_alloca_next + sz ==>
+       P (ce with ce_vars updated_by (\m. m |+
+           (nm,PtrVar (Var (STRING #"%" (toString cs.cs_next_var))) sz)))
+         mid tail ut) ==>
     ?t. run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s = OK t /\
         mat_inv func cenv' env st' t f0 mr /\ mat_frame st s t /\
         t.vs_alloca_next = s.vs_alloca_next +
-          internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
+          internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps) /\
+        P cenv' st' [] t
 Proof
   Induct
   >- (simp[materialize_internal_params_def, comp_return_def,
@@ -1119,7 +1162,7 @@ Proof
   suspend "memory"
 QED
 
-Resume materialize_run_compact[memory]:
+Resume materialize_run_invariant[memory]:
   gvs[Once materialize_internal_params_def, internal_stack_size_def] >>
   qmatch_asmsub_abbrev_tac `materialize_internal_params ce caps st` >>
   `internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps) =
@@ -1127,14 +1170,21 @@ Resume materialize_run_compact[memory]:
     (simp[Abbr `ce`] >> irule mat_tail_stack_size >> simp[]) >>
   qpat_assum `internal_stack_size ce _ = _`
     (fn th => rewrite_tac[GSYM th]) >>
-  first_x_assum irule >> simp[] >> conj_tac
-  >- (first_assum ACCEPT_TAC) >> conj_tac
-  >- (simp[Abbr `ce`] >> irule mat_inv_memory_bind >>
-      simp[] >> first_assum ACCEPT_TAC) >>
-  simp[Abbr `ce`] >> irule mat_pending_bind >>
-  simp[] >> qexistsl_tac [`s`, `st`] >> simp[mat_frame_refl]
+  `P ce st caps s` by
+    (qpat_x_assum `!ce cs us nm p tail off sz. _`
+       (drule_all o SRULE []) >> simp[Abbr `ce`]) >>
+  `mat_inv func ce env st s f0 mr` by
+    (simp[Abbr `ce`] >> irule mat_inv_memory_bind >>
+     simp[] >> first_assum ACCEPT_TAC) >>
+  `mat_pending ce env st s f0 mr caps` by
+    (simp[Abbr `ce`] >> irule mat_pending_bind >>
+     simp[] >> qexistsl_tac [`s`, `st`] >> simp[mat_frame_refl]) >>
+  `s.vs_alloca_next + internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps)
+     < dimword (:256)` by gvs[] >>
+  qpat_x_assum `!cenv st cenv' st' func env s f0 mr P. _`
+    (drule_all o SRULE []) >> simp[]
 QED
-Resume materialize_run_compact[stack]:
+Resume materialize_run_invariant[stack]:
   gvs[] >>
   drule_all materialize_stack_split >> strip_tac >>
   qmatch_asmsub_abbrev_tac `materialize_internal_params ce caps mid` >>
@@ -1155,7 +1205,13 @@ Resume materialize_run_compact[stack]:
   `!i. MEM i (DROP (LENGTH mid.cs_current_insts) st'.cs_current_insts) ==>
        MEM i (fn_insts func)` by
     (rpt strip_tac >> qpat_x_assum `!i. MEM i _ ==> _` irule >> gvs[]) >>
-  qpat_x_assum `!cenv st cenv' st' func env s f0 mr. _` drule_all >> strip_tac >>
+  `P ce mid caps t` by
+    (qpat_x_assum `!ce cs us mid ut nm p tail off sz. _`
+       (qspecl_then [`cenv`, `st`, `s`, `mid`, `t`, `h0`, `p`,
+                      `caps`, `off`, `sz`] mp_tac) >>
+     impl_tac >- gvs[Abbr `ce`] >> simp[Abbr `ce`]) >>
+  qpat_x_assum `!cenv st cenv' st' func env s f0 mr P. _`
+    (drule_all o SRULE []) >> strip_tac >>
   qexists_tac `t'` >> conj_tac
   >- (qpat_x_assum `DROP _ _ = _` (fn th => rewrite_tac[th]) >>
       qpat_assum `run_inst_seq [_;_] s = OK t`
@@ -1164,7 +1220,31 @@ Resume materialize_run_compact[stack]:
   simp[internal_stack_size_def] >> irule mat_frame_trans >>
   qexistsl_tac [`mid`, `t`] >> simp[not_fresh_at_def]
 QED
-Finalise materialize_run_compact[local]
+Finalise materialize_run_invariant
+
+Theorem materialize_run_compact[local]:
+  !caps cenv st cenv' st' func env s f0 mr.
+    materialize_internal_params cenv caps st = (cenv',st') /\
+    (!i. MEM i (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) ==>
+         MEM i (fn_insts func)) /\
+    fn_inst_ids_distinct func /\ ALL_DISTINCT (MAP FST caps) /\
+    mat_pending cenv env st s f0 mr caps /\
+    (!n1 n2 b1 sz1 b2 sz2.
+       n1 <> n2 /\ mr n1 = SOME (b1,sz1) /\ mr n2 = SOME (b2,sz2) ==>
+       regions_disjoint b1 sz1 b2 sz2) /\
+    mat_inv func cenv env st s f0 mr /\
+    s.vs_alloca_next + internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
+      < dimword (:256) ==>
+    ?t. run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s = OK t /\
+        mat_inv func cenv' env st' t f0 mr /\ mat_frame st s t /\
+        t.vs_alloca_next = s.vs_alloca_next +
+          internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`caps`, `cenv`, `st`, `cenv'`, `st'`, `func`, `env`,
+    `s`, `f0`, `mr`, `(\ce cs todo u. T)`] materialize_run_invariant) >>
+  simp[] >> metis_tac[]
+QED
 
 Theorem internal_args_local_memloc[local]:
   !cenv params env idx args frontier mem name entry.
