@@ -4155,7 +4155,7 @@ QED
 
 (* Folding a builtin either leaves it alone or turns Sha256 of a literal
    into a bytes literal. *)
-Theorem fold_const_builtin_shape[local]:
+Theorem fold_const_builtin_result_cases[local]:
   !ty bi es.
   fold_const_builtin ty bi es = Builtin ty bi es \/
   (bi = Sha256 /\ ?aty l bs. es = [Literal aty l] /\
@@ -4182,7 +4182,7 @@ Proof
   simp[fold_const_expr_def, no_neg_exp_expr_def] >> rpt strip_tac >>
   rename1 `fold_const_builtin ty bi (fold_const_exprs es)` >>
   qspecl_then [`ty`,`bi`,`fold_const_exprs es`] strip_assume_tac
-    fold_const_builtin_shape >>
+    fold_const_builtin_result_cases >>
   gvs[no_neg_exp_expr_def] >>
   Cases_on `bi = Bop Exp` >> gvs[] >>
   Cases_on `es` >> simp[fold_const_expr_def] >>
@@ -4191,18 +4191,8 @@ Proof
   Cases_on `h'` >> simp[fold_const_expr_def] >>
   rename1 `fold_const_builtin bty bb (fold_const_exprs bes)` >>
   qspecl_then [`bty`,`bb`,`fold_const_exprs bes`] strip_assume_tac
-    fold_const_builtin_shape >>
+    fold_const_builtin_result_cases >>
   simp[]
-QED
-
-Theorem module_consts_env_acc_prefix[local]:
-  !ts acc. ?l. module_consts_env ts acc = acc ++ l
-Proof
-  Induct >> simp[module_consts_env_def] >> Cases >>
-  simp[module_consts_env_def] >>
-  rename1 `VariableDecl _ mut _ _ _` >> Cases_on `mut` >>
-  simp[module_consts_env_def] >>
-  metis_tac[APPEND_ASSOC]
 QED
 
 Theorem checked_module_consts_env_typed_acc[local]:
@@ -4227,7 +4217,7 @@ Proof
       >~ [`module_consts_env ts (E ++ [(id,fold_const_expr (subst_consts_expr E e))])`]
       >- (`no_neg_exp_expr (subst_consts_expr E e)` by
             (qspecl_then [`ts`, `E ++ [(id,fold_const_expr (subst_consts_expr E e))]`]
-               strip_assume_tac module_consts_env_acc_prefix >>
+               strip_assume_tac constSubstTheory.module_consts_env_acc_prefix >>
              gvs[EVERY_APPEND, fold_const_no_neg_exp]) >>
           `well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
            expr_type (subst_consts_expr E e) = ty` by

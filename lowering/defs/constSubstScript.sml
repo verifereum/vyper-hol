@@ -392,6 +392,16 @@ Definition module_consts_env_def:
   module_consts_env (_::rest) acc = module_consts_env rest acc
 End
 
+Theorem module_consts_env_acc_prefix:
+  !ts acc. ?l. module_consts_env ts acc = acc ++ l
+Proof
+  Induct >> simp[module_consts_env_def] >> Cases >>
+  simp[module_consts_env_def] >>
+  rename1 `VariableDecl _ mut _ _ _` >> Cases_on `mut` >>
+  simp[module_consts_env_def] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
 Definition subst_consts_fn_def:
   subst_consts_fn env (mut,nr,rr,id,args,dflts,ret,body) =
     (mut,nr,rr,id,args,subst_consts_exprs env dflts,ret,subst_consts_stmts env body)

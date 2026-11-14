@@ -273,16 +273,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem module_consts_env_acc_prefix[local]:
-  !ts acc. ?l. module_consts_env ts acc = acc ++ l
-Proof
-  Induct >> simp[constSubstTheory.module_consts_env_def] >> Cases >>
-  simp[constSubstTheory.module_consts_env_def] >>
-  rename1 `VariableDecl _ mut _ _ _` >> Cases_on `mut` >>
-  simp[constSubstTheory.module_consts_env_def] >>
-  metis_tac[APPEND_ASSOC]
-QED
-
 Theorem bare_global_variable_decl:
   !ts id. is_bare_global_decl id ts ==>
     ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) ts
@@ -312,7 +302,7 @@ Proof
   `MEM dname (MAP FST (module_consts_env ts
      (acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))])))` by
     (qspecl_then [`ts`, `acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))]`]
-       strip_assume_tac module_consts_env_acc_prefix >> simp[]) >>
+       strip_assume_tac constSubstTheory.module_consts_env_acc_prefix >> simp[]) >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
