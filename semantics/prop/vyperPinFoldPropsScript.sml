@@ -291,6 +291,164 @@ Proof
   metis_tac[pin_fold_expr_tree_pure_mutual]
 QED
 
+Theorem pin_closed_builtin_exact[local]:
+  (pin_foldable_builtin b \/ (?elem bd. b = MakeArray (SOME elem) bd)) /\
+  eval_pure_exprs cx st es = SOME vs /\
+  eval_exprs cx es st = (INL vs, st) /\
+  eval_pure_expr cx st (Builtin ty b es) = SOME (Value v) ==>
+  eval_expr cx (Builtin ty b es) st = (INL (Value v), st)
+Proof
+  Cases_on `b` >>
+  simp[pin_foldable_builtin_def, eval_pure_expr_def,
+       vyperInterpreterTheory.evaluate_def,
+       vyperInterpreterTheory.precompile_call_success_def,
+       bind_def, ignore_bind_def, type_check_def, assert_def,
+       return_def, get_accounts_def, lift_sum_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  simp[return_def]
+QED
+
+Theorem pin_fold_builtin_tree_provenance[local]:
+  pin_literal_tree (pin_fold_builtin ty b fs) ==>
+  pin_literal_trees fs /\
+  (b = Len \/ pin_foldable_builtin b \/
+   ?elem bd. b = MakeArray (SOME elem) bd)
+Proof
+  strip_tac >>
+  qspecl_then [`ty`, `b`, `fs`] strip_assume_tac pin_fold_builtin_cases
+  >- (gvs[] >> Cases_on `b` >> gvs[pin_literal_tree_def] >>
+      rename1 `MakeArray elem_opt bd` >>
+      Cases_on `elem_opt` >> gvs[pin_literal_tree_def]) >>
+  Cases_on `ty` >> gvs[pin_fold_builtin_def] >>
+  Cases_on `b = Len`
+  >- (gvs[] >> Cases_on `fs` >> gvs[pin_literal_values_def, pin_foldable_builtin_def, pin_literal_tree_def] >>
+      rename1 `head :: tail` >>
+      Cases_on `tail` >> gvs[pin_literal_values_def, pin_foldable_builtin_def, pin_literal_tree_def] >>
+      Cases_on `head` >> gvs[pin_literal_values_def, pin_foldable_builtin_def, pin_literal_tree_def] >>
+      rename1 `Literal _ lit` >> Cases_on `lit` >>
+      gvs[pin_foldable_builtin_def, pin_literal_tree_def]) >>
+  gvs[AllCaseEqs(), pin_fold_result_def] >>
+  metis_tac[pin_literal_values_trees]
+QED
+
+Theorem pin_len_exact[local]:
+  eval_pure_expr cx st e = SOME (Value w) /\
+  eval_expr cx e st = (INL (Value w), st) /\
+  eval_pure_expr cx st (Builtin ty Len [e]) = SOME (Value v) ==>
+  eval_expr cx (Builtin ty Len [e]) st = (INL (Value v), st)
+Proof
+  strip_tac >>
+  gvs[eval_pure_expr_def, vyperInterpreterTheory.evaluate_def,
+      builtin_args_length_ok_def, bind_def, type_check_def,
+      assert_def, return_def] >>
+  Cases_on `w` >>
+  gvs[result_array_length_def, read_result_def, bind_def, return_def,
+      raise_def, AllCaseEqs()] >>
+  gvs[ignore_bind_def, assert_def, bind_def, return_def,
+      result_array_length_def, read_result_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[result_array_length_def, read_result_def, bind_def, return_def,
+      raise_def, AllCaseEqs()]
+QED
+
+Theorem pin_subscript_exact[local]:
+  eval_pure_expr cx st e = SOME (Value w) /\
+  eval_expr cx e st = (INL (Value w), st) /\
+  eval_pure_expr cx st idx = SOME (Value i) /\
+  eval_expr cx idx st = (INL (Value i), st) /\
+  eval_pure_expr cx st (Subscript ty e idx) = SOME (Value v) ==>
+  eval_expr cx (Subscript ty e idx) st = (INL (Value v), st)
+Proof
+  Cases_on `subscript_reads_base cx e idx` >>
+  simp[eval_pure_expr_def, vyperInterpreterTheory.evaluate_def,
+       read_result_def, return_def, bind_def, select_result_def,
+       lift_option_type_def, lift_sum_def] >>
+  rpt strip_tac >>
+  gvs[read_result_def, select_result_def, lift_option_type_def,
+      lift_sum_def, AllCaseEqs(), return_def, bind_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >>
+  gvs[return_def, raise_def] >>
+  rename1 `evaluate_type _ _ = SOME base_tv` >>
+  Cases_on `evaluate_subscripts base_tv w [ValueSubscript i]` >>
+  gvs[return_def, raise_def]
+QED
+
+Theorem pin_nullary_type_builtin_exact[local]:
+  eval_pure_expr cx st (TypeBuiltin ty tb typ []) = SOME (Value v) ==>
+  eval_expr cx (TypeBuiltin ty tb typ []) st = (INL (Value v), st)
+Proof
+  simp[eval_pure_expr_def, vyperInterpreterTheory.evaluate_def,
+       bind_def, return_def, type_check_def, assert_def, lift_sum_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), ignore_bind_def, assert_def, bind_def, return_def]
+QED
+
+(* Successful folded provenance rules out every storage-place read.
+   Keep pointwise exactness for Len, which evaluates its head directly. *)
+Theorem pin_fold_tree_exact_mutual[local]:
+  (!e. pin_literal_tree (pin_fold_expr e) ==> !v.
+    eval_pure_expr cx st e = SOME (Value v) ==>
+    eval_expr cx e st = (INL (Value v), st)) /\
+  (!es. pin_literal_trees (pin_fold_exprs es) ==> !vs.
+    eval_pure_exprs cx st es = SOME vs ==>
+    EVERY2 (\e v. eval_expr cx e st = (INL (Value v), st)) es vs /\
+    eval_exprs cx es st = (INL vs, st))
+Proof
+  ho_match_mp_tac pin_fold_expr_ind >>
+  rpt conj_tac >> rpt gen_tac
+  >- (rename1 `Builtin builtin_ty builtin args` >>
+      simp[pin_fold_expr_def] >> rpt strip_tac >>
+      drule pin_fold_builtin_tree_provenance >> strip_tac >>
+      `?vs. eval_pure_exprs cx st args = SOME vs` by
+        metis_tac[cj 2 pin_fold_expr_tree_pure_mutual,
+                  pin_literal_trees_pure] >>
+      first_x_assum drule >> disch_then drule >> strip_tac >>
+      Cases_on `builtin = Len`
+      >- (gvs[] >> Cases_on `args` >>
+          gvs[eval_pure_expr_def] >>
+          rename1 `arg :: rest` >> Cases_on `rest` >>
+          gvs[eval_pure_expr_def] >>
+          gvs[pin_fold_expr_def, pin_literal_tree_def] >>
+          drule pin_fold_expr_tree_pure >>
+          disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+          gvs[read_result_def, return_def] >>
+          irule pin_len_exact >>
+          simp[eval_pure_expr_def]) >>
+      irule pin_closed_builtin_exact >>
+      metis_tac[])
+  >- metis_tac[pin_nullary_type_builtin_exact]
+  >- metis_tac[pin_nullary_type_builtin_exact]
+  >- metis_tac[pin_nullary_type_builtin_exact]
+  >- (rename1 `Subscript sub_ty base_expr index_expr` >>
+      simp[pin_fold_expr_def] >> rpt strip_tac >>
+      Cases_on `pin_fold_expr base_expr` >>
+      gvs[pin_fold_subscript_def, pin_literal_tree_def] >>
+      rename1 `Builtin aty array_op fs` >> Cases_on `array_op` >>
+      gvs[pin_fold_subscript_def, pin_literal_tree_def] >>
+      rename1 `MakeArray elem_opt bd` >> Cases_on `elem_opt` >>
+      gvs[pin_fold_subscript_def, pin_literal_tree_def] >>
+      Cases_on `pin_fold_expr index_expr` >>
+      gvs[pin_fold_subscript_def, pin_literal_tree_def] >>
+      rename1 `Literal ity lit` >> Cases_on `lit` >>
+      gvs[pin_fold_subscript_def, pin_literal_tree_def] >>
+      qpat_x_assum `pin_literal_tree _` mp_tac >>
+      IF_CASES_TAC >> gvs[pin_literal_tree_def] >> strip_tac >>
+      `pin_literal_tree (pin_fold_expr base_expr)` by simp[pin_literal_tree_def] >>
+      `pin_literal_tree (pin_fold_expr index_expr)` by simp[pin_literal_tree_def] >>
+      `?w. eval_pure_expr cx st base_expr = SOME (Value w)` by
+        metis_tac[pin_fold_expr_tree_pure] >>
+      `?i. eval_pure_expr cx st index_expr = SOME (Value i)` by
+        metis_tac[pin_fold_expr_tree_pure] >>
+      irule pin_subscript_exact >> metis_tac[pin_literal_tree_def]) >>
+  simp[pin_fold_expr_def, pin_literal_tree_def, eval_pure_expr_def,
+       vyperInterpreterTheory.evaluate_def, return_def] >>
+  rpt strip_tac >>
+  drule pin_fold_expr_tree_pure >>
+  disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+  gvs[read_result_def, return_def, AllCaseEqs()] >>
+  gvs[bind_def, read_result_def, return_def]
+QED
+
 (* Only a literal result replaces the original expression in consumers.
    A nonliteral normal form is used solely to classify provenance. *)
 Theorem pin_fold_expr_literal_sound:
@@ -302,5 +460,6 @@ Proof
   drule pin_fold_expr_tree_pure >>
   disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
   gvs[eval_pure_expr_def] >>
-  irule eval_pure_expr_to_eval_expr_some >> simp[]
+  irule (cj 1 pin_fold_tree_exact_mutual) >>
+  simp[pin_literal_tree_def]
 QED
