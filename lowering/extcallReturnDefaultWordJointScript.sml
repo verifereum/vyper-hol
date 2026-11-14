@@ -1,7 +1,7 @@
 (* The scalar default store has one explicit operational/ghost endpoint. *)
 Theory extcallReturnDefaultWordJoint
 Ancestors
-  bodyFullUnwrapRun fragGasCopyLoop
+  bodyFullUnwrapRun bodyFullUnwrapSlotPost fragGasCopyLoop
   exprSimPtrTopLevelImmutableCopy allocaFootprint bodyPtrDefs
   extcallReturnDefaultStore exprSimBufferStore
   context emitHelperProps exprLoweringProps venomState venomInst venomExecSemantics ptrDiscipline fragExec
@@ -34,7 +34,33 @@ Theorem return_default_word_store_joint:
     (!op. op_taint tm op = op_taint tn op) /\
     (!lo ce es sa G0 tn0 s0.
        ghost_kept_at lo ce es sa G0 tn0 s0 G tn ==>
-       ghost_kept_at lo ce es sa G0 tn0 s0 G tm)
+       ghost_kept_at lo ce es sa G0 tn0 s0 G tm) /\
+    (!D d cenv cx ee sa.
+       ghost_inv_at D lo d cenv cx ee G tn s /\
+       local_ptrs_reserved cenv sa /\
+       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+       local_ptrs_rel func cenv ee.scopes s /\ lo <= w2n dw /\
+       (!name b sz. local_region cenv ee.scopes s name b sz ==>
+          w2n dw + 32 <= b \/ b + sz <= w2n dw) ==>
+       ghost_inv_at D lo d cenv cx ee G tm u) /\
+    (!H cenv cx ee sa.
+       stmt_state_rel H ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+       (!name b sz. local_region cenv ee.scopes s name b sz ==>
+          b + sz <= w2n dw \/ w2n dw + 32 <= b) /\
+       (cenv.ce_is_ctor ==> !name tv v off.
+          FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+          FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+            | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+          regions_disjoint off (type_memory_size tv) (w2n dw) 32) ==>
+       stmt_state_rel H ctx func cenv cx ee u) /\
+    (!cenv es ee sa s0.
+       wb_frame cenv es ee sa s0 s /\
+       (!aid b sz. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+          b+sz <= w2n dw \/ w2n dw+32 <= b) /\
+       (!name b sz. local_region cenv es.scopes s0 name b sz ==>
+          b+sz <= w2n dw \/ w2n dw+32 <= b) ==>
+       wb_frame cenv es ee sa s0 u)
 Proof
   strip_tac >>
   `emit_void MSTORE [Var dst;src] a = ((),b)` by
@@ -55,9 +81,11 @@ Proof
   simp[] >> conj_tac >- suspend "path" >>
   conj_tac >- suspend "value" >>
   conj_tac >- suspend "exterior" >>
-  simp[mstore_def, write_memory_with_expansion_def] >>
   conj_tac >- suspend "block" >>
-  simp[op_taint_def, ghost_kept_at_def] >> metis_tac[]
+  simp[op_taint_def] >>
+  conj_tac >- (simp[ghost_kept_at_def, op_taint_def] >> metis_tac[]) >>
+  conj_tac >- suspend "ghost" >>
+  conj_tac >- suspend "state" >> suspend "wb"
 QED
 Resume return_default_word_store_joint[path]:
   gen_tac >>
@@ -97,6 +125,55 @@ Resume return_default_word_store_joint[exterior]:
   gvs[] >> rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 Resume return_default_word_store_joint[block]:
-  drule emit_void_same_blocks >> simp[same_blocks_def]
+  drule emit_void_same_blocks >> simp[same_blocks_def, mstore_def, write_memory_with_expansion_def]
+QED
+Resume return_default_word_store_joint[ghost]:
+  rpt gen_tac >> strip_tac >>
+  irule unwrap_slot_copy_ghost_inv_at >>
+  simp[] >>
+  conj_tac >- (gvs[allocas_from_def] >> metis_tac[]) >>
+  conj_tac >- gvs[ghost_inv_at_def, stor_taint_ok_at_def, mstore_def, write_memory_with_expansion_def] >>
+  goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+  qexistsl_tac [`32`, `sa`, `w2n dw`] >>
+  simp[mstore_def, write_memory_with_expansion_def, lookup_var_def,
+       op_taint_def, stor_taint_ok_at_def, allocas_from_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  mp_tac valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  simp[mstore_def, write_memory_with_expansion_def] >> metis_tac[]
+QED
+Resume return_default_word_store_joint[state]:
+  rpt gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee (mstore (w2n dw) w s)` suffices_by
+    (simp[stmt_state_rel_inst_idx]) >>
+  irule buffer_store_state_frame >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+  qexistsl_tac [`w2n dw`, `32`, `sa`] >>
+  simp[mstore_def, write_memory_with_expansion_def, lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (rpt strip_tac >>
+    mp_tac valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+    simp[mstore_def, write_memory_with_expansion_def] >> metis_tac[]) >>
+  conj_tac >- (IF_CASES_TAC >> simp[listTheory.LENGTH_TAKE] >> decide_tac) >>
+  metis_tac[]
+QED
+Resume return_default_word_store_joint[wb]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[loweringPostsTheory.wb_frame_def] >> strip_tac >>
+  simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
+  conj_tac >- gvs[lookup_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      `mem_bytes_at off sz (mstore (w2n dw) (typed_val_to_w256 tv v) s).vs_memory =
+       mem_bytes_at off sz s.vs_memory` by
+        (irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+         metis_tac[]) >>
+      metis_tac[]) >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >> qexists_tac `s` >> simp[] >>
+  rpt strip_tac >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> metis_tac[]
 QED
 Finalise return_default_word_store_joint
