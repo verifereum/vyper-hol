@@ -97,7 +97,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> strip_tac >>
-  drule aug_place_store_backends >> strip_tac >>
+  drule (INST_TYPE [alpha |-> ``:256``] aug_place_store_backends) >> strip_tac >>
   qpat_x_assum `!b. storage_well_formed_on cx ff b <=> _`
     (fn th => REWRITE_TAC [th]) >>
   first_assum ACCEPT_TAC
