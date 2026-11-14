@@ -42,11 +42,12 @@
  * targetPlaceSimCases.
  *
  * Helpers: target_pre_sub,
- *   expr_sim_inv_local, target_post_refl, toplevel_decl_ce_vars, toplevel_target_decl
+ *   expr_sim_inv_local, toplevel_decl_ce_vars, toplevel_target_decl
  *)
 
 Theory targetPlaceSim
 Ancestors
+  vyperLocalAccessFrame
   exprSimFieldLayout
   targetPlaceSimDefs
   exprSimHypsDefs placeTypingProps
@@ -193,21 +194,6 @@ QED
 
 (* ===== Leaves ===== *)
 
-(* No code, and the post at the start state. *)
-Theorem target_post_refl[local]:
-  !H ctx func cenv cx es sa s pv vt r.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
-    (?w. eval_operand (FST r) s = SOME w /\
-         place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
-    SND (SND r) = SOME (value_type_place vt) /\
-    (!x. FST r = Var x ==> not_fresh_at sa x) /\
-    place_readable cx es pv ==>
-    target_post H ctx func cenv cx es sa sa s es pv vt r s
-Proof
-  rw[target_post_def] >> metis_tac[]
-QED
-
 (* A local: its place MemoryPlace x [] at its pointer, no code. *)
 Theorem target_name_case:
   !nocalls ctx func cenv cx id.
@@ -246,7 +232,7 @@ QED
 
 (* The compile environment holds a storage, transient or mapping variable
    at the layout's slot (storage_vars_rel, transient_vars_rel). *)
-Theorem toplevel_decl_ce_vars[local]:
+Theorem toplevel_decl_ce_vars:
   !cenv cx src id ts d id_str tr slot.
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     get_module_code cx src = SOME ts /\
@@ -264,7 +250,7 @@ QED
    declared type, or a mapping of its declared key and value types.
    bare_global_assignable and bare_globals name immutables, which have no
    storage declaration. *)
-Theorem toplevel_target_decl[local]:
+Theorem toplevel_target_decl:
   !env cx st src id vt.
     type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
     env_consistent env cx st /\
@@ -417,3 +403,22 @@ Resume target_toplevel_case[mapping]:
 QED
 
 Finalise target_toplevel_case
+
+Theorem target_base_memory_root_ptr:
+  !bt cx s id path st.
+    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),st) ==>
+    target_root bt = NameTarget id
+Proof
+  `(!e:expr. T) /\ (!bt. !cx s id path st.
+    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),st) ==>
+    target_root bt = NameTarget id)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[] >> rpt conj_tac >> rpt gen_tac
+  >- simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs(), target_root_def]
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >> metis_tac[lookup_global_not_memory]) >>
+  rpt strip_tac >> qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >> drule extend_place_memory_origin >> strip_tac >> gvs[] >>
+  simp[target_root_def] >> metis_tac[]
+QED
