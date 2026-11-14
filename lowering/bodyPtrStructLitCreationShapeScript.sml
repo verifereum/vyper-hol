@@ -112,5 +112,5 @@ Proof
             is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
             is_terminator_def]) >>
       simp[shape_step_return]) >>
-  simp[shape_step_def, plain_operand_def]
+  simp[shape_step_def, plain_operand_def, is_label_operand_def]
 QED
