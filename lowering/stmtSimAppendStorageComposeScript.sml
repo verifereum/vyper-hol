@@ -56,7 +56,7 @@ Theorem append_storage_copy_code_parts:
       (lowered_value_type cenv e) sc = ((),sd) /\
     compile_dynarray_append cenv (Lit slot) tmp.buf_operand 1
       ((type_memory_bytes cenv elem + 31) DIV 32) elem elem cap F
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sd = ((),sf)
+      (if tr then LocTransient else LocStorage) sd = ((),sf)
 Proof
   strip_tac >>
   drule_all compile_get_target_ptr_toplevel >> strip_tac >>
@@ -64,8 +64,7 @@ Proof
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def, Once compile_stmt_def] >>
   Cases_on `tr` >>
-  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def,
-       load_opc_for_def, store_opc_for_def] >>
+  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def] >>
   Cases_on `lower_value compile_expr cenv elem e sa` >>
   rename1 `lower_value _ _ _ _ _ = (raw,sb)` >> simp[] >>
   Cases_on `compile_alloc_buffer (type_memory_bytes cenv elem) sb` >>
@@ -78,7 +77,7 @@ QED
 
 Theorem append_storage_copy_suffix_parts:
   compile_dynarray_append cenv bop vop 1 stride dt st cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) <=>
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) <=>
   ?lop valid dop off pop nop u s1 s2 s3 s4 s5 s6 s7 s8.
     emit_op (if tr then TLOAD else SLOAD) [bop] s0 = (lop,s1) /\
     emit_op LT [lop; Lit (n2w cap)] s1 = (valid,s2) /\
@@ -91,7 +90,8 @@ Theorem append_storage_copy_suffix_parts:
     emit_void (if tr then TSTORE else SSTORE) [bop; nop] s8 = ((),s9)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_ignore_bind_def, comp_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_ignore_bind_def, comp_bind_def,
        comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_var_def, fresh_id_def, emit_def] >>
   pairarg_tac >> simp[] >> eq_tac >> strip_tac >> gvs[] >>
@@ -331,7 +331,7 @@ QED
 
 Theorem append_storage_copy_suffix_path:
   compile_dynarray_append cenv bop vop 1 stride dt st cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   cap < dimword (:256) /\ stride < dimword (:256) /\
   evaluate_type tenv dt = SOME tv /\ value_has_type tv v /\
@@ -365,7 +365,7 @@ Theorem append_storage_copy_suffix_path:
   else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
-  qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
     (strip_assume_tac o REWRITE_RULE [append_storage_copy_suffix_parts]) >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
    ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\
@@ -1320,7 +1320,7 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
   `~staged.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `?writes. encode_value tv v = SOME writes` by
     metis_tac[vyperTypingTheory.value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
-  drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)
     append_storage_copy_suffix_path >>
   disch_then (drule_at (Pat `fn_has_code sd sb func`)) >>
   disch_then (drule_at (Pat `encode_value tv v = SOME writes`)) >>
@@ -1395,7 +1395,7 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
       qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
   disj1_tac >> simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
-  >- (qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  >- (qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       rewrite_tac[append_storage_copy_suffix_parts] >> strip_tac >>
       drule exprOpenPrimitivesTheory.emit_void_terminated >>
       Cases_on `tr` >> simp[is_terminator_def]) >>

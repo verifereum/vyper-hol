@@ -10,7 +10,7 @@ Ancestors
 
 Theorem append_storage_aggregate_value_path_mem:
   compile_dynarray_append cenv (Lit slot) op 1 (type_slot_size tv) dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   eval_operand op s = SOME b /\ cap < dimword (:256) /\
   type_slot_size tv < dimword (:256) /\
