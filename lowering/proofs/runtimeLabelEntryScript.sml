@@ -21,6 +21,7 @@ QED
 
 
 Theorem runtime_o1_stages_no_runtime_begin:
+  !tops.
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
@@ -47,7 +48,7 @@ Theorem runtime_o1_stages_no_runtime_begin:
       MEM fn (stage k).ctx_functions /\ MEM inst (fn_insts fn) ==>
       ~MEM (Label "runtime_begin") inst.inst_operands)
 Proof
-  strip_tac >> drule o1_driver_runs >> strip_tac >>
+  gen_tac >> strip_tac >> drule o1_driver_runs >> strip_tac >>
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
   `ir_supply_inst_ok (init_ir_supply unit)` by simp[init_ir_supply_inst_ok] >>
   `!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
@@ -87,6 +88,7 @@ Proof
 QED
 
 Theorem runtime_o1_stage_labels_bound:
+  !tops.
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
@@ -114,7 +116,7 @@ Theorem runtime_o1_stage_labels_bound:
       inst.inst_opcode = CODECOPY /\ MEM (Label l) inst.inst_operands ==>
       l IN FDOM vs.vs_labels)
 Proof
-  strip_tac >> drule_all runtime_o1_stages_no_runtime_begin >> strip_tac >>
+  gen_tac >> strip_tac >> drule_all runtime_o1_stages_no_runtime_begin >> strip_tac >>
   qexistsl_tac [`pre`, `t`, `entry`, `t'`, `stage`] >> simp[] >>
   gen_tac >>
   `7 <= LENGTH o1_fn_passes` by simp[o1_fn_passes_def] >>
@@ -123,6 +125,7 @@ Proof
 QED
 
 Theorem runtime_codegen_compute_labels_bound:
+  !tops.
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   run_venom_pipeline mem_ok calling_ok post_ok rpolicy o1_pipeline_spec unit =
     SOME out /\
@@ -134,7 +137,7 @@ Theorem runtime_codegen_compute_labels_bound:
     inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
     IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)
 Proof
-  strip_tac >> drule_all runtime_o1_stages_no_runtime_begin >> strip_tac >>
+  gen_tac >> strip_tac >> drule_all runtime_o1_stages_no_runtime_begin >> strip_tac >>
   `LENGTH o1_fn_passes <= LENGTH o1_fn_passes` by simp[] >>
   `o1_ctx_shape out.po_unit.cu_context` by metis_tac[] >>
   `!fn inst. MEM fn out.po_unit.cu_context.ctx_functions /\
