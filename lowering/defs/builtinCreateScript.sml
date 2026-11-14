@@ -228,11 +228,20 @@ Definition compile_create_blueprint_check_def:
   compile_create_blueprint_check target_op code_offset_op =
     do (* Get blueprint code size, skipping preamble *)
        full_size <- emit_op EXTCODESIZE [target_op];
-       code_size <- emit_op SUB [full_size; code_offset_op];
-       (* Assert blueprint has code after preamble (sgt because underflow) *)
-       has_code <- emit_op SGT [code_size; Lit 0w];
-       emit_void ASSERT [has_code];
-       return code_size
+       case code_offset_op of
+         Lit _ =>
+           do code_size <- emit_op SUB [full_size; code_offset_op];
+              has_code <- emit_op SGT [code_size; Lit 0w];
+              emit_void ASSERT [has_code];
+              return code_size
+           od
+       | _ =>
+           do (* Compare before subtracting: runtime offsets can wrap. *)
+              has_code <- emit_op GT [full_size; code_offset_op];
+              code_size <- emit_op SUB [full_size; code_offset_op];
+              emit_void ASSERT [has_code];
+              return code_size
+           od
     od
 End
 
