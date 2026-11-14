@@ -5,7 +5,7 @@ Ancestors
   targetPlaceSimCases stmtSimDefs gasContext vyperExprNoControl vyperState
   assignPlaceEmptySource assignPlaceEmptyStore assignPlaceTargetLive exprSimHyps stmtLoweringMono
   memoryLocalRhsProps vyperTypeArgFits exprSimHypsDefs vyperTypeInvariants
-  bodySimAugPlaceLoad vyperStoragePlaceProvenance stmtSimAugAssign
+  bodySimAugPlaceLoad vyperStoragePlaceProvenance stmtSimAugAssign storageStoreFrame
   vyperTypeDefaults vyperStorageFrame stmtSimAugAssignPlaceMemory
   loweringPosts compileEnv valueEncoding exprLowering
   vyperTypeSystem option immutableAssignEmpty targetPlaceSim exprLoweringProps fragExec
@@ -118,6 +118,12 @@ Proof
          gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[] >>
          PairCases_on `tr` >> gvs[value_type_place_def]) >>
       gvs[] >>
+      `~block_is_terminated sb` by
+        (Cases_on `loc` >>
+         gvs[stmtLoweringTheory.compile_store_at_loc_def] >>
+         irule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
+         goal_assum (drule_at Any) >>
+         fs[target_post_def, venomInstTheory.is_terminator_def]) >>
       `?wr ff. write_place cx p (default_value dtv) (mid with gas_obs := []) = (wr,ff)` by
         metis_tac[pairTheory.PAIR] >>
       `stmt_res_ok lctx wr` by
@@ -129,10 +135,33 @@ Proof
             disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
             simp[bind_def]) >>
          metis_tac[gas_admissible_result]) >>
+      `~t.vs_halted` by
+        (irule aug_place_marked_path_not_halted >>
+         fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
+      Cases_on `loc <> LocMemory /\ cx.txn.is_static`
+      >- (`t.vs_call_ctx.cc_static` by
+            fs[target_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+          Cases_on `p` >> gvs[target_post_def, place_ptr_rel_def] >>
+          rename1 `StoragePlace transient slot tv` >>
+          `emit_void (if transient then TSTORE else SSTORE) [dst; Lit 0w] st = ((),sb)` by
+            (Cases_on `transient` >> gvs[slot_loc_def, stmtLoweringTheory.compile_store_at_loc_def]) >>
+          `gas_marked_path F ctx func t 0
+             (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+            (irule storage_emit_static_path >>
+             qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
+             simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+          simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+          simp[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
+          qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+            `mid with gas_obs := []`,
+            `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+          simp[write_place_def, vyperStorageBackendTheory.write_storage_slot_eq,
+               fragExecTheory.exit_result_def, stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
       `wr = INL ()` by
         (Cases_on `p`
          >- (fs[target_post_def, place_ptr_rel_def] >>
-             `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+             `~cx.txn.is_static` by
+               (Cases_on `b` >> gvs[slot_loc_def]) >>
              `value_has_type dtv (default_value dtv)` by
                metis_tac[default_value_has_type_thm] >>
              gvs[write_place_def] >>
@@ -140,9 +169,6 @@ Proof
          >- (drule_all assign_place_pure_memory_write_success >> simp[]) >>
          fs[target_post_def, place_ptr_rel_def]) >>
       gvs[] >>
-      `~t.vs_halted` by
-        (irule aug_place_marked_path_not_halted >>
-         fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
       `!id path entry t0.
          p = MemoryPlace id path /\ lookup_scopes id mid.scopes = SOME entry /\
          cenv.ce_var_type id = SOME t0 ==>
@@ -176,13 +202,7 @@ Proof
          conj_tac
          >- (fs[target_post_def] >>
              metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh]) >>
-         conj_tac
-         >- (fs[target_post_def] >> metis_tac[]) >>
-         Cases_on `loc` >>
-         gvs[stmtLoweringTheory.compile_store_at_loc_def] >>
-         irule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
-         goal_assum (drule_at Any) >>
-         simp[venomInstTheory.is_terminator_def]) >>
+         fs[target_post_def] >> metis_tac[]) >>
       simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
       qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[]) >>
