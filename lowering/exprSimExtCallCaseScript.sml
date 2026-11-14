@@ -398,23 +398,26 @@ Theorem extcall_return_values_default_empty:
     cap = abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) /\
-    (let wrapped = (if needs_external_call_wrap ret_type
-                    then TupleT [ret_type] else ret_type) in
-     let min_size = abi_static_size cenv.ce_struct_fields wrapped in
-     let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped in
-     (if ret_type = NoneT then comp_return (Lit 0w)
+    ((if ret_type = NoneT then comp_return (Lit 0w)
       else if has_default then
         comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
           (\r. compile_default_return_path cenv ret_type default_ty
-                 buf_op r.buf_operand default_op addr_op skip min_size
-                 (abi_size_bound cenv.ce_struct_fields wrapped) dec_info)
+                 buf_op r.buf_operand default_op addr_op skip (abi_static_size cenv.ce_struct_fields
+                   (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+                 (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap ret_type then
+                   TupleT [ret_type] else ret_type)) (type_to_abi_dec_info cenv.ce_struct_fields
+                   cenv (if needs_external_call_wrap ret_type then TupleT [ret_type] else
+                   ret_type)))
       else
         comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-          (\r. comp_bind (compile_return_value_decode min_size
-                      (abi_size_bound cenv.ce_struct_fields wrapped))
+          (\r. comp_bind (compile_return_value_decode (abi_static_size cenv.ce_struct_fields (if
+            needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+                      (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap ret_type
+                        then TupleT [ret_type] else ret_type)))
           (\hi_op. comp_ignore_bind
              (compile_abi_decode_to_buf r.buf_operand (Lit 0w) MLOAD
-                buf_op hi_op dec_info)
+                buf_op hi_op (type_to_abi_dec_info cenv.ce_struct_fields cenv (if
+                  needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)))
              (comp_return r.buf_operand)))) sr = (result_op, sb)) /\
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
@@ -682,23 +685,26 @@ Theorem extcall_return_values_default_nonempty:
     cap = abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) /\
-    (let wrapped = (if needs_external_call_wrap ret_type
-                    then TupleT [ret_type] else ret_type) in
-     let min_size = abi_static_size cenv.ce_struct_fields wrapped in
-     let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped in
-     (if ret_type = NoneT then comp_return (Lit 0w)
+    ((if ret_type = NoneT then comp_return (Lit 0w)
       else if has_default then
         comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
           (\r. compile_default_return_path cenv ret_type default_ty
-                 buf_op r.buf_operand default_op addr_op skip min_size
-                 (abi_size_bound cenv.ce_struct_fields wrapped) dec_info)
+                 buf_op r.buf_operand default_op addr_op skip (abi_static_size cenv.ce_struct_fields
+                   (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+                 (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap ret_type then
+                   TupleT [ret_type] else ret_type)) (type_to_abi_dec_info cenv.ce_struct_fields
+                   cenv (if needs_external_call_wrap ret_type then TupleT [ret_type] else
+                   ret_type)))
       else
         comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-          (\r. comp_bind (compile_return_value_decode min_size
-                      (abi_size_bound cenv.ce_struct_fields wrapped))
+          (\r. comp_bind (compile_return_value_decode (abi_static_size cenv.ce_struct_fields (if
+            needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+                      (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap ret_type
+                        then TupleT [ret_type] else ret_type)))
           (\hi_op. comp_ignore_bind
              (compile_abi_decode_to_buf r.buf_operand (Lit 0w) MLOAD
-                buf_op hi_op dec_info)
+                buf_op hi_op (type_to_abi_dec_info cenv.ce_struct_fields cenv (if
+                  needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)))
              (comp_return r.buf_operand)))) sr = (result_op, sb)) /\
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
@@ -928,23 +934,26 @@ Theorem extcall_return_values_no_default:
     cap = abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) /\
-    (let wrapped = (if needs_external_call_wrap ret_type
-                    then TupleT [ret_type] else ret_type) in
-     let min_size = abi_static_size cenv.ce_struct_fields wrapped in
-     let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped in
-     (if ret_type = NoneT then comp_return (Lit 0w)
+    ((if ret_type = NoneT then comp_return (Lit 0w)
       else if has_default then
         comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
           (\r. compile_default_return_path cenv ret_type default_ty
-                 buf_op r.buf_operand default_op addr_op skip min_size
-                 (abi_size_bound cenv.ce_struct_fields wrapped) dec_info)
+                 buf_op r.buf_operand default_op addr_op skip (abi_static_size cenv.ce_struct_fields
+                   (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+                 (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap ret_type then
+                   TupleT [ret_type] else ret_type)) (type_to_abi_dec_info cenv.ce_struct_fields
+                   cenv (if needs_external_call_wrap ret_type then TupleT [ret_type] else
+                   ret_type)))
       else
         comp_bind (compile_alloc_buffer (type_memory_bytes cenv ret_type))
-          (\r. comp_bind (compile_return_value_decode min_size
-                      (abi_size_bound cenv.ce_struct_fields wrapped))
+          (\r. comp_bind (compile_return_value_decode (abi_static_size cenv.ce_struct_fields (if
+            needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+                      (abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap ret_type
+                        then TupleT [ret_type] else ret_type)))
           (\hi_op. comp_ignore_bind
              (compile_abi_decode_to_buf r.buf_operand (Lit 0w) MLOAD
-                buf_op hi_op dec_info)
+                buf_op hi_op (type_to_abi_dec_info cenv.ce_struct_fields cenv (if
+                  needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)))
              (comp_return r.buf_operand)))) sr = (result_op, sb)) /\
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
