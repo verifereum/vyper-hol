@@ -7,6 +7,7 @@
  *)
 Theory bodyFullExtCallReturn
 Ancestors
+  extcallReturnDefaultMemoryJoint
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
   extcallReturnCallerReject extcallReturnDefaultDecode
