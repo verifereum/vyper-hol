@@ -78,7 +78,7 @@ Proof
   >- (rpt strip_tac >>
       irule aug_place_storage_rooted_observed >>
       goal_assum (drule_at (Pat `valid_horizon`)) >>
-      goal_assum (drule_at (Pat `MEM`)) >> goal_assum (drule_at Any) >> simp[]) >>
+      qexistsl_tac [`delta`, `offset`, `path`, `tv0`] >> simp[]) >>
   goal_assum (drule_at (Pat `lower_value`)) >>
   goal_assum (drule_at (Pat `compile_binop`)) >>
   goal_assum (drule_at (Pat `place_ptr_rel`)) >>
