@@ -4280,18 +4280,31 @@ val ld_recursive_combined_entry_fixed_goal =
   in subst [v0 |-> mk_var("vs0",type_of v0),
             ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
 
-Theorem ld_recursive_combined_entry_clause:
+val ld_combined_entry_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
-  ^ld_recursive_combined_entry_fixed_goal
+  ^ld_recursive_combined_entry_fixed_goal``;
+
+Theorem ld_recursive_combined_entry_clause_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_combined_entry_header)
 Proof
-  strip_tac >> mp_tac ld_historical_combined_entry_clause >>
-  (impl_tac >- asm_rewrite_tac []) >>
+  strip_tac >> rule_assum_tac BETA_RULE >>
+  mp_tac ld_historical_combined_entry_clause_static >>
+  (impl_tac >- simp[]) >>
   disch_tac >> rpt gen_tac >> strip_tac >>
-  irule ld_historical_combined_operational >>
+  irule ld_historical_combined_operational >> BETA_TAC >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem ld_recursive_combined_entry_clause:
+  ^ld_combined_entry_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_combined_entry_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED
 
 (* Restrict the operational combined candidate to the same ordinary opcodes.
