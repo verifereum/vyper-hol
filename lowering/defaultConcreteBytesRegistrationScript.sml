@@ -1,7 +1,9 @@
 (* Exact modular calldata address used by a dynamic registration head. *)
 Theory defaultConcreteBytesRegistration
 Ancestors defaultConcreteRegistrationDefs defaultConcreteRegistrationInit
-  defaultBytesRegistration vyperCalldata abiDecoderContract words list
+  defaultBytesRegistration vyperCalldata abiDecoderContract words list rich_list
+  defaultConcreteRegistrationCompiler defaultConcreteRegistrationResources
+  defaultConcreteRegistrationOwners compileEnv moduleLowering finite_map pred_set arithmetic
 
 Theorem default_registration_dynamic_decode:
   4 <= off /\ off < dimword (:256) /\ tv_abi_dynamic tv /\
@@ -38,4 +40,57 @@ Theorem default_registration_bytes_owner:
 Proof
   simp[default_registration_owner_def] >> strip_tac >>
   qexists `ins` >> simp[]
+QED
+
+Theorem default_registration_invariant_advance:
+  default_registration_invariant tops cx ctx fn site k initial ce0 start
+    args all_tvs specs cef sa ce st off
+    ((name,prim,dyn,sz,info)::rest) (tv::tvs) s G tn owners /\
+  DROP (LENGTH owners) args = (name,ty)::tail /\
+  compile_register_positional_args ce [(name,prim,dyn,sz,info)] off st = (ce1,st1) /\
+  default_registration_resources ctx fn site k st1 t u /\
+  default_registration_entry_frame initial t /\
+  LIST_REL (default_registration_owner fn ce1 st1 t H u)
+    (ZIP (TAKE (LENGTH (owners++[owner])) args,
+          TAKE (LENGTH (owners++[owner])) all_tvs)) (owners++[owner]) ==>
+  default_registration_invariant tops cx ctx fn site k initial ce0 start
+    args all_tvs specs cef sa ce1 st1 (off+sz) rest tvs
+    t H u (owners++[owner])
+Proof
+  strip_tac >> drule_all default_registration_compiler_advance >> strip_tac >>
+  `default_registration_slot tops ce ((name,ty),tv) (name,prim,dyn,sz,info)` by
+    fs[default_registration_invariant_def] >>
+  `sz = tv_abi_size tv` by fs[default_registration_slot_def] >>
+  fs[default_registration_invariant_def, GSYM ADD1, DROP_SUC, TAKE_SUC] >>
+  qpat_x_assum `tv::tvs = DROP _ _` (assume_tac o GSYM) >>
+  qpat_x_assum `(_::rest) = DROP _ _` (assume_tac o GSYM) >>
+  `SUC (LENGTH owners) <= LENGTH all_tvs` by
+    (qpat_x_assum `DROP _ all_tvs = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[LENGTH_DROP] >> decide_tac) >>
+  qpat_assum `ce1 = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  qpat_assum `DROP _ all_tvs = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `DROP _ specs = _` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [TAKE_def, DROP_def, MAP, SUM_APPEND, SUM] >>
+  pure_rewrite_tac[GSYM ADD_ASSOC] >>
+  qpat_assum `LIST_REL (default_registration_owner fn _ st1 t H u) _ _` mp_tac >>
+  qpat_assum `ce1 = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  qpat_assum `DROP _ args = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `DROP _ all_tvs = _` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [TAKE_def, DROP_def] >> disch_tac >>
+  `fn_has_code st1 sa fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_x_assum `compile_register_positional_args ce1 rest _ st1 = _` mp_tac >>
+     qpat_x_assum `off = _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     rpt strip_tac >> gvs[] >>
+     `SUM (MAP tv_abi_size (TAKE (LENGTH owners) all_tvs)) + tv_abi_size tv + 4 =
+      SUM (MAP tv_abi_size (TAKE (LENGTH owners) all_tvs)) + 4 + tv_abi_size tv`
+       by decide_tac >> metis_tac[]) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  qpat_assum `ce1 = _` SUBST1_TAC >>
+  qpat_x_assum `ce.ce_module = NONE` SUBST_ALL_TAC >>
+  fs[loweringStateRelDefsTheory.storage_vars_rel_def,
+     loweringStateRelDefsTheory.transient_vars_rel_def,
+     immutableRelationTheory.immutable_section_layout_def]
 QED
