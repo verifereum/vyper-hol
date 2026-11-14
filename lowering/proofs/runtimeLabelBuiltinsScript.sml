@@ -433,7 +433,7 @@ Proof
       (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_ext_call_kwargs >> gvs[]) >>
-  PairCases >> simp[] >> strip_tac >> suspend "gas"
+  qx_gen_tac `x` >> PairCases_on `x` >> simp[] >> strip_tac >> suspend "gas"
 QED
 Resume rb_compile_call_raw_calldata[invalid]:
   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
@@ -523,7 +523,7 @@ Proof
       (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_ext_call_kwargs >> gvs[]) >>
-  PairCases >> simp[] >> strip_tac >> suspend "gas"
+  qx_gen_tac `x` >> PairCases_on `x` >> simp[] >> strip_tac >> suspend "gas"
 QED
 Resume rb_compile_call_raw[invalid]:
   markerLib.RESUME_TAC >>
@@ -597,7 +597,7 @@ Proof
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_ext_call_kwargs >> simp[] >> rpt strip_tac >>
     first_x_assum irule >> simp[] >> drule rich_listTheory.MEM_DROP_IMP >> simp[]) >>
-  PairCases >> simp[] >> strip_tac >> suspend "options"
+  qx_gen_tac `x` >> PairCases_on `x` >> simp[] >> strip_tac >> suspend "options"
 QED
 Resume rb_compile_call_external[invalid]:
   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
