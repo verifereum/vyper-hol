@@ -446,6 +446,7 @@ Theorem augassign_attr_storage_store_post_path:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     stmt_state_rel ctx func cenv cx ee s /\
+    ~cx.txn.is_static /\
     (!u sto. storage_dead cx tr (update_storage k u sto) =
              storage_dead cx tr sto) /\
     encode_value ftv w = SOME [(0, typed_val_to_w256 ftv w)] /\
@@ -463,7 +464,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `write_storage_slot cx tr k ftv w ee` >>
   `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `gas_marked_path F ctx func s 0
      (OK ((if tr then tstore k (typed_val_to_w256 ftv w) s
@@ -750,6 +751,26 @@ Resume compile_augassign_attr_storage_case[store]:
     (fs[expr_post_def] >> metis_tac[]) >>
   `eval_operand res_op u = SOME (typed_val_to_w256 ftv result)` by
     simp[typed_val_to_w256_word_value] >>
+  Cases_on `cx.txn.is_static`
+  >- (`u.vs_call_ctx.cc_static` by
+        fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      simp[gas_summary_at_def] >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `es_end`, `Abort ExHalt_abort (halt_state (set_returndata [] u))`] >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
+      fs[gas_marked_exec_def] >> conj_tac
+      >- (gen_tac >>
+          qspecl_then [`cx`, `AttributeTarget (TopLevelNameTarget (src,id)) fld`,
+            `tr`, `n2w slot + n2w off`, `ftv`, `es`, `fv`, `e`,
+            `gas_explicit marks s0.vs_gas_readings ++ tail`, `v`,
+            `es_end with gas_obs := tail`]
+            mp_tac augassign_storage_place_rhs_normal >>
+          impl_tac >- simp[] >>
+          disch_then (qspecl_then [`ty`, `bop`] SUBST1_TAC) >>
+          simp[bind_def, lift_sum_def, return_def, write_storage_slot_eq]) >>
+      metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]) >>
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
   `local_ptrs_reserved cenv s2` by
