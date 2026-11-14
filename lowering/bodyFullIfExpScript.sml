@@ -267,6 +267,73 @@ Proof
   >> fs[same_memory_layout_def] >> metis_tac[]
 QED
 
+Theorem ifexp_nocopy_physical_selected_endpoint[local]:
+  expr_type e = t /\ post_value_type ce e <> t /\
+  post_value_type ce e = lowered_value_type ce e /\
+  same_memory_layout ce (lowered_value_type ce e) t /\
+  type_widens_to (get_tenv cx) (lowered_value_type ce e) t /\
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME sv /\
+  evaluate_type (get_tenv cx) t = SOME dv /\
+  value_has_type dv v /\ ~is_word_type t /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  read_result cx raw ee = (INL v,ee) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK z,Gz,tf) /\
+    expr_post H ctx func ce cx e es sa sb u ee v op z /\
+    ghost_inv_at (DF H) lo d ce cx ee Gz tf z) /\
+  expr_store_bound cx t v op z /\
+  ptr_val_ok cx (post_value_type ce e) v op Gz tf z /\
+  ptr_buf_ok ce e op Gz z /\
+  (!rt w. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME rt /\
+    eval_operand op z = SOME w ==>
+    type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+  z.vs_current_bb = sb.cs_current_bb /\
+  z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\
+  ghost_kept_at lo ce es sa G1 tn1 u Gz tf ==>
+  ?v' z' G' tf'.
+    read_result cx raw ee = (INL v',ee) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK z',G',tf') /\
+      expr_post H ctx func ce cx (IfExp t c a b) es sa sb u ee v' op z' /\
+      ghost_inv_at (DF H) lo d ce cx ee G' tf' z') /\
+    (~is_word_type t ==>
+      vv_at ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z') /\
+    expr_store_bound cx t v' op z' /\
+    z'.vs_current_bb = sb.cs_current_bb /\
+    z'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func z' /\ u.vs_alloca_next <= z'.vs_alloca_next /\
+    ptr_val_ok cx t v' op G' tf' z' /\
+    (~is_word_type t ==>
+      !e'. lowered_value_type ce e' = t ==> ptr_buf_ok ce e' op G' z') /\
+    (~is_word_type t ==>
+      !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+        eval_operand op z' = SOME w ==>
+        type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z'.vs_alloca_next) /\
+    ghost_kept_at lo ce es sa G1 tn1 u G' tf'
+Proof
+  strip_tac >>
+  `(!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK z,Gz,tf) /\
+      expr_post H ctx func ce cx (IfExp t c a b) es sa sb u ee v op z /\
+      ghost_inv_at (DF H) lo d ce cx ee Gz tf z) /\
+    vv_at ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z /\
+    expr_store_bound cx t v op z /\ ptr_val_ok cx t v op Gz tf z /\
+    (!e'. lowered_value_type ce e' = t ==> ptr_buf_ok ce e' op Gz z) /\
+    (!rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+      eval_operand op z = SOME w ==>
+      type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next)` by
+    (irule ifexp_nocopy_physical_family >>
+     simp[] >> qexistsl [`e`, `sv`] >> gvs[]) >>
+  qexistsl [`v`, `z`, `Gz`, `tf`] >> simp[]
+QED
+
 (* Uniform selected-arm conversion; the endpoint is shared by all horizons. *)
 Theorem ifexp_selected_arm_step_full[local]:
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -281,6 +348,11 @@ Theorem ifexp_selected_arm_step_full[local]:
     arg_type_fits (lowered_value_type cenv e) t) \/
    ~is_word_type t /\ ~same_memory_layout cenv (lowered_value_type cenv e) t /\
    post_value_type cenv e = lowered_value_type cenv e /\
+   type_widens_to (get_tenv cx) (lowered_value_type cenv e) t /\
+   (?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv) \/
+   ~is_word_type t /\ post_value_type cenv e <> t /\
+   post_value_type cenv e = lowered_value_type cenv e /\
+   same_memory_layout cenv (lowered_value_type cenv e) t /\
    type_widens_to (get_tenv cx) (lowered_value_type cenv e) t /\
    (?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv)) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
@@ -351,6 +423,8 @@ Theorem ifexp_selected_arm_step_full[local]:
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gz tf
 Proof
   strip_tac
+  >>~- ([`post_value_type cenv e <> t`, `same_memory_layout cenv _ t`],
+    suspend "physical")
   >>~- ([`type_widens_to _ _ _`], (irule ifexp_widened_call_arm_step_full >>
       rpt conj_tac >>
       FIRST_PROVE [MATCH_ACCEPT_TAC (GEN_ALL unwrap_value_origin_ptr),
@@ -384,6 +458,42 @@ Proof
          FAIL_TAC "unwrap concrete"] >> simp[] >>
   gvs[]
 QED
+
+Resume ifexp_selected_arm_step_full[physical]:
+  markerLib.RESUME_TAC >>
+  `unwrap_value cenv vv sm = (op,sb)` by
+    (qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >>
+     simp[compile_ifexp_arm_def]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists `sa` >> simp[]) >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[cj 1 exprOperandVarTheory.compiler_compile_var] >>
+  `!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+     ~is_word_type (post_value_type cenv e) ==>
+     type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
+     type_memory_size rt < 2 ** 64` by
+    (rpt gen_tac >> disch_tac >> irule ifexp_nocopy_physical_bound >>
+     qexistsl [`cx`, `t`, `rty`] >> gvs[]) >>
+  `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv` by metis_tac[] >>
+  `!v. read_result cx tva ee = (INL v,ee) ==> value_has_type stv v` by metis_tac[] >>
+  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tva vv z` by metis_tac[] >>
+  `sm.cs_next_var <= sm.cs_next_var /\ sm.cs_next_id <= sm.cs_next_id` by simp[] >>
+  drule_all unwrap_value_origin_ptr >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  `~is_word_type (post_value_type cenv e)` by
+    metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
+  `~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e` by
+    (gvs[]) >>
+  `value_has_type rty v` by metis_tac[] >>
+  irule ifexp_nocopy_physical_selected_endpoint >>
+  simp[] >>
+  qexistsl [`G'`, `e`, `stv`, `tn'`, `z'`] >>
+  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  gvs[] >> metis_tac[]
+QED
+
+Finalise ifexp_selected_arm_step_full
 
 (* Source composition is independent of the proof of arm conversion.
    The conversion contract is specialized at the fixed compiler layout;
@@ -1275,7 +1385,7 @@ Proof
   qexistsl [`e`,`rty`,`sm`,`ty`,`av`] >>
   simp[] >>
   qpat_x_assum `!e. e = a \/ e = b ==> _` (qspec_then `e` mp_tac) >>
-  simp[] >> gvs[]
+  simp[] >> gvs[] >> metis_tac[]
 QED
 
 Theorem ifexp_expr_full_ok_from_root[local]:
@@ -1407,5 +1517,16 @@ Theorem ifexp_expr_full_ok:
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  cheat
+  match_mp_tac ifexp_expr_full_ok_from_root >>
+  rpt gen_tac >> strip_tac >> irule ifexp_vv_full_root_uniform >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexists `rty` >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule ifexp_selected_arm_step_full >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl [`e`,`rty`,`sm`,`ty`,`av`] >>
+  simp[] >>
+  qpat_x_assum `!e. e = a \/ e = b ==> _` (qspec_then `e` mp_tac) >>
+  simp[] >> gvs[] >> metis_tac[]
 QED
