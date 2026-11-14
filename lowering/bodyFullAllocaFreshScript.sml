@@ -250,9 +250,9 @@ QED
 
 (* TOP-LEVEL: ghost_inv_at across the buffer's ALLOCA, stated over
    alloc_buffer_origin_ptr_path's conclusion. *)
-Theorem alloc_buffer_ghost_inv_at:
+Theorem alloc_buffer_ghost_inv_at_locals:
   ghost_inv_at D lo d cenv cx es G tn s /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_rel func cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -283,7 +283,6 @@ Proof
   `!p sz. not_fresh_at sa p /\ ptr_covers G tn p s sz ==>
           ptr_covers G' tn' p t sz` by
     (rw[ptr_covers_def] >> metis_tac[]) >>
-  `state_rel H func cenv cx es s` by fs[stmt_state_rel_def] >>
   qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_at_def] >> strip_tac >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -292,7 +291,15 @@ Proof
       conj_tac >- metis_tac[] >>
       rpt strip_tac >>
       `lookup_var p s = SOME w` by metis_tac[] >>
-      drule_all local_ptr_footprint_below_frontier >> strip_tac >>
+      `val_wf entry.type entry.value /\
+       (!i. w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
+            i < s.vs_alloca_next)` by
+        (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+         simp[local_ptrs_rel_def] >> strip_tac >>
+         first_x_assum (qspecl_then [`name`, `entry`, `p`, `sz`] mp_tac) >>
+         simp[] >> strip_tac >> gvs[] >>
+         drule exprSimPropsTheory.val_footprint_le >> strip_tac >>
+         simp[] >> decide_tac) >>
       qspecl_then [`entry.type`, `entry.value`, `w2n w`, `w2n w`,
                    `val_footprint entry.type entry.value`, `tn.t_mem`,
                    `tn'.t_mem`, `s.vs_memory`, `t.vs_memory`]
@@ -312,6 +319,30 @@ Proof
       metis_tac[])
   >- simp[] >>
   decide_tac
+QED
+
+Theorem alloc_buffer_ghost_inv_at:
+  ghost_inv_at D lo d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==>
+       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  t with <| vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
+            vs_alloca_next := s.vs_alloca_next;
+            vs_inst_idx := s.vs_inst_idx |> = s /\
+  allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  tn'.t_imm = tn.t_imm /\
+  (!i. i IN tn'.t_mem <=>
+       i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < e)) ==>
+  ghost_inv_at D lo d cenv cx es G' tn' t
+Proof
+  strip_tac >> irule alloc_buffer_ghost_inv_at_locals >> simp[] >>
+  fs[stmt_state_rel_def, state_rel_def] >> metis_tac[]
 QED
 
 (* TOP-LEVEL: ghost_kept_at across the buffer's ALLOCA, for a frame whose
