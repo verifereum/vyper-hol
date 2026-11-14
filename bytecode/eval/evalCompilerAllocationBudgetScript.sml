@@ -110,6 +110,10 @@ QED
 
 Theorem allocation_budget_strict_boundary_eval:
   lowering_context_ok
+    (allocation_budget_test_context [(0, n2w (2 ** 254 - 1))]) /\
+  ~lowering_context_ok
+    (allocation_budget_test_context [(0, n2w (2 ** 254))]) /\
+  ~lowering_context_ok
     (allocation_budget_test_context [(0, n2w (2 ** 256 - 1))]) /\
   unit_alloca_budget
     (allocation_budget_test_context [(0, n2w (2 ** 255));
@@ -140,7 +144,7 @@ Definition allocation_budget_invoke_context_def:
        mk_raw_function "callee"
          [<| bb_label := "callee";
              bb_instructions :=
-               [instruction 1 ALLOCA [Lit (n2w (2 ** 255))] ["p"];
+               [instruction 1 ALLOCA [Lit (n2w (2 ** 253))] ["p"];
                 instruction 3 RET [] []] |>]]
       (SOME "__entry")
 End
@@ -150,8 +154,67 @@ Theorem allocation_budget_invoke_multiplier_rejects_eval:
   wf_invoke_targets_check allocation_budget_invoke_context /\
   ctx_inst_ids_distinct allocation_budget_invoke_context /\
   forced_alloc_inputs_check allocation_budget_invoke_context /\
-  unit_alloca_budget allocation_budget_invoke_context = 2 ** 256 /\
+  unit_alloca_budget allocation_budget_invoke_context = 2 ** 254 /\
   ~lowering_context_ok allocation_budget_invoke_context
+Proof
+  EVAL_TAC
+QED
+
+Definition allocation_budget_dload_context_def:
+  allocation_budget_dload_context size =
+    mk_venom_context
+      [mk_raw_function "__entry"
+        [<| bb_label := "__entry";
+            bb_instructions :=
+              [instruction 0 ALLOCA [Lit (n2w size)] ["p"];
+               instruction 1 DLOAD [Lit 0w] ["word"];
+               instruction 2 STOP [] []] |>]]
+      (SOME "__entry")
+End
+
+Theorem allocation_budget_dload_boundary_eval:
+  lowering_context_ok (allocation_budget_dload_context (2 ** 254 - 33)) /\
+  unit_alloca_budget (allocation_budget_dload_context (2 ** 254 - 32)) =
+    2 ** 254 - 32 /\
+  ~lowering_context_ok (allocation_budget_dload_context (2 ** 254 - 32))
+Proof
+  EVAL_TAC
+QED
+
+Definition allocation_plan_test_context_def:
+  allocation_plan_test_context eom =
+    mk_venom_context
+      [(mk_raw_function "__entry"
+        [<| bb_label := "__entry";
+            bb_instructions := [instruction 0 STOP [] []] |>])
+        with fn_eom := SOME eom]
+      (SOME "__entry")
+End
+
+(* The static end and spill end both pass through ceil32 before the gate. *)
+Theorem allocation_plan_static_boundary_eval:
+  IS_SOME (generate_context_plan_with
+    (\fn base labels. SOME ([], init_plan_state base))
+    (allocation_plan_test_context (2 ** 254 - 32))) /\
+  generate_context_plan_with
+    (\fn base labels. SOME ([], init_plan_state base))
+    (allocation_plan_test_context (2 ** 254 - 31)) = NONE /\
+  generate_context_plan_with
+    (\fn base labels. SOME ([], init_plan_state base))
+    (allocation_plan_test_context (2 ** 254)) = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem allocation_plan_spill_boundary_eval:
+  IS_SOME (generate_context_plan_with
+    (\fn base labels. SOME ([], (init_plan_state base) with
+      ps_alloc updated_by (\al. al with sa_next_offset := 2 ** 254 - 32)))
+    (allocation_plan_test_context 0)) /\
+  generate_context_plan_with
+    (\fn base labels. SOME ([], (init_plan_state base) with
+      ps_alloc updated_by (\al. al with sa_next_offset := 2 ** 254 - 31)))
+    (allocation_plan_test_context 0) = NONE
 Proof
   EVAL_TAC
 QED

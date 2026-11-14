@@ -108,6 +108,53 @@ convert the upstream compile-only tests into replayed tests.
 | `lowering/defs/moduleLoweringScript.sml` | `vyper/codegen_venom/module.py` | partially reviewed | Void fallthrough, scalar internal-call layout, lexical allocation, and constructor code-copy ordering are aligned; broader reachability, metadata, and data ordering remain unaudited. |
 | `lowering/defs/vyperCompilerScript.sml` | public Venom compiler entry path | blocked | HOL currently accepts metadata rather than deriving it from a module. Boundary decision required. |
 
+### Static allocation acceptance bounds
+
+The HOL compiler reserves initial headroom for the separate dynamic-allocation
+proof by narrowing two existing acceptance comparisons. These are HOL-only
+restrictions: pinned Python has a per-buffer allocation limit, but no matching
+whole-unit budget or initial-FMP cap.
+
+| Definition | Previous comparison | Current comparison |
+|---|---|---|
+| `lowering_context_ok` | `unit_alloca_budget ctx + 32 * D < dimword (:256)` | `unit_alloca_budget ctx + 32 * D < 2 ** 254` |
+| `generate_context_plan_with` | `cp.cp_initial_fmp < dimword (:256)` | `cp.cp_initial_fmp < 2 ** 254` |
+
+Here `D` counts DLOAD instructions across every function, including uncalled
+functions. With `I` INVOKE sites and static ALLOCA sizes summing to `S`,
+`unit_alloca_budget = (1 + I) * S`; DALLOCA is excluded. LowerDload's scratch
+allowance is `32 * D`. The planner computes
+`cp_initial_fmp = ceil32 (MAX E P)`, where `E` is the maximum static end,
+including reserved intervals, and `P` is the peak spill end. Each fresh spill
+slot advances its allocator by 32 bytes; reused slots do not advance it.
+
+Holding the other checks fixed, the newly rejected numeric ranges are exactly:
+
+- `2 ** 254 <= (1 + I) * S + 32 * D < 2 ** 256`;
+- `2 ** 254 <= ceil32 (MAX E P) < 2 ** 256`.
+
+For a lowered unit whose `A` static allocations each satisfy the per-buffer
+limit, put `L = 2 ** 64 - 1` and `N = A + I + D`. Then
+`(1 + I) * S + 32 * D <= floor ((N + 1) ** 2 / 4) * L`:
+`S <= A * L`, and moving each DLOAD count to the allocation count can only
+increase this upper bound. The first `N` for which that arithmetic envelope
+reaches `2 ** 254` is `2 ** 96 + 2 ** 31`. This is a lower bound on the counted
+instructions of a budget-rejected unit, not a minimum-size valid source
+program. It does not apply to arbitrary raw contexts containing oversized
+ALLOCA literals.
+
+There is no corresponding unconditional instruction-count bound for the
+generic planner check: its generator and static-end metadata are inputs.
+Static-end, reserved-region and spill-end rejection must retain their separate
+accounting rather than inherit the allocation-budget estimate.
+
+`run_deploy_lowering` still checks
+`runtime_length + immutables_length + unit_alloca_budget + 32 * D < dimword (:256)`.
+The runtime lowering path does not call it. Deployment inherits the stricter
+unit budget through its existing `lowering_context_ok` call, and codegen checks
+its reserved intervals through the plan bound. These checks alone establish
+neither a deployment allocation horizon nor dynamic no-wrap safety.
+
 ### Venom IR and semantics
 
 | HOL file/area | Pinned Python source area | Status | Notes |

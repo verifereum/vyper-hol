@@ -21,6 +21,7 @@ Ancestors
   moduleLowering
   compileEnv
   venomInst
+  venomLayout
   venomCompilerTypes
   venomWf
   fcgDefs
@@ -511,7 +512,8 @@ End
    budget checks, they are decided on the unit rather than proved of the
    lowering.  The budget check leaves room for 32 bytes per DLOAD:
    LowerDload gives each DLOAD a 32-byte scratch ALLOCA, so its output's
-   frontier runs that far past the input's. *)
+   frontier runs that far past the input's. The 2^254 cap also leaves
+   initial headroom for the separate dynamic-allocation proof. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
@@ -521,7 +523,7 @@ Definition lowering_context_ok_def:
     unit_alloca_budget ctx +
       32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
                      (FLAT (MAP fn_insts ctx.ctx_functions))) <
-      dimword (:256) /\
+      2 ** 254 /\
     EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
       ctx.ctx_functions /\
     reachable_fcg_acyclic ctx (fcg_analyze ctx) /\
@@ -562,11 +564,22 @@ Proof
   simp[lowering_context_ok_def]
 QED
 
+Theorem lowering_context_ok_static_headroom:
+  lowering_context_ok ctx ==>
+  unit_alloca_budget ctx +
+    32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                   (FLAT (MAP fn_insts ctx.ctx_functions))) < 2 ** 254
+Proof
+  simp[lowering_context_ok_def]
+QED
+
 Theorem lowering_context_ok_alloca_budget:
   !ctx. lowering_context_ok ctx ==>
         unit_alloca_budget ctx < dimword (:256)
 Proof
-  simp[lowering_context_ok_def] >> rpt strip_tac >> decide_tac
+  simp[lowering_context_ok_def, wordsTheory.dimword_def,
+       venomLayoutTheory.dimindex_256] >>
+  rpt strip_tac >> decide_tac
 QED
 
 Theorem lowering_context_ok_dload_budget:
@@ -576,7 +589,9 @@ Theorem lowering_context_ok_dload_budget:
                          (FLAT (MAP fn_insts ctx.ctx_functions))) <
           dimword (:256)
 Proof
-  simp[lowering_context_ok_def]
+  simp[lowering_context_ok_def, wordsTheory.dimword_def,
+       venomLayoutTheory.dimindex_256] >>
+  rpt strip_tac >> decide_tac
 QED
 
 Theorem lowering_context_ok_bridge:
