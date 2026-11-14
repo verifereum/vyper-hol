@@ -160,9 +160,10 @@ Proof
         [mk_inst (st.cs_next_id + 4) TSTORE [Lit (n2w nkey); Lit 1w] []]` by
         simp[transient_lock_code_def] >>
       asm_rewrite_tac[] >> irule inst_seq_ptr_append_ok >>
-      qexistsl_tac [`G1`, `tn1`] >>
-      simp[transient_lock_code_def, mk_inst_def, is_terminator_def,
-           transient_lock_code_execution, arithmeticTheory.ADD_COMM] >>
+      conj_tac
+      >- simp[transient_lock_code_def, mk_inst_def, is_terminator_def] >>
+      qexistsl_tac [`G1`, `transient_lock_checked_state st nkey ss`, `tn1`] >>
+      simp[transient_lock_code_execution] >>
       irule literal_tstore_clean_inst_seq_ptr >>
       gvs[Abbr `tn1`, transient_lock_checked_state_def, update_var_def]) >>
   simp[Abbr `tn1`] >> qx_gen_tac `x` >> strip_tac >>
