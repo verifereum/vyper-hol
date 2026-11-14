@@ -97,11 +97,13 @@ Proof
 QED
 
 Resume body_full_assign_local_memory_value_path[staged]:
-  gvs[] >> drule_all assign_memory_relayout_code >> strip_tac >>
+  qpat_x_assum `loc = SOME LocMemory` SUBST_ALL_TAC >>
+  drule_all assign_memory_relayout_code >> strip_tac >>
   `compile_alloc_buffer (type_memory_size stv) sa = (buf,sm) /\
    compile_copy_memory buf.buf_operand (Var xs) (type_memory_size stv) sm = ((),sc')` by
     metis_tac[] >>
-  drule_all body_full_memory_stage_path >>
+  drule_all (SRULE [] (Q.INST [`n` |-> `type_memory_size tv`]
+    (SPEC_ALL body_full_memory_stage_path))) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   rename1 `ptr_covers Gf tf root t (type_memory_size stv)` >>
   rename1 `lookup_var root t = SOME (n2w b)` >>
@@ -109,7 +111,7 @@ Resume body_full_assign_local_memory_value_path[staged]:
   `ptr_covers Gf tf p t (type_memory_size dtv)` by
     (irule ptr_covers_lookup_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `local_region cenv es.scopes t id (w2n dw) cap` by
-    (simp[local_region_def] >> metis_tac[find_containing_scope_lookup]) >>
+    (simp[local_region_def] >> metis_tac[vyperLookupTheory.find_containing_scope_lookup]) >>
   `regions_disjoint b (type_memory_size stv) (w2n dw) cap` by metis_tac[] >>
   `s.vs_alloca_next <= t.vs_alloca_next` by
     (qpat_assum `!D. gas_origin_ptr_path _ _ _ _` (qspec_then `cx_dead H0 cx` mp_tac) >>
@@ -117,12 +119,10 @@ Resume body_full_assign_local_memory_value_path[staged]:
      drule gas_origin_path_erase >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >> drule rest_word_path_frontier >> simp[]) >>
   `b < dimword (:256) /\
-   w2n dw + type_memory_size dtv <= t.vs_alloca_next /\
-   (b + type_memory_size stv <= w2n dw \/ w2n dw + type_memory_size dtv <= b)` by
-    (fs[regions_disjoint_def] >> decide_tac) >>
+   w2n dw + type_memory_size dtv <= t.vs_alloca_next` by decide_tac >>
   `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) \/
       cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sc' x` by metis_tac[] >>
-  `compile_store_memory cenv (Var root) (Var p) dty sty sc' = ((),sb)` by simp[] >>
+  `compile_store_memory cenv (Var root) (Var p) dty sty sc' = ((),sb)` by metis_tac[] >>
   `b MOD dimword (:256) = b` by simp[] >>
   mp_tac (Q.INST [`xs` |-> `root`,`xd` |-> `p`,`dty` |-> `dty`,
     `sty` |-> `sty`,`cenv` |-> `cenv`,`tenv` |-> `get_tenv cx`,
@@ -131,7 +131,9 @@ Resume body_full_assign_local_memory_value_path[staged]:
     `tn` |-> `tf`,`G` |-> `Gf`,`lo` |-> `lo`,`ctx` |-> `ctx`,
     `func` |-> `func`,`explicit` |-> `explicit`,`PG` |-> `PG`]
     (SPEC_ALL body_full_memory_store_path)) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >>
+    TRY (first_assum ACCEPT_TAC) >>
+    fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> strip_tac >>
   rename1 `typed_copy_state_frame sc' _ _ t t'` >>
   qexistsl_tac [`t'`,`Gf'`,`tf'`] >>
   conj_tac >- suspend "join" >>
@@ -152,7 +154,10 @@ Resume body_full_assign_local_memory_value_path[post]:
   irule body_full_local_copy_post >> simp[] >>
   conj_tac >- (qexists_tac `sb` >> simp[]) >>
   qexistsl_tac [`Gf`,`PG`,`dw`,`explicit`,`t`,`sc'`,`tf`] >>
-  simp[] >> metis_tac[]
+  simp[] >> rpt conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
+      fs[ci_mono_def] >> decide_tac) >>
+  metis_tac[]
 QED
 
 Resume body_full_assign_local_memory_value_path[frame]:
