@@ -12,7 +12,7 @@ Ancestors
   bodyImmutableUnwrapMemory valueEncodingProps fragExec
   exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation
   bufferAllocationExecution ptrDiscipline exprPtrUnwrapAllocation exprSimAlloc
-  fragGasOriginPtrDead bodyFieldMemoryProps logTupleOwnershipPtr exprPtrUnwrapStorageShape
+  fragGasOriginPtrDead bodyFieldMemoryProps localPtrsProps exprPtrUnwrapStorageShape
   exprPtrUnwrapCodeCopyShape exprPtrCleanBufferPost bodyFullUnwrapCodeCtorRun
   bodyFullUnwrapCodeCtorSemantic bodyFullUnwrapCodeCtorFrame loweringStateRelDefs
 

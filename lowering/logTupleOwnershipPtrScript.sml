@@ -136,13 +136,6 @@ Proof
   metis_tac[local_region_frame, local_region_frame_fwd]
 QED
 
-Theorem log_local_region_inst_idx[simp]:
-  local_region ce scopes (s with vs_inst_idx := k) name b sz <=>
-  local_region ce scopes s name b sz
-Proof
-  simp[local_region_def, lookup_var_def]
-QED
-
 Theorem log_one_allocation_protected_bytes:
   alloca_inv s /\ cut <= site /\
   ((FLOOKUP s.vs_allocas site = NONE /\ p = s.vs_alloca_next) \/
