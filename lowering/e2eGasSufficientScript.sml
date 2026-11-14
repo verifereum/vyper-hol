@@ -47,6 +47,8 @@ Ancestors
   ctorDeployEntry ctorDeployMemory ctorDeployDload ctorDeployDead
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
+val _ = Parse.hide "tops";
+
 (* ===== add_frame_gas keeps the call's state relation ===== *)
 
 (* Only gas fields change, so the account maps and the return data the
