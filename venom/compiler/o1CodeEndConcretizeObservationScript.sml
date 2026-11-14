@@ -137,12 +137,13 @@ Resume concretize_codecopy_reflect[corridor]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   gvs[ptr_observe_def] >>
   drule raw_reachable_active >>
-  rewrite_tac[active_inst_def] >> strip_tac >>
+  rewrite_tac[active_inst_def] >>
+  disch_then (qx_choose_then `active_bb` strip_assume_tac) >>
   `MEM ft Ct.ctx_functions` by metis_tac[ptr_frame_context_membership] >>
   `ALL_DISTINCT (fn_labels ft)` by gvs[EVERY_MEM] >>
-  `lookup_block t.vs_current_bb ft.fn_blocks = SOME bb'` by
+  `lookup_block t.vs_current_bb ft.fn_blocks = SOME active_bb` by
     (irule MEM_lookup_block >> fs[fn_labels_def]) >>
-  `bb' = bb` by metis_tac[optionTheory.SOME_11] >>
+  `active_bb = bb` by metis_tac[optionTheory.SOME_11] >>
   `get_instruction bb t.vs_inst_idx = SOME j` by fs[get_instruction_def] >>
   metis_tac[code_end_revert_corridor_no_copy]
 QED

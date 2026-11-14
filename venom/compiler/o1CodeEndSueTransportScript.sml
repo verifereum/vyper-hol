@@ -5,52 +5,6 @@ Ancestors
   codegenSymRel irSupply venomInst venomFnScheduleRunner venomFnInstsProofs list
   o1PassLift o1ContractCfgNorm lowerDloadSourceInterface
 
-Theorem sue_project_supply[local]:
-  ir_supply_inst_ok si /\ ir_supply_covers_fn si f /\
-  sue_expand_function_supply si f = (g,sj) ==>
-  ?project.
-    (!v. MEM v si.irs_used_vars ==> project v = Var v) /\
-    (!j. MEM j (fn_insts g) ==>
-      (j.inst_opcode = ASSIGN /\ ?v. j.inst_outputs = [v] /\
-        MAP (\op. case op of Var w => project w | other => other)
-          j.inst_operands = [project v]) \/
-      (?i. MEM i (fn_insts f) /\ j.inst_opcode = i.inst_opcode /\
-        j.inst_outputs = i.inst_outputs /\
-        (!v. MEM v i.inst_outputs ==> project v = Var v) /\
-        MAP (\op. case op of Var w => project w | other => other)
-          j.inst_operands = i.inst_operands))
-Proof
-  strip_tac >> drule_all sue_expand_function_supply_origins >> strip_tac >>
-  drule_at (Pat `ALL_DISTINCT _`) sue_origins_projection_exists >>
-  disch_then (qspec_then `set si.irs_used_vars` mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  rename1 `!v. MEM v si.irs_used_vars ==> project v = Var v` >>
-  `!i v. MEM i (fn_insts f) /\
-    (MEM v i.inst_outputs \/ MEM (Var v) i.inst_operands) ==>
-    project v = Var v` by
-    (rpt strip_tac >>
-     `!bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)` by
-       (Induct >> simp[fn_insts_blocks_def]) >>
-     gvs[fn_insts_def, MEM_FLAT, MEM_MAP]
-     >- (`MEM v (fn_ir_vars f)` by
-       (simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-        qexists_tac `block_ir_vars bb` >> conj_tac >- metis_tac[] >>
-        simp[block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-        qexists_tac `inst_ir_vars i` >> simp[inst_ir_vars_def] >> metis_tac[]) >>
-         gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM]) >>
-     drule_all sue_original_operand_covered >>
-     gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM]) >>
-  qexists_tac `project` >> conj_tac >- simp[] >> rpt strip_tac >>
-  qpat_x_assum `!j. MEM j (fn_insts g) ==> _` drule >> strip_tac
-  >- (disj1_tac >> simp[] >>
-      `((?w. op = Var w /\ MEM w si.irs_used_vars) \/ (?c. op = Lit c))` by metis_tac[] >>
-      gvs[] >> metis_tac[]) >>
-  disj2_tac >> qexists_tac `i` >> simp[] >> conj_tac
-  >- metis_tac[] >>
-  irule sue_origin_rel_projection >> conj_tac >- metis_tac[] >>
-  qexists_tac `cs` >> metis_tac[]
-QED
-
 Theorem sue_project_fresh_assign[local]:
   a.inst_outputs = [v] /\ ~MEM v (fn_ir_vars f) /\
   ((a.inst_opcode = ASSIGN /\ ?w. a.inst_outputs = [w] /\
@@ -179,7 +133,7 @@ Theorem sue_frame_codecopy_projection[local]:
     execution_frame u = execution_frame t /\
     (!v. code_end_var fn' v ==> ?x. project v = Var x /\ code_end_var fn x)
 Proof
-  strip_tac >> drule_all sue_project_supply >> strip_tac >>
+  strip_tac >> drule_all sue_expand_function_supply_projection_identity >> strip_tac >>
   qpat_x_assum `sue_frame_align _ _ _ _ _ _ _` mp_tac >>
   simp[sue_frame_align_def] >> strip_tac >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>

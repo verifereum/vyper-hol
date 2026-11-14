@@ -2553,10 +2553,11 @@ Proof
   first_x_assum irule >> gvs[] >> metis_tac[])
 QED
 
-Theorem sue_expand_function_supply_projection:
+Theorem sue_expand_function_supply_projection_identity:
   ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\
   sue_expand_function_supply s fn = (fn',s') ==>
   ?project.
+    (!v. MEM v s.irs_used_vars ==> project v = Var v) /\
     (!j. MEM j (fn_insts fn') ==>
       (j.inst_opcode = ASSIGN /\ ?v. j.inst_outputs = [v] /\
         MAP (\op. case op of Var w => project w | other => other)
@@ -2576,9 +2577,8 @@ Proof
     (MEM v i.inst_outputs \/ MEM (Var v) i.inst_operands) ==>
     project v = Var v` by
     (rpt strip_tac >>
-     `!bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)` by
-       (Induct >> simp[fn_insts_blocks_def]) >>
-     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP]
+     gvs[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
+         listTheory.MEM_FLAT, listTheory.MEM_MAP]
      >- (`MEM v (fn_ir_vars fn)` by
        (simp[fn_ir_vars_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
         qexists_tac `block_ir_vars bb` >> conj_tac >- metis_tac[] >>
@@ -2587,7 +2587,7 @@ Proof
          gvs[ir_supply_covers_fn_def, list_subset_def, listTheory.EVERY_MEM]) >>
      drule_all sue_original_operand_covered >>
      gvs[ir_supply_covers_fn_def, list_subset_def, listTheory.EVERY_MEM]) >>
-  qexists_tac `project` >> rpt strip_tac >>
+  qexists_tac `project` >> conj_tac >- simp[] >> rpt strip_tac >>
   qpat_x_assum `!j. MEM j (fn_insts fn') ==> _` drule >> strip_tac
   >- (disj1_tac >> simp[] >>
       `((?w. op = Var w /\ MEM w s.irs_used_vars) \/ (?c. op = Lit c))` by metis_tac[] >>
@@ -2596,6 +2596,25 @@ Proof
   >- metis_tac[] >>
   irule sue_origin_rel_projection >> conj_tac >- metis_tac[] >>
   qexists_tac `cs` >> metis_tac[]
+QED
+
+Theorem sue_expand_function_supply_projection:
+  ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\
+  sue_expand_function_supply s fn = (fn',s') ==>
+  ?project.
+    (!j. MEM j (fn_insts fn') ==>
+      (j.inst_opcode = ASSIGN /\ ?v. j.inst_outputs = [v] /\
+        MAP (\op. case op of Var w => project w | other => other)
+          j.inst_operands = [project v]) \/
+      (?i. MEM i (fn_insts fn) /\ j.inst_opcode = i.inst_opcode /\
+        j.inst_outputs = i.inst_outputs /\
+        (!v. MEM v i.inst_outputs ==> project v = Var v) /\
+        MAP (\op. case op of Var w => project w | other => other)
+          j.inst_operands = i.inst_operands))
+Proof
+  strip_tac >> drule_all sue_expand_function_supply_projection_identity >>
+  disch_then (qx_choose_then `project` strip_assume_tac) >>
+  qexists_tac `project` >> asm_rewrite_tac[]
 QED
 
 Theorem sue_origin_rel_label_projection:

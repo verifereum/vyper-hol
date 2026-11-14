@@ -172,8 +172,9 @@ Resume code_end_frame_reachable_certified[call]:
     (irule LIST_REL_op_rename_eval >> fs[]) >>
   drule eval_operands_rel >> strip_tac >>
   `eval_operands ops0 s = SOME args` by gvs[] >>
-  drule_all code_end_certified_lookup >> strip_tac >>
-  rename1 `lookup_function nm C.ctx_functions = SOME calleeS` >>
+  drule_all code_end_certified_lookup >>
+  disch_then (qx_choose_then `calleeS` (qx_choose_then `callee_pos`
+    (qx_choose_then `callee_R` strip_assume_tac))) >>
   `setup_callee calleeS args s = SOME cs` by
     metis_tac[setup_callee_execution_frame] >>
   `fn_entry_state calleeS cs` by metis_tac[setup_callee_fn_entry_state] >>
@@ -183,7 +184,7 @@ Resume code_end_frame_reachable_certified[call]:
      rw[setup_callee_def] >> simp[]) >>
   drule_at (Pos (el 2)) lockstep_entry >> disch_then drule_all >> strip_tac >>
   rename1 `enters_block calleeS cs s1c` >>
-  rename1 `R' pc (instc,s1c) sgc _` >>
+  rename1 `callee_R pc (instc,s1c) sgc _` >>
   imp_res_tac lockstep_rel >>
   `frame_reachable vs C
      (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
@@ -199,7 +200,7 @@ Resume code_end_frame_reachable_certified[call]:
   qexistsl [`<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
                cf_prov := G; cf_tvar := tn.t_var|> :: stk`,
             `FEMPTY`, `tn with t_var := FEMPTY`, `calleeS`, `instc`, `s1c`,
-            `pc`, `sgc`, `pos'`, `R'`] >>
+            `pc`, `sgc`, `callee_pos`, `callee_R`] >>
   fs[ghost_rel_def, vars_ghost_rel_def, var_taint_def]
 QED
 

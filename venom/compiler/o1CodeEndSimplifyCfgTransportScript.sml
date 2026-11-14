@@ -221,13 +221,14 @@ Proof
   drule_all simplify_cfg_round_ssa_invariant >> strip_tac >>
   drule_all code_end_round_static >> strip_tac >>
   Cases_on `simplify_cfg_round_with_labels f` >>
+  rename1 `simplify_cfg_round_with_labels f = (next_fn,round_changed)` >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [pairTheory.FST]) >>
   simp[NoAsms, simplify_cfg_iter_with_labels_def] >>
   qpat_assum `simplify_cfg_round_with_labels f = _` (fn th => rewrite_tac[th]) >>
   simp[NoAsms] >> IF_CASES_TAC
   >- (simp[NoAsms] >> metis_tac[]) >>
-  Cases_on `simplify_cfg_iter_with_labels fuel q` >> simp[NoAsms] >>
-  first_x_assum (qspec_then `q` mp_tac) >> simp[] >>
+  Cases_on `simplify_cfg_iter_with_labels fuel next_fn` >> simp[NoAsms] >>
+  first_x_assum (qspec_then `next_fn` mp_tac) >> simp[] >>
   (impl_tac >- metis_tac[]) >> strip_tac >> metis_tac[]
 QED
 

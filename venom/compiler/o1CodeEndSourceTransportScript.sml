@@ -1,6 +1,6 @@
 Theory o1CodeEndSourceTransport
 Ancestors
-  o1CodeEndCfgBoundary o1CodeEndPruning o1ContractSimplifyCfg
+  o1CodeEndCfgBoundary o1ContractSimplifyCfg
   o1ContractMakeSsa o1ContractMakeSsaSrc makeSsaCurrentLockstep
   o1FrameLockstep lowerDloadPublicTrace memSafeRun
   o1SymStaticMakeSSA o1SymStaticSimplifyCFG unitMemInv ctxLookupAgreeHelpers
@@ -261,7 +261,9 @@ Proof
   `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
     s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
     (prune_unit_fcg_unreachable pre fcg).cu_context vs` by
-    metis_tac[o1_code_end_prune_section] >>
+    (mp_tac (Q.INST [`unit` |-> `pre`, `M` |-> `\ctx fn inst s.
+       inst_dload_in_section inst s /\ s.vs_code = vs.vs_code /\
+       s.vs_data_section = vs.vs_data_section`] o1_prune_sim) >> simp[]) >>
   `mem_inv (\ctx fn inst s. inst_dload_in_section inst s)
     (prune_unit_fcg_unreachable pre fcg).cu_context vs` by
     (irule mem_inv_mono >> goal_assum (drule_at Any) >> simp[]) >>
@@ -271,6 +273,8 @@ Proof
   >- (fs[mem_inv_raw_reachable] >> metis_tac[ld_raw_reachable_code_data]) >>
   `!f i. MEM f (prune_unit_fcg_unreachable pre fcg).cu_context.ctx_functions /\
          MEM i (fn_insts f) ==> ~MEM (Label "code_end") i.inst_operands` by
-    (drule o1_code_end_prune_no_label >> metis_tac[]) >>
+    (mp_tac (Q.INST [`unit` |-> `pre`, `P` |-> `\f. !i.
+       MEM i (fn_insts f) ==> ~MEM (Label "code_end") i.inst_operands`]
+       o1_prune_every) >> simp[EVERY_MEM] >> metis_tac[]) >>
   metis_tac[code_end_make_ssa_no_label]
 QED

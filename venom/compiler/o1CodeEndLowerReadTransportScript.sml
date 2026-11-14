@@ -61,8 +61,10 @@ Proof
     (EL j xs).inst_operands = [op; Label "code_end"] /\
     (EL j xs).inst_outputs = [x] /\ op <> Label "code_end"` by
     metis_tac[lower_dload_copy_predecessor] >> gvs[] >>
-  drule ld_prefix_predecessor >> strip_tac >>
-  `!off. eval_operand op t' = SOME off ==>
+  drule ld_prefix_predecessor >>
+  disch_then (qx_choose_then `before_add`
+    (qx_choose_then `after_add` strip_assume_tac)) >>
+  `!off. eval_operand op before_add = SOME off ==>
          w2n off < dimword(:256) DIV 2` by
     (metis_tac[lower_dload_prefix_code_end_bound, MEM]) >>
   metis_tac[code_end_add_read_delta]

@@ -21,9 +21,10 @@ Theorem lower_dload_stage_protected_lifetime:
          ?pre post. bb.bb_instructions = pre ++ d::j::post)) C'.ctx_functions
 Proof
   simp[ctx_pass_stage_def, EVERY_MEM] >> rpt strip_tac >>
-  drule_all LIST_REL_MEM_IMP_R >> strip_tac >> gvs[] >>
+  drule_all LIST_REL_MEM_IMP_R >>
+  disch_then (qx_choose_then `source_fn` strip_assume_tac) >> gvs[] >>
   drule lower_dload_step_supply >> strip_tac >>
-  `!i. MEM i (fn_insts x') ==> ~MEM (Label "code_end") i.inst_operands`
+  `!i. MEM i (fn_insts source_fn) ==> ~MEM (Label "code_end") i.inst_operands`
     by metis_tac[] >>
   drule_all lower_dload_function_code_end_lifetime >> simp[]
 QED

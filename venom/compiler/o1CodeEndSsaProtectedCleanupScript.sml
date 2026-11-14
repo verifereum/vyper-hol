@@ -27,16 +27,6 @@ Proof
   metis_tac[simplified_phi_operand, MEM]
 QED
 
-Theorem code_end_cleanup_backward_no_phi[local]:
-  (!i x. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f x ==>
-         ~MEM (Var x) i.inst_operands) ==>
-  !enabled x. code_end_var
-    (f with fn_blocks := simplify_current_phis_if enabled f.fn_blocks) x ==>
-    code_end_var f x
-Proof
-  metis_tac[cleanup_backward_no_phi_ind]
-QED
-
 Theorem renamed_protected_cleanup_owner[local]:
   visit_blocks path s rs f.fn_blocks sm tree = ((ct,t,final),events) /\
   ALL_DISTINCT (dom_tree_postorder tree) /\
@@ -99,7 +89,7 @@ Proof
   `!enabled n. code_end_var
     (f with fn_blocks := simplify_current_phis_if enabled final) n ==>
     code_end_var (f with fn_blocks := final) n` by
-    (rpt strip_tac >> irule code_end_cleanup_backward_no_phi >>
+    (rpt strip_tac >> irule cleanup_backward_no_phi_ind >>
      simp[] >> goal_assum $ drule_at Any >> simp[]) >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>
