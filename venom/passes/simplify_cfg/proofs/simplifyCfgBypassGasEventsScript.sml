@@ -438,9 +438,14 @@ fun scfg_bypass_sync_tac g = (
       more = [] /\ run_blocks N C fn' t = run_blocks j C fn' v)` by
     (drule_all gasEventsFuelTheory.gas_events_blocks_assemble >>
      disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
-  gvs[Abbr `s1`] >> qexistsl_tac [`N`, `tail ++ more`] >>
-  pure_once_rewrite_tac[gas_events_blocks_def, run_blocks_def] >>
-  simp[APPEND_ASSOC] >> strip_tac >>
+  `run_blocks (SUC k) C fn s = run_blocks k C fn u` by
+    simp[run_blocks_unfold] >>
+  `gas_events_blocks (SUC k) C fn s =
+    gas_events_block k C fn.fn_name bb s1 ++ gas_events_blocks k C fn u` by
+    simp[Once gas_events_blocks_def, Abbr `s1`] >>
+  qexistsl_tac [`N`, `tail ++ more`] >> conj_tac
+  >- gvs[APPEND_ASSOC] >> strip_tac >>
+  `terminates (run_blocks k C fn u)` by metis_tac[] >>
   `scfg_result (run_blocks k C fn u) (run_blocks j C fn' v)` by metis_tac[] >>
   `terminates (run_blocks j C fn' v)` by
     (Cases_on `run_blocks k C fn u` >> Cases_on `run_blocks j C fn' v` >>

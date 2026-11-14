@@ -628,9 +628,14 @@ Resume scfg_chain_gas_runs_forward[single_sync]:
     (drule_all gasEventsFuelTheory.gas_events_blocks_assemble >>
      disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
   `(scfg_chain fn a b).fn_name = fn.fn_name` by simp[scfg_chain_def] >>
-  gvs[Abbr `s1`] >> qexistsl_tac [`N`, `tail ++ more`] >>
-  pure_once_rewrite_tac[gas_events_blocks_def, run_blocks_def] >>
-  simp[APPEND_ASSOC] >> strip_tac >>
+  `run_blocks (SUC k) C fn s = run_blocks k C fn u` by
+    simp[run_blocks_unfold] >>
+  `gas_events_blocks (SUC k) C fn s =
+    gas_events_block k C fn.fn_name bb s1 ++ gas_events_blocks k C fn u` by
+    simp[Once gas_events_blocks_def, Abbr `s1`] >>
+  qexistsl_tac [`N`, `tail ++ more`] >> conj_tac
+  >- gvs[APPEND_ASSOC] >> strip_tac >>
+  `terminates (run_blocks k C fn u)` by metis_tac[] >>
   `frame_result_rel (run_blocks k C fn u) (run_blocks j C (scfg_chain fn a b) w)` by metis_tac[] >>
   drule frame_result_rel_terminates >> strip_tac >> gvs[]
 QED
@@ -760,7 +765,7 @@ Resume scfg_chain_gas_runs_forward[pair_sync]:
     (drule_all gasEventsFuelTheory.gas_events_blocks_assemble >>
      disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
   `(scfg_chain fn a b).fn_name = fn.fn_name` by simp[scfg_chain_def] >>
-  gvs[Abbr `s1`] >> qexistsl_tac [`N`, `tail ++ more`] >>
+  gvs[Abbr `s1`] >>
   `run_blocks (SUC (SUC h)) C fn s = run_blocks h C fn v` by
     simp[run_blocks_unfold] >>
   `gas_events_blocks (SUC (SUC h)) C fn s =
@@ -768,7 +773,9 @@ Resume scfg_chain_gas_runs_forward[pair_sync]:
       (sp with vs_inst_idx := phi_prefix_length a.bb_instructions) ++
     gas_events_block h C fn.fn_name b u ++ gas_events_blocks h C fn v` by
     (simp[Once gas_events_blocks_def] >> simp[Once gas_events_blocks_def]) >>
-  simp[APPEND_ASSOC] >> strip_tac >>
+  qexistsl_tac [`N`, `tail ++ more`] >> conj_tac
+  >- gvs[APPEND_ASSOC] >> strip_tac >>
+  `terminates (run_blocks h C fn v)` by metis_tac[] >>
   `frame_result_rel (run_blocks h C fn v) (run_blocks j C (scfg_chain fn a b) w)` by metis_tac[] >>
   drule frame_result_rel_terminates >> strip_tac >> gvs[]
 QED

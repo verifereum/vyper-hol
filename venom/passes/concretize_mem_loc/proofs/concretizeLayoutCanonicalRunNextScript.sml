@@ -133,7 +133,7 @@ Proof
   strip_tac >>
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
+  gvs[layout_canonical_OB_def] >> first_x_assum drule >> strip_tac >> gvs[] >>
   `joint_segment C q wb (JointConfig stk PG G tn fn i si oms om hs h)` by
     metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_segment] >>
   `joint_segment C qn [] qn` by
@@ -205,8 +205,12 @@ Proof
     (drule_all (PURE_REWRITE_RULE[APPEND_ASSOC]
        (Q.INST [`u` |-> `wb ++ [(SOME (OriginBlock fuel post),qn)]`,
                 `v` |-> `wr`] selected_segment_parts)) >> simp[]) >>
-  irule layout_canonical_run_continue_prefix >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[]
+  gvs[] >>
+  mp_tac (Q.INST
+    [`es` |-> `MAP FST path`,
+     `qs` |-> `MAP SND path`,
+     `qm` |-> `JointConfig stk PG G tn fn i si oms om hs h`]
+    layout_canonical_run_continue_prefix) >> simp[]
 QED
 
 Theorem layout_canonical_run_next_entry_certificate:
@@ -246,8 +250,14 @@ Proof
   `!v. rb' = OK v ==>
     layout_canonical_run D lo vs0 C C' q0 es qs ass qend
       qn (n+LENGTH wb+1) fn post fn' v` by
-    (rpt strip_tac >> gvs[] >> irule layout_canonical_run_continue_prefix >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (rpt strip_tac >> gvs[] >>
+     mp_tac (Q.INST
+       [`es` |-> `MAP FST path`,
+        `qs` |-> `MAP SND path`,
+        `qm` |-> `JointConfig stk PG G tn fn i si oms om hs h`,
+        `phi` |-> `phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+        `tb` |-> `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`]
+       layout_canonical_run_continue_prefix) >> simp[]) >>
   Cases_on `rb'` >> gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
@@ -295,8 +305,15 @@ Proof
   `!v. rb' = OK v ==>
     layout_canonical_run D lo vs0 C C' q0 es qs ass qend
       qn (n+LENGTH wb+1) fn post fn' v` by
-    (rpt strip_tac >> gvs[] >> irule layout_canonical_run_continue >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (rpt strip_tac >> gvs[] >>
+     mp_tac (Q.INST
+       [`es` |-> `MAP FST path`,
+        `qs` |-> `MAP SND path`,
+        `qm` |-> `JointConfig stk PG G tn fn i si oms om hs h`,
+        `phi` |-> `phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+        `tb` |-> `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`,
+        `r` |-> `run_blocks (SUC k) C fn s`]
+       layout_canonical_run_continue) >> simp[]) >>
   Cases_on `rb'` >> gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
