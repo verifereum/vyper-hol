@@ -42,7 +42,7 @@ Proof
     Cases_on `imm` >> Cases_on `0 < skip` >> simp[]
 QED
 
-Theorem rest_word_membership_ctor_load_joint:
+Theorem rest_word_membership_ctor_load_joint_indexed:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
@@ -53,7 +53,7 @@ Theorem rest_word_membership_ctor_load_joint:
   width = (if IS_SOME imm then 2 else 1) /\
   dst = "%" ++ toString (sa.cs_next_var+4+q+delta+width) /\
   (!i. addr i = bw + n2w (skip+stride*i)) /\
-  (!H:num. guard H ==>
+  (!H:'h. guard H ==>
     ~s0.vs_halted /\ allocas_from lo s0 /\ lo <= s0.vs_alloca_next /\
     eval_operand arr s0 = SOME bw /\ op_prov (G0 H) arr = NONE /\
     op_taint (T0 H) arr = {} /\
@@ -65,13 +65,13 @@ Theorem rest_word_membership_ctor_load_joint:
       mem_word_taint (T0 H).t_mem (w2n (addr i)) = {} /\
       mload (w2n (addr i)) s0 = EL i ws)) ==>
   !i s Gs Ts. i < LENGTH ws /\
-    (!H:num. guard H ==>
+    (!H:'h. guard H ==>
       membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
       membership_loop_registers sa i 0w (Gs H) (Ts H) s /\
       ~s.vs_halted /\ allocas_from lo s /\
       s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
       s.vs_inst_idx = 0) ==>
-    ?t Gt Tt. !H:num. guard H ==>
+    ?t Gt Tt. !H:'h. guard H ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
         (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
       membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
@@ -115,7 +115,7 @@ Proof
   suspend "checked_post"
 QED
 
-Resume rest_word_membership_ctor_load_joint[inputs]:
+Resume rest_word_membership_ctor_load_joint_indexed[inputs]:
   conj_tac
   >- (drule_all (cj 1 membership_loop_frame_operand) >> simp[]) >>
   conj_tac
@@ -128,7 +128,7 @@ Resume rest_word_membership_ctor_load_joint[inputs]:
   simp[]
 QED
 
-Resume rest_word_membership_ctor_load_joint[run]:
+Resume rest_word_membership_ctor_load_joint_indexed[run]:
   qpat_x_assum `isPREFIX _ _` kall_tac >>
   fs[lookup_var_def] >>
   Cases_on `imm` >> fs[] >> Cases_on `0 < skip` >>
@@ -141,12 +141,12 @@ Resume rest_word_membership_ctor_load_joint[run]:
   simp[update_var_def, FLOOKUP_UPDATE]
 QED
 
-Resume rest_word_membership_ctor_load_joint[checked_post]:
+Resume rest_word_membership_ctor_load_joint_indexed[checked_post]:
   `run_inst_seq_mem_ok code s` by suspend "memory" >>
   suspend "joint_post"
 QED
 
-Resume rest_word_membership_ctor_load_joint[memory]:
+Resume rest_word_membership_ctor_load_joint_indexed[memory]:
   qpat_x_assum `isPREFIX _ _` kall_tac >>
   `lo <= s.vs_alloca_next` by
     (qpat_x_assum `membership_loop_frame _ _ _ _ _ _ _` mp_tac >>
@@ -164,7 +164,7 @@ Resume rest_word_membership_ctor_load_joint[memory]:
   strip_tac >> gvs[arithmeticTheory.NOT_LESS, update_var_def, WORD_ADD_0] >> decide_tac
 QED
 
-Resume rest_word_membership_ctor_load_joint[joint_post]:
+Resume rest_word_membership_ctor_load_joint_indexed[joint_post]:
   `?g tn. inst_seq_ptr (DF H) lo ctx fn PG (Gs H) (Ts H) code s g tn /\
     membership_loop_frame sa (G0 H) (T0 H) s0 g tn
       (u with vs_inst_idx := 2+delta+width) /\
@@ -189,7 +189,7 @@ Resume rest_word_membership_ctor_load_joint[joint_post]:
   qpat_assum `!aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) ==> lo <= b` ACCEPT_TAC
 QED
 
-Resume rest_word_membership_ctor_load_joint[stages]:
+Resume rest_word_membership_ctor_load_joint_indexed[stages]:
   `op_prov (Gs H) arr = NONE /\ op_taint (Ts H) arr = {}` by
     (drule_all membership_loop_frame_operand >> simp[]) >>
   `!ib. imm = SOME ib ==> op_prov (Gs H) ib = NONE /\ op_taint (Ts H) ib = {}` by
@@ -244,7 +244,7 @@ Resume rest_word_membership_ctor_load_joint[stages]:
   suspend "offset_stage"
 QED
 
-Resume rest_word_membership_ctor_load_joint[offset_stage]:
+Resume rest_word_membership_ctor_load_joint_indexed[offset_stage]:
   qabbrev_tac `sc = sm with vs_inst_idx := 1` >>
   qabbrev_tac `offname = "%" ++ toString (sa.cs_next_var+4+
     (case bound_opt of NONE => 0 | SOME cap => 2))` >>
@@ -322,7 +322,7 @@ Resume rest_word_membership_ctor_load_joint[offset_stage]:
   suspend "address_stage"
 QED
 
-Resume rest_word_membership_ctor_load_joint[address_stage]:
+Resume rest_word_membership_ctor_load_joint_indexed[address_stage]:
   `eval_operand arr so = SOME bw /\ op_prov go arr = NONE /\
    op_taint to arr = {}` by
     (drule_all membership_loop_frame_operand >> simp[]) >>
@@ -375,7 +375,7 @@ Resume rest_word_membership_ctor_load_joint[address_stage]:
   suspend "immutable_stage"
 QED
 
-Resume rest_word_membership_ctor_load_joint[immutable_stage]:
+Resume rest_word_membership_ctor_load_joint_indexed[immutable_stage]:
   qabbrev_tac `sx = ss with vs_inst_idx := 2+delta` >>
   qabbrev_tac `ib = case imm of NONE => Lit 0w | SOME v => v` >>
   `eval_operand ib sx = SOME 0w /\ op_prov ga ib = NONE /\
@@ -444,7 +444,7 @@ Resume rest_word_membership_ctor_load_joint[immutable_stage]:
   suspend "load_stage"
 QED
 
-Resume rest_word_membership_ctor_load_joint[load_stage]:
+Resume rest_word_membership_ctor_load_joint_indexed[load_stage]:
   qabbrev_tac `sl = if IS_SOME imm then si with vs_inst_idx := 3+delta else sx` >>
   qabbrev_tac `gl = if IS_SOME imm then gi else ga` >>
   qabbrev_tac `tl = if IS_SOME imm then ti else ta` >>
@@ -535,7 +535,7 @@ Resume rest_word_membership_ctor_load_joint[load_stage]:
   suspend "spine"
 QED
 
-Resume rest_word_membership_ctor_load_joint[spine]:
+Resume rest_word_membership_ctor_load_joint_indexed[spine]:
   `code = [mulins] ++ (if 0 < skip then [skipins] else []) ++
      [addins] ++ (if IS_SOME imm then [immins] else []) ++ [loadins]` by
     (Cases_on `imm` >> Cases_on `0 < skip` >>
@@ -602,4 +602,48 @@ Resume rest_word_membership_ctor_load_joint[spine]:
   qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])
 QED
 
-Finalise rest_word_membership_ctor_load_joint
+Finalise rest_word_membership_ctor_load_joint_indexed
+
+Theorem rest_word_membership_ctor_load_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  (!x. arr = Var x ==> not_fresh_at sa x) /\
+  (!ib x. imm = SOME ib /\ ib = Var x ==> not_fresh_at sa x) /\
+  q = (case bound_opt of NONE => 0 | SOME cap => 2) /\
+  delta = (if 0 < skip then 1 else 0) /\
+  width = (if IS_SOME imm then 2 else 1) /\
+  dst = "%" ++ toString (sa.cs_next_var+4+q+delta+width) /\
+  (!i. addr i = bw + n2w (skip+stride*i)) /\
+  (!H:num. guard H ==>
+    ~s0.vs_halted /\ allocas_from lo s0 /\ lo <= s0.vs_alloca_next /\
+    eval_operand arr s0 = SOME bw /\ op_prov (G0 H) arr = NONE /\
+    op_taint (T0 H) arr = {} /\
+    (!ib. imm = SOME ib ==>
+      eval_operand ib s0 = SOME 0w /\ op_prov (G0 H) ib = NONE /\
+      op_taint (T0 H) ib = {}) /\
+    (!i. i < LENGTH ws ==>
+      w2n (addr i) + 32 <= lo /\
+      mem_word_taint (T0 H).t_mem (w2n (addr i)) = {} /\
+      mload (w2n (addr i)) s0 = EL i ws)) ==>
+  !i s Gs Ts. i < LENGTH ws /\
+    (!H:num. guard H ==>
+      membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+      membership_loop_registers sa i 0w (Gs H) (Ts H) s /\
+      ~s.vs_halted /\ allocas_from lo s /\
+      s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+      s.vs_inst_idx = 0) ==>
+    ?t Gt Tt. !H:num. guard H ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+        (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+      membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+      membership_loop_registers sa i 0w (Gt H) (Tt H) t /\
+      ~t.vs_halted /\ allocas_from lo t /\
+      t.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+      t.vs_inst_idx = 2+delta+width /\
+      eval_operand (Var dst) t = SOME (EL i ws) /\
+      op_prov (Gt H) (Var dst) = NONE /\
+      op_taint (Tt H) (Var dst) = {}
+Proof
+  MATCH_ACCEPT_TAC rest_word_membership_ctor_load_joint_indexed
+QED
