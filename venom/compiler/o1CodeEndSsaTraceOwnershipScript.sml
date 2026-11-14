@@ -1,67 +1,8 @@
 Theory o1CodeEndSsaTraceOwnership
 Ancestors
-  o1CodeEndSsaOwners makeSsaCurrentTreeTrace
+  makeSsaCurrentTreeTrace
   makeSsaCurrentRenameTrace makeSsaCurrentInduct o1MakeSsaVisitTrace
   list pair pred_set
-
-Theorem code_end_inst_trace_owner_alignment[local]:
-  current_inst_trace anns inst s rs H E inst' s' rs' H' E' /\
-  EVERY (\(token,v,n). R n v) H /\
-  LIST_REL (\v n. R n v) inst.inst_outputs inst'.inst_outputs ==>
-  EVERY (\(token,v,n). R n v) H'
-Proof
-  simp[current_inst_trace_def] >> rpt strip_tac >>
-  Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
-  drule code_end_outputs_trace_owner_alignment >>
-  disch_then irule >>
-  qpat_x_assum `MAP SND anns = _` (SUBST_ALL_TAC o SYM) >>
-  fs[LIST_REL_MAP1, combinTheory.o_DEF]
-QED
-
-Theorem code_end_local_trace_owner_alignment[local]:
-  !annss insts s rs H E insts' s' rs' H' E' R.
-  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
-  EVERY (\(token,v,n). R n v) H /\
-  LIST_REL (\i j. LIST_REL (\v n. R n v)
-    i.inst_outputs j.inst_outputs) insts insts' ==>
-  EVERY (\(token,v,n). R n v) H'
-Proof
-  Induct >> simp[current_local_trace_def] >> rpt strip_tac >> gvs[] >>
-  drule_all code_end_inst_trace_owner_alignment >> strip_tac >>
-  first_x_assum drule >> disch_then irule >> simp[]
-QED
-
-Theorem code_end_tree_trace_owner_alignment[local]:
-  (!tree A sm s rs bbs H E visited ct s' bbs' H' visited' events R.
-    current_tree_trace A sm tree s rs bbs H E visited
-      ct s' bbs' H' visited' events /\
-    EVERY (\(token,v,n). R n v) H /\
-    EVERY (\(l,bb,s,rs,H,E,is,s1,rs1,H1,E1,bbs1,bbs2).
-      LIST_REL (\i j. LIST_REL (\v n. R n v)
-        i.inst_outputs j.inst_outputs) bb.bb_instructions is) events ==>
-    EVERY (\(token,v,n). R n v) H') /\
-  (!trees A sm s ct stacks bbs H E visited ct' s' bbs' H' visited' events R.
-    current_children_trace A sm trees s ct stacks bbs H E visited
-      ct' s' bbs' H' visited' events /\
-    EVERY (\(token,v,n). R n v) H /\
-    EVERY (\(l,bb,s,rs,H,E,is,s1,rs1,H1,E1,bbs1,bbs2).
-      LIST_REL (\i j. LIST_REL (\v n. R n v)
-        i.inst_outputs j.inst_outputs) bb.bb_instructions is) events ==>
-    EVERY (\(token,v,n). R n v) H')
-Proof
-  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
-  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
-      simp[current_tree_trace_def] >>
-      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
-      drule_all code_end_local_trace_owner_alignment >> strip_tac >>
-      first_x_assum drule >> disch_then irule >> simp[])
-  >- simp[current_tree_trace_def] >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  simp[current_tree_trace_def, EVERY_APPEND] >> strip_tac >> gvs[] >>
-  qpat_x_assum `!A sm s rs bbs H E visited ct s' bbs' H' visited' events R. _`
-    drule_all >> strip_tac >>
-  first_x_assum drule >> disch_then irule >> simp[]
-QED
 
 Theorem code_end_trace_visit_output_agreement[local]:
   (!tree A sm s rs bbs H E visited ct s' bbs' H' visited' events path ve R.
@@ -115,7 +56,7 @@ Proof
   drule (cj 1 code_end_trace_visit_output_agreement) >>
   disch_then (qspecl_then [`path`,`ve`,`\n v. (n,v) IN R`] mp_tac) >>
   simp[] >> strip_tac >>
-  drule (cj 1 code_end_tree_trace_owner_alignment) >>
+  drule (cj 1 current_tree_trace_owner_alignment) >>
   disch_then (qspec_then `\n v. (n,v) IN R` mp_tac) >>
   simp[] >> strip_tac >>
   fs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]
