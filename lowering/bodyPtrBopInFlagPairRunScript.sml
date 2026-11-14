@@ -1,5 +1,6 @@
 Theory bodyPtrBopInFlagPairRun
-Ancestors bodyPtrBopInFlagRobust bodyPtrBopContinuation bodyPtrBopEntry
+Ancestors
+  bodyPtrBopTypedSource bodyPtrBopInFlagRobust bodyPtrBopContinuation bodyPtrBopEntry
   bodyPtrBopOperandContract bodyPtrDefs loweringPosts exprSimDefs exprSimProps
   vyperTypeSystem vyperValue vyperTyping loweringSlice exprBopSimProps valueEncoding compileEnv
 
@@ -36,7 +37,7 @@ Theorem membership_flag_pair_run:
     eval_operand op t = SOME (val_to_w256 v)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule bop_pair_source_facts >>
+  drule bodyPtrBopTypedSourceTheory.bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `es2`, `es1`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   drule_all bop_pair_word_inputs >> strip_tac >>
