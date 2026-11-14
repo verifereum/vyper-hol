@@ -434,7 +434,7 @@ Resume prefix_loop_header_operand_path[path]:
    jump_to (if bool_to_word (~(j<n)) <> 0w then exit_lbl else body_lbl)
      (u4 with vs_inst_idx := 4)` by
     (Cases_on `j<n` >>
-     simp[bool_to_word_def,jump_to_def,venom_state_component_equality]) >>
+     simp[Abbr `t`,bool_to_word_def,jump_to_def,venom_state_component_equality]) >>
   `gas_origin_ptr_path (D',lo,explicit,ctx,fn,PG) (u4 with vs_inst_idx := 4,g4,q4) []
      (OK (jump_to (if j<n then body_lbl else exit_lbl) u4),g4,q4)` by
     (pop_assum SUBST1_TAC >>
@@ -444,7 +444,8 @@ Resume prefix_loop_header_operand_path[path]:
        `l1` |-> `exit_lbl`, `l2` |-> `body_lbl`, `G` |-> `g4`, `tn` |-> `q4`,
        `func` |-> `fn`, `D` |-> `D'`] jnz_origin_ptr_path) >>
      simp[]) >>
-  drule_all gas_origin_ptr_path_trans >> simp[]
+  drule_all gas_origin_ptr_path_trans >> Cases_on `j<n` >>
+  gvs[Abbr `t`,bool_to_word_def]
 QED
 
 Resume prefix_loop_header_operand_path[trace]:

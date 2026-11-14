@@ -10,7 +10,7 @@ Ancestors
   venomMemDefs valueEncodingProps
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   emitHelper codegenRel contextCodegenRel memLocDefs fragGasOriginPtrLoop
-  words arithmetic list finite_map pred_set
+  words arithmetic list rich_list finite_map pred_set
 
 Theorem prefix_loop_increment_steps:
   ip <> fresh /\
@@ -253,8 +253,11 @@ Proof
        mp_tac prefix_mstore_endpoint >>
      simp[Abbr `k`,Abbr `t`,w2n_n2w,mstore_idx]) >>
   `ptr_safe_step D lo 0 ctx func PG H q k (u with vs_inst_idx := s.vs_inst_idx + 1)` by
-    (simp[Abbr `k`] >> irule prefix_mstore_ptr_step >> simp[] >>
-     qexistsl [`n2w slot:bytes32`,`slot`,`32`] >> simp[w2n_n2w]) >>
+    (simp[Abbr `k`] >>
+     irule (Q.SPECL [`iid+1`,`ip`,`Var fresh`,
+       `u with vs_inst_idx := LENGTH prefix+1`,`n2w slot:bytes32`,
+       `n2w (SUC j):bytes32`,`slot`,`32`] prefix_mstore_ptr_step) >>
+     fs[w2n_n2w,eval_op_inst_idx] >> metis_tac[]) >>
   `ghost_step 0 ctx PG H q k (u with vs_inst_idx := s.vs_inst_idx + 1) = (H,qt)` by
     (qpat_x_assum `step_inst 0 ctx k _ = _` mp_tac >>
      simp[Abbr `k`,Abbr `qt`] >> strip_tac >>
@@ -289,7 +292,9 @@ Resume prefix_loop_increment_path[trace]:
   >- simp[Abbr `a`,Abbr `k`,mk_inst_def,is_terminator_def]
   >- (qpat_x_assum `run_inst_seq_mem_ok _ s` mp_tac >>
       simp_tac (srw_ss()) [Abbr `a`,Abbr `k`,abi_decode_backedge_insts_def,TAKE_def]) >>
-  Cases >> simp[] >> Cases_on `n` >> simp[]
+  qx_gen_tac `kk` >> strip_tac >>
+  `kk = 0 \/ kk = 1` by decide_tac >>
+  pop_assum DISJ_CASES_TAC >> gvs[]
 QED
 
 Finalise prefix_loop_increment_path
