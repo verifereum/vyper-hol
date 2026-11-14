@@ -337,3 +337,95 @@ Resume rest_word_membership_found_joint[found_frame]:
 QED
 
 Finalise rest_word_membership_found_joint
+
+Theorem rest_word_membership_notin_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load is_ctor imm loc) NONE F sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = 0 /\
+  delta = (if 0 < skip then 1 else 0) /\
+  width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
+  membership_loop_frame sa G0 tn0 s0 G tn s /\
+  membership_loop_registers sa i r G tn s /\
+  dst = "%" ++ toString (sa.cs_next_var+7+delta+width) /\
+  ins = mk_inst (sa.cs_next_id+15+delta+width) ISZERO
+    [Var ("%" ++ toString sa.cs_next_var)] [dst] /\
+  t = update_var dst (bool_to_word (r=0w)) s /\
+  G1 = step_prov PG G ins t /\ tn1 = step_taint ins s t tn /\
+  u = t with vs_inst_idx := 1 ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G1,tn1) /\
+  membership_loop_frame sa G0 tn0 s0 G1 tn1 u /\
+  eval_operand op u = SOME (bool_to_word (r=0w)) /\
+  op_prov G1 op = NONE /\ op_taint tn1 op = {} /\
+  ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+  u.vs_inst_idx = 1 /\ allocas_from lo u
+Proof
+  strip_tac >> drule_all membership_compiled_notin_exit_lookup >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx = SOME ins` by
+    (Cases_on `bb.bb_instructions` >> gvs[get_instruction_def]) >>
+  `eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME r /\
+   op_prov G (Var ("%" ++ toString sa.cs_next_var)) = NONE /\
+   op_taint tn (Var ("%" ++ toString sa.cs_next_var)) = {}` by
+    fs[membership_loop_registers_def, eval_operand_def] >>
+  `(!z. not_fresh_at sa z ==> z <> dst)` by
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `7+delta+width` mp_tac) >> simp[]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn ins s` by suspend "checks" >>
+  `step_inst_base ins s = OK t` by
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def] >>
+     gvs[eval_operand_def, membership_loop_registers_def]) >>
+  `~is_terminator ins.inst_opcode /\ ins.inst_opcode <> INVOKE /\
+   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s` by
+    simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+         inst_dload_in_section_def, source_memory_read_ranges_def,
+         source_memory_write_ranges_def] >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK u,G1,tn1)` by
+    (drule_all straight_line_origin_ptr_edge >> simp[]) >>
+  conj_tac
+  >- (drule (cj 2 gas_origin_ptr_path_rules) >>
+      disch_then (qspec_then `[]` mp_tac) >>
+      simp[] >> disch_then irule >>
+      irule (cj 1 gas_origin_ptr_path_rules) >>
+      simp[update_var_def]) >>
+  suspend "post"
+QED
+
+Resume rest_word_membership_notin_joint[checks]:
+  `step_inst 0 ctx ins s = OK t` by
+    (simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+          mk_inst_def, exec_pure1_def] >>
+     gvs[eval_operand_def, membership_loop_registers_def]) >>
+  gvs[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def,
+      mk_inst_def, op_prov_def, op_taint_def, update_var_def,
+      allocas_from_def, FLOOKUP_DEF] >> first_assum ACCEPT_TAC
+QED
+
+Resume rest_word_membership_notin_joint[post]:
+  `tn1 = tn with t_var := tn.t_var |+ (dst,{}) /\
+   FLOOKUP G1 dst = NONE /\
+   (!p. p <> dst ==> FLOOKUP G1 p = FLOOKUP G p)` by
+    (qpat_x_assum `tn1 = step_taint _ _ _ _` SUBST1_TAC >>
+     qpat_x_assum `G1 = step_prov _ _ _ _` SUBST1_TAC >>
+     qpat_x_assum `ins = mk_inst _ _ _ _` SUBST1_TAC >>
+     qpat_x_assum `t = update_var _ _ _` SUBST1_TAC >>
+     conj_tac >- (irule membership_scalar_ghost_frame >> simp[]) >>
+     conj_tac >- (irule membership_scalar_provenance >> simp[]) >>
+     rpt strip_tac >> simp[scalar_step_old_prov]) >>
+  conj_tac
+  >- (qpat_x_assum `u = _` SUBST1_TAC >>
+      qpat_x_assum `t = update_var _ _ _` SUBST1_TAC >>
+      irule bodyPtrBopInElementLoadTheory.membership_frame_scalar_update >>
+      conj_tac >- metis_tac[] >>
+      qexistsl_tac [`G`, `tn`] >>
+      qpat_x_assum `tn1 = tn with t_var := _` SUBST1_TAC >>
+      simp[op_taint_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  drule membership_compiled_loop_exit >> strip_tac >>
+  qpat_x_assum `tn1 = tn with t_var := _` SUBST1_TAC >>
+  gvs[eval_operand_def, lookup_var_def, update_var_def,
+      op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def] >> gvs[]
+QED
+
+Finalise rest_word_membership_notin_joint
