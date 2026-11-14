@@ -305,7 +305,7 @@ Theorem asm_opt_deploy_result:
   ~program_reads_self_code tops /\ assemble prog' <> [] /\ runtime_bc <> [] /\
   ~(?t. runtime_bc = 0xEFw :: t) ==>
   ?r es'. run_call es = SOME (r,es') /\
-    (frame_resource_starved es r es' \/
+    (creation_resource_starved es r es' \/
      ?gobs. deploy_result_rel tops runtime_bc tx es r es'
        (load_contract NONE gobs am tx [(NONE,tops)] []))
 Proof
@@ -318,7 +318,7 @@ Proof
   drule_all asm_opt_deploy_machine_run >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   `?r es'. run_call es = SOME (r,es') /\
-    (frame_resource_starved es r es' \/ deploy_result_rel tops runtime_bc tx es r es'
+    (creation_resource_starved es r es' \/ deploy_result_rel tops runtime_bc tx es r es'
       (load_contract NONE gobs am tx [(NONE,tops)] []))` by
     (irule deploy_venom_frame >> metis_tac[]) >>
   metis_tac[]

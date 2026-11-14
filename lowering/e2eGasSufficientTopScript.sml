@@ -10,7 +10,7 @@ Theory e2eGasSufficientTop
 Ancestors
   e2eGasSufficient e2eCorrectness e2eDefs e2eProducers e2eEntry
   unitTransformDefs ptrDiscipline lowerDloadDefs e2eComposition
-  o1PipelineCorrect o1PassContract o1CodeEndOffset contextCodegenRel
+  o1PipelineCorrect o1PassContract o1CodeEndOffset o1LabelFlowCompose contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness frameGas frameStep venomRunBounded asmOptimizer callTrace
@@ -76,7 +76,7 @@ Proof
   (* the optimizer case's static facts of the O1 output *)
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   `label_flow_ok out.po_unit.cu_context` by
-    (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
+    (irule o1_pipeline_label_flow_preserved >> metis_tac[]) >>
   `sym_unit_static_ok out.po_unit` by
     (irule o1_pipeline_sym_unit_static_ok >> metis_tac[]) >>
   (* S1b, S6b and S7g-opt, at bounds that hold for every entry state *)
@@ -263,7 +263,7 @@ Proof
   drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
   `o1_source_unit_ok dunit` by metis_tac[] >>
   `label_flow_ok dout.po_unit.cu_context` by
-    (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
+    (irule o1_pipeline_label_flow_preserved >> metis_tac[]) >>
   `sym_unit_static_ok dout.po_unit` by
     (irule o1_pipeline_sym_unit_static_ok >> metis_tac[]) >>
   (* no RETURNDATACOPY anywhere in the creation code *)
