@@ -10,9 +10,13 @@
 Theory bodyFullBuiltinMakeArray
 Ancestors
   bodyFullPreds bodySimFull exprSimHypsDefs exprLowering vyperAST list
+  bodyFullMakeArrayStore
 
 val _ = Parse.hide "body";
 
+(* The checked MakeArray slot continuation preserves the parent allocation,
+   initialized prefix, baseline trace prefix and conditional pure frame at one
+   endpoint. A dynamic array's length word is an initialized prefix cell. *)
 Theorem make_array_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (?t n. bt = MakeArray t n) /\
