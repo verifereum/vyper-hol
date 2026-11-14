@@ -5,7 +5,7 @@ Ancestors
   builtinSimple emitHelper emitHelperProps exprSimBufferEmptyExec
   compileEnv context venomInst list exprLoweringProps abiEmptySequence rich_list
   fragExec fragGasSeqPtr fragGasPathPtr venomState
-  bodyPtrTypeBuiltinsEmptyTail ghostPcTransportPtr instIdxIndep ptrDiscipline
+  bodyPtrTypeBuiltinsEmptyTail allocationPtr ghostPcTransportPtr instIdxIndep ptrDiscipline
   loweringHalt exprSimAlloc
 
 (* The semantic theory's decomposition is local, so expose this boundary
@@ -158,8 +158,10 @@ Resume empty_buffer_prefixed_tail_certificate[tail]:
   qpat_x_assum `lookup_var p u = _` kall_tac >>
   qpat_x_assum `ptr_covers HG th p u sz` kall_tac >>
   drule_all empty_buffer_tail_certificate >>
-  disch_then (qspecl_then [`D`, `func`, `PG`] strip_assume_tac) >>
-  qexistsl_tac [`t'`, `HG'`, `th'`] >>
+  disch_then (qspecl_then [`D`, `func`, `PG`]
+    (qx_choose_then `tail_state` (qx_choose_then `tail_ghost`
+      (qx_choose_then `tail_taint` strip_assume_tac)))) >>
+  qexistsl_tac [`tail_state`, `tail_ghost`, `tail_taint`] >>
   gvs[lookup_var_def, venom_state_component_equality]
 QED
 Finalise empty_buffer_prefixed_tail_certificate
@@ -226,10 +228,16 @@ Proof
     (irule buffer_alloc_code >> goal_assum drule >> simp[]) >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
-  drule_all empty_alloc_checked_coverage >>
-  disch_then (qspecl_then [`D`, `PG`, `G`, `tn`] strip_assume_tac) >>
+  drule_all empty_alloc_checked_run >>
+  disch_then (qspecl_then [`D`, `func`, `PG`, `G`, `tn`] strip_assume_tac) >>
+  gvs[] >>
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s = OK u` by
     gvs[run_inst_seq_def, AllCaseEqs()] >>
+  `sz < dimword (:256)` by decide_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func)` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
+  drule_all alloca_step_ptr_covers >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] assume_tac) >>
   `lookup_var p u = SOME w` by gvs[eval_operand_def] >>
   gvs[] >>
   `w2n w+sz < dimword (:256)` by decide_tac >>
