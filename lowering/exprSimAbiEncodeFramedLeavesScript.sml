@@ -194,11 +194,14 @@ Proof
   simp[DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
-Theorem abi_encode_framed_bytes_observed:
+Theorem abi_encode_framed_bytes_endpoint:
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\
-      abi_encode_exec_frame func s t
+  ?raw. window_seq st st' s raw /\
+    window_strong_result ctx func st st' out at av d s
+      (raw with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    abi_encode_exec_frame func s
+      (raw with vs_inst_idx := LENGTH st'.cs_current_insts)
 Proof
   strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -245,7 +248,7 @@ Proof
   `abi_encoder_extend_sim ctx func s
     (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (irule window_seq_extend_sim >> simp[] >> qexists_tac `st` >> simp[]) >>
-  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  qexists_tac `actual` >> (conj_tac >- first_assum ACCEPT_TAC) >>
   (reverse conj_tac
    >- (simp[abi_encode_exec_frame_def, pending_alloca_size_def] >>
         metis_tac[abi_encode_mcopy_memory_length, abi_encode_mstore_memory_length,
@@ -290,6 +293,18 @@ Proof
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   asm_rewrite_tac[] >> (conj_tac >- asm "sizes" ACCEPT_TAC) >>
   simp[Abbr `final`] >> metis_tac[window_seq_labels]
+QED
+
+Theorem abi_encode_framed_bytes_observed:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      abi_encode_exec_frame func s t
+Proof
+  strip_tac >> drule_all abi_encode_framed_bytes_endpoint >> strip_tac >>
+  rename1 `window_seq st st' s actual` >>
+  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_framed_bytes_contract:
