@@ -44,10 +44,7 @@ Proof
   gvs[] >>
   qexistsl [`inst`, `s`] >> simp[] >>
   drule_all lockstep_paired_mem_ranges >> strip_tac >>
-  fs[state_rel_def] >> imp_res_tac execution_frame_fields >>
-  `s'.vs_gas_readings = s.vs_gas_readings` by
-    (qpat_x_assum `execution_frame s' = execution_frame s` mp_tac >>
-     simp[execution_frame_def, venom_state_component_equality]) >>
+  fs[state_rel_def, execution_frame_def, venom_state_component_equality] >>
   conj_tac
   >- (strip_tac >> qpat_x_assum `~in_revert_forward fn' s'` mp_tac >>
       fs[in_revert_forward_def, active_inst_def] >>
