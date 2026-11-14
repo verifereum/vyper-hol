@@ -1,6 +1,6 @@
 (* Pointer checks for the straight-line Concat append arms. *)
 Theory bodyPtrBytestringBuiltinsConcatChecks
-Ancestors
+Ancestors fragExecPtr
   bodyPtrBytestringBuiltinsConcatPrefix assignTuplePtrLocalBytesCopy
   exprSimConcatStep concatMemory wordLoadStorePtr exprPtrUnwrapOffsetSegment
   bodyPtrIfExpBytesFrame bodyPtrIfExpBytesCounted bodyPtrIfExpStoragePhases
@@ -335,14 +335,14 @@ Resume concat_bytes_seq_ptr[copy_frame]:
     (w2n (sw+32w:256 word)) (w2n (n2w N:256 word)) s3` >>
   qabbrev_tac `tc = step_taint (mk_inst (sx.cs_next_id+4) MCOPY [Var r3;Var r1;Var r0] []) s3 u tnf'` >>
   subgoal `tc.t_var = tnf'.t_var`
-  >- (unabbrev_all_tac >> match_mp_tac (cj 2 typedCopyPtrTheory.mcopy_operand_ghost_frame) >>
+  >- (unabbrev_all_tac >> match_mp_tac (cj 2 fragExecPtrTheory.mcopy_operand_ghost_frame) >>
       simp[eval_operand_def]) >>
   subgoal `tc.t_stor = tnf'.t_stor`
   >- (qunabbrev_tac `tc` >> qunabbrev_tac `u` >>
-      match_mp_tac (cj 3 typedCopyPtrTheory.mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
+      match_mp_tac (cj 3 fragExecPtrTheory.mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
   subgoal `tc.t_trans = tnf'.t_trans`
   >- (qunabbrev_tac `tc` >> qunabbrev_tac `u` >>
-      match_mp_tac (cj 4 typedCopyPtrTheory.mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
+      match_mp_tac (cj 4 fragExecPtrTheory.mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
   suspend "copy_memory"
 QED
 
@@ -355,7 +355,7 @@ Resume concat_bytes_seq_ptr[copy_memory]:
     {w2n (n2w (B+32)+n2w k:256 word)+i |
       i < w2n (n2w N:256 word) /\ w2n (sw+32w:256 word)+i IN tnf'.t_mem}`
   >- (qunabbrev_tac `tc` >> qunabbrev_tac `u` >>
-      match_mp_tac (cj 5 typedCopyPtrTheory.mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
+      match_mp_tac (cj 5 fragExecPtrTheory.mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
   `run_inst_seq [mk_inst (sx.cs_next_id+4) MCOPY [Var r3;Var r1;Var r0] []] s3 = OK u` by
     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, Abbr `u`] >>
   `w2n (sw+32w) = w2n sw+32 /\

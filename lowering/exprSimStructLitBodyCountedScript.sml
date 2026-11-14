@@ -7,6 +7,7 @@ Ancestors
   exprLoweringProps exprLowering compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   gasOutcome gasSummary gasContext fragGasMode fragGasPath fragGasSeq fragExec
   vyperInterpreter vyperState vyperAST
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem compile_struct_lit_body_case:
   !ctx func ce cx ann nsid fields.
@@ -25,6 +26,12 @@ QED
 Resume compile_struct_lit_body_case[vv]:
   simp[expr_vv_case_def, expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[storage_trace_domain_def]) >>
   drule compile_struct_literal_inv >> strip_tac >>
   drule_all struct_literal_evaluated_layout >> strip_tac >>
   drule_all struct_literal_lookup_types >> strip_tac >>
@@ -43,7 +50,13 @@ Resume compile_struct_lit_body_case[vv]:
           type_memory_bytes_def, wordsTheory.dimword_def] >> decide_tac) >>
   qpat_x_assum `type_memory_size_list tvs < _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  drule_all buffer_alloc_counted >> strip_tac >>
+  drule buffer_alloc_counted_horizons >>
+  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
+  disch_then (qspecl_then [`s0`, `func`, `ctx`, `ce`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H0 ctx func ce cx es t` by simp[] >>
+  `local_ptrs_rel func ce es.scopes t` by
+    metis_tac[stmt_state_rel_def, state_rel_def] >>
   `!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
       expr_body_pre ce cx env e st` by metis_tac[expr_body_pre_struct_field] >>
   `ce.ce_is_ctor ==> !name itv iv io.
@@ -58,7 +71,7 @@ Resume compile_struct_lit_body_case[vv]:
   disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = _`)) >>
-  disch_then (qspecl_then [`env`, `es`, `func`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`env`, `es`, `func`, `ctx`, `st0`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   suspend "outcome"
 QED
@@ -89,20 +102,20 @@ Resume compile_struct_lit_body_case[outcome]:
   dxrule counted_outcome_normal_facts >>
   disch_then (mp_tac o SIMP_RULE (std_ss ++ boolSimps.CONJ_ss) [GSYM LEFT_EXISTS_AND_THM, GSYM CONJ_ASSOC]) >>
   strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ Q _` >>
-  `(\res ee r. ?vs. res = INL vs /\ Q (INL vs) ee r) = Q` by
+  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ Q _` >>
+  `(\H res ee r. ?vs. res = INL vs /\ Q H (INL vs) ee r) = Q` by
     simp[FUN_EQ_THM, Abbr `Q`] >>
-  qpat_assum `(_ : (value list + exception) -> evaluation_state -> venom_state -> bool) = Q`
+  qpat_assum `(\H res ee r. ?vs. res = INL vs /\ Q H (INL vs) ee r) = Q`
     (fn eqth => qspecl_then
-      [`\vs ee r. Q (INL vs) ee r`,
-       `\res ee r. expr_exit res r`,
+      [`\H vs ee r. Q H (INL vs) ee r`,
+       `\H res ee r. expr_exit res r`,
        `\vs. Value (StructV (ZIP (MAP FST fields,vs)))`]
       (drule o REWRITE_RULE [GSYM AND_IMP_INTRO, eqth] o BETA_RULE)
       (Q.GENL [`P`, `R`, `f`] counted_outcome_map_values)) >>
   impl_tac >- simp[Abbr `Q`] >>
   disch_then (qspec_then `fields` assume_tac) >>
-  qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
-  drule_at (Pat `gas_outcome _ _ _ _ _ _ _`) counted_outcome_conseq >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
+  drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`) counted_outcome_conseq >>
   disch_then irule >>
   simp[Abbr `Q`] >> rpt gen_tac >> strip_tac >>
   qexists_tac `Value (StructV (ZIP (MAP FST fields,vs)))` >>
@@ -161,8 +174,7 @@ Resume compile_struct_lit_body_case[at]:
     (drule vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom >> simp[]) >>
   rpt strip_tac >>
   `local_region ce es.scopes t n lb lsz` by
-    (`local_ptrs_rel func ce es.scopes t` by fs[stmt_state_rel_def, state_rel_def] >>
-     drule exprSimPropsTheory.local_region_frame >>
+    (drule exprSimPropsTheory.local_region_frame >>
      disch_then (qspec_then `sm` mp_tac) >>
      simp[] >> metis_tac[]) >>
   `local_region ce es.scopes s0 n lb lsz` by metis_tac[] >>

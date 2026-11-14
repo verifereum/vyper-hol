@@ -149,9 +149,8 @@ Proof
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `res` (qx_choose_then `es_end`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
-      qexists_tac `marks` >>
       reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
-      >- (disch_then kall_tac >> disj1_tac >>
+      >- (disch_then kall_tac >> qexists_tac `marks` >> disj1_tac >>
           drule assign_local_admissible_run >>
           disch_then (fn th =>
             PURE_REWRITE_TAC [gasStorageTheory.gas_bad_storage_at_def, th]) >>
@@ -163,7 +162,7 @@ Proof
       `?H1. valid_horizon cx st0 H1 es_end.storage_trace` by
         metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
       disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
-      disj2_tac >> disj1_tac >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >> BETA_TAC
       >- suspend "normal"
       >> suspend "exception") >>
@@ -264,7 +263,7 @@ Resume assign_local_word_frag_mem[normal]:
   mp_tac (Q.INST [`H` |-> `H1`]
     (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `es_end`, `t`, `id`, `p`, `sz`,
       `pre`, `env`, `entry`, `rest`, `v`, `etv`, `op`, `sb'`, `sb`]
-      assign_local_word_store_path_mem)) >>
+      (INST_TYPE [alpha |-> ``:256``] assign_local_word_store_path_mem))) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   rename1 `gas_marked_path T ctx func t 0 (OK u)` >>
   `!H. valid_horizon cx st0 H es_end.storage_trace ==>
@@ -274,11 +273,13 @@ Resume assign_local_word_frag_mem[normal]:
     (gen_tac >> strip_tac >>
      mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `es_end`, `t`, `id`, `p`, `sz`,
          `pre`, `env`, `entry`, `rest`, `v`, `etv`, `op`, `sb'`, `sb`]
-         assign_local_word_store_path_mem) >>
+         (INST_TYPE [alpha |-> ``:256``] assign_local_word_store_path_mem)) >>
      impl_tac >- (simp[] >> metis_tac[]) >>
      disch_then (qx_choose_then `u'` strip_assume_tac) >>
-     irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexistsl_tac [`H1`, `u'`] >> rpt conj_tac >> metis_tac[]) >>
+     match_mp_tac (Q.INST [`H0` |-> `H1`, `s` |-> `u'`]
+       (INST_TYPE [alpha |-> ``:256``]
+         exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     rpt conj_tac >> metis_tac[]) >>
   qexistsl_tac [`INL ()`,
     `es_end with scopes :=
        pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`,

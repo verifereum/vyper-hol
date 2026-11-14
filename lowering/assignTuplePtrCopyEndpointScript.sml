@@ -1,6 +1,6 @@
 (* Natural-address boundary for staging into an allocated buffer. *)
 Theory assignTuplePtrCopyEndpoint
-Ancestors
+Ancestors fragExecPtr
   assignTuplePtrStageFrame robustCopyTransportPtr typedCopyPtr venomMemProofs
   valueEncodingProps exprSimBufferStore exprSimProps compileEnv
   venomState venomInst venomExecSemantics bodyPtrDefs ptrDiscipline
