@@ -162,15 +162,17 @@ Proof
      simp[transient_lock_code_def, mk_inst_def]) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
   >- (rpt gen_tac >>
-      mp_tac (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
+      mp_tac (Q.INST [`lo` |-> `0`, `PG` |-> `[]`]
+        (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
         `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`]
-        run_inst_seq_gas_origin_ptr_path) >>
+        run_inst_seq_gas_origin_ptr_path)) >>
       simp[] >>
       `FILTER (\i. i.inst_opcode = GAS) (transient_lock_code nkey iv sa) = []` by
         (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def]) >>
       simp[]) >>
   rpt strip_tac >>
-  mp_tac (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
+  mp_tac (Q.INST [`lo` |-> `0`, `PG` |-> `[]`]
+    (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
     `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`, `fuel`]
-    run_inst_seq_ptr_continuation) >> simp[]
+    run_inst_seq_ptr_continuation)) >> simp[]
 QED
