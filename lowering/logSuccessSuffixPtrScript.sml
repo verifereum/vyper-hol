@@ -20,6 +20,7 @@ Proof
 QED
 
 Theorem log_success_suffix_path_ptr:
+  ~cx.txn.is_static /\
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
@@ -92,6 +93,22 @@ Proof
   strip_tac >>
   `ghost_kept ce es sm G tn s G tn` by simp[ghost_kept_refl] >>
   `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
+  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      ptr_val_ok cx aty v (FST arg) G tn s /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs` by
+    (fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     qpat_x_assum `!n. n < LENGTH _ ==> log_arg_rel _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
+     qexistsl_tac [`SND (EL n xs)`,`tv`] >> simp[]) >>
+  `LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
+    ptr_val_ok cx (SND arg) v (FST arg) G tn s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule split_log_ops_data_rel >>
+     fs[LIST_REL_EL_EQN] >> metis_tac[]) >>
   drule_all compile_split_log_topics_path_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   suspend "suffix"
