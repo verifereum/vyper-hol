@@ -16,7 +16,7 @@ QED
 (* One range argument serves reads and writes. The second alternative is
    the erased-static case; it requires neither source/target offset equality
    nor retention of the erased site's provenance. *)
-Theorem ptr_dalloca_range_transport[local]:
+Theorem ptr_dalloca_range_transport:
   lo <= eom /\
   (!off len. MEM (off,len) rs /\ len <> 0 /\
     (lo < off + len \/ ?ops. mops = SOME ops /\

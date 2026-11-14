@@ -3,7 +3,7 @@ Ancestors
   concretizePtrDallocaRuntimeSteps concretizePtrDallocaDisciplineTransport
   concretizePtrValueTransport concretizePtrDallocaGhostInterface
   concretizePtrScalarCoreProducer concretizePtrShiftProducer
-  concretizePtrReturnTransport
+  concretizePtrReturnTransport lowerDloadPtrDalloca
   concretizePtrPrefixLedger concretizePtrOpaqueRetpc o1FrameLockstep
   basePtrProofs blockPrefixEquiv ptrDiscipline venomExecSemantics venomState venomInst
   concretizeLayoutLocalShifts contextCodegenRel finite_map pred_set words list
@@ -226,4 +226,157 @@ Proof
   >- (fs[] >> Cases_on `eval_operand a t` >> gvs[] >>
       irule shift_taint_mono >> simp[]) >>
   Cases_on `eval_operand a t` >> simp[]
+QED
+
+Theorem ptr_dalloca_positive_retention:
+  ptr_ledger_erases dyn births TG G /\
+  (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
+     FLOOKUP Gt v = SOME site) /\
+  (!owner b sz. FLOOKUP births owner = SOME (b,sz) ==> b + sz <= dyn) ==>
+  !v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
+    FLOOKUP Gt v = SOME (b,sz)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `FLOOKUP TG v` >- metis_tac[] >>
+  fs[ptr_ledger_erases_def] >>
+  qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
+  simp[ptr_owner_erases_def] >> strip_tac >>
+  `b + sz <= dyn` by metis_tac[] >> fs[]
+QED
+
+Theorem ptr_dalloca_runtime_demands:
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst s /\
+  (!v tag. FLOOKUP (TG:(string,num # num) fmap) v = SOME tag ==> v IN fn_pv P fn) /\
+  ptr_mixed_vars births positions TG tn fn ft s t /\ s.vs_labels = t.vs_labels /\
+  (!op. MEM op inst.inst_operands ==> op_taint tnt op SUBSET op_taint tn op) /\
+  (!a wt. inst.inst_operands = [a] /\ eval_operand a t = SOME wt ==>
+     ?w. eval_operand a s = SOME w /\
+       ((inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD) ==>
+         mem_word_taint tnt.t_mem (w2n wt) SUBSET mem_word_taint tn.t_mem (w2n w)) /\
+       (inst.inst_opcode = SLOAD ==>
+         key_taint tnt.t_stor wt SUBSET key_taint tn.t_stor w) /\
+       (inst.inst_opcode = TLOAD ==>
+         key_taint tnt.t_trans wt SUBSET key_taint tn.t_trans w)) ==>
+  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
+     !op. MEM op inst.inst_operands ==>
+       ptr_nonopaque_operand fn op /\ op_taint tn op = {}) /\
+  (inst.inst_opcode = DALLOCA ==>
+     eval_operands inst.inst_operands s = eval_operands inst.inst_operands t) /\
+  out_taint tnt inst t SUBSET out_taint tn inst s
+Proof
+  strip_tac >> conj_tac
+  >- (strip_tac >>
+      `EVERY (ptr_nonopaque_operand fn) inst.inst_operands` by
+        (irule ptr_nonopaque_instruction_operands >> fs[] >> metis_tac[]) >>
+      fs[EVERY_MEM] >> rpt strip_tac >> simp[] >>
+      qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+      fs[taint_ok_def] >> metis_tac[]) >>
+  reverse conj_tac
+  >- (irule ptr_dalloca_runtime_mask_demands >> metis_tac[]) >>
+  strip_tac >> irule ptr_mixed_scalar_operands_equal >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  `FDOM TG SUBSET fn_pv P fn` by
+    (simp[SUBSET_DEF, TO_FLOOKUP] >> gen_tac >>
+     Cases_on `FLOOKUP TG x` >> simp[] >> metis_tac[]) >>
+  `EVERY (ptr_nonopaque_operand fn) inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> fs[] >> metis_tac[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  `op_prov TG op = NONE /\ op_taint tn op = {}` by
+    (irule dalloca_operand_clean >> metis_tac[]) >> simp[]
+QED
+
+Theorem ptr_dalloca_compare_transport_positive[local]:
+  access_ok lo G fn inst s /\
+  ptr_dalloca_ghost_vars G V s Gt Vt t /\
+  (!v b sz. FLOOKUP Gt v = SOME (b,sz) ==> dyn <= b) /\
+  (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
+    FLOOKUP Gt v = SOME (b,sz)) ==>
+  !u w. (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+         inst.inst_opcode = EQ) /\ inst.inst_operands = [Var u; Var w] /\
+    (u IN FDOM Gt \/ w IN FDOM Gt) ==>
+    ?b sz x y. FLOOKUP Gt u = SOME (b,sz) /\ FLOOKUP Gt w = SOME (b,sz) /\
+      0 < sz /\ eval_operand (Var u) t = SOME x /\
+      eval_operand (Var w) t = SOME y /\
+      b <= w2n x /\ w2n x <= b + sz /\
+      b <= w2n y /\ w2n y <= b + sz
+Proof
+  strip_tac >> rpt gen_tac >> disch_tac >>
+  `FDOM Gt SUBSET FDOM G` by
+    (simp[SUBSET_DEF, TO_FLOOKUP] >> gen_tac >>
+     Cases_on `FLOOKUP Gt x` >> simp[] >>
+     drule_all ptr_dalloca_ghost_prov >> simp[]) >>
+  `?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
+      0 < sz /\ eval_operand (Var u) s = SOME x /\
+      eval_operand (Var w) s = SOME y /\
+      b <= w2n x /\ w2n x <= b + sz /\
+      b <= w2n y /\ w2n y <= b + sz` by
+    (fs[access_ok_def, SUBSET_DEF] >> metis_tac[]) >>
+  `dyn <= b` by
+    (Cases_on `FLOOKUP Gt u`
+     >- (fs[TO_FLOOKUP] >> Cases_on `FLOOKUP Gt w` >> fs[] >>
+         rename1 `FLOOKUP Gt w = SOME site` >> PairCases_on `site` >>
+         drule_all ptr_dalloca_ghost_prov >> strip_tac >> fs[] >> metis_tac[]) >>
+     rename1 `FLOOKUP Gt u = SOME site` >> PairCases_on `site` >>
+     drule_all ptr_dalloca_ghost_prov >> strip_tac >> fs[] >> metis_tac[]) >>
+  `FLOOKUP Gt u = SOME (b,sz) /\ FLOOKUP Gt w = SOME (b,sz)` by metis_tac[] >>
+  fs[ptr_dalloca_ghost_vars_def, eval_operand_def] >> metis_tac[]
+QED
+
+Theorem ptr_dalloca_access_transport_positive:
+  access_ok lo G fn inst s /\ lo <= eom /\
+  ptr_dalloca_ghost_vars G tn.t_var s Gt tnt.t_var t /\
+  (in_revert_forward fn s ==> in_revert_forward ft t) /\
+  (!v b sz. FLOOKUP Gt v = SOME (b,sz) ==> dyn <= b) /\
+  (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
+    FLOOKUP Gt v = SOME (b,sz)) /\
+  (!off len. MEM (off,len) (source_memory_read_ranges inst t) /\ len <> 0 ==>
+    ?off_s. MEM (off_s,len) (source_memory_read_ranges inst s) /\
+    ((off = off_s /\ (!ops. mem_read_ops inst = SOME ops ==>
+        op_prov G ops.iao_ofst = op_prov Gt ops.iao_ofst)) \/
+     (off + len <= eom /\ (!ops. mem_read_ops inst = SOME ops ==>
+        op_prov Gt ops.iao_ofst = NONE)))) /\
+  (!off len. MEM (off,len) (source_memory_write_ranges inst t) /\ len <> 0 ==>
+    ?off_s. MEM (off_s,len) (source_memory_write_ranges inst s) /\
+    ((off = off_s /\ (!ops. mem_write_ops inst = SOME ops ==>
+        op_prov G ops.iao_ofst = op_prov Gt ops.iao_ofst)) \/
+     (off + len <= eom /\ (!ops. mem_write_ops inst = SOME ops ==>
+        op_prov Gt ops.iao_ofst = NONE)))) ==>
+  access_ok eom Gt ft inst t
+Proof
+  strip_tac >> rewrite_tac[access_ok_def] >> reverse conj_tac
+  >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_compare_transport_positive >>
+      simp[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  strip_tac >>
+  `~in_revert_forward fn s` by metis_tac[] >>
+  qpat_x_assum `access_ok _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[access_ok_def]) >>
+  disch_then (CONJUNCTS_THEN2 (drule_then strip_assume_tac) kall_tac) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> irule ptr_dalloca_range_transport >>
+      simp[] >> goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`G`, `source_memory_write_ranges inst s`,
+                   `source_memory_write_ranges inst t`] >> fs[] >> gvs[]) >>
+  rpt gen_tac >> disch_tac >> irule ptr_dalloca_range_transport >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`G`, `source_memory_read_ranges inst s`,
+               `source_memory_read_ranges inst t`] >> fs[] >> gvs[]
+QED
+
+Theorem ptr_dalloca_untagged_op_prov[local]:
+  ptr_dalloca_ghost_vars G V s Gt Vt t /\
+  (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
+     FLOOKUP Gt v = SOME site) /\ op_prov TG op = NONE ==>
+  op_prov G op = op_prov Gt op
+Proof
+  strip_tac >> Cases_on `op` >> gvs[op_prov_def] >>
+  rename1 `FLOOKUP TG v = NONE` >>
+  qpat_x_assum `ptr_dalloca_ghost_vars _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[ptr_dalloca_ghost_vars_def]) >>
+  qpat_x_assum `!v. op_taint _ _ SUBSET _` kall_tac >>
+  qpat_x_assum `!v site. FLOOKUP Gt v = SOME site ==> _`
+    (qspec_then `v` assume_tac) >>
+  qpat_x_assum `!v site. FLOOKUP TG v = NONE /\ _ ==> _`
+    (qspec_then `v` assume_tac) >>
+  Cases_on `FLOOKUP G v` >> Cases_on `FLOOKUP Gt v` >> gvs[]
 QED
