@@ -189,9 +189,9 @@ Definition deploy_result_rel_def:
           ?lgs.
             frame_outcome es r es' NONE [] lgs /\
             (lookup_account tx.target es'.rollback.accounts).code = [] /\
-            accounts_agree cx am'.accounts
+            accounts_agree H cx am'.accounts
               (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-            transient_agree cx am'.tStorage es'.rollback.tStorage /\
+            transient_agree H cx am'.tStorage es'.rollback.tStorage /\
             logs_correspond (compiled_event_info tops) (type_env tops)
               tx.target am'.logs lgs
         else
