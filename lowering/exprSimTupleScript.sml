@@ -1195,7 +1195,7 @@ Proof
             `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
             `tys`,`btv`,`fe with gas_obs := []`] tuple_base_facts) >>
   simp[] >> strip_tac >>
-  drule_all attr_add_path >> strip_tac >>
+  drule_all attr_add_path_frame >> strip_tac >>
   rename1 `gas_path ctx func t 0 (OK t1)` >>
   qspecl_then [`func`,`cenv`,`cx`,`obj`,`es`,`sa`,`sb`,`s0`,
                `fe with gas_obs := []`,`btv`,`bvv`,`t1`,`w`,`tys`,`tvs`,
