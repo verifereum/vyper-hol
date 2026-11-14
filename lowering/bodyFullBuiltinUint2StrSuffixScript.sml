@@ -45,7 +45,8 @@ Theorem uint2str_suffix_joint_full:
     ~t.vs_halted /\ alloca_history fn t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
     vv_location vv = SOME LocMemory /\
     ptr_buf_ok cenv (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) (vv_operand vv) G' t /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn' /\
+    s.vs_alloca_next <= t.vs_alloca_next
 Proof
   strip_tac >>
   Cases_on `compile_uint2str op n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
@@ -164,6 +165,7 @@ Resume uint2str_suffix_joint_full[numeric_exit]:
     (mp_tac (Q.INST [`x` |-> `X`] uint256_decimal_length) >> fs[dimword_def] >> decide_tac) >>
   `t.vs_alloca_next = ready.vs_alloca_next /\ t.vs_allocas = ready.vs_allocas` by
     (fs[u2s_frame_def, venom_state_component_equality]) >>
+  `s.vs_alloca_next <= t.vs_alloca_next` by decide_tac >>
   conj_tac >- suspend "uniform_post" >>
   conj_tac >- suspend "store_bound" >>
   conj_tac >- suspend "pointer_post" >>
