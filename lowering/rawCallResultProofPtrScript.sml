@@ -101,29 +101,6 @@ Proof
   simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
-Theorem raw_call_returndatasize_step_base:
-  step_inst_base (mk_inst iid RETURNDATASIZE [] [out]) s =
-    OK (update_var out (n2w (LENGTH s.vs_returndata)) s)
-Proof
-  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
-    venomExecSemanticsTheory.bind_outputs_def]
-QED
-
-Theorem ptr_inst_ok_returndatasize:
-  ~ctx_has_dalloca ctx ==>
-  ptr_inst_ok D 0 fuel ctx func G tn (mk_inst iid RETURNDATASIZE [] [out]) s
-Proof
-  strip_tac >>
-  simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
-    ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
-    venomInstTheory.mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
-    contextCodegenRelTheory.source_memory_read_ranges_def] >>
-  simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
-    venomExecSemanticsTheory.bind_outputs_def, venomStateTheory.update_var_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem raw_call_returndatasize_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -136,9 +113,9 @@ Theorem raw_call_returndatasize_path_ptr:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst iid RETURNDATASIZE [] [out]) s = OK u` by
-    simp[raw_call_returndatasize_step_base] >>
+    simp[rawCallBufferPtrTheory.raw_call_returndatasize_step_base] >>
   `ptr_inst_ok D 0 0 ctx func G tn (mk_inst iid RETURNDATASIZE [] [out]) s` by
-    simp[ptr_inst_ok_returndatasize] >>
+    simp[rawCallBufferPtrTheory.ptr_inst_ok_returndatasize] >>
   `(mk_inst iid RETURNDATASIZE [] [out]).inst_opcode <> INVOKE /\
     ~is_terminator (mk_inst iid RETURNDATASIZE [] [out]).inst_opcode` by
     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
@@ -233,21 +210,6 @@ Proof
   drule_all raw_call_returndatasize_path_ptr >> simp[]
 QED
 
-Theorem raw_call_returndatasize_step_taint:
-  step_taint (mk_inst iid RETURNDATASIZE [] [out]) s (update_var out w s) tn =
-  tn with t_var := tn.t_var |+ (out,{})
-Proof
-  simp[ptrDisciplineTheory.step_taint_def, venomInstTheory.mk_inst_def,
-    ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.set_var_taint_def,
-    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
-    ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.mem_taint_def,
-    ptrDisciplineTheory.new_site_bytes_def, ptrDisciplineTheory.step_writes_def,
-    ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
-    codegenRelTheory.source_memory_write_ranges_def,
-    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_DEF] >>
-  simp[SF CONJ_ss, ptrDisciplineTheory.taint_component_equality]
-QED
-
 Theorem raw_call_emit_returndatasize_stage:
   emit_op RETURNDATASIZE [] sa = (Var out,sb) /\ fn_has_code sa sb func /\
   stmt_state_rel H ctx func cenv cx es s /\
@@ -292,7 +254,7 @@ Proof
     (simp[Abbr `t`, Abbr `u`] >>
      irule rawCallDataHeaderPtrTheory.raw_call_fresh_update_state_frame >> simp[]) >>
   qexistsl_tac [`HG`, `un`, `t`] >> simp[] >>
-  simp[Abbr `un`, Abbr `u`, raw_call_returndatasize_step_taint] >>
+  simp[Abbr `un`, Abbr `u`, rawCallBufferPtrTheory.raw_call_returndatasize_step_taint] >>
   simp[Abbr `t`, Abbr `HG`, venomStateTheory.update_var_def,
     venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def,
     finite_mapTheory.FLOOKUP_UPDATE, ptrDisciplineTheory.op_taint_def,
