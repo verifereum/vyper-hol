@@ -87,6 +87,7 @@ Proof
   `ghost_step fuel ctx PG G tn h s =
      (step_prov PG G h u, step_taint h s u tn)` by
     metis_tac[ghost_step_non_invoke] >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   fs[ptr_safe_run_def] >>
   once_rewrite_tac[ptr_safe_block_def] >>
   simp[]
