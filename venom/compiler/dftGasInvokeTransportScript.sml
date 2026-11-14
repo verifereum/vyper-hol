@@ -4,6 +4,87 @@ Ancestors
   gasOracleReplay gasEvents venomExecSemantics venomInst venomState
   list rich_list sorting option
 
+Theorem invoke_setup_common[local]:
+  !y a b.
+    y.inst_opcode = INVOKE /\
+    (!op. MEM op y.inst_operands ==>
+      eval_operand op a = eval_operand op b) /\
+    (!callee args. setup_callee callee args a = setup_callee callee args b) ==>
+    a.vs_fmp = b.vs_fmp /\
+    (!callee_name arg_ops. decode_invoke y = SOME (callee_name,arg_ops) ==>
+      eval_operands arg_ops a = eval_operands arg_ops b) /\
+    (!callee args gs. setup_callee callee args
+       (a with vs_gas_readings := gs) =
+       setup_callee callee args (b with vs_gas_readings := gs))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `a.vs_fmp = b.vs_fmp` by
+    (qpat_x_assum `!callee args. _`
+       (qspecl_then [`mk_raw_function "" [ARB]`, `[]`] mp_tac) >>
+     simp[setup_callee_def, venomInstTheory.mk_raw_function_def,
+          venom_state_component_equality]) >>
+  `!ops. EVERY (\op. MEM op y.inst_operands) ops ==>
+    eval_operands ops a = eval_operands ops b` by
+    (Induct >> simp[eval_operands_def] >> rpt strip_tac >> simp[]) >>
+  `!callee_name arg_ops. decode_invoke y = SOME (callee_name,arg_ops) ==>
+    eval_operands arg_ops a = eval_operands arg_ops b` by
+    (rpt gen_tac >> strip_tac >>
+     first_x_assum irule >> simp[EVERY_MEM] >>
+     qpat_x_assum `decode_invoke _ = _` mp_tac >>
+     simp[decode_invoke_def] >>
+     Cases_on `y.inst_operands` >> simp[] >>
+     Cases_on `h` >> simp[] >> rpt strip_tac >> gvs[]) >>
+  `!callee args gs. setup_callee callee args
+     (a with vs_gas_readings := gs) =
+     setup_callee callee args (b with vs_gas_readings := gs)` by
+    simp[gasOracleReplayTheory.gas_setup_callee] >>
+  simp[]
+QED
+
+Theorem invoke_native_setup[local]:
+  !y a b packet_finish invoke.
+    y.inst_opcode = INVOKE /\
+    (!op. MEM op y.inst_operands ==>
+      eval_operand op a = eval_operand op b) /\
+    (!callee args. setup_callee callee args a = setup_callee callee args b) /\
+    packet_finish = (\s res.
+    case res of
+      IntRet ir u =>
+        if LENGTH y.inst_outputs = LENGTH ir.iret_values then
+          OK (THE (bind_outputs y.inst_outputs ir.iret_values
+            (adopt_return_fmp ir (merge_callee_state s u))))
+        else Error "invoke: return arity mismatch"
+    | Halt u => Halt u | Abort e u => Abort e u | Error e => Error e
+    | OK u => Error "invoke: callee did not return") /\
+    invoke = (\F D gs.
+    case decode_invoke y of
+      NONE => Error "invoke: bad operand format"
+    | SOME (name,ops) =>
+      case lookup_function name D.ctx_functions of
+        NONE => Error "invoke: function not found"
+      | SOME callee =>
+        case eval_operands ops a of
+          NONE => Error "invoke: undefined argument"
+        | SOME args =>
+          case setup_callee callee args (a with vs_gas_readings := gs) of
+            NONE => Error "invoke: empty function"
+          | SOME cs => run_blocks F D callee cs) ==>
+    !F D gs.
+      step_inst F D y (a with vs_gas_readings := gs) = packet_finish a (invoke F D gs) /\
+      step_inst F D y (b with vs_gas_readings := gs) = packet_finish b (invoke F D gs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all invoke_setup_common >> strip_tac >>
+  rpt gen_tac >> simp[step_inst_def] >>
+     Cases_on `decode_invoke y` >> simp[] >>
+     PairCases_on `x` >> simp[] >>
+     `eval_operands x1 a = eval_operands x1 b` by metis_tac[] >>
+     simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+     BasicProvers.TOP_CASE_TAC >> simp[] >>
+     BasicProvers.TOP_CASE_TAC >> simp[] >>
+     BasicProvers.TOP_CASE_TAC >> simp[invoke_bind_case, merge_callee_state_def]
+QED
+
 Theorem invoke_finish_observations[local]:
   !outs a b r r' packet_finish.
   a.vs_fmp = b.vs_fmp /\
@@ -93,26 +174,7 @@ Theorem invoke_fixed_segment_setup:
     ))
 Proof
   rpt gen_tac >> strip_tac >>
-  `a.vs_fmp = b.vs_fmp` by
-    (qpat_x_assum `!callee args. _`
-       (qspecl_then [`mk_raw_function "" [ARB]`, `[]`] mp_tac) >>
-     simp[setup_callee_def, venomInstTheory.mk_raw_function_def,
-          venom_state_component_equality]) >>
-  `!ops. EVERY (\op. MEM op y.inst_operands) ops ==>
-    eval_operands ops a = eval_operands ops b` by
-    (Induct >> simp[eval_operands_def] >> rpt strip_tac >> simp[]) >>
-  `!callee_name arg_ops. decode_invoke y = SOME (callee_name,arg_ops) ==>
-    eval_operands arg_ops a = eval_operands arg_ops b` by
-    (rpt gen_tac >> strip_tac >>
-     first_x_assum irule >> simp[EVERY_MEM] >>
-     qpat_x_assum `decode_invoke _ = _` mp_tac >>
-     simp[decode_invoke_def] >>
-     Cases_on `y.inst_operands` >> simp[] >>
-     Cases_on `h` >> simp[] >> rpt strip_tac >> gvs[]) >>
-  `!callee args gs. setup_callee callee args
-     (a with vs_gas_readings := gs) =
-     setup_callee callee args (b with vs_gas_readings := gs)` by
-    simp[gasOracleReplayTheory.gas_setup_callee] >>
+  drule_all invoke_setup_common >> strip_tac >>
   `!F D owner owner' gs.
     gas_events_step F D owner y (a with vs_gas_readings := gs) =
     gas_events_step F D owner' y (b with vs_gas_readings := gs)` by
@@ -148,14 +210,7 @@ Proof
   `!F D gs.
     step_inst F D y (a with vs_gas_readings := gs) = packet_finish a (invoke F D gs) /\
     step_inst F D y (b with vs_gas_readings := gs) = packet_finish b (invoke F D gs)` by
-    (rpt gen_tac >> simp[step_inst_def, Abbr `invoke`] >>
-     Cases_on `decode_invoke y` >> simp[Abbr `packet_finish`] >>
-     PairCases_on `x` >> simp[] >>
-     `eval_operands x1 a = eval_operands x1 b` by metis_tac[] >>
-     simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
-     BasicProvers.TOP_CASE_TAC >> simp[] >>
-     BasicProvers.TOP_CASE_TAC >> simp[] >>
-     BasicProvers.TOP_CASE_TAC >> simp[invoke_bind_case, merge_callee_state_def]) >>
+    (irule invoke_native_setup >> simp[Abbr `packet_finish`, Abbr `invoke`]) >>
   qspecl_then [`y.inst_outputs`, `a`, `b`] mp_tac
     invoke_finish_observations >>
   qpat_assum `Abbrev (packet_finish = _)`
@@ -185,26 +240,7 @@ Theorem invoke_restore_setup:
        (ev_step orc p d ef D y (b with vs_gas_readings := rs)))
 Proof
   rpt gen_tac >> strip_tac >>
-  `a.vs_fmp = b.vs_fmp` by
-    (qpat_x_assum `!callee args. _`
-       (qspecl_then [`mk_raw_function "" [ARB]`, `[]`] mp_tac) >>
-     simp[setup_callee_def, venomInstTheory.mk_raw_function_def,
-          venom_state_component_equality]) >>
-  `!ops. EVERY (\op. MEM op y.inst_operands) ops ==>
-    eval_operands ops a = eval_operands ops b` by
-    (Induct >> simp[eval_operands_def] >> rpt strip_tac >> simp[]) >>
-  `!callee_name arg_ops. decode_invoke y = SOME (callee_name,arg_ops) ==>
-    eval_operands arg_ops a = eval_operands arg_ops b` by
-    (rpt gen_tac >> strip_tac >>
-     first_x_assum irule >> simp[EVERY_MEM] >>
-     qpat_x_assum `decode_invoke _ = _` mp_tac >>
-     simp[decode_invoke_def] >>
-     Cases_on `y.inst_operands` >> simp[] >>
-     Cases_on `h` >> simp[] >> rpt strip_tac >> gvs[]) >>
-  `!callee args gs. setup_callee callee args
-     (a with vs_gas_readings := gs) =
-     setup_callee callee args (b with vs_gas_readings := gs)` by
-    simp[gasOracleReplayTheory.gas_setup_callee] >>
+  drule_all invoke_setup_common >> strip_tac >>
   qabbrev_tac `packet_finish = (\s res.
     case res of
       IntRet ir u =>
@@ -230,14 +266,7 @@ Proof
   `!F D gs.
     step_inst F D y (a with vs_gas_readings := gs) = packet_finish a (invoke F D gs) /\
     step_inst F D y (b with vs_gas_readings := gs) = packet_finish b (invoke F D gs)` by
-    (rpt gen_tac >> simp[step_inst_def, Abbr `invoke`] >>
-     Cases_on `decode_invoke y` >> simp[Abbr `packet_finish`] >>
-     PairCases_on `x` >> simp[] >>
-     `eval_operands x1 a = eval_operands x1 b` by metis_tac[] >>
-     simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
-     BasicProvers.TOP_CASE_TAC >> simp[] >>
-     BasicProvers.TOP_CASE_TAC >> simp[] >>
-     BasicProvers.TOP_CASE_TAC >> simp[invoke_bind_case, merge_callee_state_def]) >>
+    (irule invoke_native_setup >> simp[Abbr `packet_finish`, Abbr `invoke`]) >>
   qabbrev_tac `invoke_oracle = (\F D gs.
     case decode_invoke y of
       NONE => Error "invoke: bad operand format"
