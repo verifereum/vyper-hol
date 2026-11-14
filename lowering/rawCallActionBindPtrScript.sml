@@ -5,6 +5,23 @@ Ancestors
   rawCallPrefixReadyPtr rawCallSourceActionPtr gasSummaryComposePtr gasExemptCert gasContext
   vyperInterpreter vyperState vyperValue exprReasonOperand
 
+Theorem raw_call_marked_continuation_admissible:
+  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) args dflt)) expr_vv_res_ok es /\
+  gas_marked_exec F (ctx,func) (eval_exprs cx args) (es,s) marks
+    (INL (av::BytesV bs::kvs)) mid (OK t) /\
+  dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
+  raw_call_value flags.rcf_kws kvs = SOME amount ==>
+  gas_admissible (eval_raw_call cx flags target bs amount
+    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)))
+    expr_vv_res_ok (mid with gas_obs := [])
+Proof
+  rewrite_tac[rawCallSourceActionPtrTheory.raw_call_eval_action,
+    gasSummaryTheory.gas_marked_exec_def] >>
+  strip_tac >> drule_all gasContextTheory.gas_admissible_bind_tail >>
+  BETA_TAC >> drule_all rawCallSourceActionPtrTheory.raw_call_source_continuation >>
+  disch_then (qspecl_then [`cx`, `bs`] SUBST1_TAC) >> simp[]
+QED
+
 Theorem raw_call_scalar_action_outcome:
   body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
