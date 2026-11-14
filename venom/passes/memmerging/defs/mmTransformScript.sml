@@ -12,8 +12,13 @@
  *   - dload+mstore → dloadbytes(32, src, dst), dload → NOP
  *
  * TOP-LEVEL:
- *   transform_block          — apply all sub-passes sequentially
- *   transform_function       — apply to all blocks in a function
+ *   transform_dload_inst     — rewrite either end of a selected DLOAD pair
+ *   transform_block          — apply the four local merging phases
+ *   transform_function_with  — update DLOAD pairs globally, then each block
+ *   transform_function       — instantiate the ordered function traversal
+ *
+ * Models concrete memory and single-use DLOAD pairs. Python's memory_abstract
+ * mode and multi-use DLOAD optimization are outside this implementation.
  *)
 
 Theory mmTransform
@@ -255,32 +260,28 @@ Definition transform_block_memzero_def:
       FLAT (MAP (apply_memzero_inst nop_set rep_map) bb.bb_instructions)
 End
 
-(* Dload peephole transform.
-   Python: _merge_mstore_dload *)
+(* Apply the pairs discovered in the block currently being visited.
+   The caller applies this update to every block, including visited ones. *)
+Definition transform_dload_inst_def:
+  transform_dload_inst pairs inst =
+    if EXISTS (\dp. dp.dp_dload_id = inst.inst_id) pairs then
+      mk_nop_from inst
+    else case FIND (\dp. dp.dp_mstore_id = inst.inst_id) pairs of
+      SOME dp => mk_dloadbytes_inst inst dp.dp_src dp.dp_dst
+    | NONE => inst
+End
+
 Definition transform_block_dload_def:
-  transform_block_dload dfg bb =
-    let pairs = find_dload_pairs dfg bb.bb_instructions in
-    let dload_nops = MAP (\dp. dp.dp_dload_id) pairs in
-    let mstore_map = MAP (\dp. (dp.dp_mstore_id, dp)) pairs in
-    bb with bb_instructions :=
-      MAP (\inst.
-        if MEM inst.inst_id dload_nops then
-          mk_nop_from inst
-        else
-          case ALOOKUP mstore_map inst.inst_id of
-            SOME dp => mk_dloadbytes_inst inst dp.dp_src dp.dp_dst
-          | NONE => inst)
-      bb.bb_instructions
+  transform_block_dload pairs bb =
+    bb with bb_instructions := MAP (transform_dload_inst pairs) bb.bb_instructions
 End
 
 (* ===== Full transform: all sub-passes composed ===== *)
 
-(* Apply all memmerging sub-passes to a block.
-   Python: MemMergePass.run_pass *)
+(* The block-local sub-passes follow the function-wide DLOAD update. *)
 Definition transform_block_def:
   transform_block dfg bb =
-    let bb1 = transform_block_dload dfg bb in
-    let bb2 = transform_block_memzero dfg bb1 in
+    let bb2 = transform_block_memzero dfg bb in
     let bb3 = transform_block_mode dfg CalldataMerge bb2 in
     let bb4 = transform_block_mode dfg DloadMerge bb3 in
     transform_block_mode dfg Mem2Mem bb4
@@ -288,8 +289,29 @@ End
 
 (* ===== Function-level transform ===== *)
 
+(* Python visits blocks in stored order. A DLOAD can update a store in
+   an earlier block; that block is not rescanned. Share this traversal
+   between the plain transform and the supply-threaded transform. *)
+Definition transform_function_with_def:
+  transform_function_with block_transform state fn =
+    FOLDL (\(current, st) index.
+      if index < LENGTH current.fn_blocks then
+          let bb = EL index current.fn_blocks in
+          let pairs = find_dload_pairs (dfg_build_function current)
+                        bb.bb_instructions in
+          let updated = current with fn_blocks :=
+            MAP (transform_block_dload pairs) current.fn_blocks in
+          case block_transform (dfg_build_function updated) st
+                 (transform_block_dload pairs bb) of
+            (bb', st') =>
+              (updated with fn_blocks :=
+                 LUPDATE bb' index updated.fn_blocks, st')
+      else (current, st))
+      (fn, state) (COUNT_LIST (LENGTH fn.fn_blocks))
+End
+
 Definition transform_function_def:
   transform_function fn =
-    let dfg = dfg_build_function fn in
-    function_map_transform (transform_block dfg) fn
+    FST (transform_function_with
+      (\dfg st bb. (transform_block dfg bb, st)) () fn)
 End
