@@ -7,6 +7,10 @@ Ancestors
   venomState venomExecSemantics exprLoweringProps list
   wordArgsPtr bodyPtrBopOperandRetention bodyPtrPrecompileBuiltinsGhost
   stmtSimLogArgs loweringPosts exprSimWordArgs
+  logTopicFramePtr stmtSimLogTopics abiEncodeOwnership exprSimHashBoundary
+  exprSimConvertBytes bodyPtrBytestringBuiltinsCalldataReserved
+  valueEncodingProofs valueEncodingDefs compileEnv vyperValue
+  supportedTypes vyperTypeSystem vyperTyping ptrDiscipline
 
 Theorem slice_dynamic_capture_full_run:
   compile_bytestring_src (Var src) sa = ((len,data),sb) /\
@@ -128,4 +132,102 @@ Proof
   irule ghost_kept_ptr_covers >>
   goal_assum (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
   qexists_tac `w` >> simp[]
+QED
+
+(* Adapt the successful source child at its actual capture endpoint. *)
+Theorem slice_dynamic_capture_source_post:
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx e es0 sa sm s0 es v srcop s /\
+  post_value_type cenv e = BaseT bt /\
+  (?cap. bt = BytesT (Dynamic cap) \/ bt = StringT cap) /\
+  evaluate_type (get_tenv cx) (BaseT bt) = SOME vt /\ value_has_type vt v /\
+  expr_sim_inv cenv cx env es /\
+  ptr_val_ok cx (BaseT bt) v srcop G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
+  compile_bytestring_src srcop sm = ((len,data),sc) /\ fn_has_code sm sc func /\
+  (!z. srcop = Var z ==> not_fresh_at sm z) /\ (!l. srcop <> Label l) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u G' tn' src p bs.
+    srcop = Var src /\ eval_operand srcop s = SOME p /\
+    (v = BytesV bs \/ (?str. v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
+    val_footprint vt v = 32 + LENGTH bs /\
+    run_inst_seq (emitted_insts sm sc) s = OK u /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+       (OK (u with vs_inst_idx := LENGTH sc.cs_current_insts),G',tn')) /\
+    eval_operand len u = SOME (n2w (LENGTH bs)) /\
+    eval_operand data u = SOME (p+32w) /\
+    op_taint tn' len = {} /\ op_prov G' len = NONE /\
+    mem_bytes_at (w2n p + 32) (LENGTH bs) u.vs_memory = bs /\
+    (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn'.t_mem) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    u = s with vs_vars := u.vs_vars /\
+    (!x. not_fresh_at sm x ==>
+       lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!n. 0 < LENGTH bs /\ n <= LENGTH bs ==>
+       ?dp. data = Var dp /\ ptr_covers G' tn' dp u n) /\
+    expr_post H ctx func cenv cx e es0 sa sc s0 es v srcop u /\
+    ghost_inv H d cenv cx es G' tn' u /\
+    allocas_from lo u /\ lo <= u.vs_alloca_next /\
+    ptr_covers G' tn' src u (32+LENGTH bs) /\
+    (0 < LENGTH bs ==> ?dp. data = Var dp /\ ptr_covers G' tn' dp u (LENGTH bs))
+Proof
+  strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s /\
+   expr_val_rel cx (BaseT bt) v srcop s /\
+   expr_val_at cenv cx (BaseT bt) sa sm es v srcop s` by
+    gvs[expr_post_def] >>
+  `~is_word_type (BaseT bt) /\ supported_scalar_type (BaseT bt) /\
+   is_bytestring_type (BaseT bt)` by
+    (gvs[supported_scalar_type_def, supported_word_type_def,
+         supported_string_type_def, is_word_type_def, is_bytestring_type_def]) >>
+  `log_arg_rel cenv cx sa sm es s (srcop,BaseT bt) v` by
+    (simp[log_arg_rel_def] >> irule log_arg_clear_base >>
+     goal_assum (drule_at Any)) >>
+  `?p. eval_operand srcop s = SOME p` by gvs[expr_val_rel_def] >>
+  drule_all expr_val_rel_memory >> strip_tac >>
+  `?bs. (v = BytesV bs \/ (?str. v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
+        val_footprint vt v = 32 + LENGTH bs /\
+        mem_word_at (w2n p) s.vs_memory = n2w (LENGTH bs) /\
+        mem_bytes_at (w2n p + 32) (LENGTH bs) s.vs_memory = bs` by
+    (gvs[] >> Cases_on `v` >>
+     gvs[evaluate_type_def, value_has_type_def, val_footprint_def,
+         val_in_memory_def] >> metis_tac[]) >>
+  drule_all log_arg_footprint_bound >> strip_tac >>
+  `LENGTH bs < dimword (:256) /\ w2n p + 32 < dimword (:256)` by decide_tac >>
+  drule_all ptr_val_ok_log_bytestring_window >> strip_tac >>
+  `w2n p + 32 <= s.vs_alloca_next` by
+    (drule_all abi_encode_owned_footprint_frontier >> decide_tac) >>
+  `mload (w2n p) s = n2w (LENGTH bs)` by
+    metis_tac[mem_word_at_eq_mload_proof] >>
+  `lookup_var src s = SOME p` by gvs[eval_operand_def] >>
+  `32 <= 32 + LENGTH bs` by simp[] >>
+  `not_fresh_at sm src` by metis_tac[] >>
+  qpat_x_assum `srcop = Var src` SUBST_ALL_TAC >>
+  drule_all slice_dynamic_capture_full_run >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx es u` by
+    (irule stmt_state_rel_reserved_vars_update >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `ghost_inv H d cenv cx es G' tn' u` by
+    (irule ghost_inv_readonly_transport >>
+     goal_assum (drule_at Any) >> simp[] >>
+     gvs[venom_state_component_equality]) >>
+  `sm.cs_next_id <= sc.cs_next_id` by
+    (qspec_then `sm` mp_tac (Q.SPEC `Var src` ci_mono_compile_bytestring_src) >>
+     simp[ci_mono_def]) >>
+  `eval_operand (Var src) u = SOME p` by
+    (gvs[eval_operand_def] >> metis_tac[]) >>
+  `expr_post H ctx func cenv cx e es0 sa sc s0 es v (Var src) u` by
+    (irule convert_readonly_expr_post >> simp[] >>
+     qexistsl_tac [`s`,`sm`,`Var src`] >> simp[] >>
+     gvs[venom_state_component_equality] >> metis_tac[]) >>
+  qexistsl_tac [`u`,`G'`,`tn'`,`src`,`p`,`bs`] >> simp[] >>
+  gvs[allocas_from_def, venom_state_component_equality,
+      ptr_covers_def, eval_operand_def] >> metis_tac[]
 QED
