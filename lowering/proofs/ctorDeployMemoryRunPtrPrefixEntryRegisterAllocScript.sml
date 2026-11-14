@@ -9,7 +9,7 @@ Ancestors
   vyperCompiler localPtrsProps ctorAbiActualArrayRun abiDecoderLoop
   ptrSafeRun ptrDiscipline pred_set ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunMemEntryRegistration
-  fragGasOriginPtr fragGasOriginPtrLoop memSafeRun unitTransformDefs contextCodegenRel
+  fragGasOriginPtr fragGasOriginPtrLoop memSafeRun unitTransformDefs contextCodegenRel codegenRel
 
 
 Theorem prefix_entry_register_alloc_actual:
@@ -104,8 +104,8 @@ Proof
       simp[mk_inst_def, inst_mem_below_frontier_def, inst_dload_in_section_def,
            source_memory_read_ranges_def, source_memory_write_ranges_def] >>
     irule (Q.INST [`s` |-> `initial`, `i` |-> `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [STRING #"%" (toString st.cs_next_var)]`] step_origin_ptr_path) >>
-    qexists_tac `bb` >>
-    asm_simp_tac (srw_ss()) [step_inst_non_invoke, is_terminator_def]) >>
+    asm_rewrite_tac[] >> qexistsl [`bb`, `n`, `st`] >>
+    asm_simp_tac (srw_ss()) [step_inst_non_invoke, is_terminator_def] >> gvs[]) >>
  strip_tac >> metis_tac[ctor_checked_alloc_buffer_edge]
 QED
 
