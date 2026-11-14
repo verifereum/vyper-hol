@@ -653,6 +653,87 @@ Proof
   strip_tac >> simp[venom_state_component_equality]
 QED
 
+(* Equal invocation operands and setup transport the same selected packet. *)
+Theorem invoke_fixed_segment_setup:
+  !m es unused fuel C C' y a b.
+    y.inst_opcode = INVOKE /\
+    a.vs_gas_readings = b.vs_gas_readings /\
+    (!op. MEM op y.inst_operands ==>
+      eval_operand op a = eval_operand op b) /\
+    (!callee args. setup_callee callee args a = setup_callee callee args b) ==>
+    ((
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) a.vs_gas_readings /\
+    (!u. (step_inst fuel C' y a = OK u \/
+          (?ir. step_inst fuel C' y a = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C a.vs_current_bb y
+         (a with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C y (a with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C y (a with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (a with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' y a)) /\
+        (((?v. step_inst fuel C' y a = OK v) \/
+          (?ir v. step_inst fuel C' y a = IntRet ir v)) ==>
+          gas_events_step fuel C a.vs_current_bb y
+            (a with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y a)
+            (step_inst fuel C y (a with vs_gas_readings := gs ++ tail))))
+    ) <=> (
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) b.vs_gas_readings /\
+    (!u. (step_inst fuel C' y b = OK u \/
+          (?ir. step_inst fuel C' y b = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C b.vs_current_bb y
+         (b with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C y (b with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C y (b with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (b with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' y b)) /\
+        (((?v. step_inst fuel C' y b = OK v) \/
+          (?ir v. step_inst fuel C' y b = IntRet ir v)) ==>
+          gas_events_step fuel C b.vs_current_bb y
+            (b with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y b)
+            (step_inst fuel C y (b with vs_gas_readings := gs ++ tail))))
+    ))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `a.vs_fmp = b.vs_fmp` by
+    (qpat_x_assum `!callee args. _`
+       (qspecl_then [`mk_raw_function "" [ARB]`, `[]`] mp_tac) >>
+     simp[setup_callee_def, venomInstTheory.mk_raw_function_def,
+          venom_state_component_equality]) >>
+  `!ops. EVERY (\op. MEM op y.inst_operands) ops ==>
+    eval_operands ops a = eval_operands ops b` by
+    (Induct >> simp[eval_operands_def] >> rpt strip_tac >> simp[]) >>
+  `!callee_name arg_ops. decode_invoke y = SOME (callee_name,arg_ops) ==>
+    eval_operands arg_ops a = eval_operands arg_ops b` by
+    (rpt gen_tac >> strip_tac >>
+     first_x_assum irule >> simp[EVERY_MEM] >>
+     qpat_x_assum `decode_invoke _ = _` mp_tac >>
+     simp[decode_invoke_def] >>
+     Cases_on `y.inst_operands` >> simp[] >>
+     Cases_on `h` >> simp[] >> rpt strip_tac >> gvs[]) >>
+  `!callee args gs. setup_callee callee args
+     (a with vs_gas_readings := gs) =
+     setup_callee callee args (b with vs_gas_readings := gs)` by
+    simp[gasOracleReplayTheory.gas_setup_callee] >>
+  `!F D owner owner' gs.
+    gas_events_step F D owner y (a with vs_gas_readings := gs) =
+    gas_events_step F D owner' y (b with vs_gas_readings := gs)` by
+    (rpt gen_tac >> simp[gas_events_step_def] >>
+     BasicProvers.TOP_CASE_TAC >> simp[] >>
+     rename1 `decode_invoke y = SOME decoded` >>
+     PairCases_on `decoded` >> simp[] >>
+     `eval_operands decoded1 a = eval_operands decoded1 b` by metis_tac[] >>
+     simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+     BasicProvers.TOP_CASE_TAC >> simp[])
+QED
+
 (* A selected invocation packet is unchanged by supported caller updates. *)
 Theorem invoke_fixed_segment_updates[local]:
   !m es unused fuel C C' y.
