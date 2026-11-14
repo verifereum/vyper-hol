@@ -1,7 +1,7 @@
 (* Allocation-predecessor consumers of the checked finish branches. *)
 Theory rawCallAllocatedFinishPtr
 Ancestors
-  rawCallFinishTotalPtr rawCallFinishAdaptersPtr callReadinessPtr
+  rawCallSourceDomainPtr rawCallFinishTotalPtr rawCallFinishAdaptersPtr callReadinessPtr
   rawCallOutcomeLengthPtr gasSummaryComposePtr rawCallAllocationProofPtr
 
 (* The preservation clause is the one exported by outbuf_ready_stage.
@@ -118,7 +118,7 @@ Proof
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
     (Cases_on `flags.rcf_is_static` >> gvs[]) >>
-  drule_all raw_call_prepared_source_total >> strip_tac >>
+  drule_all rawCallSourceDomainPtrTheory.raw_call_prepared_source_total >> strip_tac >>
   drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)
     (SRULE[compileEnvTheory.is_word_type_def] (Q.INST
       [`ty` |-> `BaseT BoolT`] raw_call_scalar_finish_outcome)) >>
@@ -203,7 +203,7 @@ Proof
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
     (Cases_on `flags.rcf_is_static` >> gvs[]) >>
-  drule_all raw_call_prepared_source_total >> strip_tac >>
+  drule_all rawCallSourceDomainPtrTheory.raw_call_prepared_source_total >> strip_tac >>
   `LENGTH outcome.co_returnData < dimword(:256)` by
     (irule take_call_outcome_returnData_length >> goal_assum (drule_at Any) >>
      fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
@@ -293,7 +293,7 @@ Proof
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
     (Cases_on `flags.rcf_is_static` >> gvs[]) >>
-  drule_all raw_call_prepared_source_total >> strip_tac >>
+  drule_all rawCallSourceDomainPtrTheory.raw_call_prepared_source_total >> strip_tac >>
   `LENGTH outcome.co_returnData < dimword(:256)` by
     (irule take_call_outcome_returnData_length >> goal_assum (drule_at Any) >> fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
   `n < dimword(:256)` by decide_tac >>
@@ -418,7 +418,7 @@ Proof
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
     (Cases_on `flags.rcf_is_static` >> gvs[]) >>
-  drule_all raw_call_prepared_source_total >> strip_tac >>
+  drule_all rawCallSourceDomainPtrTheory.raw_call_prepared_source_total >> strip_tac >>
   `LENGTH outcome.co_returnData < dimword(:256)` by
     (irule take_call_outcome_returnData_length >> goal_assum (drule_at Any) >> fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
   `n < dimword(:256)` by decide_tac >>

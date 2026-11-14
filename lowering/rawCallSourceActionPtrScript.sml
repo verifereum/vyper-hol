@@ -42,3 +42,26 @@ Proof
     vyperStateTheory.ignore_bind_def, vyperStateTheory.type_check_def,
     vyperStateTheory.assert_def, vyperStateTheory.return_def]
 QED
+
+Theorem raw_call_take_gas_obs:
+  take_call_outcome target data value_opt (es with gas_obs := tail) =
+    (FST (take_call_outcome target data value_opt es),
+     SND (take_call_outcome target data value_opt es) with gas_obs := tail)
+Proof
+  simp[vyperCallOutcomeTheory.take_call_outcome_def,
+    vyperCallOutcomeTheory.take_request_outcome_def,
+    vyperCallOutcomeTheory.call_outcome_request_def] >>
+  Cases_on `es.outcomes` >> simp[] >> pairarg_tac >> simp[] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem raw_call_adopt_gas_obs:
+  adopt_call_outcome rq outcome (es with gas_obs := tail) =
+    (FST (adopt_call_outcome rq outcome es),
+     SND (adopt_call_outcome rq outcome es) with gas_obs := tail)
+Proof
+  simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >> simp[]
+QED
