@@ -12,6 +12,7 @@
  *)
 Theory o1PipelineCorrect
 Ancestors
+  o1PipelineMemoryLoweredAbort
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
