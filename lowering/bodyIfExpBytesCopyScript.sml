@@ -3,7 +3,7 @@ Theory bodyIfExpBytesCopy
 Ancestors
   exprSimMemUnwrap bodyCopyMemory valueCopy bodyIfExpArmMemory
 
-Theorem ifexp_bytes_copy_no_gas[local]:
+Theorem ifexp_bytes_copy_no_gas:
   compile_store_bytestring src dst sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
     ~is_terminator i.inst_opcode) (emitted_insts sa sb)
