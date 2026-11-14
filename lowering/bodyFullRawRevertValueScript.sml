@@ -182,6 +182,9 @@ Resume raw_revert_value_full_from_tail[tail]:
          vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
   `!x. data = Var x ==> not_fresh_at sm x` by
     metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+  `expr_store_bound cx (expr_type e) (BytesV bs') data t` by metis_tac[] >>
   `expr_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx e
       es sa sm s0 mid (BytesV bs') data t /\
    ghost_inv_at (DF (storage_trace_horizon mid.storage_trace)) lo d cenv cx mid G1 tn1 t /\

@@ -3,7 +3,7 @@ Theory bodyDeclMemoryCore
 Ancestors
   loweringPosts exprSimProps stmtSimProps exprSimHypsDefs
   bodyNameMemoryFacts memoryValueEncoding
-  bodyCopyMemory bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
+  bodyCopyMemory bodyCopyMemoryBase bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes exprOperandVar freshWrites
   valueTypingMemoryProps vyperTyping exprSimDefs stmtSimDefs venomState
   valueEncoding valueEncodingProofs intCallResult compileEnv loweringStateRelDefs exprLoweringProps

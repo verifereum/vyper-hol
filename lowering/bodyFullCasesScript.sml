@@ -13,7 +13,7 @@ Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
   gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
-  exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
+  exprSimHyps bodySimStmtCases exprSimAggregateLayout bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
@@ -119,7 +119,7 @@ Proof
   >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
               0 < type_memory_bytes cenv ty` by
         (rpt strip_tac >> gvs[] >>
-         metis_tac[bodySimStmtCasesTheory.assign_local_memory_bytes_pos]) >>
+         metis_tac[exprSimAggregateLayoutTheory.assign_local_memory_bytes_pos]) >>
       Cases_on `(lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\

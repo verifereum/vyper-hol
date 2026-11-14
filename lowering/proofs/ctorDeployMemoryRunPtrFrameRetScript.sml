@@ -6,7 +6,8 @@
  * only where the region was, past the runtime code, which deploy_dead's
  * d_ret marks dead.  Every return from the constructor body and its
  * fall-through end here.
- * TOP-LEVEL: constructor_exit_run_ptr.
+ * TOP-LEVEL: constructor_exit_run_ptr, constructor_frame_ret_ok_full (the
+ * joint gas, memory and pointer frame return, for every valid horizon).
  *)
 Theory ctorDeployMemoryRunPtrFrameRet
 Ancestors
@@ -17,6 +18,12 @@ Ancestors
   venomExecSemantics venomState venomInst codegenRel contextCodegenRel memLocDefs
   valueEncoding valueEncodingDefs
   vyperStorageLayoutSafety vyperContext vyperState
+  bodyPtrDefs bodySimFull bodyFullShared gasOutcomeFull gasOutcomeFullCompose
+  ctorDeployMemoryRunMemFrameRet ctorDeployLoweringFrameRet
+  fragGasEmitCtrl fragGasOriginPtr fragGasOriginPtrExec fragGasSeqPtr
+  fragGasSeqAbort fragGasPathPtr fragGasPathMem fragGasPath gasCount
+  stmtLowering emitHelperProps venomInstProofs vyperStorageFootprint
+  loweringPosts vyperInterpreter list rich_list
 
 (* One opcode's dispatch equation, keeping the simplification local. *)
 fun opcode_eq opc =
@@ -28,45 +35,11 @@ fun opcode_eq opc =
 fun opc_tac opc =
   FIRST_ASSUM (fn th => rewrite_tac [MATCH_MP (opcode_eq opc) th]);
 
-Theorem storage_dead_in_deploy[local]:
-  !cx d tr st j b.
-    storage_dead (cx with in_deploy := d) tr st j b <=> storage_dead cx tr st j b
-Proof
-  rpt gen_tac >>
-  `!mid n subs. declared_storage_region (cx with in_deploy := d) mid n subs =
-                declared_storage_region cx mid n subs` by
-    simp[declared_storage_region_def, get_module_code_def, get_tenv_def,
-         lookup_var_slot_from_layout_def] >>
-  simp[storage_dead_def]
-QED
-
-(* The constructor runs with created_in_tx set; no storage region depends on
-   it. *)
-Theorem storage_dead_created_in_tx[local]:
-  !srcs lay tx c tr st j b.
-    storage_dead
-      (initial_evaluation_context srcs lay (tx with created_in_tx := c) NONE)
-      tr st j b <=>
-    storage_dead (initial_evaluation_context srcs lay tx NONE) tr st j b
-Proof
-  rpt gen_tac >>
-  `!mid n subs.
-     declared_storage_region
-       (initial_evaluation_context srcs lay (tx with created_in_tx := c) NONE)
-       mid n subs =
-     declared_storage_region (initial_evaluation_context srcs lay tx NONE)
-       mid n subs` by
-    simp[declared_storage_region_def, get_module_code_def, get_tenv_def,
-         lookup_var_slot_from_layout_def,
-         vyperInterpreterTheory.initial_evaluation_context_def] >>
-  simp[storage_dead_def]
-QED
-
 (* The epilogue's ALLOCA: its site starts at or past lo, and the bytes it
    allocates afresh lie in it. *)
 Theorem epilogue_alloca_step[local]:
   !ctx func cenv cx es u inst N buf lo.
-    stmt_state_rel ctx func cenv cx es u /\ MEM inst (fn_insts func) /\
+    stmt_state_rel H ctx func cenv cx es u /\ MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit (n2w N)] /\
     inst.inst_outputs = [buf] /\ N < dimword(:256) /\
     allocas_from lo u /\ lo <= u.vs_alloca_next ==>
@@ -83,7 +56,7 @@ Proof
   `!b sz. FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
      sz = w2n (n2w N : bytes32)` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
      qpat_x_assum `!inst n base sz. _` drule >>
      disch_then (qspecl_then [`n2w N`, `b`, `sz`] mp_tac) >>
@@ -94,7 +67,7 @@ Proof
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `step_inst_base inst u = OK t` by
     (opc_tac ``ALLOCA`` >> asm_rewrite_tac [] >> simp[]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` kall_tac >>
   rpt (qpat_x_assum `alloca_room _ _ _` kall_tac) >>
   rpt (qpat_x_assum `alloca_inv _` kall_tac) >>
   qpat_x_assum `MEM _ _` kall_tac >>
@@ -477,12 +450,12 @@ QED
 
 (* The epilogue from its start, with the invariant, passes the check. *)
 Theorem epilogue_ptr_safe[local]:
-  !tops runtime_bc am tx ctx func cenv cx es u G tn imm st st'.
+  !H tops runtime_bc am tx ctx func cenv cx es u G tn imm st st'.
     compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm st =
       ((),st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\
     ~block_is_terminated st /\
-    stmt_state_rel ctx func cenv cx es u /\ cenv.ce_is_ctor /\
+    stmt_state_rel H ctx func cenv cx es u /\ cenv.ce_is_ctor /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
@@ -490,15 +463,15 @@ Theorem epilogue_ptr_safe[local]:
     ~u.vs_halted /\ u.vs_current_bb = st.cs_current_bb /\
     u.vs_inst_idx = LENGTH st.cs_current_insts /\
     ~ctx_has_dalloca ctx /\
-    deploy_ptr_inv tops runtime_bc am tx imm G tn u ==>
-    !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    deploy_ptr_inv H tops runtime_bc am tx imm G tn u ==>
+    !fuel. ptr_safe_run (deploy_dead H tops runtime_bc am tx) (imm_len tops)
              fuel ctx func [] G tn u
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
-  qpat_x_assum `deploy_ptr_inv _ _ _ _ _ _ _ _`
+  qpat_x_assum `deploy_ptr_inv _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deploy_ptr_inv_def]) >>
   `immutable_base_zero cenv u` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def]) >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `u`, `st`, `st'`,
                `LENGTH runtime_bc`, `imm_len tops`, `imm`]
@@ -515,7 +488,7 @@ Proof
      `LENGTH runtime_bc + imm_len tops`, `"%" ++ toString st.cs_next_var`,
      `imm_len tops`] mp_tac epilogue_alloca_step >>
   impl_tac >- (asm_rewrite_tac [] >> simp[mk_inst_def]) >> strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `fn_has_code _ _ _` kall_tac >>
   qpat_x_assum `fn_inst_ids_distinct _` kall_tac >>
   qpat_x_assum `MEM _ _` kall_tac >>
@@ -547,7 +520,7 @@ Proof
     qabbrev_tac `L = LENGTH st.cs_current_insts` >>
     qabbrev_tac `buf = "%" ++ toString st.cs_next_var` >>
     qabbrev_tac `id = st.cs_next_id` >>
-    qabbrev_tac `D = deploy_dead tops runtime_bc am tx` >>
+    qabbrev_tac `D = deploy_dead H tops runtime_bc am tx` >>
     qabbrev_tac `i0 = mk_inst id ALLOCA [Lit (n2w rt)] [buf]` >>
     qabbrev_tac `i1 = mk_inst (id + 1) CODECOPY
                    [Var buf; Label "runtime_begin"; Lit (n2w rt)] []` >>
@@ -658,7 +631,7 @@ Proof
   qabbrev_tac `buf = "%" ++ toString st.cs_next_var` >>
   qabbrev_tac `tmp = "%" ++ toString (st.cs_next_var + 1)` >>
   qabbrev_tac `id = st.cs_next_id` >>
-  qabbrev_tac `D = deploy_dead tops runtime_bc am tx` >>
+  qabbrev_tac `D = deploy_dead H tops runtime_bc am tx` >>
   qabbrev_tac `i0 = mk_inst id ALLOCA [Lit (n2w (rt + cap))] [buf]` >>
   qabbrev_tac `i1 = mk_inst (id + 1) ADD [Var buf; Lit (n2w rt)] [tmp]` >>
   qabbrev_tac `i2 = mk_inst (id + 2) MCOPY [Var tmp; imm; Lit (n2w cap)] []` >>
@@ -881,26 +854,360 @@ QED
 
 
 Theorem deploy_dead_trans_unlock[local]:
-  !tops runtime_bc am tx nkey X a st v.
-    storage_layout_safe (deploy_evaluation_context tops am tx) /\
-    (deploy_evaluation_context tops am tx).nonreentrant_slot = SOME nkey /\
-    X SUBSET (deploy_dead tops runtime_bc am tx).d_trans a st ==>
+  !H tops runtime_bc am tx nkey X a st v.
+    storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+    nkey < dimword (:256) /\
+    X SUBSET (deploy_dead H tops runtime_bc am tx).d_trans a st ==>
     key_update X (n2w nkey) {} SUBSET
-      (deploy_dead tops runtime_bc am tx).d_trans a
+      (deploy_dead H tops runtime_bc am tx).d_trans a
         (update_storage (n2w nkey) v st)
 Proof
   rw[deploy_dead_def, pred_setTheory.SUBSET_DEF, key_update_def,
      pairTheory.FORALL_PROD] >>
   first_x_assum drule >> rw[] >>
-  fs[deploy_evaluation_context_def] >>
-  qmatch_asmsub_abbrev_tac `storage_layout_safe cx1` >>
-  `cx1.nonreentrant_slot = SOME nkey` by fs[Abbr `cx1`] >>
-  drule_all nonreentrant_storage_dead_frame >> strip_tac >>
-  fs[Abbr `cx1`, storage_dead_in_deploy, storage_dead_created_in_tx]
+  drule_all nonreentrant_storage_dead_frame >> simp[]
+QED
+
+(* halting_tail_gas_path_ptr with one ghost endpoint for every dead-byte
+   set: the ghost each step leaves is ghost_step's, which the dead bytes do
+   not affect. *)
+Theorem halting_tail_gas_path_ptr_uniform:
+  !pre ret s fuel ctx func PG G tn bb final lo.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (pre ++ [ret]) (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+               ~is_terminator i.inst_opcode) pre /\
+    ret.inst_opcode = RETURN /\
+    run_from fuel ctx func s = Halt final ==>
+    ?G' tn'. !D. ptr_safe_run D lo fuel ctx func PG G tn s ==>
+      gas_path_ptr D lo ctx func PG G tn s 0 G' tn' (Halt final)
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `isPREFIX _ _` (mp_tac o REWRITE_RULE [APPEND]) >>
+      strip_tac >> drule instruction_prefix_cursor >> strip_tac >>
+      `step_inst fuel ctx ret s = step_inst_base ret s` by
+        simp[step_inst_non_invoke] >>
+      `!t. step_inst_base ret s <> OK t` by
+        (Cases_on `ret` >> gvs[] >>
+         simp[step_inst_base_opcode_eqs, AllCaseEqs(), LET_THM]) >>
+      `step_inst_base ret s = Halt final` by
+        (qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
+         simp[run_from_def, Once exec_block_def] >>
+         Cases_on `step_inst_base ret s` >> gvs[is_terminator_def]) >>
+      qexistsl_tac [`G`, `tn`] >> rpt strip_tac >>
+      `ptr_safe_step D lo fuel ctx func PG G tn ret s` by
+        (qpat_x_assum `ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[ptr_safe_run_def, Once ptr_safe_block_def]) >>
+      irule (cj 3 gas_path_ptr_rules) >> simp[exit_result_def] >>
+      rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+      qexists_tac `fuel` >> simp[gas_count_step_def, exit_result_def]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` (mp_tac o REWRITE_RULE [APPEND]) >>
+  strip_tac >> drule instruction_prefix_cursor >> strip_tac >> fs[] >>
+  `step_inst fuel ctx h s = step_inst_base h s` by
+    simp[step_inst_non_invoke] >>
+  Cases_on `step_inst_base h s`
+  >~ [`step_inst_base h s = OK t`]
+  >- (`~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `run_from fuel ctx func (t with vs_inst_idx := SUC s.vs_inst_idx) =
+         Halt final` by
+        (qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
+         simp[run_from_def, Once exec_block_def]) >>
+      first_x_assum (qspecl_then [`ret`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`, `fuel`, `ctx`, `func`,
+        `PG`, `FST (ghost_step fuel ctx PG G tn h s)`,
+        `SND (ghost_step fuel ctx PG G tn h s)`, `bb`, `final`, `lo`]
+        mp_tac) >>
+      simp[] >> strip_tac >>
+      qexistsl_tac [`G'`, `tn'`] >> rpt strip_tac >>
+      `ptr_safe_step D lo fuel ctx func PG G tn h s` by
+        (qpat_x_assum `ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[ptr_safe_run_def, Once ptr_safe_block_def]) >>
+      `ptr_safe_run D lo fuel ctx func PG
+         (FST (ghost_step fuel ctx PG G tn h s))
+         (SND (ghost_step fuel ctx PG G tn h s))
+         (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (qpat_x_assum `ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[ptr_safe_run_def] >>
+         drule_all ptr_safe_block_step >> simp[]) >>
+      `gas_path_ptr D lo ctx func PG (FST (ghost_step fuel ctx PG G tn h s))
+         (SND (ghost_step fuel ctx PG G tn h s))
+         (t with vs_inst_idx := SUC s.vs_inst_idx) 0 G' tn' (Halt final)` by
+        res_tac >>
+      `gas_path_ptr D lo ctx func PG G tn s (0 + 0) G' tn' (Halt final)`
+        suffices_by simp[] >>
+      irule (cj 2 gas_path_ptr_rules) >>
+      qexistsl_tac [`FST (ghost_step fuel ctx PG G tn h s)`,
+                    `t with vs_inst_idx := SUC s.vs_inst_idx`,
+                    `SND (ghost_step fuel ctx PG G tn h s)`] >>
+      simp[] >> rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+      qexists_tac `fuel` >> simp[gas_count_step_def])
+  >~ [`step_inst_base h s = Halt t`]
+  >- (`t = final` by
+        (qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
+         simp[run_from_def, Once exec_block_def]) >>
+      gvs[] >> qexistsl_tac [`G`, `tn`] >> rpt strip_tac >>
+      `ptr_safe_step D lo fuel ctx func PG G tn h s` by
+        (qpat_x_assum `ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[ptr_safe_run_def, Once ptr_safe_block_def]) >>
+      irule (cj 3 gas_path_ptr_rules) >> simp[exit_result_def] >>
+      rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+      qexists_tac `fuel` >> simp[gas_count_step_def, exit_result_def]) >>
+  qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
+  simp[run_from_def, Once exec_block_def]
+QED
+
+(* The epilogue's pointer check from the frame's ghost invariant. *)
+Theorem epilogue_ptr_safe_at[local]:
+  !H tops runtime_bc am tx imm st st' func ctx cenv cx es s d G tn.
+  compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm st =
+    ((), st') /\
+  fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated st /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  cx_tops cx = tops /\
+  LENGTH runtime_bc + imm_len tops < dimword(:256) /\
+  (imm_len tops <> 0 ==>
+    cenv.ce_imm_alloca = SOME imm /\
+    (!x. imm = Var x ==> not_fresh_at st x)) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca ctx /\
+  ghost_inv_at (deploy_dead H tops runtime_bc am tx) (imm_len tops)
+    d cenv cx es G tn s ==>
+  !fuel. ptr_safe_run (deploy_dead H tops runtime_bc am tx) (imm_len tops)
+           fuel ctx func [] G tn s
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `imm_len tops = 0`
+  >- (`compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops)
+         (Lit 0w) st = ((), st')` by
+        (qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
+         simp[compile_constructor_epilogue_def]) >>
+      `deploy_ptr_inv H tops runtime_bc am tx (Lit 0w) G tn s` by
+        fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
+      metis_tac[epilogue_ptr_safe]) >>
+  `deploy_ptr_inv H tops runtime_bc am tx imm G tn s` by
+    (fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
+     metis_tac[]) >>
+  metis_tac[epilogue_ptr_safe]
+QED
+
+(* The epilogue from its start is a zero-mark joint path to its halt, for
+   every horizon of a family P at once: the halting state and the ghost
+   are the run's, so one endpoint serves every horizon. *)
+Theorem constructor_epilogue_origin_ptr_path:
+  !P H0 tops runtime_bc am tx imm st st' ctx func cenv cx es s d G tn
+   explicit.
+    compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm st =
+      ((), st') /\
+    fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+    ~block_is_terminated st /\ cenv.ce_is_ctor /\ cx_tops cx = tops /\
+    LENGTH runtime_bc + imm_len tops < dimword(:256) /\
+    (imm_len tops <> 0 ==>
+      cenv.ce_imm_alloca = SOME imm /\
+      (!x. imm = Var x ==> not_fresh_at st x)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    ~ctx_has_dalloca ctx /\ P H0 /\
+    (!H. P H ==>
+       stmt_state_rel H ctx func cenv cx es s /\
+       ghost_inv_at (deploy_dead H tops runtime_bc am tx) (imm_len tops)
+         d cenv cx es G tn s) ==>
+    ?final G' tn'.
+      gas_path ctx func s 0 (Halt final) /\
+      !H. P H ==>
+        gas_origin_ptr_path
+          (deploy_dead H tops runtime_bc am tx, imm_len tops,
+           explicit, ctx, func, [])
+          (s, G, tn) [] (Halt final, G', tn')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
+  drule_all constructor_epilogue_zero_path_mem >> strip_tac >>
+  `gas_path ctx func s 0 (Halt final) /\
+   ?fuel. run_from fuel ctx func s = Halt final` by
+    (drule gas_path_mem_exec >> simp[exit_result_def] >> metis_tac[]) >>
+  drule_all compile_constructor_epilogue_code_placement >> strip_tac >>
+  drule compile_constructor_epilogue_terminal_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+                ~is_terminator i.inst_opcode) pre` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i pre ==> _` drule >>
+     strip_tac >> gvs[is_terminator_def]) >>
+  qspecl_then [`pre`, `mk_inst id RETURN [dst; szop] []`, `s`, `fuel`, `ctx`,
+               `func`, `[]`, `G`, `tn`, `bb`, `final`, `imm_len tops`]
+    mp_tac halting_tail_gas_path_ptr_uniform >>
+  impl_tac >- gvs[mk_inst_def] >> strip_tac >>
+  qexistsl_tac [`final`, `G'`, `tn'`] >> simp[] >> rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s /\
+   ghost_inv_at (deploy_dead H tops runtime_bc am tx) (imm_len tops)
+     d cenv cx es G tn s` by metis_tac[] >>
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `imm`, `st`, `st'`,
+               `func`, `ctx`, `cenv`, `cx`, `es`, `s`, `d`, `G`, `tn`]
+    mp_tac epilogue_ptr_safe_at >>
+  impl_tac >- fs[] >> strip_tac >>
+  `gas_path_ptr (deploy_dead H tops runtime_bc am tx) (imm_len tops)
+     ctx func [] G tn s 0 G' tn' (Halt final)` by metis_tac[] >>
+  irule gas_zero_paths_joint >> simp[exit_result_def]
+QED
+
+(* Return NONE in a deployment constructor jumps to the exit block, whose
+   epilogue halts returning the runtime code and the immutables.  The
+   constructor takes no lock (deploy_ctor_entry_body_resources), so the
+   exit has no unlock. *)
+Theorem constructor_return_none_frag_full:
+  !tops am tx runtime_bc imm cx cenv body_cenv exit_lbl st_exit st_epilogue
+   st_final nr nkey ut ctx shadow_ctx func shadow_func lctx es.
+    cx = deploy_evaluation_context tops am tx /\
+    cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = SOME exit_lbl /\
+    same_frame cenv body_cenv /\
+    st_exit.cs_current_bb = exit_lbl /\
+    st_exit.cs_current_insts = [] /\
+    (if nr then compile_nonreentrant_unlock nkey ut F
+     else comp_return ()) st_exit = ((), st_epilogue) /\
+    compile_constructor_epilogue
+      (LENGTH runtime_bc) (imm_len tops) imm st_epilogue =
+        ((), st_final) /\
+    fn_has_code st_exit st_final func /\
+    LENGTH runtime_bc + imm_len tops < dimword(:256) /\ ~nr /\
+    (imm_len tops <> 0 ==>
+       cenv.ce_imm_alloca = SOME imm /\
+       (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
+    stmt_frag_full
+      ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
+       ctx, shadow_ctx, [], func, shadow_func)
+      cx lctx
+      (\H v ee gt r.
+         constructor_return_q H func cenv cx
+           (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
+      body_cenv
+      (stmt_env body_cenv lctx NoneT (Return NONE))
+      (stmt_env body_cenv lctx NoneT (Return NONE))
+      (eval_stmt cx (Return NONE)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `nr = F` by fs[] >> pop_assum SUBST_ALL_TAC >>
+  `st_epilogue = st_exit` by
+    (qpat_x_assum `(if F then _ else _) _ = _` mp_tac >>
+     simp[comp_return_def]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `cx_tops cx = tops` by
+    simp[deploy_evaluation_context_def, gasContextTheory.cx_tops_def,
+         vyperContextTheory.get_module_code_def,
+         vyperInterpreterTheory.initial_evaluation_context_def] >>
+  qpat_x_assum `cx = _` kall_tac >>
+  `body_cenv.ce_is_ctor /\ body_cenv.ce_return_pc = NONE /\
+   body_cenv.ce_ctor_exit_label = SOME exit_lbl /\
+   (imm_len tops <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
+     (!x. imm = Var x ==> not_fresh_at st_exit x))` by
+    gvs[same_frame_def, compile_env_component_equality] >>
+  `~block_is_terminated st_exit` by simp[block_is_terminated_def] >>
+  pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `!tail. eval_stmt cx (Return NONE) (es with gas_obs := tail) =
+     (INR (ReturnException NoneV), es with gas_obs := tail)` by
+    simp[Once evaluate_def, raise_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (irule gas_outcome_full_bad_nil >> simp[]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+     es.storage_trace` by fs[storage_trace_domain_def] >>
+  `cenv' = body_cenv /\ emit_inst JMP [Label exit_lbl] [] sa = ((), sb)` by
+    (qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
+     simp[stmt_env_def, declare_stmt_local_def, Once compile_stmt_def,
+          comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> gvs[]) >>
+  qabbrev_tac `sx = jump_to exit_lbl s0` >>
+  `~sx.vs_halted /\ sx.vs_current_bb = st_exit.cs_current_bb /\
+   sx.vs_inst_idx = 0` by simp[Abbr `sx`, jump_to_def] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func body_cenv cx es sx /\
+     ghost_inv_at (deploy_dead H tops runtime_bc am tx) (imm_len tops) NONE
+       body_cenv cx es G0 tn0 sx /\
+     allocas_from (imm_len tops) s0` by
+    (gen_tac >> strip_tac >>
+     first_x_assum (drule_then strip_assume_tac) >>
+     `allocas_from (imm_len tops) s0` by fs[ghost_inv_at_def] >>
+     fs[Abbr `sx`, stmt_state_rel_jump_to, ghost_inv_at_jump]) >>
+  qspecl_then [`\H. valid_horizon cx st0 H es.storage_trace`,
+    `storage_trace_horizon es.storage_trace`, `tops`, `runtime_bc`, `am`,
+    `tx`, `imm`, `st_exit`, `st_final`, `ctx`, `func`, `body_cenv`, `cx`,
+    `es`, `sx`, `NONE`, `G0`, `tn0`, `gas_explicit_sites ctx shadow_ctx`]
+    mp_tac constructor_epilogue_origin_ptr_path >>
+  impl_tac >- simp[] >> strip_tac >>
+  qspecl_then [`\H. valid_horizon cx st0 H es.storage_trace`,
+    `storage_trace_horizon es.storage_trace`, `ctx`, `func`, `cenv`,
+    `body_cenv`, `cx`, `es`, `sx`, `F`, `nkey`, `ut`, `LENGTH runtime_bc`,
+    `imm_len tops`, `imm`, `st_exit`, `st_exit`, `st_final`]
+    mp_tac constructor_exit_gas_path_horizons >>
+  impl_tac >- simp[comp_return_def] >> strip_tac >>
+  `final' = final` by metis_tac[gas_path_halt_unique] >>
+  pop_assum SUBST_ALL_TAC >>
+  pure_rewrite_tac[gas_outcome_full_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
+  qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `Halt final`, `G'`,
+                `tn'`] >>
+  conj_tac >- simp[gasSummaryTheory.gas_explicit_def] >>
+  conj_tac >- simp[] >>
+  qx_gen_tac `H` >> strip_tac >> conj_tac
+  >- (`allocas_from (imm_len tops) s0` by metis_tac[] >>
+      `gas_origin_ptr_path (deploy_dead H tops runtime_bc am tx,
+         imm_len tops, gas_explicit_sites ctx shadow_ctx, ctx, func, [])
+         (s0, G0, tn0) [] (OK sx, G0, tn0)` by
+        (simp[Abbr `sx`] >> irule emit_jmp_origin_ptr >> simp[] >>
+         metis_tac[]) >>
+      drule gas_origin_ptr_path_append >> simp[] >>
+      disch_then irule >> metis_tac[]) >>
+  disj2_tac >> simp[exit_result_def, stmt_exit_ptr_def] >> gen_tac >>
+  `constructor_return_q H func cenv cx (LENGTH runtime_bc) (imm_len tops) F
+     nkey NoneV ((es with scopes := []) with gas_obs := tail) (Halt final)` by
+    (pure_rewrite_tac[constructor_return_q_gas_obs] >> metis_tac[]) >>
+  pop_assum mp_tac >> simp[]
+QED
+
+(* Every return from a deployment constructor's body: a valueless Return,
+   the only one the constructor types. *)
+Theorem constructor_frame_ret_ok_full:
+  !ctx shadow_ctx func shadow_func cenv cx tops am tx runtime_bc imm nr nkey ut
+   exit_lbl st_exit st_epilogue st_final.
+    cx = deploy_evaluation_context tops am tx /\
+    cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = SOME exit_lbl /\
+    st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
+    (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
+      st_exit = ((), st_epilogue) /\
+    compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm
+      st_epilogue = ((), st_final) /\
+    fn_has_code st_exit st_final func /\
+    LENGTH runtime_bc + imm_len tops < dimword(:256) /\ ~nr /\
+    (imm_len tops <> 0 ==>
+      cenv.ce_imm_alloca = SOME imm /\
+      (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
+    frame_ret_ok_full
+      ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
+       ctx, shadow_ctx, [], func, shadow_func)
+      cx
+      (\H v ee gt r. constructor_return_q H func cenv cx
+        (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
+      cenv NoneT
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `eo`
+  >- (simp[optionTheory.OPTION_MAP_DEF] >>
+      qspecl_then [`tops`, `am`, `tx`, `runtime_bc`, `imm`, `cx`, `cenv`,
+        `cenv'`, `exit_lbl`, `st_exit`, `st_epilogue`, `st_final`, `nr`,
+        `nkey`, `ut`, `ctx`, `shadow_ctx`, `func`, `shadow_func`, `lctx`,
+        `es`] mp_tac constructor_return_none_frag_full >>
+      impl_tac >- simp[] >> simp[]) >>
+  gvs[vyperTypeSystemTheory.type_stmt_def]
 QED
 
 Theorem constructor_exit_run_ptr:
-  !tops runtime_bc am tx ctx func cenv body_cenv cx es s G tn nr nkey ut
+  !H tops runtime_bc am tx ctx func cenv body_cenv cx es s G tn nr nkey ut
    st_exit st_epilogue st_final imm.
     cenv.ce_is_ctor /\ same_frame cenv body_cenv /\
     st_exit.cs_current_insts = [] /\
@@ -911,17 +1218,19 @@ Theorem constructor_exit_run_ptr:
     fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
     ~ctx_has_dalloca ctx /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+    (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+            storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+            nkey < dimword (:256)) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
     cx = deploy_evaluation_context tops am tx /\
-    stmt_state_rel ctx func body_cenv cx es s /\ ~s.vs_halted /\
+    stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
     s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 /\
-    deploy_ptr_inv tops runtime_bc am tx imm G tn s ==>
+    deploy_ptr_inv H tops runtime_bc am tx imm G tn s ==>
     ?fuel final.
       run_from fuel ctx func s = Halt final /\
-      ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops) fuel
+      ptr_safe_run (deploy_dead H tops runtime_bc am tx) (imm_len tops) fuel
         ctx func [] G tn s
 Proof
   rpt gen_tac >> strip_tac >>
@@ -943,7 +1252,7 @@ Proof
   >- ((* no unlock: the epilogue from the exit block's start *)
       qpat_x_assum `(if F then _ else _) _ = _` mp_tac >>
       simp[comp_return_def] >> strip_tac >>
-      qspecl_then [`tops`, `runtime_bc`, `am`, `tx`, `ctx`, `func`, `body_cenv`,
+      qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `ctx`, `func`, `body_cenv`,
                    `deploy_evaluation_context tops am tx`, `es`, `s`, `G`,
                    `tn`, `imm`, `st_epilogue`, `st_final`]
         mp_tac epilogue_ptr_safe >>
@@ -1002,17 +1311,17 @@ Proof
            source_memory_write_ranges_def, mem_write_ops_def,
            mem_read_ops_def, Abbr `i0`, mk_inst_def, op_taint_def] >>
       simp[tstore_def] >> rw[] >> fs[]) >>
-  `ptr_safe_block (deploy_dead tops runtime_bc am tx) (imm_len tops) fuel
+  `ptr_safe_block (deploy_dead H tops runtime_bc am tx) (imm_len tops) fuel
      ctx func [] G (tn with t_trans := key_update tn.t_trans (n2w nkey) {})
      bb (tstore (n2w nkey) 0w s with vs_inst_idx := SUC s.vs_inst_idx) =
-   ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops) fuel
+   ptr_safe_run (deploy_dead H tops runtime_bc am tx) (imm_len tops) fuel
      ctx func [] G (tn with t_trans := key_update tn.t_trans (n2w nkey) {})
      u` by
     (simp[ptr_safe_run_def, Abbr `u`, tstore_def] >>
      qpat_x_assum `s.vs_current_bb = _` (SUBST1_TAC o SYM) >>
      rw_asm `lookup_block s.vs_current_bb _ = SOME _` >> simp[]) >>
   pop_assum SUBST1_TAC >>
-  qspecl_then [`tops`, `runtime_bc`, `am`, `tx`, `ctx`, `func`, `body_cenv`,
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `ctx`, `func`, `body_cenv`,
                `deploy_evaluation_context tops am tx`,
                `es with tStorage :=
                   ((deploy_evaluation_context tops am tx).txn.target =+
@@ -1029,7 +1338,7 @@ Proof
         irule constructor_unlock_stmt_state_rel >> simp[]) >>
     conj_tac >- simp[tstore_def] >>
     (* the invariant after the unlock *)
-    qpat_x_assum `deploy_ptr_inv _ _ _ _ _ _ _ s` mp_tac >>
+    qpat_x_assum `deploy_ptr_inv _ _ _ _ _ _ _ _ s` mp_tac >>
     simp[deploy_ptr_inv_def, allocas_from_def, op_taint_def, tstore_def,
          combinTheory.APPLY_UPDATE_THM] >>
     strip_tac >> conj_tac

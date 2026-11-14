@@ -312,7 +312,9 @@ Theorem constructor_exit_run_mem[local]:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+          storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+          nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
   stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
@@ -367,7 +369,9 @@ Theorem deploy_ctor_fallthrough_mem_safe:
        st_epilogue, st_final, func) /\
     cenv.ce_is_ctor /\ cenv_top_ext cenv cenv' ee.scopes /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+    (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+          storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+          nkey < dimword (:256)) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
