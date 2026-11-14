@@ -4,7 +4,7 @@ Ancestors
   lowerDloadExpansionExit lowerDloadSafetyAllocation lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
   lowerDloadSafetyWriteAssembly lowerDloadConfiguredOrigins lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds o1PassLift memSafeRun venomExecProps venomExecProofs contextRawReachable o1PassContract
   lowerDloadSafetyLocations venomFnScheduleRunner contextCodegenRel passSharedDefs lowerDloadSafetyRelation codegenRel lowerDloadDefs irSupply ptrDiscipline pointerConfinedDefs memLocDefs pred_set unitShapeDefs
-  venomExecSemantics venomState venomInst finite_map list words
+  venomExecSemantics venomState venomInst finite_map list words o1SafeUpto
 
 Theorem ld_dloadbytes_prefix_observations:
   X = [<|inst_id := ai; inst_opcode := ADD;
@@ -345,18 +345,6 @@ Proof
       AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ld_raw_reachable_code_data:
-  !vs C fn inst s. raw_reachable vs C fn inst s ==>
-    s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section
-Proof
-  ho_match_mp_tac raw_reachable_ind >>
-  rw[enters_block_def, setup_callee_def] >>
-  imp_res_tac step_inst_ok_code_data >>
-  imp_res_tac eval_phis_only_updates_vs_vars >>
-  gvs[setup_callee_def, AllCaseEqs()] >>
-  qpat_x_assum `s_phi = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
-QED
-
 Theorem ld_sync_source_code_layout:
   o1_ctx_shape C /\ o1_run_state_ok vs0 /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
@@ -364,7 +352,7 @@ Theorem ld_sync_source_code_layout:
 Proof
   strip_tac >> drule ld_sync_source >> strip_tac >>
   drule_all ld_frame_raw_reachable >> strip_tac >>
-  drule ld_raw_reachable_code_data >> strip_tac >>
+  drule raw_reachable_code_data >> strip_tac >>
   drule raw_reachable_labels >> strip_tac >>
   gvs[o1_run_state_ok_def, code_layout_valid_def]
 QED
@@ -512,7 +500,7 @@ val _ = List.app (fn th => if null (hyp th) then ()
   [ld_dloadbytes_supply_temporary, ld_dloadbytes_scalar_nonpointer,
    ld_dloadbytes_scalar_observation, ld_dloadbytes_destinations,
    ld_envelope_supply_reserved, ld_dloadbytes_envelope_temporary,
-   ld_raw_reachable_code_data, ld_sync_source_code_layout,
+   raw_reachable_code_data, ld_sync_source_code_layout,
    ld_sync_dload_code_offset, ld_dloadbytes_source_operands,
    ld_sync_dloadbytes_trace_evaluations, ld_sync_dloadbytes_destination_cases];
 
