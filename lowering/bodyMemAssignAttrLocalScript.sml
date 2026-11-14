@@ -759,7 +759,7 @@ Theorem body_assign_attr_local_mem:
   !cx id fld e sid fty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     body_stmt_safe tops (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
     body_expr_mem_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) ==>

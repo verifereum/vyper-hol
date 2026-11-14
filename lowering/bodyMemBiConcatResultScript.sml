@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem concat_result_vv_sim_mem:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args /\
   expr_body_pre cenv cx env (Builtin ann (Concat n) args) es ==>
   expr_vv_sim_mem ctx func cenv cx ty (Builtin ann (Concat n) args) es
 Proof

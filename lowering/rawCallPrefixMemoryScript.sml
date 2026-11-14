@@ -9,7 +9,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom
 
 Theorem raw_call_addr_data_sim_mem[local]:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
   lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
@@ -169,7 +169,7 @@ QED
 Finalise raw_call_data_endpoint_mem
 
 Theorem raw_call_kwargs_ready_mem[local]:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx kws /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx kws /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es ==>
   typed_args_ready_mem ctx func cenv cx (K (BaseT (UintT 256)))
     (expr_sim_inv cenv cx env) kws
@@ -186,7 +186,7 @@ Proof
 QED
 
 Theorem raw_call_prefix_sim_mem:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
   lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\

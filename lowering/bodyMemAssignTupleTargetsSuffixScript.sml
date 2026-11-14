@@ -99,6 +99,7 @@ QED
 
 Theorem assign_tuple_targets_suffix_mem:
   !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag d.
+    ~cx.txn.is_static /\
     post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
     sv.vs_current_bb = su.cs_current_bb /\

@@ -264,7 +264,7 @@ Theorem typed_args_ready_mem_of_body:
   !args tops ctx func cenv cx env arg_ty.
     (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
        expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)) /\
-    body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args ==>
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args ==>
     typed_args_ready_mem ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args
 Proof
   Induct >> simp[typed_args_ready_mem_def, body_exprs_mem_ok_def] >>

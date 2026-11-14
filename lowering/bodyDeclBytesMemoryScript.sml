@@ -463,7 +463,7 @@ QED
    that room at the lowered type. *)
 Theorem annassign_bytes_rhs_located_mem:
   !tops ctx func c cx env e es ltv etv.
-    body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
+    ~cx.txn.is_static /\ body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
     body_expr_mem_ok cx e /\
     is_bytestring_type (expr_type e) /\
     evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\

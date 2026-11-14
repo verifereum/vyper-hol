@@ -7,7 +7,7 @@ Ancestors
   exprSimHyps vyperInterpreter exprSimMemDefs stmtSimAugAssignPlace bodySim
 
 Theorem aug_place_storage_endpoint:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
   expr_body_pre cenv cx env e es /\ target_indices_pre cenv cx env bt /\

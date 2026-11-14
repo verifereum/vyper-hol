@@ -162,7 +162,7 @@ QED
 Theorem assign_local_rhs_located_mem[local]:
   !tops ctx func c cx env e es ltv etv.
     post_value_type c e = expr_type e /\
-    body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
+    ~cx.txn.is_static /\ body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
     body_expr_mem_ok cx e /\ ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -661,7 +661,7 @@ QED
 
 Theorem compile_assign_local_memory_widen_stmt_frag_mem[local]:
   !d tops ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv etv ltv env.
-    body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
     body_expr_mem_ok cx e /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME vtyp /\ ~is_word_type vtyp /\
@@ -814,7 +814,7 @@ Finalise compile_assign_local_memory_widen_stmt_frag_mem
 Theorem body_assign_local_memory_mem:
   !cx id e ty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     body_expr_mem_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assign (BaseTarget (NameTarget id)) e) ==>

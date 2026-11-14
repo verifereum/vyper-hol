@@ -67,7 +67,7 @@ Theorem body_augassign_immutable_deploy_mem:
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_mem_ok cx e) /\
     body_base_target_mem_ok cx t /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty t bop e) /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty t bop e) /\
     body_stmt_safe tops (AugAssign ty t bop e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AugAssign ty t bop e) ==>

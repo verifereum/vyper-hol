@@ -27,6 +27,7 @@ Libs
    allocation kept. *)
 Theorem assign_storage_store_path_mem:
   !ctx func cenv cx es' s tr slot op w st st'.
+    ~cx.txn.is_static /\
     emit_void (if tr then TSTORE else SSTORE) [Lit slot; op] st = ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
@@ -46,7 +47,7 @@ Proof
   `~s.vs_call_ctx.cc_static` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
-     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def, call_ctx_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
@@ -86,6 +87,7 @@ QED
 Theorem compile_assign_storage_typed_stmt_frag_mem:
   !d ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt vtyp.
+    ~cx.txn.is_static /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -179,6 +181,7 @@ QED
 
 Theorem body_assign_toplevel_word_mem:
   !cx nsid e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    ~cx.txn.is_static /\
     body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings

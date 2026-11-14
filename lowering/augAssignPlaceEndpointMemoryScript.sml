@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem aug_place_memory_endpoint:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty bt bop e) /\
   ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\

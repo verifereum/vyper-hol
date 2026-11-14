@@ -369,7 +369,7 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     expr_sim_inv ce cx env es /\
     (!e st. MEM e args /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e st) /\
-    body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+    ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
     inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -410,7 +410,7 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
                regions_disjoint p n c sz) ==>
             mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   expr_body_pre ce cx env h es /\ body_exprs_mem_ok cx (h::args) /\
   compile_expr ce (expr_type h) h sa = (vv,sm) /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
@@ -545,7 +545,7 @@ Theorem aggregate_make_tuple_body_sim_mem:
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\

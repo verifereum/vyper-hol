@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem held_bytestring_compare_sim_mem:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
   body_exprs_mem_ok cx [e1;e2] ==>
@@ -78,7 +78,7 @@ Proof
      pure_once_rewrite_tac[body_expr_mem_ok_def] >>
      disch_then (mp_tac o CONJUNCT1) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `expr_type e1`, `es`] mp_tac) >>
-     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+     (impl_tac >- simp[]) >>
      disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   drule (CONV_RULE (DEPTH_CONV ETA_CONV) bop_first_admissible) >> strip_tac >>
   qpat_assum `(h1,s1) = _` (assume_tac o SYM) >>

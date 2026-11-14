@@ -7,6 +7,7 @@ Ancestors
   compileEnv vyperState venomState finite_map list arithmetic
 
 Theorem compile_internal_return_buffer_path_mem:
+  ~cx.txn.is_static /\
   compile_return_unlock cenv sa = ((),su) /\
   compile_internal_return cenv (SOME src) rpc cenv.ce_returns_count
     ty sty ets (SOME dst) su = ((),sb) /\
@@ -44,7 +45,8 @@ Proof
   strip_tac >>
   `~is_word_type sty` by metis_tac[is_bytestring_word_type] >>
   `val_in_memory stv v (w2n sw) s.vs_memory` by fs[expr_val_rel_def] >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `type_memory_size tv + 64 < dimword (:256)` by decide_tac >>
   `frag_exec ctx sa sb
      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\

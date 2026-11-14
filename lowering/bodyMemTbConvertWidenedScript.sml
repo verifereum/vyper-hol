@@ -18,7 +18,7 @@ Theorem body_convert_widened_call_arg_mem:
   !cx v11 typ e1.
     body_exprs_mem_ok cx [e1] ==>
     !tops ctx func cenv env ty st.
-      body_inv tops ctx cenv cx /\
+      ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (TypeBuiltin v11 Convert typ [e1]) st /\
       (?a f cargs d. e1 = Call a (IntCall f) cargs d) /\
       lowered_value_type cenv e1 <> expr_type e1 ==>

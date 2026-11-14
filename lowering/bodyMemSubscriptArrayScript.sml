@@ -10,7 +10,7 @@ Theorem body_subscript_array_vv_mem:
       then bind (read_result cx tv) (\v. return (Value v))
       else return tv) s' = (INL tv', t') ==>
      body_expr_mem_ok cx idx) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
   post_value_type cenv obj = expr_type obj ==>

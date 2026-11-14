@@ -255,7 +255,7 @@ Proof
 QED
 
 Theorem topcopy_rhs_memory:
-  body_expr_mem_ok cx e /\ body_inv tops ctx cenv cx /\
+  body_expr_mem_ok cx e /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env e es ==>
   expr_sim_mem ctx func cenv cx (expr_type e) e es
 Proof

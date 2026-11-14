@@ -42,7 +42,7 @@ QED
 Theorem log_mem_args_step[local]:
   !tops ctx func cenv cx env e tail s.
     EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) (e::tail) /\
-    body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (e::tail) /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (e::tail) /\
     expr_sim_inv cenv cx env s /\
     supported_pure_exprs tops (e::tail) /\ well_typed_exprs env (e::tail) /\
     ~supported_exprs_exists
@@ -102,7 +102,7 @@ QED
 Theorem body_log_widen_mem_case:
   !d cx id args tops ctx func cenv env env' ret_ty lctx RetQ es fields.
     body_stmt_safe tops (Log id args) /\
-    body_exprs_mem_ok cx args /\ body_inv tops ctx cenv cx /\
+    body_exprs_mem_ok cx args /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_pure_exprs tops args /\
     supported_event_fields tops id = SOME fields /\
     LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) args fields /\
@@ -213,6 +213,7 @@ Proof
               is_bytestring_type (expr_type e)) es` by
     metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_ready_stmt_frag_mem >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>

@@ -18,6 +18,7 @@ val _ = Parse.hide "body";
 Definition body_expr_mem_ok_mutual_def:
   (body_expr_mem_ok cx e <=>
     (!tops ctx func cenv env ty es.
+      ~cx.txn.is_static /\
       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
       expr_sim_mem ctx func cenv cx ty e es /\
       expr_vv_sim_mem ctx func cenv cx ty e es) /\
@@ -27,6 +28,7 @@ Definition body_expr_mem_ok_mutual_def:
       body_exprs_mem_ok cx elems) /\
     (!ann e1 e2 tops ctx func cenv env ty es.
       e = Subscript ann e1 e2 /\
+      ~cx.txn.is_static /\
       body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
       expr_map_sim_mem ctx func cenv cx ty e es)) /\
   body_exprs_mem_ok cx [] = T /\
@@ -71,6 +73,7 @@ Theorem body_expr_mem_ok_intro:
        builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
        body_exprs_mem_ok cx elems) /\
     (!tops ctx func cenv env ty es.
+       ~cx.txn.is_static /\
        body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
        expr_sim_mem ctx func cenv cx ty e es /\
        expr_vv_sim_mem ctx func cenv cx ty e es) ==>
@@ -82,6 +85,7 @@ QED
 Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+      ~cx.txn.is_static /\
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
       body_stmt_safe tops s /\
       (!target. supported_stmt_expr_exists
@@ -99,6 +103,7 @@ End
 Definition body_stmts_mem_ok_def:
   body_stmts_mem_ok cx ss <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+      ~cx.txn.is_static /\
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
       body_stmts_safe tops ss /\
       (!target. supported_stmts_expr_exists
@@ -175,6 +180,7 @@ QED
 Theorem body_stmts_mem_projection:
   (!cx ss. body_stmts_mem_ok cx ss) ==>
   !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es.
+    ~cx.txn.is_static /\
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>

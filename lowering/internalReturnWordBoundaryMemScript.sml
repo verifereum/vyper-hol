@@ -15,6 +15,7 @@ Proof
 QED
 
 Theorem internal_return_word_boundary_mem:
+  ~cx.txn.is_static /\
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_returns_count =
     returns_stack_count
@@ -57,7 +58,8 @@ Proof
      fs[expr_post_def]) >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
     gvs[expr_post_def, expr_val_rel_def] >>
-  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `ce.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
   drule_all compile_internal_word_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>

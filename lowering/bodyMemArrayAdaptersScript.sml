@@ -20,7 +20,7 @@ Theorem aggregate_make_array_elems_body_sim_mem:
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -274,7 +274,7 @@ Theorem aggregate_make_array_body_sim_mem:
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\

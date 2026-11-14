@@ -32,6 +32,7 @@ QED
 
 Theorem compile_pop_toplevel_vv_sim_mem:
   !ctx func cenv cx env ty ann nid es.
+    ~cx.txn.is_static /\
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget nid)) es ==>
     expr_vv_sim_mem ctx func cenv cx ty (Pop ann (TopLevelNameTarget nid)) es
 Proof

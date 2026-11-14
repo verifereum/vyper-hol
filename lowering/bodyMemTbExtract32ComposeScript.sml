@@ -13,7 +13,7 @@ Ancestors
   valueEncoding integer_word venomExecSemantics venomState builtinBytes emitHelperProps
 
 Theorem compile_extract32_sim_mem:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
   body_exprs_mem_ok cx [src;off] /\
   expr_type src = BaseT (BytesT (Dynamic cap)) /\

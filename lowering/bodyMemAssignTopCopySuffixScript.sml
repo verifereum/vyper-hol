@@ -32,6 +32,7 @@ QED
 
 Theorem storage_copy_bulk_run_mem:
   !ctx func cenv cx es' tr src k n sa sb u s b.
+    ~cx.txn.is_static /\
     compile_word_copy_loop src (Lit k) n LocMemory
       (if tr then LocTransient else LocStorage) F sa = (u,sb) /\
     n < dimword (:256) /\ w2n b + 32*n <= s.vs_alloca_next /\
@@ -55,7 +56,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~s.vs_call_ctx.cc_static` by
     (Cases_on `tr` >>
-     fs[stmt_state_rel_def, state_rel_def, storage_copy_backend_fold]) >>
+     fs[stmt_state_rel_def, state_rel_def, storage_copy_backend_fold,
+        call_ctx_rel_def]) >>
   drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
     topcopy_compile_loop_path >>
   disch_then (qspecl_then [`ctx`, `func`, `s`, `b`, `k`] mp_tac) >>
@@ -82,6 +84,7 @@ QED
 
 Theorem storage_copy_one_run_mem:
   !ctx func cenv cx es' tr src k sa sm sb op s b.
+    ~cx.txn.is_static /\
     emit_op MLOAD [src] sa = (op,sm) /\
     emit_void (if tr then TSTORE else SSTORE) [Lit k;op] sm = ((),sb) /\
     eval_operand src s = SOME b /\ local_ptrs_reserved cenv sa /\
@@ -112,7 +115,9 @@ Proof
   `!x. not_fresh_at sa x ==> x <> out` by
     (simp[not_fresh_at_def, Abbr `out`] >> decide_tac) >>
   `~s.vs_call_ctx.cc_static` by
-    (Cases_on `tr` >> fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def]) >>
+    (Cases_on `tr` >>
+     fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def,
+        call_ctx_rel_def]) >>
   `?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
      store_copy_normalize s u = (if tr then tstore else sstore) k (mload (w2n b) s) s /\
      (!x. x <> out ==> lookup_var x u = lookup_var x s) /\
@@ -160,6 +165,7 @@ Finalise storage_copy_one_run_mem
 
 Theorem storage_copy_suffix_run_mem:
   !ctx func cenv cx es' tr src k n typ src_ty loc sa sb s b.
+    ~cx.txn.is_static /\
     compile_assign_value cenv (Lit k)
       (if tr then LocTransient else LocStorage) src F loc
       typ src_ty (32 * n) sa = ((),sb) /\
@@ -243,6 +249,8 @@ Theorem storage_copy_success_run_mem:
       alloca_history func t
 Proof
   rpt gen_tac >> strip_tac >>
+  `~cx.txn.is_static` by
+    (Cases_on `cx.txn.is_static` >> gvs[write_storage_slot_eq]) >>
   drule compile_lower_value_var >> simp[] >> disch_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by

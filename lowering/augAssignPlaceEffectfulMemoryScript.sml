@@ -9,7 +9,7 @@ Ancestors
 Theorem compile_augassign_place_effectful_storage_mem_case:
   (!id. target_root bt <> NameTarget id) /\
   ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty bt bop e) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
   target_sim_mem ctx func cenv cx env bt es /\

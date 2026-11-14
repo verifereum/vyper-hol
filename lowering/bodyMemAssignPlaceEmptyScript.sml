@@ -131,6 +131,7 @@ Proof
 QED
 
 Theorem empty_place_store_outcome_mem[local]:
+  ~cx.txn.is_static /\
   target_post ctx func ce cx es sa st s0 ee (PlaceR p) (Type ty)
     (dst,SOME loc,SOME (ValPT ty)) s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ has_length_word ty /\
@@ -236,6 +237,7 @@ Proof
 QED
 
 Theorem compile_assign_place_empty_stmt_frag_mem:
+  ~cx.txn.is_static /\
   target_sim_mem ctx func ce cx env bt es /\
   target_indices_pre ce cx env bt /\ expr_sim_inv ce cx env es /\
   well_typed_expr env e /\ type_place_target env bt = SOME (Type ty) /\

@@ -210,7 +210,7 @@ Proof
 QED
 
 Theorem aggregate_tuple_child_outcome_mem:
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx (e::args) /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx (e::args) /\
   expr_body_pre ce cx env e es /\
   compile_expr ce (expr_type e) e sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

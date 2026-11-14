@@ -34,7 +34,7 @@ Theorem body_for_range_lit_mem:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_mem_ok cx it) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>

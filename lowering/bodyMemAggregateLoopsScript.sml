@@ -20,7 +20,7 @@ Theorem aggregate_make_tuple_flat_sim_mem:
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
   (!e. MEM e args ==>
      int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -394,7 +394,7 @@ Theorem aggregate_make_tuple_sim_mem:
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
   (!e. MEM e args ==>
      int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -535,7 +535,7 @@ Theorem aggregate_make_tuple_fits_sim_mem:
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
   (!e. MEM e args ==>
      int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

@@ -305,6 +305,7 @@ QED
 Theorem constructor_exit_run_mem[local]:
   !ctx func cenv body_cenv cx es s nr nkey ut st_exit st_epilogue st_final
    rt cap imm.
+  ~cx.txn.is_static /\
   cenv.ce_is_ctor /\ same_frame cenv body_cenv /\
   st_exit.cs_current_insts = [] /\
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
@@ -333,7 +334,8 @@ Proof
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule optional_unlock_frag_mem >>
   disch_then (qspecl_then [`ctx`, `\s0. s0 = s`, `\s2. s2 = s1`, `\r. F`]
                 mp_tac) >>
@@ -362,6 +364,7 @@ QED
 Theorem deploy_ctor_fallthrough_mem_safe:
   !tops rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl sa sb sj
    st_exit st_epilogue st_final func cx cenv' ee t.
+    ~cx.txn.is_static /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

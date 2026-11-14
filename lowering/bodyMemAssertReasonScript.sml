@@ -17,7 +17,7 @@ Ancestors
 Theorem assert_reason_vv_sim_mem[local]:
   !cx e se tops ctx func cenv env es gs es1.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_mem_ok cx se) /\
-    body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\ ~is_extcode se /\
     ~supported_expr_exists call_operands_effect_root se /\

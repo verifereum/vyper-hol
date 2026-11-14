@@ -10,7 +10,7 @@ Ancestors
 Theorem mapping_index_sim_mem[local]:
   (!s res t. eval_expr cx obj s = (INL res,t) ==>
      body_expr_mem_ok cx idx) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
    expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
   place_type cenv obj = MapPT kt vt /\
@@ -20,7 +20,8 @@ Theorem mapping_index_sim_mem[local]:
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac
-      (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
+      (CONJUNCTS_THEN2 assume_tac
+        (CONJUNCTS_THEN2 assume_tac strip_assume_tac)))) >>
   drule_all mapping_subscript_marked_index_pre >> strip_tac >>
   `body_expr_mem_ok cx idx` by metis_tac[] >>
   qpat_x_assum `body_expr_mem_ok cx idx`
@@ -57,7 +58,7 @@ Theorem compile_mapping_subscript_outcome_mem_given_tail:
       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next) /\
   body_expr_mem_ok cx obj /\
   (!s tv t. eval_expr cx obj s = (INL tv,t) ==> body_expr_mem_ok cx idx) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
    expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
   place_type cenv obj = MapPT kt vt /\
@@ -95,7 +96,8 @@ Proof
     (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 assume_tac
         (CONJUNCTS_THEN2 assume_tac
-          (CONJUNCTS_THEN2 assume_tac strip_assume_tac))))) >>
+          (CONJUNCTS_THEN2 assume_tac
+            (CONJUNCTS_THEN2 assume_tac strip_assume_tac)))))) >>
   `expr_map_pre cenv cx env obj es` by
     metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
   `type_place_expr env obj = SOME (HashMapT kt vt)` by

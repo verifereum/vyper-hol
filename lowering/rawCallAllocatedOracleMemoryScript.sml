@@ -7,6 +7,7 @@ Ancestors
   instIdxIndep entrySinkExtraction valueTypingMemoryProps vfmConstants words finite_map list
 
 Theorem raw_call_allocated_oracle_mem:
+  ~cx.txn.is_static /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]

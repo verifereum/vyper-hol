@@ -687,7 +687,7 @@ Theorem body_augassign_local_mem:
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_mem_ok cx e) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings
       (AugAssign ty (NameTarget id) bop e) /\
     (!target. supported_stmt_expr_exists

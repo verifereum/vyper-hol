@@ -25,6 +25,7 @@ Proof
 QED
 
 Theorem compile_append_storage_word_stmt_frag_mem:
+  ~cx.txn.is_static /\
   eval_target_place cx (TopLevelNameTarget nid) es =
     (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\

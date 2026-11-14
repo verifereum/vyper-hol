@@ -187,7 +187,7 @@ Proof
 QED
 
 Theorem body_subscript_tuple_vv_mem:
-  body_expr_mem_ok cx obj /\ body_inv tops ctx cenv cx /\
+  body_expr_mem_ok cx obj /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = TupleT tys /\ place_type cenv obj = ValPT (TupleT tys) /\
   post_value_type cenv obj = expr_type obj ==>

@@ -5,7 +5,7 @@ Ancestors
   gasSummary vyperState exprSimRawLog bodyMemoryPreds exprSimWordArgs exprSimHypsDefs compileEnv exprSimPrecompiles
 
 Theorem raw_log_body_topics_sim_mem:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx topics /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx topics /\
   (!e s. MEM e topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env e s /\ expr_type e = BaseT (BytesT (Fixed 32))) /\
   expr_sim_inv cenv cx env es /\
@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem raw_log_marked_data_ready_mem:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   body_exprs_mem_ok cx
     [Builtin ann (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] /\
   LENGTH topics <= n /\

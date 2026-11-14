@@ -7,7 +7,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom list
 
 Theorem raw_log_topics_marked_post_mem:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx topics /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx topics /\
   (!e s. MEM e topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env e s /\ expr_type e = BaseT (BytesT (Fixed 32))) /\
   expr_sim_inv cenv cx env es /\

@@ -39,7 +39,7 @@ End
 
 Theorem body_target_sim_mem:
   !t cx tops ctx func cenv env es.
-    body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
+    body_base_target_mem_ok cx t /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     target_pre cenv cx env t es ==>
     target_sim_mem ctx func cenv cx env t es
 Proof

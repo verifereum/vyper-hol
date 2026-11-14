@@ -12,6 +12,7 @@ Libs
   monadsyntax
 
 Theorem raw_call_tail_outcome_mem:
+  ~cx.txn.is_static /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
   bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
@@ -70,7 +71,8 @@ Proof
    accounts_runtime_well_typed esK.accounts` by
     fs[expr_sim_inv_def,
       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
-  drule_all raw_call_source_tail >>
+  qpat_assum `~cx.txn.is_static`
+    (fn nonstatic => drule_all (REWRITE_RULE [nonstatic] raw_call_source_tail)) >>
   disch_then (qspecl_then [`target`,
     `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)`,`bs`]
     strip_assume_tac) >>

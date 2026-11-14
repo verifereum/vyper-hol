@@ -14,7 +14,7 @@ Theorem body_struct_lit_widened_flat_mem[local]:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_mem_ok cx (MAP SND kes)) ==>
     !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\
+      ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
       (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
            lowered_value_type cenv e <> expr_type e) /\
@@ -198,7 +198,7 @@ Theorem body_struct_lit_widened_call_elem_mem:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_mem_ok cx (MAP SND kes)) ==>
     !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\
+      ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
       (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
            lowered_value_type cenv e <> expr_type e) ==>

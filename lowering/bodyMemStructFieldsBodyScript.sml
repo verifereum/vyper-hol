@@ -17,7 +17,7 @@ Theorem aggregate_struct_fields_body_sim_mem:
   expr_sim_inv ce cx env es /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  body_inv tops ctx ce cx /\ body_exprs_mem_ok cx (MAP SND fields) /\
+  ~cx.txn.is_static /\ body_inv tops ctx ce cx /\ body_exprs_mem_ok cx (MAP SND fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\

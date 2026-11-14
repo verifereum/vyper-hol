@@ -9,6 +9,7 @@ Ancestors
   venomState venomInst vyperState vyperValue vyperAST list loweringStateRelDefs
 
 Theorem raw_log_dynamic_data_endpoint_mem[local]:
+  ~cx.txn.is_static /\
   expr_has_effect call /\
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\
@@ -66,6 +67,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_frag_mem:
+  ~cx.txn.is_static /\
   body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
   (?a elem bd topics data cap.
@@ -138,6 +140,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_data_endpoint_mem[local]:
+  ~cx.txn.is_static /\
   expr_has_effect call /\
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
   expr_type data = BaseT (BytesT (Fixed 32)) /\
@@ -205,6 +208,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_allocated_mem[local]:
+  ~cx.txn.is_static /\
   expr_has_effect call /\
   expr_sim_mem ctx func cenv cx (expr_type data) data (mid with gas_obs := []) /\
   (!s. expr_sim_inv cenv cx env s ==> expr_body_pre cenv cx env data s) /\
@@ -275,6 +279,7 @@ Proof
 QED
 
 Theorem raw_log_fixed32_frag_mem:
+  ~cx.txn.is_static /\
   body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
   (?a elem bd topics data.

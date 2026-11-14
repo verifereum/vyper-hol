@@ -98,6 +98,7 @@ QED
 
 
 Theorem internal_return_tuple_boundary_mem:
+  ~cx.txn.is_static /\
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_imm_alloca = NONE /\
   cenv.ce_returns_count = returns_stack_count

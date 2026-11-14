@@ -9,7 +9,7 @@ Theorem immutable_augassign_scalar_assembly:
     eval_target_place cx (TopLevelNameTarget nsid) s = (INL p,s1) /\
     read_place cx p s2 = (INL cur,s3) /\
     place_type_value cx p s4 = (INL ptv,s5) ==> body_expr_mem_ok cx e) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty (TopLevelNameTarget nsid) bop e) /\
   body_stmt_safe tops (AugAssign ty (TopLevelNameTarget nsid) bop e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)

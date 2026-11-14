@@ -127,6 +127,7 @@ Proof
 QED
 
 Theorem constructor_exit_zero_path_mem:
+  ~cx.txn.is_static /\
   cenv.ce_is_ctor /\ same_frame cenv body_cenv /\
   st_exit.cs_current_insts = [] /\
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
@@ -159,7 +160,8 @@ Proof
          (u with vs_inst_idx := 1)` by
         (simp[stmt_state_rel_inst_idx, Abbr `u`] >>
          irule constructor_unlock_stmt_state_rel >> simp[]) >>
-      `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      `~s.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
       `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
         isPREFIX [mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []]
           (DROP s.vs_inst_idx bb.bb_instructions)` by
@@ -191,6 +193,7 @@ Proof
 QED
 
 Theorem constructor_return_none_frag_mem:
+  ~cx.txn.is_static /\
   cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
   cenv.ce_ctor_exit_label = SOME exit_lbl /\ same_frame cenv body_cenv /\
   st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\

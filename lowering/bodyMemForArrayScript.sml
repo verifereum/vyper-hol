@@ -123,7 +123,7 @@ Theorem array_body_fragment_callback_mem[local]:
   !cx stmts tops ctx cenv bindings env ei id typ tv v env_b ret_ty
    d func RetQ st0 bc sd ex inc.
     body_stmts_safe tops stmts /\
-    body_stmts_mem_ok cx stmts /\ body_inv tops ctx cenv cx /\
+    body_stmts_mem_ok cx stmts /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmts tops bindings stmts /\
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) stmts ==>
@@ -187,7 +187,7 @@ Theorem body_for_dynarray_name_mem:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_mem_ok cx it) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
@@ -285,7 +285,7 @@ Theorem body_for_immutable_array_mem:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_mem_ok cx it) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
@@ -513,7 +513,7 @@ Theorem body_for_fixed_array_mem[local]:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_mem_ok cx it) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
@@ -603,7 +603,7 @@ Theorem body_for_array_mem:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
        body_iterator_mem_ok cx it) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>

@@ -36,7 +36,7 @@ QED
 
 Theorem ec_mem_operands_then:
   expr_body_pre cenv cx env (Builtin ann bt [a;b]) es /\
-  body_exprs_mem_ok cx [a;b] /\ body_inv tops ctx cenv cx /\
+  body_exprs_mem_ok cx [a;b] /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   (bt = ECAdd \/ bt = ECMul) /\
   expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   lower_value compile_expr cenv (expr_type a) a sa = (p,s1) /\

@@ -117,6 +117,7 @@ Proof
 QED
 
 Theorem raw_call_oracle_run_mem:
+  ~cx.txn.is_static /\
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\

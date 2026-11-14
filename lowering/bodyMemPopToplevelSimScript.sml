@@ -48,6 +48,7 @@ Proof
 QED
 
 Theorem compile_pop_storage_normalized_vv_sim_mem:
+  ~cx.txn.is_static /\
   expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT ann (Dynamic n)), name) /\
@@ -87,7 +88,8 @@ Proof
 QED
 Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
-  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s0.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all dynarray_pop_storage_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule dynarray_pop_storage_shape >> strip_tac >> gvs[] >>

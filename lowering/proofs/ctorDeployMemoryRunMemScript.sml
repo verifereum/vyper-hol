@@ -84,6 +84,9 @@ Proof
      simp[deploy_evaluation_context_def, initial_evaluation_context_def,
           get_module_code_def]) >>
   qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
+  `~cx.txn.is_static` by
+    fs[Abbr `cx`, deploy_state_rel_def, deploy_evaluation_context_def,
+       initial_evaluation_context_def] >>
   `frame_ret_ok_mem NONE dunit.cu_context func cx (\v es r. T) cenv NoneT` by
     (qspecl_then [`dunit.cu_context`, `func`, `cenv`, `cx`, `LENGTH runtime_bc`,
                   `imm_len tops`, `imm`, `nr`, `nkey`, `ut`, `exit_lbl`,

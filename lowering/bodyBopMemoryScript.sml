@@ -21,7 +21,7 @@ Theorem body_bop_word_mem:
      body_expr_mem_ok cx e2) /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
     !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\
+      ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
       expr_sim_mem ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
@@ -95,7 +95,7 @@ Theorem body_bop_bytes_eq_mem:
     (expr_type e1 = BaseT AddressT \/
      ?m. expr_type e1 = BaseT (BytesT (Fixed m))) ==>
     !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\
+      ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
       expr_sim_mem ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof

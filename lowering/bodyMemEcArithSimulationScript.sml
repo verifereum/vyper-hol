@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem ecmul_vv_sim_mem:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann ECMul [a;b]) es /\
   body_exprs_mem_ok cx [a;b] ==>
   expr_vv_sim_mem ctx func cenv cx ty (Builtin ann ECMul [a;b]) es
@@ -156,7 +156,7 @@ Finalise ecmul_vv_sim_mem
 
 
 Theorem ecadd_vv_sim_mem:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann ECAdd [a;b]) es /\
   body_exprs_mem_ok cx [a;b] ==>
   expr_vv_sim_mem ctx func cenv cx ty (Builtin ann ECAdd [a;b]) es
@@ -235,7 +235,7 @@ Finalise ecadd_vv_sim_mem
 
 
 Theorem ec_arith_sim_mem:
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann bt [a;b]) es /\
   body_exprs_mem_ok cx [a;b] /\ (bt = ECAdd \/ bt = ECMul) ==>
   expr_sim_mem ctx func cenv cx ty (Builtin ann bt [a;b]) es /\

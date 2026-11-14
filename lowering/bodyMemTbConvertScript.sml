@@ -20,7 +20,7 @@ Theorem body_type_builtin_convert_plain_mem_case:
          "TypeBuiltin args" s'' = (INL x,t) ==>
        body_exprs_mem_ok cx es) ==>
     !tops ctx func cenv env ty st.
-      body_inv tops ctx cenv cx /\
+      ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (TypeBuiltin v11 Convert typ es) st /\
       ~(?e1 a f cargs d. es = [e1] /\ e1 = Call a (IntCall f) cargs d /\
                          lowered_value_type cenv e1 <> expr_type e1) ==>

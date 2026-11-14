@@ -14,7 +14,7 @@ Theorem body_assign_other_mem:
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_mem_ok cx t) /\
     body_expr_mem_ok cx e /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assign (BaseTarget t) e) ==>

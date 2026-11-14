@@ -35,7 +35,7 @@ Theorem make_tuple_body_vv_mem[local]:
    | ArrayT et' bd => EVERY (\e. et' = expr_type e \/
        is_bytestring_type et' /\ is_bytestring_type (expr_type e)) es
    | _ => T) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ty (MakeArray NONE n) es) st ==>
   expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray NONE n) es) st
 Proof
@@ -118,7 +118,7 @@ Theorem make_array_body_vv_mem[local]:
    | ArrayT et' bd => EVERY (\e. et' = expr_type e \/
        is_bytestring_type et' /\ is_bytestring_type (expr_type e)) es
    | _ => T) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ty (MakeArray (SOME et) n) es) st ==>
   expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray (SOME et) n) es) st
 Proof
@@ -207,7 +207,7 @@ Theorem body_make_array_sim_mem:
      | ArrayT et' bd => EVERY (\e. et' = expr_type e \/
          is_bytestring_type et' /\ is_bytestring_type (expr_type e)) es
      | _ => T) /\
-    body_inv tops ctx cenv cx /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env (Builtin ty (MakeArray t n) es) st ==>
     expr_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
     expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st

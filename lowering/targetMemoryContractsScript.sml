@@ -11,7 +11,7 @@ Ancestors
    body_base_target_mem_ok; no global expression induction is required. *)
 Theorem target_subscript_index_sim_mem:
   body_base_target_mem_ok cx (SubscriptTarget bt e) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   eval_base_place cx bt es = (INL pv,es1) ==>
   expr_sim_mem ctx func cenv cx ty e es1 /\

@@ -24,7 +24,7 @@ Theorem concat_args_sim_mem:
     expr_sim_inv cenv cx env es /\
     (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
        expr_body_pre cenv cx env e st) /\
-    body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args /\
+    ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx args /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
@@ -100,7 +100,8 @@ Proof
   `expr_sim_mem ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_mem_ok _ _`
       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
-     disch_then drule >> disch_then drule >> simp[]) >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`func`, `expr_type e`] (ACCEPT_TAC o CONJUNCT1))) >>
   qpat_assum `EVERY _ (e::args)`
     (CONJUNCTS_THEN assume_tac o BETA_RULE o REWRITE_RULE [listTheory.EVERY_DEF]) >>
   Cases_on `lower_value compile_expr cenv (expr_type e) e sa` >>

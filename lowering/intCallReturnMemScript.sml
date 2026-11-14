@@ -208,6 +208,7 @@ QED
    epilogue-aware contract, including persistent and transient guards. *)
 Theorem compile_internal_return_memory_frag:
   !ctx func cenv cx es ty tv v val_op rpc elem_types buf_op sa su sb bw.
+    ~cx.txn.is_static /\
     compile_return_unlock cenv sa = ((),su) /\
     compile_internal_return cenv (SOME val_op) rpc cenv.ce_returns_count
       ty ty elem_types (SOME buf_op) su = ((),sb) /\
@@ -238,7 +239,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
   rename1 `stmt_state_rel ctx func cenv cx (es with scopes := []) s0` >>
-  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s0.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\

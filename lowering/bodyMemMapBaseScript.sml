@@ -70,7 +70,7 @@ QED
    holds of. *)
 Theorem body_expr_mem_ok_map:
   !cx e tops ctx func cenv env ty es.
-    body_expr_mem_ok cx e /\ body_inv tops ctx cenv cx /\
+    body_expr_mem_ok cx e /\ ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
     expr_map_pre cenv cx env e es ==>
     expr_map_sim_mem ctx func cenv cx ty e es
 Proof

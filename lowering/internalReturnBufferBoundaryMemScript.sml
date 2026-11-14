@@ -127,6 +127,7 @@ QED
 
 
 Theorem internal_return_buffer_boundary_mem:
+  ~cx.txn.is_static /\
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_imm_alloca = NONE /\ cenv.ce_returns_count = 0 /\
   ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\

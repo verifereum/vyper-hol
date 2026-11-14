@@ -9,7 +9,7 @@ Libs
   monadsyntax
 
 Theorem raw_call_expr_vv_sim_mem:
-  body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es ==>
   expr_vv_sim_mem ctx func cenv cx ty
     (Call ann (RawCallTarget flags) (a::d::kws) dflt) es

@@ -23,6 +23,7 @@ QED
 
 Theorem compile_assign_tuple_targets_stmt_frag_mem:
   !d ctx func cx lctx RetQ cenv ty gs e es tys tvs.
+    ~cx.txn.is_static /\
     expr_type e = TupleT tys /\ LENGTH gs = LENGTH tys /\
     lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\

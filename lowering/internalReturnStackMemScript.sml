@@ -26,6 +26,7 @@ Proof
 QED
 
 Theorem compile_internal_word_return_intret_mem:
+  ~cx.txn.is_static /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   cenv.ce_return_buf = NONE /\ cenv.ce_returns_count = 1 /\
   compile_internal_return_from_env cenv ty src_ty op rpc st = ((),st') /\
@@ -41,7 +42,7 @@ Proof
   `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
     gvs[loweringPostsTheory.expr_val_rel_def] >>
   `~s.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all compile_internal_word_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >>

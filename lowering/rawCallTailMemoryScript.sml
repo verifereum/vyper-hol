@@ -10,6 +10,7 @@ Libs
   monadsyntax
 
 Theorem raw_call_outbuf_tail_mem:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op

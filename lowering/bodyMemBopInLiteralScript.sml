@@ -42,7 +42,7 @@ QED
 Theorem literal_typed_args_ready_mem[local]:
   (bop = In \/ bop = NotIn) /\
   body_exprs_mem_ok cx [e1; Builtin a (MakeArray t n) elems] /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env
     (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
   typed_args_ready_mem ctx func cenv cx expr_type
@@ -208,7 +208,7 @@ QED
 Theorem literal_expr_sim_mem[local]:
   (bop = In \/ bop = NotIn) /\
   body_exprs_mem_ok cx [e1; Builtin a (MakeArray t n) elems] /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env
     (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
   expr_sim_mem ctx func cenv cx ty

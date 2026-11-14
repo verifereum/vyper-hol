@@ -272,7 +272,12 @@ Theorem tuple_storage_store_head_path_mem:
       alloca_history func t /\ return_buf_frame d cenv sb t
 Proof
   rpt gen_tac >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~cx.txn.is_static` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `cx.txn.is_static` >>
+     simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   `emit_void (if tr then TSTORE else SSTORE) [dst; op] sa = ((),sb)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
@@ -527,6 +532,7 @@ QED
    just the current unread suffix and its bounded backing container. *)
 Theorem tuple_store_targets_path_mem:
   !gs m tys tvs vs ops addr b sz ctx func cenv cx es es' s st st' d.
+    ~cx.txn.is_static /\
     compile_tuple_store_all cenv tys gs ops st = ((),st') /\
     assign_tuple_target_list cx gs vs es = (INL (),es') /\
     LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
@@ -584,7 +590,6 @@ Proof
   `value_has_type tv v /\ val_wf tv v` by
     (qpat_x_assum `ih :- _` kall_tac >>
      fs[value_has_type_def, val_wf_def]) >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all tuple_target_list_cons_success >> strip_tac >>
   drule_all tuple_target_aligned_compiler >> strip_tac >>
   drule tuple_compiler_target_base >>
@@ -629,7 +634,7 @@ Resume tuple_store_targets_path_mem[head_operand]:
 QED
 
 Resume tuple_store_targets_path_mem[tail]:
-  asm_x "ih" drule >> disch_then drule >>
+  asm_x "ih" drule >> disch_then drule >> disch_then drule >>
   disch_then (qspecl_then [`m`, `tvs1`, `addr + type_memory_size tv`, `b`,
     `sz`, `ctx`, `func`, `s1`] mp_tac) >>
   disch_then (qspec_then `d` mp_tac) >>

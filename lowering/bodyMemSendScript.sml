@@ -170,6 +170,7 @@ Proof
 QED
 
 Theorem send_tail_path_mem:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
@@ -221,7 +222,14 @@ Proof
   `isPREFIX code (DROP t.vs_inst_idx bb.bb_instructions)` by
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
   drule_all send_call_read_step >>
-  disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac) >>
+  disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac)
+  >~ [`step_inst_base _ t = Abort ExHalt_abort _`]
+  >- (`~t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      qpat_x_assum `step_inst_base _ t = Abort ExHalt_abort _` mp_tac >>
+      Cases_on `eval_operand gas_op t` >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+           exec_ext_call_def, AllCaseEqs()]) >>
   rename1 `s' = t with <| vs_outcomes := _; vs_requests := _;
     vs_accounts := _; vs_transient := _; vs_logs := _;
     vs_pending_deletions := _; vs_returndata := _ |>` >>
@@ -307,6 +315,7 @@ QED
    its source part reads no observation, so the whole action keeps the
    operands' marks. *)
 Theorem send_args_summary_mem:
+  ~cx.txn.is_static /\
   gas_summary_at T (ctx,func) marks (eval_exprs cx args) (es,s0)
     (\rr ee t. ?vs. rr = INL vs /\
        typed_args_post ctx func cenv cx es sa s0 ee args
@@ -425,6 +434,7 @@ QED
 Finalise send_args_summary_mem
 
 Theorem send_expr_sim_mem:
+  ~cx.txn.is_static /\
   expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
   typed_args_ready_mem ctx func cenv cx expr_type
     (expr_sim_inv cenv cx env) args ==>
@@ -478,7 +488,8 @@ Proof
   `body_exprs_mem_ok cx args` by
     (first_x_assum irule >> simp[type_check_def, assert_def]) >>
   `expr_sim_mem ctx func cenv cx ty (Call ann (Send has_gas) args dflt) es` by
-    (irule send_expr_sim_mem >> qexists_tac `env` >> simp[] >>
+    (irule send_expr_sim_mem >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `env` >> simp[] >>
      irule typed_args_ready_mem_of_body >> rpt conj_tac
      >- (rpt strip_tac >- metis_tac[expr_body_pre_send_arg] >>
          gvs[EVERY_MEM]) >>

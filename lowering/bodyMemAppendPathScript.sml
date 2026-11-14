@@ -74,6 +74,7 @@ Proof
 QED
 
 Theorem append_storage_word_success_post_mem[local]:
+  ~cx.txn.is_static /\
   state_frame u = state_frame
     (if tr then tstore slot (n2w len+1w) (tstore (slot+1w+n2w len) w s)
      else sstore slot (n2w len+1w) (sstore (slot+1w+n2w len) w s)) /\
@@ -105,6 +106,7 @@ Proof
 QED
 
 Theorem append_storage_word_success_path_mem:
+  ~cx.txn.is_static /\
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
@@ -206,6 +208,7 @@ Proof
 QED
 
 Theorem append_storage_word_value_path_mem:
+  ~cx.txn.is_static /\
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\

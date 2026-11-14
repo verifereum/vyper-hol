@@ -79,6 +79,7 @@ Proof
 QED
 
 Theorem compile_log_ready_stmt_frag_mem:
+  ~cx.txn.is_static /\
   (!e tail s. R (e::tail) s ==>
     expr_sim_mem ctx func cenv cx (expr_type e) e s /\
     !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
@@ -308,6 +309,7 @@ Finalise compile_log_ready_stmt_frag_mem
 (* Field metadata may use wider scalar bounds than the argument buffers. *)
 
 Theorem compile_log_ready_stmt_frag_mem_widen:
+  ~cx.txn.is_static /\
   (!e tail s. R (e::tail) s ==>
     expr_sim_mem ctx func cenv cx (expr_type e) e s /\
     !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>

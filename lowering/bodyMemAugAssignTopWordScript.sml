@@ -475,6 +475,7 @@ QED
 Theorem compile_augassign_toplevel_mem:
   !d ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
+    ~cx.txn.is_static /\
     (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
     expr_body_pre cenv cx env e es /\
     get_module_code cx src = SOME ts /\
@@ -753,6 +754,7 @@ Finalise compile_augassign_toplevel_mem
 
 Theorem body_augassign_toplevel_word_mem:
   !cx ty src id bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    ~cx.txn.is_static /\
     body_stmt_safe tops (AugAssign ty (TopLevelNameTarget (src,id)) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (TopLevelNameTarget (src, id)) s'' = (INL p,t') /\

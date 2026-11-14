@@ -55,6 +55,7 @@ QED
 Definition frame_ret_ok_mem_def:
   frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty <=>
     !cenv' env lctx eo es.
+      ~cx.txn.is_static /\
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
       stmt_exprs_ok cenv' (Return eo) /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\

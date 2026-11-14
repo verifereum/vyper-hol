@@ -11,7 +11,7 @@ Ancestors
 Theorem compile_mapping_subscript_outcome_mem:
   body_expr_mem_ok cx obj /\
   (!s tv t. eval_expr cx obj s = (INL tv,t) ==> body_expr_mem_ok cx idx) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
    expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
   place_type cenv obj = MapPT kt vt /\
@@ -54,7 +54,7 @@ QED
 Theorem body_subscript_map_mem:
   body_expr_mem_ok cx obj /\
   (!s tv t. eval_expr cx obj s = (INL tv,t) ==> body_expr_mem_ok cx idx) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_map_pre cenv cx env (Subscript ann obj idx) es ==>
   expr_map_sim_mem ctx func cenv cx ty (Subscript ann obj idx) es
 Proof
@@ -89,7 +89,7 @@ QED
 Theorem body_subscript_map_vv_mem:
   body_expr_mem_ok cx obj /\
   (!s tv t. eval_expr cx obj s = (INL tv,t) ==> body_expr_mem_ok cx idx) /\
-  body_inv tops ctx cenv cx /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   place_type cenv obj = MapPT kt vt ==>
   expr_vv_sim_mem ctx func cenv cx ty (Subscript ann obj idx) es

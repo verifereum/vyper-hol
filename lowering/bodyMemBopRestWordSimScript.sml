@@ -45,6 +45,7 @@ QED
 
 Theorem compile_rest_word_membership_sim_mem:
   !tops ctx func cenv cx env ty ann bop e1 e2 bd es.
+    ~cx.txn.is_static /\
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
     (bop = In \/ bop = NotIn) /\

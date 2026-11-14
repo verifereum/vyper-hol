@@ -520,6 +520,7 @@ QED
    any operand. *)
 Theorem storage_store_op_path_mem:
   !ctx func cenv cx es' s tr kop slot op w st st'.
+    ~cx.txn.is_static /\
     emit_void (if tr then TSTORE else SSTORE) [kop; op] st = ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
@@ -540,7 +541,7 @@ Proof
   `~s.vs_call_ctx.cc_static` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
-     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def, call_ctx_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
@@ -577,6 +578,7 @@ QED
 Theorem compile_augassign_attr_storage_mem[local]:
   !d ctx func cx lctx RetQ cenv ty0 env src id fld sid ty fsz bop e es
    ts tr id_str slot fs off ftv.
+    ~cx.txn.is_static /\
     (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
     expr_body_pre cenv cx env e es /\
     get_module_code cx src = SOME ts /\
@@ -875,6 +877,7 @@ Finalise compile_augassign_attr_storage_mem
 
 Theorem body_augassign_attr_storage_mem:
   !cx ty src id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    ~cx.txn.is_static /\
     body_stmt_safe tops (AugAssign ty (AttributeTarget (TopLevelNameTarget (src,id)) fld) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld) s'' = (INL p,t') /\

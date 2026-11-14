@@ -30,7 +30,7 @@ Theorem body_append_storage_fragment_mem:
   body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
   (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
              body_expr_mem_ok cx e) /\
-  body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
+  ~cx.txn.is_static /\ body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
   supported_expr tops e /\ expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
