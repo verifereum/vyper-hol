@@ -141,7 +141,7 @@ Proof
   simp[GSYM bind_assoc, bind_def]
 QED
 
-Theorem augassign_attr_rhs_normal_mem_src[local]:
+Theorem augassign_attr_rhs_normal_mem_src:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\

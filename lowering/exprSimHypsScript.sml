@@ -1008,18 +1008,6 @@ Proof
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
 
-Theorem expr_body_pre_read_value_typed[local]:
-  !cenv cx env e es v es'.
-    expr_body_pre cenv cx env e es /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-    value_runtime_typed env (expr_type e) v
-Proof
-  rpt strip_tac >>
-  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
-  disch_then (qspec_then `env` mp_tac) >>
-  gvs[expr_body_pre_def, expr_sim_inv_def]
-QED
-
 (* concat(...) evaluation and buffer sizing, shared with exprSimConcatResult. *)
 Theorem eval_expr_concat_bind:
   !cx ann n args.

@@ -494,7 +494,7 @@ val () = cv_auto_trans subst_consts_fn_def;
 
 (* Executable coverage regressions: declaration order, single-step replacement,
    qualified references, nested lvalue indices and expression-bearing reasons. *)
-Theorem module_consts_env_chain[local]:
+Theorem module_consts_env_chain:
   module_consts_env
     [VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 7)))
        "A" (BaseT (UintT 256)) NONE;
@@ -506,7 +506,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem subst_consts_reference_boundaries[local]:
+Theorem subst_consts_reference_boundaries:
   subst_consts_expr
     [("A",TopLevelName NoneT (NONE,"B")); ("B",Literal NoneT (IntL 7))]
     (TopLevelName NoneT (NONE,"A")) = TopLevelName NoneT (NONE,"B") /\
@@ -518,7 +518,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem subst_consts_nested_targets[local]:
+Theorem subst_consts_nested_targets:
   subst_consts_target [("A",Literal NoneT (IntL 7))]
     (TupleTarget [BaseTarget
       (SubscriptTarget (AttributeTarget
@@ -533,7 +533,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem subst_consts_defaults_bodies_reasons[local]:
+Theorem subst_consts_defaults_bodies_reasons:
   subst_consts_fn [("A",Literal NoneT (IntL 7))]
     (View,F,F,"__default__",[],[TopLevelName NoneT (NONE,"A")],NoneT,
       [For "i" NoneT (Range (TopLevelName NoneT (NONE,"A"))
@@ -558,7 +558,7 @@ QED
 
 (* Symbolic regressions: exercise the fold interface without evaluating a
    concrete cryptographic hash inside the proof. *)
-Theorem fold_const_literal_sha256[local]:
+Theorem fold_const_literal_sha256:
   fold_const_expr (Builtin ty Sha256 [Literal aty (BytesL bs)]) =
     Literal ty (BytesL (word_to_bytes (SHA_256_bytes bs : bytes32) T)) /\
   fold_const_expr (Builtin ty Sha256 [Literal aty (StringL s)]) =
@@ -568,7 +568,7 @@ Proof
   simp[fold_const_expr_def, fold_const_builtin_def]
 QED
 
-Theorem fold_const_nested_sha256[local]:
+Theorem fold_const_nested_sha256:
   fold_const_expr
     (Builtin ty Sha256 [Builtin aty Sha256 [Literal bty (BytesL bs)]]) =
   Literal ty (BytesL (word_to_bytes
@@ -577,7 +577,7 @@ Proof
   simp[fold_const_expr_def, fold_const_builtin_def]
 QED
 
-Theorem fold_const_nonliteral_sha256[local]:
+Theorem fold_const_nonliteral_sha256:
   fold_const_expr (Builtin ty Sha256 [TopLevelName aty (NONE,id)]) =
     Builtin ty Sha256 [TopLevelName aty (NONE,id)] /\
   ~no_sha256_expr
@@ -586,7 +586,7 @@ Proof
   simp[fold_const_expr_def, fold_const_builtin_def, no_sha256_expr_def]
 QED
 
-Theorem no_sha256_hidden_children[local]:
+Theorem no_sha256_hidden_children:
   ~no_sha256_expr (StructLit ty ns [(id,Builtin aty Sha256 [])]) /\
   ~no_sha256_expr (Builtin ty Len [Builtin aty Sha256 []]) /\
   ~no_sha256_expr (Call ty ct [] (SOME (Builtin aty Sha256 []))) /\
@@ -596,7 +596,7 @@ Proof
   simp[no_sha256_expr_def]
 QED
 
-Theorem subst_consts_runtime_sha256[local]:
+Theorem subst_consts_runtime_sha256:
   subst_consts_expr [] (Builtin ty Sha256 [Literal aty (BytesL bs)]) =
     Builtin ty Sha256 [Literal aty (BytesL bs)]
 Proof

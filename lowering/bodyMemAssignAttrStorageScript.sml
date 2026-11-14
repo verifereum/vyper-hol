@@ -159,7 +159,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem vv_post_emit_cursor_mem_src[local]:
+Theorem vv_post_emit_cursor_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
   sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\

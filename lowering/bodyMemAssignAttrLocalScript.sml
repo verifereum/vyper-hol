@@ -393,7 +393,7 @@ Proof
   simp[Abbr `u`, lookup_var_def, mstore_def]
 QED
 
-Theorem assign_attr_local_suffix_mem[local]:
+Theorem assign_attr_local_suffix_mem:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   emit_op ADD [Var p; Lit (n2w (struct_field_offset fields fld))] sm = (dst,sn) /\
