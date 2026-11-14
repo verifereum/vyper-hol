@@ -242,7 +242,7 @@ Proof
   irule scalar_abort_origin_edge >> simp[] >> metis_tac[]
 QED
 
-Theorem scalar_convert_straight[local]:
+Theorem scalar_convert_straight:
   valid_conversion src dst /\ ~is_bytestring_type src ==>
   straight_fresh (compile_type_convert x (case dst of FlagT name =>
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
