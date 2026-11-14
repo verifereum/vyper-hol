@@ -117,10 +117,14 @@ Proof
 QED
 
 Theorem supported_append_target_expr_exclusion[local]:
+  (!e. supported_expr tops e ==> ~supported_expr_exists p e) /\
   supported_append_target tops target ==> ~supported_target_exists p target
 Proof
   Cases_on `target` >>
-  simp[supported_append_target_def, supported_expr_exists_def]
+  simp[supported_append_target_def, supported_target_pure_def,
+       supported_expr_exists_def] >>
+  metis_tac[supported_target_pure_expr_exclusion, supported_expr_def,
+            supported_expr_exists_def]
 QED
 
 Theorem supported_stmts_type_builtin_exclusion:
