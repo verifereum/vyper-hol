@@ -8,27 +8,6 @@ Ancestors
   vyperValue valueEncoding exprSimWordArgs stmtSimDefs localPtrsProps vyperState exprBopSimProps
   placeTypedCopyPath stmtSimProps emitHelperProps venomExecSemantics venomInst venomState exprSimUint2Str loweringPosts
 
-Theorem outcome_zero_suffix[local]:
-  gas_outcome F tops (ctx,func) source (es,s0) Q R /\
-  (!res ee u. Q res ee u /\ ~u.vs_halted ==>
-    ?v. gas_marked_path F ctx func u 0 (OK v) /\ Q' res ee v) ==>
-  gas_outcome F tops (ctx,func) source (es,s0) Q' R
-Proof
-  rw[gas_outcome_def] >> qexists_tac `marks` >>
-  Cases_on `gas_summary_at F (ctx,func) marks source (es,s0) Q R`
-  >- (disj1_tac >>
-      fs[gas_summary_at_def] >>
-      gvs[]
-      >- (`~t.vs_halted` by
-            (fs[gas_marked_exec_def, gas_marked_path_def] >>
-             metis_tac[cj 1 gas_path_normal]) >>
-          first_x_assum drule_all >> strip_tac >>
-          qexistsl_tac [`res`, `es_end`, `OK v`] >>
-          simp[] >> fs[gas_marked_exec_def] >>
-          metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]) >>
-      metis_tac[]) >>
-  metis_tac[]
-QED
 
 Theorem assign_join_path[local]:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
@@ -65,43 +44,58 @@ QED
 
 Theorem normalized_arm_join_outcome[local]:
   (~expr_has_effect (IfExp ann c a b) ==> ~expr_has_effect (IfExp ann nc na nb)) /\
-  gas_outcome F tops (ctx,func) source (es1,jump_to lbl tt)
-    (\res ee u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
+  gas_outcome F tops (ctx,func) cx st0 source (es1,jump_to lbl tt)
+    (\H res ee u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post H ctx func ce cx (IfExp ann nc na nb) es1 sc sd
         (jump_to lbl tt) ee v op u /\
       (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
         (LocatedValue ann (mk_ptr op LocMemory)) u) /\
       u.vs_current_bb = sd.cs_current_bb /\
       u.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\res ee r. expr_exit res r) /\
+    (\H res ee r. expr_exit res r) /\
   emit_inst ASSIGN [op] [rv] sd = ((),se) /\
   emit_inst JMP [Label xl] [] se = ((),sf) /\
   fn_has_code sd se func /\ fn_has_code se sf func /\
   sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
-  expr_post H ctx func ce cx c es sa s1 s0 es1 cv cop tt /\
+  (!H. valid_horizon cx st0 H es1.storage_trace ==>
+    expr_post H ctx func ce cx c es sa s1 s0 es1 cv cop tt /\
+    stmt_state_rel H ctx func ce cx es s0) /\
+  storage_trace_frame source /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
   sd.cs_next_id <= sb.cs_next_id ==>
-  gas_outcome F tops (ctx,func) source (es1,jump_to lbl tt)
-    (\res ee u. ?tv. res = INL tv /\
+  gas_outcome F tops (ctx,func) cx st0 source (es1,jump_to lbl tt)
+    (\H res ee u. ?tv. res = INL tv /\
       vv_post H ctx func ce cx (IfExp ann c a b) es sa sb s0 ee tv
         (if is_word_type ann then StackValue ann (Var rv)
          else LocatedValue ann (mk_ptr (Var rv) LocMemory)) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = 0)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
-  strip_tac >> irule outcome_zero_suffix >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  strip_tac >>
+  qpat_assum `gas_outcome _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ifexp_root_outcome_suffix) >>
+  disch_then irule >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> simp[] >> strip_tac >>
-  `?w. eval_operand op u = SOME w` by
-    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `?w. eval_operand op u = SOME w /\
+       u.vs_current_bb = sd.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sd.cs_current_insts` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> ?tv v. _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   drule_all assign_join_path >> disch_then assume_tac >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH se.cs_current_insts)` >>
-  conj_tac >- metis_tac[] >>
+  conj_tac >- fs[gas_marked_path_def] >>
+  qx_gen_tac `H1` >> strip_tac >>
+  `?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
+      expr_post H1 ctx func ce cx (IfExp ann nc na nb) es1 sc sd
+        (jump_to lbl tt) ee v op u /\
+      (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
+        (LocatedValue ann (mk_ptr op LocMemory)) u)` by metis_tac[] >>
   qexists_tac `tv` >> simp[] >>
   reverse conj_tac >- simp[jump_to_def] >>
   irule normalized_ifexp_root_vv_post >> metis_tac[]
@@ -158,16 +152,24 @@ Proof
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
   simp[expr_sim_def] >> disch_then drule_all >> strip_tac >>
   rewrite_tac[ifexp_forced_source] >>
-  irule gas_outcome_bind_value >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
-  suspend "condition_outcome"
-QED
-
-Resume widened_ifexp_vv_sim[condition_outcome]:
+  irule (INST_TYPE [alpha |-> ``:eval_result``]
+    stmtReasonVvMemoryTheory.gas_outcome_bind_value) >>
+  conj_tac >- (gen_tac >> simp[] >> rpt IF_CASES_TAC >>
+    simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_conditional_result,
+       vyperStorageTraceTheory.storage_trace_frame_raise]) >>
+  first_assum (irule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   reverse conj_tac >-
     (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >>
      metis_tac[expr_exit_INR_type]) >>
   rpt gen_tac >> simp[] >> strip_tac >>
+  qabbrev_tac `H = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    fs[Abbr `H`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  fs[] >>
   `vyperState$bind (eval_expr cx c) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL v,mid with gas_obs := [])` by
@@ -177,15 +179,16 @@ Resume widened_ifexp_vv_sim[condition_outcome]:
      simp[gas_admissible_def] >>
      disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
      simp[] >> metis_tac[]) >>
-  qexists_tac `v` >> simp[] >>
+  simp[] >>
+  `expr_post H ctx func ce cx c es sa s1 s0 (mid with gas_obs := []) v cond_op t` by
+    metis_tac[] >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_def, gas_marked_path_def] >>
      metis_tac[cj 1 gas_path_normal]) >>
   `eval_operand cond_op t = SOME (if sel then 1w else 0w)` by
-    (qpat_x_assum `expr_post H _ _ _ _ c _ _ _ _ _ _ _ _` mp_tac >>
-     `post_value_type ce c = BaseT BoolT` by
+    (`post_value_type ce c = BaseT BoolT` by
        metis_tac[post_value_type_word, is_word_type_def] >>
-     simp[expr_post_def, expr_val_rel_def, is_word_type_def,
+     fs[expr_post_def, expr_val_rel_def, is_word_type_def,
        evaluate_type_def, typed_val_to_w256_def, val_to_w256_def]) >>
   `gas_marked_path F ctx func t 0 (OK (jump_to (if sel then tl else el) t))` by
     (simp[gas_marked_path_def] >> irule assert_jnz_zero_path >>
@@ -203,11 +206,8 @@ Resume widened_ifexp_vv_sim[condition_outcome]:
     (drule (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
   `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
-  suspend "selected_branch"
-QED
-
-Resume widened_ifexp_vv_sim[selected_branch]:
-  Cases_on `sel` >> gvs[] >>
+  all_tac >>
+  Cases_on `sel` >> (gvs[] >>
   drule_at (Pat `expr_vv_sim _ _ _ _ _ _ _`) selected_ifexp_arm_outcome >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   simp[] >>
@@ -217,20 +217,39 @@ Resume widened_ifexp_vv_sim[selected_branch]:
       simp[stmt_state_rel_jump_to] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
   qmatch_asmsub_rename_tac `gas_marked_path F ctx func t 0 (OK (jump_to lbl t))` >>
-  qpat_x_assum `!s0' env' c' b' a'. _`
-    (qspec_then `jump_to lbl t` mp_tac) >>
+  qpat_x_assum `!st0' s0' env' c' b' a'. _`
+    (qspecl_then [`st0`, `jump_to lbl t`] mp_tac) >>
   disch_then (qspec_then `env` mp_tac) >>
   disch_then (qspecl_then [`c`, `b`, `a`] mp_tac) >>
   (impl_tac >- (simp[stmt_state_rel_jump_to, jump_to_def] >>
-    metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans])) >>
+    conj_tac >- (irule fn_has_code_mid >>
+      simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[] >>
+      metis_tac[cs_extends_trans]) >>
+    conj_tac >- (rpt strip_tac >>
+      first_x_assum (drule_then mp_tac) >>
+      simp[expr_post_def]) >>
+    first_assum ACCEPT_TAC)) >>
   disch_then assume_tac >>
   irule gas_outcome_zero_prefix_any >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
   irule normalized_arm_join_outcome >>
   simp[] >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> metis_tac[]
+  conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+    vyperStorageTraceTheory.storage_trace_frame_conditional_result,
+    cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  first_assum (irule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  qexists_tac `s1` >>
+  qexistsl_tac [`BoolV (eval_operand cond_op t = SOME 1w)`, `cond_op`] >> simp[] >>
+  rpt strip_tac >>
+  `valid_horizon cx st0 H' es.storage_trace` by
+    (qpat_assum `vyperState$bind _ _ _ = _`
+       (mp_then (Pat `_ _ = _`) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  qpat_x_assum `!H. valid_horizon _ _ _ es.storage_trace ==> _`
+    (qspec_then `H'` mp_tac) >> simp[])
 QED
 
-Finalise widened_ifexp_vv_sim

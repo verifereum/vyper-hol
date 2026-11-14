@@ -4,6 +4,7 @@ Theory tuplePlaceHead
 Ancestors
   tuplePlacePrefix tuplePlaceBorrowStore abiEncoderSourceTransport
   tupleMemoryFrame exprSimCopy valueEncodingProofs valueEncodingProps vyperTypeDefaults list
+  loweringPosts
 Libs monadsyntax
 
 Definition tuple_place_head_def:
@@ -100,7 +101,7 @@ Proof
     mp_tac tuple_place_assignment_prefix_path >>
   impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   strip_tac >>
-  qexistsl_tac [`t`, `w`] >> simp[] >> irule tuple_place_head_intro >>
+  qexistsl_tac [`t`, `w`] >> simp[] >> match_mp_tac tuple_place_head_intro >>
   conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (rpt strip_tac >- res_tac >>

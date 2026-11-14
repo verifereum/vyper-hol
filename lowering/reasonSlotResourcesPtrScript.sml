@@ -121,7 +121,7 @@ Proof
   `ptr_covers G1 tn1 slot t 32` by
     (simp[Abbr `G1`, Abbr `tn1`] >> irule alloca_step_ptr_covers >>
      simp[wordsTheory.dimword_def] >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]) >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]) >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all reason_encoder_alloc_path_ptr >> simp[Abbr `G1`, Abbr `tn1`]) >>
@@ -180,7 +180,7 @@ Resume reason_slot_initialize_resources_ptr[covers]:
   qpat_x_assum `!p k. ptr_covers _ _ p s1 k ==> _` irule >>
   simp[Abbr `s1`] >>
   irule alloca_step_old_ptr_covers >> simp[wordsTheory.dimword_def] >>
-  qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]
+  qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]
 QED
 
 Finalise reason_slot_initialize_resources_ptr
@@ -222,7 +222,7 @@ Proof
      (i IN tn1.t_mem <=> i IN tn.t_mem))` by
     (qpat_x_assum `tn1 = _` SUBST_ALL_TAC >>
      irule reason_alloca_exterior_effects >> simp[wordsTheory.dimword_def] >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]) >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es`, `func`] >> simp[]) >>
   `lookup_var tuple t = lookup_var tuple s` by suspend "lookup" >>
   qexistsl_tac [`G1`, `tnf`, `sf`, `a`] >> simp[] >>
   conj_tac >- suspend "length" >>
