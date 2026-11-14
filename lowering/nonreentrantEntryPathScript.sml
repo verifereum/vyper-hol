@@ -248,7 +248,8 @@ Proof
       simp[] >> Cases_on `iv` >>
       gvs[transient_lock_code_execution, stmt_state_rel_def,
           immutable_alloca_sep_def, immutable_base_zero_def,
-          local_region_def, tstore_def, eval_operand_def, lookup_var_def]) >>
+          local_region_def, tstore_def, eval_operand_def, lookup_var_def] >>
+      rpt strip_tac >> fs[]) >>
   Cases_on `iv` >> gvs[transient_lock_code_execution]
   >- fs[ghost_inv_def] >>
   irule nonreentrant_ghost_inv_frame >>
