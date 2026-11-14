@@ -1,6 +1,6 @@
 Theory dftGasFocusStep
 Ancestors
-  dftGasMask dftGasFromListTraceSuccessor dftGasFromListTraceNames
+  dftGasPacketRefinement dftGasFromListTraceSuccessor dftGasFromListTraceNames
   dftGasFromListReadings dftGasFromListTracePrefix dftGasFromListTraceDefs
   dftGasFromListLookup
   dftGasFromListTraceLift dftGasFromListOpenTrace frameExecutionPrefix
