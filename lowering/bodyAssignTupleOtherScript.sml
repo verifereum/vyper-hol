@@ -15,6 +15,11 @@ Ancestors
   list finite_map vyperTypeValues exprSimHyps valueEncoding compileEnv vyperState supportedExprForms supportedTargets
   supportedStmtTraverse supportedExprTraverse gasContext vyperTypeCallGraph
   vyperTypeCallStackSoundness allocLimits targetPlaceLive
+  tupleAssignImmutableDeploy tupleAssignImmutableDeployPremises
+  exprSimIfExpCompat exprSimSource aggregateEvaluatedLayout
+  tupleTargetStoreProps tupleMemoryLayout compileVyper vyperCompiler
+  vyperTypeArgFits vyperAST
+  bodyAugPlaceTarget
 
 (* A supported, typed tuple assignment with an element outside
    body_assign_tuple_targets' (a local of nonzero size, a word scalar, a word
@@ -90,10 +95,9 @@ Proof
   >- (Cases_on `t` >> gvs[] >> metis_tac[])
 QED
 
-(* RESIDUAL: an immutable among the targets, assigned in the constructor.
-   The lowering keeps it in code (LocCode), which nothing relates to the
-   source's immutables yet (targetPlaceSim's immutable_root); it waits on a
-   strengthening of immutable_alloca_sep and body_inv. *)
+(* Constructor tuples use the ordinary snapshot alternatives. Each target
+   consumes its head in source order; immutable stores retain the code
+   allocation relation, and mutable targets use their actual endpoint. *)
 Theorem immutable_deploy_tuple_assign:
   !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
@@ -116,7 +120,105 @@ Theorem immutable_deploy_tuple_assign:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `cx.in_deploy` by (fs[EXISTS_MEM] >> metis_tac[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (`supported_expr tops e` by
+       gvs[supported_stmt_def, supported_assignment_def] >>
+     `well_typed_expr env e` by gvs[type_stmt_def] >>
+     drule_then strip_assume_tac supported_expr_body_calls >>
+     `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+       gvs[body_inv_def] >>
+     `cx_tops cx = tops` by
+       (irule cx_tops_module >> gvs[body_inv_def]) >>
+     `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
+       gvs[body_inv_def] >>
+     irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+     qexists_tac `[]` >> simp[] >>
+     metis_tac[call_evaluation_safe_append_right]) >>
+  drule tuple_targets_typing >> strip_tac >> gvs[] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `gs <> []` by
+    (Cases_on `gs` >> gvs[assignable_type_def]) >>
+  `?tvs. evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs)` by
+    (`?tv. evaluate_type (get_tenv cx) (TupleT tys) = SOME tv` by
+       metis_tac[assignable_type_well_formed, well_formed_type_def,
+                 optionTheory.IS_SOME_EXISTS] >>
+     drule evaluate_type_TupleT_cases >> strip_tac >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `?ltys ltvs. lowered_value_type cenv e = TupleT ltys /\
+     arg_types_fit ltys tys /\
+     evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs)` by
+    (Cases_on `lowered_value_type cenv e = expr_type e`
+     >- (qexistsl [`tys`,`tvs`] >> simp[] >>
+         metis_tac[ifexp_arg_type_fits_refl, arg_type_fits_def]) >>
+     drule expr_body_pre_var_types_well_formed >> strip_tac >>
+     `well_typed_expr env e /\
+      sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+      (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+        cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
+       gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+           env_context_consistent_def] >>
+     drule ifexp_lowered_type_classify >>
+     disch_then (qspec_then `cenv` mp_tac) >>
+     (impl_tac >- metis_tac[]) >>
+     simp[is_bytestring_type_def] >> strip_tac >> gvs[] >>
+     drule ifexp_body_pre_intcall_physical >> strip_tac >>
+     gvs[expr_type_def] >>
+     Cases_on `lowered_value_type cenv (Call (TupleT tys) (IntCall fid) args drv)` >>
+     gvs[arg_type_fits_def] >>
+     drule evaluate_type_TupleT_cases >> strip_tac >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `cenv.ce_target CapMcopy` by
+    (qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+     rw[body_inv_def] >>
+     gvs[lower_vyper_deploy_unit_def, AllCaseEqs()] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     gvs[vyperCompilerTheory.run_deploy_lowering_def, AllCaseEqs(),
+         vyperCompilerTheory.lowering_policy_ok_def]) >>
+  `!bt. body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt` by
+    (rpt strip_tac >> irule target_case_all >>
+     irule aug_place_body_target_idx >> simp[] >> qexists_tac `tops` >> simp[]) >>
+  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target tops bindings bt /\
+     target_indices_pre cenv cx env bt /\
+     call_evaluation_safe cx (int_calls_target bt) /\
+     (body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt) /\
+     (immutable_root cx bt ==> ?nsid. bt = TopLevelNameTarget nsid /\
+       IS_SOME (supported_immutable_type tops nsid))) gs` by
+    (drule_all tuple_immutable_targets_ready >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
+  `type_memory_size (TupleTV tvs) < 2 ** 64` by
+    (drule expr_body_pre_copy_ok >>
+     disch_then (qspec_then `TupleTV tvs` mp_tac) >> simp[is_word_type_def]) >>
+  `type_memory_size (TupleTV ltvs) <= type_memory_size (TupleTV tvs)` by
+    (irule (cj 1 arg_fits_evaluated_memory_size) >>
+     goal_assum (drule_at Any) >> qexists_tac `TupleT tys` >>
+     simp[arg_type_fits_def]) >>
+  `LENGTH tvs = LENGTH tys /\ LENGTH ltvs = LENGTH tys` by
+    (imp_res_tac evaluate_type_TupleT_cases >> gvs[] >>
+     metis_tac[LIST_REL_LENGTH, arg_types_fit_LENGTH]) >>
+  `!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
+     type_memory_size (EL i tvs) + 64 < dimword (:256) /\
+     type_memory_size (EL i ltvs) + 64 < dimword (:256)` by
+    (rpt strip_tac >>
+     `type_memory_size (EL i tvs) <= type_memory_size (TupleTV tvs) /\
+      type_memory_size (EL i ltvs) <= type_memory_size (TupleTV ltvs)` by
+       (mp_tac (Q.SPECL [`tvs`,`i`] tuple_element_interval) >>
+        mp_tac (Q.SPECL [`ltvs`,`i`] tuple_element_interval) >>
+        simp[type_memory_size_def,
+             valueEncodingProofsTheory.type_memory_size_list_sum] >> decide_tac) >>
+     fs[wordsTheory.dimword_def] >> decide_tac) >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by
+    gvs[body_inv_def] >>
+  `expr_sim ctx func cenv cx (TupleT tys) e es` by
+    (gvs[body_expr_ok_def] >> metis_tac[]) >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`,
+    `env`, `tops`, `bindings`, `gs`, `e`, `es`, `tys`, `tvs`, `ltys`, `ltvs`]
+    compile_assign_tuple_mixed_stmt_frag) >>
+  impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]
 QED
 
 Theorem tuple_places_typing:

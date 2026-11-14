@@ -144,7 +144,7 @@ Proof
          int_calls_assert_reason_def] >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_assert_frag >> gvs[type_stmt_def] >>
-  fs[body_expr_ok_def] >> metis_tac[compile_expr_grows]
+  fs[Once body_expr_ok_def] >> metis_tac[compile_expr_grows]
 QED
 
 (* ===== Cases ===== *)
@@ -212,7 +212,7 @@ Proof
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
-  first_x_assum irule >> fs[body_expr_ok_def] >>
+  first_x_assum irule >> fs[Once body_expr_ok_def] >>
   conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
 QED
 
@@ -2780,7 +2780,7 @@ Proof
         expr_vv_sim ctx func cenv cx ty e es` by
     (gen_tac >>
      qpat_x_assum `body_expr_ok _ _`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
      disch_then irule >> conj_tac
      >- (qexists_tac `tops` >> simp[]) >>
      qexists_tac `env` >> simp[]) >>
@@ -2836,7 +2836,7 @@ Proof
   `expr_sim ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_ok _ _`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`,
                               `expr_type e`, `es`] mp_tac) >>
      simp[]) >>
