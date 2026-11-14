@@ -206,9 +206,10 @@ Proof
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
   mp_tac (Q.INST
-    [`dst` |-> `FST r`, `prefix` |-> `gas_explicit marks s0.vs_gas_readings`]
+    [`dst` |-> `FST (r : operand # data_location option # place_ty option)`,
+     `prefix` |-> `gas_explicit marks s0.vs_gas_readings`]
     (SPEC_ALL aug_place_loaded_storage_suffix)) >>
-  impl_tac >- (simp[] >>
+  impl_tac >- (simp[] >> rpt conj_tac >> simp[] >>
     qexistsl_tac [`offset`, `tv0`, `path`, `delta`] >> simp[]) >>
   simp[]
 QED
