@@ -294,7 +294,10 @@ Resume prefix_loop_increment_path[trace]:
       simp_tac (srw_ss()) [Abbr `a`,Abbr `k`,abi_decode_backedge_insts_def,TAKE_def]) >>
   qx_gen_tac `kk` >> strip_tac >>
   `kk = 0 \/ kk = 1` by (fs[] >> decide_tac) >>
-  pop_assum DISJ_CASES_TAC >> gvs[]
+  gvs[] >>
+  `s with vs_inst_idx := LENGTH prefix = s` by
+    simp[venom_state_component_equality] >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Finalise prefix_loop_increment_path

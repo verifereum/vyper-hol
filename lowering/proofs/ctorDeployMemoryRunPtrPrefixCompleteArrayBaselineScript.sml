@@ -112,6 +112,7 @@ Proof
   strip_tac >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
+  asm_x "child" kall_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   `st.cs_next_var <= loop_st.cs_next_var` by
     (drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
@@ -133,20 +134,7 @@ Proof
     (strip_tac >> qpat_x_assum `checked ==> !D explicit. _` drule >>
      simp_tac std_ss []) >>
   asm_simp_tac bool_ss [] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `abi_decoder_older_vars loop_st.cs_next_var x` by res_tac >>
-      qpat_x_assum `!x w. _ /\ lookup_var x initial = SOME w ==> _` drule_all >>
-      disch_tac >>
-      qpat_x_assum `!x w. _ /\ lookup_var x prepared = SOME w ==> _` irule >>
-      asm_rewrite_tac[]) >>
   conj_tac >- (irule SUBSET_TRANS >> qexists `qt.t_mem` >> asm_rewrite_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `abi_decoder_older_vars loop_st.cs_next_var x` by res_tac >>
-      qpat_x_assum `!x. _ ==> FLOOKUP Hout x = _ /\ _` drule >> strip_tac >>
-      qpat_x_assum `!x. _ ==> FLOOKUP H x = _ /\ _` drule >> strip_tac >>
-      asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `mem_bytes_at a 1 prepared.vs_memory = mem_bytes_at a 1 initial.vs_memory` by
     (qpat_x_assum `!a n. _ ==> mem_bytes_at a n prepared.vs_memory = _` irule >>

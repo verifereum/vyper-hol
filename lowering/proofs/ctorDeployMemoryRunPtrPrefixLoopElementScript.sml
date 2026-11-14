@@ -5,7 +5,7 @@ Ancestors
   exprSimUnwrap instIdxIndep ghostPcTransportPtr slotCopyExecution compileEnv
   ctorDeployMemoryRunPtrPrefixLoopHeader ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
-  ctorDeployMemoryRunPtrPrefixWordRead
+  ctorDeployMemoryRunPtrPrefixWordRead ctorDeployMemoryRunPtrPrefixLoopSlot
   ctorDeployMemoryRunPtrPrefixLoopIteration ctorAbiActualArrayBody
   ctorAbiActualArrayIteration abiDecoderTypedContract
   abiDecoderLoopSetup abiDecoderIndexedAddress abiEncoder abiDecoderContract abiDecoderReentry
@@ -435,11 +435,12 @@ Proof
      (set_prov g1 [y] (first_prov g1 [base_op;Var x]))
      (q1 with t_var := q1.t_var |+ (y,{}))` by
     (unabbrev_all_tac >> rpt gen_tac >>
+     rename1 `eval_operand head s = SOME addr` >>
      `(mk_inst iid DLOAD [head] [x]).inst_opcode <> INVOKE /\
       (mk_inst (iid+1) ADD [base_op;Var x] [y]).inst_opcode <> INVOKE` by
        simp[mk_inst_def] >>
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `off` |-> `head`,
-       `w` |-> `abi_decode_load DLOAD a s`, `D` |-> `D'`, `fuel` |-> `0`]
+       `a` |-> `addr:bytes32`, `w` |-> `abi_decode_load DLOAD (addr:bytes32) s`, `D` |-> `D'`, `fuel` |-> `0`]
        prefix_member_dload_pair) >>
      (impl_tac >- (fs[instIdxIndepTheory.eval_op_inst_idx,abi_decode_load_def,
         abi_decode_source_def,allocas_from_def] >> metis_tac[])) >>
@@ -447,13 +448,15 @@ Proof
      drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      mp_tac (Q.INST [
-       `s` |-> `update_var x (abi_decode_load DLOAD a s) s with vs_inst_idx := SUC k`,
+       `s` |-> `update_var x (abi_decode_load DLOAD (addr:bytes32) s) s with vs_inst_idx := SUC k`,
        `opc` |-> `ADD`, `a` |-> `base_op`, `b` |-> `Var x`, `u` |-> `c`,
-       `v` |-> `abi_decode_load DLOAD a s`, `G` |-> `DRESTRICT G (COMPL {x})`,
+       `v` |-> `abi_decode_load DLOAD (addr:bytes32) s`, `G` |-> `DRESTRICT G (COMPL {x})`,
        `tn` |-> `tn with t_var := tn.t_var |+ (x,{})`, `iid` |-> `iid+1`,
        `x` |-> `y`, `f` |-> `0`, `D` |-> `D'`] prefix_bool_body_arith_certificate) >>
-     (impl_tac >- gs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
-        lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def]) >>
+     (impl_tac >- (Cases_on `base_op` >>
+        gvs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
+          lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def] >>
+        metis_tac[])) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
      drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -481,6 +484,63 @@ Proof
   `op_taint tq base_op = {} /\ op_taint tq (Var x) = {}` by
     simp[Abbr `tq`,op_taint_def,FLOOKUP_UPDATE] >>
   simp[prefix_member_add_taint,Abbr `tq`]
+QED
+
+Theorem prefix_loop_element_arith_seq_facts[local]:
+  (opc = ADD \/ opc = MUL) /\
+  eval_operand a s = SOME (u:bytes32) /\ eval_operand b s = SOME v /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  allocas_from (lo:num) s /\ ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D lo 0 ctx fn G tn (mk_inst iid opc [a;b] [x]) s /\
+  step_prov PG G (mk_inst iid opc [a;b] [x])
+    (update_var x (if opc = ADD then u+v else u*v) s) =
+    set_prov G [x] (if opc = ADD then first_prov G [a;b] else NONE) /\
+  step_taint (mk_inst iid opc [a;b] [x]) s
+    (update_var x (if opc = ADD then u+v else u*v) s) tn =
+    tn with t_var := tn.t_var |+ (x,{})
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`iid` |-> `iid`, `x` |-> `x`, `G` |-> `G`,
+    `PG` |-> `PG`, `f` |-> `0`, `D` |-> `D`, `fn` |-> `fn`]
+    prefix_bool_body_arith_certificate) >>
+  (impl_tac >- simp[]) >>
+  simp[LET_THM] >> strip_tac >>
+  gvs[] >>
+  `(mk_inst iid ADD [a;b] [x]).inst_opcode <> INVOKE /\
+   (mk_inst iid MUL [a;b] [x]).inst_opcode <> INVOKE` by simp[mk_inst_def] >>
+  drule_all prefix_loop_step_seq_facts >> strip_tac >>
+  simp[prefix_member_add_taint,prefix_loop_element_mul_taint]
+QED
+
+Theorem prefix_loop_element_arith_seq_cons[local]:
+  (opc = ADD \/ opc = MUL) /\
+  eval_operand a s = SOME (u:bytes32) /\ eval_operand b s = SOME v /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  allocas_from (lo:num) s /\ ~ctx_has_dalloca ctx /\
+  inst_seq_ptr D lo ctx fn PG
+    (set_prov G [x] (if opc = ADD then first_prov G [a;b] else NONE))
+    (tn with t_var := tn.t_var |+ (x,{})) rest
+    ((update_var x (if opc = ADD then u+v else u*v) s)
+      with vs_inst_idx := SUC s.vs_inst_idx) H qt ==>
+  inst_seq_ptr D lo ctx fn PG G tn
+    (mk_inst iid opc [a;b] [x]::rest) s H qt
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst iid opc [a;b] [x]) s =
+    OK (update_var x (if opc = ADD then u+v else u*v) s)` by
+    (gvs[] >>
+     metis_tac[slotCopyExecutionTheory.slot_copy_step_add,
+       slotCopyExecutionTheory.slot_copy_step_mul]) >>
+  simp[inst_seq_ptr_def] >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst iid opc [a;b] [x]) s /\
+   step_prov PG G (mk_inst iid opc [a;b] [x])
+     (update_var x (if opc = ADD then u+v else u*v) s) =
+     set_prov G [x] (if opc = ADD then first_prov G [a;b] else NONE) /\
+   step_taint (mk_inst iid opc [a;b] [x]) s
+     (update_var x (if opc = ADD then u+v else u*v) s) tn =
+     tn with t_var := tn.t_var |+ (x,{})` by
+    (irule prefix_loop_element_arith_seq_facts >> simp[]) >>
+  gvs[]
 QED
 
 Theorem prefix_loop_element_indexed_uniform_pair:
@@ -552,40 +612,21 @@ Proof
        (Cases_on `prov` >>
         simp[first_prov_def,op_prov_def,set_prov_def,FLOOKUP_UPDATE,
           FLOOKUP_DRESTRICT]) >>
-     mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `opc` |-> `ADD`,
-       `a` |-> `dst`, `b` |-> `Lit 32w`, `u` |-> `d`, `v` |-> `32w`,
-       `f` |-> `0`, `D` |-> `D'`] prefix_bool_body_arith_certificate) >>
-     (impl_tac >- fs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
-        op_taint_def,allocas_from_def]) >>
-     simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_step_seq_facts >>
-     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-     mp_tac (Q.INST [
-       `s` |-> `update_var x (d+32w) s with vs_inst_idx := SUC k`,
-       `opc` |-> `MUL`, `a` |-> `idx`, `b` |-> `Lit stride`, `u` |-> `j`,
-       `v` |-> `stride`, `G` |-> `set_prov G [x] prov`,
-       `tn` |-> `tn with t_var := tn.t_var |+ (x,{})`, `iid` |-> `iid+1`,
-       `x` |-> `y`, `f` |-> `0`, `D` |-> `D'`] prefix_bool_body_arith_certificate) >>
-     (impl_tac >- gs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
-        lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def]) >>
-     simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_step_seq_facts >>
-     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-     mp_tac (Q.INST [
-       `s` |-> `update_var y (j*stride) (update_var x (d+32w) s) with
-                  vs_inst_idx := SUC (SUC k)`,
-       `opc` |-> `ADD`, `a` |-> `Var x`, `b` |-> `Var y`, `u` |-> `d+32w`,
-       `v` |-> `j*stride`, `G` |-> `set_prov (set_prov G [x] prov) [y] NONE`,
-       `tn` |-> `tn with t_var := tn.t_var |+ (x,{}) |+ (y,{})`,
-       `iid` |-> `iid+2`, `x` |-> `z`, `f` |-> `0`, `D` |-> `D'`]
-       prefix_bool_body_arith_certificate) >>
-     (impl_tac >- gs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
-        lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def]) >>
-     simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_step_seq_facts >>
-     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-     simp[inst_seq_ptr_def,prefix_member_add_taint,prefix_loop_element_mul_taint,
-       prefix_loop_element_taint_rules,FLOOKUP_UPDATE]) >>
+     `!k. allocas_from lo (s with vs_inst_idx := k)` by
+       (fs[allocas_from_def] >> metis_tac[]) >>
+     irule prefix_loop_element_arith_seq_cons >>
+     simp[op_taint_def,eval_operand_def] >>
+     irule prefix_loop_element_arith_seq_cons >>
+     simp[op_taint_def,eval_operand_def,
+       instIdxIndepTheory.update_var_idx] >>
+     conj_tac >- (simp[allocas_from_def,update_var_def] >> metis_tac[allocas_from_def]) >>
+     simp[] >>
+     irule prefix_loop_element_arith_seq_cons >>
+     simp[instIdxIndepTheory.update_var_idx,instIdxIndepTheory.eval_op_inst_idx,
+       update_var_def,prefix_loop_element_taint_rules,op_taint_def,
+       eval_operand_def,lookup_var_def,FLOOKUP_UPDATE,inst_seq_ptr_def] >>
+     (qpat_x_assum `allocas_from lo s` mp_tac >>
+      simp[allocas_from_def])) >>
   qexistsl [`g3`,`q3`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (Cases_on `prov` >> simp[Abbr `g3`,set_prov_def,FLOOKUP_UPDATE,FLOOKUP_DRESTRICT]) >>
@@ -808,8 +849,12 @@ Proof
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `D` |-> `D'`,
        `fuel` |-> `0`, `iid` |-> `st.cs_next_id`,
        `x` |-> `"%" ++ toString st.cs_next_var`] prefix_loop_element_mload_pair) >>
-     (impl_tac >- fs[instIdxIndepTheory.eval_op_inst_idx,allocas_from_def]) >>
+     (impl_tac >- (fs[instIdxIndepTheory.eval_op_inst_idx,allocas_from_def] >> metis_tac[])) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
+     gvs[] >>
+     `(mk_inst st.cs_next_id MLOAD [Var ip]
+        [STRING #"%" (toString st.cs_next_var)]).inst_opcode <> INVOKE` by
+       simp[mk_inst_def] >>
      drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      simp[inst_seq_ptr_def]) >>
@@ -818,7 +863,8 @@ Proof
       s (update_var ("%" ++ toString st.cs_next_var) (mload (w2n p) s) s) tn`] >>
   simp[] >>
   conj_tac
-  >- simp[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
+  >- (gvs[] >> first_assum MATCH_ACCEPT_TAC) >>
+  conj_tac >- simp[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
   conj_tac >- simp[update_var_def] >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `op` >>
@@ -1084,6 +1130,7 @@ Proof
      qpat_x_assum `emitted_insts st c4 = _` SUBST1_TAC >>
      simp_tac std_ss [APPEND_ASSOC]) >>
   qexistsl [`H4`,`q4`] >> simp[] >>
+  conj_tac >- (qpat_x_assum `!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st c4) _ H4 q4` mp_tac >> simp[]) >>
   conj_tac
   >- (gen_tac >> disch_tac >>
       `not_fresh_at c1 v /\ not_fresh_at c2 v /\ not_fresh_at c3 v` by

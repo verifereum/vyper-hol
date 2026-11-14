@@ -159,6 +159,16 @@ Proof
 QED
 
 
+Theorem prefix_complete_array_position_cfg_zero[local]:
+  abi_decode_position_loop_cfg func hdr body_lbl exit_lbl hid ip src opc (Lit 0w) hv ==>
+  abi_decode_loop_cfg func hdr body_lbl exit_lbl hid ip src opc
+    (STRING #"%" (toString hv)) (STRING #"%" (toString (hv+1)))
+    (STRING #"%" (toString (hv+2))) (STRING #"%" (toString (hv+3)))
+Proof
+  simp[abi_decode_position_loop_cfg_def,abi_decode_loop_cfg_def,
+    abi_decode_position_header_zero]
+QED
+
 Theorem prefix_complete_array_header_reach_pair_mode:
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src dst
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
@@ -224,6 +234,9 @@ Proof
        (irule canonical_dynamic_array_head_min >> simp[contractABITheory.is_dynamic_def]) >>
      `sb < dimword(:256)` by decide_tac >>
      fs[w2n_n2w,Excl "enc_def"] >> decide_tac) >>
+  drule prefix_complete_array_position_cfg_zero >> strip_tac >>
+  `header_var + 4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all prefix_complete_array_header_pair_mode >>
   disch_then (mp_tac o SPEC_ALL) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -260,11 +273,11 @@ Proof
   simp_tac bool_ss [transitive_def] >>
   map_every qx_gen_tac [`x`,`y`,`z`] >>
   PairCases_on `x` >> PairCases_on `y` >> PairCases_on `z` >>
-  simp_tac std_ss [] >> strip_tac >> rpt conj_tac
-  >~ [`checked ==> _`]
+  simp_tac std_ss [] >> strip_tac >>
+  reverse conj_tac
   >- (strip_tac >> fs[] >> rpt strip_tac >>
       metis_tac[gas_path_mem_then,ADD_0,gas_origin_ptr_path_trans]) >>
-  metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF]
+  rpt conj_tac >> metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF]
 QED
 
 
@@ -498,7 +511,7 @@ Proof
           (qspecl_then [`D'`,`LENGTH st.cs_current_insts`] mp_tac) >>
         pop_assum (fn th => rewrite_tac[th])) >>
      simp[Abbr `prepared`] >> rpt strip_tac >>
-     irule emitted_origin_ptr_path >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     irule emitted_origin_ptr_path >> metis_tac[]) >>
   drule_all prefix_complete_array_setup_ambient >> strip_tac >>
   `(^Ok) k ctx func site ids D N d
      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
@@ -604,8 +617,8 @@ Proof
     (drule prefix_complete_array_header_support >> simp[]) >>
   `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
     phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_loop_cfg_def,abi_decode_header_insts_def,
-      phi_prefix_length_def,mk_inst_def]) >>
+    (fs[abi_decode_position_loop_cfg_def,abi_decode_position_header_zero,
+      abi_decode_header_insts_def,phi_prefix_length_def,mk_inst_def]) >>
   `mem_bytes_at (sb + abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j)
     (LENGTH (enc (vyper_to_abi_type env ty) (EL j avs))) prepared.vs_data_section =
     enc (vyper_to_abi_type env ty) (EL j avs)` by simp[Excl "enc_def"] >>
@@ -670,7 +683,7 @@ Proof
     irule ctor_checked_array_child_section_at_index >>
     qpat_assum `abi_decoder_metadata _ _ (ArrayT _ _) _ _ _ _` (irule_at Any) >>
     asm_simp_tac (srw_ss()) [contractABITheory.enc_def,LET_THM] >>
-    qpat_assum `abi_decoder_ranges DLOAD _ _ _ _ _ _ _ _ _ _ initial` (irule_at Any) >>
+    qpat_assum `abi_decoder_ranges DLOAD _ _ _ _ _ _ _ _ _ _ _ initial` (irule_at Any) >>
     qexists_tac `sf` >> simp[Excl "enc_def"])) >>
   strip_tac >> suspend "compose"
 QED

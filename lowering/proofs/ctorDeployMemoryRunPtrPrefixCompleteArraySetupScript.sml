@@ -200,7 +200,7 @@ Proof
           `fn` |-> `func`, `a` |-> `n2w sb`, `ys` |-> `[]`, `G'` |-> `H`, `tn'` |-> `qt`]
           prefix_copy_count_success_ptr) >>
         simp[LET_THM, inst_seq_ptr_def, Abbr `H`, Abbr `qt`]) >>
-     irule emitted_origin_ptr_path >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     irule emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
   qexistsl [`raw with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
   suspend "package"
 QED
@@ -316,7 +316,7 @@ Proof
        i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def,is_terminator_def] >>
      rpt strip_tac >>
-     irule emitted_origin_ptr_path >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     irule emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
   asm_simp_tac bool_ss [] >>
   conj_tac >-
@@ -409,12 +409,12 @@ Proof
      `fn_inst_ids_distinct func /\ alloca_history func s` by metis_tac[] >>
      drule_all ctor_checked_index_endpoint >>
      disch_then (qspec_then `ctx` strip_assume_tac) >>
-     rpt conj_tac >- simp[] >- simp[] >>
+     rpt conj_tac >- gvs[] >- gvs[] >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def,is_terminator_def] >>
      rpt strip_tac >>
-     irule emitted_origin_ptr_path >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     irule emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`p`,`H`,`qt`] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
   simp[eval_op_inst_idx] >>
