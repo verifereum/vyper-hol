@@ -156,7 +156,7 @@ Theorem deploy_correct_at_tail[local]:
   run_call es = SOME (r, es') /\
   deploy_storage_ok tops am tx vs.vs_outcomes
     (gas_explicit marks vs.vs_gas_readings ++ tail) ==>
-  frame_resource_starved es r es' \/
+  creation_resource_starved es r es' \/
   deploy_result_rel
     (storage_trace_horizon
        (deploy_storage_trace (SOME vs.vs_outcomes)
@@ -245,7 +245,7 @@ Theorem e2e_deploy_correct_from_gas_link:
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t) /\
     run_call es = SOME (r, es') /\
-    (frame_resource_starved es r es' \/
+    (creation_resource_starved es r es' \/
      gas_readings_rel (gas_readings es)
        (\gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs ==>
              ?vs marks tail.
@@ -263,11 +263,11 @@ Theorem e2e_deploy_correct_from_gas_link:
                     (deploy_entry_state prog cplan tops es)) /\
                deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs) T)
     ==>
-    frame_resource_starved es r es' \/
+    creation_resource_starved es r es' \/
     deploy_call_result_rel tops runtime_bc am tx es r es'
 Proof
   rpt strip_tac >>
-  Cases_on `frame_resource_starved es r es'` >> fs[] >>
+  Cases_on `creation_resource_starved es r es'` >> fs[] >>
   simp[deploy_call_result_rel_def] >>
   drule gas_readings_rel_mono >> disch_then irule >>
   rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
