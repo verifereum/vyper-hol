@@ -33,11 +33,14 @@ Theorem owned_target_relayout_store_outcome:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
     (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
-  target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
-    (dst,SOME loc,SOME (ValPT dty)) s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
+      (dst,SOME loc,SOME (ValPT dty)) s /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ storage_place_observed H p) /\
   expr_val_own cenv cx sty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
@@ -54,7 +57,7 @@ Theorem owned_target_relayout_store_outcome:
   expr_sim_inv cenv cx env ee /\ acyclic_struct_metadata cenv.ce_struct_fields /\
   assign_alloc_ok cenv bt e /\ lowered_value_type cenv e = sty /\
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-  cenv.ce_target CapMcopy /\ storage_place_region cx p /\
+  cenv.ce_target CapMcopy /\
   write_place cx p v ee = (res,ff) /\ stmt_res_ok lctx res /\
   local_ptrs_reserved cenv sb /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
@@ -62,15 +65,21 @@ Theorem owned_target_relayout_store_outcome:
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?r. gas_marked_path F ctx func s 0 r /\
     ((?t. r = OK t /\ res = INL () /\
-       stmt_state_rel H ctx func cenv cx ff t /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ff t) /\
        (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
        ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
        t.vs_inst_idx = LENGTH sf.cs_current_insts /\
        alloca_frame cenv ee sb s cenv ff t) \/
-     (exit_result r /\ stmt_exit RetQ ff res r))
+     (exit_result r /\ !H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_exit (RetQ H) ff res r))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
   `~cx.txn.is_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `res = INL ()` by
