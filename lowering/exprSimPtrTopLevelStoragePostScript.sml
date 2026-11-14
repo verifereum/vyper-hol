@@ -129,8 +129,8 @@ Proof
     FLOOKUP_DRESTRICT, step_taint_other_output] >>
   Cases_on `loc = LocStorage` >>
   (simp[mk_inst_def] >>
-  simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
-    set_var_taint_def, op_taint_def, FLOOKUP_UPDATE])
+   simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
+   simp[set_var_taint_def, op_taint_def, FLOOKUP_UPDATE])
 QED
 
 Theorem toplevel_copy_word_memory_taint:
