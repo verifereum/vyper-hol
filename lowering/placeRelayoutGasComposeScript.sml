@@ -10,6 +10,7 @@ Theorem gas_outcome_bind_place:
     (a : evaluation_state -> place evaluation_result) (es,s0) Qa Ra /\
   (!marks res mid t.
     gas_marked_exec memory (ctx,func) a (es,s0) marks res mid (OK t) /\
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\
     (!H. valid_horizon cx st0 H mid.storage_trace ==>
        Qa H res (mid with gas_obs := []) t) ==>
     ?v. res = INL v /\
@@ -45,7 +46,7 @@ Proof
           rpt BasicProvers.VAR_EQ_TAC >>
           qpat_x_assum `!marks res mid t. _`
             (qspecl_then [`left`, `res`, `mid`, `t`] mp_tac) >>
-          impl_tac >- simp[] >> strip_tac >>
+          impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
           rpt BasicProvers.VAR_EQ_TAC >>
           qpat_x_assum `gas_outcome _ _ _ _ _ (k _) _ _ _` mp_tac >>
           rewrite_tac[gas_outcome_def] >>
