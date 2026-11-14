@@ -201,7 +201,7 @@ Proof
   qexists_tac `t1` >> gvs[]
 QED
 
-Theorem request_agree_dead_trans[local]:
+Theorem request_agree_dead_trans:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   request_agree H cx r0 r1 /\
   request_agree_except (external_call_dead H tx (res, am', rqs)) r1 r2 ==>

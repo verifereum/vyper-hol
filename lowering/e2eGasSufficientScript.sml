@@ -37,7 +37,7 @@ Ancestors
   e2eCorrectness e2eDefs e2eProducers e2eEntry unitTransformDefs
   ptrDiscipline lowerDloadDefs e2eComposition
   o1PipelineCorrect o1PassContract contextCodegenRel
-  vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
+  vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect loweringDloadHeadroom
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv
