@@ -11,7 +11,7 @@ Ancestors
   exprLoweringProps freshWrites gasShadow vyperStorageFootprint loweringStateRelDefs
   vyperTypeValues vyperTyping vyperInterpreter vyperState venomState list finite_map
 
-Theorem augassign_toplevel_source_join_full:
+Theorem augassign_toplevel_source_join_full[local]:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -56,7 +56,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC
 QED
 
-Theorem augassign_toplevel_read_ready_full:
+Theorem augassign_toplevel_read_ready_full[local]:
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\

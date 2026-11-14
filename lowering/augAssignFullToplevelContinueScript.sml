@@ -13,7 +13,7 @@ Ancestors
   loweringPosts emitHelperProps loweringShapeRules bodyMemoryDefs loweringStateRelDefs
   stmtSimProps gasOutcomeFullCompose fragGasOriginPtr exprSimProps fragExec
 
-Theorem augassign_toplevel_store_relations_full:
+Theorem augassign_toplevel_store_relations_full[local]:
   root_es.storage_trace = es.storage_trace ++ [StorageRoot tr slot tvt] /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
     valid_horizon cx st0 H root_es.storage_trace) /\
@@ -63,7 +63,7 @@ Proof
   qexists_tac `mid` >> simp[]
 QED
 
-Theorem augassign_toplevel_rhs_numeric_facts_full:
+Theorem augassign_toplevel_rhs_numeric_facts_full[local]:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -110,7 +110,7 @@ Proof
 QED
 
 (* The loaded scalar remains clean across the RHS, and the RHS word is clean. *)
-Theorem augassign_toplevel_rhs_operands_full:
+Theorem augassign_toplevel_rhs_operands_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
   lower_value compile_expr cenv ty e s1 = (op,s2) /\
   expr_body_pre cenv cx env e root_es /\ is_word_type (expr_type e) /\
@@ -142,7 +142,7 @@ Proof
   gvs[ghost_kept_at_def, ptr_val_ok_def, op_prov_def, op_taint_def]
 QED
 
-Theorem augassign_toplevel_rhs_alloca_frame_full:
+Theorem augassign_toplevel_rhs_alloca_frame_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
   root_es = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
   t = update_var out (if tr then tload (n2w slot) s0 else sload (n2w slot) s0)
@@ -193,7 +193,7 @@ Proof
 QED
 
 (* Transport the loaded reserved frame through the RHS and numeric endpoint. *)
-Theorem augassign_toplevel_rhs_operator_frame_full:
+Theorem augassign_toplevel_rhs_operator_frame_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
   s2.cs_next_var <= s3.cs_next_var /\ t.vs_alloca_next <= u.vs_alloca_next /\
@@ -238,7 +238,7 @@ Proof
 QED
 
 (* Close the successful numeric/store continuation at the original statement frame. *)
-Theorem augassign_toplevel_store_outcome_full:
+Theorem augassign_toplevel_store_outcome_full[local]:
   evaluate_binop bound tvt bop cur rhs = INL result /\
   write_storage_slot cx tr (n2w slot) tvt result (mid with gas_obs := []) =
     (INL (),fin) /\ fin.gas_obs = [] /\
@@ -297,7 +297,7 @@ Proof
 QED
 
 
-Theorem augassign_toplevel_success_frames_full:
+Theorem augassign_toplevel_success_frames_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
   s2.cs_next_var <= s3.cs_next_var /\
@@ -332,7 +332,7 @@ Proof
   drule_all augassign_toplevel_rhs_operator_frame_full >> simp[]
 QED
 
-Theorem augassign_toplevel_success_alloca_full:
+Theorem augassign_toplevel_success_alloca_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
   root_es = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
   bind (eval_expr cx e) (read_result cx) (root_es with gas_obs := gs) =
@@ -402,7 +402,7 @@ Proof
   simp[]
 QED
 
-Theorem augassign_toplevel_success_continue_full:
+Theorem augassign_toplevel_success_continue_full[local]:
   evaluate_binop bound tvt bop cur rhs = INL result /\
   value_has_type tvt result /\ encode_value tvt result = SOME [(0,w)] /\
   type_slot_size tvt = 1 /\ well_formed_type_value tvt /\
@@ -507,7 +507,7 @@ Proof
 QED
 
 (* Prepare the concrete and all-horizon frames of a successful scalar update. *)
-Theorem augassign_toplevel_success_prepare_full:
+Theorem augassign_toplevel_success_prepare_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
   lower_value compile_expr cenv ty e s1 = (op,s2) /\
   compile_binop bop (Var out) op ty NONE

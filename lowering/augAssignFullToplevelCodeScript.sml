@@ -6,7 +6,7 @@ Ancestors
   exprLoweringProps emitHelperProps codegenRel compileEnv fragExec loweringSlice
   stmtSimDefs stmtLowering exprLowering gasShadow list finite_map
 
-Theorem augassign_toplevel_phase_slices_full:
+Theorem augassign_toplevel_phase_slices_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (cur,s1) /\
   lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
   compile_binop bop cur rhs ty NONE

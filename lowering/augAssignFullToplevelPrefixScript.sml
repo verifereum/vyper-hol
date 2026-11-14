@@ -8,7 +8,7 @@ Ancestors
   ptrDiscipline exprSimUnwrap augAssignStorageFieldSource
   vyperInterpreter vyperState venomState venomInst venomExecSemantics finite_map list
 
-Theorem augassign_toplevel_rhs_ready_full:
+Theorem augassign_toplevel_rhs_ready_full[local]:
   (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
      eval_target_place cx (TopLevelNameTarget (src,id)) s'' = (INL p,t') /\
      read_place cx p s'3' = (INL cur,t'') /\
@@ -29,7 +29,7 @@ Proof
   simp[read_place_def, place_type_value_def, return_def] >> metis_tac[]
 QED
 
-Theorem augassign_toplevel_loaded_frame_full:
+Theorem augassign_toplevel_loaded_frame_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,sb) /\
   cs_extends sa sb /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -98,7 +98,7 @@ Proof
   gvs[same_blocks_def, update_var_def] >> metis_tac[]
 QED
 
-Theorem augassign_toplevel_load_full:
+Theorem augassign_toplevel_load_full[local]:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,sb) /\
   cs_extends sa sb /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
