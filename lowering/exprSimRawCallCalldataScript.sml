@@ -761,7 +761,7 @@ Proof
   >- (qpat_x_assum `t = _` kall_tac >>
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
       Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
-      simp[step_inst_base_def]) >>
+      pure_once_rewrite_tac[step_inst_base_def] >> simp[]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
