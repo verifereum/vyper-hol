@@ -6,6 +6,7 @@ Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
   fragExec compileVyper list packagedRegistrationProps argumentRegistrationOpen
   exprOpenPrimitives vyperLoweringCorrect vyperCompiler venomWf venomInst
   exprOpenTerminals allocaFrontierBound externalEntryChecks runtimeBodyStartDefs
+  entryDispatchProps
 
 Theorem source_selected_entry_prefix_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -73,11 +74,17 @@ Proof
      simp[shape_step_def] >> disch_then drule >> simp[shape_extends_def]) >>
   `ALL_DISTINCT (MAP FST
      (l1 ++ (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt)::l2))` by
-    (drule externalEntryChecksTheory.classified_external_labels_distinct >>
+    (drule external_names_distinct_numeric_namespace >>
+     disch_then (mp_tac o MATCH_MP externalEntryChecksTheory.classified_external_labels_distinct) >>
      strip_tac >>
-     qpat_x_assum `_ ++ _ = MAP _ _` (fn th => rewrite_tac[th]) >>
-     gvs[MAP_MAP_o, combinTheory.o_DEF, pairTheory.LAMBDA_PROD,
-         set_external_package_target_def, package_external_fn_def, LET_THM]) >>
+     qpat_x_assum `_ ++ _ = MAP _ _`
+       (mp_tac o Q.AP_TERM `\ps. ALL_DISTINCT (MAP FST ps)`) >>
+     qpat_x_assum `ALL_DISTINCT (MAP _ (FST (classify_functions tops)))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac std_ss [MAP_APPEND, MAP, MAP_MAP_o, combinTheory.o_DEF,
+         pairTheory.LAMBDA_PROD, set_external_package_target_def,
+         package_external_fn_def, LET_THM, GSYM APPEND_ASSOC, APPEND,
+         pairTheory.FST, pairTheory.SND, stringTheory.STRCAT_EQNS] >> metis_tac[]) >>
   `runtime_selected_body_start tops rpolicy
      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) checked` by
     (simp[runtime_selected_body_start_def] >>
@@ -86,7 +93,9 @@ Proof
        `FST (SND (SND (classify_functions tops)))`,
        `SND (SND (SND (classify_functions tops)))`,
        `l1`, `l2`, `fallback`, `label_st`, `dispatch_st`, `before`, `opened`] >>
-     gvs[ALL_DISTINCT_APPEND]) >>
+     gvs[ALL_DISTINCT_APPEND] >>
+     qpat_x_assum `!e. MEM e (MAP FST l1) ==> _`
+       (qspec_then `lbl` mp_tac) >> simp[]) >>
   qexistsl_tac [`fallback`, `label_st`, `dispatch_st`, `opened`, `checked`,
     `ce`, `registered`, `after`] >>
   gvs[] >> rpt conj_tac
