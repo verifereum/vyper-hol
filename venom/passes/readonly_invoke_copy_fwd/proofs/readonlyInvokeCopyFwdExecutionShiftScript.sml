@@ -30,20 +30,11 @@ Proof
     (drule ricf_execution_nonaddress_operand >> disch_then irule >> fs[MEM] >>
      simp[is_pointer_preserving_op_def, memLocDefsTheory.mem_read_ops_def,
        memLocDefsTheory.mem_write_ops_def] >> metis_tac[]) >>
-  `op_prov G data = NONE` by
-    (drule ricf_execution_nonaddress_no_provenance >> disch_then irule >> fs[MEM] >>
-     simp[is_pointer_preserving_op_def, memLocDefsTheory.mem_read_ops_def,
-       memLocDefsTheory.mem_write_ops_def] >> metis_tac[]) >>
-  `!name. data = Var name ==> ~retpc_var fn name` by
-    (rpt gen_tac >> strip_tac >> irule ordinary_operand_not_retpc >> simp[] >>
-     qexists_tac `inst` >> fs[MEM] >> metis_tac[active_inst_mem_fn_insts]) >>
-  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
-    sites (ricf_complete_params PG s.vs_params) G tn s t` by
-    fs[ricf_execution_invariant_def] >>
-  drule_all (Q.INST [`op` |-> `data`] ricf_opaque_frame_operand) >> strip_tac >>
-  qexists_tac `y` >>
-  gvs[ricf_opaque_value_agree_def, ricf_is_zero_prov_def,
-    ricf_value_agree_def, ld_value_agree_def]
+  simp[] >>
+  drule (Q.INST [`op` |-> `data`] ricf_execution_nonaddress_value) >>
+  disch_then irule >> fs[MEM] >>
+  simp[is_pointer_preserving_op_def, memLocDefsTheory.mem_read_ops_def,
+    memLocDefsTheory.mem_write_ops_def] >> metis_tac[]
 QED
 
 Theorem ricf_execution_shift_next:

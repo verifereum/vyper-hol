@@ -2081,7 +2081,8 @@ QED
 Resume ircf_redirect_ordinary_ok[hash]:
   gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
       invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
-  `?w nw. lookup_var v s = SOME w /\ eval_operand h' s = SOME nw` by
+  rename1 `inst.inst_operands = [Var v; size_op]` >>
+  `?w nw. lookup_var v s = SOME w /\ eval_operand size_op s = SOME nw` by
     (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def, eval_operand_def]) >>
   irule ircf_redirect_hash_ok >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
@@ -2123,16 +2124,18 @@ QED
 Resume ircf_redirect_ordinary_ok[create]:
   gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
       invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
-  `?w nw vw. lookup_var v s = SOME w /\ eval_operand h'' s = SOME nw /\
-    eval_operand h s = SOME vw` by
+  rename1 `inst.inst_operands = [value_op; Var v; size_op]` >>
+  `?w nw vw. lookup_var v s = SOME w /\ eval_operand size_op s = SOME nw /\
+    eval_operand value_op s = SOME vw` by
     (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def, eval_operand_def]) >>
   irule ircf_redirect_create_ok >> simp[] >> metis_tac[]
 QED
 Resume ircf_redirect_ordinary_ok[create2]:
   gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
       invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
-  `?w nw vw sw. lookup_var v s = SOME w /\ eval_operand h'' s = SOME nw /\
-    eval_operand h s = SOME vw /\ eval_operand h''' s = SOME sw` by
+  rename1 `inst.inst_operands = [value_op; Var v; size_op; salt_op]` >>
+  `?w nw vw sw. lookup_var v s = SOME w /\ eval_operand size_op s = SOME nw /\
+    eval_operand value_op s = SOME vw /\ eval_operand salt_op s = SOME sw` by
     (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def, eval_operand_def]) >>
   irule ircf_redirect_create2_ok >> simp[] >> metis_tac[]
 QED
