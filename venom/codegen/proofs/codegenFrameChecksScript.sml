@@ -3,7 +3,7 @@
  * These do not claim that the witness program/context/plan were generated. *)
 Theory codegenFrameChecks
 Ancestors
-  codegenCorrectness frameOutcome callTrace observableOracle stateEquiv
+  codegenCorrectness frameOutcome frameGas callTrace observableOracle stateEquiv
   stateFrame venomState venomInst venomExecSemantics codegenRel contextCodegenRel
   asmSem asmIR symbolResolve asmOracleRegression stackPlanTypes stackPlanGen
   vfmExecution vfmExecutionProp vfmContext vfmState vfmConstants vfmOperation
@@ -31,7 +31,8 @@ Theorem venom_frame_rel_constructor_cases:
   ~venom_frame_rel es r es' (OK vs) /\
   ~venom_frame_rel es r es' (IntRet ret vs) /\
   (venom_frame_rel es r es' (Abort Revert_abort vs) <=>
-   ?lgs. frame_outcome es r es' (SOME Reverted) vs.vs_returndata lgs) /\
+   (?lgs. frame_outcome es r es' (SOME Reverted) vs.vs_returndata lgs) /\
+   frame_inst_raises es Reverted Revert) /\
   (venom_frame_rel es r es' (Abort ExHalt_abort vs) <=>
    ?exc lgs. exc <> Reverted /\ frame_outcome es r es' (SOME exc) [] lgs)
 Proof
@@ -50,8 +51,8 @@ Proof
   Cases_on `a` >> simp[venom_frame_rel_def]
 QED
 
-(* Nonvacuity for all three terminal constructors, with arbitrary nonempty
-   emitted logs/output and the EXACT traced requests, not a fabricated oracle. *)
+(* Single-frame constructor witnesses with arbitrary logs/output and the exact
+   traced requests. The Revert witness requires an instruction raising Revert. *)
 Theorem venom_frame_rel_single_constructor_witnesses:
   let start = es with contexts := [(ctxt with logs := [], rb)];
       post = es with contexts :=
@@ -63,7 +64,8 @@ Theorem venom_frame_rel_single_constructor_witnesses:
                       vs_requests := call_requests start |>
   in
     venom_frame_rel start (INR NONE) post (Halt vs') /\
-    venom_frame_rel start (INR (SOME Reverted)) post (Abort Revert_abort vs') /\
+    (frame_inst_raises start Reverted Revert ==>
+     venom_frame_rel start (INR (SOME Reverted)) post (Abort Revert_abort vs')) /\
     venom_frame_rel start (INR (SOME InvalidOpcode))
       (es with contexts := [(ctxt with returnData := [], rb)])
       (Abort ExHalt_abort vs')
@@ -126,7 +128,8 @@ QED
 
 (* Nested success returns to the parent, with short-write splice and combined
    logs. Failure restores the child's saved rollback and leaves parent logs.
-   No run_call correctness is assumed to construct these relation witnesses. *)
+   The Revert witness requires an instruction raising Revert; neither witness
+   assumes run_call correctness. *)
 Theorem venom_frame_rel_nested_constructor_witnesses:
   let child = ctxt with msgParams := ctxt.msgParams with outputTo := Memory mr;
       start = es with contexts := [(child, rb); (parent, prb)];
@@ -143,9 +146,10 @@ Theorem venom_frame_rel_nested_constructor_witnesses:
         vs_requests := call_requests start |>
   in
     venom_frame_rel start (INL ()) (es with contexts := [(ok, prb)]) (Halt vs') /\
-    venom_frame_rel start (INL ())
-      (es with <| contexts := [(bad, prb)]; rollback := rb |>)
-      (Abort Revert_abort vs')
+    (frame_inst_raises start Reverted Revert ==>
+     venom_frame_rel start (INL ())
+       (es with <| contexts := [(bad, prb)]; rollback := rb |>)
+       (Abort Revert_abort vs'))
 Proof
   simp[LET_THM] >> conj_tac >>
   simp[venom_frame_rel_def, frame_outcome_def, b2w_def]
@@ -232,4 +236,67 @@ Proof
        account_empty_def, empty_account_state_def, wf_account_state_def] >>
   simp[dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
   gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+(* REVERT at entry, with an empty output slice and enough stack and gas. *)
+Definition frame_revert_probe_prog_def:
+  frame_revert_probe_prog = [AsmOp "REVERT"]
+End
+
+Definition frame_revert_probe_es_def:
+  frame_revert_probe_es =
+    (make_asm_call_state asm_oracle_initial 0w 100 0 []
+       (assemble frame_revert_probe_prog) F) with contexts updated_by
+      MAP (\(ctxt, rb). (ctxt with stack := [0w; 0w], rb))
+End
+
+Theorem frame_revert_probe_encoding:
+  assemble frame_revert_probe_prog = [0xfdw] /\
+  parse_code 0 FEMPTY [0xfdw] = FEMPTY |+ (0, Revert)
+Proof
+  conj_tac >- EVAL_TAC >>
+  simp[Once parse_code_def, parse_opcode_cond_thm, opcode_def, dimword_8] >>
+  simp[Once parse_code_def]
+QED
+
+Theorem frame_revert_probe_step:
+  step_inst Revert frame_revert_probe_es =
+    (INR (SOME Reverted), frame_revert_probe_es with contexts updated_by
+      MAP (\(ctxt, rb). (ctxt with stack := [], rb)))
+Proof
+  simp[frame_revert_probe_es_def,
+       frame_revert_probe_encoding, make_asm_call_state_def,
+       asm_oracle_initial_def, empty_call_context_def, make_sub_tx_def,
+       vfmContextTheory.initial_context_def, initial_msg_params_def] >>
+  simp[step_inst_def, step_return_def, pop_stack_def,
+       memory_expansion_info_def, memory_expansion_cost_def,
+       consume_gas_def, expand_memory_def, read_memory_def,
+       set_return_data_def, revert_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def, return_def,
+       assert_def, static_gas_def, FLOOKUP_UPDATE] >>
+  simp[vfmBufferTheory.buffer_take_to_list]
+QED
+
+Theorem frame_revert_probe_raises:
+  frame_inst_raises frame_revert_probe_es Reverted Revert
+Proof
+  rw[frame_inst_raises_def] >>
+  qexistsl_tac [`frame_revert_probe_es`,
+               `SND (step_inst Revert frame_revert_probe_es)`] >>
+  simp[frame_revert_probe_step, frame_inst_at_def,
+       frame_revert_probe_es_def, frame_revert_probe_encoding,
+       make_asm_call_state_def, vfmContextTheory.initial_context_def,
+       initial_msg_params_def,
+       FLOOKUP_UPDATE]
+QED
+
+Theorem venom_frame_rel_revert_nonvacuity:
+  venom_frame_rel frame_revert_probe_es (INR (SOME Reverted))
+    frame_revert_probe_es
+    (Abort Revert_abort (init_venom_state "entry"))
+Proof
+  simp[venom_frame_rel_def, frame_revert_probe_raises,
+       frame_outcome_def, frame_revert_probe_es_def,
+       make_asm_call_state_def, vfmContextTheory.initial_context_def,
+       init_venom_state_def]
 QED

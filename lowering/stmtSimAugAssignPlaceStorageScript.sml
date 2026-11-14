@@ -1034,13 +1034,6 @@ Proof
 QED
 
 
-Theorem aug_place_storage_entry_pre[local]:
-  expr_body_pre cenv cx env e es ==>
-  expr_body_pre cenv cx env e (es with gas_obs := gs)
-Proof
-  simp[expr_body_pre_gas_obs]
-QED
-
 Theorem aug_place_base_memory_origin[local]:
   !t cx s id path st.
     eval_base_place cx t s = (INL (PlaceR (MemoryPlace id path)),st) ==>
@@ -1252,55 +1245,6 @@ Proof
   simp[expr_val_rel_def]
 QED
 
-Theorem aug_place_storage_load_pointer[local]:
-  eval_operand arg s = SOME slot /\ fresh_vars_wrt sa s ==>
-  eval_operand arg
-    ((update_var (STRING #"%" (toString sa.cs_next_var)) w s)
-       with vs_inst_idx := SUC s.vs_inst_idx) = SOME slot
-Proof
-  strip_tac >>
-  `eval_operand arg (update_var (STRING #"%" (toString sa.cs_next_var)) w s) = SOME slot` by
-    (irule emitHelperPropsTheory.eval_operand_update_fresh >>
-     goal_assum (drule_at Any) >> qexistsl_tac [`sa.cs_next_var`, `sa`] >> simp[]) >>
-  Cases_on `arg` >>
-  gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
-QED
-
-Theorem aug_place_storage_load_counted[local]:
-  emit_op (if tr then TLOAD else SLOAD) [arg] sa = (op,sb) /\
-  fn_has_code sa sb func /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  eval_operand arg s = SOME slot /\ fresh_vars_wrt sa s /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx st s /\
-  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-  (if tr then tload slot s else sload slot s) = typed_val_to_w256 tv cur ==>
-  ?u. gas_path ctx func s 0 (OK u) /\
-      expr_val_rel cx ty cur op u /\
-      stmt_state_rel ctx func cenv cx st u /\
-      eval_operand arg u = SOME slot /\ fresh_vars_wrt sb u /\
-      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
-             lookup_var x u = SOME w) /\
-      u.vs_allocas = s.vs_allocas
-Proof
-  strip_tac >>
-  qexists_tac `(update_var (STRING #"%" (toString sa.cs_next_var))
-    (typed_val_to_w256 tv cur) s) with vs_inst_idx := SUC s.vs_inst_idx` >>
-  conj_tac >- metis_tac[aug_place_storage_load_path] >>
-  conj_tac >- metis_tac[aug_place_storage_load_value] >>
-  conj_tac >- metis_tac[aug_place_storage_load_state] >>
-  conj_tac >- metis_tac[aug_place_storage_load_pointer] >>
-  conj_tac
-  >- (gvs[emitHelperTheory.emit_op_def, comp_bind_def, fresh_var_def,
-          fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
-      gvs[fresh_vars_wrt_def, venomStateTheory.update_var_def]) >>
-  drule_all aug_place_storage_load_endpoint >>
-  disch_then (qspec_then `typed_val_to_w256 tv cur` mp_tac) >>
-  simp[venomStateTheory.update_var_def] >> metis_tac[]
-QED
-
 Theorem aug_place_storage_load_counted_nofresh[local]:
   emit_op (if tr then TLOAD else SLOAD) [arg] sa = (op,sb) /\
   fn_has_code sa sb func /\
@@ -1335,38 +1279,6 @@ Proof
     qpat_x_assum `!x w'. _` (drule_then drule) >>
     rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]) >>
   simp[] >> metis_tac[]
-QED
-
-Theorem aug_place_static_store_exit[local]:
-  emit_void (if tr then TSTORE else SSTORE) [dst;op] sa = ((),sb) /\
-  fn_has_code sa sb func /\
-  eval_operand dst s = SOME slot /\ eval_operand op s = SOME w /\
-  s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
-      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
-Proof
-  strip_tac >>
-  drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-     SOME (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qexists_tac `Abort ExHalt_abort (halt_state (set_returndata [] s))` >>
-  simp[stmt_exit_def, expr_exit_def, exit_result_def] >>
-  `gas_marked_path F ctx func s
-     (if (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] []).inst_opcode = GAS then 1 else 0)
-     (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
-    (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
-     Cases_on `tr` >>
-     simp[venomInstTheory.mk_inst_def] >>
-     simp[venomInstTheory.is_terminator_def] >>
-     (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
-      simp[venomStateTheory.eval_operands_def])) >>
-  Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def]
 QED
 
 Theorem aug_place_storage_write_static[local]:
@@ -1449,30 +1361,6 @@ Proof
   simp[write_place_def, ignore_bind_def, bind_def, return_def,
        stmtSimAssignStorageTheory.write_storage_slot_gas_obs,
        AllCaseEqs()] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem aug_place_storage_error_exec[local]:
-  evaluate_binop bound tv bop cur v = INR err /\
-  gas_marked_path F ctx func z 0 r ==>
-  gas_marked_exec F (ctx,func)
-    (bind (lift_sum (evaluate_binop bound tv bop cur v))
-      (write_place cx (StoragePlace tr slot tv)))
-    (ee,z) [] (INR (Error err)) ee r
-Proof
-  simp[gasSummaryTheory.gas_marked_exec_def, bind_def, lift_sum_def, raise_def]
-QED
-
-Theorem aug_place_storage_write_exec[local]:
-  evaluate_binop bound tv bop cur v = INL w /\
-  write_place cx (StoragePlace tr slot tv) w ee = (res,fin) /\
-  gas_marked_path F ctx func z 0 r ==>
-  gas_marked_exec F (ctx,func)
-    (bind (lift_sum (evaluate_binop bound tv bop cur v))
-      (write_place cx (StoragePlace tr slot tv)))
-    (ee,z) [] res fin r
-Proof
-  strip_tac >> simp[gasSummaryTheory.gas_marked_exec_def, bind_def, lift_sum_def, return_def] >>
-  metis_tac[aug_place_storage_write_gas_obs]
 QED
 
 Theorem aug_place_storage_rhs_exception_exec[local]:
@@ -1705,47 +1593,6 @@ QED
 
 Finalise aug_place_storage_binop_store_nofresh
 
-Theorem aug_place_storage_binop_store[local]:
-  compile_binop bop cur_op rhs_op ty NONE
-    (if bop = Exp then expr_int_literal e else NONE) s2 = (out,s3) /\
-  emit_void (if tr then TSTORE else SSTORE) [dst;out] s3 = ((),sf) /\
-  fn_has_code s2 s3 func /\ fn_has_code s3 sf func /\
-  fn_inst_ids_distinct func /\
-  binop_frag ctx func cenv cx bop ty ty NONE
-    (if bop = Exp then expr_int_literal e else NONE) [ty;expr_type e] cur v ee /\
-  expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur v ee) /\
-  bop <> In /\ bop <> NotIn /\ word_value_type ty /\
-  word_value cur /\ word_value v /\
-  eval_operand cur_op z = SOME (val_to_w256 cur) /\
-  eval_operand rhs_op z = SOME (val_to_w256 v) /\
-  (!x. cur_op = Var x ==> not_fresh_at s2 x) /\
-  (!x. rhs_op = Var x ==> not_fresh_at s2 x) /\
-  eval_operand dst z = SOME slot /\ (!l. dst <> Label l) /\
-  (!x. dst = Var x ==> not_fresh_at s2 x) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  (!w. evaluate_binop
-    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-    tv bop cur v = INL w ==> value_has_type tv w) /\
-  expr_sim_inv cenv cx env ee /\
-  acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv s2 /\
-  storage_place_region cx (StoragePlace tr slot tv) /\
-  stmt_state_rel ctx func cenv cx ee z /\ fresh_vars_wrt s2 z /\
-  ~z.vs_halted /\ z.vs_current_bb = s2.cs_current_bb /\
-  z.vs_inst_idx = LENGTH s2.cs_current_insts ==>
-  ?res fin r. gas_marked_exec F (ctx,func)
-    (bind (lift_sum (evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
-    (ee,z) [] res fin r /\
-    ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
-          (fin with gas_obs := []) last) \/
-     (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
-Proof
-  strip_tac >> drule_all aug_place_storage_binop_store_nofresh >> simp[]
-QED
-
 Theorem aug_place_storage_rhs_success[local]:
   expr_body_pre cenv cx env e st /\
   bind (eval_expr cx e) (read_result cx) st = (INL v,fin) ==>
@@ -1942,55 +1789,6 @@ QED
 
 Finalise aug_place_storage_suffix_outcome_nofresh
 
-Theorem aug_place_storage_suffix_outcome[local]:
-  lower_value compile_expr cenv ty e s1 = (rhs_op,s2) /\
-  compile_binop bop cur_op rhs_op ty NONE
-    (if bop = Exp then expr_int_literal e else NONE) s2 = (out,s3) /\
-  emit_void (if tr then TSTORE else SSTORE) [dst;out] s3 = ((),sf) /\
-  fn_has_code s1 s2 func /\ fn_has_code s2 s3 func /\
-  fn_has_code s3 sf func /\ fn_inst_ids_distinct func /\
-  type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
-  type_bits ty MOD 8 = 0 /\
-  word_value_type ty /\ word_value_type (expr_type e) /\
-  bop <> In /\ bop <> NotIn /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
-  word_value cur /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
-  (!v w. value_has_type tvrhs v /\
-    evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      tv bop cur v = INL w ==> value_has_type tv w) /\
-  expr_body_pre cenv cx env e st /\
-  expr_sim ctx func cenv cx ty e st /\
-  gas_admissible
-    (bind (eval_expr cx e) (\raw. bind (read_result cx raw)
-      (\v. bind (lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-        tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))))
-    (stmt_res_ok lctx) st /\
-  eval_operand cur_op u = SOME (val_to_w256 cur) /\
-  (!x. cur_op = Var x ==> not_fresh_at s1 x) /\
-  (!l. cur_op <> Label l) /\
-  eval_operand dst u = SOME slot /\
-  (!x. dst = Var x ==> not_fresh_at s1 x) /\
-  (!l. dst <> Label l) /\
-  acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv s1 /\
-  storage_place_region cx (StoragePlace tr slot tv) /\
-  stmt_state_rel ctx func cenv cx st u /\ fresh_vars_wrt s1 u /\
-  ~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
-  u.vs_inst_idx = LENGTH s1.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
-    (bind (eval_expr cx e) (\raw. bind (read_result cx raw)
-      (\v. bind (lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-        tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
-    (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
-Proof
-  strip_tac >> drule_all aug_place_storage_suffix_outcome_nofresh >> simp[]
-QED
-
 Theorem aug_place_storage_target_bind[local]:
   eval_stmt cx (AugAssign ty bt bop e) =
   bind (eval_base_place cx bt) (\pv.
@@ -2037,123 +1835,6 @@ Proof
   drule vyperExprNoControlTheory.eval_base_place_no_control >>
   Cases_on `y` >> simp[vyperExprNoControlTheory.no_control_exc_def]
 QED
-
-Theorem aug_place_result_bind_outcome[local]:
-  gas_outcome memory tops (ctx,func)
-    (a : evaluation_state -> eval_result evaluation_result) (es,s0) P E /\
-  (!v mid t. P (INL v) mid t ==>
-    gas_outcome memory tops (ctx,func) (k v) (mid,t) Q R) /\
-  (!ex mid t. P (INR ex) mid t ==> Q (INR ex) mid t) /\
-  (!res mid r. E res mid r ==> ?ex. res = INR ex /\ R (INR ex) mid r) ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  disch_then (qx_choose_then `left` strip_assume_tac)
-  >- (gvs[gasSummaryTheory.gas_summary_at_def]
-      >- (Cases_on `res` >- suspend "normal" >> suspend "error") >>
-      suspend "exit") >> suspend "exempt"
-QED
-
-Resume aug_place_result_bind_outcome[normal]:
-  first_x_assum drule >>
-  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  disch_then (qx_choose_then `right` strip_assume_tac)
-  >- (gvs[gasSummaryTheory.gas_summary_at_def] >>
-      qexists_tac `left ++ right` >> disj1_tac >>
-      simp[gasSummaryTheory.gas_summary_at_def] >>
-      drule_all gasSummaryComposeTheory.gas_marked_exec_bind_normal >>
-      metis_tac[]) >>
-  qexists_tac `left ++ right` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  irule (cj 6 gasExemptCertTheory.gas_exempt_cert_rules) >>
-  simp[GSYM ignore_bind_def] >> metis_tac[]
-QED
-Resume aug_place_result_bind_outcome[error]:
-  qexists_tac `left` >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
-  irule_at Any gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-Resume aug_place_result_bind_outcome[exit]:
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  qexists_tac `left` >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
-  irule_at Any gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-Resume aug_place_result_bind_outcome[exempt]:
-  qexists_tac `left` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  irule (cj 7 gasExemptCertTheory.gas_exempt_cert_rules) >>
-  simp[ignore_bind_def]
-QED
-Finalise aug_place_result_bind_outcome
-
-Theorem aug_place_result_bind_outcome_exec[local]:
-  gas_outcome memory tops (ctx,func)
-    (a : evaluation_state -> eval_result evaluation_result) (es,s0) P E /\
-  (!v mid t marks. P (INL v) mid t /\
-    (!tail. a (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-      (INL v, mid with gas_obs := tail)) ==>
-    gas_outcome memory tops (ctx,func) (k v) (mid,t) Q R) /\
-  (!ex mid t. P (INR ex) mid t ==> Q (INR ex) mid t) /\
-  (!res mid r. E res mid r ==> ?ex. res = INR ex /\ R (INR ex) mid r) ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  disch_then (qx_choose_then `left` strip_assume_tac)
-  >- (gvs[gasSummaryTheory.gas_summary_at_def]
-      >- (Cases_on `res` >- suspend "normal" >> suspend "error") >>
-      suspend "exit") >> suspend "exempt"
-QED
-
-Resume aug_place_result_bind_outcome_exec[normal]:
-  `gas_outcome memory tops (ctx,func) (k x)
-     (es_end with gas_obs := [],t) Q R` by
-    (qpat_x_assum `!v mid t marks. _` (qspecl_then
-       [`x`, `es_end with gas_obs := []`, `t`, `left`] mp_tac) >>
-     fs[gasSummaryTheory.gas_marked_exec_def]) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  disch_then (qx_choose_then `right` strip_assume_tac)
-  >- (gvs[gasSummaryTheory.gas_summary_at_def] >>
-      qexists_tac `left ++ right` >> disj1_tac >>
-      simp[gasSummaryTheory.gas_summary_at_def] >>
-      drule_all gasSummaryComposeTheory.gas_marked_exec_bind_normal >>
-      metis_tac[]) >>
-  qexists_tac `left ++ right` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  irule (cj 6 gasExemptCertTheory.gas_exempt_cert_rules) >>
-  simp[GSYM ignore_bind_def] >> metis_tac[]
-QED
-Resume aug_place_result_bind_outcome_exec[error]:
-  qexists_tac `left` >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
-  irule_at Any gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-Resume aug_place_result_bind_outcome_exec[exit]:
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  qexists_tac `left` >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
-  irule_at Any gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-Resume aug_place_result_bind_outcome_exec[exempt]:
-  qexists_tac `left` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  irule (cj 7 gasExemptCertTheory.gas_exempt_cert_rules) >>
-  simp[ignore_bind_def]
-QED
-Finalise aug_place_result_bind_outcome_exec
 
 Theorem aug_place_result_bind_outcome_path:
   gas_outcome memory tops (ctx,func)
@@ -2217,21 +1898,6 @@ Resume aug_place_result_bind_outcome_path[exempt]:
   simp[ignore_bind_def]
 QED
 Finalise aug_place_result_bind_outcome_path
-
-Theorem aug_place_target_exempt_lift[local]:
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_base_place cx bt) (return ()))
-    start marks err endpoint ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_stmt cx (AugAssign ty bt bop e)) (return ()))
-    start marks err endpoint
-Proof
-  PairCases_on `start` >> PairCases_on `err` >> PairCases_on `endpoint` >>
-  strip_tac >>
-  simp[aug_place_storage_target_bind, ignore_bind_def, bind_assoc] >>
-  irule (cj 7 gasExemptCertTheory.gas_exempt_cert_rules) >>
-  simp[ignore_bind_def]
-QED
 
 Theorem aug_place_zero_prefix_outcome[local]:
   gas_marked_path F ctx func s0 0 (OK s1) /\

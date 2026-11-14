@@ -2,7 +2,7 @@ Theory vyperCalldataSliceTest
 Ancestors
   arithmetic integer list words
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperContext vyperValue vyperConstEval
-  jsonToVyperType
+  jsonToVyperType vyperPinFold
   vyperValueOperation vyperState vyperInterpreter vyperSmallStep
   vyperTypeSystem vyperTypeBuiltins vyperTypeContract
 Libs
@@ -48,7 +48,7 @@ Proof
        is_calldata_slice_call_def] >>
   ntac 3 (simp[Once translate_expr_def]) >>
   simp[calldata_slice_bound_def, calldata_slice_length_def, translate_expr_def,
-       eval_constant_def, evaluate_literal_def, translate_type_def]
+       pin_fold_value_def, pin_fold_literal, evaluate_literal_def, translate_type_def]
 QED
 
 Theorem calldata_slice_zero_marker_typing_test:
