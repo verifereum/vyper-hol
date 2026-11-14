@@ -85,7 +85,7 @@ Proof
       qexistsl_tac [`INR ex`, `es_end`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       disj2_tac >> simp[] >> rpt strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` (mp_tac o BETA_RULE)) >>
       (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
       qpat_x_assum `!H res ee r. exit_result _ /\ _ ==> _`
         (qspecl_then [`H`, `INR ex`, `es_end with gas_obs := []`, `r`] mp_tac) >>
@@ -202,20 +202,17 @@ Proof
   simp[SF ETA_ss] >> disch_then (fn th => rewrite_tac[th]) >>
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
-  rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (gen_tac >> BETA_TAC >> irule (CONJUNCT1 raw_log_tail_trace_frame))
-  >~ [`exit_result _`]
-  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def]) >>
+  reverse (rpt conj_tac)
+  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def])
+  >- (gen_tac >> BETA_TAC >> irule (CONJUNCT1 raw_log_tail_trace_frame)) >>
   (* the topics: one endpoint, the post at each valid horizon of it *)
   qx_genl_tac [`marks`, `res`, `mid`, `t`] >> strip_tac >>
   `?H1. valid_horizon cx st0 H1 mid.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
   `?vs. res = INL vs` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> Cases_on `res` >> simp[]) >>
-  qpat_x_assum `?vs. res = INL vs` (qx_choose_then `vs` assume_tac) >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> Cases_on `res` >> simp[]) >>
   BasicProvers.VAR_EQ_TAC >>
   qexists_tac `vs` >> conj_tac >- REFL_TAC >> BETA_TAC >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -225,20 +222,20 @@ Proof
      t.vs_inst_idx = LENGTH sm.cs_current_insts` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      drule_all raw_log_topics_marked_post >> simp[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t` by
@@ -246,8 +243,8 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      drule_all raw_log_topics_marked_post >> simp[]) >>
   `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
      stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
@@ -256,8 +253,8 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[])) >>
      simp[typed_args_post_def]) >>
   `eval_exprs cx topics
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -287,10 +284,8 @@ Proof
   `lower_value compile_expr cenv (expr_type data) data sm = (data_op,sn)` by simp[] >>
   drule_all expr_sim_apply >>
   disch_then (mp_then Any irule stmtReasonVvMemoryTheory.gas_outcome_bind_value) >>
-  rpt conj_tac
-  >~ [`storage_trace_frame _`]
+  reverse (rpt conj_tac)
   >- (gen_tac >> BETA_TAC >> irule (CONJUNCT2 raw_log_tail_trace_frame))
-  >~ [`exit_result _`]
   >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
   (* the data: again one endpoint with the post at each valid horizon *)
   qx_genl_tac [`marks2`, `res2`, `mid2`, `td`] >> strip_tac >>
@@ -298,9 +293,8 @@ Proof
     metis_tac[storage_trace_domain_def] >>
   `?dv. res2 = INL dv` by
     (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
-       (qspec_then `H2` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> Cases_on `res2` >> simp[]) >>
-  qpat_x_assum `?dv. res2 = INL dv` (qx_choose_then `dv` assume_tac) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> Cases_on `res2` >> simp[]) >>
   BasicProvers.VAR_EQ_TAC >>
   `!H. valid_horizon cx st0 H mid2.storage_trace ==>
      expr_post H ctx func cenv cx data (mid with gas_obs := []) sm sn t
@@ -309,14 +303,14 @@ Proof
      td.vs_inst_idx = LENGTH sn.cs_current_insts` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `td.vs_current_bb = sn.cs_current_bb /\ td.vs_inst_idx = LENGTH sn.cs_current_insts` by
     (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
         expr_post H ctx func cenv cx data (mid with gas_obs := []) sm sn t
           (mid2 with gas_obs := []) dv data_op td /\ _`
-       (qspec_then `H2` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `bind (eval_expr cx data) (read_result cx)
      (mid with gas_obs := gas_explicit marks2 t.vs_gas_readings) =
      (INL dv, mid2 with gas_obs := [])` by
@@ -331,35 +325,34 @@ Proof
      drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
   `valid_horizon cx st0 H2 es.storage_trace` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
-        valid_horizon _ _ H es.storage_trace` (qspec_then `H2` mp_tac) >> simp[]) >>
+        valid_horizon _ _ H es.storage_trace` (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `wb_args_post H2 ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `stmt_state_rel H2 ctx func cenv cx es s0` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\ _`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `expr_post H2 ctx func cenv cx data (mid with gas_obs := []) sm sn t
      (mid2 with gas_obs := []) dv data_op td` by
     (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
         expr_post H ctx func cenv cx data (mid with gas_obs := []) sm sn t
           (mid2 with gas_obs := []) dv data_op td /\ _`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `expr_body_pre cenv cx env data
-    (mid with gas_obs := gas_explicit marks2 t.vs_gas_readings)` by simp[] >>
+    (mid with gas_obs := gas_explicit marks2 t.vs_gas_readings)` by fs[] >>
   drule_all (SRULE [SF ETA_ss] expr_body_pre_base_result) >> strip_tac >>
   `?bs. dv = BytesV bs` by
     (qpat_x_assum `!v'. INL dv = _ ==> _` mp_tac >>
      simp[] >> Cases_on `dv` >> simp[vyperTypingTheory.value_has_type_def]) >>
-  qpat_x_assum `?bs. dv = BytesV bs` (qx_choose_then `bs` assume_tac) >>
   BasicProvers.VAR_EQ_TAC >>
   qexists_tac `BytesV bs` >> conj_tac >- REFL_TAC >> BETA_TAC >>
   `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by simp[] >>
   drule_all raw_log_data_post_transport >> strip_tac >>
   `evaluate_type (get_tenv cx) (expr_type data) =
      SOME (BaseTV (BytesT (Dynamic cap)))` by
-    (`expr_body_pre cenv cx env data mid` by simp[] >>
+    (`expr_body_pre cenv cx env data mid` by fs[] >>
      drule expr_body_pre_type_evaluates >>
      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
   drule_all raw_log_dynamic_data_view >> strip_tac >>
@@ -370,8 +363,8 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
         expr_post H ctx func cenv cx data (mid with gas_obs := []) sm sn t
           (mid2 with gas_obs := []) (BytesV bs) data_op td /\ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[])) >>
      simp[expr_post_def]) >>
   `valid_horizon cx st0 H2 (mid2 with gas_obs := []).storage_trace` by simp[] >>
   `~td.vs_halted` by
@@ -381,8 +374,9 @@ Proof
   `LENGTH vs = LENGTH topics` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
-          topics ops vs t /\ _` (qspec_then `H2` mp_tac) >>
-     simp[typed_args_post_def]) >>
+          topics ops vs t /\ _` (qspec_then `H2` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >> fs[typed_args_post_def]) >>
   `eval_operands ops td = SOME (MAP event_value_to_word vs)` by
     (qpat_x_assum `LIST_REL _ ops vs` mp_tac >>
      rpt (pop_assum kall_tac) >> qid_spec_tac `vs` >>
@@ -395,24 +389,22 @@ Proof
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   qpat_assum `LENGTH ops = LENGTH topics`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
-  qpat_x_assum `Abbrev (call = _)`
-    (strip_assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  BasicProvers.VAR_EQ_TAC >>
   drule_all_then (qx_choose_then `tl` strip_assume_tac)
     raw_log_dynamic_tail_counted >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
-  irule raw_log_tail_summary >> qexists_tac `tl` >>
+  irule raw_log_tail_summary >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bs`, `tl`] >>
   conj_tac >- simp[dest_BytesV_def] >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   BETA_TAC >> gen_tac >> strip_tac >>
   qexists_tac `NoneV` >> conj_tac >- REFL_TAC >>
   conj_tac
   >- (irule raw_log_post_gas_obs >>
       qpat_assum `!H. valid_horizon _ _ H (mid2 with gas_obs := []).storage_trace ==>
           expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
-      asm_simp_tac (srw_ss()) []) >>
+      fs[]) >>
   simp[]
 QED
 
@@ -537,20 +529,17 @@ Proof
   simp[SF ETA_ss] >> disch_then (fn th => rewrite_tac[th]) >>
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
-  rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (gen_tac >> BETA_TAC >> irule (CONJUNCT1 raw_log_tail_trace_frame))
-  >~ [`exit_result _`]
-  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def]) >>
+  reverse (rpt conj_tac)
+  >- (rpt gen_tac >> Cases_on `res` >> simp[wb_args_exit_def])
+  >- (gen_tac >> BETA_TAC >> irule (CONJUNCT1 raw_log_tail_trace_frame)) >>
   (* the topics *)
   qx_genl_tac [`marks`, `res`, `mid`, `t`] >> strip_tac >>
   `?H1. valid_horizon cx st0 H1 mid.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
   `?vs. res = INL vs` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> Cases_on `res` >> simp[]) >>
-  qpat_x_assum `?vs. res = INL vs` (qx_choose_then `vs` assume_tac) >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> Cases_on `res` >> simp[]) >>
   BasicProvers.VAR_EQ_TAC >>
   qexists_tac `vs` >> conj_tac >- REFL_TAC >> BETA_TAC >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -560,20 +549,20 @@ Proof
      t.vs_inst_idx = LENGTH sm.cs_current_insts` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      drule_all raw_log_topics_marked_post >> simp[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t` by
@@ -581,8 +570,8 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      drule_all raw_log_topics_marked_post >> simp[]) >>
   `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
      stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
@@ -591,8 +580,8 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
           topics ops vs t /\ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[])) >>
      simp[typed_args_post_def]) >>
   `eval_exprs cx topics
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -621,7 +610,9 @@ Proof
   `wb_frame cenv es (mid with gas_obs := []) sa s0 t` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t`
-       (qspec_then `H1` mp_tac) >> simp[wb_args_post_def]) >>
+       (qspec_then `H1` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >> fs[wb_args_post_def]) >>
   drule_all_then (qx_choosel_then [`ta`, `w`] strip_assume_tac)
     raw_log_alloc_counted >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -631,22 +622,22 @@ Proof
      `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) ta` by
        (qpat_assum `!H. valid_horizon _ _ H (mid with gas_obs := []).storage_trace ==>
            stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) ta`
-          (qspec_then `H` mp_tac) >> simp[]) >>
+          (qspec_then `H` (mp_tac o BETA_RULE)) >> simp[]) >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      irule raw_log_alloc_args_post >> simp[] >> qexistsl_tac [`sm`, `t`] >> simp[]) >>
   `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
      stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) ta /\
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
-    (rpt strip_tac >> conj_tac
+    (gen_tac >> strip_tac >> conj_tac
      >- (qpat_assum `!H. valid_horizon _ _ H (mid with gas_obs := []).storage_trace ==>
            stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) ta`
-          (qspec_then `H` mp_tac) >> simp[])
+          (qspec_then `H` (mp_tac o BETA_RULE)) >> simp[])
      >- (qpat_assum `!H. valid_horizon _ _ H (mid with gas_obs := []).storage_trace ==>
            stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\ _`
-          (qspec_then `H` mp_tac) >> simp[])) >>
+          (qspec_then `H` (mp_tac o BETA_RULE)) >> simp[])) >>
   irule gas_outcome_zero_prefix >> qexists_tac `ta` >> simp[] >>
   `expr_body_pre cenv cx env data (mid with gas_obs := [])` by
     (qpat_assum `!s. expr_sim_inv _ _ _ s ==> expr_body_pre _ _ _ data s` irule >>
@@ -655,10 +646,8 @@ Proof
   `lower_value compile_expr cenv (expr_type data) data sk = (data_op,sn)` by simp[] >>
   drule_all expr_sim_apply >>
   disch_then (mp_then Any irule stmtReasonVvMemoryTheory.gas_outcome_bind_value) >>
-  rpt conj_tac
-  >~ [`storage_trace_frame _`]
+  reverse (rpt conj_tac)
   >- (gen_tac >> BETA_TAC >> irule (CONJUNCT2 raw_log_tail_trace_frame))
-  >~ [`exit_result _`]
   >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
   (* the data *)
   qx_genl_tac [`marks2`, `res2`, `mid2`, `td`] >> strip_tac >>
@@ -666,9 +655,8 @@ Proof
     metis_tac[storage_trace_domain_def] >>
   `?dv. res2 = INL dv` by
     (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
-       (qspec_then `H2` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> Cases_on `res2` >> simp[]) >>
-  qpat_x_assum `?dv. res2 = INL dv` (qx_choose_then `dv` assume_tac) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> Cases_on `res2` >> simp[]) >>
   BasicProvers.VAR_EQ_TAC >>
   `!H. valid_horizon cx st0 H mid2.storage_trace ==>
      expr_post H ctx func cenv cx data (mid with gas_obs := []) sk sn ta
@@ -677,14 +665,14 @@ Proof
      td.vs_inst_idx = LENGTH sn.cs_current_insts` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `td.vs_current_bb = sn.cs_current_bb /\ td.vs_inst_idx = LENGTH sn.cs_current_insts` by
     (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
         expr_post H ctx func cenv cx data (mid with gas_obs := []) sk sn ta
           (mid2 with gas_obs := []) dv data_op td /\ _`
-       (qspec_then `H2` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `bind (eval_expr cx data) (read_result cx)
      (mid with gas_obs := gas_explicit marks2 ta.vs_gas_readings) =
      (INL dv, mid2 with gas_obs := [])` by
@@ -700,32 +688,31 @@ Proof
   `valid_horizon cx st0 H2 (mid with gas_obs := []).storage_trace` by simp[] >>
   `valid_horizon cx st0 H2 es.storage_trace` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
-        valid_horizon _ _ H es.storage_trace` (qspec_then `H2` mp_tac) >> simp[]) >>
+        valid_horizon _ _ H es.storage_trace` (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `wb_args_post H2 ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs ta` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs ta`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `stmt_state_rel H2 ctx func cenv cx es s0` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\ _`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `stmt_state_rel H2 ctx func cenv cx (mid with gas_obs := []) ta` by
     (qpat_assum `!H. valid_horizon _ _ H (mid with gas_obs := []).storage_trace ==>
         stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) ta /\ _`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `expr_post H2 ctx func cenv cx data (mid with gas_obs := []) sk sn ta
      (mid2 with gas_obs := []) dv data_op td` by
     (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
         expr_post H ctx func cenv cx data (mid with gas_obs := []) sk sn ta
           (mid2 with gas_obs := []) dv data_op td /\ _`
-       (qspec_then `H2` mp_tac) >> simp[]) >>
+       (qspec_then `H2` (mp_tac o BETA_RULE)) >> simp[]) >>
   `expr_body_pre cenv cx env data
-    (mid with gas_obs := gas_explicit marks2 ta.vs_gas_readings)` by simp[] >>
+    (mid with gas_obs := gas_explicit marks2 ta.vs_gas_readings)` by fs[] >>
   drule_all (SRULE [SF ETA_ss] expr_body_pre_base_result) >> strip_tac >>
   `?bs. dv = BytesV bs` by
     (qpat_x_assum `!v'. INL dv = _ ==> _` mp_tac >>
      simp[] >> Cases_on `dv` >> simp[vyperTypingTheory.value_has_type_def]) >>
-  qpat_x_assum `?bs. dv = BytesV bs` (qx_choose_then `bs` assume_tac) >>
   BasicProvers.VAR_EQ_TAC >>
   qexists_tac `BytesV bs` >> conj_tac >- REFL_TAC >> BETA_TAC >>
   `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by simp[] >>
@@ -749,8 +736,8 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
         expr_post H ctx func cenv cx data (mid with gas_obs := []) sk sn ta
           (mid2 with gas_obs := []) (BytesV bs) data_op td /\ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[]) >>
+       (qspec_then `H` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >> simp[])) >>
      simp[expr_post_def]) >>
   `valid_horizon cx st0 H2 (mid2 with gas_obs := []).storage_trace` by simp[] >>
   `~td.vs_halted` by
@@ -760,8 +747,9 @@ Proof
   `LENGTH vs = LENGTH topics` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         typed_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := [])
-          topics ops vs t /\ _` (qspec_then `H2` mp_tac) >>
-     simp[typed_args_post_def]) >>
+          topics ops vs t /\ _` (qspec_then `H2` (mp_tac o BETA_RULE)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >> fs[typed_args_post_def]) >>
   `eval_operands ops td = SOME (MAP event_value_to_word vs)` by
     (qpat_x_assum `LIST_REL _ ops vs` mp_tac >>
      rpt (pop_assum kall_tac) >> qid_spec_tac `vs` >>
@@ -800,24 +788,23 @@ Proof
   `FLOOKUP td.vs_allocas
     (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString sm.cs_next_var)]).inst_id = SOME (w2n w,32)` by simp[mk_inst_def] >>
-  qpat_x_assum `Abbrev (call = _)`
-    (strip_assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  BasicProvers.VAR_EQ_TAC >>
+  `eval_operand buf.buf_operand td = SOME w` by fs[] >>
   drule_all_then (qx_choose_then `tl` strip_assume_tac)
     raw_log_fixed_tail_counted >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
-  irule raw_log_tail_summary >> qexists_tac `tl` >>
+  irule raw_log_tail_summary >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bs`, `tl`] >>
   conj_tac >- simp[dest_BytesV_def] >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   BETA_TAC >> gen_tac >> strip_tac >>
   qexists_tac `NoneV` >> conj_tac >- REFL_TAC >>
   conj_tac
   >- (irule raw_log_post_gas_obs >>
       qpat_assum `!H. valid_horizon _ _ H (mid2 with gas_obs := []).storage_trace ==>
           expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
-      asm_simp_tac (srw_ss()) []) >>
+      fs[]) >>
   simp[]
 QED
 
