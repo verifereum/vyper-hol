@@ -2,7 +2,7 @@
 Theory bodyIntCallFamCallExt
 Ancestors
   bodyIntCallJointContract bodyIntCallJointCallCore bodyIntCallJointPurePath
-  exprExtRequestHistory extcallProtFramePath
+  exprExtRequestHistory extcallProtFramePath exprSimSliceCompose
 
 Theorem intcall_ext_history_cont[local]:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -48,6 +48,63 @@ Proof
      metis_tac[]) >>
   fs[intcall_expr_cont_def, extrequest_history_frame_def,
      loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
+QED
+
+Theorem intcall_ext_target_cps[local]:
+  intcall_forced_producer fp e /\ intcall_frame_ok fp /\
+  body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  expr_body_pre ce fp.jc_cx env e es /\ expr_type e = BaseT AddressT /\
+  supported_expr fp.jc_tops e /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+  lower_value compile_expr ce (BaseT AddressT) e sa = (op,sb) /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  gas_admissible (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+    expr_vv_res_ok es /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!v ee u.
+    expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u /\
+    intcall_expr_cont fp ce env es sa s ee sb u /\ ee.gas_obs = [] /\
+    (?used. !tail. bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+      (es with gas_obs := used ++ tail) = (INL v,ee with gas_obs := tail)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (kont v) (ee,u) Q (\r ee z. expr_exit r z)) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+    (es,s) Q (\r ee z. expr_exit r z)
+Proof
+  strip_tac >>
+  `gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
+     expr_res_ok es` by metis_tac[slice_gas_admissible_expr_head] >>
+  `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) (es,s)
+    (\res ee u. ?v. res = INL v /\
+      expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u /\
+      intcall_expr_cont fp ce env es sa s ee sb u)
+    (\res ee r. ?ex. res = INR ex /\ expr_exit (INR ex) r)` by
+    (fs[intcall_forced_producer_def] >>
+     first_x_assum (drule_all_then mp_tac) >>
+     strip_tac >> irule slice_gas_outcome_conseq >>
+     goal_assum (drule_at Any) >>
+     qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+     qpat_x_assum `!v ee u. _` kall_tac >>
+     rpt conj_tac >> rpt gen_tac >> Cases_on `res` >>
+     simp[exprSimDefsTheory.expr_exit_def] >> strip_tac >>
+     gvs[loweringPostsTheory.expr_post_def, intcall_expr_cont_def,
+         intcall_expr_res_def] >>
+     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  irule slice_gas_outcome_bind_value >>
+  qexists `\v ee u. expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u /\
+    intcall_expr_cont fp ce env es sa s ee sb u` >>
+  reverse conj_tac
+  >- (BETA_TAC >> irule slice_gas_outcome_conseq >>
+      goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> fs[] >>
+  qexists `gas_explicit marks s.vs_gas_readings` >>
+  gvs[gasSummaryTheory.gas_marked_exec_def]
 QED
 
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
