@@ -24,8 +24,8 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ld_owned_prefix_pack:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_owned_prefix_pack_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
   ^ld_probe_stable lo P Sigma names fs f0 A0 A frames /\
   fn' = ld_image (HD frames) /\
@@ -51,14 +51,55 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem ld_point_owned_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
+  active_inst fn' ti t ==>
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
+  fs[] >> drule_all (SRULE [] ld_owned_prefix_pack_static) >> gvs[Abbr `Goal`]
+QED
+
+Theorem ld_transfer_point_owned_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
+  ^ld_transfer_point lo P C C' vs0 stk fn fn' source fs f0 A0 Sigma names bb t /\
+  active_inst fn' ti t ==>
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t
+Proof
+  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
+  fs[] >> drule_all (SRULE [] ld_owned_prefix_pack_static) >> gvs[Abbr `Goal`]
+QED
+
+Theorem ld_owned_prefix_pack:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+  ^ld_probe_stable lo P Sigma names fs f0 A0 A frames /\
+  fn' = ld_image (HD frames) /\
+  ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\ active_inst fn' ti t ==>
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE o
+    REWRITE_RULE [o1_run_state_ok_def]) >>
+  mp_tac (BETA_RULE ld_owned_prefix_pack_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem ld_point_owned:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
   ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
   active_inst fn' ti t ==>
   ^ld_owned lo P C C' vs0 Sigma names fn' ti t
 Proof
-  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
-  fs[] >> drule_all (SRULE [] ld_owned_prefix_pack) >> gvs[Abbr `Goal`]
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE o
+    REWRITE_RULE [o1_run_state_ok_def]) >>
+  mp_tac (BETA_RULE ld_point_owned_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem ld_transfer_point_owned:
@@ -67,8 +108,12 @@ Theorem ld_transfer_point_owned:
   active_inst fn' ti t ==>
   ^ld_owned lo P C C' vs0 Sigma names fn' ti t
 Proof
-  strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
-  fs[] >> drule_all (SRULE [] ld_owned_prefix_pack) >> gvs[Abbr `Goal`]
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (map_every assume_tac o CONJUNCTS o BETA_RULE o
+    REWRITE_RULE [o1_run_state_ok_def]) >>
+  mp_tac (BETA_RULE ld_transfer_point_owned_static) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem ld_owned_root_static:
