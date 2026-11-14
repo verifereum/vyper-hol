@@ -5,7 +5,8 @@ Ancestors bodyPtrBopScalarRun bodyPtrBopScalarDispatch bodyPtrBopScalarSeq
   fragGasSeqPtr gasSummaryComposePtr gasStorage vyperStorageFootprint
   bodyPtrBopScalarDynamic fragExec rich_list exprLoweringProps
   appendStorageGhostPtr emitHelperProps freshWrites ptrDiscipline
-  exprBopSimProps exprSimDefs fragGasPathPtr
+  exprBopSimProps exprSimDefs fragGasPathPtr fragGasCopyLoop
+  fragGasOriginPtr fragExecMem instMemFrontier
   venomExecSemantics venomState venomInst finite_map list pred_set
 
 Theorem bop_scalar_seq_outputs:
@@ -207,20 +208,38 @@ Resume bop_scalar_suffix_outcome_ptr[abort]:
     (drule run_inst_seq_append >>
      disch_then (qspec_then `[mk_inst id opc [needle] []]` mp_tac) >>
      simp[run_inst_seq_def]) >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  `EVERY (\i. MEM i.inst_opcode
+      [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+       EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT;
+       SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSIGN; ASSERT; ASSERT_UNREACHABLE])
      (prefix ++ [mk_inst id opc [needle] []])` by
-    (drule bop_scalar_seq_opcodes >>
-     gvs[EVERY_CONJ, EVERY_APPEND, mk_inst_def, is_terminator_def]) >>
-  drule_all run_inst_seq_gas_path_ptr_abort_uniform >>
-  disch_then (qspec_then `ctx`
-    (qx_choose_then `n` (qx_choose_then `j` assume_tac))) >>
+    (simp[EVERY_APPEND, mk_inst_def, EVERY_MEM] >>
+     rpt strip_tac >> drule_all bop_scalar_seq_outputs >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+      i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
+     (prefix ++ [mk_inst id opc [needle] []])` by
+    (rewrite_tac[EVERY_MEM] >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `EVERY (\i. MEM i.inst_opcode _) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> simp[] >> strip_tac >> simp[is_terminator_def]) >>
+  `run_inst_seq_mem_ok (prefix ++ [mk_inst id opc [needle] []]) s` by
+    (irule run_inst_seq_mem_ok_every >> rewrite_tac[EVERY_MEM] >>
+     rpt gen_tac >> strip_tac >> BETA_TAC >> gen_tac >>
+     qpat_x_assum `EVERY (\i. MEM i.inst_opcode _) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> simp[] >> strip_tac >>
+     simp[below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other]) >>
+  `allocas_from 0 s` by simp[allocas_from_def] >>
+  drule_all run_inst_seq_origin_ptr_abort_lift >>
+  disch_then (qspecl_then [`{}`, `ctx`, `PG`]
+    (qx_choose_then `j` assume_tac)) >>
   drule bop_scalar_seq_assert_abort_checked >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >> simp[] >>
   disch_then (qspecl_then [`fn`,`PG`,`D H0`] strip_assume_tac) >>
   rename1 `inst_seq_ptr (D H0) 0 ctx fn PG G tn _ s Ga tna` >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `REPLICATE n F` >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >>
   disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError m))`, `es`, `Ga`, `tna`,
     `Abort Revert_abort (t with vs_inst_idx := j)`] >>
@@ -232,6 +251,8 @@ Resume bop_scalar_suffix_outcome_ptr[abort]:
   disch_then (qspecl_then [`fn`,`PG`,`D H2`] strip_assume_tac) >>
   rename1 `inst_seq_ptr (D H2) 0 ctx fn PG G tn _ s Gb tnb` >>
   `Gb = Ga /\ tnb = tna` by metis_tac[inst_seq_ptr_ghost_unique] >>
-  gvs[expr_exit_def, exit_result_def] >> metis_tac[]
+  gvs[expr_exit_def, exit_result_def] >>
+  first_x_assum (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_projections) >> simp[]
 QED
 Finalise bop_scalar_suffix_outcome_ptr
