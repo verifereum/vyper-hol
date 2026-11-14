@@ -98,6 +98,27 @@ Proof
   >> metis_tac[]
 QED
 
+(* Owned buffers are clear of live locals, including dynamic array headers. *)
+Theorem vv_own_memory_bytes_frame:
+  vv_own cenv cx ty sa sb es r (LocatedValue ann p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx r es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand p.ptr_operand s = SOME w /\
+  wb_frame cenv es ee sb s s' ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) s'.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_own_def] >> strip_tac >> gvs[]
+  >- (gvs[wb_frame_def] >>
+      `mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >> simp[]) >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
 Theorem vv_post_vars_frame:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   (t with vs_vars := s.vs_vars) = s /\
