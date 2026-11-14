@@ -1,7 +1,7 @@
 (* Joint count validation, count store and scratch-index initialization. *)
 Theory decoderArrayInitPtr
-Ancestors physicalArrayInitSequence actualIndexInitPtr wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafetyTransport decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
-  decoderNavigationPtr calldataClampPtr typedCopyPtr bodyPtrDefs
+Ancestors venomMemDefs unitTransformDefs fragExecMem instSeqComposePtr ghostPcTransportPtr fragGasOriginPtr instMemFrontier memSafeRun physicalArrayInitSequence actualIndexInitPtr wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafetyTransport decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
+  fragGasSeqPtr decoderNavigationPtr calldataClampPtr typedCopyPtr bodyPtrDefs
   compileEnv loweringStateRelDefs emitHelper venomInst venomExecSemantics venomState words list
   rich_list arithmetic finite_map ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
   emitHelperProps exprLoweringProps fragExec decoderGhostFramePtr
@@ -50,92 +50,19 @@ Proof
   strip_tac >> gvs[APPEND_ASSOC]
 QED
 
-Theorem emit_count_comparison_endpoint_ptr[local]:
-  !src bound sa out sb s t a G tn cx ctx PG R.
-  emit_op GT [src; Lit bound] sa = (out,sb) /\
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u. frag_exec_ptr H cx ctx PG sa sb
-      (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = HG /\ z = u /\
-        v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
-    op_taint u out = {} /\ op_prov HG out = NONE /\
-    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
-    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
-    (?vars. t = s with vs_vars := vars) /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all emit_count_comparison_endpoint_ptr_core >>
-  disch_then (qspecl_then [`H`, `G`] mp_tac) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
-QED
-
-Theorem emit_clamp_scalar_endpoint_ptr[local]:
-  emit_op opc ops sa = (out,sb) /\
-  MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO] /\
-  EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u. op_taint u out = {} /\ op_prov HG out = NONE /\
-    frag_exec_ptr H cx ctx PG sa sb
-      (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = HG /\ z = u /\
-        v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
-    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
-    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
-    (?vars. t = s with vs_vars := vars) /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
-Proof
-  strip_tac >> drule_all emit_clamp_scalar_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
-QED
-
-Theorem emit_assert_endpoint_ptr[local]:
-  emit_void ASSERT [op] sa = ((),sb) /\
-  op_taint tn op = {} /\ op_prov G op = NONE /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  frag_exec_ptr H cx ctx PG sa sb
-    (\g z v. g = G /\ z = tn /\ v = s)
-    (\g z v. g = G /\ z = tn /\
-      v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\ t = s
-Proof
-  strip_tac >> drule_all emit_assert_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >> simp[]
-QED
-
-Theorem emit_count_load_endpoint_ptr[local]:
-  !src sa out sb s t a G tn cx ctx PG R.
-  emit_op CALLDATALOAD [src] sa = (out,sb) /\
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u. frag_exec_ptr H cx ctx PG sa sb
-    (\g z v. g = G /\ z = tn /\ v = s)
-    (\g z v. g = HG /\ z = u /\
-      v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
-    op_taint u out = {} /\ op_prov HG out = NONE /\
-    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
-    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
-    (?vars. t = s with vs_vars := vars) /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all emit_count_load_endpoint_ptr_core >>
-  disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
-QED
 
 
-
-Theorem calldata_count_guard_endpoint_ptr_core:
+Theorem calldata_count_guard_endpoint_ptr_origin_core_joint:
   abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u. op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+  ?HG u. (!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
     frag_exec_ptr H cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
       (\g z v. g = HG /\ z = u /\
@@ -150,7 +77,11 @@ Theorem calldata_count_guard_endpoint_ptr_core:
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
+    (alloca_inv s ==> run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u)
 Proof
   strip_tac >>
   qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
@@ -186,8 +117,8 @@ Proof
   suspend "guard_ghost"
 QED
 
-Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
-  drule_all emit_count_load_endpoint_ptr_core >>
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_ghost]:
+  drule_all emit_calldata_load_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`H`, `G`] mp_tac) >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u1 cnt = {}` >>
@@ -204,8 +135,8 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
      simp[is_terminator_def, exec_result_map_def]) >>
   `eval_operand cnt (s1 with vs_inst_idx := SUC s.vs_inst_idx) = SOME b` by
     (Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def]) >>
-  qpat_x_assum `run_inst_seq (emitted_insts c1 c2) s1 = _` kall_tac >>
-  drule_all emit_count_comparison_endpoint_ptr_core >>
+  qpat_x_assum `run_inst_seq (emitted_insts c1 c2) s1 = _` (mk_asm "cmp_run") >>
+  drule_all emit_count_comparison_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`H`, `H1`] mp_tac) >> simp[NoAsms] >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u2 cmp = {}` >> rename1 `op_prov H2 cmp = NONE` >>
@@ -214,14 +145,14 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
     OK (s3 with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by
     (qpat_assum `emit_op ISZERO _ _ = _` (mp_then Any mp_tac emit_op_run_pc) >>
      simp[is_terminator_def, exec_result_map_def]) >>
-  qpat_x_assum `run_inst_seq (emitted_insts c2 c3) s2 = _` kall_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts c2 c3) s2 = _` (mk_asm "zero_run") >>
   `MEM ISZERO [SIGNEXTEND; SHR; SHL; EQ; ISZERO] /\
     EVERY (\op. op_taint u2 op = {} /\ op_prov H2 op = NONE) [cmp]` by simp[] >>
-  drule_all emit_clamp_scalar_endpoint_ptr_core >>
+  drule_all emit_clamp_scalar_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] mp_tac) >> simp[NoAsms] >>
   strip_tac >> rename1 `op_taint u3 ok = {}` >> rename1 `op_prov H3 ok = NONE` >>
   qpat_x_assum `emitted_insts sa sb = _` kall_tac >>
-  qpat_x_assum `run_inst_seq (emitted_insts sa c1) _ = _` kall_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa c1) _ = _` (mk_asm "load_run") >>
   qpat_x_assum `run_inst_seq (emitted_insts c1 c2) _ = _` kall_tac >>
   qpat_x_assum `run_inst_seq (emitted_insts c2 c3) _ = _` kall_tac >>
   `run_inst_seq (emitted_insts c3 sb)
@@ -231,21 +162,31 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
       (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
      simp[run_inst_seq_inst_idx, mk_inst_def, is_terminator_def, exec_result_map_def]) >>
   qpat_x_assum `run_inst_seq (emitted_insts c3 sb) s3 = _` kall_tac >>
-  drule_all emit_assert_endpoint_ptr_core >>
+  drule_all emit_assert_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] mp_tac) >> simp[NoAsms] >> strip_tac >>
   `t = s3` by
     (qpat_x_assum `t with vs_inst_idx := _ = _` mp_tac >>
      simp[venom_state_component_equality]) >>
-  `s2 = s1 with vs_vars := vars'` by
+  `s2 = s1 with vs_vars := s2.vs_vars` by
     (qpat_x_assum `s2 with vs_inst_idx := _ = _` mp_tac >>
-     simp[venom_state_component_equality]) >>
-  `s3 = s2 with vs_vars := vars''` by
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `s3 = s2 with vs_vars := s3.vs_vars` by
     (qpat_x_assum `s3 with vs_inst_idx := _ = _` mp_tac >>
-     simp[venom_state_component_equality]) >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `s2.vs_allocas = s1.vs_allocas /\ s2.vs_alloca_next = s1.vs_alloca_next /\
+   s2.vs_current_bb = s1.vs_current_bb /\ s2.vs_halted = s1.vs_halted` by
+    (qpat_assum `s2 = s1 with vs_vars := _`
+      (mp_tac o AP_TERM ``\v:venom_state.
+        (v.vs_allocas,v.vs_alloca_next,v.vs_current_bb,v.vs_halted)``) >> simp[]) >>
+  `s3.vs_allocas = s2.vs_allocas /\ s3.vs_alloca_next = s2.vs_alloca_next /\
+   s3.vs_current_bb = s2.vs_current_bb /\ s3.vs_halted = s2.vs_halted` by
+    (qpat_assum `s3 = s2 with vs_vars := _`
+      (mp_tac o AP_TERM ``\v:venom_state.
+        (v.vs_allocas,v.vs_alloca_next,v.vs_current_bb,v.vs_halted)``) >> simp[]) >>
   suspend "guard_compose"
 QED
 
-Resume calldata_count_guard_endpoint_ptr_core[guard_compose]:
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_compose]:
   `cs_extends sa c1 /\ cs_extends c1 c2 /\ cs_extends c2 c3 /\ cs_extends c3 sb` by
     (rpt conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def] >>
      metis_tac[emit_op_same_blocks, emit_void_same_blocks, same_blocks_def]) >>
@@ -267,7 +208,7 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_compose]:
   suspend "guard_frames"
 QED
 
-Resume calldata_count_guard_endpoint_ptr_core[guard_frames]:
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_frames]:
   qpat_x_assum `frag_exec_ptr _ _ _ _ sa c1 _ _ _` kall_tac >>
   qpat_x_assum `frag_exec_ptr _ _ _ _ c1 c2 _ _ _` kall_tac >>
   qpat_x_assum `frag_exec_ptr _ _ _ _ c2 c3 _ _ _` kall_tac >>
@@ -283,17 +224,35 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_frames]:
   `!x. cnt = Var x ==> not_fresh_at c2 x` by
     (rpt strip_tac >> `not_fresh_at c1 x` by metis_tac[] >>
      gvs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `(alloca_inv s ==> run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t)` by
+    suspend "guard_memory" >>
+  `!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+    !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+      (s with vs_inst_idx := k) H3 u3` by
+    suspend "guard_checks" >>
   qexistsl_tac [`H3`,`u3`] >>
+  conj_tac >- suspend "guard_origin" >>
   conj_tac >-
     (Cases_on `cnt` >> gvs[op_taint_def] >> metis_tac[]) >>
   conj_tac >-
     (Cases_on `cnt` >> gvs[op_prov_def] >> metis_tac[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (qexists_tac `vars''` >> simp[]) >>
+  conj_tac >-
+    (qexists_tac `t.vs_vars` >> fs[venom_state_component_equality] >> metis_tac[]) >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++
+    (emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 sb))` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  qpat_x_assum `emitted_insts sa sb = _` (fn eq =>
+    qpat_x_assum `alloca_inv s ==> run_inst_seq_mem_ok _ s /\ _`
+      (assume_tac o PURE_REWRITE_RULE [eq, APPEND_ASSOC]) >>
+    qpat_x_assum `!D lower ctx' func. allocas_from lower s /\ _ ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn _ _ H3 u3`
+      (assume_tac o PURE_REWRITE_RULE [eq, APPEND_ASSOC])) >>
+  pure_rewrite_tac [APPEND_ASSOC] >>
   fs[lookup_var_def] >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume calldata_count_guard_endpoint_ptr_core[guard_continuation]:
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_continuation]:
   rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
   `c1.cs_current_bb = sa.cs_current_bb /\
@@ -316,7 +275,229 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_continuation]:
   gvs[]
 QED
 
-Finalise calldata_count_guard_endpoint_ptr_core
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_origin]:
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
+  `c1.cs_current_bb = sa.cs_current_bb /\
+   c2.cs_current_bb = sa.cs_current_bb /\ c3.cs_current_bb = sa.cs_current_bb /\
+   LENGTH c1.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+   LENGTH c2.cs_current_insts = SUC (SUC (LENGTH sa.cs_current_insts)) /\
+   LENGTH c3.cs_current_insts = SUC (SUC (SUC (LENGTH sa.cs_current_insts)))` by
+    (imp_res_tac emitted_insts_emit_op >>
+     imp_res_tac emit_op_same_blocks >> gvs[same_blocks_def, ADD1]) >>
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+   fn_has_code c2 c3 func /\ fn_has_code c3 sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `allocas_from lower (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+   allocas_from lower (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)) /\
+   allocas_from lower (s3 with vs_inst_idx := SUC (SUC (SUC s.vs_inst_idx))) /\
+   s1.vs_current_bb = c1.cs_current_bb /\ s2.vs_current_bb = c2.cs_current_bb /\
+   s3.vs_current_bb = c3.cs_current_bb` by
+    (gvs[allocas_from_def] >> metis_tac[]) >>
+  gvs[] >> metis_tac[gas_origin_ptr_path_append, APPEND]
+QED
+
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_checks]:
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
+  rpt gen_tac >> strip_tac >>
+  `allocas_from lower (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+   allocas_from lower (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)) /\
+   allocas_from lower (s3 with vs_inst_idx := SUC (SUC (SUC s.vs_inst_idx)))` by
+    (gvs[allocas_from_def] >> metis_tac[]) >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++
+    (emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 sb))` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa c1) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c1 c2) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c2 c3)` by
+    (imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
+  asm "load_run" assume_tac >>
+  asm "cmp_run" assume_tac >> asm "zero_run" assume_tac >>
+  `!k. inst_seq_ptr D lower ctx' func PG H2 u2
+    (emitted_insts c2 c3 ++ emitted_insts c3 sb) (s2 with vs_inst_idx := k) H3 u3` by
+    (irule inst_seq_ptr_uniform_append >> reverse conj_tac >- simp[] >>
+     qexistsl_tac [`H3`,`s3`,`u3`] >> simp[] >> metis_tac[]) >>
+  `!k. inst_seq_ptr D lower ctx' func PG H1 u1
+    (emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 sb))
+    (s1 with vs_inst_idx := k) H3 u3` by
+    (irule inst_seq_ptr_uniform_append >> reverse conj_tac >- simp[] >>
+     qexistsl_tac [`H2`,`s2`,`u2`] >> simp[] >> metis_tac[]) >>
+  qpat_assum `emitted_insts sa sb = _` (fn eq => pure_rewrite_tac[eq]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule inst_seq_ptr_uniform_append >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`H1`,`s1`,`u1`] >> simp[] >> metis_tac[]
+QED
+
+Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_memory]:
+  strip_tac >> reverse conj_tac >-
+    (gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++
+    (emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 sb))` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
+  qpat_assum `emitted_insts sa sb = _` (fn eq => pure_rewrite_tac[eq]) >>
+  irule run_inst_seq_mem_ok_every >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+  simp[EVERY_APPEND, inst_mem_below_frontier_def, inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def, mk_inst_def]
+QED
+
+Finalise calldata_count_guard_endpoint_ptr_origin_core_joint
+
+Theorem calldata_count_guard_endpoint_joint_core:
+  abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u.
+    (alloca_inv s ==> run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u) /\
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := s.vs_inst_idx + 4)) R /\
+    (?vars. t = s with vs_vars := vars) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_count_guard_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_count_guard_endpoint_joint:
+  abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u.
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := s.vs_inst_idx + 4)) R /\
+    (?vars. t = s with vs_vars := vars) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all calldata_count_guard_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_count_guard_endpoint_ptr_core_joint:
+  abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u.
+    (alloca_inv s ==> run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u) /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := s.vs_inst_idx + 4)) R /\
+    (?vars. t = s with vs_vars := vars) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_count_guard_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_count_guard_endpoint_ptr_origin_core:
+  abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u. (!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := s.vs_inst_idx + 4)) R /\
+    (?vars. t = s with vs_vars := vars) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_count_guard_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_count_guard_endpoint_ptr_core:
+  abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u. op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := s.vs_inst_idx + 4)) R /\
+    (?vars. t = s with vs_vars := vars) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all calldata_count_guard_endpoint_ptr_origin_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
 
 Theorem calldata_count_guard_endpoint_ptr:
   abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
@@ -338,14 +519,29 @@ Proof
   qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
-Theorem calldata_array_header_endpoint_ptr_core:
+Theorem calldata_array_header_endpoint_ptr_origin_core_joint:
   !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
   abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
   ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
   not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
-  ?HG u. frag_exec_ptr H cx ctx PG sa sb
+  ?HG u. (alloca_inv s /\ d + totalbytes <= s.vs_alloca_next ==>
+      run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u) /\
+    (!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ d + 32 <= s.vs_alloca_next /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    eval_operand cnt t = SOME (abi_decode_load CALLDATALOAD a s) /\
+    (!op. abi_decoder_operand_live sa.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    frag_exec_ptr H cx ctx PG sa sb
     (\g z v. g = G /\ z = tn /\ v = s)
     (\g z v. g = HG /\ z = u /\
       v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
@@ -365,6 +561,10 @@ Theorem calldata_array_header_endpoint_ptr_core:
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
   rpt gen_tac >> strip_tac >>
+  `eval_operand (Var root) s = SOME (n2w d) /\
+   abi_decoder_operand_live sa.cs_next_var (Var root)` by
+    simp[eval_operand_def, calldata_operand_live_not_fresh] >>
+  drule_all calldata_array_header_repeat_sequence >> strip_tac >>
   qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
   simp[abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
@@ -379,7 +579,7 @@ Proof
   pure_asm_rewrite_tac [] >>
   disch_then (mp_then Any strip_assume_tac run_inst_seq_append_ok) >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
-  drule_all emit_count_load_endpoint_ptr_core >>
+  drule_all emit_calldata_load_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `lookup_var root s1 = SOME (n2w d) /\ ptr_covers HG u root s1 totalbytes` by
     (conj_tac >- metis_tac[] >> irule ptr_covers_frame >> metis_tac[]) >>
@@ -432,7 +632,7 @@ Proof
   suspend "header_finish"
 QED
 
-Resume calldata_array_header_endpoint_ptr_core[header_finish]:
+Resume calldata_array_header_endpoint_ptr_origin_core_joint[header_finish]:
   `same_blocks sa sm /\ same_blocks sm sb` by
     metis_tac[emit_op_same_blocks, emit_void_same_blocks] >>
   `cs_extends sa sm /\ cs_extends sm sb` by
@@ -444,7 +644,11 @@ Resume calldata_array_header_endpoint_ptr_core[header_finish]:
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
     (suspend "header_continuation") >>
-  qexistsl_tac [`HG`,`u2`] >> conj_tac
+  qexistsl_tac [`HG`,`u2`] >>
+  conj_tac >- suspend "header_memory" >>
+  conj_tac >- suspend "header_checks" >>
+  conj_tac >- suspend "header_origin" >>
+  simp[] >> conj_tac
   >- (irule frag_exec_ptr_seq >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       gvs[ADD_COMM] >> metis_tac[]) >>
@@ -453,10 +657,11 @@ Resume calldata_array_header_endpoint_ptr_core[header_finish]:
   `!x. lookup_var x t = lookup_var x s1` by simp[mstore_def, write_memory_with_expansion_def, lookup_var_def] >>
   `ptr_covers HG u2 root t totalbytes` by
     (irule ptr_covers_frame >> metis_tac[]) >>
-  simp[mstore_def, write_memory_with_expansion_def]
+  gvs[lookup_var_def, mstore_def, write_memory_with_expansion_def] >>
+  metis_tac[]
 QED
 
-Resume calldata_array_header_endpoint_ptr_core[header_continuation]:
+Resume calldata_array_header_endpoint_ptr_origin_core_joint[header_continuation]:
   rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
   rpt gen_tac >> strip_tac >>
@@ -487,7 +692,289 @@ Resume calldata_array_header_endpoint_ptr_core[header_continuation]:
     write_memory_with_expansion_def, w2n_n2w]
 QED
 
-Finalise calldata_array_header_endpoint_ptr_core
+Resume calldata_array_header_endpoint_ptr_origin_core_joint[header_origin]:
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
+  `sm.cs_current_bb = sa.cs_current_bb /\
+   LENGTH sm.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+   LENGTH sb.cs_current_insts = SUC (SUC (LENGTH sa.cs_current_insts))` by
+    (imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+     fs[same_blocks_def]) >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+     (OK (s1 with vs_inst_idx := LENGTH sm.cs_current_insts),HG,u)` by
+    (first_assum irule >> simp[]) >>
+  qabbrev_tac `v = s1 with vs_inst_idx := LENGTH sm.cs_current_insts` >>
+  qabbrev_tac `i = mk_inst sm.cs_next_id MSTORE [Var root;cnt] []` >>
+  `allocas_from lower v /\ ~v.vs_halted /\
+   v.vs_current_bb = sm.cs_current_bb /\ d+32 <= v.vs_alloca_next` by
+    (gvs[Abbr `v`, allocas_from_def] >> metis_tac[]) >>
+  `lookup_var root v = SOME (n2w d)` by
+    (gvs[Abbr `v`, lookup_var_def] >> metis_tac[]) >>
+  `step_inst_base i v = OK (t with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (simp[Abbr `i`, Abbr `v`, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_write2_def, eval_operand_def, mstore_def, write_memory_with_expansion_def] >>
+     Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def, w2n_n2w]) >>
+  `ptr_inst_ok D lower 0 ctx' func HG u i v` by
+    (irule ptr_inst_ok_lower_bound_transport >> simp[] >> qexists_tac `0` >>
+     simp[Abbr `i`] >> irule ptr_inst_ok_mstore >>
+     gvs[Abbr `v`, ptr_covers_def, lookup_var_def]) >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (v,HG,u) []
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u2)` by
+    (`gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (v,HG,u) []
+       (OK ((t with vs_inst_idx := LENGTH sm.cs_current_insts)
+          with vs_inst_idx := SUC v.vs_inst_idx),
+        step_prov PG HG i (t with vs_inst_idx := LENGTH sm.cs_current_insts),
+        step_taint i v (t with vs_inst_idx := LENGTH sm.cs_current_insts) u)` suffices_by
+       simp[Abbr `v`, Abbr `i`, Abbr `u2`, mstore_def, write_memory_with_expansion_def] >>
+     irule navigation_instruction_origin >> goal_assum (drule_at Any) >>
+     simp[Abbr `i`, Abbr `v`, mk_inst_def, is_terminator_def,
+       inst_dload_in_section_def] >>
+     conj_tac >- (simp[GSYM mk_inst_def, below_frontier_MSTORE,
+       eval_operand_def, lookup_var_def, w2n_n2w] >> gvs[lookup_var_def]) >>
+     qexistsl_tac [`sm`,`sb`] >> simp[mk_inst_def]) >>
+  metis_tac[gas_origin_ptr_path_append, APPEND]
+QED
+
+Resume calldata_array_header_endpoint_ptr_origin_core_joint[header_checks]:
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  irule inst_seq_ptr_append_ok >>
+  conj_tac >- (drule emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`HG`,`s1 with vs_inst_idx := k`,`u`] >>
+  conj_tac >-
+    (drule emitted_insts_emit_op >> strip_tac >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def, is_terminator_def]) >>
+  conj_tac >- (first_x_assum irule >> simp[]) >>
+  `LENGTH (emitted_insts sa sm) = 1` by
+    (drule emitted_insts_emit_op >> simp[]) >>
+  `!fuel. ptr_inst_ok D lower fuel ctx' func HG u
+    (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := k + 1)` by
+    (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
+     conj_tac >- (gvs[allocas_from_def] >> metis_tac[]) >>
+     qexists_tac `0` >> simp[] >> irule ptr_inst_ok_mstore >> simp[] >>
+     gvs[ptr_covers_def, lookup_var_def]) >>
+  `step_inst_base (mk_inst sm.cs_next_id MSTORE [Var root;cnt] []) s1 = OK t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sm sb) s1 = OK t` mp_tac >>
+     simp[run_inst_seq_def, AllCaseEqs()]) >>
+  `step_inst_base (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := k + 1) =
+    OK (t with vs_inst_idx := k + 1)` by
+    simp[step_inst_inst_idx_indep, exec_result_map_def, mk_inst_def, is_terminator_def] >>
+  qpat_x_assum `s1 = s with vs_vars := _` kall_tac >>
+  simp[inst_seq_ptr_def, Abbr `u2`] >> gvs[]
+QED
+
+Resume calldata_array_header_endpoint_ptr_origin_core_joint[header_memory]:
+  rename1 `s1 = s with vs_vars := vars` >>
+  strip_tac >>
+  reverse conj_tac >-
+    (gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+      mstore_def, write_memory_with_expansion_def] >> metis_tac[]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK s1` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  simp[run_inst_seq_mem_ok_def, inst_mem_below_frontier_def,
+    inst_dload_in_section_def, source_memory_read_ranges_def,
+    source_memory_write_ranges_def, fixed_source_write_range_def, mk_inst_def] >>
+  simp[eval_operand_def, lookup_var_def, w2n_n2w] >>
+  gvs[lookup_var_def] >>
+  conj_tac >- (Cases_on `FLOOKUP vars (STRING #"%" (toString sa.cs_next_var))` >> simp[] ) >>
+  qpat_x_assum `run_inst_seq [_] _ = _` mp_tac >>
+  simp[run_inst_seq_def, mk_inst_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Finalise calldata_array_header_endpoint_ptr_origin_core_joint
+
+Theorem calldata_array_header_endpoint_joint_core:
+  !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?HG u.
+    (alloca_inv s /\ d + totalbytes <= s.vs_alloca_next ==>
+      run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u) /\
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    frag_exec_ptr H cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = HG /\ z = u /\
+      v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
+    ptr_covers HG u root t totalbytes /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all calldata_array_header_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_array_header_endpoint_joint:
+  !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?HG u.
+    (alloca_inv s /\ d + totalbytes <= s.vs_alloca_next ==>
+      run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u) /\
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    frag_exec_ptr H cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = HG /\ z = u /\
+      v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
+    ptr_covers HG u root t totalbytes /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >> drule_all calldata_array_header_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_array_header_endpoint_ptr_core_joint:
+  !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?HG u.
+    (alloca_inv s /\ d + totalbytes <= s.vs_alloca_next ==>
+      run_inst_seq_mem_ok (emitted_insts sa sb) s /\ alloca_inv t) /\
+    (!D lower ctx' func. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+      !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
+        (s with vs_inst_idx := k) HG u) /\
+    frag_exec_ptr H cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = HG /\ z = u /\
+      v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
+    ptr_covers HG u root t totalbytes /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all calldata_array_header_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_array_header_endpoint_ptr_origin_core:
+  !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?HG u. (!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ d + 32 <= s.vs_alloca_next /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    eval_operand cnt t = SOME (abi_decode_load CALLDATALOAD a s) /\
+    (!op. abi_decoder_operand_live sa.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    frag_exec_ptr H cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = HG /\ z = u /\
+      v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
+    ptr_covers HG u root t totalbytes /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all calldata_array_header_endpoint_ptr_origin_core_joint >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_array_header_endpoint_ptr_core:
+  !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?HG u. frag_exec_ptr H cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = HG /\ z = u /\
+      v = (t with vs_inst_idx := 2 + s.vs_inst_idx)) R /\
+    ptr_covers HG u root t totalbytes /\
+    op_taint u cnt = {} /\ op_prov HG cnt = NONE /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d + 32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all calldata_array_header_endpoint_ptr_origin_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`] >> simp[]
+QED
 
 Theorem calldata_array_header_endpoint_ptr:
   !root src sa cnt sb s t d totalbytes a G tn cx ctx PG R.
@@ -513,7 +1000,7 @@ Proof
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
-Theorem actual_array_init_endpoint_ptr_core:
+Theorem actual_array_init_endpoint_ptr_origin_core:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
@@ -526,7 +1013,14 @@ Theorem actual_array_init_endpoint_ptr_core:
       s.vs_alloca_next + 32 < dimword (:256)) \/
    (?p. FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = SOME (p,32) /\
       p + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) ==>
-  ?HG u q p. FST setup = Var q /\
+  ?HG u q p. (!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    FST setup = Var q /\
     eval_operand (FST setup) t = SOME (n2w p) /\
     p + 32 < dimword (:256) /\
     (case FLOOKUP s.vs_allocas (sb.cs_next_id - 2) of
@@ -576,7 +1070,7 @@ Proof
   qpat_x_assum `run_inst_seq (_ ++ _) _ = OK t`
     (mp_then Any strip_assume_tac run_inst_seq_append_ok) >>
   rename1 `run_inst_seq (emitted_insts guard_st header_st) s1 = OK s2` >>
-  drule_all calldata_count_guard_endpoint_ptr_core >>
+  drule_all calldata_count_guard_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`,`G`] strip_assume_tac) >>
   rename1 `op_taint u1 guard_cnt = {}` >>
   rename1 `op_prov H1 guard_cnt = NONE` >>
@@ -606,13 +1100,13 @@ Proof
     ptr_covers H1 u1 root (s1 with vs_inst_idx := s.vs_inst_idx + 4) totalbytes /\
     ~(s1 with vs_inst_idx := s.vs_inst_idx + 4).vs_halted` by
     (gvs[ptr_covers_def, lookup_var_def]) >>
-  drule_all calldata_array_header_endpoint_ptr_core >>
+  drule_all calldata_array_header_endpoint_ptr_origin_core >>
   disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] mp_tac) >>
   simp[NoAsms] >> strip_tac >>
   suspend "joint_index"
 QED
 
-Resume actual_array_init_endpoint_ptr_core[joint_index]:
+Resume actual_array_init_endpoint_ptr_origin_core[joint_index]:
   rename1 `ptr_covers H2 u2 root s2 totalbytes` >>
   `~s2.vs_halted` by metis_tac[] >>
   `sb.cs_next_id - 2 = header_st.cs_next_id` by decide_tac >>
@@ -625,7 +1119,7 @@ Resume actual_array_init_endpoint_ptr_core[joint_index]:
 
   `~(s2 with vs_inst_idx := s.vs_inst_idx + 6).vs_halted` by simp[] >>
   qpat_x_assum `run_inst_seq (emitted_insts header_st sb) s2 = _` kall_tac >>
-  drule_at (Pat `run_inst_seq _ _ = _`) actual_index_init_endpoint_ptr_core >>
+  drule_at (Pat `run_inst_seq _ _ = _`) actual_index_init_endpoint_ptr_origin_core >>
   disch_then drule >>
   disch_then (qspecl_then [`u2`,`cx`,`ctx`,`R`,`PG`,`H`,`H2`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
@@ -633,7 +1127,7 @@ Resume actual_array_init_endpoint_ptr_core[joint_index]:
   suspend "joint_finish"
 QED
 
-Resume actual_array_init_endpoint_ptr_core[joint_finish]:
+Resume actual_array_init_endpoint_ptr_origin_core[joint_finish]:
   `!x. not_fresh_at sa x ==> not_fresh_at guard_st x /\ not_fresh_at header_st x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> simp[]) >>
@@ -662,6 +1156,14 @@ Resume actual_array_init_endpoint_ptr_core[joint_finish]:
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
     (suspend "joint_continuation") >>
+  `!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)` by
+    (suspend "joint_origin") >>
   rpt (qpat_x_assum `run_inst_seq _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `abi_decoder_budget _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _` kall_tac) >>
@@ -678,7 +1180,7 @@ Resume actual_array_init_endpoint_ptr_core[joint_finish]:
   suspend "joint_compose"
 QED
 
-Resume actual_array_init_endpoint_ptr_core[joint_compose]:
+Resume actual_array_init_endpoint_ptr_origin_core[joint_compose]:
   qexistsl_tac [`HG`,`u`,`p`] >>
   `mload p t = 0w` by fs[mload_def] >>
   `q = STRING #"%" (toString (guard_st.cs_next_var + 1))` by metis_tac[operand_11] >>
@@ -697,7 +1199,7 @@ Resume actual_array_init_endpoint_ptr_core[joint_compose]:
   simp[ADD_ASSOC, ADD_COMM] >> metis_tac[]
 QED
 
-Resume actual_array_init_endpoint_ptr_core[joint_continuation]:
+Resume actual_array_init_endpoint_ptr_origin_core[joint_continuation]:
   rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
   rpt gen_tac >> strip_tac >>
@@ -715,9 +1217,153 @@ Resume actual_array_init_endpoint_ptr_core[joint_continuation]:
   gvs[]
 QED
 
-Finalise actual_array_init_endpoint_ptr_core
+Resume actual_array_init_endpoint_ptr_origin_core[joint_origin]:
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code sa guard_st func /\ fn_has_code guard_st header_st func /\
+   fn_has_code header_st sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `guard_st.cs_current_bb = sa.cs_current_bb` by
+    (drule calldata_count_guard_layout >> simp[]) >>
+  `LENGTH guard_st.cs_current_insts = LENGTH sa.cs_current_insts + 4 /\
+   LENGTH header_st.cs_current_insts = LENGTH sa.cs_current_insts + 6` by
+    (fs[inst_extends_def] >> simp[] >> decide_tac) >>
+  `allocas_from lower (s1 with vs_inst_idx := s.vs_inst_idx + 4) /\
+   allocas_from lower (s2 with vs_inst_idx := s.vs_inst_idx + 6)` by
+    (gvs[allocas_from_def] >> metis_tac[]) >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+    (OK (s1 with vs_inst_idx := s.vs_inst_idx + 4),H1,u1)` by
+    (qpat_assum `!D lower explicit ctx' func.
+       _ ==> gas_origin_ptr_path _ (s,G,tn) [] _`
+       (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >> gvs[]) >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG)
+    (s1 with vs_inst_idx := s.vs_inst_idx + 4,H1,u1) []
+    (OK (s2 with vs_inst_idx := s.vs_inst_idx + 6),H2,u2)` by
+    (qpat_assum `!D lower explicit ctx' func.
+       _ ==> gas_origin_ptr_path _ (_ with vs_inst_idx := _,H1,u1) [] _`
+       (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >> gvs[]) >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx',func,PG)
+    (s2 with vs_inst_idx := s.vs_inst_idx + 6,H2,u2) []
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)` by
+    (qpat_assum `!D lower explicit ctx' func.
+       _ ==> gas_origin_ptr_path _ (_ with vs_inst_idx := _,H2,u2) [] _`
+       (qspecl_then [`D`,`lower`,`explicit`,`ctx'`,`func`] mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >> gvs[]) >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`gas_origin_ptr_path _ (s,G,tn) [] _`,
+     `gas_origin_ptr_path _ (_ with vs_inst_idx := _,H1,u1) [] _`,
+     `gas_origin_ptr_path _ (_ with vs_inst_idx := _,H2,u2) [] _`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+  metis_tac[gas_origin_ptr_path_append, APPEND]
+QED
 
-Theorem calldata_array_init_endpoint_ptr_core:
+Finalise actual_array_init_endpoint_ptr_origin_core
+
+Theorem actual_array_init_endpoint_ptr_core:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    maxn abi_sz sa = (setup,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\
+  32 <= totalbytes /\ not_fresh_at sa root /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  ((FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = NONE /\
+      s.vs_alloca_next + 32 < dimword (:256)) \/
+   (?p. FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = SOME (p,32) /\
+      p + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) ==>
+  ?HG u q p. FST setup = Var q /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    p + 32 < dimword (:256) /\
+    (case FLOOKUP s.vs_allocas (sb.cs_next_id - 2) of
+       NONE => p = s.vs_alloca_next | SOME (slot,sz) => p = slot) /\
+    mload p t = 0w /\
+    ptr_covers HG u q
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    ptr_covers HG u root
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
+      ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all actual_array_init_endpoint_ptr_origin_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
+QED
+
+Theorem actual_array_init_endpoint_joint_core:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    maxn abi_sz sa = (setup,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\
+  32 <= totalbytes /\ not_fresh_at sa root /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  ((FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = NONE /\
+      s.vs_alloca_next + 32 < dimword (:256)) \/
+   (?p. FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = SOME (p,32) /\
+      p + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) ==>
+  ?HG u q p.
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    FST setup = Var q /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    p + 32 < dimword (:256) /\
+    (case FLOOKUP s.vs_allocas (sb.cs_next_id - 2) of
+       NONE => p = s.vs_alloca_next | SOME (slot,sz) => p = slot) /\
+    mload p t = 0w /\
+    ptr_covers HG u q
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    ptr_covers HG u root
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
+      ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all actual_array_init_endpoint_ptr_origin_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_array_init_endpoint_joint_core:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
@@ -728,7 +1374,14 @@ Theorem calldata_array_init_endpoint_ptr_core:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
   sb.cs_next_id <= last ==>
-  ?HG u q p. FST setup = Var q /\
+  ?HG u q p.
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    FST setup = Var q /\
     eval_operand (FST setup) t = SOME (n2w p) /\
     b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
     mload p t = 0w /\
@@ -773,7 +1426,7 @@ Proof
      qpat_x_assum `CARD _ = SUC _` SUBST_ALL_TAC >>
      qpat_x_assum `_ + 32 * SUC _ <= _` mp_tac >>
      rewrite_tac[arithmeticTheory.MULT_SUC] >> decide_tac) >>
-  drule_at (Pat `run_inst_seq _ _ = _`) actual_array_init_endpoint_ptr_core >>
+  drule_at (Pat `run_inst_seq _ _ = _`) actual_array_init_endpoint_joint_core >>
   disch_then drule >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
@@ -790,6 +1443,91 @@ Proof
   >- fs[abi_decoder_budget_def] >>
   PairCases_on `x` >> gvs[] >> fs[abi_decoder_budget_def] >>
   qpat_x_assum `!id off sz. _` drule_all >> strip_tac >> decide_tac
+QED
+
+Theorem calldata_array_init_endpoint_joint:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    maxn abi_sz sa = (setup,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\
+  32 <= totalbytes /\ not_fresh_at sa root /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
+  sb.cs_next_id <= last /\ (d + totalbytes <= b \/ b + cap <= d) ==>
+  ?HG u q p.
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\
+      lower <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    FST setup = Var q /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    mload p t = 0w /\
+    ptr_covers HG u q
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    ptr_covers HG u root
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all calldata_array_init_endpoint_joint_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
+QED
+
+
+Theorem calldata_array_init_endpoint_ptr_core:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    maxn abi_sz sa = (setup,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\
+  32 <= totalbytes /\ not_fresh_at sa root /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
+  sb.cs_next_id <= last ==>
+  ?HG u q p. FST setup = Var q /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    mload p t = 0w /\
+    ptr_covers HG u q
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    ptr_covers HG u root
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
+      ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_array_init_endpoint_joint_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
 
 Theorem calldata_array_init_endpoint_ptr:
@@ -953,3 +1691,4 @@ Proof
   qexistsl_tac [`setup`,`sb`,`t`,`p`,`HG`,`u`,`q`] >>
   simp[] >> fs[ptr_covers_def, lookup_var_def]
 QED
+
