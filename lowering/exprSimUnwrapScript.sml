@@ -2374,7 +2374,7 @@ Proof
   metis_tac[read_result_gas_obs, APPEND]
 QED
 
-Theorem unwrap_value_path_fields[local]:
+Theorem unwrap_value_path_fields:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op s.
     post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
