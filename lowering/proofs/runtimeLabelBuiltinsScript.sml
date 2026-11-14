@@ -1657,3 +1657,40 @@ Proof
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_ignore >> simp[rb_emit_void, rb_step_return]
 QED
+
+Theorem rb_compile_bytestring_widen_copy:
+  rb_operand_ok v ==>
+  rb_step rb_operand_ok (compile_bytestring_widen_copy dst_size v src_size)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_bytestring_widen_copy_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_ignore >> simp[rb_compile_copy_memory, rb_step_return]
+QED
+
+Theorem rb_compile_neg:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_neg v ty)
+Proof
+  strip_tac >> simp[compile_neg_def] >>
+  Cases_on `type_bounds ty` >> simp[] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+
+Theorem rb_compile_store_words:
+  !vs buf off. EVERY rb_operand_ok vs /\ rb_operand_ok buf ==>
+  rb_step (K T) (compile_store_words buf vs off)
+Proof
+  Induct >> simp[compile_store_words_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (Cases_on `off = 0` >> simp[rb_step_return, rb_emit_op]) >>
+  gen_tac >> strip_tac >> irule rb_ignore >> simp[rb_emit_void]
+QED
+
+Theorem rb_compile_invert:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_invert v ty ce)
+Proof
+  Cases_on `ty` >> simp[compile_invert_def, rb_emit_op]
+QED
