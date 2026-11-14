@@ -139,11 +139,13 @@ Theorem call_step_exec_ext_call:
   (~stat ==> eval_operand value s = SOME vw) /\
   eval_operand ao s = SOME aw /\ eval_operand az s = SOME an /\
   eval_operand ro s = SOME rw /\ eval_operand rz s = SOME rn /\
-  ~s.vs_call_ctx.cc_static ==>
+  (~stat /\ s.vs_call_ctx.cc_static ==> vw = 0w) ==>
   step_inst_base inst s =
-  exec_ext_call inst s gw dw (if stat then 0w else vw) aw an rw rn stat
+  exec_ext_call inst s gw dw (if stat then 0w else vw) aw an rw rn
+    (stat \/ s.vs_call_ctx.cc_static)
 Proof
-  strip_tac >> simp[step_inst_base_opcode_eqs]
+  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  Cases_on `s.vs_call_ctx.cc_static` >> gvs[]
 QED
 
 Theorem call_zero_access_ok_ptr:
@@ -202,7 +204,7 @@ Proof
 QED
 
 Theorem exec_ext_call_stor_taint_ok:
-  ((inst.inst_opcode = CALL /\ ~stat) \/
+  ((inst.inst_opcode = CALL /\ stat = s.vs_call_ctx.cc_static) \/
    (inst.inst_opcode = STATICCALL /\ stat)) /\
   exec_ext_call inst s gas addr value ao az ro rz stat = OK u /\
   stor_taint_ok cx tn s ==>

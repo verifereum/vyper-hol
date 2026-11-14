@@ -19,7 +19,8 @@ Theorem oracle_call_checked_step:
   eval_operand ao_op s = SOME ao /\ eval_operand az_op s = SOME az /\
   eval_operand ro_op s = SOME ro /\ eval_operand rz_op s = SOME rz /\
   w2w aw = target /\ w2n (if stat then 0w else vw) =
-    (case value_opt of NONE => 0 | SOME n => n) /\ stat = IS_NONE value_opt /\
+    (case value_opt of NONE => 0 | SOME n => n) /\
+  (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   access_ok 0 G func inst s /\ taint_ok func tn inst s /\
@@ -27,7 +28,8 @@ Theorem oracle_call_checked_step:
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
   ?s'.
-    exec_ext_call inst s gas aw (if stat then 0w else vw) ao az ro rz stat =
+    exec_ext_call inst s gas aw (if stat then 0w else vw) ao az ro rz
+      (stat \/ s.vs_call_ctx.cc_static) =
       OK (update_var out (if outcome.co_success then 1w else 0w) s') /\
     s' = s with <| vs_outcomes := s'.vs_outcomes; vs_requests := s'.vs_requests;
       vs_accounts := s'.vs_accounts; vs_transient := s'.vs_transient;
@@ -55,20 +57,23 @@ Theorem oracle_call_checked_step:
       (Var out) = NONE
 Proof
   VALID (strip_tac >> (
-  `~s.vs_call_ctx.cc_static` by fs[loweringStateRelDefsTheory.state_rel_def] >>
+  `~stat /\ s.vs_call_ctx.cc_static ==> vw = 0w` by
+    (Cases_on `value_opt` >> gvs[wordsTheory.w2n_eq_0]) >>
   mp_tac (exec_ext_call_oracle_step |>
     INST_TYPE [``:'a`` |-> ``:256 word``, ``:'b`` |-> ``:256``,
                ``:'c`` |-> ``:256``] |> SPEC_ALL |>
-    Q.INST [`vw` |-> `if stat then 0w else vw`]) >>
+    Q.INST [`vw` |-> `if stat then 0w else vw`,
+            `stat` |-> `stat \/ s.vs_call_ctx.cc_static`]) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qexists_tac `s'` >> gvs[] >>
   `step_inst_base inst s =
     OK (update_var out (if outcome.co_success then 1w else 0w) s')` by
-    (gvs[step_inst_base_opcode_eqs]) >>
+    (Cases_on `stat` >> gvs[step_inst_base_opcode_eqs]) >>
   conj_tac
   >- (irule call_gas_path_ptr_edge >> simp[] >> metis_tac[]) >>
   conj_tac
-  >- metis_tac[exec_ext_call_stor_taint_ok] >>
+  >- (irule exec_ext_call_stor_taint_ok >>
+      qexists_tac `stat \/ s.vs_call_ctx.cc_static` >> gvs[] >> metis_tac[]) >>
   simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
     step_prov_def, set_prov_def, out_prov_def, op_prov_def,
     finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE]))
@@ -106,7 +111,8 @@ Theorem oracle_call_checked_full:
   eval_operand ao_op s = SOME ao /\ eval_operand az_op s = SOME az /\
   eval_operand ro_op s = SOME ro /\ eval_operand rz_op s = SOME rz /\
   w2w aw = target /\ w2n (if stat then 0w else vw) =
-    (case value_opt of NONE => 0 | SOME n => n) /\ stat = IS_NONE value_opt /\
+    (case value_opt of NONE => 0 | SOME n => n) /\
+  (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   access_ok 0 G func inst s /\ taint_ok func tn inst s /\
@@ -123,7 +129,8 @@ Theorem oracle_call_checked_full:
   (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint (w2n ro) (w2n rz) a len) ==>
   ?s' t H un.
-    exec_ext_call inst s gas aw (if stat then 0w else vw) ao az ro rz stat = OK t /\
+    exec_ext_call inst s gas aw (if stat then 0w else vw) ao az ro rz
+      (stat \/ s.vs_call_ctx.cc_static) = OK t /\
     t = update_var out (if outcome.co_success then 1w else 0w) s' /\
     s'.vs_memory = (write_memory_with_expansion (w2n ro)
       (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\

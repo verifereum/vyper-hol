@@ -2592,7 +2592,7 @@ Theorem raw_call_memory_oracle_exec[local]:
   stmt_state_rel ctx func cenv cx es s /\ inst.inst_outputs = [out] /\
   w2w aw = target /\
   w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
@@ -2617,6 +2617,8 @@ Theorem raw_call_memory_oracle_exec[local]:
 Proof
   strip_tac >>
   `state_rel func cenv cx es s` by fs[stmt_state_rel_def] >>
+  `s.vs_call_ctx.cc_static = cx.txn.is_static` by
+    fs[state_rel_def, call_ctx_rel_def] >>
   VALID (drule_all_then
     (strip_assume_tac o Q.ISPECL [`gas:bytes32`, `ro:bytes32`, `rz:bytes32`])
     exec_ext_call_oracle_step) >>
@@ -3509,7 +3511,7 @@ Theorem raw_call_oracle_emit_run_aged:
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
@@ -3546,9 +3548,13 @@ Proof
     (qx_choose_then `oracle_state` strip_assume_tac))
     (raw_call_memory_oracle_exec |> Q.INST
       [`inst` |-> `call_inst`, `vw` |-> `if stat then 0w else val_word`,
+       `stat` |-> `stat \/ cx.txn.is_static`,
        `out` |-> `STRING #"%" (toString sa.cs_next_var)`,
        `rz` |-> `(n2w cap : bytes32)`]) >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `s.vs_call_ctx.cc_static = cx.txn.is_static /\
+   (~stat /\ cx.txn.is_static ==> val_word = 0w)` by
+    (fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+     Cases_on `value_opt` >> gvs[wordsTheory.w2n_eq_0]) >>
   `oracle_state.vs_vars = s.vs_vars /\ oracle_state.vs_allocas = s.vs_allocas /\
    oracle_state.vs_alloca_next = s.vs_alloca_next /\
    oracle_state.vs_fmp = s.vs_fmp /\ oracle_state.vs_labels = s.vs_labels` by
@@ -4034,7 +4040,7 @@ Theorem raw_call_oracle_path[local]:
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
@@ -4133,7 +4139,7 @@ Theorem raw_call_allocated_tail_frag_aged[local]:
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
@@ -4208,7 +4214,7 @@ Resume raw_call_allocated_tail_frag_aged[frame]:
     [`eval_operand gas_op s = _`, `eval_operand to_op s = _`,
      `eval_operand dp s = _`, `eval_operand dl s = _`,
      `eval_operand val_op s = _`, `w2w aw = target`,
-     `w2n (if stat then _ else _) = _`, `stat = IS_NONE value_opt`,
+     `w2n (if stat then _ else _) = _`, `(stat \/ cx.txn.is_static) = IS_NONE value_opt`,
      `take_call_outcome _ _ _ _ = _`, `cenv.ce_is_ctor ==> _`] >>
   `t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
    t.vs_labels = s.vs_labels` by
@@ -4477,7 +4483,7 @@ Theorem raw_call_outbuf_zero_tail_vv_path[local]:
   safe_operand sa gas_op /\ safe_operand sa val_op /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
@@ -4585,7 +4591,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[call_metadata]:
   qpat_x_assum `emit_op _ _ sm = _` mp_tac >>
   qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  Cases_on `value_opt = NONE` >> fs[] >>
+  Cases_on `stat` >> fs[] >>
   Cases_on `flags.rcf_revert_on_failure` >>
   gvs[compile_raw_call_finish_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> simp[cs_extends_refl] >>
@@ -4631,7 +4637,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   >- suspend "revert_zero" >>
   fs[] >> drule raw_call_nonrevert_finish_code >>
   simp[] >> strip_tac >>
-  `sc' = sc /\ ok' = ok` by (Cases_on `value_opt = NONE` >> gvs[]) >>
+  `sc' = sc /\ ok' = ok` by (Cases_on `stat` >> gvs[]) >>
   gvs[comp_return_def] >>
   irule frag_path_run_inst_seq >>
   simp[emitted_insts_def, run_inst_seq_def] >>
@@ -4704,7 +4710,7 @@ Theorem raw_call_outbuf_positive_tail_vv_path[local]:
   safe_operand sa gas_op /\ safe_operand sa val_op /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
@@ -4842,7 +4848,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[finish]:
   Cases_on `flags.rcf_revert_on_failure`
   >- suspend "revert_positive" >>
   fs[] >> drule raw_call_nonrevert_finish_code >> simp[] >> strip_tac >>
-  `sc' = sc /\ ok' = ok` by (Cases_on `value_opt = NONE` >> gvs[]) >>
+  `sc' = sc /\ ok' = ok` by (Cases_on `stat` >> gvs[]) >>
   gvs[] >> suspend "tuple_positive"
 QED
 
@@ -4952,7 +4958,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[call_metadata]:
         (POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
          List.exists (fn v => mem (fst (dest_var v)) ["ce", "sc", "value_opt"])
            (free_vars (concl th)))) >>
-         Cases_on `value_opt = NONE` >> gvs[]) >> gvs[] >>
+         Cases_on `stat` >> gvs[]) >> gvs[] >>
       rename1 `fresh_label "call_failed" sc = _` >>
       `ci_mono sc s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
        ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
@@ -4966,7 +4972,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[call_metadata]:
          fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
       fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
   fs[] >> drule raw_call_nonrevert_finish_code >> simp[] >> strip_tac >>
-  `sc' = sc` by (Cases_on `value_opt = NONE` >> gvs[]) >> gvs[] >>
+  `sc' = sc` by (Cases_on `stat` >> gvs[]) >> gvs[] >>
   drule_at (Pat `0 < _`) raw_call_nonrevert_suffix_code >> simp[] >>
   disch_then drule >> strip_tac >> metis_tac[cs_extends_trans]
 QED
@@ -4988,7 +4994,7 @@ Theorem raw_call_outbuf_tail_vv_path[local]:
   safe_operand sa gas_op /\ safe_operand sa val_op /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
@@ -5036,7 +5042,7 @@ Theorem raw_call_outbuf_tail_vv_frag[local]:
   (!x. to_op = Var x \/ dp = Var x \/ dl = Var x \/ gas_op = Var x \/ val_op = Var x ==> not_fresh_at sa x) /\
   w2w aw = target /\
   w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  stat = IS_NONE value_opt /\
+  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es = (INL (rq,outcome),es1) /\
   MAP FDOM es.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes /\
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
@@ -5167,8 +5173,8 @@ Resume raw_call_outbuf_tail_vv_frag[zero_finish]:
   `!aid b sz. aid < initial.cs_next_id /\ FLOOKUP entry.vs_allocas aid = SOME (b,sz) ==>
       regions_disjoint (w2n w) 0 b sz` by
       (simp[Abbr `entry`] >> metis_tac[]) >>
-  Cases_on `emit_op (if value_opt = NONE then STATICCALL else CALL)
-    (if value_opt = NONE then [gas_op;to_op;dp;dl;buf.buf_operand;Lit 0w]
+  Cases_on `emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;buf.buf_operand;Lit 0w]
      else [gas_op;to_op;val_op;dp;dl;buf.buf_operand;Lit 0w]) sm` >>
   rename1 `emit_op _ _ sm = (ok,sc)` >>
   drule raw_call_allocated_tail_frag_aged >>
@@ -5268,8 +5274,8 @@ Resume raw_call_outbuf_tail_vv_frag[positive_finish]:
     (`read_memory (w2n ao) (w2n az) entry = read_memory (w2n ao) (w2n az) s`
        by simp[Abbr `entry`, read_memory_def] >> asm_rewrite_tac[]) >>
   `initial.cs_next_var <= sm.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
-  Cases_on `emit_op (if value_opt = NONE then STATICCALL else CALL)
-    (if value_opt = NONE then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+  Cases_on `emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sm` >>
   rename1 `emit_op _ _ sm = (ok,sc)` >>
   drule raw_call_allocated_tail_frag_aged >>
@@ -5524,13 +5530,13 @@ Proof
 QED
 
 Theorem raw_call_source_tail:
-  ~cx.txn.is_static /\ ~flags.rcf_is_delegate /\
+  (cx.txn.is_static ==> amount = 0) /\ ~flags.rcf_is_delegate /\
   (flags.rcf_is_static ==> amount = 0) /\ IS_SOME es.outcomes /\
   outcomes_accounts_typed es.outcomes /\
   accounts_runtime_well_typed es.accounts ==>
   ?rq outcome es1 es2.
     take_call_outcome target bytes
-      (if flags.rcf_is_static then NONE else SOME amount) es =
+      (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) es =
         (INL (rq,outcome),es1) /\
     adopt_call_outcome rq outcome es1 = (INL (),es2) /\
     eval_raw_call cx flags target bytes amount gas es =
@@ -5550,7 +5556,7 @@ Proof
   strip_tac >>
   drule_all raw_call_typed_outcome >>
   disch_then (qspecl_then [`target`, `bytes`,
-    `if flags.rcf_is_static then NONE else SOME amount`] strip_assume_tac) >>
+    `if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount`] strip_assume_tac) >>
   Cases_on `adopt_call_outcome rq outcome es1` >>
   drule adopt_call_outcome_frame >> strip_tac >> gvs[] >>
   drule_all raw_call_oracle_result >> strip_tac >>
@@ -5631,7 +5637,9 @@ Theorem raw_call_tail_outcome[local]:
 Proof
   strip_tac >> drule_all raw_call_prefix_source_ready >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  Cases_on `cx.txn.is_static /\ amount <> 0`
+  >- suspend "static_value_abort" >>
+  `cx.txn.is_static ==> amount = 0` by fs[] >>
   `IS_SOME esK.outcomes /\ outcomes_accounts_typed esK.outcomes /\
    accounts_runtime_well_typed esK.accounts` by
     fs[expr_sim_inv_def,
@@ -5697,13 +5705,16 @@ QED
 Resume raw_call_tail_outcome[path]:
   `w2w (w2w target : bytes32) = target` by wordsLib.WORD_DECIDE_TAC >>
   `w2n (if flags.rcf_is_static then 0w else (n2w amount : bytes32)) =
-    (case (if flags.rcf_is_static then NONE else SOME amount) of NONE => 0 | SOME n => n)` by
-    (Cases_on `flags.rcf_is_static` >> simp[]) >>
-  `flags.rcf_is_static = IS_NONE (if flags.rcf_is_static then NONE else SOME amount)` by
-    (Cases_on `flags.rcf_is_static` >> simp[]) >>
+    (case (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) of
+      NONE => 0 | SOME n => n)` by
+    (Cases_on `flags.rcf_is_static` >> Cases_on `cx.txn.is_static` >> gvs[]) >>
+  `(flags.rcf_is_static \/ cx.txn.is_static) =
+    IS_NONE (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount)` by
+    simp[] >>
   `take_call_outcome target
     (read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t)
-    (if flags.rcf_is_static then NONE else SOME amount) esK = (INL (rq,outcome),es1)` by simp[] >>
+    (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount) esK =
+      (INL (rq,outcome),es1)` by simp[] >>
   `MAP FDOM esK.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes` by simp[] >>
   `0 < flags.rcf_max_outsize ==> evaluate_type (get_tenv cx)
     (expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) =
