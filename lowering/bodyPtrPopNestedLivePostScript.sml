@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLivePost
 Ancestors
   bodyPtrPopNestedLiveHandoff exprSimPopNestedLocalPost
-  augAssignPtrFieldStore valueEncodingProps venomState pred_set
+  wordLoadStorePtr valueEncodingProps venomState pred_set
   exprSimPopNestedLocalMemory valueEncoding valueEncodingDefs exprSimPop
 
 (* Restore the overwritten header before applying the ordinary path-update
