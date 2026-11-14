@@ -1,6 +1,6 @@
 (*
  * The function-level statements of the label-discipline proof at one fixed
- * fuel: fnSimSpec's gen_fn_sim_at and gen_fn_frame_sim_at with the symbolic
+ * fuel: fnSimSpec's gen_fn_sim_at_simple and gen_fn_frame_sim_at_simple with the symbolic
  * run added.  The symbolic run starts from a state related to the concrete
  * one and takes the same n steps: it ends where the concrete run halts,
  * reverts or faults, and at an internal return it is OK, related, and holds
@@ -8,8 +8,8 @@
  * control leaves (INVOKE, RET, JMP, JNZ) and the fuel induction share them.
  *
  * TOP-LEVEL:
- *   sym_fn_sim_at        - gen_fn_sim_at with the symbolic run
- *   sym_fn_frame_sim_at  - gen_fn_frame_sim_at with the symbolic run
+ *   sym_fn_sim_at        - gen_fn_sim_at_simple with the symbolic run
+ *   sym_fn_frame_sim_at  - gen_fn_frame_sim_at_simple with the symbolic run
  *)
 
 Theory symFnSimSpec

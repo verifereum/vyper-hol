@@ -5,8 +5,8 @@
  * Qualitative statements specialize the resource judgement at F and NONE.
  *
  * TOP-LEVEL:
- *   gen_fn_sim_at        - gen_fn_simulation at fuel
- *   gen_fn_frame_sim_at  - gen_fn_frame_simulation at fuel
+ *   gen_fn_sim_at_simple        - gen_fn_simulation at fuel
+ *   gen_fn_frame_sim_at_simple  - gen_fn_frame_simulation at fuel
  *)
 
 Theory fnSimSpec
@@ -89,8 +89,8 @@ QED
 
 
 (* Independent resource modes: NONE removes cost, F removes creation safety. *)
-Definition gen_fn_sim_resource_at_def:
-  gen_fn_sim_resource_at safe q fuel <=>
+Definition gen_fn_sim_at_def:
+  gen_fn_sim_at safe q fuel <=>
     !rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest.
       ctx = unit.cu_context /\
       lo = SND (compute_label_offsets prog) /\
@@ -137,8 +137,8 @@ Definition gen_fn_sim_resource_at_def:
                  fn_return_state_rel ctx cp fn vs' as as')
 End
 
-Definition gen_fn_frame_sim_resource_at_def:
-  gen_fn_frame_sim_resource_at safe q fuel <=>
+Definition gen_fn_frame_sim_at_def:
+  gen_fn_frame_sim_at safe q fuel <=>
     !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
      spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after
      vs as Inv ra pc_ret rest mem0.
@@ -216,10 +216,10 @@ End
 
 
 (* Qualitative simulations use the same judgement with both resources off. *)
-Definition gen_fn_sim_at_def:
-  gen_fn_sim_at fuel <=> gen_fn_sim_resource_at F NONE fuel
+Definition gen_fn_sim_at_simple_def:
+  gen_fn_sim_at_simple fuel <=> gen_fn_sim_at F NONE fuel
 End
 
-Definition gen_fn_frame_sim_at_def:
-  gen_fn_frame_sim_at fuel <=> gen_fn_frame_sim_resource_at F NONE fuel
+Definition gen_fn_frame_sim_at_simple_def:
+  gen_fn_frame_sim_at_simple fuel <=> gen_fn_frame_sim_at F NONE fuel
 End

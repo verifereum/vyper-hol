@@ -6,7 +6,7 @@
  *
  * TOP-LEVEL:
  *   block_step_prefix - from the block-boundary premises of
- *                       gen_fn_frame_sim_at and the block's PHI result,
+ *                       gen_fn_frame_sim_at_simple and the block's PHI result,
  *                       the premises block_body_frame_sim takes over with
  *)
 

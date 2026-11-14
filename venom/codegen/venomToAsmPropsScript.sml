@@ -40,13 +40,13 @@ Ancestors
    the callees an INVOKE runs and for the rest of the run. *)
 Theorem gen_fn_sims_resource_all:
   !safe fuel.
-    gen_fn_sim_resource_at safe
+    gen_fn_sim_at safe
       (SOME (\unit cp prog. fn_sim_budget unit.cu_context prog fuel)) fuel /\
-    gen_fn_frame_sim_resource_at safe
+    gen_fn_frame_sim_at safe
       (SOME (\unit cp prog. fn_sim_budget unit.cu_context prog fuel)) fuel
 Proof
   gen_tac >> Induct
-  >- (simp[gen_fn_sim_resource_at_def, gen_fn_frame_sim_resource_at_def] >>
+  >- (simp[gen_fn_sim_at_def, gen_fn_frame_sim_at_def] >>
       rpt strip_tac >> gvs[Once run_blocks_def]) >>
   pop_assum strip_assume_tac >>
   drule_all fn_entry_block_step_resource >> strip_tac >>
@@ -56,11 +56,11 @@ QED
 
 
 Theorem gen_fn_sims_all[local]:
-  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel
+  !fuel. gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel
 Proof
   gen_tac >> conj_tac
   >- (mp_tac (CONJUNCT1 (Q.SPECL [`F`, `fuel`] gen_fn_sims_resource_all)) >>
-      PURE_REWRITE_TAC [gen_fn_sim_at_def, gen_fn_sim_resource_at_def,
+      PURE_REWRITE_TAC [gen_fn_sim_at_simple_def, gen_fn_sim_at_def,
         optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
       strip_tac >> rpt gen_tac >> strip_tac >>
       qpat_x_assum `!rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest. _`
@@ -68,7 +68,7 @@ Proof
       rpt conj_tac >> rpt gen_tac >> strip_tac >>
       first_x_assum drule >> strip_tac >> metis_tac[]) >>
   mp_tac (CONJUNCT2 (Q.SPECL [`F`, `fuel`] gen_fn_sims_resource_all)) >>
-  PURE_REWRITE_TAC [gen_fn_frame_sim_at_def, gen_fn_frame_sim_resource_at_def,
+  PURE_REWRITE_TAC [gen_fn_frame_sim_at_simple_def, gen_fn_frame_sim_at_def,
     optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
@@ -145,7 +145,7 @@ Theorem gen_fn_simulation:
 Proof
   rpt gen_tac >>
   mp_tac (CONJUNCT1 (SPEC_ALL gen_fn_sims_all)) >>
-  PURE_REWRITE_TAC [gen_fn_sim_at_def, gen_fn_sim_resource_at_def,
+  PURE_REWRITE_TAC [gen_fn_sim_at_simple_def, gen_fn_sim_at_def,
     optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
   disch_then MATCH_ACCEPT_TAC
 QED
@@ -258,7 +258,7 @@ Theorem gen_fn_frame_simulation:
 Proof
   rpt gen_tac >>
   mp_tac (CONJUNCT2 (SPEC_ALL gen_fn_sims_all)) >>
-  PURE_REWRITE_TAC [gen_fn_frame_sim_at_def, gen_fn_frame_sim_resource_at_def,
+  PURE_REWRITE_TAC [gen_fn_frame_sim_at_simple_def, gen_fn_frame_sim_at_def,
     optionTheory.OPTION_MAP_DEF, cost_le_def, IMP_CLAUSES, AND_CLAUSES] >>
   disch_then MATCH_ACCEPT_TAC
 QED

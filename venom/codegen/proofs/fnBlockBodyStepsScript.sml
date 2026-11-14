@@ -2,7 +2,7 @@
  * The per-instruction steps of fnBlockBody$block_body_frame_sim.
  *
  * body_inv bundles that theorem's premises (all but the fuel-level
- * simulation hypotheses) at instruction k of block bb; body_result is
+ * simulation hypotheses) at instruction k of block bb; body_result_simple is
  * its conclusion about a run result.  Each instruction class gets one
  * lemma: an ordinary, GAS or INVOKE instruction that steps OK moves the
  * invariant to k + 1 (body_inv_advance); a JMP or JNZ hands the rest of
@@ -30,8 +30,8 @@ Ancestors
 
 (* ===== The invariant and the conclusion ===== *)
 
-(* block_body_frame_sim's premises other than gen_fn_sim_at and
-   gen_fn_frame_sim_at, in its variable order. *)
+(* block_body_frame_sim's premises other than gen_fn_sim_at_simple and
+   gen_fn_frame_sim_at_simple, in its variable order. *)
 Definition body_inv_def:
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -114,8 +114,8 @@ End
 (* block_body_frame_sim's conclusion about the run result res from the
    assembly state as. *)
 (* The safety mode constrains the same witness as the optional budget. *)
-Definition body_result_resource_def:
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+Definition body_result_def:
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
     (!vs'. res = Halt vs' ==>
        ?n as'. cost_le b n /\
                (safe ==> create_safe_prefix lo o2pc prog n as) /\
@@ -142,11 +142,11 @@ End
 
 
 Theorem body_result_resource_mono:
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res /\
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res /\
   (c = NONE \/ ?B C. b = SOME B /\ c = SOME C /\ B <= C) ==>
-  body_result_resource safe c lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+  body_result safe c lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
 Proof
-  simp[body_result_resource_def] >> rpt strip_tac >>
+  simp[body_result_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`n`, `as'`] >> simp[] >> irule cost_le_mono >>
   goal_assum (drule_at Any) >> simp[]
@@ -155,11 +155,11 @@ QED
 Theorem body_result_resource_prefix:
   asm_steps lo o2pc prog n as = AsmOK as1 /\
   (safe ==> create_safe_prefix lo o2pc prog n as) /\
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
-  body_result_resource safe (OPTION_MAP (\B. n + B) b)
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
+  body_result safe (OPTION_MAP (\B. n + B) b)
     lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
 Proof
-  rw[body_result_resource_def] >> gvs[] >>
+  rw[body_result_def] >> gvs[] >>
   qexistsl_tac [`n + n'`, `as'`] >>
   imp_res_tac asm_steps_add_ok >> simp[] >>
   Cases_on `b` >> gvs[cost_le_def] >>
@@ -167,34 +167,34 @@ Proof
 QED
 
 (* Resource-free results specialize the same execution witnesses. *)
-Definition body_result_def:
-  body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
-    body_result_resource F NONE lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Definition body_result_simple_def:
+  body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+    body_result F NONE lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
 End
 
 Theorem body_result_error:
   !lo o2pc prog cpl ctx fn mem0 pc_ret rest as e.
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Error e)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Error e)
 Proof
-  simp[body_result_def, body_result_resource_def]
+  simp[body_result_simple_def, body_result_def]
 QED
 
 Theorem body_result_ok:
   !lo o2pc prog cpl ctx fn mem0 pc_ret rest as s.
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (OK s)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (OK s)
 Proof
-  simp[body_result_def, body_result_resource_def]
+  simp[body_result_simple_def, body_result_def]
 QED
 
 Theorem body_result_prefix:
   !lo o2pc prog cpl ctx fn mem0 pc_ret rest as as1 n res.
     asm_steps lo o2pc prog n as = AsmOK as1 /\
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
 Proof
   rpt gen_tac >>
   mp_tac (Q.INST [`safe` |-> `F`, `b` |-> `NONE`]
-    body_result_resource_prefix) >> simp[GSYM body_result_def]
+    body_result_resource_prefix) >> simp[GSYM body_result_simple_def]
 QED
 
 (* ===== Generic facts ===== *)

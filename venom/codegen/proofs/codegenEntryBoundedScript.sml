@@ -74,7 +74,7 @@ Proof
         gvs[codegen_context_obligations_def]) >>
   mp_tac codegen_invoke_targets_retpc >> (impl_tac >- simp[]) >> strip_tac >>
   mp_tac (CONJUNCT1 (Q.SPECL [`T`, `fuel`] gen_fn_sims_resource_all)) >>
-  rewrite_tac[gen_fn_sim_resource_at_def] >>
+  rewrite_tac[gen_fn_sim_at_def] >>
   disch_then (qspecl_then [`rpolicy`, `unit`, `cp`, `prog`, `unit.cu_context`,
     `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`,
     `0`, `r`, `fe`,

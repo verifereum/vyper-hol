@@ -167,7 +167,7 @@ QED
 
 Theorem body_callee_sim_resource:
   !safe q fuel rpolicy unit cpl prog ctx lo o2pc Inv.
-    gen_fn_sim_resource_at safe q fuel /\
+    gen_fn_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
@@ -216,8 +216,8 @@ Theorem body_callee_sim_resource:
                   (safe ==> create_safe_prefix lo o2pc prog n cas))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `gen_fn_sim_resource_at _ _ _`
-    (mp_tac o REWRITE_RULE [gen_fn_sim_resource_at_def]) >>
+  qpat_x_assum `gen_fn_sim_at _ _ _`
+    (mp_tac o REWRITE_RULE [gen_fn_sim_at_def]) >>
   disch_then (qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`,
                            `o2pc`, `j`, `rj`, `callee`, `cvs`, `cas`, `Inv`,
                            `cra`, `cpc`, `crest`] mp_tac) >>
@@ -230,7 +230,7 @@ QED
 
 Theorem body_callee_sim:
   !fuel rpolicy unit cpl prog ctx lo o2pc Inv.
-    gen_fn_sim_at fuel /\
+    gen_fn_sim_at_simple fuel /\
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
@@ -272,7 +272,7 @@ Theorem body_callee_sim:
                   fn_return_state_rel ctx cpl callee vs' cas as')
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
-  drule_all (SRULE [GSYM gen_fn_sim_at_def, cost_le_def]
+  drule_all (SRULE [GSYM gen_fn_sim_at_simple_def, cost_le_def]
     (Q.SPECL [`F`, `NONE`] body_callee_sim_resource)) >>
   disch_then irule >> simp[]
 QED
@@ -392,9 +392,9 @@ Theorem body_result_resource_halt:
   (?n as'. cost_le b n /\
            (safe ==> create_safe_prefix lo o2pc prog n as) /\ asm_steps lo o2pc prog n as = AsmHalt as' /\
            venom_asm_terminal_rel vs as') ==>
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs)
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs)
 Proof
-  rw[body_result_resource_def] >> metis_tac[]
+  rw[body_result_def] >> metis_tac[]
 QED
 
 
@@ -404,9 +404,9 @@ Theorem body_result_resource_abort:
            ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
             (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
            venom_asm_terminal_rel vs as') ==>
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs)
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs)
 Proof
-  rw[body_result_resource_def] >> metis_tac[]
+  rw[body_result_def] >> metis_tac[]
 QED
 
 
@@ -420,29 +420,29 @@ Theorem body_result_resource_intret:
                 ~closure_spill_byte ctx cpl fn.fn_name b ==>
                 read_byte b as'.as_memory = read_byte b mem0) /\
            shared_state_rel vs as') ==>
-  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs)
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs)
 Proof
-  rw[body_result_resource_def] >> metis_tac[]
+  rw[body_result_def] >> metis_tac[]
 QED
 
 
 Theorem body_result_halt:
   (?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
            venom_asm_terminal_rel vs as') ==>
-  body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs)
+  body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs)
 Proof
   mp_tac (Q.INST [`safe` |-> `F`, `b` |-> `NONE`]
-    body_result_resource_halt) >> simp[GSYM body_result_def, cost_le_def]
+    body_result_resource_halt) >> simp[GSYM body_result_simple_def, cost_le_def]
 QED
 
 Theorem body_result_abort:
   (?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
             (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
            venom_asm_terminal_rel vs as') ==>
-  body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs)
+  body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs)
 Proof
   mp_tac (Q.INST [`safe` |-> `F`, `b` |-> `NONE`]
-    body_result_resource_abort) >> simp[GSYM body_result_def, cost_le_def]
+    body_result_resource_abort) >> simp[GSYM body_result_simple_def, cost_le_def]
 QED
 
 Theorem body_result_intret:
@@ -454,10 +454,10 @@ Theorem body_result_intret:
                 ~closure_spill_byte ctx cpl fn.fn_name b ==>
                 read_byte b as'.as_memory = read_byte b mem0) /\
            shared_state_rel vs as') ==>
-  body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs)
+  body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs)
 Proof
   mp_tac (Q.INST [`safe` |-> `F`, `b` |-> `NONE`]
-    body_result_resource_intret) >> simp[GSYM body_result_def, cost_le_def]
+    body_result_resource_intret) >> simp[GSYM body_result_simple_def, cost_le_def]
 QED
 
 (* ===== Instructions that don't end the block ===== *)
@@ -585,7 +585,7 @@ Theorem body_halt_step_resource:
     inst.inst_opcode <> INVOKE /\ (!j. ~revert_forward_pair bb k j) /\
     LENGTH (compute_operands inst) <= 16 /\
     step_inst fuel ctx inst vs = Halt vs1 ==>
-    body_result_resource safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)))
+    body_result safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)))
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs1)
 Proof
   strip_tac >> gather_tac >> step_facts_tac >>
@@ -608,11 +608,11 @@ Theorem body_halt_step:
     inst.inst_opcode <> INVOKE /\ (!j. ~revert_forward_pair bb k j) /\
     LENGTH (compute_operands inst) <= 16 /\
     step_inst fuel ctx inst vs = Halt vs1 ==>
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs1)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs1)
 Proof
   strip_tac >>
   drule_all (SRULE [] (Q.INST [`safe` |-> `F`] body_halt_step_resource)) >> strip_tac >>
-  rewrite_tac[body_result_def] >>
+  rewrite_tac[body_result_simple_def] >>
   irule body_result_resource_mono >> goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -626,7 +626,7 @@ Theorem body_abort_step_resource:
     inst.inst_opcode <> INVOKE /\ (!j. ~revert_forward_pair bb k j) /\
     LENGTH (compute_operands inst) <= 16 /\
     step_inst fuel ctx inst vs = Abort a vs1 ==>
-    body_result_resource safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) + 7))
+    body_result safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) + 7))
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs1)
 Proof
   strip_tac >> gather_tac >> step_facts_tac >>
@@ -655,11 +655,11 @@ Theorem body_abort_step:
     inst.inst_opcode <> INVOKE /\ (!j. ~revert_forward_pair bb k j) /\
     LENGTH (compute_operands inst) <= 16 /\
     step_inst fuel ctx inst vs = Abort a vs1 ==>
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs1)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs1)
 Proof
   strip_tac >>
   drule_all (SRULE [] (Q.INST [`safe` |-> `F`] body_abort_step_resource)) >> strip_tac >>
-  rewrite_tac[body_result_def] >>
+  rewrite_tac[body_result_simple_def] >>
   irule body_result_resource_mono >> goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -671,7 +671,7 @@ Theorem body_ret_step_resource:
     k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
     LENGTH (compute_operands inst) <= 16 /\
     step_inst fuel ctx inst vs = IntRet ret vs1 ==>
-    body_result_resource safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)))
+    body_result safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)))
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs1)
 Proof
   strip_tac >> gather_tac >>
@@ -725,18 +725,18 @@ Theorem body_ret_step:
     k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
     LENGTH (compute_operands inst) <= 16 /\
     step_inst fuel ctx inst vs = IntRet ret vs1 ==>
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs1)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (IntRet ret vs1)
 Proof
   strip_tac >>
   drule_all (SRULE [] (Q.INST [`safe` |-> `F`] body_ret_step_resource)) >> strip_tac >>
-  rewrite_tac[body_result_def] >>
+  rewrite_tac[body_result_simple_def] >>
   irule body_result_resource_mono >> goal_assum (drule_at Any) >> simp[]
 QED
 
 (* ===== INVOKE ===== *)
 
 Theorem body_invoke_step_resource:
-  gen_fn_sim_resource_at safe q fuel /\
+  gen_fn_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -767,11 +767,11 @@ Theorem body_invoke_step_resource:
          fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
          as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops)) /\
     (!vs1. step_inst fuel ctx inst vs = Halt vs1 ==>
-       body_result_resource safe (OPTION_MAP (\F.
+       body_result safe (OPTION_MAP (\F.
          LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) + F unit cpl prog) q)
          lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs1)) /\
     (!a vs1. step_inst fuel ctx inst vs = Abort a vs1 ==>
-       body_result_resource safe (OPTION_MAP (\F.
+       body_result safe (OPTION_MAP (\F.
          LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) + F unit cpl prog) q)
          lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs1))
 Proof
@@ -826,7 +826,7 @@ QED
 
 
 Theorem body_invoke_step:
-  gen_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -853,26 +853,26 @@ Theorem body_invoke_step:
          fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
          as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops)) /\
     (!vs1. step_inst fuel ctx inst vs = Halt vs1 ==>
-       body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs1)) /\
+       body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Halt vs1)) /\
     (!a vs1. step_inst fuel ctx inst vs = Abort a vs1 ==>
-       body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs1))
+       body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Abort a vs1))
 Proof
   mp_tac (Q.INST [`safe` |-> `F`, `q` |-> `NONE`]
     body_invoke_step_resource) >>
-  simp[GSYM gen_fn_sim_at_def, GSYM body_result_def, cost_le_def]
+  simp[GSYM gen_fn_sim_at_simple_def, GSYM body_result_simple_def, cost_le_def]
 QED
 
 (* ===== Jumps ===== *)
 
 (* The run from the successor t that a jump enters, in assembly state as1
-   at t's code: gen_fn_frame_sim_at fuel, entered through the lineage
+   at t's code: gen_fn_frame_sim_at_simple fuel, entered through the lineage
    entry from bb, after the n steps from as. *)
 Theorem body_jump_continue_resource:
   !safe q fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
    ra pc_ret rest mem0 inst t vs1 n as1 off.
-    gen_fn_frame_sim_resource_at safe q fuel /\
+    gen_fn_frame_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -890,7 +890,7 @@ Theorem body_jump_continue_resource:
        operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
     FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc ==>
     ~vs1.vs_halted /\
-    body_result_resource safe (OPTION_MAP (\F. n + F unit cpl prog) q)
+    body_result safe (OPTION_MAP (\F. n + F unit cpl prog) q)
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as
       (run_blocks fuel ctx fn vs1)
 Proof
@@ -975,8 +975,8 @@ QED
 
 Resume body_jump_continue_resource[callee]:
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `gen_fn_frame_sim_resource_at safe q fuel`
-    (mp_tac o REWRITE_RULE [gen_fn_frame_sim_resource_at_def]) >>
+  qpat_x_assum `gen_fn_frame_sim_at safe q fuel`
+    (mp_tac o REWRITE_RULE [gen_fn_frame_sim_at_def]) >>
   disch_then (qspecl_then
     [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`, `i`, `fn`, `r`,
      `liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`, `lbl_ctr`,
@@ -995,10 +995,10 @@ Resume body_jump_continue_resource[callee]:
       TRY (first_assum ACCEPT_TAC) >>
       SIMP_TAC (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
   strip_tac >>
-  `body_result_resource safe (OPTION_MAP (\F. F unit cpl prog) q)
+  `body_result safe (OPTION_MAP (\F. F unit cpl prog) q)
      lo o2pc prog cpl ctx fn mem0 pc_ret rest as1
      (run_blocks fuel ctx fn vs1)` by
-    (PURE_REWRITE_TAC [body_result_resource_def] >>
+    (PURE_REWRITE_TAC [body_result_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all body_result_resource_prefix >> simp[OPTION_MAP_COMPOSE, combinTheory.o_DEF]
 QED
@@ -1011,7 +1011,7 @@ Theorem body_jump_continue:
    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
    ra pc_ret rest mem0 inst t vs1 n as1 off.
-    gen_fn_frame_sim_at fuel /\
+    gen_fn_frame_sim_at_simple fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1027,11 +1027,11 @@ Theorem body_jump_continue:
        operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
     FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc ==>
     ~vs1.vs_halted /\
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as
       (run_blocks fuel ctx fn vs1)
 Proof
   mp_tac (Q.SPECL [`F`, `NONE`] body_jump_continue_resource) >>
-  simp[GSYM gen_fn_frame_sim_at_def, GSYM body_result_def]
+  simp[GSYM gen_fn_frame_sim_at_simple_def, GSYM body_result_simple_def]
 QED
 
 (* The body_inv variables, in body_jump_continue's order. *)
@@ -1059,7 +1059,7 @@ val jump_resource_finish_tac =
   Cases_on `q` >> simp[execute_plan_append] >> decide_tac;
 
 Theorem body_jmp_step_resource:
-  gen_fn_frame_sim_resource_at safe q fuel /\
+  gen_fn_frame_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -1069,7 +1069,7 @@ Theorem body_jmp_step_resource:
     inst.inst_opcode = JMP /\
     step_inst fuel ctx inst vs = OK vs1 ==>
     ~vs1.vs_halted /\
-    body_result_resource safe (OPTION_MAP (\F.
+    body_result safe (OPTION_MAP (\F.
       LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) + F unit cpl prog) q)
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as (run_blocks fuel ctx fn vs1)
 Proof
@@ -1165,7 +1165,7 @@ Finalise body_jmp_step_resource
 
 
 Theorem body_jnz_step_resource:
-  gen_fn_frame_sim_resource_at safe q fuel /\
+  gen_fn_frame_sim_at safe q fuel /\
     (safe ==> !f inst s. Inv ctx f inst s ==> inst_create_size_ok inst s) /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -1175,7 +1175,7 @@ Theorem body_jnz_step_resource:
     inst.inst_opcode = JNZ /\
     step_inst fuel ctx inst vs = OK vs1 ==>
     ~vs1.vs_halted /\
-    body_result_resource safe (OPTION_MAP (\F.
+    body_result safe (OPTION_MAP (\F.
       LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) + F unit cpl prog) q)
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as (run_blocks fuel ctx fn vs1)
 Proof
@@ -1296,7 +1296,7 @@ Finalise body_jnz_step_resource
 
 
 Theorem body_jmp_step:
-  gen_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1305,16 +1305,16 @@ Theorem body_jmp_step:
     inst.inst_opcode = JMP /\
     step_inst fuel ctx inst vs = OK vs1 ==>
     ~vs1.vs_halted /\
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as
       (run_blocks fuel ctx fn vs1)
 Proof
   mp_tac (Q.INST [`safe` |-> `F`, `q` |-> `NONE`]
     body_jmp_step_resource) >>
-  simp[GSYM gen_fn_frame_sim_at_def, GSYM body_result_def]
+  simp[GSYM gen_fn_frame_sim_at_simple_def, GSYM body_result_simple_def]
 QED
 
 Theorem body_jnz_step:
-  gen_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1323,12 +1323,12 @@ Theorem body_jnz_step:
     inst.inst_opcode = JNZ /\
     step_inst fuel ctx inst vs = OK vs1 ==>
     ~vs1.vs_halted /\
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as
       (run_blocks fuel ctx fn vs1)
 Proof
   mp_tac (Q.INST [`safe` |-> `F`, `q` |-> `NONE`]
     body_jnz_step_resource) >>
-  simp[GSYM gen_fn_frame_sim_at_def, GSYM body_result_def]
+  simp[GSYM gen_fn_frame_sim_at_simple_def, GSYM body_result_simple_def]
 QED
 
 (* ===== Revert forwarding ===== *)
@@ -1358,7 +1358,7 @@ Theorem body_revert_step_resource:
     revert_forward_pair bb k j /\
     (!off. ~MEM (SORestore off) rest_ops /\ ~MEM (SOSpill off) rest_ops) ==>
     (!t. exec_block fuel ctx bb vs <> OK t) /\
-    body_result_resource safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)))
+    body_result safe (SOME (LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)))
       lo o2pc prog cpl ctx fn mem0 pc_ret rest as (exec_block fuel ctx bb vs)
 Proof
   strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
@@ -1368,7 +1368,7 @@ Proof
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac
   >~ [`exec_block fuel ctx bb vs = Error e`]
   >- (qpat_x_assum `exec_block fuel ctx bb vs = _`
-        (fn th => REWRITE_TAC [th, body_result_resource_def]) >>
+        (fn th => REWRITE_TAC [th, body_result_def]) >>
       simp[]) >>
   conj_tac
   >- (qpat_x_assum `exec_block fuel ctx bb vs = _`
@@ -1446,13 +1446,13 @@ Theorem body_revert_step:
     revert_forward_pair bb k j /\
     (!off. ~MEM (SORestore off) rest_ops /\ ~MEM (SOSpill off) rest_ops) ==>
     (!t. exec_block fuel ctx bb vs <> OK t) /\
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as
       (exec_block fuel ctx bb vs)
 Proof
   strip_tac >>
   drule_all (SRULE [] (Q.INST [`safe` |-> `F`] body_revert_step_resource)) >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  rewrite_tac[body_result_def] >>
+  rewrite_tac[body_result_simple_def] >>
   irule body_result_resource_mono >> goal_assum (drule_at Any) >> simp[]
 QED
