@@ -5,7 +5,9 @@ Ancestors moduleLowering compileEnv emitHelper emitHelperProps exprLoweringProps
   abiDecoderContract fragExec fragExecMem fragGasSeqPtr fragGasCopyLoop
   venomState venomExecSemantics venomInst words finite_map list arithmetic
   decoderNavigationPtr calldataOverwritePtr bodyPtrDefs ptrDiscipline
-  ctorDeployMemoryRunMemEntryRegistration
+  ctorDeployMemoryRunMemEntryRegistration defaultBytesAllocationBoundary
+  loweringStateRelDefs localPtrsProps loweringHalt abiDecoderReentry
+  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryAllocation
 
 Theorem default_bytes_address_shape:
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] sa = (head,sb) /\
@@ -281,3 +283,136 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists `raw` >> simp[Abbr `raw`]
 QED
+
+Theorem default_bytes_address_prelude:
+  compile_alloc_buffer cap st = (buf,allocated) /\
+  emit_op ADD [Lit 4w; Lit (n2w (off-4))] allocated = (head,after_head) /\
+  emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
+  emit_op ADD [Lit 4w;offset] after_load = (src,after_src) /\
+  0 < cap /\ cap < dimword (:256) /\ fn_has_code st after_src fn /\
+  alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
+  fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  alloca_history fn s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?ready H u p.
+    buf.buf_operand = Var p /\
+    eval_operand (Var p) ready = SOME (n2w s.vs_alloca_next) /\
+    eval_operand src ready = SOME ((4w + abi_decode_load CALLDATALOAD
+      ((4w+n2w(off-4)):bytes32) s):bytes32) /\
+    abi_decoder_operand_live after_src.cs_next_var (Var p) /\
+    abi_decoder_operand_live after_src.cs_next_var src /\
+    not_fresh_at after_src p /\ (!v. src = Var v ==> not_fresh_at after_src v) /\
+    ptr_covers H u p ready cap /\ op_taint u src = {} /\ op_prov H src = NONE /\
+    FLOOKUP ready.vs_allocas st.cs_next_id = SOME (s.vs_alloca_next,cap) /\
+    ready.vs_alloca_next = s.vs_alloca_next+cap /\
+    s.vs_alloca_next+cap < dimword (:256) /\
+    alloca_inv ready /\ alloca_frontier_inv_from k ctx fn site ready /\
+    allocas_from lo ready /\ lo <= ready.vs_alloca_next /\ alloca_history fn ready /\
+    ~ready.vs_halted /\ ready.vs_current_bb = after_src.cs_current_bb /\
+    ready.vs_inst_idx = LENGTH after_src.cs_current_insts /\
+    ready = (s with <|vs_vars := ready.vs_vars; vs_allocas := ready.vs_allocas;
+      vs_alloca_next := ready.vs_alloca_next;
+      vs_inst_idx := LENGTH after_src.cs_current_insts|>) /\
+    st.cs_next_id < after_src.cs_next_id /\ st.cs_next_var <= after_src.cs_next_var /\
+    (!id. id <> st.cs_next_id ==> FLOOKUP ready.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op ready = eval_operand op s) /\
+    (!v. not_fresh_at st v ==> FLOOKUP H v = FLOOKUP G v /\
+      op_taint u (Var v) = op_taint tn (Var v)) /\
+    u.t_mem = tn.t_mem UNION {j | s.vs_alloca_next <= j /\ j < s.vs_alloca_next+cap} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    gas_path_mem ctx fn s 0 (OK ready) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK ready,H,u)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  drule compile_alloc_buffer_extends >> strip_tac >>
+  qpat_assum `emit_op ADD _ allocated = _`
+    (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+  qpat_assum `emit_op CALLDATALOAD _ after_head = _`
+    (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+  qpat_assum `emit_op ADD _ after_load = _`
+    (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+  `cs_extends allocated after_src` by metis_tac[cs_extends_trans] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all default_bytes_allocation_boundary >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] (qx_choose_then `a`
+    (qx_choose_then `H0` (qx_choose_then `u0` (qx_choose_then `p` strip_assume_tac))))) >>
+  drule_all default_bytes_address_joint >>
+  disch_then (qspecl_then [`u0`,`PG`,`H0`] (qx_choose_then `ready`
+    (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>
+  drule_all default_bytes_address_memory >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `gas_path_mem ctx fn a 0 (OK ready) /\ alloca_history fn ready` by gvs[] >>
+  qexistsl [`ready`,`H`,`u`,`p`] >>
+  pure_rewrite_tac[CONJ_ASSOC] >>
+  reverse conj_tac >- suspend "pullback" >>
+  reverse conj_tac >- suspend "origin" >>
+  reverse conj_tac >- suspend "memory" >>
+  suspend "fields"
+QED
+Resume default_bytes_address_prelude[fields]:
+  `ready.vs_allocas = a.vs_allocas /\ ready.vs_alloca_next = a.vs_alloca_next /\
+    ready.vs_call_ctx = a.vs_call_ctx` by
+    (qpat_assum `ready = a with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `a.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `a = s with <|vs_vars := _; vs_allocas := _;
+      vs_alloca_next := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) a =
+    abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) s` by
+    simp[abi_decode_load_def, abi_decode_source_def] >>
+  qpat_x_assum `ready = raw with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `raw' = _` kall_tac >>
+  pure_rewrite_tac[GSYM CONJ_ASSOC] >> simp[] >>
+  conj_tac >- (fs[eval_operand_def] >> metis_tac[]) >>
+  conj_tac >- (irule abi_decoder_operand_live_mono >>
+    qexists `allocated.cs_next_var` >> simp[]) >>
+  conj_tac >- simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+    ASCIInumbersTheory.toString_11] >>
+  conj_tac >- (irule loweringShapeDefsTheory.not_fresh_at_mono >>
+    qexists `allocated` >> simp[]) >>
+  conj_tac >- simp[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+  conj_tac >- (fs[ptr_covers_def] >> metis_tac[]) >>
+  conj_tac >- (irule alloca_inv_fields >> qexists `a` >> simp[]) >>
+  conj_tac >- (irule deploy_ctor_alloca_frontier_fields >>
+    qexistsl [`a`,`site`] >> simp[]) >>
+  conj_tac >- (fs[allocas_from_def] >> metis_tac[]) >>
+  conj_tac >- gvs[venom_state_component_equality] >>
+  conj_tac >- suspend "old_operands" >>
+  suspend "old_ghosts"
+QED
+Resume default_bytes_address_prelude[memory]:
+  metis_tac[fragGasPathMemTheory.gas_path_mem_then, ADD]
+QED
+Resume default_bytes_address_prelude[origin]:
+  rpt gen_tac >>
+  metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND]
+QED
+Resume default_bytes_address_prelude[pullback]:
+  metis_tac[]
+QED
+Resume default_bytes_address_prelude[old_operands]:
+  `!v. not_fresh_at st v ==> not_fresh_at allocated v` by
+    (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists `st` >> simp[]) >>
+  Cases >> simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+    eval_operand_def]
+  >- (strip_tac >>
+      `not_fresh_at st s'` by simp[not_fresh_at_def] >>
+      qpat_assum `!op. abi_decoder_operand_live _ op ==> _`
+        (qspec_then `Var s'` mp_tac) >>
+      simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+        eval_operand_def] >> metis_tac[]) >>
+  gvs[venom_state_component_equality]
+QED
+Resume default_bytes_address_prelude[old_ghosts]:
+  `!v. not_fresh_at st v ==> not_fresh_at allocated v` by
+    (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists `st` >> simp[]) >>
+  metis_tac[]
+QED
+Finalise default_bytes_address_prelude
