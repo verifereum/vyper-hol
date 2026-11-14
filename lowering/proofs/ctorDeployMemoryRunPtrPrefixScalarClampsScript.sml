@@ -3,7 +3,7 @@ Theory ctorDeployMemoryRunPtrPrefixScalarClamps
 Ancestors
   fragGasSeqPtr fragGasOriginPtrLoop loweringStateRelDefs
   emitHelperProps venomExecProofs exprSimUnwrap instIdxIndep slotCopyExecution compileEnv
-  ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
+  ctorDeployMemoryRunPtrPrefixScalarPackage
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSteps
   abiEncoder emitHelper exprLoweringProps
   venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
