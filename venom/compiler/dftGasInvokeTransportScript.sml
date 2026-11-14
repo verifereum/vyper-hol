@@ -125,6 +125,134 @@ Proof
   simp[invoke_return_readings] >> metis_tac[invoke_return_compare_gas]
 QED
 
+(* Lift an exact returning callee cut through the real caller frame. *)
+Theorem invoke_return_residual:
+  i.inst_opcode = INVOKE /\
+  decode_invoke i = SOME (name,ops) /\
+  lookup_function name C.ctx_functions = SOME f /\
+  eval_operands ops s = SOME args /\
+  setup_callee f args s = SOME cs /\
+  residual_result tail (IntRet ir u)
+    (run_blocks fuel C f (cs with vs_gas_readings := gs)) /\
+  bind_outputs i.inst_outputs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state s u)) = SOME t ==>
+  step_inst fuel C i (s with vs_gas_readings := gs) =
+    OK (t with vs_gas_readings := tail)
+Proof
+  strip_tac >>
+  `setup_callee f args (s with vs_gas_readings := gs) =
+     SOME (cs with vs_gas_readings := gs)` by
+    (qpat_x_assum `setup_callee _ _ _ = SOME _` mp_tac >>
+     simp[gasOracleReplayTheory.gas_setup_callee, optionTheory.OPTION_MAP_EQ_SOME] >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `cs = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  Cases_on `run_blocks fuel C f (cs with vs_gas_readings := gs)` >>
+  gvs[residual_result_def, stateEquivTheory.lift_result_def] >>
+  simp[Once step_inst_def, gasOracleReplayTheory.gas_eval_operands,
+       gasOracleReplayTheory.gas_merge_callee,
+       gasOracleReplayTheory.gas_adopt_return,
+       gasOracleReplayTheory.gas_bind_outputs]
+QED
+
+(* Reuse a fixed returning child packet at its actual caller. *)
+Theorem closed_child_invoke_fixed:
+ !fuel C7 C8 i b0 nm ops args sf tf cs ir child_out caller_out m es unused.
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (nm,ops) /\
+  lookup_function nm C7.ctx_functions = SOME sf /\
+  lookup_function nm C8.ctx_functions = SOME tf /\
+  eval_operands ops b0 = SOME args /\
+  setup_callee sf args b0 = SOME cs /\
+  setup_callee tf args b0 = SOME cs /\
+  bind_outputs i.inst_outputs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state b0 child_out)) = SOME caller_out /\
+  run_blocks fuel C8 tf cs = IntRet ir child_out /\
+  LENGTH m = LENGTH es /\ EVERY IS_SOME m /\
+  unused = child_out.vs_gas_readings /\
+  PERM (MAP THE (FILTER IS_SOME m) ++ unused) cs.vs_gas_readings /\
+  (!gs tail.
+   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+   (?extra. es = gas_events_blocks fuel C7 sf
+       (cs with vs_gas_readings := gs ++ tail) ++ extra) /\
+   ((?f. terminates (run_blocks f C7 sf
+       (cs with vs_gas_readings := gs ++ tail))) ==>
+    terminates (run_blocks fuel C7 sf
+       (cs with vs_gas_readings := gs ++ tail)) /\
+    dft_res_rel
+     (restore_result [] (run_blocks fuel C7 sf
+       (cs with vs_gas_readings := gs ++ tail)))
+     (restore_result [] (IntRet ir child_out)) /\
+    gas_events_blocks fuel C7 sf
+       (cs with vs_gas_readings := gs ++ tail) = es /\
+    residual_result tail (IntRet ir child_out)
+      (run_blocks fuel C7 sf (cs with vs_gas_readings := gs ++ tail))))
+  ==>
+  LENGTH m = LENGTH es /\ EVERY IS_SOME m /\
+  unused = caller_out.vs_gas_readings /\
+  PERM (MAP THE (FILTER IS_SOME m) ++ unused) b0.vs_gas_readings /\
+  step_inst fuel C8 i b0 = OK caller_out /\
+  !gs tail.
+   LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+   (?extra. es = gas_events_step fuel C7 b0.vs_current_bb i
+      (b0 with vs_gas_readings := gs ++ tail) ++ extra) /\
+   ((?f. terminates (step_inst f C7 i
+      (b0 with vs_gas_readings := gs ++ tail))) ==>
+    terminates (step_inst fuel C7 i
+      (b0 with vs_gas_readings := gs ++ tail)) /\
+    dft_res_rel
+     (restore_result [] (step_inst fuel C7 i
+       (b0 with vs_gas_readings := gs ++ tail)))
+     (restore_result [] (OK caller_out)) /\
+    gas_events_step fuel C7 b0.vs_current_bb i
+      (b0 with vs_gas_readings := gs ++ tail) = es /\
+    residual_result tail (OK caller_out)
+      (step_inst fuel C7 i (b0 with vs_gas_readings := gs ++ tail)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs.vs_gas_readings = b0.vs_gas_readings` by
+    metis_tac[gasOracleReplayTheory.gas_setup_callee_readings] >>
+  `caller_out.vs_gas_readings = child_out.vs_gas_readings` by
+    (drule gasOracleReplayTheory.gas_bind_outputs_readings >>
+     simp[merge_callee_state_def, adopt_return_fmp_def]) >>
+  `step_inst fuel C8 i b0 = OK caller_out` by
+    simp[Once step_inst_def] >>
+  `!rs. setup_callee sf args (b0 with vs_gas_readings := rs) =
+     SOME (cs with vs_gas_readings := rs)` by
+    (gen_tac >> qpat_x_assum `setup_callee sf args b0 = SOME cs` mp_tac >>
+     simp[gasOracleReplayTheory.gas_setup_callee, optionTheory.OPTION_MAP_EQ_SOME] >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `cs = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!n rs. terminates (step_inst n C7 i (b0 with vs_gas_readings := rs)) ==>
+     terminates (run_blocks n C7 sf (cs with vs_gas_readings := rs))` by
+    (rpt gen_tac >>
+     simp[Once step_inst_def, gasOracleReplayTheory.gas_eval_operands] >>
+     Cases_on `run_blocks n C7 sf (cs with vs_gas_readings := rs)` >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  `!n rs. gas_events_step n C7 b0.vs_current_bb i
+     (b0 with vs_gas_readings := rs) =
+     gas_events_blocks n C7 sf (cs with vs_gas_readings := rs)` by
+    simp[gas_events_step_def, gasOracleReplayTheory.gas_eval_operands] >>
+  `PERM (MAP THE (FILTER IS_SOME m) ++ unused) b0.vs_gas_readings` by
+    (qpat_x_assum `PERM _ cs.vs_gas_readings` mp_tac >> simp[]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ _ _ ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >>
+  simp[] >> strip_tac >> strip_tac >>
+  `?f. terminates (run_blocks f C7 sf
+     (cs with vs_gas_readings := gs ++ tail))` by metis_tac[] >>
+  qpat_x_assum `(?f. terminates (run_blocks _ _ _ _)) ==> _` mp_tac >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  `step_inst fuel C7 i (b0 with vs_gas_readings := gs ++ tail) =
+     OK (caller_out with vs_gas_readings := tail)` by
+    metis_tac[invoke_return_residual] >>
+  qpat_assum `step_inst fuel C7 i _ = OK _` (fn step =>
+  qpat_assum `gas_events_blocks fuel C7 sf _ = es` (fn events =>
+    simp_tac (srw_ss()) [step, events,
+      passSimulationDefsTheory.terminates_def, restore_result_def,
+      dftRunRelTheory.dft_res_rel_def, residual_result_def,
+      stateEquivTheory.lift_result_def]))
+QED
+
+
 (* Equal invocation operands and setup transport the same selected packet. *)
 Theorem invoke_fixed_segment_setup:
   !m es unused fuel C C' y a b.
