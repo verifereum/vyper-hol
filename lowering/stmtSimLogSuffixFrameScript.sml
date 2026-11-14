@@ -34,6 +34,7 @@ Proof
 QED
 
 Theorem log_success_suffix_framed_run:
+  ~cx.txn.is_static /\
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
