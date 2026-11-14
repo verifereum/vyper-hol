@@ -4119,13 +4119,13 @@ Proof
     `if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount`] strip_assume_tac) >>
   `?adopted. adopt_call_outcome rq outcome es1' = (INL (),adopted)` by
     simp[adopt_call_outcome_equation] >>
-  drule calldata_call_pre >> strip_tac >> gvs[] >>
+  drule calldata_call_pre >> strip_tac >>
   drule_all raw_call_oracle_result >>
   disch_then (qspecl_then [
-    `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws vals)`] mp_tac) >>
+    `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws vals)`] assume_tac) >>
+  qexistsl_tac [`aw`,`amount`,`rq`,`outcome`,`es1'`] >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `outcome.co_success` >>
-  gvs[] >> strip_tac >> gvs[] >>
-  qexistsl_tac [`amount`,`rq`,`outcome`,`es1'`] >> simp[]
+  gvs[]
 QED
 
 Theorem calldata_take_outcome_bound[local]:
@@ -4556,7 +4556,7 @@ Proof
                 pairTheory.SND] >>
     irule frag_path_exit_prefix >> qexists_tac `se` >> simp[] >>
     irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-    simp[expr_exit_def]) >>
+    rpt strip_tac >> gvs[expr_exit_def]) >>
   drule_all calldata_call_returndata_bound >> disch_tac >>
   drule_all calldata_call_gas >> strip_tac >>
   drule calldata_prepared_buffer_frame >> strip_tac >>
