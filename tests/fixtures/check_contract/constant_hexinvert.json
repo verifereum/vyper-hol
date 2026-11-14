@@ -1,0 +1,164 @@
+{
+  "contract_name": "<unknown>",
+  "ast": {
+    "source_sha256sum": "1a08bbbcadb5d2bedcbea843c15ceb06ad9c08addd7f4d1a299e63273068a2c0",
+    "ast_type": "Module",
+    "body": [
+      {
+        "args": {
+          "args": [],
+          "ast_type": "arguments",
+          "col_offset": 0,
+          "default": null,
+          "defaults": [],
+          "end_col_offset": 78,
+          "end_lineno": 4,
+          "lineno": 3,
+          "node_id": 2,
+          "src": "16:98:-1"
+        },
+        "ast_type": "FunctionDef",
+        "body": [
+          {
+            "ast_type": "Return",
+            "col_offset": 4,
+            "end_col_offset": 78,
+            "end_lineno": 4,
+            "lineno": 4,
+            "node_id": 3,
+            "src": "40:74:-1",
+            "value": {
+              "ast_type": "UnaryOp",
+              "col_offset": 11,
+              "end_col_offset": 78,
+              "end_lineno": 4,
+              "lineno": 4,
+              "node_id": 4,
+              "op": {
+                "ast_type": "Invert",
+                "col_offset": 11,
+                "end_col_offset": 78,
+                "end_lineno": 4,
+                "lineno": 4,
+                "node_id": 5,
+                "src": "47:67:-1"
+              },
+              "operand": {
+                "ast_type": "Hex",
+                "col_offset": 12,
+                "end_col_offset": 78,
+                "end_lineno": 4,
+                "lineno": 4,
+                "node_id": 6,
+                "src": "48:66:-1",
+                "value": "0xabababababababababababababababababababababababababababababababab",
+                "type": {
+                  "m": 32,
+                  "name": "bytes32",
+                  "typeclass": "bytes_m"
+                },
+                "folded_value": {
+                  "ast_type": "Hex",
+                  "col_offset": 12,
+                  "end_col_offset": 78,
+                  "end_lineno": 4,
+                  "lineno": 4,
+                  "node_id": 6,
+                  "src": "48:66:-1",
+                  "value": "0xabababababababababababababababababababababababababababababababab",
+                  "type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  }
+                }
+              },
+              "src": "47:67:-1",
+              "type": {
+                "m": 32,
+                "name": "bytes32",
+                "typeclass": "bytes_m"
+              }
+            }
+          }
+        ],
+        "col_offset": 0,
+        "decorator_list": [
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 9,
+            "end_lineno": 1,
+            "id": "external",
+            "lineno": 1,
+            "node_id": 7,
+            "src": "1:8:-1"
+          },
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 5,
+            "end_lineno": 2,
+            "id": "pure",
+            "lineno": 2,
+            "node_id": 9,
+            "src": "11:4:-1"
+          }
+        ],
+        "doc_string": null,
+        "end_col_offset": 78,
+        "end_lineno": 4,
+        "lineno": 3,
+        "name": "f",
+        "node_id": 1,
+        "returns": {
+          "ast_type": "Name",
+          "col_offset": 11,
+          "end_col_offset": 18,
+          "end_lineno": 3,
+          "id": "bytes32",
+          "lineno": 3,
+          "node_id": 11,
+          "src": "27:7:-1"
+        },
+        "src": "16:98:-1",
+        "func_type": {
+          "argument_types": [],
+          "return_type": {
+            "m": 32,
+            "name": "bytes32",
+            "typeclass": "bytes_m"
+          },
+          "name": "f",
+          "type_decl_node": {
+            "node_id": 1,
+            "source_id": -1
+          },
+          "typeclass": "contract_function"
+        }
+      }
+    ],
+    "col_offset": 0,
+    "doc_string": null,
+    "end_col_offset": 79,
+    "end_lineno": 4,
+    "is_interface": false,
+    "lineno": 1,
+    "name": null,
+    "node_id": 0,
+    "path": "<unknown>",
+    "resolved_path": "<unknown>",
+    "settings": {},
+    "source_id": -1,
+    "src": "0:115:-1",
+    "type": {
+      "name": "<unknown>",
+      "type_decl_node": {
+        "node_id": 0,
+        "source_id": -1
+      },
+      "typeclass": "module"
+    }
+  },
+  "imports": []
+}

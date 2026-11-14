@@ -53,19 +53,21 @@ folding disagrees, the translation follows the semantics; see Validation.
 
 ## Translation
 
-Constant evaluation happens on the translated expression, after `translate_expr`
-has given every name and operator its meaning, so the evaluator sees exactly
-what the interpreter would run.
+The frontend resolves constant values together with their source literal origins.
+The origin records preserve distinctions that the translated expression alone
+cannot recover, including Bytes versus HexBytes and the spelling of Hex values.
 
 1. Constants are evaluated in passes over every module, imported modules
-   first (`annotated_constants`). Each pass evaluates the initializers not yet
-   evaluated, using the constants evaluated so far, and records the value of
-   each one that evaluates under its `(module, name)` key. Passes repeat until
-   one evaluates nothing new, since a constant may refer to one declared after
-   it. Initializers that never evaluate (arrays, decimals, calls) stay
-   top-level names for the semantics to evaluate at runtime.
-2. A reference to an evaluated constant, bare or through a module, translates
-   to its value as a literal of the type the compiler gives the reference,
+   first (`evaluated_origin_constants`, `imported_origin_constants` and
+   `module_origin_constants`). Each pass records resolved literal values and
+   closed array literal trees (`pin_literal_tree`) together with their origins,
+   under `(module, name)` keys. Passes repeat until no new entries appear,
+   allowing forward references. `scalar_origin_constants` projects only Literal
+   entries into the ordinary scalar table. Producer translation also resolves
+   containers through the origin table; unresolved initializers keep their
+   original expressions.
+2. A reference to an evaluated scalar constant, bare or through a module,
+   translates to its value as a literal of the type the compiler gives the reference,
    which is the type its position expects (`top_level_ref`): with
    `B: constant(Bytes[5]) = b"abc"`, the reference `B` in
    `A: constant(Bytes[10]) = B` is a `Bytes[10]`.
@@ -73,19 +75,21 @@ what the interpreter would run.
    bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
    endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
-   tuple indices and `method_id` (`fold_constant`). Exponents use
-   `pin_fold_expr`, which preserves operations the compiler does not fold,
-   including unsafe arithmetic. Boolean operators fold their literal children
-   before translation to conditional expressions.
+   tuple indices and `method_id` (`fold_pin_constant` / `pin_fold_value`).
+   Exponents use `exponent_operand` through `fold_pin_constant` and
+   `origin_fold_value`. This query preserves source refusals and operations
+   the compiler does not fold, including unsafe arithmetic; callers keep the
+   original operand when it does not yield a Literal. Reapplying the raw
+   `pin_fold_expr` could erase those refusals. Boolean operators fold their
+   literal children before translation to conditional expressions.
 4. A position whose value must be known at compile time but does not
    evaluate is rejected, never given a default: a declaration with such an
    annotation bound or `range` bound fails validation (`bound_resolved`,
    `iter_bound_resolved`), and a call with such a keyword or slice length
    translates to an expression the type checker rejects (`kwargs_checked`,
-   `rejected_expr`). Rejection is the cost of an evaluator smaller than the
-   compiler's folder: a `range` count defined by `uint256_addmod` is accepted
-   by the compiler and rejected here. A closed Boolean flag such as
-   `True or False` is folded and accepted.
+   `rejected_expr`). Closed `uint256_addmod` range counts and Boolean flags
+   such as `True or False` are folded and accepted, as the two
+   `constant_unevaluated_*` fixtures now check.
 
 Annotation nodes carry no compiler types, and neither do the functions of an
 imported module that nothing calls. So in a count (an annotation bound, a
@@ -110,8 +114,9 @@ expression under every node that also carries a `folded_value`.
 (constants of an imported module's import in bounds), `constant_widened`
 (a `Bytes[5]` constant referenced as a `Bytes[10]`), `constant_minmax_bound`
 (`int8[max_value(int8)]` and a `min_value` constant), `constant_interface_stub`
-(the builtin `IERC20Detailed` interface's `String[...]`), the two
-`constant_unevaluated_*` rejections, `constant_undecodable_bound` and
+(the builtin `IERC20Detailed` interface's `String[...]`),
+`constant_unevaluated_flag` (a folded Boolean constant),
+`constant_unevaluated_range` (a folded AddMod range bound), `constant_undecodable_bound` and
 `constant_undecodable_import` (an undecodable annotation in the main or an
 imported module) from
 `tests/fixtures/check_contract`. It decodes each one again with every
