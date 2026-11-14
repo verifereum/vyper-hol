@@ -588,9 +588,9 @@ Resume ld_historical_combined_entry_clause_static[data]:
   simp[lowerDloadLifetimeTheory.ld_site_bytes_def, entry_taint_def, op_taint_def]
 QED
 
-Finalise ld_historical_combined_entry_clause_static
+Finalise ld_historical_combined_entry_clause_static[local]
 
-Theorem ld_historical_combined_entry_clause:
+Theorem ld_historical_combined_entry_clause[local]:
   ^ld_historical_entry_header
 Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -598,6 +598,8 @@ Proof
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
   asm_simp_tac bool_ss []
 QED
+val _ = save_thm ("ld_historical_combined_entry_clause",
+                  ld_historical_combined_entry_clause);
 val ld_entry_geometry_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
@@ -2450,9 +2452,9 @@ Resume ld_recursive_bytes_next_witness_static[revert_successor]:
   asm_rewrite_tac [] >> metis_tac[]
 QED
 
-Finalise ld_recursive_bytes_next_witness_static
+Finalise ld_recursive_bytes_next_witness_static[local]
 
-Theorem ld_recursive_bytes_next_witness:
+Theorem ld_recursive_bytes_next_witness[local]:
   ^ld_bytes_witness_header
 Proof
   rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -2460,6 +2462,8 @@ Proof
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
   asm_simp_tac bool_ss []
 QED
+val _ = save_thm ("ld_recursive_bytes_next_witness",
+                  ld_recursive_bytes_next_witness);
 
 val ld_bytes_anchor_header = ``
   !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
@@ -3370,9 +3374,9 @@ Resume ld_recursive_geometry_load_next_witness_static[revert_successor]:
   disj2_tac >> qexistsl_tac [`gb`, `copypos`, `endpos`] >> gvs[]
 QED
 
-Finalise ld_recursive_geometry_load_next_witness_static
+Finalise ld_recursive_geometry_load_next_witness_static[local]
 
-Theorem ld_recursive_geometry_load_next_witness:
+Theorem ld_recursive_geometry_load_next_witness[local]:
   ^ld_geometry_load_witness_header
 Proof
   rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -3381,6 +3385,8 @@ Proof
   first_x_assum (map_every assume_tac o CONJUNCTS) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+val _ = save_thm ("ld_recursive_geometry_load_next_witness",
+                  ld_recursive_geometry_load_next_witness);
 
 val ld_geometry_load_header = ``
   ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
@@ -3859,9 +3865,9 @@ Resume ld_recursive_guarded_call_clause_static[exceptional_child_entry]:
   disj2_tac >> qexistsl_tac [`gb'`, `copypos`, `endpos`] >> asm_rewrite_tac []
 QED
 
-Finalise ld_recursive_guarded_call_clause_static
+Finalise ld_recursive_guarded_call_clause_static[local]
 
-Theorem ld_recursive_guarded_call_clause:
+Theorem ld_recursive_guarded_call_clause[local]:
   ^ld_guarded_call_header
 Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -3869,6 +3875,8 @@ Proof
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
   asm_simp_tac bool_ss []
 QED
+val _ = save_thm ("ld_recursive_guarded_call_clause",
+                  ld_recursive_guarded_call_clause);
 
 val ld_geometry_call_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
@@ -6459,9 +6467,9 @@ Resume ld_recursive_member_next_clause_static[nonmacro]:
   irule ld_recursive_combined_alloca_next >>
   rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC
 QED
-Finalise ld_recursive_member_next_clause_static
+Finalise ld_recursive_member_next_clause_static[local]
 
-Theorem ld_recursive_member_next_clause:
+Theorem ld_recursive_member_next_clause[local]:
   ^ld_member_next_header
 Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
@@ -6469,6 +6477,8 @@ Proof
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
   asm_simp_tac bool_ss []
 QED
+val _ = save_thm ("ld_recursive_member_next_clause",
+                  ld_recursive_member_next_clause);
 
 (* Curry the complete witness as one premise; matching must not flatten its
    saved certificates into a global premise search. *)

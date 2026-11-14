@@ -285,7 +285,7 @@ Proof
   metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
 QED
 
-Theorem lower_dload_run_contract_static:
+Theorem o1_static_stage_lower_dload:
   !C C' vs.
     ctx_pass_stage rpolicy (EL 1 o1_fn_passes) (o1_walk_view rpolicy 1) C C' /\
     o1_pre 1 C C' /\ dead_wf D /\ o1_ctx_shape C /\
@@ -327,7 +327,7 @@ Theorem lower_dload_run_contract:
   o1_run_contract rpolicy D 1
 Proof
   rw[o1_run_contract_def, o1_stage_contract_def] >>
-  match_mp_tac lower_dload_run_contract_static >> fs[o1_run_state_ok_def]
+  match_mp_tac o1_static_stage_lower_dload >> fs[o1_run_state_ok_def]
 QED
 
 (* One run takes function row 1 to row 2: it keeps a valid MakeSSA
