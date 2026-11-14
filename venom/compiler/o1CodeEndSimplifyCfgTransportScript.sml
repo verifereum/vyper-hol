@@ -30,13 +30,14 @@ Theorem code_end_fix_phis_backward[local]:
     code_end_var f x
 Proof
   Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
-  drule scfg_fix_all_phis_inst_mem >> strip_tac
-  >- (`fix_phi_inst actual_preds inst' = inst'` by
+  drule scfg_fix_all_phis_inst_mem >>
+  disch_then (qx_choosel_then [`source_inst`, `actual_preds`] strip_assume_tac)
+  >- (`fix_phi_inst actual_preds source_inst = source_inst` by
         (irule scfg_fix_phi_seed_identity >> gvs[]) >>
       gvs[] >> metis_tac[code_end_var_rules]) >>
   rename1 `inst.inst_operands = [Var y]` >>
   `code_end_var f y` by metis_tac[] >>
-  `fix_phi_inst actual_preds inst' = inst'` by
+  `fix_phi_inst actual_preds source_inst = source_inst` by
     (irule code_end_fix_phi_protected_identity >> metis_tac[MEM]) >>
   gvs[] >> metis_tac[code_end_var_rules]
 QED

@@ -4,7 +4,7 @@ Ancestors
   o1LabelFlowMiddleFmp concretizeStageStatic
   concretizePtrCurrentObservation concretizePtrUniversalExtension
   concretizePtrFrameRetpcShape concretizePtrCoverageStaticMem
-  o1PassContract list venomWf passSimulationDefs
+  o1PassContract list venomWf passSimulationDefs lowerDloadRevertSuffix
   venomExecProofs venomExecSemantics venomInst codegenRel contextCodegenRel
   stepWriteFootprintBase concretizePtrOperationalOpcodes
   concretizePtrPairedPrefix concretizePtrStructuralTranscript
@@ -145,7 +145,7 @@ Resume concretize_codecopy_reflect[corridor]:
     (irule MEM_lookup_block >> fs[fn_labels_def]) >>
   `active_bb = bb` by metis_tac[optionTheory.SOME_11] >>
   `get_instruction bb t.vs_inst_idx = SOME j` by fs[get_instruction_def] >>
-  metis_tac[code_end_revert_corridor_no_copy]
+  drule_all ld_revert_pair_suffix_opcode >> simp[]
 QED
 
 Finalise concretize_codecopy_reflect

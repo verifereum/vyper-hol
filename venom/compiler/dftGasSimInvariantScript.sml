@@ -3,7 +3,7 @@ Ancestors
   dftGasSimBoundary dftGasOracleDefs dftRunRel
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
   list dftScheduleOrder
-  venomWfProps
+  venomWfProps venomExecProps contextCodegenRel
 
 Theorem ev_setup_callee_dominators:
   setup_callee fn args s = SOME t ==> strict_dom_vars_defined fn t
@@ -31,6 +31,20 @@ Proof
   simp[Once ev_step_def] >> strip_tac >>
   `step_inst fuel C inst s = OK t` by simp[step_inst_non_invoke] >>
   metis_tac[step_inst_preserves_labels_always]
+QED
+
+Theorem ev_reachable_labels:
+  !orc initial ctx p d fn inst t.
+    ev_reachable orc initial ctx p d fn inst t ==>
+    t.vs_labels = initial.vs_labels
+Proof
+  ho_match_mp_tac ev_reachable_ind >> rpt strip_tac >>
+  gvs[enters_block_def]
+  >- (drule eval_phis_preserves_labels >> gvs[])
+  >- (drule ev_step_labels >> gvs[])
+  >- (drule eval_phis_preserves_labels >> drule ev_step_labels >> gvs[]) >>
+  drule eval_phis_preserves_labels >> strip_tac >>
+  gvs[setup_callee_def, AllCaseEqs()]
 QED
 
 Theorem ev_suffix_labels:

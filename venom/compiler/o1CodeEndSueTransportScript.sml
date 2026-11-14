@@ -206,20 +206,23 @@ Proof
         ctx_pass_stage_def] >>
      irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[frame_origin_def] >> strip_tac >>
+  pure_rewrite_tac[frame_origin_def] >>
+  disch_then (qx_choosel_then [`source_fn`, `source_entry`] strip_assume_tac) >>
+  rename1 `lookup_function source_name C.ctx_functions = SOME source_fn` >>
   drule list_rel_lookup_function >> simp[] >>
-  disch_then (qspec_then `nm` mp_tac) >> simp[optionTheory.OPTREL_def] >>
+  disch_then (qspec_then `source_name` mp_tac) >> simp[optionTheory.OPTREL_def] >>
   strip_tac >>
-  `sue_frame_align C C' fn' fn s0 inst vs'` by
+  `sue_frame_align C C' source_fn fn source_entry inst vs'` by
     (irule sue_frame_reach_align >> metis_tac[]) >>
-  drule_all sue_frame_codecopy_projection >> strip_tac >>
-  `?y. project x = Var y /\ code_end_var fn' y` by metis_tac[] >>
-  `?d z. inst'.inst_operands = [d; Var y; z]` by
+  drule_all sue_frame_codecopy_projection >>
+  disch_then (qx_choosel_then [`source_inst`, `source_state`, `project`] strip_assume_tac) >>
+  `?y. project x = Var y /\ code_end_var source_fn y` by metis_tac[] >>
+  `?d z. source_inst.inst_operands = [d; Var y; z]` by
     (qpat_x_assum `MAP _ _ = _` mp_tac >> simp[] >> metis_tac[]) >>
-  `eval_operand (Var y) u = SOME w` by
+  `eval_operand (Var y) source_state = SOME w` by
     (gvs[LIST_REL_EL_EQN] >> first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
-  `raw_reachable vs C fn' inst' u` by metis_tac[frame_reach_raw_reachable] >>
-  `u.vs_labels = vs'.vs_labels` by
+  `raw_reachable vs C source_fn source_inst source_state` by metis_tac[frame_reach_raw_reachable] >>
+  `source_state.vs_labels = vs'.vs_labels` by
     (qpat_x_assum `execution_frame _ = _` mp_tac >> simp[]) >>
   qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
   simp[code_end_offset_ok_def] >> metis_tac[]

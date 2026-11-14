@@ -27,14 +27,3 @@ Proof
   `ptr_nonopaque_operand fn off` by gvs[] >>
   drule_all ptr_mixed_scalar_eval >> simp[]
 QED
-
-Theorem code_end_revert_corridor_no_copy:
-  revert_forward_pair bb i j /\ i < k /\ k <= j /\
-  get_instruction bb k = SOME inst ==>
-  inst.inst_opcode <> CODECOPY
-Proof
-  simp[revert_forward_pair_def] >> strip_tac >>
-  Cases_on `k = j` >> gvs[] >>
-  `k < j` by decide_tac >>
-  `inst.inst_opcode = ASSIGN` by metis_tac[] >> simp[]
-QED

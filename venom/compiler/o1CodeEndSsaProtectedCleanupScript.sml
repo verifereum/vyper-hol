@@ -9,24 +9,6 @@ Ancestors
   o1MakeSsaEventOwnership makeSsaCurrentTraceCertificate makeSsaCurrentLockstep
   makeSsaCurrentWfSsa makeSsaCurrentTreeTrace pair
 
-Theorem cleanup_backward_no_phi_ind[local]:
-  !g x. code_end_var g x ==> !f enabled.
-    g = f with fn_blocks := simplify_current_phis_if enabled f.fn_blocks /\
-    (!i y. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f y ==>
-           ~MEM (Var y) i.inst_operands) ==> code_end_var f x
-Proof
-  Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
-  drule cleanup_if_origin >> strip_tac >> gvs[]
-  >- (irule (cj 1 code_end_var_rules) >> qexistsl [`j`, `op`] >> simp[])
-  >- (drule simplify_current_phi_opcodes >> gvs[])
-  >- (rename1 `j.inst_operands = [Var src]` >>
-      irule (cj 2 code_end_var_rules) >> qexistsl [`j`, `src`] >> simp[] >>
-      metis_tac[]) >>
-  rename1 `inst.inst_operands = [Var src]` >>
-  `code_end_var f src` by metis_tac[] >>
-  metis_tac[simplified_phi_operand, MEM]
-QED
-
 Theorem renamed_protected_cleanup_owner[local]:
   visit_blocks path s rs f.fn_blocks sm tree = ((ct,t,final),events) /\
   ALL_DISTINCT (dom_tree_postorder tree) /\
@@ -89,7 +71,7 @@ Proof
   `!enabled n. code_end_var
     (f with fn_blocks := simplify_current_phis_if enabled final) n ==>
     code_end_var (f with fn_blocks := final) n` by
-    (rpt strip_tac >> irule cleanup_backward_no_phi_ind >>
+    (rpt strip_tac >> irule cleanup_code_end_backward_no_phi >>
      simp[] >> goal_assum $ drule_at Any >> simp[]) >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>

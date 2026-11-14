@@ -176,13 +176,16 @@ Proof
         ctx_pass_stage_def] >>
      irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[frame_origin_def] >> strip_tac >>
+  pure_rewrite_tac[frame_origin_def] >>
+  disch_then (qx_choosel_then [`source_fn`, `source_entry`] strip_assume_tac) >>
+  rename1 `lookup_function source_name C.ctx_functions = SOME source_fn` >>
   drule list_rel_lookup_function >> simp[] >>
-  disch_then (qspec_then `nm` mp_tac) >> simp[optionTheory.OPTREL_def] >> strip_tac >>
+  disch_then (qspec_then `source_name` mp_tac) >> simp[optionTheory.OPTREL_def] >> strip_tac >>
   `MEM (Var x) inst.inst_operands` by simp[] >>
-  drule_all cfg_fn_codecopy_back >> strip_tac >>
-  `raw_reachable vs C fn' inst u` by metis_tac[frame_reach_raw_reachable] >>
-  `u.vs_labels = vs'.vs_labels` by
+  drule_all cfg_fn_codecopy_back >>
+  disch_then (qx_choose_then `source_state` strip_assume_tac) >>
+  `raw_reachable vs C source_fn inst source_state` by metis_tac[frame_reach_raw_reachable] >>
+  `source_state.vs_labels = vs'.vs_labels` by
     (qpat_x_assum `execution_frame _ = _` mp_tac >> simp[]) >>
   qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
   simp[code_end_offset_ok_def] >> metis_tac[]

@@ -9,20 +9,6 @@ Ancestors
   o1DftStageSsa venomPassSchedule venomRetProps stackPlanGen
   contextRawReachable unitMemInv venomInst dftCorrectnessFinal
 
-Theorem code_end_ev_reachable_labels[local]:
-  !orc initial ctx p d fn inst t.
-    ev_reachable orc initial ctx p d fn inst t ==>
-    t.vs_labels = initial.vs_labels
-Proof
-  ho_match_mp_tac ev_reachable_ind >> rpt strip_tac >>
-  gvs[enters_block_def]
-  >- (drule eval_phis_preserves_labels >> gvs[])
-  >- (drule ev_step_labels >> gvs[])
-  >- (drule eval_phis_preserves_labels >> drule ev_step_labels >> gvs[]) >>
-  drule eval_phis_preserves_labels >> strip_tac >>
-  gvs[setup_callee_def, AllCaseEqs()]
-QED
-
 Theorem dft_ev_code_end_offset_ok[local]:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
@@ -39,7 +25,7 @@ Proof
   `EVERY label_positions_ok (fn_insts source)` by
     fs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >>
   `code_end_var source x` by metis_tac[dft_code_end_var_reflect] >>
-  `sS.vs_labels = t.vs_labels` by metis_tac[code_end_ev_reachable_labels] >>
+  `sS.vs_labels = t.vs_labels` by metis_tac[ev_reachable_labels] >>
   fs[code_end_offset_ok_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[MEM]
