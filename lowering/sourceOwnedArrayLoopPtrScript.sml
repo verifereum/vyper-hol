@@ -1,7 +1,6 @@
 (* Source-exact initialized array loop with a synchronized owned child callback. *)
 Theory sourceOwnedArrayLoopPtr
 Ancestors
-  decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr fragGasSeqMem fragGasOriginPtr
   calldataDynOwned sourceRecursiveComplexPtr sourceEncodingWindows sourceEncodingLayout
   actualAllocaReplayPtr actualAllocSitesCredit abiDecoderCoherence abiDecoderContract
