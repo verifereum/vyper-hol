@@ -1,7 +1,7 @@
 (* Same-run copy boundaries for memory defaults. *)
 Theory extcallReturnDefaultMemoryJoint
 Ancestors
-  extcallReturnDefaultWordJoint
+  extcallReturnDefaultWordJoint extcallReturnDefaultLengthJoint
   bodyFullUnwrapRun bodyFullUnwrapSlotPost fragGasCopyLoop allocaFootprint
   exprSimBufferStore fragExecPtr fragGasSeqPtr typedCopyPtr robustCopyTransportPtr
   compileEnv venomMemDefs fragExec exprLoweringProps codegenRel ptrDiscipline context emitHelperProps venomState venomInst venomExecSemantics
