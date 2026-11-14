@@ -9,6 +9,7 @@ Ancestors
   exprLowering compileEnv exprExtRequestSnapshotPositionalCps vyperState stmtSimDeclGas
   exprExtRequestSnapshotLayout exprExtRequestGasSelections
   exprExtRequestSnapshotStorePrefix extcallProtFramePrefixCompose exprSimExtCallCase
+  vyperCallOutcomeFrame bodyIntCallJointPureSlot
 
 Theorem intcall_ext_history_cont[local]:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -1966,6 +1967,265 @@ Resume intcall_ext_ready_suffix[ready_pack_memory]:
   fs[intcall_expr_res_def, intcall_expr_cont_def] >> metis_tac[]
 QED
 Finalise intcall_ext_ready_suffix
+
+Theorem intcall_extcall_expr_step[local]:
+  (!e'. expr_size e' < expr_size (Call a (ExtCall static skip sig opts) args NONE) ==>
+    intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
+    intcall_map_producer fp e') ==>
+  intcall_expr_producer fp (Call a (ExtCall static skip sig opts) args NONE)
+Proof
+  PairCases_on `sig` >>
+  strip_tac >> pure_rewrite_tac[intcall_expr_producer_def] >> rpt strip_tac >>
+  rename1 `ExtCall stat skip (fname,ats,rt) opts` >>
+  `args <> []` by
+    (fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     metis_tac[exprExtRequestShapeTheory.extrequest_typed_nonempty]) >>
+  Cases_on `args` >> fs[] >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  rewrite_tac[exprExtRequestShapeTheory.extrequest_compile_expr_extcall] >> strip_tac >>
+  drule exprExtRequestShapeTheory.extrequest_compile_call_split >> strip_tac >>
+  qpat_x_assum `let call_types = _ in _` mp_tac >>
+  simp[NoAsms, LET_THM] >> pairarg_tac >> simp[] >> strip_tac >>
+  `ci_mono sa s1` by
+    metis_tac[cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND] >>
+  `ci_mono s1 s2` by
+    (qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` mp_tac >>
+     mp_tac (Q.SPECL [`TAKE (LENGTH (ats:type list)) t`,
+       `MAP (lowered_value_type ce) (TAKE (LENGTH (ats:type list)) t)`,
+       `compile_expr`, `ce`, `DROP (LENGTH (ats:type list)) t`, `s1`]
+       ci_mono_compile_ext_call_args) >>
+     simp[cj 1 compile_expr_ci_mono] >> metis_tac[pairTheory.SND]) >>
+  `ci_mono s2 s3` by
+    metis_tac[exprExtRequestKwargsTheory.extrequest_kwargs_mono, pairTheory.SND] >>
+  `ci_mono s3 s4` by
+    (Cases_on `gas_opt` >- (gvs[] >> metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
+     gvs[ci_mono_refl]) >>
+  `ci_mono s4 sb` by
+    metis_tac[exprExtRequestCodeTheory.extrequest_external_mono, pairTheory.SND] >>
+  `fn_has_code sa s1 fp.jc_func /\ fn_has_code s1 s2 fp.jc_func /\
+   fn_has_code s2 s3 fp.jc_func /\ fn_has_code s3 s4 fp.jc_func /\
+   fn_has_code s4 sb fp.jc_func` by
+    (fs[ci_mono_def] >>
+     `cs_extends s3 sb` by metis_tac[cs_extends_trans] >>
+     `cs_extends s2 sb` by metis_tac[cs_extends_trans] >>
+     `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
+     `fn_has_code sa s1 fp.jc_func /\ fn_has_code s1 sb fp.jc_func` by
+       metis_tac[fragExecTheory.fn_has_code_split] >>
+     `fn_has_code s1 s2 fp.jc_func /\ fn_has_code s2 sb fp.jc_func` by
+       metis_tac[fragExecTheory.fn_has_code_split] >>
+     `fn_has_code s2 s3 fp.jc_func /\ fn_has_code s3 sb fp.jc_func` by
+       metis_tac[fragExecTheory.fn_has_code_split] >>
+     metis_tac[fragExecTheory.fn_has_code_split]) >>
+  fs[exprExtRequestStagesSourceTheory.extrequest_source_stages] >>
+  irule (BETA_RULE (Q.INST [`kont` |->
+    `\target posvs kwargs. eval_ext_call fp.jc_cx stat skip (fname,ats,rt) opts
+      (target::(posvs ++ kwargs))`] intcall_ext_operands_cps)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
+  qexistsl [`env`, `a`] >>
+  simp[vyperASTTheory.expr_size_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all exprExtRequestShapeTheory.extrequest_compile_kwargs_code >> strip_tac >>
+  `MAP (\(vv,ty,tv,v). v) cells = MAP (\(vv,ty,tv,v). v) cells` by simp[] >>
+  drule_all intcall_ext_ready_suffix >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ source _ post _` >>
+  `?marks. gas_summary_at F (fp.jc_ctx,fp.jc_func) marks source (ee,u') post
+    (\r ef z. expr_exit r z)` suffices_by
+    (strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+     qexists `REPLICATE (if IS_NONE gas_opt then 1 else 0) F ++ marks` >>
+     disj1_tac >> irule bodyIntCallPackagePrefixTheory.gas_summary_at_path_prefix >>
+     qexists `u'` >> gvs[fragGasModeTheory.gas_marked_path_def]) >>
+  qabbrev_tac `retpost = \(res : eval_result + vyperState$exception) ef z. ?tv. res = INL tv /\
+    vv_own ce fp.jc_cx
+      (expr_type (Call a (ExtCall stat skip (fname,ats,rt) opts) (h::t) NONE))
+      sa sb ef tv vv z /\
+    vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx
+      (Call a (ExtCall stat skip (fname,ats,rt) opts) (h::t) NONE)
+      es sa sb s ef tv vv z /\
+    z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!pa pk. fp.jc_prot pa pk ==>
+      mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s.vs_memory)` >>
+  `?marks. gas_summary_at F (fp.jc_ctx,fp.jc_func) marks source (ee,u') retpost
+    (\r ef z. expr_exit r z)` suffices_by
+    (strip_tac >> qexists `marks` >>
+     qpat_x_assum `gas_summary_at _ _ _ _ _ retpost _` mp_tac >>
+     rewrite_tac[gasSummaryTheory.gas_summary_at_def] >> strip_tac >>
+     qexistsl [`res`, `es_end`, `r`] >> simp[] >>
+     disj1_tac >>
+     `gas_marked_path F fp.jc_ctx fp.jc_func u' (LENGTH marks) (OK t'')` by
+       fs[gasSummaryTheory.gas_marked_exec_def] >>
+     `allocas_above fp.jc_lo t''` by
+       (irule gas_marked_path_allocas_above >>
+        goal_assum (drule_at Any) >>
+        fs[intcall_expr_cont_def, intcall_expr_res_def]) >>
+     `u'.vs_alloca_next <= t''.vs_alloca_next` by
+       metis_tac[gas_marked_path_alloca_next_mono] >>
+     gvs[Abbr `retpost`] >>
+     rename1 `vv_post _ _ _ _ _ es sa sb s _ result _ endpoint` >>
+     `?kwused. !tail. eval_exprs fp.jc_cx (DROP (LENGTH ats) t)
+       (esB with gas_obs := kwused ++ tail) =
+       (INL kwvs,ee with gas_obs := tail)` by
+       (fs[exprExtRequestKwargsTheory.extrequest_kwargs_post_def] >> metis_tac[]) >>
+     `?obs. eval_expr fp.jc_cx
+       (Call a (ExtCall stat skip (fname,ats,rt) opts) (h::t) NONE)
+       (es with gas_obs := obs) = (INL result,es_end with gas_obs := [])` by
+       (qexists `used ++ used' ++ kwused ++ gas_explicit marks u'.vs_gas_readings` >>
+        qpat_assum `!tail. bind _ _ _ = _` mp_tac >>
+        qpat_assum `!tail. eval_exprs _ (TAKE _ _) _ = _` mp_tac >>
+        qpat_assum `!tail. eval_exprs _ (DROP _ _) (esB with gas_obs := kwused ++ tail) = _` mp_tac >>
+        qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+        qpat_assum `Abbrev (source = _)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[markerTheory.Abbrev_def, gasSummaryTheory.gas_marked_exec_def] >>
+        rpt strip_tac >>
+        pure_rewrite_tac[exprExtRequestStagesSourceTheory.extrequest_source_stages] >>
+        CONV_TAC (LHS_CONV (REWR_CONV vyperStateTheory.bind_def)) >>
+        pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+        pure_asm_rewrite_tac[] >> simp[] >>
+        CONV_TAC (LHS_CONV (REWR_CONV vyperStateTheory.bind_def)) >>
+        pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+        pure_asm_rewrite_tac[] >> simp[] >>
+        CONV_TAC (LHS_CONV (REWR_CONV vyperStateTheory.bind_def)) >>
+        pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+        pure_asm_rewrite_tac[] >> simp[] >>
+        qpat_x_assum `!tail. eval_ext_call _ _ _ _ _ _ _ = _`
+          (qspec_then `[]` mp_tac) >> simp[]) >>
+     `expr_body_pre ce fp.jc_cx env
+       (Call a (ExtCall stat skip (fname,ats,rt) opts) (h::t) NONE)
+       (es with gas_obs := obs)` by simp[] >>
+     `expr_sim_inv ce fp.jc_cx env (es_end with gas_obs := [])` by
+       (drule_all exprSimSourceTheory.expr_body_pre_eval_result >> simp[]) >>
+     suspend "outer_return_post_join") >>
+  simp[Abbr `source`] >>
+  `stat <=> (if stat then NONE else case ext_call_kwarg EKValue opts kwvs of
+    NONE => SOME 0 | SOME v => dest_NumV v) = NONE` by
+    fs[exprSimExtCallCaseTheory.extcall_request_ready_def] >>
+  rename1 `dest_AddressV source_target = SOME target_addr` >>
+  mp_tac (Q.INST [`cx` |-> `fp.jc_cx`, `arg_types` |-> `ats`,
+    `target_v` |-> `source_target`, `target` |-> `target_addr`,
+    `skip` |-> `skip`, `ret_type` |-> `rt`,
+    `rest` |-> `MAP (\(vv,ty,tv,v). v) (cells : (vyper_value # type # type_value # value) list) ++ kwvs`,
+    `value_opt` |-> `(if stat then NONE else case ext_call_kwarg EKValue opts kwvs of
+      NONE => SOME 0 | SOME v => dest_NumV v)`]
+    exprSimExtCallCaseTheory.eval_ext_call_request) >>
+  qpat_assum `LENGTH (MAP (\(vv,ty,tv,v). v) cells) = LENGTH ats`
+    (fn th => pure_rewrite_tac[GSYM th]) >>
+  simp[rich_listTheory.TAKE_LENGTH_APPEND, listTheory.DROP_APPEND] >>
+  disch_then SUBST1_TAC >>
+  ho_match_mp_tac exprSimExtCallCaseTheory.extcall_call_step >>
+  qpat_assum `extrequest_compile_step _ _ _ _ _ _ _ _ _ _ _ = _`
+    (fn th => assume_tac (REWRITE_RULE [exprExtRequestShapeTheory.extrequest_compile_step_def] th)) >>
+  first_assum (irule_at (Pat `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `comp_ignore_bind _ _ _ = _`)) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `extrequest_compile_return _ _ _ _ _ _ _ _ _ _ _ _ _ = _`
+    (fn th => assume_tac (REWRITE_RULE [exprExtRequestShapeTheory.extrequest_compile_return_def] th)) >>
+  `local_ptrs_reserved ce sa` by
+    fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
+  drule_all (SRULE [LET_THM] exprSimExtCallCaseTheory.extcall_return_values_owned) >>
+  strip_tac >>
+  qexists `marks` >> fs[Abbr `retpost`]
+QED
+
+Resume intcall_extcall_expr_step[outer_return_post_join]:
+  `wb_frame ce es (es_end with gas_obs := []) sa s endpoint` by
+    (fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.wb_frame_def] >>
+     metis_tac[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es_end.scopes` by
+    fs[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def] >>
+  `!n b k. local_region ce es.scopes s n b k <=>
+            local_region ce es_end.scopes endpoint n b k` by
+    (irule wordArgsPtrTheory.wb_frame_local_regions >>
+     fs[intcall_expr_res_def] >> metis_tac[]) >>
+  `supported_pure_expr fp.jc_tops h /\
+   supported_pure_exprs fp.jc_tops (TAKE (LENGTH ats) t) /\
+   supported_pure_exprs fp.jc_tops (DROP (LENGTH ats) t)` by
+    (fs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_expr_def,
+        supportedExprsTheory.supported_effect_expr_def,
+        supportedExprsTheory.supported_pure_exprs_every] >>
+     metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+  `esA.immutables = es.immutables` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[NoAsms, vyperStateTheory.bind_def, AllCaseEqs()] >> strip_tac >>
+     drule_all bodyIntCallJointCallSourceTheory.intcall_pure_expr_immutables >>
+     drule vyperStateTheory.read_result_state >> rpt strip_tac >> gvs[]) >>
+  `esB.immutables = esA.immutables` by
+    (qpat_assum `!tail. eval_exprs _ (TAKE _ _) _ = _`
+       (qspec_then `[]` assume_tac) >>
+     mp_tac (Q.SPECL [`fp.jc_tops`, `TAKE (LENGTH (ats : type list)) t`]
+       (cj 2 bodyIntCallJointCallSourceTheory.intcall_pure_immutables_mutual)) >>
+     impl_tac >- simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
+  `ee.immutables = esB.immutables` by
+    (qpat_assum `!tail. eval_exprs _ (DROP _ _) (esB with gas_obs := kwused ++ tail) = _`
+       (qspec_then `[]` assume_tac) >>
+     mp_tac (Q.SPECL [`fp.jc_tops`, `DROP (LENGTH (ats : type list)) t`]
+       (cj 2 bodyIntCallJointCallSourceTheory.intcall_pure_immutables_mutual)) >>
+     impl_tac >- simp[] >> strip_tac >> first_x_assum drule >> simp[]) >>
+  `es_end.immutables = ee.immutables` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[NoAsms, gasSummaryTheory.gas_marked_exec_def, Abbr `source`] >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[] >> strip_tac >>
+     drule vyperCallOutcomeFrameTheory.eval_ext_call_preserves_non_accounts >> simp[]) >>
+  `s.vs_alloca_next <= endpoint.vs_alloca_next` by
+    (fs[intcall_expr_cont_def] >> decide_tac) >>
+  `!op. fp.jc_reserved op ==> eval_operand op endpoint = eval_operand op s` by
+    (rpt strip_tac >>
+     `?x w. op = Var x /\ lookup_var x fp.jc_oorig = SOME w` by
+       metis_tac[intcall_frame_ok_def] >>
+     gvs[] >>
+     fs[intcall_expr_res_def, loweringPostsTheory.wb_frame_def,
+        venomStateTheory.eval_operand_def] >>
+     `lookup_var x s = SOME w` by
+       (qpat_x_assum `!op. fp.jc_reserved op ==> _`
+          (qspec_then `Var x` mp_tac) >> simp[venomStateTheory.eval_operand_def]) >>
+     `not_fresh_at sa x` by metis_tac[] >>
+     qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x endpoint = SOME w`
+       (qspecl_then [`x`, `w`] mp_tac) >> simp[]) >>
+  `intcall_expr_res fp ce env (es_end with gas_obs := []) sb endpoint` by
+    (irule bodyIntCallJointCallCoreTheory.intcall_joint_res_frame >>
+     conj_tac >- simp[] >>
+     conj_tac >- simp[] >>
+     conj_tac >- simp[] >>
+     reverse conj_tac
+     >- fs[loweringPostsTheory.vv_post_def] >>
+     qexistsl [`es`, `s`, `sa`] >> simp[] >>
+     fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.wb_frame_def,
+        intcall_frame_ok_def, intcall_expr_res_def, ci_mono_def]) >>
+  `~endpoint.vs_halted` by
+    (qpat_assum `gas_marked_path F _ _ u' _ (OK endpoint)` mp_tac >>
+     pure_rewrite_tac[fragGasModeTheory.gas_marked_path_def, boolTheory.COND_CLAUSES] >>
+     disch_then (strip_assume_tac o MATCH_MP fragGasPathTheory.gas_path_normal)) >>
+  `intcall_expr_cont fp ce env es sa s (es_end with gas_obs := []) sb endpoint` by
+    (drule_all bodyIntCallJointCallCoreTheory.intcall_expr_cont_vv_post >> simp[]) >>
+  simp[Abbr `post`] >>
+  fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_own_def] >>
+  conj_tac
+  >- (drule (GEN_ALL (SRULE [exprLoweringPropsTheory.compile_expr_ci_mono]
+        (Q.INST [`cfn` |-> `compile_expr`] exprOperandVarTheory.compiler_call_var))) >> simp[]) >>
+  rpt strip_tac >>
+  `a = rt` by
+    fs[exprSimHypsDefsTheory.expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+  `supported_value_type fp.jc_tops
+     (expr_type (Call a (ExtCall stat skip (fname,ats,rt) opts) (h::t) NONE))` by
+    fs[supportedExprsTheory.supported_expr_def,
+       supportedExprsTheory.supported_pure_call_pop_rejected,
+       supportedExprsTheory.supported_effect_expr_def,
+       supportedExprFormsTheory.supported_external_return_type_def,
+       vyperASTTheory.expr_type_def] >>
+  `?v. read_result fp.jc_cx result (es_end with gas_obs := []) =
+       (INL v,es_end with gas_obs := [])` by
+    (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     Cases_on `rt = NoneT` >>
+     simp[loweringPostsTheory.vv_holds_def, contextTheory.mk_ptr_def] >>
+     metis_tac[]) >>
+  drule_all bodyIntCallJointPureSlotTheory.joint_supported_result_slot >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
+Finalise intcall_extcall_expr_step
 
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
