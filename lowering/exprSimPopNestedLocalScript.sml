@@ -61,24 +61,41 @@ Proof
   pop_assum (fn th => rewrite_tac[th]) >>
   rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >> qexists_tac `marks`
-  >- (disj1_tac >> suspend "summary") >>
-  disj2_tac >> rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_pop_place])
+  >- suspend "summary" >>
+  disj2_tac >> disj2_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_place)
 QED
 
 Resume pop_nested_local_sim[summary]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >>
-  disch_then (qx_choosel_then [`tres`, `tend`, `tr0`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`tres`, `tend`, `tr0`]
+    (CONJUNCTS_THEN assume_tac)) >>
+  reverse (Cases_on `storage_trace_domain cx st0 tend.storage_trace`)
+  >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_pop_place,
+           gasStorageTheory.gas_bad_storage_at_def] >>
+      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_marked_exec_def]) >>
+  `?H0. valid_horizon cx st0 H0 tend.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  disj2_tac >> disj1_tac >>
   gvs[] >- suspend "normal" >>
-  Cases_on `tres` >> gvs[expr_exit_def] >>
+  `expr_exit tres tr0` by metis_tac[] >>
+  Cases_on `tres` >- fs[] >>
   rename1 `expr_exit (INR exc) tr0` >>
   qexistsl_tac [`INR exc`, `tend`, `tr0`] >> simp[] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
 Resume pop_nested_local_sim[normal]:
+  qpat_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
   `!path entry err. p = MemoryPlace id path /\
      lookup_scopes id tend.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INR err ==>
@@ -99,12 +116,14 @@ Resume pop_nested_local_sim[normal]:
      `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by
        simp[] >>
      drule_all local_target_live >> strip_tac >> gvs[]) >>
+  qpat_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (drule_then assume_tac) >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by
-    fs[target_post_def] >>
-  `storage_well_formed_on cx (tend with gas_obs := []) (FST H)` by
     fs[target_post_def] >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
   `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by simp[] >>
+  qpat_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (drule_then assume_tac) >>
   drule_all memory_target_encoding_handoff >> strip_tac >>
   gvs[value_type_place_def, Abbr `lc`, Abbr `ws`, Abbr `esz`,
       word_scale_def, elem_size_in_location_def, is_slot_addressed_def] >>
@@ -137,7 +156,6 @@ Resume pop_nested_local_sim[normal]:
   qpat_x_assum `target_root _ = _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `place_readable _ _ _` kall_tac >>
   qpat_x_assum `gas_admissible (eval_target_place _ _) _ _` kall_tac >>
   drule memory_pop_shape >> strip_tac >>
@@ -251,6 +269,23 @@ Resume pop_nested_local_sim[nonempty]:
       irule gas_marked_exec_bind_normal >> goal_assum drule >>
       simp[Abbr `result`, Abbr `scopes'`]) >>
   disj1_tac >> simp[] >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
+     `storage_trace_frame (eval_target_place cx bt)` by
+       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >>
+     strip_tac >> qpat_x_assum `valid_horizon _ _ H _` mp_tac >> fs[] >>
+     simp[vyperStorageFootprintTheory.valid_horizon_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx (tend with gas_obs := []) t /\
+   storage_well_formed_on cx (tend with gas_obs := []) (FST H)` by
+    fs[target_post_def] >>
   irule (pop_memory_live_suffix_post |> Q.INST [`mid` |-> `tend with gas_obs := []`, `e` |-> `Pop ann bt`]
     |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
              loweringPostsTheory.expr_has_effect_thm]) >>
