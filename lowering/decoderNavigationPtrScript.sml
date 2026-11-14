@@ -1,6 +1,6 @@
 (* Pointer destination navigation, including stale output registers. *)
 Theory decoderNavigationPtr
-Ancestors fragGasPathPtr fragGasPathMem fragGasOrigin gasCount venomExecProofs
+Ancestors unitTransformDefs fragGasOriginPtrLoop fragGasPathPtr fragGasPathMem fragGasOrigin gasCount venomExecProofs
   memSafeRun fragGasOriginPtr fragGasSeqPtr fragGasSeqMem stmtForRangeMemoryParts instMemFrontier wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   ptrDiscipline venomInst arithmetic abiEncoder abiDecoderContract
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
@@ -429,25 +429,12 @@ Proof
     simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
       mk_inst_def, step_inst_non_invoke, step_inst_base_def, jump_to_def,
       source_memory_write_ranges_def, source_memory_read_ranges_def, op_taint_def] >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s 0 G tn
-     (OK (jump_to lbl s))` by
-    (simp[gas_path_ptr_edge_def] >> qexists `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gasCountTheory.gas_count_step_def,
-       step_inst_base_opcode_eqs, is_terminator_def] >> metis_tac[]) >>
-  `gas_path_mem_edge ctx fn s 0 (OK (jump_to lbl s))` by
-    (simp[fragGasPathMemTheory.gas_path_mem_edge_def] >> qexists `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gasCountTheory.gas_count_step_def,
-       step_inst_base_opcode_eqs, is_terminator_def] >>
-     conj_tac >- (disj2_tac >>
-       simp[memSafeRunTheory.mem_safe_step_def, memSafeRunTheory.inst_dload_in_section_def] >>
-       irule instMemFrontierTheory.below_frontier_no_ranges >> simp[GSYM mk_inst_def]) >>
-     metis_tac[]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-     (OK (jump_to lbl s),G,tn)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
-  metis_tac[gas_origin_ptr_path_rules, APPEND]
+  mp_tac (Q.INST
+    [`i` |-> `mk_inst id JMP [Label lbl] []`, `func` |-> `fn`]
+    fragGasOriginPtrLoopTheory.jump_origin_ptr_path) >>
+  fs[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+    inst_dload_in_section_def, source_memory_read_ranges_def,
+    source_memory_write_ranges_def, step_inst_base_opcode_eqs] >> metis_tac[]
 QED
 
 Theorem jnz_origin_ptr_path:
@@ -472,22 +459,13 @@ Proof
        Cases_on `op' = Label yes` >> Cases_on `op' = Label no` >> gvs[op_taint_def])) >>
      Cases_on `v = 0w` >> simp[jump_to_def] >>
      gvs[Abbr `t`, jump_to_def, allocas_from_def, allocas_below_fmp_def]) >>
-  `gas_path_mem_edge ctx fn s 0 (OK t)` by
-    (simp[gas_path_mem_edge_def] >> qexists_tac `0` >>
-     simp[Abbr `i`, gasCountTheory.gas_count_step_def,
-       step_inst_non_invoke, memSafeRunTheory.mem_safe_step_non_invoke,
-       below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other,
-       mk_inst_def, is_terminator_def] >> metis_tac[]) >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s 0 G tn (OK t)` by
-    (simp[gas_path_ptr_edge_def] >> qexists_tac `0` >>
-     simp[Abbr `i`, gasCountTheory.gas_count_step_def,
-       step_inst_non_invoke, mk_inst_def, is_terminator_def] >> metis_tac[]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G,tn)` by
-    (simp[gas_origin_ptr_edge_def] >> metis_tac[gas_path_mem_edge_zero_origin]) >>
-  `~t.vs_halted` by simp[Abbr `t`, jump_to_def] >>
-  qpat_x_assum `gas_origin_ptr_edge _ _ _ _` mp_tac >>
-  pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-  metis_tac[gas_origin_ptr_path_rules, APPEND]
+  mp_tac (Q.INST
+    [`i` |-> `i`, `func` |-> `fn`,
+     `lbl` |-> `if (v:256 word) <> 0w then yes else no`]
+    fragGasOriginPtrLoopTheory.jump_origin_ptr_path) >>
+  fs[Abbr `i`, Abbr `t`, mk_inst_def, is_terminator_def,
+    inst_mem_below_frontier_def, inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >> metis_tac[]
 QED
 
 
