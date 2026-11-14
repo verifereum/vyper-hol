@@ -145,3 +145,93 @@ Proof
       goal_assum (drule_at Any) >> simp[compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
   drule_all vv_at_located_frame >> simp[]
 QED
+
+Theorem intcall_located_provenance_index_frame[local]:
+  intcall_vv_provenance ce cx ty sa sb es raw (LocatedValue ann p) s /\
+  eval_operand p.ptr_operand t = eval_operand p.ptr_operand s /\
+  (!tr slot vt. raw <> PlaceR (StoragePlace tr slot vt)) /\
+  ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
+  wb_frame ce es ee sb s t /\ local_ptrs_reserved ce sb /\
+  local_ptrs_rel func ce es.scopes s /\ sb.cs_next_id <= sc.cs_next_id ==>
+  intcall_vv_provenance ce cx ty sa sc ee raw (LocatedValue ann p) t
+Proof
+  strip_tac >>
+  `!n b sz. local_region ce ee.scopes t n b sz <=>
+             local_region ce es.scopes s n b sz` by
+    (rpt gen_tac >> simp[] >> irule local_region_wb_frame >> metis_tac[]) >>
+  `FST (read_result cx raw ee) = FST (read_result cx raw es)` by
+    (irule read_result_nonstorage_frame >> simp[]) >>
+  `!v. read_result cx raw ee = (INL v,ee) <=>
+        read_result cx raw es = (INL v,es)` by
+    (gen_tac >> Cases_on `read_result cx raw es` >>
+     Cases_on `read_result cx raw ee` >> gvs[] >>
+     metis_tac[read_result_state]) >>
+  `!root sz w n. FLOOKUP ce.ce_vars n = SOME (PtrVar (Var root) sz) /\
+     lookup_var root s = SOME w ==> lookup_var root t = SOME w` by
+    (rpt strip_tac >> gvs[wb_frame_def, loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+     first_x_assum irule >> metis_tac[]) >>
+  gvs[bodyIntCallProducerInterfaceTheory.intcall_vv_provenance_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `p.ptr_location = LocMemory ==> _` drule >>
+  disch_then drule_all >> strip_tac >> qexists `w` >> simp[] >>
+  gvs[wb_frame_def]
+  >~ [`FLOOKUP s.vs_allocas aid = SOME (b,sz)`]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+      first_assum ACCEPT_TAC)
+  >~ [`local_val_at ce cx n (w2n w - b) tvt v`]
+  >- (disj2_tac >> disj2_tac >> disj1_tac >>
+      qexistsl [`n`, `b`, `sz`] >> simp[]) >>
+  disj2_tac >> disj2_tac >> disj2_tac >>
+  rename1 `lookup_var rootvar s = SOME rootword` >>
+  qexistsl [`n`, `sz`, `entry`, `rootvar`, `rootword`, `k`] >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem pure_array_select_read[local]:
+  expr_body_pre ce cx env obj es /\ ~expr_has_effect obj /\
+  eval_expr cx obj es = (INL raw,st) /\
+  expr_type obj = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  ee.scopes = st.scopes /\ ee.immutables = st.immutables /\
+  (!tr slot vt. raw <> PlaceR (StoragePlace tr slot vt)) /\
+  read_result cx raw ee = (INL (ArrayV av),ee) /\
+  array_index (ArrayTV etv bd) av i = SOME v ==>
+  ?child. select_result cx (ArrayT et bd) raw (ValueSubscript (IntV i)) ee =
+            (INL child,ee) /\ read_result cx child ee = (INL v,ee)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `evaluate_subscripts (ArrayTV etv bd) (ArrayV av)
+      [ValueSubscript (IntV i)] = INL v` by
+    simp[exprSimSubscriptArraySourceTheory.evaluate_array_subscript_result] >>
+  Cases_on `raw`
+  >~ [`read_result cx (HashMapRef tr slot tv key) _ = _`] >-
+    gvs[read_result_def, raise_def]
+  >~ [`Value value`] >-
+    (gvs[read_result_def, return_def] >>
+     drule_all exprSimSubscriptArraySourceTheory.select_value_read >> metis_tac[]) >>
+  drule_all exprSimSubscriptArraySourceTheory.expr_body_pre_place_metadata >> strip_tac >>
+  gnvs[] >> Cases_on `p`
+  >~ [`StoragePlace tr slot vt`] >- metis_tac[]
+  >~ [`MemoryPlace id path`] >-
+    (`read_result cx (PlaceR (MemoryPlace id path)) st = (INL (ArrayV av),st)` by
+       (`FST (read_result cx (PlaceR (MemoryPlace id path)) st) = INL (ArrayV av)` by
+          (mp_tac (Q.INST [`r` |-> `PlaceR (MemoryPlace id path)`,
+                            `s'` |-> `ee`, `s` |-> `st`]
+             exprSimSubscriptArraySourceTheory.read_result_nonstorage_frame) >> simp[]) >>
+        Cases_on `read_result cx (PlaceR (MemoryPlace id path)) st` >> gvs[] >>
+        metis_tac[read_result_state]) >>
+     drule_all bodyIntCallPostProvenanceLiveSourceTheory.effect_free_memory_result_selection >>
+     strip_tac >>
+     `subscripts_type entry.type path = SOME (ArrayTV etv bd)` by
+       gvs[vyperPlaceTypingTheory.runtime_place_typed_memory] >>
+     `lookup_scopes id ee.scopes = SOME entry` by simp[] >>
+     qpat_x_assum `lookup_scopes id st.scopes = _` kall_tac >>
+     drule_all live_memory_child_read >> metis_tac[]) >>
+  rename1 `ImmutablePlace src id path` >>
+  `runtime_place_typed cx ee (ImmutablePlace src id path) (ArrayTV etv bd)` by
+    (qpat_x_assum `runtime_place_typed _ _ _ _` mp_tac >>
+     Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+     simp[vyperPlaceTypingTheory.runtime_place_typed_immutable,
+          get_immutables_def, get_address_immutables_def, bind_def, return_def, raise_def]) >>
+  drule_all exprSimSubscriptArraySourceTheory.select_typed_immutable_read >> metis_tac[]
+QED
