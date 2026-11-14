@@ -635,64 +635,12 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
        qpat_assum `inst.inst_id = _` mp_tac >>
        qpat_assum `header_st.cs_next_id = _` mp_tac >>
        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])) >>
-  `?guard_cnt. abi_decode_count_guard CALLDATALOAD src maxn st =
-      (guard_cnt,guard_st)` by
-    (qpat_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
+  `d+32 <= s.vs_alloca_next` by
+    (qpat_assum `alloca_inv s` mp_tac >>
+     qpat_assum `FLOOKUP s.vs_allocas oid = _` mp_tac >>
+     qpat_assum `d+32 <= base_addr+owner_cap` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-     pairarg_tac >> simp[] >> metis_tac[]) >>
-  `guard_st.cs_current_bb = st.cs_current_bb /\
-   guard_st.cs_blocks = st.cs_blocks /\
-   guard_st.cs_next_var = st.cs_next_var + 3 /\
-   guard_st.cs_next_id = st.cs_next_id + 4 /\
-   LENGTH guard_st.cs_current_insts = LENGTH st.cs_current_insts + 4` by
-    (qpat_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[abi_decode_count_guard_def, emit_op_def, emit_void_def,
-       emit_inst_def, fresh_var_def, fresh_id_def, emit_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     strip_tac >> gvs[APPEND_ASSOC]) >>
-  drule abi_decode_count_guard_shape >> disch_tac >>
-  drule_all (SIMP_RULE bool_ss [abi_decode_source_opcode_def]
-    (Q.INST [`opc` |-> `CALLDATALOAD`] abi_decode_array_header_shape)) >> strip_tac >>
-  drule abi_decode_index_init_shape >> strip_tac >>
-  `cs_extends st guard_st /\ cs_extends guard_st header_st /\
-    cs_extends header_st loop_st` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`inst_extends st guard_st`, `inst_extends guard_st header_st`,
-        `inst_extends header_st loop_st`,
-        `guard_st.cs_blocks = st.cs_blocks`,
-        `header_st.cs_blocks = guard_st.cs_blocks`,
-        `loop_st.cs_blocks = header_st.cs_blocks`,
-        `guard_st.cs_current_bb = st.cs_current_bb`,
-        `header_st.cs_current_bb = guard_st.cs_current_bb`,
-        `loop_st.cs_current_bb = header_st.cs_current_bb`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     rpt conj_tac >> irule cs_extends_same_block >>
-     fs[inst_extends_def, same_blocks_def] >> metis_tac[]) >>
-  `fn_has_code st guard_st fn /\ fn_has_code guard_st header_st fn /\
-    fn_has_code header_st loop_st fn` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`fn_has_code st loop_st fn`, `cs_extends st guard_st`,
-        `cs_extends guard_st header_st`, `cs_extends header_st loop_st`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     metis_tac[fn_has_code_split, cs_extends_trans]) >>
-  `emitted_insts st loop_st = emitted_insts st guard_st ++
-    (emitted_insts guard_st header_st ++ emitted_insts header_st loop_st)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`inst_extends st guard_st`, `inst_extends guard_st header_st`,
-        `inst_extends header_st loop_st`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     fs[inst_extends_def] >> metis_tac[emitted_insts_append, APPEND_ASSOC]) >>
-  qpat_assum `emitted_insts st loop_st = _` (fn code_eq =>
-    qpat_assum `run_inst_seq (emitted_insts st loop_st) s = OK t`
-      (mp_then Any strip_assume_tac decoderArraySetupPtrTheory.run_inst_seq_append_ok o
-       PURE_REWRITE_RULE [code_eq])) >>
-  rename1 `run_inst_seq (emitted_insts st guard_st) s = OK r1` >>
-  qpat_x_assum `run_inst_seq (_ ++ _) _ = OK t`
-    (mp_then Any strip_assume_tac decoderArraySetupPtrTheory.run_inst_seq_append_ok) >>
-  rename1 `run_inst_seq (emitted_insts guard_st header_st) r1 = OK r2` >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[LESS_EQ_TRANS]) >>
   mp_tac (SRULE [] (Q.INST
      [`H` |-> `ARB`,
       `cx` |-> `ARB`,
@@ -700,285 +648,36 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
       `R` |-> `ARB`,
       `PG` |-> `PG`,
       `sa` |-> `st`,
-      `sb` |-> `guard_st`,
-      `src` |-> `src`,
-      `maxn` |-> `maxn`,
-      `cnt` |-> `guard_cnt`,
-      `s` |-> `s`,
-      `t` |-> `r1`,
-      `a` |-> `n2w cdsbase`,
-      `G` |-> `G`,
-      `tn` |-> `tn`]
-     (SPEC_ALL calldata_count_guard_endpoint_ptr_origin_core))) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choose_then `H1` (qx_choose_then `u1` strip_assume_tac)) >>
-  `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
-    (s,G,tn) []
-    (OK (r1 with vs_inst_idx := LENGTH guard_st.cs_current_insts),H1,u1)` by
-    (rpt gen_tac >> first_assum irule >> simp[]) >>
-  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H1 u1
-      (r1 with vs_inst_idx := LENGTH guard_st.cs_current_insts)) ==>
-    !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s` by
-    (rpt gen_tac >> strip_tac >> first_assum irule >> simp[]) >>
-  suspend "initializer_header"
-QED
-
-Resume source_owned_nonbulk_array_ptr[initializer_header]:
-  markerLib.RESUME_TAC >>
-  rename1 `op_taint u1 guard_cnt = {}` >>
-  rename1 `op_prov H1 guard_cnt = NONE` >>
-  `!x. not_fresh_at st x ==> not_fresh_at guard_st x /\
-     not_fresh_at header_st x` by
-    (qpat_assum `guard_st.cs_next_var = st.cs_next_var + 3` mp_tac >>
-     qpat_assum `header_st.cs_next_var = guard_st.cs_next_var + 1` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-     qexists `st` >> simp[] >> decide_tac) >>
-  `not_fresh_at guard_st root /\ not_fresh_at header_st root` by
-    (qpat_assum `!x. not_fresh_at st x ==> not_fresh_at guard_st x /\ _`
-       (qspec_then `root` mp_tac) >>
-     qpat_assum `not_fresh_at st root` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `eval_operand src r1 = SOME (n2w cdsbase) /\ op_taint u1 src = {}` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`!x. not_fresh_at st x ==> lookup_var x r1 = _ /\ _`,
-        `!x. src = Var x ==> not_fresh_at st x`,
-        `eval_operand src s = SOME (n2w cdsbase)`, `op_taint tn src = {}`,
-        `r1 = s with vs_vars := _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     Cases_on `src` >> fs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
-  `lookup_var root r1 = SOME (n2w d) /\ ptr_covers H1 u1 root r1 outsz` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`!x. not_fresh_at st x ==> lookup_var x r1 = _ /\ _`,
-        `not_fresh_at st root`, `lookup_var root s = SOME (n2w d)`,
-        `ptr_covers G tn root s outsz`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     conj_tac >- metis_tac[] >> irule ptr_covers_frame >> metis_tac[]) >>
-  `r1.vs_allocas = s.vs_allocas /\ r1.vs_alloca_next = s.vs_alloca_next /\
-    r1.vs_current_bb = s.vs_current_bb /\ r1.vs_halted = s.vs_halted` by
-    (qpat_assum `r1 = s with vs_vars := _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `d+32 <= s.vs_alloca_next` by
-    (qpat_assum `alloca_inv s` mp_tac >>
-     qpat_assum `FLOOKUP s.vs_allocas oid = _` mp_tac >>
-     qpat_assum `d+32 <= base_addr+owner_cap` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[LESS_EQ_TRANS]) >>
-  qabbrev_tac `a1 = r1 with vs_inst_idx := LENGTH guard_st.cs_current_insts` >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts guard_st header_st)` by
-    (qpat_assum `EVERY (\i. _ /\ _ /\ _) (emitted_insts guard_st header_st)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM] >> metis_tac[]) >>
-  `run_inst_seq (emitted_insts guard_st header_st) a1 =
-     OK (r2 with vs_inst_idx := LENGTH guard_st.cs_current_insts)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts guard_st header_st)`,
-        `run_inst_seq (emitted_insts guard_st header_st) r1 = OK r2`,
-        `Abbrev (a1 = _)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     simp[Abbr `a1`, run_inst_seq_inst_idx, exec_result_map_def]) >>
-  `eval_operand src a1 = SOME (n2w cdsbase) /\
-    lookup_var root a1 = SOME (n2w d) /\ ptr_covers H1 u1 root a1 outsz /\
-    ~a1.vs_halted /\ allocas_from lower a1 /\
-    a1.vs_current_bb = guard_st.cs_current_bb /\
-    a1.vs_inst_idx = LENGTH guard_st.cs_current_insts /\
-    d+32 <= a1.vs_alloca_next` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`Abbrev (a1 = _)`, `eval_operand src r1 = SOME (n2w cdsbase)`,
-        `lookup_var root r1 = SOME (n2w d)`, `ptr_covers H1 u1 root r1 outsz`,
-        `r1 = s with vs_vars := _`, `~s.vs_halted`, `allocas_from lower s`,
-        `s.vs_current_bb = st.cs_current_bb`,
-        `guard_st.cs_current_bb = st.cs_current_bb`,
-        `d+32 <= s.vs_alloca_next`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     gvs[Abbr `a1`, ptr_covers_def, eval_operand_def, lookup_var_def, allocas_from_def] >>
-     metis_tac[]) >>
-  `d < dimword (:256)` by
-    (qpat_assum `d+outsz < dimword (:256)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-  mp_tac (SRULE [] (Q.INST
-     [`H` |-> `ARB`,
-      `cx` |-> `ARB`,
-      `ctx` |-> `ARB`,
-      `R` |-> `ARB`,
-      `PG` |-> `PG`,
-      `sa` |-> `guard_st`,
-      `sb` |-> `header_st`,
+      `sb` |-> `loop_st`,
       `root` |-> `root`,
       `src` |-> `src`,
-      `cnt` |-> `cnt`,
-      `s` |-> `a1`,
-      `t` |-> `r2 with vs_inst_idx := LENGTH guard_st.cs_current_insts`,
+      `maxn` |-> `maxn`,
+      `abi_sz` |-> `abi_embedded_static_size ce.ce_struct_fields ty`,
+      `setup` |-> `(ip,cnt)`,
+      `s` |-> `s`,
+      `t` |-> `t`,
       `d` |-> `d`,
       `totalbytes` |-> `outsz`,
       `a` |-> `n2w cdsbase`,
-      `G` |-> `H1`,
-      `tn` |-> `u1`]
-     (SPEC_ALL calldata_array_header_endpoint_ptr_origin_core))) >>
+      `G` |-> `G`,
+      `tn` |-> `tn`]
+     (SPEC_ALL actual_array_init_endpoint_ptr_origin_core))) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choose_then `H2` (qx_choose_then `u2` strip_assume_tac)) >>
+  disch_then (qx_choose_then `H` (qx_choose_then `u`
+    (qx_choose_then `q` (qx_choose_then `p'` strip_assume_tac)))) >>
   `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
-    (a1,H1,u1) []
-    (OK (r2 with vs_inst_idx := LENGTH header_st.cs_current_insts),H2,u2)` by
-    (rpt gen_tac >> first_assum irule >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H2 u2
-      (r2 with vs_inst_idx := LENGTH header_st.cs_current_insts)) ==>
-    !fuel. ptr_safe_run D lower fuel ctx fn PG H1 u1 a1` by
-    (rpt gen_tac >> strip_tac >> first_assum irule >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  suspend "initializer_index"
-QED
-
-Resume source_owned_nonbulk_array_ptr[initializer_index]:
-  markerLib.RESUME_TAC >>
-  rename1 `op_taint u2 cnt = {}` >>
-  rename1 `op_prov H2 cnt = NONE` >>
-  qabbrev_tac `a2 = r2 with vs_inst_idx := LENGTH header_st.cs_current_insts` >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts header_st loop_st)` by
-    (qpat_assum `EVERY (\i. _ /\ _) (emitted_insts header_st loop_st)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM] >> metis_tac[]) >>
-  `a2.vs_allocas = s.vs_allocas /\ a2.vs_alloca_next = s.vs_alloca_next` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`Abbrev (a1 = _)`, `Abbrev (a2 = _)`, `r1 = s with vs_vars := _`,
-        `_ = a1.vs_allocas`, `_ = a1.vs_alloca_next`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     gvs[Abbr `a1`, Abbr `a2`]) >>
-  `run_inst_seq (emitted_insts header_st loop_st) a2 =
-     OK (t with vs_inst_idx := LENGTH header_st.cs_current_insts)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts header_st loop_st)`,
-        `run_inst_seq (emitted_insts header_st loop_st) r2 = OK t`,
-        `Abbrev (a2 = _)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     simp[Abbr `a2`, run_inst_seq_inst_idx, exec_result_map_def]) >>
-  (Q.SUBGOAL_THEN
-   `~a2.vs_halted /\ allocas_from lower a2 /\ lower <= a2.vs_alloca_next /\
-    a2.vs_current_bb = header_st.cs_current_bb /\
-    a2.vs_inst_idx = LENGTH header_st.cs_current_insts /\
-    ((FLOOKUP a2.vs_allocas header_st.cs_next_id = NONE /\
-      a2.vs_alloca_next+32 < dimword (:256)) \/
-     (?b. FLOOKUP a2.vs_allocas header_st.cs_next_id = SOME (b,32) /\
-       b+32 <= a2.vs_alloca_next /\ a2.vs_alloca_next < dimword (:256)))`
-   (map_every assume_tac o CONJUNCTS) >-
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`Abbrev (a1 = _)`, `Abbrev (a2 = _)`, `r1 = s with vs_vars := _`,
-        `_ = a1.vs_allocas`, `_ = a1.vs_alloca_next`,
-        `_ = a1.vs_current_bb`, `~r2.vs_halted`,
-        `s.vs_current_bb = st.cs_current_bb`,
-        `guard_st.cs_current_bb = st.cs_current_bb`,
-        `header_st.cs_current_bb = guard_st.cs_current_bb`,
-        `allocas_from lower s`, `lower <= s.vs_alloca_next`, `~s.vs_halted`,
-        `header_st.cs_next_id = loop_st.cs_next_id-2`,
-        `(FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = NONE /\ _) \/ (?b. _)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     gvs[Abbr `a2`, Abbr `a1`, allocas_from_def] >> metis_tac[])) >>
-  mp_tac (SRULE [] (Q.INST
-     [`H` |-> `ARB`,
-      `cx` |-> `ARB`,
-      `ctx` |-> `ARB`,
-      `R` |-> `ARB`,
-      `PG` |-> `PG`,
-      `sa` |-> `header_st`,
-      `sb` |-> `loop_st`,
-      `ip` |-> `ip`,
-      `s` |-> `a2`,
-      `t` |-> `t with vs_inst_idx := LENGTH header_st.cs_current_insts`,
-      `G` |-> `H2`,
-      `tn` |-> `u2`]
-     (SPEC_ALL actual_index_init_endpoint_ptr_origin_core))) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choose_then `H` (qx_choose_then `u` (qx_choose_then `q` (qx_choose_then `p'` strip_assume_tac)))) >>
-  `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
-    (a2,H2,u2) []
+    (s,G,tn) []
     (OK (t with vs_inst_idx := LENGTH loop_st.cs_current_insts),H,u)` by
     (rpt gen_tac >> first_assum irule >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u
       (t with vs_inst_idx := LENGTH loop_st.cs_current_insts)) ==>
-    !fuel. ptr_safe_run D lower fuel ctx fn PG H2 u2 a2` by
+    !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s` by
     (rpt gen_tac >> strip_tac >> first_assum irule >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rename1 `ip = Var q` >>
-  `case FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) of
-     NONE => p' = s.vs_alloca_next | SOME (slot,sz) => p' = slot` by
-    (qpat_assum `case FLOOKUP a2.vs_allocas header_st.cs_next_id of
-       NONE => p' = a2.vs_alloca_next | SOME (slot,sz) => p' = slot` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`a2.vs_allocas = s.vs_allocas`, `a2.vs_alloca_next = s.vs_alloca_next`,
-        `header_st.cs_next_id = loop_st.cs_next_id-2`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `!x. cnt = Var x ==> not_fresh_at header_st x` by
-    (qpat_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-     rpt strip_tac >> gvs[] >> simp[not_fresh_at_def]) >>
-  `!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-     FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`!x. not_fresh_at st x ==> lookup_var x r1 = _ /\ _`,
-        `!x. not_fresh_at guard_st x ==> lookup_var x _ = lookup_var x a1 /\ _`,
-        `!x. not_fresh_at header_st x ==> lookup_var x _ = lookup_var x a2 /\ _`,
-        `!x. not_fresh_at st x ==> not_fresh_at guard_st x /\ _`,
-        `Abbrev (a1 = _)`, `Abbrev (a2 = _)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     rpt strip_tac >> fs[Abbr `a1`, Abbr `a2`, lookup_var_def] >> metis_tac[]) >>
-  `ptr_covers H u root
-      (t with vs_inst_idx := LENGTH loop_st.cs_current_insts) outsz` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`ptr_covers G tn root s outsz`, `not_fresh_at st root`,
-        `!x. not_fresh_at st x ==> lookup_var x t = _ /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     irule ptr_covers_frame >>
-     goal_assum (drule_at Any) >>
-     fs[lookup_var_def] >> metis_tac[]) >>
-  `op_taint u cnt = {} /\ op_prov H cnt = NONE` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`op_taint u2 cnt = {}`, `op_prov H2 cnt = NONE`,
-        `!x. cnt = Var x ==> not_fresh_at header_st x`,
-        `!x. not_fresh_at header_st x ==> lookup_var x _ = lookup_var x a2 /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     Cases_on `cnt` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
-  `u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d+32})
-       DIFF {x | p' <= x /\ x < p'+32} /\
-    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`u.t_mem = u2.t_mem DIFF _`, `u2.t_mem = u1.t_mem DIFF _`,
-        `u1.t_mem = tn.t_mem`,
-        `u.t_stor = u2.t_stor`, `u2.t_stor = u1.t_stor`, `u1.t_stor = tn.t_stor`,
-        `u.t_trans = u2.t_trans`, `u2.t_trans = u1.t_trans`, `u1.t_trans = tn.t_trans`,
-        `u.t_imm = u2.t_imm`, `u2.t_imm = u1.t_imm`, `u1.t_imm = tn.t_imm`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >> simp[]) >>
-  `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
-    (s,G,tn) []
-    (OK (t with vs_inst_idx := LENGTH loop_st.cs_current_insts),H,u)` by
-    (rpt gen_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`,
-        `!D explicit. gas_origin_ptr_path _ (a1,H1,u1) _ _`,
-        `!D explicit. gas_origin_ptr_path _ (a2,H2,u2) _ _`,
-        `Abbrev (a1 = _)`, `Abbrev (a2 = _)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[markerTheory.Abbrev_def] >> rpt strip_tac >>
-     metis_tac[gas_origin_ptr_path_append, APPEND]) >>
-  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u
-       (t with vs_inst_idx := LENGTH loop_st.cs_current_insts)) ==>
-      !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s`,
-        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG H1 u1 a1`,
-        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG H2 u2 a2`,
-        `Abbrev (a1 = _)`, `Abbrev (a2 = _)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[markerTheory.Abbrev_def] >> metis_tac[]) >>
-  `eval_operand (FST (ip,cnt)) t = SOME (n2w p') /\
-    FST (ip,cnt) = Var q` by
-    (qpat_assum `eval_operand ip t = SOME (n2w p')` mp_tac >>
-     qpat_assum `ip = Var q` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[eval_operand_def, lookup_var_def]) >>
-  (* Identify the ghost index slot and prepare header entry. *)
+  (* Identify the ghost index slot with the physical initializer slot. *)
   `p' = p` by
-    (qpat_assum `eval_operand (FST (ip,cnt)) t = _` mp_tac >>
+    (qpat_assum `eval_operand ip t = SOME (n2w p')` mp_tac >>
      qpat_assum `eval_operand ip t = SOME (n2w p)` mp_tac >>
      qpat_assum `p+32 < dimword (:256)` mp_tac >>
      qpat_assum `p'+32 < dimword (:256)` mp_tac >>
@@ -987,9 +686,6 @@ Resume source_owned_nonbulk_array_ptr[initializer_index]:
      `p < dimword (:256) /\ p' < dimword (:256)` by decide_tac >>
      gvs[LESS_MOD]) >>
   qpat_x_assum `p' = p` SUBST_ALL_TAC >>
-  `ip = Var q` by
-    (qpat_assum `FST (ip,cnt) = Var q` mp_tac >>
-     simp_tac bool_ss [pairTheory.FST]) >>
   (* Installed loop entry code. *)
   `labels = (FST labels,FST (SND labels),SND (SND labels))` by simp[] >>
   `abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
@@ -1007,18 +703,12 @@ Resume source_owned_nonbulk_array_ptr[initializer_index]:
        (emitted_insts st loop_st)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule_all run_inst_seq_preserves_entry_control >> simp_tac bool_ss []) >>
-  (* Normalize physical and ghost program counters. *)
-  qmatch_asmsub_abbrev_tac `ptr_covers H u root init outsz` >>
+  (* Use the owner's normalized initializer endpoint. *)
+  qabbrev_tac `init = t with vs_inst_idx := LENGTH loop_st.cs_current_insts` >>
   `init = t with vs_inst_idx := LENGTH loop_st.cs_current_insts` by
-    (qpat_assum `Abbrev (init = _)` mp_tac >>
-     qpat_assum `inst_extends st loop_st` mp_tac >>
-     qpat_assum `s.vs_inst_idx = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[markerTheory.Abbrev_def, inst_extends_def, emitted_insts_def, LENGTH_DROP] >>
-     rpt strip_tac >>
-     `LENGTH st.cs_current_insts <= LENGTH loop_st.cs_current_insts` by
-       (qpat_x_assum `loop_st.cs_current_insts = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[] >> decide_tac) >>
-     simp[]) >>
+    simp[Abbr `init`] >>
+  `ptr_covers H u root init outsz /\ ptr_covers H u q init 32` by
+    simp[Abbr `init`] >>
   `gas_path_mem ctx fn s 0 (OK init)` by
     (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
        (qspecl_then [`ARB`,`ARB`] mp_tac) >>
