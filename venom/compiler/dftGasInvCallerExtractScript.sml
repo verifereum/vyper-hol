@@ -1,5 +1,6 @@
 Theory dftGasInvCallerExtract
 Ancestors
+  dftStaticReachAvailability dftStaticInvokeTrace
   dftGasInvCallerInput dftGasInvExtraction dftGasInvReachAvailability dftGasInvPrefixReach
   o1PassContract contextCodegenRel venomInstProofs1 venomExecProofs
   dftGasInvInversion dftGasInvFlexibleTrace dftGasInvResidualTrace
@@ -8,7 +9,7 @@ Ancestors
   venomExecSemantics venomInst venomState list rich_list pred_set sorting
   dftSsaPreserve dftPermSim venomWf dftWf
 
-Theorem inv_lookup_call_crossings[local]:
+Theorem inv_lookup_call_crossings:
   dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
   lookup_block name fn.fn_blocks = SOME bb /\
   lookup_block name fn'.fn_blocks = SOME bb' /\
@@ -45,7 +46,7 @@ Proof
   drule_all inv_lookup_inversion_swap >> simp[]
 QED
 
-Theorem inv_lookup_normalized_invoke:
+Theorem inv_lookup_normalized_invoke_static:
   dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
   lookup_block name fn.fn_blocks = SOME bb /\
   lookup_block name fn'.fn_blocks = SOME bb' /\
@@ -58,7 +59,7 @@ Theorem inv_lookup_normalized_invoke:
   ALL_DISTINCT (srcpre ++ obs::srcpost) /\
   PERM (consumed ++ obs::later) (srcpre ++ obs::srcpost) /\
   dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
-  s0.vs_inst_idx = LENGTH pseudos /\ ~s0.vs_call_ctx.cc_static /\
+  s0.vs_inst_idx = LENGTH pseudos /\
   inv_ev_ftrace orc p d ctx consumed s0 sT /\ obs.inst_opcode = INVOKE ==>
   ?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
     sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
@@ -75,7 +76,6 @@ Proof
   drule_all inv_lookup_block_contract >> strip_tac >>
   drule_all inv_lookup_missing_predecessors >> strip_tac >>
   drule_all inv_lookup_call_crossings >> strip_tac >>
-  `~sT.vs_call_ctx.cc_static` by metis_tac[inv_ftrace_call_ctx] >>
   `dft_remaining_inv fn bb
       (FILTER (\i. ~MEM i consumed) srcpre ++
        obs::FILTER (\i. ~MEM i consumed) srcpost) sT` by
@@ -83,7 +83,7 @@ Proof
   `inv_memory_observation obs.inst_opcode` by simp[inv_memory_observation_def] >>
   `?u. inv_ev_trace orc p d 0 ctx (FILTER (\i. ~MEM i consumed) srcpre) sT u /\
        (!op. MEM op obs.inst_operands ==> eval_operand op u = eval_operand op sT)` by
-    (drule_all inv_remaining_trace_extension >>
+    (drule_all inv_remaining_trace_extension_invoke >>
      simp[inv_memory_observation_def] >> metis_tac[]) >>
   `inv_ev_ftrace orc p d ctx (FILTER (\i. ~MEM i consumed) srcpre) sT u` by
     metis_tac[inv_ev_trace_ftrace] >>
@@ -98,7 +98,7 @@ Proof
   qexists_tac `sS` >> suspend "projection"
 QED
 
-Resume inv_lookup_normalized_invoke[projection]:
+Resume inv_lookup_normalized_invoke_static[projection]:
   `!callee args. setup_callee callee args u = setup_callee callee args sS` by
     metis_tac[inv_ev_invoke_trace_setup] >>
   `EVERY (\z. MEM z bb.bb_instructions /\ ~is_pseudo z.inst_opcode /\
@@ -123,9 +123,33 @@ Resume inv_lookup_normalized_invoke[projection]:
   simp[] >> metis_tac[]
 QED
 
-Finalise inv_lookup_normalized_invoke
+Finalise inv_lookup_normalized_invoke_static
 
-Theorem inv_lookup_scheduled_invoke:
+Theorem inv_lookup_normalized_invoke:
+  dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
+  lookup_block name fn.fn_blocks = SOME bb /\
+  lookup_block name fn'.fn_blocks = SOME bb' /\
+  bb.bb_instructions = pseudos ++ (srcpre ++ obs::srcpost) /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) /\
+  MAP (\i. i.inst_id) bb'.bb_instructions =
+    MAP (\i. i.inst_id) pseudos ++
+    MAP (\i. i.inst_id) (consumed ++ obs::later) /\
+  ALL_DISTINCT (srcpre ++ obs::srcpost) /\
+  PERM (consumed ++ obs::later) (srcpre ++ obs::srcpost) /\
+  dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
+  s0.vs_inst_idx = LENGTH pseudos /\ ~s0.vs_call_ctx.cc_static /\
+  inv_ev_ftrace orc p d ctx consumed s0 sT /\ obs.inst_opcode = INVOKE ==>
+  ?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
+    sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
+    (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op sT) /\
+    (!callee args. setup_callee callee args sS = setup_callee callee args sT)
+Proof
+  rpt strip_tac >>
+  drule_all inv_lookup_normalized_invoke_static >> simp[]
+QED
+
+Theorem inv_lookup_scheduled_invoke_static:
   dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
   lookup_block name fn.fn_blocks = SOME bb /\
   lookup_block name fn'.fn_blocks = SOME bb' /\
@@ -136,7 +160,7 @@ Theorem inv_lookup_scheduled_invoke:
   bb'.bb_instructions = pseudos ++ (scheduled ++ targetobs::targetpost) /\
   targetobs.inst_id = obs.inst_id /\
   dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
-  s0.vs_inst_idx = LENGTH pseudos /\ ~s0.vs_call_ctx.cc_static /\
+  s0.vs_inst_idx = LENGTH pseudos /\
   inv_ev_ftrace orc p d ctx scheduled s0 sT /\ obs.inst_opcode = INVOKE ==>
   ?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
     sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
@@ -165,7 +189,7 @@ Proof
   suspend "representatives"
 QED
 
-Resume inv_lookup_scheduled_invoke[representatives]:
+Resume inv_lookup_scheduled_invoke_static[representatives]:
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
     metis_tac[dft_fn_rel_def, wf_fn_block_inst_ids_distinct] >>
   `PERM (originals ++ obs::later) (srcpre ++ obs::srcpost)` by
@@ -181,13 +205,35 @@ Resume inv_lookup_scheduled_invoke[representatives]:
     (asm_rewrite_tac[MAP_APPEND, MAP] >> metis_tac[APPEND_ASSOC, APPEND]) >>
   qpat_x_assum `!x y. _` kall_tac >>
   qpat_x_assum `!x y. _` kall_tac >>
-  irule inv_lookup_normalized_invoke >>
+  irule inv_lookup_normalized_invoke_static >>
   simp[] >> qexists_tac `bb'` >> qexists_tac `originals` >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Finalise inv_lookup_scheduled_invoke
+Finalise inv_lookup_scheduled_invoke_static
+
+Theorem inv_lookup_scheduled_invoke:
+  dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
+  lookup_block name fn.fn_blocks = SOME bb /\
+  lookup_block name fn'.fn_blocks = SOME bb' /\
+  bb.bb_instructions = pseudos ++ (srcpre ++ obs::srcpost) /\
+  EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  bb'.bb_instructions = pseudos ++ (scheduled ++ targetobs::targetpost) /\
+  targetobs.inst_id = obs.inst_id /\
+  dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0 /\
+  s0.vs_inst_idx = LENGTH pseudos /\ ~s0.vs_call_ctx.cc_static /\
+  inv_ev_ftrace orc p d ctx scheduled s0 sT /\ obs.inst_opcode = INVOKE ==>
+  ?sS. inv_ev_prefix orc p d ctx bb (LENGTH srcpre) s0 sS /\
+    sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
+    (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op sT) /\
+    (!callee args. setup_callee callee args sS = setup_callee callee args sT)
+Proof
+  rpt strip_tac >>
+  drule_all inv_lookup_scheduled_invoke_static >> simp[]
+QED
 
 Theorem inv_reachable_active[local]:
   !orc initial C p d fn inst s. ev_reachable orc initial C p d fn inst s ==>
@@ -195,6 +241,61 @@ Theorem inv_reachable_active[local]:
 Proof
   ho_match_mp_tac ev_reachable_ind >> rpt strip_tac >> simp[]
 QED
+
+Theorem inv_source_reachable_invoke_static:
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
+  initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
+  ev_reachable orc initial C p d fn startinst s0 /\
+  dft_fn_rel fn fn' /\ MEM bb fn.fn_blocks /\
+  lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block s0.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  bb.bb_instructions = pseudos ++ (srcpre ++ obs::srcpost) /\
+  EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  bb'.bb_instructions = pseudos ++ (scheduled ++ targetobs::targetpost) /\
+  targetobs.inst_id = obs.inst_id /\
+  s0.vs_inst_idx = LENGTH pseudos /\
+  inv_ev_ftrace orc p d C scheduled s0 sT /\ obs.inst_opcode = INVOKE ==>
+  ?sS. ev_reachable orc initial C p d fn obs sS /\
+    (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op sT) /\
+    (!callee args. setup_callee callee args sS = setup_callee callee args sT)
+Proof
+  strip_tac >>
+  `FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions = pseudos /\
+   FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions = srcpre ++ obs::srcpost` by
+    (`FILTER (\i. is_pseudo i.inst_opcode) pseudos = pseudos /\
+      FILTER (\i. ~is_pseudo i.inst_opcode) pseudos = [] /\
+      FILTER (\i. is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) = [] /\
+      FILTER (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) = srcpre ++ obs::srcpost` by
+       (simp[FILTER_EQ_ID, FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
+     asm_rewrite_tac[FILTER_APPEND_DISTRIB, APPEND_NIL, APPEND]) >>
+  `dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0` by
+    (`s0.vs_inst_idx = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)` by simp[] >>
+     drule_all inv_ev_reachable_source_initialized_static >> simp[]) >>
+  drule_all inv_lookup_scheduled_invoke_static >> strip_tac >>
+  qexists_tac `sS` >> simp[] >>
+  irule inv_ev_prefix_reachable >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  suspend "fetch"
+QED
+
+Resume inv_source_reachable_invoke_static[fetch]:
+  `bb.bb_label = s0.vs_current_bb` by metis_tac[lookup_block_label] >>
+  simp[] >> conj_tac
+  >- (drule inv_reachable_active >>
+      simp[active_inst_def] >> strip_tac >>
+      rename1 `MEM activebb fn.fn_blocks` >>
+      `wf_function fn` by gvs[dft_fn_rel_def] >>
+      `lookup_block s0.vs_current_bb fn.fn_blocks = SOME activebb` by
+        (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+      gvs[get_instruction_def]) >>
+  simp[get_instruction_def, EL_APPEND_EQN]
+QED
+
+Finalise inv_source_reachable_invoke_static
 
 Theorem inv_source_reachable_invoke:
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
@@ -215,40 +316,11 @@ Theorem inv_source_reachable_invoke:
     (!op. MEM op obs.inst_operands ==> eval_operand op sS = eval_operand op sT) /\
     (!callee args. setup_callee callee args sS = setup_callee callee args sT)
 Proof
-  strip_tac >>
-  `FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions = pseudos /\
-   FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions = srcpre ++ obs::srcpost` by
-    (`FILTER (\i. is_pseudo i.inst_opcode) pseudos = pseudos /\
-      FILTER (\i. ~is_pseudo i.inst_opcode) pseudos = [] /\
-      FILTER (\i. is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) = [] /\
-      FILTER (\i. ~is_pseudo i.inst_opcode) (srcpre ++ obs::srcpost) = srcpre ++ obs::srcpost` by
-       (simp[FILTER_EQ_ID, FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
-     asm_rewrite_tac[FILTER_APPEND_DISTRIB, APPEND_NIL, APPEND]) >>
-  `dft_remaining_inv fn bb (srcpre ++ obs::srcpost) s0` by
-    (`s0.vs_inst_idx = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)` by simp[] >>
-     drule_all inv_ev_reachable_source_initialized >> simp[]) >>
-  drule_all inv_lookup_scheduled_invoke >> strip_tac >>
-  qexists_tac `sS` >> simp[] >>
-  irule inv_ev_prefix_reachable >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  suspend "fetch"
+  rpt strip_tac >>
+  qpat_x_assum `o1_run_state_ok initial`
+    (strip_assume_tac o PURE_REWRITE_RULE [o1_run_state_ok_def]) >>
+  drule_all inv_source_reachable_invoke_static >> simp[]
 QED
-
-Resume inv_source_reachable_invoke[fetch]:
-  `bb.bb_label = s0.vs_current_bb` by metis_tac[lookup_block_label] >>
-  simp[] >> conj_tac
-  >- (drule inv_reachable_active >>
-      simp[active_inst_def] >> strip_tac >>
-      rename1 `MEM activebb fn.fn_blocks` >>
-      `wf_function fn` by gvs[dft_fn_rel_def] >>
-      `lookup_block s0.vs_current_bb fn.fn_blocks = SOME activebb` by
-        (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
-      gvs[get_instruction_def]) >>
-  simp[get_instruction_def, EL_APPEND_EQN]
-QED
-
-Finalise inv_source_reachable_invoke
 
 Theorem inv_invoke_observation_decode:
   ev_reachable orc initial C p d fn obs sS /\
