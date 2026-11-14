@@ -21,3 +21,5 @@ Ancestors
   branchOptCheckWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata
+  (* guarded explicit-stack prefixes project to ordinary reachability *)
+  guardedFrameSubset
