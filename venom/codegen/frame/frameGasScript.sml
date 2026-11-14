@@ -4,11 +4,15 @@
  *   add_frame_gas      - es with g more gas for its top frame
  *   frame_inst_at      - a state of the top frame's run and its instruction
  *   frame_inst_raises  - the top frame's instruction raises an exception
+ *   frame_raises       - some instruction of the top frame raises it
+ *   frame_raises_inst_raises - frame_raises names a frame_inst_raises op
+ *   frame_inst_raises_here - the raise at the frame's own state
+ *   frame_inst_raises_mid  - a raise from a later state of the frame
  *   add_frame_gas_wf_state - add_frame_gas keeps wf_state
  *)
 Theory frameGas
 Ancestors
-  vfmExecution vfmExecutionProp vfmContext list rich_list pair
+  callTrace vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
 (* es with g more gas for our (top) frame.  Every frame on the stack gets
    g more gas limit and every caller g more gas used, so the callers'
@@ -56,6 +60,20 @@ Definition frame_inst_raises_def:
       step_inst op s = (INR (SOME exc), s') /\
       LENGTH s'.contexts = LENGTH es.contexts
 End
+
+(* Some instruction of the top frame's run raises exc there. *)
+Definition frame_raises_def:
+  frame_raises es exc <=>
+    ?s s' op. frame_inst_at es s op /\
+              step_inst op s = (INR (SOME exc), s') /\
+              LENGTH s'.contexts = LENGTH es.contexts
+End
+
+Theorem frame_raises_inst_raises:
+  frame_raises es exc <=> ?op. frame_inst_raises es exc op
+Proof
+  metis_tac[frame_raises_def, frame_inst_raises_def]
+QED
 
 Theorem add_frame_gas_contexts:
   es.contexts = (c, rb) :: t ==>
@@ -111,4 +129,61 @@ Theorem add_frame_gas_calldata:
          (FST (HD es.contexts)).msgParams.data
 Proof
   rw[add_frame_gas_def] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]
+QED
+
+Theorem frame_inst_at_unique:
+  frame_inst_at es s op /\ frame_inst_at es s op' ==> op = op'
+Proof
+  rw[frame_inst_at_def] >> gvs[] >>
+  Cases_on `FLOOKUP ctxt.msgParams.parsed ctxt.pc` >> gvs[] >>
+  Cases_on `LENGTH ctxt.msgParams.code <= ctxt.pc` >> gvs[]
+QED
+
+Theorem frame_inst_at_self:
+  es.contexts <> [] /\
+  (FST (HD es.contexts)).pc < LENGTH (FST (HD es.contexts)).msgParams.code /\
+  next_opcode (FST (HD es.contexts)) = SOME op ==>
+  frame_inst_at es es op
+Proof
+  Cases_on `es.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[frame_inst_at_def, next_opcode_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem frame_inst_at_prefix:
+  RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
+             step a = (INL (),b)) es es1 /\
+  LENGTH es1.contexts = LENGTH es.contexts /\
+  frame_inst_at es1 s op ==> frame_inst_at es s op
+Proof
+  rw[frame_inst_at_def] >> metis_tac[relationTheory.RTC_TRANS]
+QED
+
+(* The instruction s runs raises exc at our depth, from s itself. *)
+Theorem frame_inst_raises_here:
+  s.contexts = (ctxt, rb) :: rest /\
+  (case FLOOKUP ctxt.msgParams.parsed ctxt.pc of
+     SOME op' => op = op'
+   | NONE => op = if LENGTH ctxt.msgParams.code <= ctxt.pc then Stop
+                  else Invalid) /\
+  step_inst op s = (INR (SOME exc), s') /\
+  LENGTH s'.contexts = LENGTH s.contexts ==>
+  frame_inst_raises s exc op
+Proof
+  rw[frame_inst_raises_def, frame_inst_at_def] >>
+  qexistsl_tac [`s`, `s'`] >> simp[]
+QED
+
+(* A raise from a later state of the frame, reached at our depth or
+   deeper, is a raise of the frame. *)
+Theorem frame_inst_raises_mid:
+  RTC (\a b. LENGTH a.contexts >= LENGTH es0.contexts /\
+             step a = (INL (), b)) es0 es /\
+  LENGTH es.contexts = LENGTH es0.contexts /\
+  frame_inst_raises es exc op ==>
+  frame_inst_raises es0 exc op
+Proof
+  rw[frame_inst_raises_def, frame_inst_at_def] >>
+  qexistsl_tac [`s`, `s'`] >> gvs[] >>
+  metis_tac[relationTheory.RTC_RTC]
 QED

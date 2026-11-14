@@ -77,3 +77,19 @@ Theorem execute_plan_singleton:
 Proof
   simp[execute_plan_def]
 QED
+
+Theorem swap_name_prefix:
+  !n. TAKE 2 (swap_name n) = "SW"
+Proof
+  gen_tac >> rewrite_tac[swap_name_def] >>
+  pure_rewrite_tac [Q.ISPEC `TAKE 2 : string -> string` COND_RAND] >>
+  CONV_TAC EVAL
+QED
+
+Theorem dup_name_prefix:
+  !n. TAKE 2 (dup_name n) = "DU"
+Proof
+  gen_tac >> rewrite_tac[dup_name_def] >>
+  pure_rewrite_tac [Q.ISPEC `TAKE 2 : string -> string` COND_RAND] >>
+  CONV_TAC EVAL
+QED

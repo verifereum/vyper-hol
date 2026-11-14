@@ -9,6 +9,11 @@
  *)
 Theory vyperHol
 Ancestors
+  codegenStaticAbort
+  runtimeLabelReadiness
+  o1LabelReadiness
+  runtimeLabelEntry
+  o1LabelStages
   (* semantics properties *)
   vyperSemanticsHol
   (* frontend, its cv translation, and the test runner *)

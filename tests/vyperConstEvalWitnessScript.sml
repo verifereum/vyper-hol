@@ -84,6 +84,47 @@ Proof
   EVAL_TAC
 QED
 
+val residual = ``Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+  [Builtin (BaseT (UintT 256)) (Bop Add)
+     [Literal (BaseT (UintT 256)) (IntL 1);
+      Literal (BaseT (UintT 256)) (IntL 2)];
+   Name (BaseT (UintT 256)) "x"]``;
+val residual_json = ``JE_Call
+  (JE_Name "unsafe_add" NONE JMissingSource (JT_Integer 256 F))
+  [JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add
+     (JE_Int 2 (JT_Integer 256 F)) (JT_Integer 256 F);
+   JE_Name "x" NONE JMissingSource (JT_Integer 256 F)]
+  [] (JT_Integer 256 F) JMissingSource``;
+val residual_ctx_raw = ``module_expr_ctx [] (0:int) NONE [] [] [] []``;
+val residual_ctx = Term.inst
+  (match_type (type_of residual_ctx_raw) (fst (dom_rng (type_of ``translate_expr``))))
+  residual_ctx_raw;
+
+val projection_residual = EVAL ``
+  fold_pin_constant ^residual = ^residual /\
+  make_builtin_call (BaseT (BytesT (Dynamic 8))) "slice"
+    [Literal (BaseT (BytesT (Dynamic 8))) (BytesL []);
+     Literal (BaseT (UintT 256)) (IntL 0); ^residual] [] (JT_Bytes 8) =
+    Builtin (BaseT (BytesT (Dynamic 8))) (Slice 8)
+      [Literal (BaseT (BytesT (Dynamic 8))) (BytesL []);
+       Literal (BaseT (UintT 256)) (IntL 0); ^residual] /\
+  make_builtin_call (BaseT (BytesT (Fixed 4))) "method_id"
+    [^residual] [] (JT_BytesM 4) =
+    Builtin (BaseT (BytesT (Fixed 4))) MethodId [^residual] /\
+  translate_expr ^residual_ctx
+    (JE_Subscript
+      (JE_Tuple [JE_Int 1 (JT_Integer 256 F)]
+        (JT_Tuple [JT_Integer 256 F])) ^residual_json (JT_Integer 256 F)) =
+    Subscript (BaseT (UintT 256))
+      (Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1))
+        [Literal (BaseT (UintT 256)) (IntL 1)]) ^residual /\
+  translate_iter ^residual_ctx (BaseT (UintT 256))
+    (JIter_Range [^residual_json; ^residual_json] NONE) =
+    Range ^residual ^residual``;
+val () = if aconv (rhs (concl projection_residual)) ``T`` then ()
+         else raise Fail "runtime consumer changed a nonliteral residual";
+Theorem runtime_consumers_original_residual = EQT_ELIM projection_residual;
+
 (* The pin widens each literal's annotation to the list element type;
    decoding must retain that bound rather than derive it from the payload. *)
 val widened_subscript = translate "constant_widened_subscript.json";
@@ -259,12 +300,14 @@ val () = if can (find_term (fn t =>
 Theorem constant_widened_translation = widened;
 Theorem constant_widened_contract_checked = checked "constant_widened.json";
 
-(* General range-bound folding is still deferred; original BoolOp syntax is
-   folded before translation to the runtime IfExp representation. *)
+(* Literal-result initializers supply constants without trusting folded_value.
+   BoolOp syntax folds before translation to runtime IfExp. *)
 val unevaluated_range = translate "constant_unevaluated_range.json";
-val () = if optionSyntax.is_none (rhs (concl unevaluated_range)) then ()
-  else raise Fail "unevaluated range bound accepted";
-Theorem constant_unevaluated_range_rejected = unevaluated_range;
+val () = if has_for_bound 3 (rhs (concl unevaluated_range)) then ()
+  else raise Fail "folded addmod range bound is not 3";
+Theorem constant_addmod_range_translation = unevaluated_range;
+Theorem constant_addmod_range_contract_checked =
+  checked "constant_unevaluated_range.json";
 Theorem constant_unevaluated_flag_contract_checked =
   checked "constant_unevaluated_flag.json";
 
