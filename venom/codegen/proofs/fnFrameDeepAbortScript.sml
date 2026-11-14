@@ -703,8 +703,12 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   Cases_on `eval_operands inst.inst_operands vs` >>
-  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
-      exec_create_def, exec_ext_call_def, eval_operands_def, AllCaseEqs()] >>
+  qpat_x_assum `MEM inst.inst_opcode _` mp_tac >>
+  simp_tac bool_ss [MEM] >> strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  gvs[step_inst_base_opcode_eqs] >>
+  gvs[exec_write2_def, exec_create_def, exec_ext_call_def] >>
+  gvs[eval_operands_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[venomStateTheory.eval_operands_def]
 QED
 
