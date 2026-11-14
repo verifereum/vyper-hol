@@ -4,7 +4,7 @@ Ancestors
   bodyPtrSignedConvertSignedFixed bodyPtrSignedConvertSourceFixed bodyPtrSignedConvertSourceFrame
   exprSimConvertFromBytes instSeqComposePtr fragGasSeqPtr fragGasPathPtr
   fragExec emitHelperProps exprLoweringProps venomState venomInst
-  venomExecSemantics ptrDiscipline finite_map words arithmetic list pred_set
+  venomExecSemantics ptrDiscipline finite_map words arithmetic list pred_set varsExt
 
 Theorem inst_seq_ptr_uniformize[local]:
   (!D. ?H th.
@@ -175,7 +175,7 @@ QED
 
 Theorem convert_signed_loader_uniform:
   load_bytestring_as_word (Var src) SAR sa = ((out,bits),sb) /\
-  fresh_vars_wrt sa s /\ not_fresh_at sa src /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa src /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\ 64 <= capacity /\
@@ -187,7 +187,7 @@ Theorem convert_signed_loader_uniform:
       (word_asr (if (n2w n:256 word) = 0w then 0w else mload (w2n (a+32w)) s)
         (w2n (((32w-n2w n)*8w):256 word))) /\
     eval_operand bits t = SOME (n2w (8*(32-n))) /\
-    fresh_vars_wrt sb t /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_allocas = s.vs_allocas /\
     t = s with vs_vars := t.vs_vars /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
@@ -201,12 +201,33 @@ Theorem convert_signed_loader_uniform:
       (OK (t with vs_inst_idx := s.vs_inst_idx+9)))
 Proof
   strip_tac >>
-  `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
+  `eval_operand (Var src) (drop_fresh sa s) = SOME a` by
+    simp[eval_operand_def, lookup_var_drop_fresh] >>
   drule dynamic_load_word_raw_exact >>
-  disch_then (qspecl_then [`s`,`n2w n`,`mload (w2n (a+32w)) s`,`a`] mp_tac) >>
-  simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sb) s = OK t` >>
+  disch_then (qspecl_then [`drop_fresh sa s`,`n2w n`,`mload (w2n (a+32w)) s`,`a`] mp_tac) >>
+  `mload (w2n a) (drop_fresh sa s) = n2w n /\
+   mload (w2n (a+32w)) (drop_fresh sa s) = mload (w2n (a+32w)) s` by
+    (simp[drop_fresh_def, mload_def] >> fs[mload_def]) >>
+  simp[fresh_vars_wrt_drop_fresh] >> strip_tac >>
   drule_all bodyPtrSignedConvertSignedLoadTheory.signed_loader_shape_fresh >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
+    simp[mk_inst_def, is_terminator_def, is_ext_call_op_def] >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+    (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand out t = SOME
+      (word_asr (if (n2w n:256 word) = 0w then 0w else mload (w2n (a+32w)) s)
+        (w2n (((32w-n2w n)*8w):256 word))) /\
+    eval_operand bits t = SOME (n2w (8*(32-n)))` by
+    (gvs[vars_ext_result_def, vars_ext_def] >>
+     conj_tac >- metis_tac[eval_operand_vars_ext, optionTheory.NOT_NONE_SOME] >>
+     `((32w - n2w n) * 8w :256 word) = n2w (8*(32-n))` by
+       (simp[GSYM wordsTheory.n2w_sub, wordsTheory.word_mul_n2w,
+          arithmeticTheory.MULT_COMM]) >>
+     metis_tac[eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]) >>
+  qpat_x_assum `run_inst_seq _ (drop_fresh sa s) = _` kall_tac >>
   `run_inst_seq [mk_inst i MLOAD [Var src] [len];
     mk_inst j ADD [Var src;Lit 32w] [dp];
     mk_inst k MLOAD [Var dp] [data];
@@ -215,13 +236,20 @@ Proof
     mk_inst r MUL [Var data;Var nonempty] [selected];
     mk_inst u SUB [Lit 32w;Var len] [sub];
     mk_inst v MUL [Var sub;Lit 8w] [b];
-    mk_inst w SAR [Var b;Var selected] [dst]] s = OK t` by fs[] >>
+    mk_inst w SAR [Var b;Var selected] [dst]] s = OK t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK t` mp_tac >>
+     asm_rewrite_tac[]) >>
   drule_all signed_loader_uniform_frame_raw >>
   disch_then (qspecl_then [`fn`,`PG`]
     (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
   qexistsl_tac [`t`,`HG`,`th`] >> simp[] >>
   conj_tac
-  >- gvs[] >>
+  >- (qpat_x_assum `t = s with vs_vars := _` (fn eq => once_rewrite_tac[eq]) >> simp[]) >>
+  conj_tac
+  >- (`t.vs_labels = s.vs_labels` by
+        (qpat_x_assum `t = s with vs_vars := _` (fn eq => once_rewrite_tac[eq]) >> simp[]) >>
+      rpt gen_tac >> strip_tac >> Cases_on `p` >>
+      gvs[eval_operand_def] >> metis_tac[]) >>
   gen_tac >>
   mp_tac (Q.SPECL [`emitted_insts sa sb`,`s`,`t`,`G`,`tn`,`HG`,`th`,`ctx`,`fn`,`bb`]
     (Q.INST [`lo` |-> `0`] run_inst_seq_gas_path_ptr)) >>
