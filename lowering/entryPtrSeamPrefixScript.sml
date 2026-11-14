@@ -223,16 +223,14 @@ Resume external_entry_reaches_registration_ptr[checks]:
   `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
     (ss,FEMPTY,entry_taint) [] (OK u,G2,tn2)` by
     (irule prefix_joint_then >> qexistsl_tac [`G1`, `tn1`, `tt`] >> simp[]) >>
+  `vars_pc_only ss u` by
+    (irule vars_pc_only_trans >> qexists_tac `tt` >> simp[]) >>
+  `u.vs_gas_readings = vs.vs_gas_readings` by
+    (qpat_assum `vars_pc_only ss u`
+       (mp_tac o MATCH_MP vars_pc_only_gas_readings) >> simp[Abbr `ss`]) >>
   qpat_x_assum `Abbrev (ss = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
-  simp[entry_taint_def] >>
-  (conj_tac >- metis_tac[vars_pc_only_trans]) >>
-  (conj_tac >-
-    (`vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                               vs_inst_idx := 0 |>) u`
-       by metis_tac[vars_pc_only_trans] >>
-     drule vars_pc_only_gas_readings >> simp[])) >>
-  all_tac >>
+  fs[entry_taint_def, stringTheory.STRCAT_EQNS] >>
   `cs_extends opened st` by
     (qspec_then `pkg3` (qspec_then `mut = Payable` mp_tac) compile_entry_checks_shape >>
      pure_rewrite_tac[shape_step_def] >>
@@ -252,7 +250,8 @@ Resume external_entry_reaches_registration_ptr[checks]:
        [STRING #"%" (toString ds.cs_next_var)]`] >> gvs[mk_inst_def])) >>
   rewrite_tac[GSYM entry_taint_def] >>
   `!fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] G1 tn1 tt` suffices_by
-    metis_tac[] >>
+    (qpat_x_assum `!D. (!fuel. ptr_safe_blocks _ 0 fuel _ _ [] G1 tn1 tt) ==> _`
+       (qspec_then `D` mp_tac) >> simp[entry_taint_def]) >>
   irule ptr_safe_blocks_from_phi_free_run >>
   simp[] >>
   qexists_tac `bb` >> gvs[]
