@@ -5,6 +5,7 @@ Ancestors moduleLowering compileEnv emitHelper emitHelperProps exprLoweringProps
   abiDecoderContract fragExec fragExecMem fragGasSeqPtr fragGasCopyLoop
   venomState venomExecSemantics venomInst words finite_map list arithmetic
   decoderNavigationPtr calldataOverwritePtr bodyPtrDefs ptrDiscipline
+  ctorDeployMemoryRunMemEntryRegistration
 
 Theorem default_bytes_address_shape:
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] sa = (head,sb) /\
@@ -114,6 +115,8 @@ Theorem default_bytes_address_joint:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
+    (?raw. run_inst_seq (emitted_insts sa sd) s = OK raw /\
+      t = raw with vs_inst_idx := LENGTH sd.cs_current_insts) /\
     t = s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sd.cs_current_insts|> /\
     ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -225,5 +228,56 @@ Proof
     (s,G,tn) [] (OK t3,H3,u3)` by
     (rpt gen_tac >>
      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND]) >>
+  conj_tac >- (
+    drule_all default_bytes_address_exec >>
+    disch_then (qspec_then `s` assume_tac) >>
+    qmatch_asmsub_abbrev_tac `run_inst_seq _ s = OK raw` >>
+    qexists `raw` >> simp[] >>
+    qpat_assum `emit_op ADD _ sa = _`
+      (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+    qpat_assum `emit_op CALLDATALOAD _ sb = _`
+      (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
+    gvs[Abbr `raw`, Abbr `t1`, update_var_def]) >>
   metis_tac[]
+QED
+
+(* Memory/history certificate at the deterministic three-instruction endpoint. *)
+Theorem default_bytes_address_memory:
+  emit_op ADD [Lit 4w; Lit (n2w (off-4))] sa = (head,sb) /\
+  emit_op CALLDATALOAD [head] sb = (offset,sc) /\
+  emit_op ADD [Lit 4w;offset] sc = (src,sd) /\
+  fn_has_code sa sd fn /\ alloca_history fn s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?raw. run_inst_seq (emitted_insts sa sd) s = OK raw /\
+    raw = update_var ("%" ++ toString (sa.cs_next_var+2))
+      (4w + abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) s)
+      (update_var ("%" ++ toString (sa.cs_next_var+1))
+        (abi_decode_load CALLDATALOAD ((4w+n2w(off-4)):bytes32) s)
+        (update_var ("%" ++ toString sa.cs_next_var) (4w+n2w(off-4)) s)) /\
+    gas_path_mem ctx fn s 0
+      (OK (raw with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
+    alloca_history fn (raw with vs_inst_idx := LENGTH sd.cs_current_insts)
+Proof
+  strip_tac >>
+  drule_all default_bytes_address_exec >>
+  disch_then (qspec_then `s` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq _ s = OK raw` >>
+  drule_all default_bytes_address_shape >> strip_tac >>
+  `sd.cs_blocks = sa.cs_blocks /\ sd.cs_current_bb = sa.cs_current_bb` by
+    gvs[same_blocks_def] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sd)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sd) s` by
+    (irule run_inst_seq_mem_ok_every >>
+     simp[mk_inst_def, memSafeRunTheory.inst_dload_in_section_def,
+       unitTransformDefsTheory.inst_mem_below_frontier_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def]) >>
+  `raw.vs_allocas = s.vs_allocas /\ raw.vs_current_bb = s.vs_current_bb` by
+    simp[Abbr `raw`, update_var_def] >>
+  drule_all ctor_checked_arg_sequence_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists `raw` >> simp[Abbr `raw`]
 QED
