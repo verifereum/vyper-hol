@@ -439,6 +439,7 @@ Theorem augassign_storage_store_post_path:
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list)
       ctx func cenv cx ee s /\
+    ~cx.txn.is_static /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -461,7 +462,7 @@ Proof
   `encode_value tvt w = SOME [(0, typed_val_to_w256 tvt w)]` by
     metis_tac[encode_value_word_typed] >>
   `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt w ee` >>
   rename1 `_ = (res, fin)` >>
   `res = INL ()` by
@@ -1017,6 +1018,26 @@ Resume compile_augassign_toplevel_case[operator_normal]:
     (qpat_assum `!H. valid_horizon _ _ H _ ==>
                    stmt_state_rel H _ _ _ _ _ s /\ _`
        (qspec_then `H2` mp_tac) >> simp[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (`s.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `eval_operand (Lit (n2w slot)) s = SOME (n2w slot)` by
+        simp[eval_operand_def] >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      `gas_marked_path F ctx func u 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `ee with gas_obs := []`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+      conj_tac
+      >- (irule augassign_toplevel_rhs_normal_exec >>
+          qexistsl_tac [`ee`, `id_str`, `slot`, `t`, `tr`, `ts`, `tvt`, `ty`,
+                        `u`, `v`, `v0`] >> simp[] >>
+          irule augassign_storage_continuation_exec >>
+          simp[lift_sum_def, bind_def, return_def, write_storage_slot_eq]) >>
+      disj2_tac >> simp[stmt_exit_def, expr_exit_def, exit_result_def]) >>
   qspecl_then [`H2`, `ctx`, `func`, `cx`, `cenv`, `lctx`, `src`, `id`, `ts`,
                `tr`, `ty`, `id_str`, `slot`, `tvt`, `result`, `res_op`, `s3`,
                `sb`, `s`, `s3`, `s`, `ee with gas_obs := []`,
