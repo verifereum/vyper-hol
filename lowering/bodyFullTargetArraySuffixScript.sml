@@ -6,7 +6,7 @@ Ancestors
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
   targetSubscriptContinuation exprLowering exprSimArrayIndex
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
-  fragFuelExprHelpers
+  fragFuelExprHelpers targetPlaceSimCasesBase
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
   vyperValue compileEnv valueEncoding vyperTypeEnv vyperInterpreter vyperState
@@ -161,7 +161,7 @@ Proof
   drule_all place_ptr_rel_memory_current >> strip_tac >>
   Cases_on `live` >> gvs[value_has_type_def] >>
   rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
-  metis_tac[target_memory_array_length_bound]
+  drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
 QED
 
 Theorem array_tail_packet_storage_source[local]:
@@ -430,7 +430,7 @@ Proof
     (fs[type_memory_size_def] >> decide_tac) >>
   `w2n (b + n2w k) = w2n b + k` by
     (simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w] >>
-     `k < dimword (:256)` by decide_tac >> simp[]) >>
+     `k < dimword (:256)` by decide_tac >> gvs[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w]) >>
   `mem_word_taint tn2.t_mem (w2n b + k) = {}` by
     (irule array_tail_robust_path_header_clean >>
      goal_assum (drule_at (Pos (el 3))) >>
@@ -520,7 +520,8 @@ Proof
   drule_all array_tail_packet_base_at_index >> strip_tac >>
   gvs[] >>
   `w = slot` by fs[place_ptr_rel_def] >> gvs[] >>
-  `w2n slot + type_slot_size (ArrayTV etv (Dynamic cap)) <= dimword (:256)` by decide_tac >>
+  `w2n slot + type_slot_size (ArrayTV etv (Dynamic cap)) <= dimword (:256)` by
+    (metis_tac[arithmeticTheory.ADD_COMM]) >>
   drule_all target_storage_array_len_ok >> strip_tac >>
   simp[] >>
   `storage_agree (storage_dead H tr (get_storage cx mid2 tr))
@@ -1288,4 +1289,107 @@ Proof
   fs[array_tail_packet_def] >>
   qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
   simp[venom_state_component_equality]
+QED
+
+Theorem array_tail_memory_child_pointer[local]:
+  expr_sim_inv cenv cx env es /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b loc
+    (Type (ArrayT et bd)) /\
+  evaluate_type (get_tenv cx) et = SOME etv /\
+  value_has_type (ArrayTV etv bd) (ArrayV av) /\
+  0 <= i /\ Num i < array_length (ArrayTV etv bd) av /\
+  iw = i2w i ==>
+  place_ptr_rel cenv cx s
+    (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV i)])))
+    ((if (case bd of Dynamic _ => T | _ => F) then b + n2w 32 else b) +
+      iw * n2w (type_memory_bytes cenv et)) loc (Type et)
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
+    (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()]) >>
+  Cases_on `bd` >> gvs[] >>
+  (drule_all (SRULE [] (Q.INST [`dyn` |-> `F`] target_memory_array_offset)) ORELSE
+   drule_all (SRULE [] (Q.INST [`dyn` |-> `T`] target_memory_array_offset))) >>
+  (disch_then (qspec_then `b` strip_assume_tac) ORELSE strip_tac) >>
+  gvs[] >> irule place_ptr_rel_memory_step >>
+  goal_assum (drule_at Any) >> simp[evaluate_type_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem array_tail_packet_child_post[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  extend_place cx pv (ValueSubscript v) mid2 = (INL child,mid2) /\
+  eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
+  (u with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|>) = t2 /\
+  (!x. not_fresh_at sn x ==> FLOOKUP u.vs_vars x = FLOOKUP t2.vs_vars x) /\
+  eval_operand (FST r) u = SOME
+    ((if (case bd of Dynamic _ => T | _ => F) then b + n2w (word_scale loc) else b) +
+      iw * n2w (elem_size_in_location cenv loc et)) /\
+  loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+  stmt_state_rel H ctx func cenv cx mid2 u ==>
+  target_post H ctx func cenv cx es sa sb s0 mid2 child vt r u
+Proof
+  strip_tac >>
+  drule_all array_tail_packet_index_post >> strip_tac >>
+  drule array_tail_packet_compile_parts >> strip_tac >>
+  `!x. FST r = Var x ==> not_fresh_at sb x` by
+    (qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+     simp[array_elem_ptr_def, comp_bind_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     drule loweringShapeRulesTheory.emit_op_facts >> strip_tac >> gvs[]) >>
+  drule_all array_tail_packet_source_bounds >> strip_tac >>
+  `target_subscript_suffix cenv e rb iop sn = (r,sb) /\
+   vt = Type et /\ sa.cs_next_var <= sn.cs_next_var /\
+   local_ptrs_reserved cenv sn` by
+    (fs[array_tail_packet_def] >>
+     imp_res_tac target_subscript_compile_decompose >>
+     gvs[type_place_target_SubscriptTarget, subscript_vtype_def, AllCaseEqs()] >>
+     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `u.vs_allocas = t2.vs_allocas /\ u.vs_memory = t2.vs_memory` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `iw = i2w i` by
+    (Cases_on `is_signed_type (expr_type e)` >> gvs[] >>
+     simp[integer_wordTheory.i2w_pos]) >>
+  `place_ptr_rel cenv cx t2 pv b (FST (SND rb)) (Type (ArrayT et bd))` by
+    (fs[target_post_def] >> gvs[]) >>
+  gvs[] >> irule (SRULE [value_type_place_def]
+    (Q.INST [`vt'` |-> `Type et`] target_post_suffix_frame)) >>
+  simp[lookup_var_def] >> reverse conj_tac
+  >- (reverse conj_tac
+      >- (goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          simp[lookup_var_def]) >>
+      Cases_on `pv` >> gvs[place_ptr_rel_def] >>
+      rename1 `PlaceR pl` >> Cases_on `pl` >> gvs[place_ptr_rel_def] >>
+      gvs[AllCaseEqs()] >> simp[Once place_readable_def] >>
+      qpat_x_assum `(INL _,_) = extend_place _ _ _ _` (assume_tac o SYM) >>
+      drule_all extend_place_memory_live >> strip_tac >> gvs[] >>
+      irule (SRULE [place_readable_def] targetSubscriptMemoryTheory.place_readable_memory_live) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  `place_ptr_rel cenv cx u pv b (FST (SND rb)) (Type (ArrayT et bd))` by
+    (irule place_ptr_rel_vars_frame >> goal_assum (drule_at Any) >>
+     qexists `sn` >> simp[lookup_var_def]) >>
+  Cases_on `pv` >> gvs[] >> TRY (fs[place_ptr_rel_def] >> NO_TAC) >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> gvs[AllCaseEqs()]
+  >- (gvs[place_ptr_rel_def] >>
+      `type_memory_bytes cenv et = type_memory_size etv` by
+        (irule exprSimHypsTheory.expr_sim_inv_memory_size >>
+         qexistsl [`cx`, `env`, `mid2`] >> simp[]) >>
+      Cases_on `b'` >> Cases_on `bd` >>
+      simp[place_ptr_rel_def, elem_size_in_location_def, slot_loc_def,
+           word_scale_def, is_slot_addressed_def, valueEncodingPropsTheory.type_memory_size_slots] >>
+      gvs[valueEncodingPropsTheory.type_memory_size_slots] >>
+      qmatch_goalsub_abbrev_tac `i2w ix` >>
+      `~(ix < 0)` by (simp[Abbr `ix`, integerTheory.INT_NOT_LT]) >>
+      simp[integer_wordTheory.i2w_def, wordsTheory.word_mul_n2w] >>
+      pure_rewrite_tac[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC] >>
+      simp[AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM]) >>
+  TRY (fs[place_ptr_rel_def] >> NO_TAC) >>
+  `FST (SND rb) = SOME LocMemory` by (fs[place_ptr_rel_def]) >>
+  gvs[elem_size_in_location_def, is_slot_addressed_def, word_scale_def] >>
+  metis_tac[array_tail_memory_child_pointer]
+
 QED
