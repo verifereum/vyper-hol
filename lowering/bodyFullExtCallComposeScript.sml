@@ -68,7 +68,15 @@ Proof
     (Q.INST [`k` |-> `kont`, `gas` |-> `callgas`, `Q` |-> `post`,
        `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
        (SPEC_ALL extcall_call_full))) >>
-  simp[] >>
+  simp[] >> conj_tac
+  >- (gen_tac >> simp[Abbr `kont`] >>
+      Cases_on `if returnData = [] then
+        ext_call_kwarg EKDefault opts (DROP (LENGTH sig1) rest) else NONE` >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.storage_trace_frame_lifts,
+           vyperStorageTraceTheory.storage_trace_frame_return,
+           vyperStorageTraceTheory.storage_trace_frame_state_reads,
+           vyperStorageTraceTheory.storage_trace_frame_checks]) >>
   qexistsl [`G0`, `addr_op`, `buf_op`, `call_len`, `call_offset`,
     `abi_size_bound cenv.ce_struct_fields (if needs_external_call_wrap sig2 then TupleT [sig2] else sig2)`,
     `cenv`, `d`, `default_op`,
