@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimMapContinuation
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimMapTail bodyPtrPopTargetSimPost bodyPtrPopTargetFactor
   bodyPtrHashBuiltinsGhostCompose exprSimWordArgs targetPlaceSimCasesBase
   bodyPtrPopTargetDefs loweringPosts exprLowering exprLoweringProps

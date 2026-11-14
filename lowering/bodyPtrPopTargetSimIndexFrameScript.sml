@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimIndexFrame
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetDefs bodyPtrDefs targetPlaceSimCasesBase
   loweringPosts exprSimProps compileEnv venomState ptrDiscipline
   augAssignPtrRhsFrame finite_map exprLowering compileEnv

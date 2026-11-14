@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimDynamicSlot
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimArrayContinue bodyPtrPopTargetSimArraySource
   bodyPtrPopTargetSimArraySlot bodyPtrPopTargetDefs bodyPtrPopTargetSimStorageHeader
   exprLowering loweringPosts compileEnv words list vyperStorageBackend vyperValue

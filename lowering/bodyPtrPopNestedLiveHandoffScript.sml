@@ -1,5 +1,6 @@
 Theory bodyPtrPopNestedLiveHandoff
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopNestedLiveSource bodyPtrPopTargetDefs exprSimPopNestedLocalMemory
   bodyPtrPopMemoryHeader bodyPtrDefs valueEncoding venomState
   exprSimPopNestedLocalHandoff ptrDiscipline

@@ -8,25 +8,6 @@ Ancestors
   stmtSimAugAssign targetPlaceLive exprSimPopNestedBase vyperPureExpr
   vyperStorageBackend
 
-Theorem target_base_memory_root_ptr:
-  !bt cx s id path st.
-    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),st) ==>
-    target_root bt = NameTarget id
-Proof
-  `(!e:expr. T) /\ (!bt. !cx s id path st.
-    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),st) ==>
-    target_root bt = NameTarget id)` suffices_by simp[] >>
-  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
-  simp[] >> rpt conj_tac >> rpt gen_tac
-  >- simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def, AllCaseEqs(), target_root_def]
-  >- (PairCases_on `p` >> simp[Once evaluate_def] >> metis_tac[lookup_global_not_memory]) >>
-  rpt strip_tac >> qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >> drule extend_place_memory_origin >> strip_tac >> gvs[] >>
-  simp[target_root_def] >> metis_tac[]
-QED
-
 Theorem target_current_local_resolution_ptr:
   (!id. target_root (SubscriptTarget bt e) = NameTarget id ==>
     local_target_live cx id (SubscriptTarget bt e)) /\

@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimBoundary
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetDefs bodyPtrPopTargetFactor bodyPtrPreds
   bodyPtrEnvBuiltinsBoundary targetPlaceSim targetPlaceLive
   exprSimHypsDefs bodySim bodySimAugPlaceLoad typedCopyLayoutPtr

@@ -52,10 +52,10 @@ Proof
   `gas_admissible (bind (eval_base_place cx bt) get_place) target_place_res_ok es` by
     (qpat_x_assum `gas_admissible (eval_target_place _ _) _ _`
        (mp_tac o PURE_REWRITE_RULE
-          [bodyPtrPopTargetFragTransportTheory.eval_target_place_as_bind]) >>
+          [targetPlaceSimCasesTheory.eval_target_place_bind]) >>
      simp[]) >>
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by
-    (irule bodyPtrPopTargetFragTransportTheory.get_place_base_admissible >>
+    (irule targetPlaceSimCasesTheory.get_place_base_admissible >>
      first_assum ACCEPT_TAC) >>
   `!v. storage_trace_frame (bind (get_place v) k)` by
     (gen_tac >> irule storage_trace_frame_bind_all >> simp[] >>
@@ -112,7 +112,7 @@ Proof
           >- (gen_tac >>
               qpat_assum `!tail. eval_base_place _ _ _ = _`
                 (qspec_then `tail` mp_tac) >>
-              simp[bodyPtrPopTargetFragTransportTheory.eval_target_place_as_bind,
+              simp[targetPlaceSimCasesTheory.eval_target_place_bind,
                    bind_def, get_place_def, return_def]) >>
           first_assum ACCEPT_TAC) >>
       simp[])

@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimRoots
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimBoundary stmtSimAugAssign
   bodyPtrBopInNameBoundary fragGasPathPtr targetPlaceSim
   exprLoweringProps compileEnv loweringStateRelDefs loweringPosts vyperInterpreter vyperState

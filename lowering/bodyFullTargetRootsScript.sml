@@ -10,7 +10,7 @@
 Theory bodyFullTargetRoots
 Ancestors
   bodyFullTargetDefs gasOutcomeFullCompose fragGasOriginPtr gasOutcomeFull
-  bodyPtrPopTargetDefs bodyPtrDefs targetPlaceSim stmtSimAugAssign
+  bodyPtrDefs targetPlaceSim stmtSimAugAssign
   exprLoweringProps exprSimHypsDefs compileEnv
   loweringStateRelDefs loweringPosts exprLowering ptrDiscipline
   vyperTypeEnv vyperTyping vyperTypeSystem vyperPlaceResultTyping

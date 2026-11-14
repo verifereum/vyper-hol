@@ -9,9 +9,30 @@
  *)
 Theory bodyFullTargetDefs
 Ancestors
-  bodySimFull bodyPtrPopTargetDefs targetPlaceSimCases targetPlaceSimDefs
+  bodySimFull targetPlaceSimCases targetPlaceSimDefs
   gasShadow gasOutcomeFull loweringPosts exprLowering compileEnv
-  vyperInterpreter vyperState vyperAST
+  ptrDiscipline venomState vyperInterpreter vyperState vyperAST
+
+(* New definition: target_post H (with ghost_inv) says what the target's
+   pointer holds, not where it may point, and a fresh pointer derived
+   from a local's (an attribute's or an element's) needs the local's site
+   for the pop's MLOAD and MSTORE access checks.  The site is the one the
+   local's pointer has (ghost_inv's ptr_covers covers the local inside
+   it). *)
+Definition target_ptr_ok_def:
+  target_ptr_ok cenv (pv : eval_result)
+    (r : operand # data_location option # place_ty option) G tn
+    (s : venom_state) <=>
+    op_taint tn (FST r) = {} /\
+    (!id path p sz.
+       pv = PlaceR (MemoryPlace id path) /\
+       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+       op_prov G (FST r) = FLOOKUP G p) /\
+    (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+                  op_prov G (FST r) = NONE) /\
+    (!tr slot kt vt. pv = HashMapRef tr slot kt vt ==>
+                     op_prov G (FST r) = NONE)
+End
 
 (* New definition: target_sim_ptr over the joint judgment. *)
 Definition target_sim_full_def:

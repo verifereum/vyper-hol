@@ -4,7 +4,7 @@ Ancestors
   exprLoweringProps exprSimHypsDefs exprSimProps vyperTyping vyperState
   vyperInterpreter compileEnv loweringPosts fragGasSeqPtr gasExemptCert
   gasSummary gasOutcome fragGasPathPtr bodyPtrPopTargetDefs
-  bodyPtrPopTargetSimAttributeSource bodyPtrDefs targetPlaceSimDefs
+  targetPtrFacts bodyPtrDefs targetPlaceSimDefs
   exprLowering emitHelperProps stmtLoweringMono fragExec pair
   gasContext vyperTypeSystem venomState exprSimDefs targetPlaceSim exprSimHyps
   vyperTypeInvariants list

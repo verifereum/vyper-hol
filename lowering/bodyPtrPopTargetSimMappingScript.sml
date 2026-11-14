@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimMapping
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimArrayConstructor bodyPtrPopTargetSimMapContinuation
   bodyPtrPopTargetSimArrayCompose bodyPtrPopTargetSimSubscriptCuts
   bodyPtrPopTargetSimPost bodyPtrPopTargetSimAttribute

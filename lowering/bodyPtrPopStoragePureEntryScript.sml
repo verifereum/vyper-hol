@@ -1,6 +1,7 @@
 (* Entry boundaries for nested storage pop. *)
 Theory bodyPtrPopStoragePureEntry
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetDefs exprSimPopNestedBase targetPlaceLive
   appendStorageGhostPtr exprPtrUnwrapStorageFacts
   accountsRelProps vyperStorageBackend vyperValue pred_set compileEnv loweringStateRelDefs

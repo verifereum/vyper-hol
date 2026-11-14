@@ -1,22 +1,10 @@
 Theory bodyPtrPopTargetSimAttributeAdd
 Ancestors
-  bodyPtrPopTargetSimAttributeSource bodyPtrPopTargetDefs bodyPtrDefs
+  bodyFullTargetDefs
+  targetPtrFacts bodyPtrPopTargetDefs bodyPtrDefs
   bodyPtrAttributeAdd targetPlaceSimCasesBase emitHelperProps emitHelper
   compileEnv loweringStateRelDefs ptrDiscipline venomState venomInst words finite_map exprLowering
   fragGasPathPtr
-
-(* Spatial extent is deliberately not asserted: a target pointer may denote
-   a zero-sized child.  This transport only preserves its provenance class. *)
-Theorem target_ptr_ok_operand_transport:
-  target_ptr_ok cenv pv rb G tn s /\
-  op_taint tn' (FST r) = {} /\
-  op_prov G' (FST r) = op_prov G (FST rb) /\
-  (!id p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
-              FLOOKUP G' p = FLOOKUP G p) ==>
-  target_ptr_ok cenv pv r G' tn' t
-Proof
-  simp[target_ptr_ok_def] >> metis_tac[]
-QED
 
 Theorem target_add_continuation_ptr:
   target_post H ctx func cenv cx es sa sm s0 ee pv vt rb s /\
