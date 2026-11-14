@@ -4,9 +4,10 @@
  * with the frames the full-body callers rebuild their ghosts from.
  *
  * TOP-LEVEL:
- *   alloc_buffer_origin_ptr_path - the ALLOCA as one joint path, its buffer
+ *   alloc_buffer_origin_ptr_path_exact - the ALLOCA as one joint path, its buffer
  *     disjoint from older sites and locals, the taint grown only above the
- *     old frontier
+ *     old frontier, with its exact output provenance
+ *   alloc_buffer_origin_ptr_path - the existing covering-region interface
  *   alloc_buffer_ghost_inv_at - ghost_inv_at across that conclusion
  *   alloc_buffer_ghost_kept_at - ghost_kept_at across that conclusion
  *)
@@ -71,7 +72,7 @@ Proof
 QED
 
 (* TOP-LEVEL: compile_alloc_buffer's ALLOCA on the joint path. *)
-Theorem alloc_buffer_origin_ptr_path:
+Theorem alloc_buffer_origin_ptr_path_exact:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
@@ -94,6 +95,7 @@ Theorem alloc_buffer_origin_ptr_path:
     allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
     lookup_var q t = SOME w /\ ptr_covers G' tn' q t n /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+    FLOOKUP G' q = SOME (w2n w,n) /\
     w2n w + n < dimword (:256) /\ w2n w + n <= t.vs_alloca_next /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
              FLOOKUP t.vs_allocas aid = SOME e) /\
@@ -184,6 +186,9 @@ Proof
       simp[ptr_covers_def, lookup_var_def] >> strip_tac >>
       gvs[lookup_var_def]) >>
   conj_tac >- simp[] >>
+  conj_tac
+  >- simp[Abbr `ins`, step_prov_def, out_prov_def, set_prov_def,
+          mk_inst_def, FLOOKUP_UPDATE] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
@@ -196,6 +201,51 @@ Proof
       fs[lookup_var_def])
   >- simp[Abbr `ins`, step_prov_other_output, mk_inst_def] >>
   simp[Abbr `ins`, step_taint_other_output, mk_inst_def]
+QED
+
+(* The previous interface follows from the same execution and ghosts. *)
+Theorem alloc_buffer_origin_ptr_path:
+  compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  n < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q w t G' tn'.
+    buf.buf_operand = Var q /\ not_fresh_at sb q /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+           (s,G,tn) [] (OK t,G',tn')) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t with <| vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
+              vs_alloca_next := s.vs_alloca_next;
+              vs_inst_idx := s.vs_inst_idx |> = s /\
+    (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+          stmt_state_rel H' ctx func cenv cx es t) /\
+    alloca_history func t /\
+    allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    lookup_var q t = SOME w /\ ptr_covers G' tn' q t n /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+    w2n w + n < dimword (:256) /\ w2n w + n <= t.vs_alloca_next /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+             FLOOKUP t.vs_allocas aid = SOME e) /\
+    (!aid b len. aid < sa.cs_next_id /\
+                 FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+                 regions_disjoint (w2n w) n b len) /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+                  regions_disjoint (w2n w) n b len) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!i. i IN tn'.t_mem <=>
+         i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < w2n w + n)) /\
+    (!x. not_fresh_at sa x ==>
+         lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all alloc_buffer_origin_ptr_path_exact >>
+  disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
+  qexistsl_tac [`q`, `w`, `t`, `G'`, `tn'`] >> simp[] >> metis_tac[]
 QED
 
 (* TOP-LEVEL: ghost_inv_at across the buffer's ALLOCA, stated over
