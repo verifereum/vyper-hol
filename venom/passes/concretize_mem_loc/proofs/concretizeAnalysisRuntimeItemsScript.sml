@@ -68,13 +68,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem runtime_chain_endpoint[local]:
-  !es q0 qs q. joint_chain C q0 es qs q ==>
-    EL (LENGTH es) (q0::qs) = q
-Proof
-  Induct >> Cases_on `qs` >> simp[joint_chain_def] >> metis_tac[]
-QED
-
 Theorem activation_cache_source_instruction:
   joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
   activation_cache q d owner aid site ==>
@@ -88,7 +81,7 @@ Proof
   `LENGTH es = LENGTH qs` by
     metis_tac[joint_trace_def, joint_chain_length] >>
   `EL (LENGTH es) (q0::qs) = q` by
-    metis_tac[joint_trace_def, runtime_chain_endpoint] >>
+    metis_tac[joint_trace_endpoint] >>
   `?t. t < LENGTH es /\
     allocation_birth C (EL t (q0::qs)) (EL t es) d owner aid site` by
     metis_tac[joint_cache_birth, LESS_EQ_REFL] >>

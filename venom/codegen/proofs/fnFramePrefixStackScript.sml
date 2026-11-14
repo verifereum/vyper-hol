@@ -298,42 +298,47 @@ Proof
   drule body_plan_inv_facts >> strip_tac >>
   drule_all body_plan_inv_inst >> strip_tac >>
   drule_all body_plan_inv_static >> strip_tac >>
-  drule_all body_plan_inv_step >> strip_tac >>
+  drule_all body_plan_inv_step >>
+  disch_then (qx_choosel_then [`next_ops`, `next_ps`, `next_rest`]
+    strip_assume_tac) >>
   drule_all body_operands_le_16 >> strip_tac >>
-  drule_all invoke_plan_decompose >> strip_tac >>
-  `iops' = iops /\ prepared' = prepared` by
-    (qpat_assum `emit_input_plan INVOKE _ _ _ = (iops',prepared')`
+  drule_all invoke_plan_decompose >>
+  disch_then (qx_choosel_then [`decomp_iops`, `decomp_prepared`, `decomp_rops`,
+    `decomp_arranged`, `consumed`, `pushed`, `decomp_ret_lbl`, `called`,
+    `pops`, `popped`, `opts`, `swapped`] strip_assume_tac) >>
+  `decomp_iops = iops /\ decomp_prepared = prepared` by
+    (qpat_assum `emit_input_plan INVOKE _ _ _ = (decomp_iops,decomp_prepared)`
       (fn newer => qpat_assum `emit_input_plan INVOKE _ _ _ = (iops,prepared)`
         (fn older => mp_tac (TRANS (SYM newer) older))) >> simp[]) >>
   map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
-    [`iops' = iops`, `prepared' = prepared`] >>
-  `rops' = rops /\ arranged' = arranged` by
-    (qpat_assum `reorder_plan _ _ _ = (rops',arranged')`
+    [`decomp_iops = iops`, `decomp_prepared = prepared`] >>
+  `decomp_rops = rops /\ decomp_arranged = arranged` by
+    (qpat_assum `reorder_plan _ _ _ = (decomp_rops,decomp_arranged)`
       (fn newer => qpat_assum `reorder_plan _ _ _ = (rops,arranged)`
         (fn older => mp_tac (TRANS (SYM newer) older))) >> simp[]) >>
   map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
-    [`rops' = rops`, `arranged' = arranged`] >>
-  `ops' = iops ++ rops ++
+    [`decomp_rops = rops`, `decomp_arranged = arranged`] >>
+  `next_ops = iops ++ rops ++
       [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++
-      call_post /\ ps'' = ps'` by
-    (qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (ops',ps'')`
+      call_post /\ next_ps = ps'` by
+    (qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (next_ops,next_ps)`
       (fn newer => qpat_assum
         `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME
           (iops ++ rops ++
            [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++
            call_post,ps')`
         (fn older => mp_tac (TRANS (SYM newer) older))) >> simp[]) >>
-  qpat_x_assum `ps'' = ps'` SUBST_ALL_TAC >>
-  qpat_x_assum `ops' = _` SUBST_ALL_TAC >>
-  `ret_lbl' = ret_lbl /\ call_post = pops ++ opts` by
+  qpat_x_assum `next_ps = ps'` SUBST_ALL_TAC >>
+  qpat_x_assum `next_ops = _` SUBST_ALL_TAC >>
+  `decomp_ret_lbl = ret_lbl /\ call_post = pops ++ opts` by
     (qpat_assum
       `iops ++ rops ++
         [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++
         call_post = iops ++ rops ++
-        [SOPushLabel ret_lbl'; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl'] ++
+        [SOPushLabel decomp_ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel decomp_ret_lbl] ++
         pops ++ opts` mp_tac >> simp[APPEND_11]) >>
   map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
-    [`ret_lbl' = ret_lbl`, `call_post = pops ++ opts`] >>
+    [`decomp_ret_lbl = ret_lbl`, `call_post = pops ++ opts`] >>
   map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
     [`consumed = _`, `pushed = _`] >>
   qpat_assum `body_plan_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
