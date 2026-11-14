@@ -583,6 +583,97 @@ QED
    (extCallOracleStep), and a failed call's returndata copy and REVERT
    against the source's RevertData; a successful call reaches sr with the
    returndata in the buffer. *)
+(* The oracle prefix leaves the supplied gas-observation suffix untouched.
+   Unlike a normalized source frame, this equation retains the trace. *)
+Theorem extcall_call_prefix_observation:
+  ee.outcomes = SOME os ==>
+  (do accounts <- get_accounts;
+      check (ext_call_precheck_ok skip ret_type target accounts)
+            "ExtCall target has no code";
+      value_opt' <- frame_call_value cx value_opt;
+      eval_ext_call_effects cx target calldata value_opt' gas accounts
+   od) (ee with gas_obs := tail) =
+  (let (res, last) =
+     (do accounts <- get_accounts;
+         check (ext_call_precheck_ok skip ret_type target accounts)
+               "ExtCall target has no code";
+         value_opt' <- frame_call_value cx value_opt;
+         eval_ext_call_effects cx target calldata value_opt' gas accounts
+      od) ee
+   in (res, last with gas_obs := tail))
+Proof
+  strip_tac >>
+  simp[get_accounts_def, bind_def, ignore_bind_def, check_def,
+       vyperStateTheory.assert_def, return_def, raise_def] >>
+  Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts` >> simp[] >>
+  simp[frame_call_value_def, bind_def, ignore_bind_def, check_def,
+       vyperStateTheory.assert_def, return_def, raise_def] >>
+  Cases_on `cx.txn.is_static` >> simp[] >>
+  Cases_on `value_opt = NONE \/ value_opt = SOME 0` >>
+  simp[vyperStateTheory.assert_def, bind_def, ignore_bind_def, return_def] >>
+  simp[eval_ext_call_effects_def, bind_def, ignore_bind_def, return_def,
+       take_call_outcome_def, take_request_outcome_def,
+       call_outcome_request_def] >>
+  pairarg_tac >> simp[] >>
+  rpt IF_CASES_TAC >>
+  simp[bind_def, ignore_bind_def, return_def, raise_def,
+       adopt_call_outcome_equation] >>
+  Cases_on `outcome.co_success` >> simp[return_def, raise_def] >>
+  Cases_on `value_opt = NONE` >> simp[]
+QED
+
+(* In oracle mode the prefix exposes the failure before adoption. *)
+Theorem extcall_call_prefix_oracle:
+  ee.outcomes = SOME os ==>
+  (do accounts <- get_accounts;
+      check (ext_call_precheck_ok skip ret_type target accounts)
+            "ExtCall target has no code";
+      value_opt' <- frame_call_value cx value_opt;
+      eval_ext_call_effects cx target calldata value_opt' gas accounts
+   od) ee =
+  (do check (ext_call_precheck_ok skip ret_type target ee.accounts)
+            "ExtCall target has no code";
+      value_opt' <- frame_call_value cx value_opt;
+      (rq,oc) <- take_call_outcome target calldata value_opt';
+      if oc.co_success then
+        do adopt_call_outcome rq oc; return oc.co_returnData od
+      else raise (Error (RevertData oc.co_returnData))
+   od) ee
+Proof
+  strip_tac >>
+  simp[get_accounts_def, bind_def, ignore_bind_def, check_def,
+       vyperStateTheory.assert_def, return_def] >>
+  Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts` >> simp[] >>
+  simp[frame_call_value_def, bind_def, ignore_bind_def, check_def,
+       vyperStateTheory.assert_def, return_def] >>
+  Cases_on `cx.txn.is_static` >> simp[] >>
+  Cases_on `value_opt = NONE \/ value_opt = SOME 0` >>
+  simp[vyperStateTheory.assert_def, bind_def, ignore_bind_def, return_def] >>
+  simp[eval_ext_call_effects_def, bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `take_call_outcome target calldata vo ee` >>
+  Cases_on `take_call_outcome target calldata vo ee` >>
+  rename1 `_ = (result,mid)` >> Cases_on `result` >> simp[] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `x1.co_success` >> simp[bind_def, return_def, raise_def]
+QED
+
+Theorem extcall_call_prefix_trace_frame:
+  storage_trace_frame
+    (do accounts <- get_accounts;
+        check (ext_call_precheck_ok skip ret_type target accounts)
+              "ExtCall target has no code";
+        value_opt' <- frame_call_value cx value_opt;
+        eval_ext_call_effects cx target calldata value_opt' gas accounts
+     od)
+Proof
+  irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_state_reads] >> gen_tac >>
+  irule storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_checks] >>
+  irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_call_value, storage_trace_frame_ext_effects]
+QED
+
 Theorem extcall_call_step:
   !ctx func cenv cx es st0 sa s0 sp sr u is_static skip ret_type
    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
