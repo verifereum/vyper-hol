@@ -2619,6 +2619,7 @@ Proof
   `state_rel func cenv cx es s` by fs[stmt_state_rel_def] >>
   `s.vs_call_ctx.cc_static = cx.txn.is_static` by
     fs[state_rel_def, call_ctx_rel_def] >>
+  `(stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt` by simp[] >>
   VALID (drule_all_then
     (strip_assume_tac o Q.ISPECL [`gas:bytes32`, `ro:bytes32`, `rz:bytes32`])
     exec_ext_call_oracle_step) >>
@@ -3544,6 +3545,8 @@ Proof
     ops [STRING #"%" (toString sa.cs_next_var)]` >>
   `call_inst.inst_outputs = [STRING #"%" (toString sa.cs_next_var)]` by
     simp[Abbr `call_inst`, mk_inst_def] >>
+  `((stat \/ cx.txn.is_static) \/ cx.txn.is_static) = IS_NONE value_opt` by
+    simp[GSYM DISJ_ASSOC] >>
   drule_all_then (qspec_then `gas`
     (qx_choose_then `oracle_state` strip_assume_tac))
     (raw_call_memory_oracle_exec |> Q.INST
@@ -3554,7 +3557,7 @@ Proof
   `s.vs_call_ctx.cc_static = cx.txn.is_static /\
    (~stat /\ cx.txn.is_static ==> val_word = 0w)` by
     (fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-     Cases_on `value_opt` >> gvs[wordsTheory.w2n_eq_0]) >>
+     Cases_on `value_opt` >> Cases_on `stat` >> gvs[wordsTheory.w2n_eq_0]) >>
   `oracle_state.vs_vars = s.vs_vars /\ oracle_state.vs_allocas = s.vs_allocas /\
    oracle_state.vs_alloca_next = s.vs_alloca_next /\
    oracle_state.vs_fmp = s.vs_fmp /\ oracle_state.vs_labels = s.vs_labels` by
@@ -5288,10 +5291,6 @@ Resume raw_call_outbuf_tail_vv_frag[positive_finish]:
           simp[Abbr `entry`, local_region_def, lookup_var_def] >>
       simp[Abbr `entry`] >>
       rpt conj_tac
-      >- (POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
-            List.exists (fn v => mem (fst (dest_var v)) ["value_opt", "val_word"])
-              (free_vars (concl th)))) >>
-          Cases_on `value_opt` >> gvs[])
       >- (rpt strip_tac >>
           qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
             drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
@@ -5649,6 +5648,56 @@ Proof
     `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)`,`bs`]
     strip_assume_tac) >>
   suspend "ready"
+QED
+
+Resume raw_call_tail_outcome[static_value_abort]:
+  `~flags.rcf_is_static` by fs[] >> fs[] >>
+  drule_all raw_call_source_continuation >>
+  disch_then (qspecl_then [`cx`,`bs`] SUBST1_TAC) >>
+  `!st. eval_raw_call cx flags target bs amount
+    (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) st =
+    (INR (Error (RuntimeError "write in static context")), st)` by
+    (gen_tac >> irule raw_call_static_value_abort >> simp[]) >>
+  `local_ptrs_reserved cenv s6` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  `0 < flags.rcf_max_outsize ==>
+     ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)` by
+    (strip_tac >> drule_all raw_call_outbuf_capacity >> simp[]) >>
+  `ci_mono s6 s7 /\ ci_mono s7 sb` by
+    metis_tac[ci_mono_compile_raw_call_outbuf,
+              ci_mono_compile_raw_call_finish, pairTheory.SND] >>
+  `cs_extends s6 s7 /\ cs_extends s7 sb` by fs[ci_mono_def] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  qpat_assum `stmt_state_rel ctx func cenv cx esK t`
+    (mp_then Any mp_tac raw_call_outbuf_alloc_path) >>
+  disch_then drule_all >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `frag_path ctx s6 s7 _ Alloc _` >>
+  `frag_path ctx s6 sb (\u. u = t) (\u. F)
+    (\r. ?u. r = Abort ExHalt_abort u)` by
+    (irule frag_path_seq >> qexistsl_tac [`Alloc`, `s7`] >> simp[] >>
+     conj_tac
+     >- (irule frag_path_conseq >>
+         goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >> simp[]) >>
+     irule frag_path_pointwise >> simp[Abbr `Alloc`] >> rpt strip_tac >>
+     rename1 `stmt_state_rel ctx func cenv cx esK u` >>
+     `u.vs_call_ctx.cc_static` by
+       fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+     `eval_operand gas u = SOME gw /\
+      eval_operand addr u = SOME (w2w target) /\
+      eval_operand dp u = SOME (n2w (b+32)) /\
+      eval_operand len u = SOME (n2w (LENGTH bs)) /\
+      eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
+        NONE => Lit 0w | SOME v => v) u = SOME (n2w amount)` by metis_tac[] >>
+     irule raw_call_finish_static_abort >> simp[] >>
+     goal_assum (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     rpt (goal_assum (drule_at Any)) >> simp[wordsTheory.n2w_11]) >>
+  ho_match_mp_tac (GEN_ALL raw_call_tail_path_outcome) >>
+  qexistsl_tac [`s6`, `INR (Error (RuntimeError "write in static context"))`, `esK`] >>
+  simp[type_check_def, assert_def, ignore_bind_def, bind_def,
+    lift_option_type_def, return_def, dest_BytesV_def] >>
+  irule frag_path_conseq >>
+  goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
+  rpt strip_tac >> gvs[expr_exit_def]
 QED
 
 Resume raw_call_tail_outcome[ready]:
