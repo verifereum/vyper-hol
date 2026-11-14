@@ -3,6 +3,7 @@
    separate CI jobs. *)
 Theory vyperTestsHol
 Ancestors
+  staticFrameTest
   e2eSourceBoundaryCVTest
   vyperConstEvalWitness
   livenessProofIntegrity

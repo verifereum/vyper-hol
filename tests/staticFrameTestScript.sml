@@ -62,7 +62,7 @@ Theorem static_nonreentrant_entry_fails_lock_held:
     (INR (Error (RuntimeError "nonreentrant lock")), st)
 Proof
   simp[lock_if_nr_def, acquire_nonreentrant_lock_def, bind_def,
-       ignore_bind_def, raise_def, get_transient_storage_def]
+       ignore_bind_def, raise_def, return_def, get_transient_storage_def]
 QED
 
 Theorem static_nonreentrant_view_entry_succeeds:
@@ -122,7 +122,8 @@ Theorem venom_static_call_zero_value_is_static:
        ["r"]) s =
     exec_ext_call
       (mk_inst 0 CALL [Lit 0w; Lit 0w; Lit 0w; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
-         ["r"]) s 0w 0w 0w 0w 0w 0w 0w T
+         ["r"]) s (0w:bytes32) (0w:bytes32) (0w:bytes32)
+           (0w:bytes32) (0w:bytes32) (0w:bytes32) (0w:bytes32) T
 Proof
   simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]
 QED
