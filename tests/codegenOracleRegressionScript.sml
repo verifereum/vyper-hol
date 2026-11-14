@@ -66,10 +66,9 @@ Proof
        plan_spill_rel_def, FLOOKUP_DEF, memory_rel_def, context_memory_rel_def]
 QED
 
-(* Deliberately no terminal leftover-outcome or GAS-reading equality. *)
-Theorem terminal_leftovers_and_readings_free:
-  venom_asm_terminal_rel vs
-    (s with <| as_outcomes := outcomes; as_gas_readings := readings |>) =
+(* Remaining call outcomes are free; remaining GAS readings agree. *)
+Theorem terminal_outcomes_free:
+  venom_asm_terminal_rel vs (s with as_outcomes := outcomes) =
   venom_asm_terminal_rel vs s
 Proof
   simp[venom_asm_terminal_rel_def]
