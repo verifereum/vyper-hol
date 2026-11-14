@@ -14,6 +14,7 @@ Definition ev_shadow_prefix_reachable_def:
       MEM fn C.ctx_functions /\
       ev_reachable orc initial C p d fn startinst s0 /\
       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+      lookup_block s0.vs_current_bb (dft_fn fn).fn_blocks = SOME bb' /\
       dftScheduleOrder$dft_block_rel bb bb' /\
       s0.vs_current_bb = t.vs_current_bb /\
       s0.vs_inst_idx = LENGTH pseudos /\
