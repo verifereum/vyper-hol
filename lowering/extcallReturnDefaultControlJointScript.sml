@@ -6,7 +6,7 @@ Ancestors
   venomExecSemantics ptrDiscipline compileEnv ptrSafeRun contextCodegenRel codegenRel
   exprLoweringProps list fragGasSeqPtr fragExecMem bodyPtrDefs
   bodyFullGhostFrame extcallReturnDefaultResources loweringStateRelDefs
-  bodyPtrEnvBuiltinsAllocation allocationPtr
+  bodyPtrEnvBuiltinsAllocation allocationPtr bodyFullUnwrapRun
 
 Theorem return_default_join_joint:
   emit_inst JMP [Label lbl] [] a = ((),b) /\ fn_has_code a b func /\
@@ -845,3 +845,222 @@ Proof
   drule_all return_default_shell_joint_frame >> simp[]
 QED
 
+
+(* Resources on the already selected allocation-and-shell run.  The shell
+   indices and label are supplied by the compiler decomposition. *)
+Theorem return_default_prefix_store_resources:
+  compile_alloc_buffer n a = (buf,b) /\
+  run_inst_seq (emitted_insts a b) s = OK r /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv a /\ n < dimword (:256) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  b.cs_next_var <= n1 /\ b.cs_next_var <= n2 /\
+  ds.cs_current_bb = dl /\ ds.cs_current_insts = [] /\
+  b.cs_next_var <= ds.cs_next_var /\
+  AG = step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) r /\
+  atn = step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) s r tn /\
+  u = jump_to dl ((update_var (STRING #"%" (toString n2)) w2
+        (update_var (STRING #"%" (toString n1)) w1
+          (r with vs_inst_idx := LENGTH b.cs_current_insts)))
+        with vs_inst_idx := k) /\
+  Gf = DRESTRICT (DRESTRICT AG (COMPL {STRING #"%" (toString n1)}))
+        (COMPL {STRING #"%" (toString n2)}) /\
+  tm = atn with t_var := (atn.t_var |+ (STRING #"%" (toString n1),{})) |+
+        (STRING #"%" (toString n2),{}) /\
+  stmt_state_rel H ctx func cenv cx ee s ==>
+  u.vs_current_bb = ds.cs_current_bb /\
+  u.vs_inst_idx = LENGTH ds.cs_current_insts /\
+  buf.buf_operand = Var (STRING #"%" (toString a.cs_next_var)) /\
+  not_fresh_at ds (STRING #"%" (toString a.cs_next_var)) /\
+  stmt_state_rel H ctx func cenv cx ee u /\
+  u.vs_memory = s.vs_memory /\
+  u.vs_allocas = r.vs_allocas /\ u.vs_alloca_next = r.vs_alloca_next /\
+  u.vs_halted = s.vs_halted /\
+  (!x. not_fresh_at a x ==>
+    lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)) /\
+  (?w. eval_operand buf.buf_operand u = SOME w /\
+    FLOOKUP u.vs_allocas a.cs_next_id = SOME (w2n w,n) /\
+    w2n w + n < dimword (:256) /\ w2n w + n <= u.vs_alloca_next /\
+    (!aid off sz. aid < a.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (off,sz) ==>
+      regions_disjoint (w2n w) n off sz) /\
+    (!name off sz. local_region cenv ee.scopes u name off sz ==>
+      regions_disjoint (w2n w) n off sz)) /\
+  (!D lo d. ghost_inv_at D lo d cenv cx ee G tn s ==>
+    ghost_inv_at D lo d cenv cx ee Gf tm u /\
+    ptr_covers Gf tm (STRING #"%" (toString a.cs_next_var)) u n /\
+    ghost_kept_at lo cenv ee a G tn s Gf tm) /\
+  s.vs_alloca_next <= u.vs_alloca_next /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+     FLOOKUP u.vs_allocas aid = SOME entry) /\
+  (!cenv0 es0 ee0 sa0 s0. sa0.cs_next_var <= a.cs_next_var /\
+     wb_frame cenv0 es0 ee0 sa0 s0 s ==>
+     wb_frame cenv0 es0 ee0 sa0 s0 u) /\
+  (!i. i < s.vs_alloca_next ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+  tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+  (alloca_history func s /\ s.vs_current_bb = a.cs_current_bb /\
+   s.vs_inst_idx = LENGTH a.cs_current_insts ==> alloca_history func u)
+Proof
+  strip_tac >>
+  drule_all return_default_alloc_run_step >> strip_tac >>
+  drule_all return_default_alloc_resources >> strip_tac >>
+  qabbrev_tac `ar = r with vs_inst_idx := LENGTH b.cs_current_insts` >>
+  drule_all (Q.INST [`sa` |-> `b`, `ctx` |-> `ctx`, `func` |-> `func`]
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:256``] return_default_shell_joint_frame))) >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
+  `local_ptrs_reserved cenv b` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `a` >> simp[]) >>
+  `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at b x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at b x)` by
+    (fs[not_fresh_at_def] >> metis_tac[]) >>
+  `not_fresh_at b (STRING #"%" (toString a.cs_next_var))` by
+    gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+      emit_def, not_fresh_at_def] >>
+  `stmt_state_rel H ctx func cenv cx ee ar` by
+    simp[Abbr `ar`, stmt_state_rel_inst_idx] >>
+  `stmt_state_rel H ctx func cenv cx ee u` by
+    (irule return_default_shell_state >>
+     qpat_assum `u = _` (fn th => irule_at Any th) >>
+     qexists_tac `b` >> simp[]) >>
+  `r.vs_halted = s.vs_halted` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[update_var_def]) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = r.vs_allocas /\
+   u.vs_alloca_next = r.vs_alloca_next /\ u.vs_halted = s.vs_halted` by
+    gvs[jump_to_def, update_var_def, Abbr `ar`] >>
+  `not_fresh_at ds (STRING #"%" (toString a.cs_next_var))` by
+    (fs[not_fresh_at_def] >> decide_tac) >>
+  `u.vs_current_bb = ds.cs_current_bb /\
+   u.vs_inst_idx = LENGTH ds.cs_current_insts` by
+    simp[jump_to_def, update_var_def, Abbr `ar`] >>
+  ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- suspend "old" >>
+  conj_tac >- suspend "destination" >>
+  conj_tac >- suspend "ghost" >>
+  suspend "frames"
+QED
+Resume return_default_prefix_store_resources[old]:
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  drule_all alloca_step_frame_effects >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  rpt strip_tac >>
+  `not_fresh_at b x /\ x <> STRING #"%" (toString a.cs_next_var)` by
+    (fs[not_fresh_at_def] >> metis_tac[]) >>
+  qpat_x_assum `!x. not_fresh_at b x ==> _`
+    (qspec_then `x` (drule_all_then strip_assume_tac)) >>
+  qpat_x_assum `!p. p <> _ ==> _`
+    (qspec_then `x` (drule_all_then strip_assume_tac)) >>
+  gvs[Abbr `ar`, lookup_var_def]
+QED
+Resume return_default_prefix_store_resources[destination]:
+  `lookup_var (STRING #"%" (toString a.cs_next_var)) u =
+   lookup_var (STRING #"%" (toString a.cs_next_var)) r` by
+    (qpat_x_assum `!x. not_fresh_at b x ==> _`
+       (qspec_then `STRING #"%" (toString a.cs_next_var)` mp_tac) >>
+     simp[Abbr `ar`, lookup_var_def]) >>
+  qexists_tac `w` >>
+  conj_tac >-
+    (qpat_x_assum `eval_operand _ r = SOME w` mp_tac >>
+     qpat_assum `buf.buf_operand = _` (fn th => rewrite_tac[th, eval_operand_def]) >>
+     qpat_assum `lookup_var _ u = lookup_var _ r`
+       (fn th => rewrite_tac[th]) >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+     qpat_x_assum `!aid base sz. FLOOKUP r.vs_allocas aid = _ ==> _`
+       (qspecl_then [`a.cs_next_id`, `w2n w`, `n`] mp_tac) >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `!name off sz. local_region cenv ee.scopes u name off sz <=>
+                 local_region cenv ee.scopes r name off sz` suffices_by metis_tac[] >>
+  irule local_region_lookup_cong >> rpt strip_tac >>
+  `not_fresh_at b p` by metis_tac[local_ptrs_reserved_def] >>
+  qpat_x_assum `!x. not_fresh_at b x ==> _`
+    (qspec_then `p` mp_tac) >>
+  simp[Abbr `ar`, lookup_var_def]
+QED
+Resume return_default_prefix_store_resources[ghost]:
+  rpt gen_tac >> disch_tac >>
+  `ghost_inv_at D lo d cenv cx ee AG atn r /\
+   ptr_covers AG atn (STRING #"%" (toString a.cs_next_var)) r n /\
+   ghost_kept_at lo cenv ee a G tn s AG atn` by
+    (qpat_assum `AG = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `atn = _` (fn th => rewrite_tac[th]) >>
+     irule return_default_alloc_ghost_resources >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`H`, `ctx`, `func`] >> simp[]) >>
+  conj_tac >-
+    (qpat_x_assum `!D lo d cenv cx ee. _ ==> ghost_inv_at _ _ _ _ _ _ Gf tm u` irule >>
+     simp[NoAsms] >>
+     conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+     conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+     conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+     irule bodyFullGhostFrameTheory.ghost_inv_at_exterior_frame >>
+     goal_assum (drule_at Any) >> qexists_tac `b` >>
+     simp[Abbr `ar`, lookup_var_def]) >>
+  conj_tac >-
+    (fs[ptr_covers_def] >>
+     qpat_x_assum `!x. not_fresh_at b x ==> _`
+       (qspec_then `STRING #"%" (toString a.cs_next_var)`
+         (drule_all_then strip_assume_tac)) >>
+     gvs[Abbr `ar`, lookup_var_def]) >>
+  qpat_x_assum `!lo cenv es sa0 G0 tn0 s0. _ ==> ghost_kept_at _ _ _ _ _ _ _ Gf tm` irule >>
+  simp[]
+QED
+
+Resume return_default_prefix_store_resources[frames]:
+  conj_tac >-
+    (drule_all return_default_allocation_frontier >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- suspend "wb" >>
+  conj_tac >-
+    (drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+     drule_all alloca_step_frame_effects >>
+     disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+     gvs[]) >>
+  conj_tac >- suspend "taint" >>
+  conj_tac >- suspend "taint" >>
+  conj_tac >- suspend "taint" >>
+  suspend "history"
+QED
+Resume return_default_prefix_store_resources[wb]:
+  rpt gen_tac >> strip_tac >>
+  irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+  goal_assum (drule_at Any) >> qexists_tac `a` >>
+  simp[NoAsms] >> conj_tac >-
+    (rpt strip_tac >>
+     `not_fresh_at b z` by (fs[not_fresh_at_def] >> metis_tac[]) >>
+     qpat_x_assum `!x. not_fresh_at b x ==> _`
+       (qspec_then `z` (drule_all_then strip_assume_tac)) >>
+     fs[Abbr `ar`, lookup_var_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+Resume return_default_prefix_store_resources[taint]:
+  markerLib.RESUME_TAC >>
+  simp[step_taint_def, mk_inst_def, adopt_reset_def, store_taint_def,
+       imm_taint_def]
+QED
+Resume return_default_prefix_store_resources[history]:
+  strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_history func ar` by
+    (simp[Abbr `ar`] >> irule emitted_alloca_history >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`emitted_insts a b`, `s`, `a`] >> simp[] >>
+     gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
+       emit_def, emitted_insts_def, mk_inst_def, is_terminator_def,
+       rich_listTheory.DROP_LENGTH_APPEND]) >>
+  irule allocaHistoryTheory.alloca_history_jump >>
+  conj_tac >- metis_tac[listTheory.LENGTH_NIL] >>
+  qexists_tac `ar` >> simp[Abbr `ar`]
+QED
+Finalise return_default_prefix_store_resources
