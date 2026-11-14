@@ -1,6 +1,6 @@
 (* Endpoint facts for the supplied MCOPY step; no second run is chosen. *)
 Theory assignBasePtrMcopyTransport
-Ancestors
+Ancestors fragExecPtr
   typedCopyPtr robustCopyTransportPtr assignBasePtrMcopy valueEncodingProps
   emitHelper venomInst venomState venomExecSemantics pred_set
 

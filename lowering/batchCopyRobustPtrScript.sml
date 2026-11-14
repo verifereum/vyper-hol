@@ -1,6 +1,6 @@
 (* The emitted batch copy transports robust representations, including padding. *)
 Theory batchCopyRobustPtr
-Ancestors typedCopyPtr robustCopyTransportPtr valueEncodingProps
+Ancestors fragExecPtr typedCopyPtr robustCopyTransportPtr valueEncodingProps
   context emitHelper emitHelperProps pred_set compileEnv
   venomState venomInst venomExecSemantics ptrDiscipline
 

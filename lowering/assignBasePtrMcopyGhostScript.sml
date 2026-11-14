@@ -1,6 +1,6 @@
 (* MCOPY frames the ghost outside its natural destination interval. *)
 Theory assignBasePtrMcopyGhost
-Ancestors assignBasePtrCopyPath assignBasePtrMcopyTransport
+Ancestors fragExecPtr assignBasePtrCopyPath assignBasePtrMcopyTransport
   assignBasePtrLiteralGhost assignBasePtrLiteralOutcome bodyPtrDefs
   typedCopyPtr robustCopyTransportPtr localPtrsProps exprLoweringProps
   venomState venomExecSemantics venomInst ptrDiscipline words pred_set
