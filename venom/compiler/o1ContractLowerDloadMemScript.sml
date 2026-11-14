@@ -14,15 +14,15 @@ Ancestors
   lowerDloadPtrStatic
 
 (* The output's reachable states keep raw memory safety. *)
-Theorem lower_dload_stage_mem:
+Theorem lower_dload_stage_mem_static:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     mem_inv raw_mem_ok C' vs
 Proof
   rpt strip_tac >>
-  drule_all lowerDloadStageAmbientTheory.ld_stage_ambient >> strip_tac >>
+  drule_all lowerDloadStageAmbientTheory.ld_stage_ambient_static >> strip_tac >>
   `mem_inv raw_mem_ok C vs` by fs[o1_src_inv_def] >>
   RULE_ASSUM_TAC BETA_RULE >>
   rewrite_tac[mem_inv_raw_reachable] >>
@@ -30,14 +30,25 @@ Proof
   rpt strip_tac >>
   `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
     metis_tac[lower_dload_stage_no_dalloca] >>
-  drule_all (BETA_RULE ld_raw_coverage_fixed) >> disch_tac >>
-  irule (BETA_RULE ld_owned_or_forward_current_raw) >>
+  drule_all (BETA_RULE ld_raw_coverage_fixed_static) >> disch_tac >>
+  irule (BETA_RULE ld_owned_or_forward_current_raw_static) >>
   goal_assum (drule_at Any) >>
-  drule_all (BETA_RULE ld_raw_fixed_ambient) >> strip_tac >>
+  drule_all (BETA_RULE ld_raw_fixed_ambient_static) >> strip_tac >>
   qpat_x_assum `!fn. MEM fn C.ctx_functions ==> _` drule >>
   simp[] >> strip_tac >> simp[] >>
   qpat_x_assum `!fn. MEM fn C.ctx_functions ==> (_ /\ _) /\ _` drule >>
   simp[] >> strip_tac >> simp[]
+QED
+
+Theorem lower_dload_stage_mem:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    mem_inv raw_mem_ok C' vs
+Proof
+  rpt strip_tac >> irule lower_dload_stage_mem_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
 
 (* Fail the build if the contract ever regresses to an admitted proof. *)

@@ -44,8 +44,8 @@ Proof
   simp[Once run_block_non_phis_def]
 QED
 
-Theorem ld_point_alignment:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_point_alignment_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t ==>
   ?PG G tn inst s t0 A frames N X p h.
     ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
@@ -150,4 +150,26 @@ Proof
   `h = 0` by fs[] >>
   `in_revert_forward g t` by (irule ld_envelope_revert_forward >> simp[] >> metis_tac[]) >>
   drule ld_guard_non_revert >> gvs[in_revert_forward_def]
+QED
+
+Theorem ld_point_alignment:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t ==>
+  ?PG G tn inst s t0 A frames N X p h.
+    ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+    ^ld_probe_stable lo P Sigma names fs f0 A0 A frames /\
+    fn' = ld_image (HD frames) /\
+    ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+    ld_prefix C' fn' X p h t0 t /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+    ld_return_cont C fn cs s /\
+    ir_supply_covers_fn (HD frames).lf_supply fn /\
+    active_inst fn inst s /\
+    h < LENGTH X /\ t0.vs_inst_idx = p /\ t.vs_inst_idx = p+h /\
+    active_inst fn' (EL h X) t /\
+    get_instruction bb t.vs_inst_idx = SOME (EL h X)
+Proof
+  strip_tac >> irule ld_point_alignment_static >>
+  goal_assum (drule_at Any) >>
+  gvs[o1_run_state_ok_def]
 QED

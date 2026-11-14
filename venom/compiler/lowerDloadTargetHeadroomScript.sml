@@ -38,9 +38,9 @@ Proof
   decide_tac
 QED
 
-Theorem ld_owned_target_headroom:
+Theorem ld_owned_target_headroom_static:
   ^ld_owned lo P C C' vs0 Sigma names fn' ti t /\
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ mem_inv dload_headroom_ok C vs0 /\
   (!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn) /\
   ctx_has_dalloca C ==>
   t.vs_alloca_next <= w2n t.vs_initial_fmp
@@ -71,12 +71,12 @@ Proof
   gvs[ld_prefix_zero]
 QED
 
-Resume ld_owned_target_headroom[dload]:
+Resume ld_owned_target_headroom_static[dload]:
   `?off out. inst.inst_operands = [off] /\ inst.inst_outputs = [out]` by
     fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
   drule ld_sync_active >> simp[] >> strip_tac >>
   drule_all ld_dload_envelope_temporary >> strip_tac >>
-  drule_all ld_sync_dload_scratch_bounds >> strip_tac >>
+  drule_all ld_sync_dload_scratch_bounds_static >> strip_tac >>
   drule_all lower_dload_prefix_scratch >> strip_tac >>
   qpat_x_assum `t.vs_alloca_next <= _ + _` mp_tac >>
   Cases_on `FLOOKUP t0.vs_allocas ai = NONE`
@@ -87,7 +87,7 @@ Resume ld_owned_target_headroom[dload]:
   asm_rewrite_tac[] >> decide_tac
 QED
 
-Resume ld_owned_target_headroom[dloadbytes]:
+Resume ld_owned_target_headroom_static[dloadbytes]:
   `?dest off len. inst.inst_operands = [dest;off;len]` by
     fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
   drule_all ld_dloadbytes_envelope_temporary >> strip_tac >>
@@ -99,4 +99,15 @@ Resume ld_owned_target_headroom[dloadbytes]:
   qpat_x_assum `t.vs_alloca_next = _` (fn th => rewrite_tac[th]) >>
   first_assum ACCEPT_TAC
 QED
-Finalise ld_owned_target_headroom
+Finalise ld_owned_target_headroom_static
+
+Theorem ld_owned_target_headroom:
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t /\
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  (!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn) /\
+  ctx_has_dalloca C ==>
+  t.vs_alloca_next <= w2n t.vs_initial_fmp
+Proof
+  strip_tac >> irule (BETA_RULE ld_owned_target_headroom_static) >>
+  fs[o1PassContractTheory.o1_run_state_ok_def] >> metis_tac[]
+QED

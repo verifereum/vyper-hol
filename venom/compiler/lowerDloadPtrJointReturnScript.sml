@@ -19,7 +19,7 @@ Proof
   `n = 0 \/ n = 1 \/ n = 2 \/ n = 3` by decide_tac >> gvs[]
 QED
 
-Theorem dload_joint_return_closed:
+val dload_joint_return_closed_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -111,13 +111,24 @@ Theorem dload_joint_return_closed:
     dload_terminal_mode lo P vs C ds
       (DRESTRICT d.cf_prov (COMPL (set d.cf_inst.inst_outputs)))
       (un with t_var := DRESTRICT d.cf_tvar (COMPL (set d.cf_inst.inst_outputs)))
-      d.cf_fn j (t' with vs_inst_idx := SUC d.cf_state.vs_inst_idx)
+      d.cf_fn j (t' with vs_inst_idx := SUC d.cf_state.vs_inst_idx)``;
+
+val dload_joint_return_closed_static_header =
+  rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_return_closed_header)));
+
+Theorem dload_joint_return_closed_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (dload_joint_return_closed_static_header))))
 Proof
   strip_tac >- suspend "normal" >>
   metis_tac[dload_terminal_mode_no_return]
 QED
 
-Resume dload_joint_return_closed[normal]:
+Resume dload_joint_return_closed_static[normal]:
   drule_all dload_return_phase_zero >> strip_tac >> gvs[dload_prefix_zero] >>
   rename1 `step_inst fuel C' ri t = IntRet rt tend` >>
   `MEM f C.ctx_functions` by
@@ -137,7 +148,7 @@ Resume dload_joint_return_closed[normal]:
   gnvs[] >> suspend "origins"
 QED
 
-Resume dload_joint_return_closed[origins]:
+Resume dload_joint_return_closed_static[origins]:
   `ptr_use_ok P (fn_pv P f) ri` by gvs[fn_ptr_ok_def] >>
   `taint_ok f tn ri s` by
     (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
@@ -181,7 +192,7 @@ Resume dload_joint_return_closed[origins]:
   suspend "pop"
 QED
 
-Resume dload_joint_return_closed[pop]:
+Resume dload_joint_return_closed_static[pop]:
   drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     dload_normal_return >>
   disch_then (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
@@ -205,7 +216,16 @@ Resume dload_joint_return_closed[pop]:
   simp[dload_prefix_zero] >> gnvs[]
 QED
 
-Finalise dload_joint_return_closed
+Finalise dload_joint_return_closed_static
+
+Theorem dload_joint_return_closed:
+  ^dload_joint_return_closed_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_return_closed_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
 
 val _ = if null (hyp dload_joint_return_closed) then ()
   else raise Fail "joint return: nonempty hypotheses";

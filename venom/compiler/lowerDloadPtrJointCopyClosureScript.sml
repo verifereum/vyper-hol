@@ -7,7 +7,7 @@ Ancestors lowerDloadPtrCopy lowerDloadPtrNormalNext lowerDloadPtrJointNext
   ptrDiscipline unitShapeDefs codegenRel venomExecSemantics venomState
   venomInst venomWf venomExecProps contextCodegenRel list rich_list pred_set finite_map
 
-Theorem dload_joint_tracked_external_copy_normal_next:
+val dload_joint_tracked_external_copy_normal_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -94,7 +94,15 @@ Theorem dload_joint_tracked_external_copy_normal_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_external_copy_normal_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_external_copy_normal_next_header)))))))
 Proof
   strip_tac >>
   `emitted = [i] /\ n = 0 /\ j = i` by
@@ -140,7 +148,7 @@ Proof
   (impl_tac >- fs[EVERY_MEM]) >> simp[]
 QED
 
-Resume dload_joint_tracked_external_copy_normal_next[semantic]:
+Resume dload_joint_tracked_external_copy_normal_next_static[semantic]:
   rpt strip_tac >>
   `fn_ptr_ok P f` by fs[EVERY_MEM] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
@@ -175,10 +183,10 @@ Resume dload_joint_tracked_external_copy_normal_next[semantic]:
      (mp_then Any mp_tac dload_boundary_core_index_update) >> simp[])
 QED
 
-Finalise dload_joint_tracked_external_copy_normal_next
+Finalise dload_joint_tracked_external_copy_normal_next_static
 
 
-Theorem dload_joint_tracked_external_copy_next:
+val dload_joint_tracked_external_copy_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -264,7 +272,15 @@ Theorem dload_joint_tracked_external_copy_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_external_copy_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_external_copy_next_header)))))))
 Proof
   strip_tac >>
   `o1_fn_shape C f` by
@@ -284,7 +300,7 @@ Proof
      `get_instruction bb s.vs_inst_idx = SOME (EL s.vs_inst_idx bb.bb_instructions)` by
        simp[get_instruction_def] >>
      drule_all revert_forward_at_opcode >> simp[]) >>
-  irule dload_joint_tracked_external_copy_normal_next >>
+  irule dload_joint_tracked_external_copy_normal_next_static >>
   simp[] >>
   (reverse conj_tac >- metis_tac[]) >>
   qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _`
@@ -298,7 +314,7 @@ Proof
   fs[MEM]
 QED
 
-Theorem dload_joint_tracked_external_copy_routed_next:
+val dload_joint_tracked_external_copy_routed_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -386,7 +402,15 @@ Theorem dload_joint_tracked_external_copy_routed_next:
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
           c.cf_inst [c.cf_inst] 0))) \/
   dload_terminal_mode lo P vs C ds (step_prov PH H j t1)
-    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+    (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx)``;
+
+Theorem dload_joint_tracked_external_copy_routed_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_external_copy_routed_next_header)))))))
 Proof
   strip_tac >>
   `emitted = [i] /\ n = 0 /\ j = i` by
@@ -410,7 +434,7 @@ Proof
   disj1_tac >> suspend "ordinary"
 QED
 
-Resume dload_joint_tracked_external_copy_routed_next[returndata]:
+Resume dload_joint_tracked_external_copy_routed_next_static[returndata]:
   Cases_on `in_revert_forward g t0 \/ about_to_revert g i t0`
   >- (disj2_tac >>
       `MEM i (fn_insts f)` by
@@ -433,9 +457,9 @@ Resume dload_joint_tracked_external_copy_routed_next[returndata]:
 
 QED
 
-Resume dload_joint_tracked_external_copy_routed_next[ordinary]:
+Resume dload_joint_tracked_external_copy_routed_next_static[ordinary]:
   drule_at (Pat `ctx_pass_stage`)
-    (Q.INST [`fl` |-> `dyn_floor C vs`] dload_joint_tracked_external_copy_next) >>
+    (Q.INST [`fl` |-> `dyn_floor C vs`] dload_joint_tracked_external_copy_next_static) >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst _ next _`)) >>
   disch_then (drule_at (Pat `ptr_discipline`)) >>
@@ -455,10 +479,10 @@ Resume dload_joint_tracked_external_copy_routed_next[ordinary]:
   simp[]
 QED
 
-Resume dload_joint_tracked_external_copy_routed_next[normal]:
+Resume dload_joint_tracked_external_copy_routed_next_static[normal]:
   drule_at (Pat `ctx_pass_stage`)
     (Q.INST [`fl` |-> `dyn_floor C vs`]
-       dload_joint_tracked_external_copy_normal_next) >>
+       dload_joint_tracked_external_copy_normal_next_static) >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst _ next _`)) >>
   disch_then (drule_at (Pat `ptr_discipline`)) >>
@@ -477,4 +501,32 @@ Resume dload_joint_tracked_external_copy_routed_next[normal]:
   simp[dload_prefix_zero, EL]) >> simp[]
 QED
 
-Finalise dload_joint_tracked_external_copy_routed_next
+Finalise dload_joint_tracked_external_copy_routed_next_static
+
+
+Theorem dload_joint_tracked_external_copy_normal_next:
+  ^dload_joint_tracked_external_copy_normal_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_external_copy_normal_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+Theorem dload_joint_tracked_external_copy_next:
+  ^dload_joint_tracked_external_copy_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_external_copy_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+Theorem dload_joint_tracked_external_copy_routed_next:
+  ^dload_joint_tracked_external_copy_routed_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_external_copy_routed_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED

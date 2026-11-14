@@ -18,7 +18,7 @@ Proof
   gvs[retpc_use_ok_def, MEM]
 QED
 
-Theorem dload_joint_tracked_scalar_next:
+val dload_joint_tracked_scalar_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -105,7 +105,15 @@ Theorem dload_joint_tracked_scalar_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_scalar_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_scalar_next_header)))))))
 Proof
   strip_tac >>
   `emitted = [i] /\ n = 0 /\ j = i` by
@@ -156,7 +164,7 @@ Proof
   simp[]
 QED
 
-Resume dload_joint_tracked_scalar_next[semantic]:
+Resume dload_joint_tracked_scalar_next_static[semantic]:
   `fn_ptr_ok P f` by metis_tac[EVERY_MEM] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
     (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
@@ -196,4 +204,13 @@ Resume dload_joint_tracked_scalar_next[semantic]:
      rpt (pop_assum kall_tac) >> simp[MEM] >> metis_tac[])) >> simp[]
 QED
 
-Finalise dload_joint_tracked_scalar_next
+Finalise dload_joint_tracked_scalar_next_static
+
+Theorem dload_joint_tracked_scalar_next:
+  ^dload_joint_tracked_scalar_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_scalar_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED

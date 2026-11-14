@@ -37,9 +37,9 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem ld_joint_dloadbytes_next:
+Theorem ld_joint_dloadbytes_next_static:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   mem_inv dload_offset_ok C vs /\ ptr_discipline lo C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DLOADBYTES /\ step_inst fuel C inst s = OK s1 ==>
@@ -66,7 +66,7 @@ Proof
   drule_at (Pat `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     ld_joint_segment_control >>
   disch_then drule >> disch_then drule >> simp[IgnAsm `s1 = _`] >> strip_tac >>
-  `code_layout_valid t` by metis_tac[ld_joint_segment_layout] >>
+  `code_layout_valid t` by metis_tac[ld_joint_segment_layout_static] >>
   `w2n x + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword(:256)` by
     (drule ld_joint_segment_offset >> disch_then irule >> simp[] >> metis_tac[]) >>
   Cases_on `fresh_ir_var v` >> rename1 `fresh_ir_var v = (bv,v1)` >>
@@ -175,9 +175,9 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ld_joint_dload_next:
+Theorem ld_joint_dload_next_static:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs /\
   callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
@@ -216,7 +216,7 @@ Proof
   drule_all ld_joint_control_segment >> strip_tac >>
   `ld_joint_scratch u fn inst.inst_id (HD es).inst_id` by metis_tac[] >>
   `ir_supply_covers_fn u fn` by fs[ld_joint_control_def] >>
-  `code_layout_valid t` by metis_tac[ld_joint_segment_layout] >>
+  `code_layout_valid t` by metis_tac[ld_joint_segment_layout_static] >>
   `w2n x + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword(:256)` by
     (drule ld_joint_segment_offset >> disch_then irule >> simp[] >> metis_tac[]) >>
   Cases_on `fresh_ir_var v` >> rename1 `fresh_ir_var v = (av,v1)` >>
@@ -422,4 +422,56 @@ Proof
        write_memory_with_expansion_def, update_var_def, ld_shared_agree_def,
        step_taint_def, set_var_taint_def, store_taint_def, imm_taint_def,
        adopt_reset_def, DRESTRICT_UNIV])
+QED
+
+Theorem ld_joint_dloadbytes_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  mem_inv dload_offset_ok C vs /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  inst.inst_opcode = DLOADBYTES /\ step_inst fuel C inst s = OK s1 ==>
+  ?inst2 es t2 t3 fn' bb'.
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    TAKE 2 (DROP t.vs_inst_idx bb'.bb_instructions) = es /\ LENGTH es = 2 /\
+    t.vs_inst_idx + 2 <= LENGTH bb'.bb_instructions /\
+    step_inst fuel C' (EL 0 es) t = OK t2 /\
+    step_inst fuel C' (EL 1 es) t2 = OK t3 /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t3 with vs_inst_idx := t.vs_inst_idx+2)
+      n a U B HP (occurrence_step a HP H inst s1) sites X ts
+Proof
+  strip_tac >> irule ld_joint_dloadbytes_next_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+
+Theorem ld_joint_dload_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs /\
+  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = DLOAD /\ step_inst fuel C inst s = OK s1 ==>
+  ?inst2 es t1 t2 t3 t4 fn' bb' X1.
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    TAKE 4 (DROP t.vs_inst_idx bb'.bb_instructions) = es /\ LENGTH es = 4 /\
+    t.vs_inst_idx + 4 <= LENGTH bb'.bb_instructions /\
+    step_inst fuel C' (EL 0 es) t = OK t1 /\
+    step_inst fuel C' (EL 1 es) t1 = OK t2 /\
+    step_inst fuel C' (EL 2 es) t2 = OK t3 /\
+    step_inst fuel C' (EL 3 es) t3 = OK t4 /\
+    ((FLOOKUP X (a,inst.inst_id) = NONE /\
+      X1 = X |+ ((a,inst.inst_id),((EL 0 es).inst_id,t.vs_alloca_next))) \/
+     (IS_SOME (FLOOKUP X (a,inst.inst_id)) /\ X1 = X)) /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t4 with vs_inst_idx := t.vs_inst_idx+4)
+      n a U B HP (occurrence_step a HP H inst s1) sites X1 ts
+Proof
+  strip_tac >> irule ld_joint_dload_next_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

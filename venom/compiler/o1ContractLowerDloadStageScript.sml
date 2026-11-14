@@ -109,10 +109,10 @@ Proof
 QED
 
 (* So its DLOAD offset bound holds at every reachable instruction. *)
-Theorem lower_dload_stage_dload_ok:
+Theorem lower_dload_stage_dload_ok_static:
   !rpolicy view C C' vs.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     mem_inv raw_mem_ok C vs ==>
     mem_inv dload_offset_ok C' vs
 Proof
@@ -129,14 +129,25 @@ Proof
   drule_all lower_dload_stage_no_dload >> simp[dload_offset_ok_def]
 QED
 
+Theorem lower_dload_stage_dload_ok:
+  !rpolicy view C C' vs.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    o1_ctx_shape C /\ o1_run_state_ok vs /\
+    mem_inv raw_mem_ok C vs ==>
+    mem_inv dload_offset_ok C' vs
+Proof
+  rpt strip_tac >> irule lower_dload_stage_dload_ok_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+
 (* And no DLOAD to need headroom for: the bound is raw_mem_ok's frontier
    bound, and with DALLOCA the frontier stays below the initial frame
    pointer, from the source's headroom on owned states and from the
    forwarding certificate on revert-forwarding ones. *)
-Theorem lower_dload_stage_headroom:
+Theorem lower_dload_stage_headroom_static:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     mem_inv dload_headroom_ok C' vs
 Proof
@@ -145,10 +156,10 @@ Proof
     (simp[ctx_dload_count_def, SUM_eq_0, MEM_MAP, PULL_EXISTS,
           FILTER_EQ_NIL, EVERY_MEM] >>
      metis_tac[lower_dload_stage_no_dload]) >>
-  `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
+  `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem_static] >>
   `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
     metis_tac[lower_dload_stage_no_dalloca] >>
-  drule_all lowerDloadStageAmbientTheory.ld_stage_ambient >> strip_tac >>
+  drule_all lowerDloadStageAmbientTheory.ld_stage_ambient_static >> strip_tac >>
   `mem_inv raw_mem_ok C vs` by fs[o1_src_inv_def] >>
   RULE_ASSUM_TAC BETA_RULE >>
   qpat_x_assum `mem_inv raw_mem_ok C' vs` mp_tac >>
@@ -161,15 +172,26 @@ Proof
   simp_tac (srw_ss()) [] >>
   conj_tac >- fs[raw_mem_ok_def] >>
   strip_tac >> `ctx_has_dalloca C` by res_tac >>
-  drule_all (BETA_RULE ld_raw_coverage_fixed) >> disch_then DISJ_CASES_TAC
-  >- (irule (BETA_RULE ld_owned_target_headroom) >>
+  drule_all (BETA_RULE ld_raw_coverage_fixed_static) >> disch_then DISJ_CASES_TAC
+  >- (irule (BETA_RULE ld_owned_target_headroom_static) >>
       goal_assum (drule_at Any) >>
-      drule_all (BETA_RULE ld_raw_fixed_ambient) >> strip_tac >>
+      drule_all (BETA_RULE ld_raw_fixed_ambient_static) >> strip_tac >>
       qpat_x_assum `!fn. MEM fn C.ctx_functions ==> _` drule >>
       simp[] >> strip_tac >> simp[] >>
       qpat_x_assum `!fn. MEM fn C.ctx_functions ==> (_ /\ _) /\ _` drule >>
       simp[] >> strip_tac >> simp[]) >>
   fs[]
+QED
+
+Theorem lower_dload_stage_headroom:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    mem_inv dload_headroom_ok C' vs
+Proof
+  rpt gen_tac >> strip_tac >> irule (BETA_RULE lower_dload_stage_headroom_static) >>
+  fs[o1PassContractTheory.o1_run_state_ok_def] >> metis_tac[]
 QED
 
 (* ===== The cheap rows ===== *)
@@ -303,22 +325,26 @@ Proof
   metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
 QED
 
-Theorem lower_dload_run_contract:
-  o1_run_contract rpolicy D 1
+Theorem o1_static_stage_lower_dload:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 1 o1_fn_passes) (o1_walk_view rpolicy 1) C C' /\
+    o1_pre 1 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 1 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 1 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 1) C' vs
 Proof
-  `EL 1 o1_fn_passes = CFP_Simple VP_LowerDload` by
-    simp[o1_fn_passes_def] >>
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def,
-       pass_fuel_def] >>
+  simp[o1_fn_passes_def, o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  `ctx_sim_fuel I D C C' vs vs` by metis_tac[lower_dload_stage_sim_fuel] >>
-  `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
-  `taint_within D C' vs` by metis_tac[lower_dload_stage_taint] >>
+  `ctx_sim_fuel I D C C' vs vs` by
+    metis_tac[lower_dload_stage_sim_fuel_static] >>
+  `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem_static] >>
+  `taint_within D C' vs` by metis_tac[lower_dload_stage_taint_static] >>
   `mem_inv dload_offset_ok C' vs` by
-    (irule lower_dload_stage_dload_ok >> fs[o1_src_inv_def] >>
+    (irule lower_dload_stage_dload_ok_static >> fs[o1_src_inv_def] >>
      metis_tac[]) >>
   `mem_inv dload_headroom_ok C' vs` by
-    metis_tac[lower_dload_stage_headroom] >>
+    metis_tac[lower_dload_stage_headroom_static] >>
   `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions` by
     (rw[EVERY_MEM] >> drule_all lower_dload_stage_fn >> strip_tac >>
      fs[o1_src_inv_def, EVERY_MEM] >> first_x_assum drule >>
@@ -334,9 +360,18 @@ Proof
     metis_tac[lower_dload_stage_ssa_form] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
-    (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
+    (irule lower_dload_stage_ptr_static >> simp[o1_src_inv_def] >> metis_tac[]) >>
   `C'.ctx_global_reserved = C.ctx_global_reserved` by fs[ctx_pass_stage_def] >>
   fs[fixed_region_reserved_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_run_contract:
+  o1_run_contract rpolicy D 1
+Proof
+  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (SIMP_RULE (srw_ss()) [] o1_static_stage_lower_dload) >>
+  fs[o1_run_state_ok_def]
 QED
 
 (* One run takes function row 1 to row 2: it keeps a valid MakeSSA

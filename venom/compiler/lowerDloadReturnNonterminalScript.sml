@@ -8,8 +8,8 @@ Ancestors
 Libs
   lowerDloadReturnPackageLib
 
-Theorem ld_return_point_endpoint_next:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_return_point_endpoint_next_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
   ^ld_probe_stable lo P Sigma names fs f0 A0 A (f::fs) /\
   fn' = ld_image f /\
@@ -67,7 +67,7 @@ Proof
      drule_all ld_guarded_source_non_revert >> simp[]) >>
   `EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
      j IN P f.lf_fn.fn_name) (f::fs)` by simp[] >>
-  drule_all (SRULE [EVERY_DEF, LENGTH] ld_full_endpoint) >> strip_tac >>
+  drule_all (SRULE [EVERY_DEF, LENGTH] ld_full_endpoint_static) >> strip_tac >>
   `^ld_probe_stable lo P Sigma names fs f0 A0 Ar (g::fs)` by
     (irule ld_stable_head_extend >> conj_tac >- simp[] >>
      qexistsl_tac [`A`, `f`] >> simp[] >> metis_tac[]) >>
@@ -105,6 +105,26 @@ Proof
     `next`,`g.lf_src`,`g.lf_tgt`,`Ar`,`g::fs`,`N`,`Y`,`p+LENGTH X`,`0`] >>
   simp[NoAsms, lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
   fs[ADD1] >> metis_tac[ld_image_def]
+QED
+
+Theorem ld_return_point_endpoint_next:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs f0 A0 A (f::fs) /\
+  fn' = ld_image f /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  ld_return_cont C fn cs s /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ^ld_probe_guard C' k bb t /\ SUC h = LENGTH X /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel C' (EL h X) t = OK u /\
+  ^ld_probe_guard C' j bb (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> irule ld_return_point_endpoint_next_static >>
+  simp[] >> rpt conj_tac >> gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
 
 val _ = if null (hyp ld_return_point_endpoint_next) then ()
