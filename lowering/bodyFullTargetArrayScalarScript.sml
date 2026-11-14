@@ -22,23 +22,6 @@ Proof
       AllCaseEqs()]
 QED
 
-Theorem array_bounds_check_scalar_code[local]:
-  array_bounds_check idx len sgn sa = ((),sb) /\
-  scalar_available A idx /\ scalar_available A len ==>
-  scalar_code A (emitted_insts sa sb)
-Proof
-  Cases_on `sgn` >>
-  simp[array_bounds_check_def, array_bounds_valid_def,
-       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, fresh_var_def, emit_def, comp_return_def,
-       emitted_insts_def, scalar_code_def, scalar_shape_def,
-       scalar_binary_def, scalar_unary_def, scalar_available_def, mk_inst_def] >>
-  rpt strip_tac >> gvs[] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, scalar_code_def, scalar_shape_def,
-       scalar_binary_def, scalar_unary_def, scalar_available_def]
-QED
-
 Theorem array_scalar_clean_operand_step[local]:
   scalar_shape ins /\
   EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) ins.inst_operands ==>

@@ -1,4 +1,4 @@
-(* Exact frozen-cut diagnostic boundary. No additional representation premise. *)
+(* Array suffix on the frozen source and runtime contract. *)
 Theory bodyFullTargetArraySuffix
 Ancestors
   bodyFullTargetSubscript bodyFullTargetArraySource bodyFullTargetArrayLoad
@@ -85,7 +85,7 @@ Proof
   metis_tac[]
 QED
 
-(* Diagnostic: robust root layout supplies a clean current nested header. *)
+(* Robust root layout supplies a clean current nested header. *)
 Theorem array_tail_robust_path_header_clean[local]:
   !path tv a vs off mem k etv cap tn.
     value_has_type tv a /\ well_formed_type_value tv /\
@@ -556,94 +556,6 @@ Proof
   fs[op_taint_def, ghost_inv_at_def]
 QED
 
-Theorem array_tail_bounds_uniform[local]:
-  array_bounds_check idx len sgn sa = ((),sb) /\
-  eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
-  fresh_vars_wrt sa s /\ ~ctx_has_dalloca ctx /\
-  op_prov G idx = NONE /\ op_prov G len = NONE /\
-  op_taint tn idx = {} /\ op_taint tn len = {} /\ allocas_from lo s ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-  ?G' tn'.
-    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn') /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==>
-      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
-    (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-      (t with vs_vars := s.vs_vars) = s /\
-      (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)) /\
-    (!t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t ==>
-      (t with vs_vars := s.vs_vars) = revert_state (set_returndata [] s) /\
-      (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x))
-Proof
-  strip_tac >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
-  drule_all array_bounds_check_certified >>
-  disch_then (qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac) >>
-  simp[] >> qexistsl [`G'`, `tn'`] >> simp[] >>
-  rpt strip_tac >>
-  drule_all array_bounds_check_certified >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique]
-QED
-
-
-Theorem array_tail_address_uniform[local]:
-  array_elem_ptr bop idx dyn ws esz sa = (p,sb) /\
-  eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
-  fresh_vars_wrt sa s /\ op_taint tn bop = {} /\ op_taint tn idx = {} /\
-  op_prov G idx = NONE /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-  ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn') /\
-    op_taint tn' p = {} /\ op_prov G' p = op_prov G bop /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==>
-      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x /\
-      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
-    (t with vs_vars := s.vs_vars) = s /\
-    eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz)
-Proof
-  strip_tac >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
-  drule_all array_elem_ptr_certified >>
-  disch_then (qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac) >>
-  simp[] >> qexistsl [`H`, `tm`] >> simp[] >>
-  gen_tac >>
-  drule_all array_elem_ptr_certified >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique]
-QED
-
-(* Certify the scalar failure once with no dead bytes. Monotonicity then
-   keeps the actual failing cursor fixed for every horizon mask. *)
-Theorem array_tail_bounds_abort_uniform[local]:
-  array_bounds_check idx len sgn sa = ((),sb) /\
-  eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
-  fresh_vars_wrt sa s /\ ~idx_in_range sgn iw nw /\
-  sb.cs_current_bb = sa.cs_current_bb /\
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  fn_has_code sa sb func /\
-  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
-               ~is_terminator ins.inst_opcode) (emitted_insts sa sb) /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-  (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn') ==>
-  ?t j. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (Abort Revert_abort (t with vs_inst_idx := j),G',tn')
-Proof
-  strip_tac >>
-  `inst_seq_ptr <| d_stor := K (K {}); d_trans := K (K {});
-                   d_imm := K {}; d_ret := K {} |>
-     lo ctx func PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
-  drule_all array_bounds_check_joint_abort >>
-  disch_then (qspec_then `explicit` strip_assume_tac) >>
-  qexistsl_tac [`t`, `j`] >> simp[] >> gen_tac >>
-  irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC
-QED
 
 Theorem array_tail_length_uniform[local]:
   (if dyn then compile_ptr_load ctor imm loc bop

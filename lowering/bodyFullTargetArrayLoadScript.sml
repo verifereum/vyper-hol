@@ -162,17 +162,21 @@ Theorem array_length_step_joint[local]:
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  let i = mk_inst sa.cs_next_id opc args [out];
-      u = update_var out w s;
-      t = u with vs_inst_idx := LENGTH sb.cs_current_insts;
-      G' = step_prov PG G i u;
-      tn' = step_taint i s u tn in
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
-    eval_operand (Var out) t = SOME w /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    array_length_frame sa s G tn t G' tn'
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts),
+     step_prov PG G (mk_inst sa.cs_next_id opc args [out]) (update_var out w s),
+     step_taint (mk_inst sa.cs_next_id opc args [out]) s (update_var out w s) tn) /\
+  eval_operand (Var out)
+    (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
+  ~(update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts).vs_halted /\
+  (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb =
+    sb.cs_current_bb /\
+  array_length_frame sa s G tn
+    (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts)
+    (step_prov PG G (mk_inst sa.cs_next_id opc args [out]) (update_var out w s))
+    (step_taint (mk_inst sa.cs_next_id opc args [out]) s (update_var out w s) tn)
 Proof
-  pure_rewrite_tac[LET_THM] >> strip_tac >>
+  strip_tac >>
   `opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc` by
     (gvs[] >> simp[is_terminator_def]) >>
   qpat_x_assum `array_length_step_ok _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
