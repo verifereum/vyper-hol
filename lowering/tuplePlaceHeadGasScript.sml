@@ -278,8 +278,9 @@ Resume tuple_place_marked_head_step[static_value]:
         venomMemDefsTheory.alloca_next_valid_def,
         venomMemDefsTheory.allocas_non_overlapping_def] >>
      conj_tac >- (res_tac >> decide_tac) >>
-     rpt strip_tac >>
-     `aid <> aid'` by decide_tac >>
+     map_every qx_gen_tac [`other_aid`, `other_base`, `other_size`] >>
+     strip_tac >>
+     `aid <> other_aid` by decide_tac >>
      res_tac >> decide_tac) >>
   `compile_assign_value cenv (FST r) (if is_t then LocTransient else LocStorage)
      (EL i elems) (is_word_type (EL i tys)) NONE (EL i tys) (EL i ltys)

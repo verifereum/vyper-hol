@@ -579,12 +579,14 @@ Resume assign_place_mutating_nonempty_case_with_store[static]:
      `t'.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
      `w2n w + type_memory_size tv <= t'.vs_alloca_next` by
        metis_tac[venomMemDefsTheory.alloca_next_valid_def] >>
-     simp[] >> rpt strip_tac >>
-     `aid <> aid'` by (fs[ci_mono_def] >> decide_tac) >>
+     simp[] >>
+     map_every qx_gen_tac [`other_aid`, `other_base`, `other_size`] >>
+     strip_tac >>
+     `aid <> other_aid` by (fs[ci_mono_def] >> decide_tac) >>
      qpat_assum `allocas_non_overlapping t'` mp_tac >>
      qpat_assum `FLOOKUP t'.vs_allocas aid = _` mp_tac >>
-     qpat_assum `FLOOKUP t'.vs_allocas aid' = _` mp_tac >>
-     qpat_assum `aid <> aid'` mp_tac >>
+     qpat_assum `FLOOKUP t'.vs_allocas other_aid = _` mp_tac >>
+     qpat_assum `aid <> other_aid` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   qpat_x_assum `case FST _ of NONE => _ | SOME loc' => _`
