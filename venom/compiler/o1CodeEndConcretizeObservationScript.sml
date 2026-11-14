@@ -105,7 +105,7 @@ Resume concretize_codecopy_reflect[scalar]:
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   qpat_assum `ptr_discipline _ _ _` mp_tac >>
-  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  pure_rewrite_tac[ptr_discipline_def] >> disch_then (qx_choose_then `P` strip_assume_tac) >>
   `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by

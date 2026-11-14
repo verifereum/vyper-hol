@@ -50,6 +50,7 @@ Theorem o1_code_end_pipeline_from_walk:
        code_end_offset_ok (raw_reachable vs_out) out.po_unit.cu_context)
 Proof
   disch_tac >> strip_tac >> drule o1_driver_runs >> strip_tac >>
+  rename1 `run_pipeline_stages _ _ _ _ = SOME (pre,pre_supply)` >>
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
   `ir_supply_inst_ok (init_ir_supply unit)` by
     simp[irSupplyTheory.init_ir_supply_inst_ok] >>

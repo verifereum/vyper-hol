@@ -76,7 +76,7 @@ Proof
   rpt strip_tac >>
   `rows_step_contracts_from o1_fn_row rp 0 o1_fn_passes` by
     simp[o1_fn_passes_steps, o1_step_contracts_from_rows] >>
-  drule_all retained_decomp >> strip_tac >>
+  drule_all retained_decomp >> disch_then (qx_choose_then `chains` strip_assume_tac) >>
   qexists_tac `stage_ctx u.cu_context chains` >>
   conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
   conj_tac >- simp[] >> conj_tac

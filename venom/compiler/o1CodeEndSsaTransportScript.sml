@@ -1,6 +1,6 @@
 Theory o1CodeEndSsaTransport
 Ancestors
-  o1CodeEndCertifiedLockstep o1ContractMakeSsa o1PassContract
+  o1FrameLockstep o1ContractMakeSsa o1PassContract
   venomPassSchedule unitTransformDefs
   concretizePtrCoverageStaticMemReachability frameRawProjection
   o1CodeEndSsaProtectedCleanup o1CodeEndSsaTraceOwnership o1CodeEndSsaRead

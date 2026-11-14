@@ -16,7 +16,8 @@ Theorem code_end_fix_phis_uses[local]:
 Proof
   rpt strip_tac >>
   `code_end_var f x` by metis_tac[simplify_fix_phis_code_end_backward_no_phi, opcode_distinct] >>
-  drule scfg_fix_all_phis_inst_mem >> strip_tac >> gvs[] >>
+  drule scfg_fix_all_phis_inst_mem >>
+  disch_then (qx_choosel_then [`inst`,`actual_preds`] strip_assume_tac) >> gvs[] >>
   `fix_phi_inst actual_preds inst = inst` by
     (irule fix_phi_inst_code_end_identity >> metis_tac[opcode_distinct]) >>
   metis_tac[]
@@ -233,7 +234,8 @@ Theorem code_end_origin_payload[local]:
 Proof
   strip_tac >>
   qpat_x_assum `frame_origin _ _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[frame_origin_def] >> strip_tac >>
+  pure_rewrite_tac[frame_origin_def] >>
+  disch_then (qx_choosel_then [`fn`,`s0`] strip_assume_tac) >>
   `g = simplify_cfg_fn fn /\ scfg_static fn` by metis_tac[] >>
   `frame_reach C g s0 j t` by metis_tac[frame_reach_ctx_bisim] >>
   `?s. frame_reach C fn s0 j s /\ scfg_payload s t` by
@@ -318,7 +320,8 @@ Proof
   simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
   drule_all code_end_stage_origins >> strip_tac >>
   `ctx_bisim C Ct` by metis_tac[simplify_cfg_stage_bisim] >>
-  drule_all code_end_origin_payload >> strip_tac >>
+  drule_all code_end_origin_payload >>
+  disch_then (qx_choosel_then [`f`,`s`] strip_assume_tac) >>
   `code_end_var f x` by metis_tac[] >>
   qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
   simp[code_end_offset_ok_def] >>

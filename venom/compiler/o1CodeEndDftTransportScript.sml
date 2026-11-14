@@ -45,7 +45,6 @@ Proof
   disch_then (qspec_then `D`
     (qx_choosel_then [`source_state`,`orc`] strip_assume_tac)) >>
   qexists_tac `source_state` >> simp[] >> strip_tac >>
-  conj_tac >- metis_tac[] >>
   `code_end_offset_ok
     (\ctx fn inst t. ?p d. ev_reachable orc vs' ctx p d fn inst t) C` by
     (rw[code_end_offset_ok_def] >>
@@ -54,9 +53,10 @@ Proof
      first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
   drule_all dft_ev_code_end_offset_ok >>
   simp[code_end_offset_ok_def] >> strip_tac >> rpt strip_tac >>
+  rename1 `raw_reachable vs' C' fn inst target_state` >>
   first_x_assum drule >> strip_tac >>
   first_x_assum (qspecl_then
-    [`fn`, `inst`, `vs with vs_gas_readings := vs'.vs_gas_readings`] mp_tac) >>
+    [`fn`, `inst`, `target_state with vs_gas_readings := vs'.vs_gas_readings`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
 
@@ -77,8 +77,8 @@ Proof
       `ctx_labels_bound C vs'.vs_labels` by
         (irule dft_ctx_labels_bound >> gvs[o1_run_state_ok_def]) >>
       drule_all dft_ctx_code_end_sim_gas >>
-      disch_then (qspec_then `D` strip_assume_tac) >>
-      qexists_tac `vs` >> simp[o1_fn_passes_def] >> rpt strip_tac >>
+      disch_then (qspec_then `D` (qx_choose_then `source_state` strip_assume_tac)) >>
+      qexists_tac `source_state` >> simp[o1_fn_passes_def] >> rpt strip_tac >>
       `o1_lowered_inv C' vs' /\ code_end_offset_ok (raw_reachable vs') C'` by
         metis_tac[] >>
       simp[] >> irule dft_stage_wf_ssa >> metis_tac[]) >>

@@ -35,6 +35,7 @@ Proof
    >- (drule_all supply_split_outputs_distinct >>
        gvs[cfg_block_decl_vars_def, MEM_FLAT, MEM_MAP, EVERY_MEM,
            ir_supply_covers_fn_def, list_subset_def] >> metis_tac[]) >>
+   rename1 `supply_inst_image _ _ _ _ old j` >>
    drule supply_inst_image_metadata >> strip_tac >>
    `j = old` by (irule supply_inst_image_unchanged >>
      gvs[] >> simp[is_terminator_def] >> metis_tac[]) >> gvs[])
@@ -92,6 +93,7 @@ Theorem cfg_round_codecopy_back[local]:
 Proof
   strip_tac >> drule cfg_norm_round_supply_cases >> strip_tac
   >- (qexists_tac `v` >> gvs[]) >>
+  rename1 `insert_split_supply s f pred target = (g,t)` >>
   Cases_on `build_split_block_supply s pred target` >>
   rename1 `build_split_block_supply s pred target = (split,split_tail)` >>
   PairCases_on `split_tail` >>

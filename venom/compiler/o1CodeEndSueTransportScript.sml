@@ -85,16 +85,19 @@ Theorem sue_frame_codecopy_projection[local]:
     execution_frame u = execution_frame t /\
     (!v. code_end_var fn' v ==> ?x. project v = Var x /\ code_end_var fn x)
 Proof
-  strip_tac >> drule_all sue_expand_function_supply_projection_identity >> strip_tac >>
+  strip_tac >> drule_all sue_expand_function_supply_projection_identity >>
+  disch_then (qx_choose_then `project` strip_assume_tac) >>
   qpat_x_assum `sue_frame_align _ _ _ _ _ _ _` mp_tac >>
-  simp[sue_frame_align_def] >> strip_tac >>
+  pure_rewrite_tac[sue_frame_align_def] >>
+  disch_then (qx_choosel_then [`bb`,`bb_prime`,`bs`,`be`,`segs`,`i`,`j`,`u`,`b`] strip_assume_tac) >> gvs[] >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
   `MEM (bb with bb_instructions := FLAT segs) fn'.fn_blocks` by
     metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
   `!v. MEM (Var v) (EL u.vs_inst_idx bb.bb_instructions).inst_operands ==>
     MEM v (fn_ir_vars fn)` by
     metis_tac[sue_original_operand_covered, MEM_EL] >>
-  drule_all sue_segments_supply_index_ready >> strip_tac >>
+  drule_all sue_segments_supply_index_ready >>
+  disch_then (qx_choosel_then [`si`,`sj`] strip_assume_tac) >>
   `EL j (EL u.vs_inst_idx segs) = LAST (EL u.vs_inst_idx segs) /\
    (EL j (EL u.vs_inst_idx segs)).inst_opcode = (EL u.vs_inst_idx bb.bb_instructions).inst_opcode /\
    LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
