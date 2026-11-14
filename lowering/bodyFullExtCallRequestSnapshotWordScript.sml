@@ -262,3 +262,67 @@ Proof
       simp[vv_at_def]) >>
   metis_tac[bytestring_val_footprint_eq]
 QED
+
+Theorem extcall_capture_nonmemory_transport:
+  !H ctx func ce cx ty sa sb sc ee ef raw tag p s u.
+    p.ptr_location <> LocMemory /\
+    vv_holds ce cx ty raw (LocatedValue tag p) ee s /\
+    vv_at ce cx ty sa sb ee raw (LocatedValue tag p) s /\
+    vv_storage_live H cx (LocatedValue tag p) ee s /\
+    stmt_state_rel H ctx func ce cx ef u /\
+    (ef with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+      (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+    FST (read_result cx raw ef) = FST (read_result cx raw ee) /\
+    (!w. eval_operand p.ptr_operand s = SOME w ==>
+         eval_operand p.ptr_operand u = SOME w) ==>
+    vv_holds ce cx ty raw (LocatedValue tag p) ef u /\
+    vv_at ce cx ty sa sc ef raw (LocatedValue tag p) u /\
+    vv_storage_live H cx (LocatedValue tag p) ef u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ef.accounts = ee.accounts /\ ef.tStorage = ee.tStorage /\
+   ef.immutables = ee.immutables` by
+    (qpat_x_assum `_ with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _`
+       (fn th => map_every (mp_tac o (fn f => AP_TERM f th))
+          [``\x:evaluation_state. x.accounts``,
+           ``\x:evaluation_state. x.tStorage``,
+           ``\x:evaluation_state. x.immutables``]) >> simp[]) >>
+  `!tr. get_storage cx ef tr = get_storage cx ee tr` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `SND (read_result cx raw ef) = ef` by
+    (Cases_on `read_result cx raw ef` >>
+     drule vyperStateTheory.read_result_state >> simp[]) >>
+  Cases_on `p.ptr_location` >>
+  gvs[vv_holds_def, vv_at_def, vv_storage_live_def]
+  >~ [`immutable_holds ce cx tag raw w ef u`]
+  >- (gvs[immutable_holds_def] >>
+      qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`, `v`] >>
+      simp[] >> metis_tac[pairTheory.PAIR, pairTheory.FST, pairTheory.SND]) >>
+  (gvs[storage_holds_def] >>
+  `w2n w + type_slot_size tvt <= dimword (:256)` by
+    gvs[accountsRelPropsTheory.storage_range_agree_def] >>
+  `storage_read_live H (p.ptr_location = LocTransient)
+     (get_storage cx ef (p.ptr_location = LocTransient)) w tvt` by simp[] >>
+  qexists_tac `v` >> conj_tac
+  >- (qpat_x_assum `read_storage_slot _ _ _ _ ee = _` mp_tac >>
+      simp[vyperStateTheory.read_storage_slot_def,
+           vyperStorageBackendTheory.get_storage_backend_eq,
+           vyperStateTheory.bind_def, vyperStateTheory.lift_option_def,
+           vyperStateTheory.return_def] >>
+      Cases_on `decode_value (get_storage cx ee
+        (p.ptr_location = LocTransient)) (w2n w) tvt` >>
+      gvs[vyperStateTheory.return_def,
+                            vyperStateTheory.raise_def]) >>
+  conj_tac
+  >- metis_tac[pairTheory.PAIR, pairTheory.FST, pairTheory.SND] >>
+  irule accountsRelPropsTheory.storage_range_agree_of_live >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`H`, `p.ptr_location = LocTransient`] >>
+  simp[] >>
+  gvs[exprLoweringPropsTheory.stmt_state_rel_def,
+      loweringStateRelDefsTheory.state_rel_def,
+      loweringStateRelDefsTheory.storage_rel_def,
+      loweringStateRelDefsTheory.transient_rel_def,
+      vyperStorageBackendTheory.get_storage_def,
+      vfmStateTheory.lookup_account_def])
+QED
