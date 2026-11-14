@@ -1937,25 +1937,6 @@ Proof
   simp[venomCallOracleDefsTheory.venom_create_request_def, read_memory_def]
 QED
 
-Theorem frag_consume_call_control[local]:
-  consume_call_outcome rq ro rs (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
-    (FST (consume_call_outcome rq ro rs s),
-     SND (consume_call_outcome rq ro rs s) with
-       <|vs_prev_bb := p; vs_current_bb := b|>)
-Proof
-  simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
-       write_memory_with_expansion_def]
-QED
-
-Theorem frag_consume_create_control[local]:
-  consume_create_outcome rq (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
-    (FST (consume_create_outcome rq s),
-     SND (consume_create_outcome rq s) with
-       <|vs_prev_bb := p; vs_current_bb := b|>)
-Proof
-  simp[venomCallOracleDefsTheory.consume_create_outcome_eq]
-QED
-
 Theorem frag_ext_call_control:
   exec_ext_call inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     gas addr value ao az ro rz static =
