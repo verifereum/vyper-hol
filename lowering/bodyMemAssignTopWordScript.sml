@@ -83,7 +83,7 @@ QED
 Theorem compile_assign_storage_typed_stmt_frag_mem:
   !d ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt vtyp.
-    get_module_code cx src = SOME ts /\
+    ~cx.txn.is_static /\ get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     expr_type e = typ /\ is_word_type typ /\
@@ -184,8 +184,9 @@ Resume compile_assign_storage_typed_stmt_frag_mem[store]:
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
     (qpat_x_assum `stmt_state_rel H1 _ _ _ _ ee t` mp_tac >>
+     qpat_assum `~cx.txn.is_static` mp_tac >>
      rpt (pop_assum kall_tac) >>
-     simp[stmt_state_rel_def, state_rel_def]) >>
+     simp[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
   `alloca_inv t` by
     (qpat_x_assum `stmt_state_rel H1 _ _ _ _ ee t` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def]) >>
@@ -278,7 +279,7 @@ Finalise compile_assign_storage_typed_stmt_frag_mem
 
 Theorem body_assign_toplevel_word_mem:
   !cx nsid e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    ~cx.txn.is_static /\ body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
