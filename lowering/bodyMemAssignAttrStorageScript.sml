@@ -209,17 +209,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem vv_post_emit_cursor_mem_src[local]:
-  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
-  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\
-  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) ==>
-  vv_post H ctx func ce cx e es sa sn s0 ee tv vv
-    (update_var x w s with vs_inst_idx := n)
-Proof
-  simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
-QED
-
 Theorem vv_store_bound_frame_mem_src:
   vv_store_bound cx ty lt es tv vv s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
