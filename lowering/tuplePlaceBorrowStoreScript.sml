@@ -1,13 +1,15 @@
 (* Equal-layout stores retain borrowed local bytes at their correctness endpoint. *)
 Theory tuplePlaceBorrowStore
 Ancestors
-  tuplePlaceValueFrame tuplePlaceMemoryFrame
+  tuplePlaceValueFrame tuplePlaceMemoryFrame tuplePlaceValueStorageFrame
   placeStore placeStoreStorage placeStoreSlots placeMemoryStateRebuild placeStoreMemory placeMemoryStoreEffect
   vyperTypeArgFits exprSimProps valueEncodingProps vyperTyping
   stmtSimDefs exprSimHypsDefs loweringPosts venomState stmtLowering exprLowering
   compileEnv vyperInterpreter vyperState vyperValue vyperTypeSystem
   fragGasPath fragGasMode arithmetic exprLoweringProps stmtSimStoreCopy
   typedMemoryCopy
+
+Libs horizonTypeLib
 
 Theorem tuple_place_equal_storage_run_memory:
   !H0 ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty stv v sa sb.
@@ -82,13 +84,16 @@ Resume tuple_place_equal_storage_run_memory[equal]:
     place_store_slots_suffix_run_horizons >>
   (impl_tac >- (fs[] >> metis_tac[])) >>
   strip_tac >> qexists_tac `t` >> gvs[] >> rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _ (* g|sg *)`] >-
   (rpt strip_tac >>
   `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl stv /\
      w2n (root + n2w delta) = w2n rk + dl` by
     (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
   qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
-  metis_tac[])
+  qexistsl_tac [`dl`, `pth`, `rt`, `rk`] >> conj_tac
+  >- (qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >>
+      qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >> decide_tac) >>
+  conj_tac >> first_assum ACCEPT_TAC)
 QED
 Finalise tuple_place_equal_storage_run_memory
 
@@ -155,11 +160,17 @@ Proof
 QED
 
 Resume tuple_place_equal_value_run_frame[memory]:
+  `storage_place_region cx p` by
+    (Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def,
+       vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+     Cases_on `b` >> gvs[slot_loc_def]) >>
   Cases_on `is_word_type dty`
   >- suspend "memory_word" >>
   drule_all (SRULE [] (Q.INST [`sty` |-> `dty`]
-    (SPEC_ALL tuple_place_memory_forward_frame))) >> strip_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+    (SPEC_ALL (at_horizon_named "H"
+      (at_horizon_named "H0" tuple_place_memory_forward_frame))))) >> strip_tac >>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff t` by
     (rpt strip_tac >>
      qpat_assum `!H. stmt_state_rel H _ _ _ _ ee s ==> _` drule >> strip_tac >>
@@ -182,7 +193,8 @@ Resume tuple_place_equal_value_run_frame[memory_word]:
     gvs[compile_assign_value_def] >>
   `eval_operand op s = SOME (typed_val_to_w256 stv v)` by fs[expr_val_rel_def] >>
   qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 stv v) s` >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff u` by
     (rpt strip_tac >> Cases_on `p`
      >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])
