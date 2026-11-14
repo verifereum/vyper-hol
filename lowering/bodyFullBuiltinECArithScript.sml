@@ -9,6 +9,7 @@ Ancestors
   bodyFullAllocGeneric bodyFullUnwrapRun bodyFullGhostFrame wordArgsPtr
   bodyFullBuiltinPrecompileSuffixPath bodyFullBuiltinPrecompileSuffixAbort
   bodyFullBuiltinPrecompileSuffixSuccess bodyFullBuiltinECArithOperands
+  bodyFullBuiltinECArithCompose bodyFullBuiltinECArithSuffix bodyFullBuiltinECArithStaging
   gasOutcomeFull gasOutcomeFullCompose gasShadowCompile
   exprSimHypsDefs exprLowering vyperAST list
 
@@ -23,17 +24,9 @@ Theorem ec_arith_builtin_vv_sim_full:
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  `a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-   ?e1 e2. args = [e1;e2] /\
-     expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-     expr_type e2 = (if bt = ECAdd then
-       ArrayT (BaseT (UintT 256)) (Fixed 2) else BaseT (UintT 256))` by
-    (Cases_on `bt = ECAdd` >> gvs[] >> metis_tac[ec_pre_types]) >>
-  `body_exprs_full_ok cx [e1;e2]` by
-    (gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
-  simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  FAIL_TAC "EC assembly boundary"
+  MATCH_MP_TAC ec_arith_vv_from_tail_full >>
+  MATCH_MP_TAC ec_arith_tail_full_from_staging >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC ec_arith_staging_full_conditional
 QED
 
 Theorem ec_arith_builtin_sim_full:
@@ -47,5 +40,23 @@ Theorem ec_arith_builtin_sim_full:
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es
 Proof
-  rpt strip_tac
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty (Builtin a bt args) es` by
+    (MATCH_MP_TAC ec_arith_builtin_vv_sim_full >>
+     qexistsl_tac [`tops`, `env`] >> asm_rewrite_tac []) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule expr_sim_full_of_vv >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all exprSimHypsTheory.expr_body_pre_copy_ok >> simp[]) >>
+  qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+    (mp_tac o MATCH_MP exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  qexists_tac `x` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env (Builtin a bt args)
+     (es with gas_obs := gs)` by simp[] >>
+  drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
+  strip_tac >> gvs[] >> metis_tac[]
 QED

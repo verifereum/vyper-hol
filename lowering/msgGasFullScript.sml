@@ -2,10 +2,7 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
-  bodyFullBuiltinECAddStaging
-  bodyFullBuiltinECMulStaging
-  (* Keep the joint EC arithmetic suffix in the default build cone. *)
-  bodyFullBuiltinECArithSuffix
+  bodyFullBuiltinECArith
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
