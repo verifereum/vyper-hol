@@ -1,6 +1,7 @@
 (* Current-source raw_call shape interfaces shared by pointer simulations. *)
 Theory rawCallShapePtr
 Ancestors
+  builtinSimple emitHelperProps
   exprSimHypsDefs exprLowering exprLoweringProps builtinSystem
   vyperTyping vyperTypeSystem vyperInterpreter vyperState vyperValue
   supportedExprTraverse allocLimits list pair exprSimSend context emitHelper
@@ -332,3 +333,28 @@ Proof
     fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[] >>
   simp[arithmeticTheory.ADD1, listTheory.APPEND_ASSOC]
 QED
+
+Theorem raw_call_select_code:
+  compile_select condop tp ep sa = (op,sb) ==>
+  ?d m out. op = Var out /\
+    d = STRING #"%" (toString sa.cs_next_var) /\
+    m = STRING #"%" (toString (sa.cs_next_var + 1)) /\
+    out = STRING #"%" (toString (sa.cs_next_var + 2)) /\
+    same_blocks sa sb /\
+    sb.cs_next_var = sa.cs_next_var + 3 /\ sb.cs_next_id = sa.cs_next_id + 3 /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id XOR [tp;ep] [d];
+       mk_inst (sa.cs_next_id + 1) MUL [condop;Var d] [m];
+       mk_inst (sa.cs_next_id + 2) XOR [ep;Var m] [out]] /\
+    emitted_insts sa sb =
+      [mk_inst sa.cs_next_id XOR [tp;ep] [d];
+       mk_inst (sa.cs_next_id + 1) MUL [condop;Var d] [m];
+       mk_inst (sa.cs_next_id + 2) XOR [ep;Var m] [out]]
+Proof
+  simp[compile_select_def, comp_bind_def, emit_op_def, fresh_var_def,
+    fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
+  strip_tac >> gvs[] >> simp[same_blocks_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+    rich_listTheory.DROP_LENGTH_APPEND] >> simp[arithmeticTheory.ADD_ASSOC]
+QED
+
