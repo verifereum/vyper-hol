@@ -21,7 +21,7 @@ Theorem bytes_word_empty_convert_origin_path:
   not_fresh_at sa z /\ fresh_vars_wrt sa s /\ lookup_var z s = SOME a /\
   val_in_memory tv v (w2n a) s.vs_memory /\
   ptr_covers G tn z s capacity /\ 64 <= capacity /\
-  FLOOKUP G z = SOME (b,sz) /\ b+sz <= dimword(:256) /\
+  w2n a + 64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
@@ -54,7 +54,6 @@ Proof
   reverse conj_tac
   >- (rpt strip_tac >> drule_all dynamic_empty_scalar_convert >> simp[]) >>
   rpt strip_tac >>
-  `w2n a+64 <= dimword(:256)` by (gvs[ptr_covers_def] >> decide_tac) >>
   `w2n a+32 < dimword(:256)` by decide_tac >>
   `eval_operand (Var z) s = SOME a` by simp[eval_operand_def] >>
   drule_all dynamic_scalar_run_exact >> simp[NoAsms] >> strip_tac >>

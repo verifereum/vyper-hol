@@ -16,7 +16,7 @@ Theorem bytes_word_loader_fixed_frame:
   load_bytestring_as_word (Var src) SHR sa = ((out,bits),sb) /\
   not_fresh_at sa src /\ ~ctx_has_dalloca ctx /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
-  64 <= capacity /\ FLOOKUP G src = SOME (b,sz) /\ b+sz <= dimword(:256) /\
+  64 <= capacity /\ w2n a + 64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
@@ -34,7 +34,6 @@ Theorem bytes_word_loader_fixed_frame:
 Proof
   strip_tac >> drule_all unsigned_loader_shape_fresh >> strip_tac >>
   `ptr_covers G tn src s 64` by (irule ptr_covers_mono >> metis_tac[]) >>
-  `w2n a+64 <= dimword(:256)` by (gvs[ptr_covers_def] >> decide_tac) >>
   `src <> len` by fs[] >>
   drule_all bytestring_source_run >>
   disch_then (qspecl_then [`sa.cs_next_id+1`,`sa.cs_next_id`,`dp`] assume_tac) >>
@@ -91,7 +90,7 @@ Theorem bytes_word_convert_origin_path:
   not_fresh_at sa z /\ fresh_vars_wrt sa s /\ lookup_var z s = SOME a /\
   val_in_memory tv v (w2n a) s.vs_memory /\
   ptr_covers G tn z s capacity /\ 64 <= capacity /\
-  FLOOKUP G z = SOME (b,sz) /\ b+sz <= dimword(:256) /\
+  w2n a + 64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
@@ -121,7 +120,6 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `~is_bytestring_type dst` by
     (gvs[is_bytestring_type_def] >> metis_tac[]) >>
-  `w2n a+64 <= dimword(:256)` by (gvs[ptr_covers_def] >> decide_tac) >>
   `w2n a+32 < dimword(:256)` by decide_tac >>
   drule_at (Pat `compile_type_convert _ _ _ = _`) bytes_word_convert_parts >>
   (impl_tac >-
