@@ -2,7 +2,7 @@
 Theory defaultDispatchPlacement
 Ancestors runtimeExternalPackageCode runtimeBodyStartDefs entryRuntimePrefix
   supportedProgramProps entryDispatchProps compileVyper
-  rawEntryCode entryCheckIntervals sourceEntrySelection supportedProgram supportedDecls
+  classifiedExternalLabels pair rawEntryCode entryCheckIntervals sourceEntrySelection supportedProgram supportedDecls
   loweringShapeSource loweringShapeRules loweringShapeProps loweringShapeDefs compileEnv supportedNames list
   vyperCompiler actualDecoderPackaging actualRegistrationCode moduleLowering
 
@@ -209,4 +209,76 @@ Proof
       qexistsl [`fallback`, `label_st`, `dispatch_st`, `external_st`, `checks`] >> simp[]) >>
   rpt conj_tac >> irule external_decoder_fn_has_code >>
   simp[cs_extends_refl] >> qexists `checks` >> simp[cs_extends_refl]
+QED
+
+Theorem default_selected_compile_placement:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+  fn_entry_label func = SOME elbl /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,F,rr,name,args,([]:expr list),ret,fbody)) =
+    (lbl,ce,pargs,mincd,pay,F,key,ut,iv,fbody,rt) ==>
+  ?pre post fallback label_st dispatch_st before checks st ce' body_st st'.
+    runtime_selected_body_start tops rpolicy
+      (lbl,ce,pargs,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+    MAP (set_external_package_target rpolicy.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot))
+      (FST (classify_functions tops)) =
+      pre ++ (lbl,ce,pargs,mincd,pay,F,key,ut,iv,fbody,rt)::post /\
+    ~MEM lbl (MAP FST pre) /\
+    fresh_label "fallback" (initial_compile_state "__entry") = (fallback,label_st) /\
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fallback label_st = ((),dispatch_st) /\
+    compile_external_fn_bodies pre dispatch_st = ((),before) /\
+    new_block lbl before = (before.cs_current_bb,checks) /\
+    compile_entry_checks mincd pay checks = ((),st) /\
+    compile_register_positional_args ce pargs 4 st = (ce',body_st) /\
+    compile_guarded_body ce' F key ut iv fbody rt body_st = ((),st') /\
+    shape_state label_st /\ shape_state dispatch_st /\ shape_state checks /\
+    shape_state st /\ shape_state body_st /\ shape_state st' /\
+    cs_extends label_st dispatch_st /\ cs_extends dispatch_st checks /\
+    cs_extends checks st /\ cs_extends st body_st /\ cs_extends body_st st' /\
+    fn_has_code label_st dispatch_st func /\ fn_has_code checks st func /\
+    fn_has_code st body_st func /\ fn_has_code body_st st' func /\
+    label_st.cs_current_bb = elbl /\ label_st.cs_current_insts = [] /\
+    label_st.cs_next_var = 0
+Proof
+  strip_tac >> drule_all default_runtime_compile_layout >> strip_tac >>
+  `MEM (lbl,ce,pargs,mincd,pay,F,key,ut,iv,fbody,rt) extpkgs` by
+    (gvs[MEM_MAP] >> goal_assum (drule_at Any) >> simp[]) >>
+  `ALL_DISTINCT (MAP FST extpkgs)` by
+    (gvs[] >> drule classifiedExternalLabelsTheory.classified_external_labels_distinct >>
+     simp[MAP_MAP_o, combinTheory.o_DEF, LAMBDA_PROD,
+       package_external_fn_def, set_external_package_target_def]) >>
+  drule_all compile_external_member_interval >> strip_tac >>
+  `~MEM lbl (MAP FST pre)` by (gvs[MAP_APPEND, ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  qpat_x_assum `extpkgs = pre ++ _` SUBST_ALL_TAC >>
+  drule_all external_selected_check_interval >> strip_tac >>
+  gvs[] >>
+  `cenv_shape_ok checked ce` by
+    (irule cenv_static_ok_shape_ok >> fs[external_fn_shape_ok_def]) >>
+  qspecl_then [`pargs`, `ce`, `4`] mp_tac compile_register_positional_args_shape >>
+  rewrite_tac[shape_step_def] >> disch_then drule >> simp[] >> strip_tac >>
+  `cs_extends checked sa` by fs[shape_extends_def] >>
+  `ce'.ce_return_pc = NONE /\
+   ~supported_stmts_expr_exists expr_shape_root fbody` by
+    fs[external_fn_shape_ok_def] >>
+  drule compile_guarded_body_env_shape >> simp[] >>
+  rewrite_tac[shape_step_def] >> disch_then drule >> simp[] >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  qexistsl [`pre`, `post`, `fallback`, `label_st`, `dispatch_st`, `before`,
+    `opened`, `checked`, `ce'`, `sa`, `se`] >> simp[] >>
+  conj_tac
+  >- (rw[runtime_selected_body_start_def] >>
+      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
+      qexistsl [`pre`, `post`, `fallback`, `label_st`, `dispatch_st`, `before`,
+        `opened`] >> simp[]) >>
+  rpt conj_tac >> irule external_decoder_fn_has_code >>
+  simp[cs_extends_refl] >> metis_tac[cs_extends_trans, cs_extends_refl]
 QED
