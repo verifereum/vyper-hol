@@ -317,7 +317,7 @@ Proof
   simp[normal_frame_plan_def] >> metis_tac[]
 QED
 
-Theorem normal_frame_call_step:
+Theorem normal_frame_call_progress:
   normal_frame_plan rpolicy unit cpl prog vs0 es0
     (JointConfig stk PG G tn fn callinst s oms om hs h) ast /\
   joint_config_reachable vs0 unit.cu_context
@@ -329,6 +329,7 @@ Theorem normal_frame_call_step:
   enters_block callee cs s1 /\
   f.cf_fn = fn /\ f.cf_inst = callinst /\ f.cf_state = s ==>
   ?n ast1.
+    0 < n /\
     asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
       prog n ast = AsmOK ast1 /\
     normal_frame_plan rpolicy unit cpl prog vs0 es0
@@ -350,6 +351,26 @@ Proof
   >- (irule asm_steps_compose_ok >> qexists_tac `ready` >>
       conj_tac >> first_assum ACCEPT_TAC) >>
   simp[normal_frame_plan_def] >> metis_tac[]
+QED
+
+Theorem normal_frame_call_step:
+  normal_frame_plan rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn callinst s oms om hs h) ast /\
+  joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn callinst s oms om hs h) /\
+  active_inst fn callinst s /\ callinst.inst_opcode = INVOKE /\
+  callinst.inst_operands = Label nm :: arg_ops /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME callee /\
+  eval_operands arg_ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  enters_block callee cs s1 /\
+  f.cf_fn = fn /\ f.cf_inst = callinst /\ f.cf_state = s ==>
+  ?n ast1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    normal_frame_plan rpolicy unit cpl prog vs0 es0
+      (JointConfig (f::stk) PG' G' tn' callee inst' s1 oms' om' hs' h') ast1
+Proof
+  metis_tac[normal_frame_call_progress]
 QED
 
 Theorem normal_frame_fn_shape:
@@ -392,6 +413,77 @@ Proof
       irule normal_frame_call_step >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> metis_tac[])
   >> drule_all normal_frame_return_step >> metis_tac[]
+QED
+
+(* Every non-RF actual edge advances assembly or decreases the remaining
+   ordinary instruction rank in the same source activation and block. *)
+Theorem normal_frame_joint_progress:
+  joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  normal_frame_plan rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast /\
+  ~in_revert_forward fn s /\
+  (inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+    source_memory_reads_disjoint cpl inst s /\
+    context_source_memory_writes_disjoint cpl inst s) /\
+  joint_transition unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) ev
+    (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+  ?n ast1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    normal_frame_plan rpolicy unit cpl prog vs0 es0
+      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast1 /\
+    (0 < n \/
+     (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+      stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\
+      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        LENGTH bb.bb_instructions - t.vs_inst_idx <
+          LENGTH bb.bb_instructions - s.vs_inst_idx))
+Proof
+  strip_tac >>
+  qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
+  simp[Once joint_transition_cases] >> rpt strip_tac >> gvs[]
+  >- (drule_all normal_frame_fn_shape >> strip_tac >>
+      mp_tac (Q.INST
+        [`post` |-> `s'`, `PG'` |-> `PG`, `G'` |-> `step_prov PG G inst s'`,
+         `tn'` |-> `step_taint inst s s' tn`, `oms'` |-> `oms`,
+         `om'` |-> `origin_step PG om inst s'`, `hs'` |-> `hs`,
+         `h'` |-> `h ++ [OriginOrdinary fuel s'; OriginObserve
+           (OriginSnapshot fn PG (step_prov PG G inst s')
+             (origin_step PG om inst s') inst'
+             (s' with vs_inst_idx := SUC s.vs_inst_idx))]`]
+        (SPEC_ALL normal_frame_next_step)) >>
+      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      disch_then (qx_choosel_then [`n`, `ast1`] strip_assume_tac) >>
+      `s'.vs_current_bb = s.vs_current_bb` by
+        metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+      qpat_assum `active_inst fn inst s`
+        (qx_choose_then `bb` strip_assume_tac o REWRITE_RULE [active_inst_def]) >>
+      `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+        (irule venomExecPropsTheory.MEM_lookup_block >> fs[fn_labels_def]) >>
+      qexistsl_tac [`n`, `ast1`] >> rpt conj_tac >>
+      TRY (first_assum ACCEPT_TAC) >>
+      Cases_on `n = 0` >> simp[] >> qexists_tac `bb` >> simp[] >> decide_tac)
+  >- (drule_all normal_frame_jump_step >> metis_tac[])
+  >- (fs[decode_invoke_def, AllCaseEqs()] >>
+      `?n ast1.
+        0 < n /\
+        asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+          prog n ast = AsmOK ast1 /\
+        normal_frame_plan rpolicy unit cpl prog vs0 es0
+          (JointConfig
+            (<| cf_fn := fn; cf_inst := inst; cf_state := s;
+                cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |> :: stk)
+            (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) fn' inst' t
+            (om::oms) FEMPTY (h::hs)
+            [OriginCallee cs; OriginObserve
+              (OriginSnapshot fn' (MAP (op_prov G) ops) FEMPTY FEMPTY inst' t)]) ast1` by
+        (irule normal_frame_call_progress >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> metis_tac[]) >>
+      metis_tac[]) >>
+  drule_all normal_frame_return_step >> metis_tac[]
 QED
 
 (* Only the local range obligations at earlier occurrences are requested.
