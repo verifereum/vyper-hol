@@ -107,6 +107,29 @@ Proof
   simp[mem_bytes_at_def]
 QED
 
+Theorem extcall_capture_expr_val_bytes_frame:
+  !ce cx src sa sb ee v op s sv w ef func cut u.
+    expr_val_at ce cx src sa sb ee v op s /\
+    evaluate_type (get_tenv cx) src = SOME sv /\
+    ~is_word_type src /\ eval_operand op s = SOME w /\
+    wb_frame ce ee ef sb s u /\ pure_frame ce func ee cut s u ==>
+    mem_bytes_at (w2n w) (val_footprint sv v) u.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint sv v) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >- (gvs[wb_frame_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (gvs[pure_frame_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        metis_tac[] >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[mem_bytes_at_def]
+QED
+
 Theorem extcall_capture_located_at_frame:
   !ce cx ty sa sb sc es ee raw tag p s u.
     vv_at ce cx ty sa sb es raw (LocatedValue tag p) s /\
