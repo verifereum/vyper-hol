@@ -5,6 +5,7 @@ Ancestors
   exprPtrUnwrapStorageShape abiEncodeArgsSim abiEncodeMaterialize
   exprSimHyps valueCopyBytes context loweringPosts
   bodyIntCallFamAggSubscriptAllocRun placeMemoryPrimitiveForward loweringHalt
+  exprExtRequestOperandSafety exprSafeOperand
 
 Theorem intcall_assign_lowered_value:
   body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
@@ -344,4 +345,142 @@ Proof
   >- metis_tac[freshWritesTheory.not_fresh_at_mono,
               exprLoweringPropsTheory.ci_mono_def] >>
   metis_tac[]
+QED
+
+Theorem intcall_assign_snapshot_path:
+  body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  expr_body_pre ce fp.jc_cx env e es0 /\
+  compile_expr ce ety e si = (vv,sa) /\
+  eval_expr fp.jc_cx e es0 = (INL raw,es) /\
+  read_result fp.jc_cx raw es = (INL v,es) /\
+  vv_holds ce fp.jc_cx (post_value_type ce e) raw vv es s /\
+  (take ==> type_alloc_ok ce (lowered_value_type ce e)) /\
+  (if take then compile_snapshot_vv ce T
+       (vv_with_type (lowered_value_type ce e) vv) sa
+   else (vv,sa)) = (saved,sb) /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
+  (post_value_type ce e <> NoneT /\
+   ~is_word_type (post_value_type ce e) /\
+   ~is_bytestring_type (post_value_type ce e) /\
+   (case vv of StackValue _ _ => T
+     | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   !tv'. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv' ==>
+     ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+       a <= w2n w /\ w2n w + type_memory_size tv' <= a+k /\
+       a+k < dimword (:256) /\
+       (fp.jc_lo <= a \/
+        ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t tv. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK t) /\
+    intcall_expr_cont fp ce env es sa s es sb t /\
+    evaluate_type (get_tenv fp.jc_cx) (lowered_value_type ce e) = SOME tv /\
+    value_has_type tv v /\
+    (!x. vv_operand saved = Var x ==> not_fresh_at sb x) /\
+    (~take ==> saved = vv /\ sb = sa /\ t = s) /\
+    (take ==>
+      vv_type saved = lowered_value_type ce e /\
+      expr_val_rel fp.jc_cx (lowered_value_type ce e) v (vv_operand saved) t /\
+      (is_word_type (lowered_value_type ce e) ==>
+         saved = StackValue (lowered_value_type ce e) (vv_operand saved)) /\
+      (~is_word_type (lowered_value_type ce e) ==>
+        saved = LocatedValue (lowered_value_type ce e)
+                  (mk_ptr (vv_operand saved) LocMemory) /\
+        ?w. eval_operand (vv_operand saved) t = SOME w /\
+          val_in_memory tv v (w2n w) t.vs_memory /\
+          FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size tv) /\
+          sa.cs_next_id < sb.cs_next_id /\ fp.jc_lo <= w2n w /\
+          w2n w + type_memory_size tv < dimword (:256) /\
+          (!n b k. local_region ce es.scopes t n b k ==>
+             regions_disjoint (w2n w) (type_memory_size tv) b k)) /\
+      (!ee sc u. intcall_expr_cont fp ce env es sb t ee sc u ==>
+         expr_val_rel fp.jc_cx (lowered_value_type ce e) v (vv_operand saved) u))
+Proof
+  strip_tac >> drule_all intcall_assign_lowered_value >> strip_tac >>
+  Cases_on `take`
+  >- (gvs[] >>
+      drule_all intcall_assign_unwrap_type >> strip_tac >>
+      `vv_type (vv_with_type (lowered_value_type ce e) vv) =
+         lowered_value_type ce e /\
+       vv_operand (vv_with_type (lowered_value_type ce e) vv) = vv_operand vv` by
+        (Cases_on `vv` >> simp[vv_with_type_def, vv_type_def, vv_operand_def]) >>
+      `lowered_value_type ce e <> NoneT /\
+       ~is_word_type (lowered_value_type ce e) /\
+       ~is_bytestring_type (lowered_value_type ce e) /\
+       (case vv_with_type (lowered_value_type ce e) vv of
+          StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+       ?w a k. eval_operand (vv_operand (vv_with_type (lowered_value_type ce e) vv)) s = SOME w /\
+         a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+         (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)` by
+        (strip_tac >> `post_value_type ce e = lowered_value_type ce e` by metis_tac[] >>
+         Cases_on `vv` >> gvs[vv_with_type_def] >> metis_tac[]) >>
+      Cases_on `is_word_type (lowered_value_type ce e)`
+      >- (gvs[exprLoweringTheory.compile_snapshot_vv_def,
+               compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+               AllCaseEqs()] >>
+          Cases_on `unwrap_value ce (vv_with_type (lowered_value_type ce e) vv) sa` >>
+          gvs[] >>
+          drule_at (Pat `unwrap_value _ _ _ = _`) intcall_unwrap_landing >>
+          disch_then (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
+          disch_then (qspecl_then [`v`, `tv`, `env`] mp_tac) >>
+          (impl_tac >- simp[]) >> strip_tac >>
+          `!x. q = Var x ==> not_fresh_at r x` by
+            (drule_at (Pat `unwrap_value _ _ _ = _`)
+               bodyIntCallJointForceTheory.unwrap_value_operand_reserved >> simp[]) >>
+          `!l. vv_operand vv <> Label l` by
+            (drule_at (Pat `compile_expr _ _ _ _ = _`)
+               (CONJUNCT1 extrequest_compiler_nonlabel) >>
+             disch_then (qspec_then `env` mp_tac) >>
+             simp[] >>
+             gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+                 exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+          `!l. q <> Label l` by
+            (drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_not_label >> simp[]) >>
+          qexists_tac `u` >> simp[vv_operand_def, vv_type_def] >>
+          rpt strip_tac >>
+          gvs[intcall_expr_cont_def, expr_val_rel_def] >>
+          Cases_on `q` >> gvs[venomStateTheory.eval_operand_def] >>
+          metis_tac[]) >>
+      gvs[exprLoweringTheory.compile_snapshot_vv_def,
+          compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+          AllCaseEqs()] >>
+      Cases_on `compile_materialize_vv ce (lowered_value_type ce e)
+                  (vv_with_type (lowered_value_type ce e) vv) sa` >> gvs[] >>
+      drule_at (Pat `compile_materialize_vv _ _ _ _ = _`)
+        intcall_assign_materialize_path >>
+      disch_then (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
+      disch_then (qspecl_then [`v`, `tv`, `env`] mp_tac) >>
+      (impl_tac >- (simp[] >>
+         gvs[wordsTheory.dimword_def] >> metis_tac[])) >> strip_tac >>
+      `?x. q = Var x` by
+        (drule_at (Pat `compile_materialize_vv _ _ _ _ = _`) materialize_compile_trace >>
+         strip_tac >>
+         drule bodyPtrMakeArrayAllocBufferTheory.alloc_buffer_emitted >>
+         strip_tac >> metis_tac[]) >>
+      qexists_tac `t` >>
+      simp[vv_operand_def, vv_type_def, contextTheory.mk_ptr_def] >>
+      conj_tac >- (simp[expr_val_rel_def] >> metis_tac[]) >>
+      conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `eval_operand q u = SOME w` by
+        (gvs[intcall_expr_cont_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+      `mem_bytes_at (w2n w) (type_memory_size tv) u.vs_memory =
+       mem_bytes_at (w2n w) (type_memory_size tv) t.vs_memory` by
+        (gvs[intcall_expr_cont_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
+         qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _` irule >>
+         conj_tac >- (rpt gen_tac >> strip_tac >>
+           qpat_x_assum `!n b k. local_region ce es.scopes t n b k ==> _` drule >>
+           simp[]) >>
+         qexists_tac `sa.cs_next_id` >> simp[]) >>
+      simp[expr_val_rel_def] >>
+      qexists_tac `w` >> gvs[] >>
+      irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+      conj_tac >- metis_tac[memoryValueTypingTheory.value_has_type_val_wf] >>
+      qexistsl_tac [`type_memory_size tv`, `t.vs_memory`] >>
+      simp[memoryValueTypingTheory.value_has_type_val_wf]) >>
+  gvs[] >>
+  simp[intcall_expr_cont_def] >>
+  simp[fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules]
 QED
