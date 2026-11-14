@@ -467,7 +467,11 @@ val code_rewrites = [
     val eta = QCONV (DEPTH_CONV ETA_CONV) (lhs (concl abstracted))
   in [th, TRANS (GSYM eta) abstracted] end)
     [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
-     wordsTheory.word_from_bin_list_def]);
+     wordsTheory.word_from_bin_list_def,
+     prove (``word_exp (b : 'a word) e =
+                n2w (vfmExecution$modexp (w2n b) (w2n e) (dimword (:'a)) 1)``,
+       simp[wordsTheory.word_exp_def, vfmExecutionTheory.modexp_exp,
+            wordsTheory.ZERO_LT_dimword, wordsTheory.n2w_mod])]);
 fun rewrite_rhs eq = let val r = rhs eq
   in mk_eq (lhs eq, rhs (concl (QCONV (Ho_Rewrite.PURE_REWRITE_CONV code_rewrites) r))) end;
 fun def_rules k = map rewrite_rhs (case Lib.assoc1 k code_equations of
