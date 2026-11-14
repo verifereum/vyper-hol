@@ -12,7 +12,7 @@ Ancestors
   abiDecoderBytesFrame abiDecoderBytesTyped abiDecoderReentry abiDecoderReentryPointer
   abiDecoderContract abiDecoderTypedContract abiDecoderCoherence abiDecoderLoop
   abiEncoder abiEncoderRegisteredEffect allocaFrontierBound allocaBudgetProps
-  exprLowering exprLoweringProps emitHelper venomInst venomState venomExecSemantics
+  exprLowering exprLoweringProps emitHelper emitHelperProps venomInst venomState venomExecSemantics
   ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
   fragGasOriginPtr fragGasOriginPtrLoop
 
@@ -254,7 +254,7 @@ Resume prefix_bytestring_complete_mode_contract[package]:
         qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
         simp[] >> decide_tac) >>
      rpt gen_tac >> irule emitted_origin_ptr_path >>
-     qexists_tac `st` >> simp[]) >>
+     simp[] >> qexists_tac `st` >> simp[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>
   simp[SUBSET_REFL, op_taint_def] >>
