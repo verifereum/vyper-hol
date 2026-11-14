@@ -18,7 +18,7 @@ Theorem bytes_word_empty_convert_origin_path:
   evaluate_type (get_tenv cx) src = SOME tv /\ value_has_type tv v /\
   (v = BytesV [] \/ v = StringV []) /\
   compile_type_convert (Var z) (mk_convert_op src dst) sa = (out,sb) /\
-  not_fresh_at sa z /\ fresh_vars_wrt sa s /\ lookup_var z s = SOME a /\
+  not_fresh_at sa z /\ lookup_var z s = SOME a /\
   val_in_memory tv v (w2n a) s.vs_memory /\
   ptr_covers G tn z s capacity /\ 64 <= capacity /\
   w2n a + 64 <= dimword(:256) /\
@@ -56,7 +56,10 @@ Proof
   rpt strip_tac >>
   `w2n a+32 < dimword(:256)` by decide_tac >>
   `eval_operand (Var z) s = SOME a` by simp[eval_operand_def] >>
-  drule_all dynamic_scalar_run_exact >> simp[NoAsms] >> strip_tac >>
+  drule_all bytes_word_conversion_run_actual >>
+  qpat_assum `convert_result cx src dst v = INL vout`
+    (fn th => simp_tac std_ss [th]) >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sb) s = OK sf` >>
   `value_has_type dtv vout` by
     (`src <> BaseT AddressT` by
        (strip_tac >> gvs[is_bytestring_type_def]) >>
@@ -74,8 +77,7 @@ Proof
   (impl_tac >-
     (drule_all bytestring_scalar_type_partition >> strip_tac >>
      gvs[mk_convert_op_def] >> metis_tac[])) >> strip_tac >>
-  drule_at (Pat `load_bytestring_as_word _ _ _ = _`) load_bytestring_as_word_exec >>
-  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+  drule_all bytes_word_loader_run_actual >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
   drule_all bytes_word_loader_fixed_frame >>
   disch_then (qspecl_then [`fn`,`PG`]

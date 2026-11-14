@@ -10,7 +10,69 @@ Ancestors
   builtinConvertPrefix exprSimConvert vyperTypeConversions vyperValueOperation
   bodyPtrSignedConvertUnsignedCompose reasonCopySourcePtr instSeqComposePtr
   bodyPtrSignedConvertUnsignedLoad bodyPtrDefs fragExec venomState
-  venomInst venomExecSemantics finite_map words arithmetic exprLoweringProps list
+  venomInst venomExecSemantics finite_map words arithmetic exprLoweringProps list varsExt
+
+Theorem bytes_word_loader_run_actual:
+  load_bytestring_as_word (Var src) SHR sa = ((out,bits),sb) /\
+  not_fresh_at sa src /\ lookup_var src s = SOME a ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t
+Proof
+  strip_tac >>
+  `eval_operand (Var src) (drop_fresh sa s) = SOME a` by
+    simp[eval_operand_def, lookup_var_drop_fresh] >>
+  drule_at (Pat `load_bytestring_as_word _ _ _ = _`) load_bytestring_as_word_exec >>
+  disch_then (qspec_then `drop_fresh sa s` mp_tac) >>
+  simp[fresh_vars_wrt_drop_fresh] >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
+    (drule_all unsigned_loader_shape_fresh >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def, is_ext_call_op_def]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+    (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  gvs[vars_ext_result_def] >> metis_tac[]
+QED
+
+Theorem bytes_word_conversion_run_actual:
+  is_bytestring_type src /\ ~is_bytestring_type dst /\
+  valid_conversion src dst /\ well_formed_type (get_tenv cx) dst /\
+  evaluate_type (get_tenv cx) src = SOME tv /\ value_has_type tv v /\
+  compile_type_convert (Var z) (mk_convert_op src dst) sa = (out,sb) /\
+  not_fresh_at sa z /\ lookup_var z s = SOME a /\
+  w2n a+32 < dimword(:256) /\ val_in_memory tv v (w2n a) s.vs_memory ==>
+  case convert_result cx src dst v of
+    INL vout => ?dtv t. evaluate_type (get_tenv cx) dst = SOME dtv /\
+      run_inst_seq (emitted_insts sa sb) s = OK t /\
+      eval_operand out t = SOME (typed_val_to_w256 dtv vout)
+  | INR exc => (?msg. exc = Error (RuntimeError msg)) /\
+      ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `eval_operand (Var z) (drop_fresh sa s) = SOME a` by
+    simp[eval_operand_def, lookup_var_drop_fresh] >>
+  `val_in_memory tv v (w2n a) (drop_fresh sa s).vs_memory` by
+    simp[drop_fresh_def] >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `dynamic_straight_fresh (compile_type_convert (Var z) (mk_convert_op src dst))` by
+    (irule dynamic_scalar_straight_read_fresh >> simp[]) >>
+  `dynamic_writes_fresh sa (emitted_insts sa sb)` by
+    metis_tac[dynamic_straight_fresh_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
+    (drule dynamic_writes_fresh_path_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+    (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  drule_at (Pat `compile_type_convert _ _ _ = _`) dynamic_scalar_run_exact >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `well_formed_type _ _`)) >>
+  disch_then (qspecl_then [`convert_result cx src dst v`,`cx`] mp_tac) >>
+  simp[] >> Cases_on `convert_result cx src dst v` >> simp[] >> strip_tac >>
+  gvs[vars_ext_result_def, vars_ext_def] >>
+  metis_tac[eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]
+QED
 
 Theorem bytes_word_loader_fixed_frame:
   load_bytestring_as_word (Var src) SHR sa = ((out,bits),sb) /\
@@ -87,7 +149,7 @@ Theorem bytes_word_convert_origin_path:
   evaluate_type (get_tenv cx) src = SOME tv /\ value_has_type tv v /\
   (v <> BytesV [] /\ v <> StringV []) /\
   compile_type_convert (Var z) (mk_convert_op src dst) sa = (out,sb) /\
-  not_fresh_at sa z /\ fresh_vars_wrt sa s /\ lookup_var z s = SOME a /\
+  not_fresh_at sa z /\ lookup_var z s = SOME a /\
   val_in_memory tv v (w2n a) s.vs_memory /\
   ptr_covers G tn z s capacity /\ 64 <= capacity /\
   w2n a + 64 <= dimword(:256) /\
@@ -126,8 +188,7 @@ Proof
     (drule_all bytestring_scalar_type_partition >> strip_tac >>
      gvs[mk_convert_op_def] >> metis_tac[])) >> strip_tac >>
   `eval_operand (Var z) s = SOME a` by simp[eval_operand_def] >>
-  drule_at (Pat `load_bytestring_as_word _ _ _ = _`) load_bytestring_as_word_exec >>
-  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+  drule_all bytes_word_loader_run_actual >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
   drule_all bytes_word_loader_fixed_frame >>
   disch_then (qspecl_then [`fn`,`PG`]
@@ -166,8 +227,10 @@ Proof
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
     (irule emitted_insts_append >> fs[inst_extends_def]) >>
   conj_tac
-  >- (rpt strip_tac >> drule_all dynamic_scalar_run_exact >> simp[NoAsms] >>
-      strip_tac >>
+  >- (rpt strip_tac >> drule_all bytes_word_conversion_run_actual >>
+      qpat_assum `convert_result cx src dst v = INL vout`
+        (fn th => simp_tac std_ss [th]) >>
+      strip_tac >> rename1 `run_inst_seq (emitted_insts sa sb) s = OK sf` >>
       `src <> BaseT AddressT` by
         (strip_tac >> qpat_x_assum `is_bytestring_type src` mp_tac >> simp[is_bytestring_type_def]) >>
       `evaluate_convert (get_tenv cx) v dst = INL vout` by
@@ -218,8 +281,10 @@ Proof
       qpat_assum `sf = s with vs_vars := _`
         (fn eq => once_rewrite_tac[eq]) >> simp[] >>
       rpt strip_tac >> metis_tac[]) >>
-  rpt strip_tac >> drule_all dynamic_scalar_run_exact >> simp[NoAsms] >>
-  strip_tac >>
+  rpt strip_tac >> drule_all bytes_word_conversion_run_actual >>
+  qpat_assum `convert_result cx src dst v = INR exc`
+    (fn th => simp_tac std_ss [th]) >>
+  strip_tac >> rename1 `run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort sf` >>
   `run_inst_seq (emitted_insts sm sb) u = Abort Revert_abort sf` by
     (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK u`
        (mp_then Any mp_tac run_inst_seq_append) >>
