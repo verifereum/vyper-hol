@@ -658,8 +658,9 @@ Resume typed_memory_sarray_slow_forward_mem[element]:
         `typed_copy_effect ctx func sa stb a a' _ _`] >>
      rpt (first_x_assum kall_tac) >> rpt strip_tac >>
      Cases_on `src` >> Cases_on `dst` >>
-     gvs[eval_operand_def, typed_copy_effect_def,
-         venom_state_component_equality] >> metis_tac[]) >>
+      gvs[eval_operand_def] >>
+      fs[typed_copy_effect_def] >>
+      gvs[venom_state_component_equality] >> metis_tac[]) >>
   `i * type_memory_size stv + type_memory_size stv <= N * type_memory_size stv /\
    i * type_memory_size dtv + type_memory_size dtv <= N * type_memory_size dtv` by
     (`SUC i <= N` by decide_tac >>

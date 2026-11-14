@@ -353,7 +353,8 @@ Proof
   drule emit_output_venom_asm_rel >>
   disch_then (qspecl_then [`output`, `out`, `if with_value then 7 else 6`] mp_tac) >>
   Cases_on `with_value` >>
-  gvs[asm_next_def, venom_asm_rel_def, update_var_def]
+  (simp[asm_next_def, update_var_def] >> gvs[venom_asm_rel_def] >>
+   simp[update_var_def])
 QED
 
 Theorem delegatecall_emit_venom_asm_rel:

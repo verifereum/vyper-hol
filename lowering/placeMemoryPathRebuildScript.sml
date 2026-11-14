@@ -154,7 +154,7 @@ Theorem typed_memory_replace_path_frame:
 Proof
   Induct >> rpt gen_tac
   >- (strip_tac >> gvs[mem_path_offset_def, assign_subscripts_def]) >>
-  strip_tac >> gvs[mem_path_offset_def, AllCaseEqs()] >>
+  strip_tac >> (fs[mem_path_offset_def] >> gvs[AllCaseEqs()]) >>
   PairCases_on `z` >> gvs[] >>
   `mem_path_offset tv [h] = SOME (k',etv)` by simp[mem_path_offset_def] >>
   drule mem_path_offset_sound >> strip_tac >>
