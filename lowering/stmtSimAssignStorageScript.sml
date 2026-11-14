@@ -505,7 +505,7 @@ Proof
      simp[]) >>
   Cases_on `cx.txn.is_static`
   >- (`eval_operand op t = SOME (typed_val_to_w256 etv v)` by
-        fs[expr_post_def, expr_val_rel_def] >>
+        (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
       `t.vs_call_ctx.cc_static` by
         fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
       `eval_operand (Lit (n2w slot)) t = SOME (n2w slot)` by
