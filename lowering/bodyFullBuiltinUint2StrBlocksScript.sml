@@ -6,6 +6,7 @@ Ancestors
   localPtrsProps exprSimProps exprSimUint2Str fragGasSeqPtr
   bodyPtrBytestringBuiltinsUintGhost ptrSafeRun venomExecSemantics venomInst
   exprLoweringProps emitHelperProps codegenRel contextCodegenRel bodyFullUnwrapRun
+  exprSimPtrLiteralOps bodyPtrBytestringBuiltinsUintArithmetic
 
 Theorem u2s_clean_store_ghost_at:
   ghost_inv_at D lo d cenv cx es G tn s /\
@@ -107,3 +108,234 @@ Proof
   simp[Once inst_seq_ptr_def, mk_inst_def] >> gvs[mk_inst_def]
 QED
 
+(* allocas_from is supplied by ghost_inv_at at the loop boundary. *)
+Theorem u2s_body_pointer_sequence:
+  not_fresh_at a p /\ n+32 <= sz /\ b+sz < dimword(:256) /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  0 < x /\ i < n /\ x < dimword(:256) /\
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\
+  lookup_var (u2s_var a 1) s = SOME (n2w i) /\
+  lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (b,sz) /\
+  op_taint tn (Var p) = {} /\
+  (!k. k < 2 ==> FLOOKUP G (u2s_var a k) = NONE /\
+                   op_taint tn (Var (u2s_var a k)) = {}) /\
+  s.vs_inst_idx = 0 ==>
+  ?G' tn'.
+    (!D. inst_seq_ptr D lo ctx fn PG G tn
+      (TAKE 9 (u2s_body a (Var p) n)) s G' tn') /\
+    (!r. not_fresh_at a r ==> FLOOKUP G' r = FLOOKUP G r /\
+                            op_taint tn' (Var r) = op_taint tn (Var r)) /\
+    FLOOKUP G' p = SOME (b,sz) /\ op_taint tn' (Var p) = {} /\
+    (!k. k < 2 ==> FLOOKUP G' (u2s_var a k) = NONE /\
+                   op_taint tn' (Var (u2s_var a k)) = {}) /\
+    tn'.t_mem = tn.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `!k. p <> u2s_var a k` by metis_tac[u2s_var_fresh] >>
+  `!r. not_fresh_at a r ==> !k. r <> u2s_var a k` by metis_tac[u2s_var_fresh] >>
+  `FLOOKUP G (u2s_var a 0) = NONE /\ FLOOKUP G (u2s_var a 1) = NONE /\
+   op_taint tn (Var (u2s_var a 0)) = {} /\
+   op_taint tn (Var (u2s_var a 1)) = {}` by simp[] >>
+  qabbrev_tac `G2 = DRESTRICT G (COMPL {u2s_var a 5; u2s_var a 6})` >>
+  qabbrev_tac `tn2 = tn with t_var := tn.t_var |+ (u2s_var a 5,{}) |+ (u2s_var a 6,{})` >>
+  qabbrev_tac `s2 = update_var (u2s_var a 6) (48w + safe_mod (n2w x) 10w)
+    (update_var (u2s_var a 5) (safe_mod (n2w x) 10w) s) with vs_inst_idx := 2` >>
+  qabbrev_tac `G3 = G2 |+ (u2s_var a 7,(b,sz))` >>
+  qabbrev_tac `tn3 = tn2 with t_var := tn2.t_var |+ (u2s_var a 7,{})` >>
+  qabbrev_tac `s3 = update_var (u2s_var a 7) (n2w (b+n)) s2 with vs_inst_idx := 3` >>
+  qabbrev_tac `subi = mk_inst (a.cs_next_id+11) SUB
+    [Var (u2s_var a 7); Var (u2s_var a 1)] [u2s_var a 8]` >>
+  qabbrev_tac `u4 = update_var (u2s_var a 8) (n2w (b+n) - n2w i) s3` >>
+  qabbrev_tac `G4 = step_prov PG G3 subi u4` >>
+  qabbrev_tac `tn4 = step_taint subi s3 u4 tn3` >>
+  qabbrev_tac `s4 = u4 with vs_inst_idx := 4` >>
+  qabbrev_tac `tn5 = tn4 with t_mem := tn4.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32}` >>
+  qexistsl_tac
+    [`DRESTRICT G4 (COMPL {u2s_var a 0; u2s_var a 1; u2s_var a 9; u2s_var a 10})`,
+     `tn5 with t_var := tn5.t_var |+ (u2s_var a 9,{}) |+ (u2s_var a 0,{})
+       |+ (u2s_var a 10,{}) |+ (u2s_var a 1,{})`] >>
+  conj_tac >- suspend "sequence" >>
+  suspend "frame"
+QED
+
+Resume u2s_body_pointer_sequence[frame]:
+  `!r. r <> u2s_var a 8 ==> op_taint tn4 (Var r) = op_taint tn3 (Var r)` by
+    simp[Abbr `tn4`, Abbr `subi`, Abbr `u4`, pointer_sub_ghost_frame] >>
+  fs[op_taint_def] >>
+  simp[Abbr `tn5`, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
+  simp[Abbr `G4`, Abbr `tn4`, Abbr `subi`, Abbr `u4`, pointer_sub_ghost_frame] >>
+  simp[Abbr `G3`, Abbr `G2`, Abbr `tn3`, Abbr `tn2`,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume u2s_body_pointer_sequence[sequence]:
+  gen_tac >> fs[op_taint_def] >> simp[u2s_body_def, u2s_inst_def] >>
+  irule u2s_clean_scalar_seq_cons >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def] >>
+  qexists_tac `safe_mod (n2w x) 10w` >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  simp[GSYM mk_inst_def] >>
+  irule u2s_clean_scalar_seq_cons >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, allocas_from_def, update_var_def] >>
+  conj_tac >- fs[allocas_from_def] >>
+  qexists_tac `48w + safe_mod (n2w x) 10w` >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[GSYM mk_inst_def] >>
+  simp[GSYM COMPL_UNION, INSERT_UNION_EQ] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr D lo ctx fn PG G2 tn2 cs ss` >>
+  `ss = s2` by simp[Abbr `ss`, Abbr `s2`, update_var_def] >> gvs[] >>
+  `FLOOKUP G2 p = SOME (b,sz) /\ op_taint tn2 (Var p) = {} /\
+   lookup_var p s2 = SOME (n2w b) /\ allocas_from lo s2` by
+    (fs[lookup_var_def, allocas_from_def] >>
+     simp[Abbr `G2`, Abbr `tn2`, Abbr `s2`, FLOOKUP_DRESTRICT,
+          FLOOKUP_UPDATE, op_taint_def, lookup_var_def, allocas_from_def,
+          update_var_def] >> metis_tac[]) >>
+  `step_inst_base (mk_inst (a.cs_next_id+10) ADD [Var p; Lit (n2w n)]
+      [u2s_var a 7]) s2 = OK (update_var (u2s_var a 7) (n2w b+n2w n) s2)` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  `step_prov PG G2 (mk_inst (a.cs_next_id+10) ADD [Var p; Lit (n2w n)]
+      [u2s_var a 7]) (update_var (u2s_var a 7) (n2w b+n2w n) s2) = G3 /\
+   step_taint (mk_inst (a.cs_next_id+10) ADD [Var p; Lit (n2w n)]
+      [u2s_var a 7]) s2 (update_var (u2s_var a 7) (n2w b+n2w n) s2) tn2 = tn3` by
+    (simp[Abbr `G3`, Abbr `tn3`] >> irule literal_add_ghost >> simp[]) >>
+  simp[Abbr `cs`, Once inst_seq_ptr_def] >>
+  conj_tac
+  >- (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+           source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+      simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+      rpt gen_tac >> Cases_on `op` >> simp[op_taint_def] >>
+      fs[op_taint_def] >> metis_tac[]) >>
+  `s2.vs_inst_idx = 2` by simp[Abbr `s2`, update_var_def] >>
+  `update_var (u2s_var a 7) (n2w b+n2w n) s2 with
+     vs_inst_idx := SUC s2.vs_inst_idx = s3` by
+    simp[Abbr `s3`, word_add_n2w] >> simp[] >>
+  suspend "middle"
+QED
+
+Resume u2s_body_pointer_sequence[middle]:
+  `lookup_var (u2s_var a 7) s3 = SOME (n2w (b+n)) /\
+   lookup_var (u2s_var a 1) s3 = SOME (n2w i) /\
+   FLOOKUP G3 (u2s_var a 7) = SOME (b,sz) /\
+   op_taint tn3 (Var (u2s_var a 7)) = {} /\
+   op_taint tn3 (Var (u2s_var a 1)) = {} /\ allocas_from lo s3` by
+    (fs[lookup_var_def, allocas_from_def] >>
+     simp[Abbr `s3`, Abbr `G3`, Abbr `tn3`, Abbr `s2`, Abbr `tn2`,
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def,
+          allocas_from_def] >> metis_tac[]) >>
+  `step_inst_base subi s3 = OK u4` by
+    simp[Abbr `subi`, Abbr `u4`, step_inst_base_opcode_eqs, mk_inst_def,
+         exec_pure2_def, eval_operand_def] >>
+  simp[Once inst_seq_ptr_def] >>
+  conj_tac
+  >- (simp[Abbr `subi`, ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+           source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+           eval_operand_def, update_var_def] >>
+      simp[Abbr `u4`, update_var_def] >>
+      rpt gen_tac >> Cases_on `op` >> simp[op_taint_def] >>
+      fs[op_taint_def] >> metis_tac[]) >>
+  `s3.vs_inst_idx = 3` by simp[Abbr `s3`] >>
+  `u4 with vs_inst_idx := SUC s3.vs_inst_idx = s4` by simp[Abbr `s4`] >>
+  simp[] >>
+  `ptr_covers G4 tn4 (u2s_var a 8)
+      (u4 with vs_inst_idx := SUC s3.vs_inst_idx) 32` by
+    (map_every qunabbrev_tac [`G4`, `tn4`, `subi`, `u4`] >>
+     irule pointer_sub_covers >> simp[eval_operand_def] >> decide_tac) >>
+  `ptr_covers G4 tn4 (u2s_var a 8) s4 32` by metis_tac[] >>
+  `(n2w (b+n) - n2w i : bytes32) = n2w (b+n-i)` by
+    (irule uint2str_sub_word >> conj_tac >- decide_tac >>
+     qexists_tac `sz` >> decide_tac) >>
+  `op_taint tn4 (Var (u2s_var a 6)) = {}` by
+    (simp[Abbr `tn4`, Abbr `subi`, Abbr `u4`, pointer_sub_ghost_frame] >>
+     simp[Abbr `tn3`, Abbr `tn2`, op_taint_def, FLOOKUP_UPDATE]) >>
+  `lookup_var (u2s_var a 8) s4 = SOME (n2w (b+n-i)) /\
+   lookup_var (u2s_var a 6) s4 = SOME (48w + safe_mod (n2w x) 10w) /\
+   allocas_from lo s4` by
+    (simp[Abbr `s4`, Abbr `u4`, Abbr `s3`, Abbr `s2`,
+          lookup_var_def, update_var_def, allocas_from_def, FLOOKUP_UPDATE] >>
+     fs[allocas_from_def] >> metis_tac[]) >>
+  `b+n-i < dimword(:256)` by decide_tac >>
+  `step_inst_base (mk_inst (a.cs_next_id+12) MSTORE
+      [Var (u2s_var a 8); Var (u2s_var a 6)] []) s4 =
+     OK (mstore (b+n-i) (48w + safe_mod (n2w x) 10w) s4)` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+         exec_write2_def] >>
+  simp[Once inst_seq_ptr_def] >>
+  conj_tac
+  >- (irule exprPtrUnwrapCopyEdgesTheory.ptr_inst_ok_mstore_tainted >> simp[]) >>
+  `step_taint (mk_inst (a.cs_next_id+12) MSTORE
+      [Var (u2s_var a 8); Var (u2s_var a 6)] []) s4
+      (mstore (b+n-i) (48w + safe_mod (n2w x) 10w) s4) tn4 = tn5` by
+    (simp[Abbr `tn5`] >>
+     qpat_assum `lookup_var (u2s_var a 8) s4 = _`
+       (mp_then Any mp_tac clean_mstore_taint_state) >>
+     disch_then (qspecl_then [`tn4`, `a.cs_next_id+12`,
+       `Var (u2s_var a 6)`, `48w + safe_mod (n2w x) 10w`] mp_tac) >>
+     simp[eval_operand_def]) >>
+  simp[step_prov_def, mk_inst_def, set_prov_def] >>
+  simp[GSYM mk_inst_def] >>
+  suspend "tail"
+QED
+
+Resume u2s_body_pointer_sequence[tail]:
+  simp[DRESTRICT_UNIV] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr D lo ctx fn PG G4 tn5 cs s5` >>
+  `!k. k < 2 ==> FLOOKUP G4 (u2s_var a k) = NONE /\
+                      op_taint tn5 (Var (u2s_var a k)) = {}` by
+    (gen_tac >> disch_tac >>
+     `k <> 8 /\ k <> 7 /\ k <> 6 /\ k <> 5` by decide_tac >>
+     qpat_x_assum `n2w (b+n) - n2w i = _` kall_tac >>
+     `op_taint tn4 (Var (u2s_var a k)) = op_taint tn3 (Var (u2s_var a k))` by
+       simp[Abbr `tn4`, Abbr `subi`, Abbr `u4`, pointer_sub_ghost_frame] >>
+     fs[op_taint_def] >>
+     simp[Abbr `tn5`, Abbr `G4`, Abbr `subi`, Abbr `u4`,
+          pointer_sub_ghost_frame, op_taint_def] >>
+     simp[Abbr `G3`, Abbr `G2`, Abbr `tn3`, Abbr `tn2`,
+          FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
+  `lookup_var (u2s_var a 0) s5 = SOME (n2w x) /\
+   lookup_var (u2s_var a 1) s5 = SOME (n2w i) /\ allocas_from lo s5` by
+    (simp[Abbr `s5`, Abbr `s4`, Abbr `u4`, Abbr `s3`, Abbr `s2`,
+          mstore_def, write_memory_with_expansion_def, update_var_def,
+          lookup_var_def, FLOOKUP_UPDATE, allocas_from_def] >>
+     fs[allocas_from_def, lookup_var_def] >> metis_tac[]) >>
+  fs[op_taint_def] >>
+  simp[Abbr `cs`] >>
+  irule u2s_clean_scalar_seq_cons >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  simp[GSYM mk_inst_def] >>
+  qexists_tac `safe_div (n2w x) 10w` >> simp[] >>
+  irule u2s_clean_assign_seq_cons >>
+  simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+       allocas_from_def, update_var_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[GSYM mk_inst_def] >>
+  conj_tac >- fs[allocas_from_def] >>
+  qexists_tac `safe_div (n2w x) 10w` >> simp[] >>
+  irule u2s_clean_scalar_seq_cons >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, allocas_from_def] >>
+  conj_tac >- fs[allocas_from_def] >>
+  qexists_tac `1w + n2w i` >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[GSYM mk_inst_def] >>
+  conj_tac >- (fs[lookup_var_def] >> simp[WORD_ADD_COMM]) >>
+  irule u2s_clean_assign_seq_cons >>
+  simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+       allocas_from_def, update_var_def] >>
+  conj_tac >- fs[allocas_from_def] >>
+  qexists_tac `1w + n2w i` >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[GSYM mk_inst_def, inst_seq_ptr_def] >>
+  AP_TERM_TAC >> simp[EXTENSION] >> metis_tac[]
+QED
+
+Finalise u2s_body_pointer_sequence
