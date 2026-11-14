@@ -2,7 +2,8 @@
    here are before clear_nops; no source-block acceptance is asserted. *)
 Theory readonlyInvokeCopyFwdHistory
 Ancestors
-  readonlyInvokeCopyFwdTraceOrigin readonlyInvokeCopyFwdPlan list
+  readonlyInvokeCopyFwdTraceOrigin readonlyInvokeCopyFwdPlan
+  o1PassContract venomInst list
 
 Definition ricf_logged_round_def:
   ricf_logged_round base round logs mid <=>
@@ -208,6 +209,26 @@ Proof
      qexists_tac `round` >> simp[] >> metis_tac[EL_MEM]) >>
   fs[ricf_function_edit_def, LIST_REL_EL_EQN] >>
   metis_tac[ricf_block_edit_trans]
+QED
+
+Theorem ricf_located_event_original_copy_member:
+  ricf_located_event ctx0 original log round b es prefix e current /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts original)) ==>
+  b < LENGTH original.fn_blocks /\
+  e.rfe_index < LENGTH (EL b original.fn_blocks).bb_instructions /\
+  MEM (ricf_event_copy e (EL b original.fn_blocks)) (fn_insts original) /\
+  (ricf_event_copy e (EL b original.fn_blocks)).inst_opcode = MCOPY
+Proof
+  strip_tac >> drule ricf_located_event_validation >> strip_tac >>
+  drule_all ricf_located_event_source_block >> strip_tac >>
+  drule ricf_event_copy_shape >> strip_tac >>
+  `e.rfe_index < LENGTH (EL b original.fn_blocks).bb_instructions /\
+   ricf_inst_edit (ricf_event_copy e (EL b original.fn_blocks))
+     (ricf_event_copy e current)` by
+    (gvs[ricf_block_edit_def, LIST_REL_EL_EQN, ricf_event_copy_def] >>
+     metis_tac[]) >>
+  simp[fn_insts_def, fn_insts_blocks_MEM, ricf_event_copy_def] >>
+  fs[ricf_inst_edit_def, ricf_event_copy_def] >> metis_tac[EL_MEM]
 QED
 
 Theorem ricf_located_event_source_descriptor:

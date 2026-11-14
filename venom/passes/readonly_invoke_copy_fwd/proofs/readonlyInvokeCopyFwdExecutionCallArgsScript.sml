@@ -479,25 +479,6 @@ Proof
     icf_assign_root_op_def]
 QED
 
-Theorem ricf_call_located_copy_member[local]:
-  ricf_located_event ctx0 original log round b es prefix e current /\
-  ssa_form original /\
-  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts original)) ==>
-  MEM (ricf_event_copy e (EL b original.fn_blocks)) (fn_insts original) /\
-  (ricf_event_copy e (EL b original.fn_blocks)).inst_opcode = MCOPY
-Proof
-  strip_tac >> drule ricf_located_event_validation >> strip_tac >>
-  drule_all ricf_located_event_source_block >> strip_tac >>
-  drule_all ricf_located_event_source_descriptor >> strip_tac >>
-  drule ricf_event_copy_shape >> strip_tac >>
-  `e.rfe_index < LENGTH (EL b original.fn_blocks).bb_instructions` by
-    (fs[ricf_block_edit_def] >> metis_tac[LIST_REL_LENGTH]) >>
-  simp[fn_insts_def, fn_insts_blocks_MEM, ricf_event_copy_def] >>
-  conj_tac
-  >- (qexists_tac `EL b original.fn_blocks` >> simp[EL_MEM]) >>
-  fs[ricf_event_copy_def] >> metis_tac[]
-QED
-
 (* A selected operand cannot have been supplied by any previous accepted
    rewrite, even one from another round.  No instruction-record equality
    between the original function and the selected round is assumed. *)
@@ -535,7 +516,9 @@ Proof
      simp[]) >>
   `MEM (ricf_event_copy e (EL b original.fn_blocks)) (fn_insts original) /\
    (ricf_event_copy e (EL b original.fn_blocks)).inst_opcode = MCOPY` by
-    (irule ricf_call_located_copy_member >> metis_tac[]) >>
+    (qpat_assum `ricf_located_event ctx0 original log round b es prefix e current`
+       (mp_then Any mp_tac ricf_located_event_original_copy_member) >>
+     simp[] >> metis_tac[]) >>
   `~ircf_alias original
     (icf_assign_root (dfg_build_function original) {} dst) fsv` by
     (irule ricf_call_copy_source_not_destination_alias >>

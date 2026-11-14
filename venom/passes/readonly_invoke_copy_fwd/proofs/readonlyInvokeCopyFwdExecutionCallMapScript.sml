@@ -14,26 +14,6 @@ Ancestors
   allocaRemapSSA mem2varProofs o1PassContract venomWf venomInst
   list finite_map pred_set arithmetic words
 
-Theorem ricf_call_original_copy_member[local]:
-  ricf_located_event ctx0 original log round b es prefix e current /\
-  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts original)) ==>
-  b < LENGTH original.fn_blocks /\
-  e.rfe_index < LENGTH (EL b original.fn_blocks).bb_instructions /\
-  MEM (ricf_event_copy e (EL b original.fn_blocks)) (fn_insts original) /\
-  (ricf_event_copy e (EL b original.fn_blocks)).inst_opcode = MCOPY
-Proof
-  strip_tac >> drule ricf_located_event_validation >> strip_tac >>
-  drule_all ricf_located_event_source_block >> strip_tac >>
-  drule ricf_event_copy_shape >> strip_tac >>
-  `e.rfe_index < LENGTH (EL b original.fn_blocks).bb_instructions /\
-   ricf_inst_edit (ricf_event_copy e (EL b original.fn_blocks))
-     (ricf_event_copy e current)` by
-    (gvs[ricf_block_edit_def, LIST_REL_EL_EQN, ricf_event_copy_def] >>
-     metis_tac[]) >>
-  simp[fn_insts_def, fn_insts_blocks_MEM, ricf_event_copy_def] >>
-  fs[ricf_inst_edit_def, ricf_event_copy_def] >> metis_tac[EL_MEM]
-QED
-
 Theorem ricf_call_destination_copy_equal[local]:
   ricf_located_event ctxP original logP roundP bp esP pp e currentP /\
   ricf_located_event ctxQ original logQ roundQ bq esQ pq f currentQ /\
@@ -48,9 +28,9 @@ Theorem ricf_call_destination_copy_equal[local]:
 Proof
   strip_tac >>
   qpat_assum `ricf_located_event ctxP original logP roundP bp esP pp e currentP`
-    (mp_then Any mp_tac ricf_call_original_copy_member) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac ricf_located_event_original_copy_member) >> simp[] >> strip_tac >>
   qpat_assum `ricf_located_event ctxQ original logQ roundQ bq esQ pq f currentQ`
-    (mp_then Any mp_tac ricf_call_original_copy_member) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac ricf_located_event_original_copy_member) >> simp[] >> strip_tac >>
   `ircf_alias original
     (icf_assign_root (dfg_build_function original) {} dst) qdst` by
     metis_tac[ircf_assign_root_alias] >>
