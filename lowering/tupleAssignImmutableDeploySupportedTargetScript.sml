@@ -116,5 +116,5 @@ Proof
   conj_tac
   >- (simp[gas_marked_exec_def] >> rpt strip_tac >>
       drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >> simp[]) >>
-  asm_rewrite_tac[]
+  simp[] >> first_assum ACCEPT_TAC
 QED
