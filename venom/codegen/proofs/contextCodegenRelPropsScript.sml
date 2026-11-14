@@ -5,6 +5,8 @@ Ancestors
   contextCodegenRel venomExecProofs planSpillBounds codegenRel memLocDefs venomWf venomState words
   venomInst
 
+val _ = Parse.hide "cp";
+
 Theorem lookup_instruction_active:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
