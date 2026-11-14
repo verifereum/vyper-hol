@@ -4,6 +4,44 @@ Ancestors
   finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
   venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr robustCopyTransportPtr
 
+Theorem raw_call_returndatasize_step_base:
+  step_inst_base (mk_inst iid RETURNDATASIZE [] [out]) s =
+    OK (update_var out (n2w (LENGTH s.vs_returndata)) s)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
+    venomExecSemanticsTheory.bind_outputs_def]
+QED
+
+Theorem ptr_inst_ok_returndatasize:
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx func G tn (mk_inst iid RETURNDATASIZE [] [out]) s
+Proof
+  strip_tac >>
+  simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+    ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
+    venomInstTheory.mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
+    venomExecSemanticsTheory.bind_outputs_def, venomStateTheory.update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem raw_call_returndatasize_step_taint:
+  step_taint (mk_inst iid RETURNDATASIZE [] [out]) s (update_var out w s) tn =
+  tn with t_var := tn.t_var |+ (out,{})
+Proof
+  simp[ptrDisciplineTheory.step_taint_def, venomInstTheory.mk_inst_def,
+    ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.set_var_taint_def,
+    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+    ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.mem_taint_def,
+    ptrDisciplineTheory.new_site_bytes_def, ptrDisciplineTheory.step_writes_def,
+    ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+  simp[SF CONJ_ss, ptrDisciplineTheory.taint_component_equality]
+QED
+
 Theorem ptr_mem_ok_site:
   ptr_mem_ok cx ty v op G tn s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
