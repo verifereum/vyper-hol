@@ -158,14 +158,6 @@ Proof
   qspecl_then [`dfg`, `operands`, `ps`, `lo`] mp_tac reorder_plan_wf_len >> simp[]
 QED
 
-Theorem output_pushes_length[local]:
-  !outputs ps.
-    LENGTH (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
-      ps outputs).ps_stack = LENGTH ps.ps_stack + LENGTH outputs
-Proof
-  Induct >> simp[] >> simp[stack_push_def, arithmeticTheory.ADD_ASSOC]
-QED
-
 Theorem regular_plan_admin_decomposition:
   generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps = (ops,qs) /\
   inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
@@ -210,7 +202,7 @@ Proof
     metis_tac[prefix_wf_len_append] >>
   `LENGTH core.ps_stack + LENGTH (compute_operands inst) =
     LENGTH ps4.ps_stack + LENGTH inst.inst_outputs` by
-    (simp[Abbr `core`, output_pushes_length, stack_pop_def]) >>
+    (simp[Abbr `core`, push_outputs_length, stack_pop_def]) >>
   pairarg_tac >> simp[] >>
   `LENGTH ps7.ps_stack = LENGTH core.ps_stack` by
     metis_tac[generate_emit_ops_stack, pairTheory.SND] >>

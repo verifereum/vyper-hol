@@ -34,6 +34,7 @@ Ancestors
   codegenRequestPrefix
   fnStaticAbortSim
   contextStaticAbortRel
+  staticAbortMemDefs
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
