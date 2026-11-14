@@ -373,6 +373,29 @@ Proof
   simp[APPEND_ASSOC]
 QED
 
+Theorem memory_iterator_source_path_prefix:
+  !e cx es ee target root attrs pending path.
+    loop_iterator_place e = SOME target /\
+    place_access target pending = (NameTarget root, attrs) /\
+    eval_expr cx e es = (INL (PlaceR (MemoryPlace root path)), ee) ==>
+    ?tail. path ++ MAP AttrSubscript pending = MAP AttrSubscript attrs ++ tail
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[loop_iterator_place_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[place_access_def, Once evaluate_def, bind_def, ignore_bind_def,
+      get_scopes_def, type_check_def, check_def, assert_def, return_def,
+      raise_def, AllCaseEqs()] >>
+  drule exprSimPropsTheory.select_result_memory_place >>
+  disch_then (qspecl_then [`root`, `path`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  gvs[COND_RATOR, bind_def, return_def, AllCaseEqs()] >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[MAP]
+QED
+
 Theorem eval_target_place_attribute_prefix[local]:
   !target cx es root path es'.
     eval_target_place cx target es = (INL (MemoryPlace root path),es') ==>
