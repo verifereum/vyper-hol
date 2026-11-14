@@ -2,7 +2,7 @@
 Theory tuplePlaceFlagPrefix
 Ancestors
   tuplePlaceHead tupleAssignParts abiCallerTupleLayout
-Libs monadsyntax
+Libs monadsyntax horizonTypeLib
 
 Theorem flag_optional_stage_path[local]:
   !cx st0 ctx func cenv es flag tys ltys ltvs vs sa su sl staged op s sw.
@@ -97,7 +97,7 @@ Proof
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es1 sv /\
        storage_well_formed_on cx es1 (FST H)` by
-    (rpt strip_tac >>
+    (rpt gen_tac >> disch_tac >>
      qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `H'` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >>
@@ -138,7 +138,7 @@ Proof
   impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
   disch_then (qx_choosel_then [`st`, `sw`] strip_assume_tac) >>
   `stmt_state_rel H ctx func cenv cx es1 st` by res_tac >>
-  drule tuplePlaceLoadTheory.tuple_place_load_snapshot_path >>
+  drule (at_horizon (at_horizon_named "H" tuplePlaceLoadTheory.tuple_place_load_snapshot_path)) >>
   disch_then (drule_at (Pat `tuple_place_snapshot _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vs`, `get_tenv cx`] mp_tac) >>
@@ -152,11 +152,6 @@ Proof
   conj_tac
   >- (irule tuple_place_head_intro >> simp[] >>
       conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
-      conj_tac
-      >- (qx_gen_tac `H1` >> strip_tac >>
-          `stmt_state_rel H1 ctx func cenv cx es1 st /\
-           storage_well_formed_on cx es1 (FST H1)` by res_tac >>
-          simp[] >> metis_tac[]) >>
       gvs[listTheory.LIST_REL_EL_EQN]) >>
   conj_tac
   >- (rpt strip_tac >>
@@ -243,6 +238,8 @@ Proof
      pairarg_tac >> gvs[compileEnvTheory.comp_bind_def,
        compileEnvTheory.comp_return_def]) >>
   gnvs[compileEnvTheory.comp_ignore_bind_def] >>
-  irule flag_assignment_prefix_head >> simp[] >> goal_assum (drule_at Any) >>
+  irule flag_assignment_prefix_head >> simp[] >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  goal_assum (drule_at Any) >>
   simp[Abbr `guard`, compileEnvTheory.comp_ignore_bind_def] >> metis_tac[]
 QED

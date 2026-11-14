@@ -5,7 +5,7 @@ Ancestors
   tupleAssignPrefix stmtSimAssignTuple exprLoweringProps compileEnv loweringStateRelDefs loweringPosts
   valueEncoding valueEncodingDefs valueEncodingProofs vyperValue stmtLowering fragGasPath fragGasSeq
   fragGasMode vyperTyping vyperTypeABI emitHelper
-Libs monadsyntax
+Libs monadsyntax horizonTypeLib
 
 Theorem tuple_place_optional_stage_path[local]:
   !cx st0 ctx func cenv es flag tys ltys ltvs vs sa su sl staged op s sw.
@@ -146,7 +146,7 @@ Proof
   impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`st`, `sw`] strip_assume_tac) >>
   `stmt_state_rel H ctx func cenv cx es1 st` by res_tac >>
-  drule tuple_place_load_snapshot_path >>
+  drule (at_horizon (at_horizon_named "H" tuple_place_load_snapshot_path)) >>
   disch_then (drule_at (Pat `tuple_place_snapshot _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vs`, `get_tenv cx`] mp_tac) >>
