@@ -359,8 +359,9 @@ Proof
   strip_tac >>
   Cases_on `bop = Eq \/ bop = NotEq`
   >- (gvs[bop_result_def, evaluate_builtin_def] >>
-      Cases_on `v1` >> Cases_on `v2` >>
-      gvs[evaluate_binop_def, binop_negate_def]) >>
+      Cases_on `v1` >> gvs[evaluate_binop_def] >> gvs[binop_negate_def] >>
+      Cases_on `v2` >> gvs[evaluate_binop_def] >>
+      gvs[binop_negate_def]) >>
   `bop_result cx ty bop [ty; t2] v1 v2 es =
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
