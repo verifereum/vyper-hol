@@ -3,6 +3,7 @@
 Theory msgGasFull
 Ancestors
   bodyFullBuiltinECAddStaging
+  bodyFullBuiltinECMulStaging
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
