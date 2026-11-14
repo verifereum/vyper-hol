@@ -73,16 +73,6 @@ Proof
   rpt (pop_assum mp_tac) >> rw[] >> gvs[is_bytestring_type_def]
 QED
 
-Theorem aggregate_store_lowered_elem[local]:
-  !ce e src dst.
-    lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e) ==>
-    compile_store_memory ce src dst (expr_type e) (lowered_value_type ce e) =
-    compile_store_memory ce src dst (expr_type e) (expr_type e)
-Proof
-  rpt strip_tac >> simp[contextTheory.compile_store_memory_def] >> gvs[]
-QED
-
-
 (* ===== Counted composition of the tuple loop ===== *)
 
 (* The empty source list is a genuine reflexive counted execution. *)
