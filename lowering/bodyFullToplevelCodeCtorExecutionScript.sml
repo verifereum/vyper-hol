@@ -19,7 +19,8 @@ Theorem toplevel_code_ctor_execution_full:
   (!x. src = Var x ==> not_fresh_at sm x) /\
   eval_operand src s = SOME p /\ op_taint tn src = {} /\ op_prov G src = NONE /\
   (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
-    copy_old_operand sm region /\ op_taint tn region = {} /\ op_prov G region = NONE) /\
+    copy_old_operand sm region /\
+    (n <> 0 ==> op_taint tn region = {} /\ op_prov G region = NONE)) /\
   w2n p + 32*n <= lo ==>
   ?root u a Gm tm Gf tnf z d.
     buf.buf_operand = Var root /\ buf.buf_size = nb /\
@@ -78,6 +79,8 @@ Proof
 QED
 
 Resume toplevel_code_ctor_execution_full[copy]:
+  Cases_on `n = 0`
+  >- suspend "empty" >>
   `!region. imm = SOME region ==> eval_operand region a = SOME 0w /\
     copy_old_operand mid region /\ op_taint tm region = {} /\ op_prov Gm region = NONE` by
     (rpt gen_tac >> disch_tac >>
@@ -140,6 +143,19 @@ Resume toplevel_code_ctor_execution_full[paths]:
   `ptr_covers Gf tnf root t nb` by metis_tac[] >>
   qexistsl [`root`,`u`,`a`,`Gm`,`tm`,`Gf`,`tnf`,`t`,`d`] >>
   gvs[Abbr `d`]
+QED
+
+Resume toplevel_code_ctor_execution_full[empty]:
+  `sb = mid` by fs[compile_imm_copy_to_memory_def, comp_return_def] >>
+  qpat_x_assum `sb = mid` SUBST_ALL_TAC >>
+  qexistsl [`root`,`u`,`a`,`Gm`,`tm`,`Gm`,`tm`,`a`,`d`] >>
+  `a with vs_inst_idx := LENGTH mid.cs_current_insts = a` by
+    simp[venom_state_component_equality] >>
+  asm_rewrite_tac[] >>
+  conj_tac
+  >- simp[copy_runtime_frame_def, same_blocks_def, emitted_insts_def, run_inst_seq_def] >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _` mp_tac >>
+  simp[]
 QED
 
 Finalise toplevel_code_ctor_execution_full
