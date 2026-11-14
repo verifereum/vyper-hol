@@ -911,7 +911,8 @@ Theorem constructor_exit_run_ptr:
     fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
     ~ctx_has_dalloca ctx /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+    (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey /\
+            ~tx.is_static) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
@@ -926,6 +927,12 @@ Theorem constructor_exit_run_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `cx = _` SUBST_ALL_TAC >>
+  `(deploy_evaluation_context tops am tx).txn.is_static = tx.is_static` by
+    simp[deploy_evaluation_context_def,
+         vyperInterpreterTheory.initial_evaluation_context_def] >>
+  `nr ==> ut /\ storage_layout_safe (deploy_evaluation_context tops am tx) /\
+     (deploy_evaluation_context tops am tx).nonreentrant_slot = SOME nkey /\
+     ~(deploy_evaluation_context tops am tx).txn.is_static` by simp[] >>
   drule_all constructor_exit_run >> strip_tac >>
   qexistsl_tac [`fuel`, `final`] >> simp[] >>
   `nr ==> ut` by simp[] >>
@@ -965,7 +972,8 @@ Proof
    st_epilogue.cs_current_insts = [i0]` by
     (qpat_x_assum `st_epilogue = _` (fn th => rewrite_tac [th]) >> simp[]) >>
   qabbrev_tac `u = tstore (n2w nkey) 0w s with vs_inst_idx := 1` >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `step_inst_base i0 s = OK (tstore (n2w nkey) 0w s)` by
     (simp[Abbr `i0`, mk_inst_def] >>
      simp[opcode_eq ``TSTORE``, exec_write2_def, eval_operand_def]) >>

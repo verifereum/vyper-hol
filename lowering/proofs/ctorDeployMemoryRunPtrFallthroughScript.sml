@@ -78,7 +78,8 @@ Theorem deploy_ctor_fallthrough_ptr:
     cenv.ce_is_ctor /\ cenv_top_ext cenv cenv' ee.scopes /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
     (nr ==> ut /\ storage_layout_safe (deploy_evaluation_context tops am tx) /\
-       (deploy_evaluation_context tops am tx).nonreentrant_slot = SOME nkey) /\
+       (deploy_evaluation_context tops am tx).nonreentrant_slot = SOME nkey /\
+       ~tx.is_static) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
