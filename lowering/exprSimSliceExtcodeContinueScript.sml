@@ -485,7 +485,7 @@ Proof
   strip_tac >>
   ho_match_mp_tac exprSimSliceTerminalTheory.slice_terminal_domain_intro >>
   strip_tac >>
-  `accounts_agree (storage_trace_horizon es.storage_trace) cx es.accounts s.vs_accounts` by
+  `accounts_agree (storage_trace_horizon es.storage_trace) cx.txn.target es.accounts s.vs_accounts` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
      impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
