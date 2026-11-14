@@ -1,5 +1,6 @@
 Theory rawCallBufferPtr
 Ancestors
+  rawCallShapePtr ghostPcTransportPtr loweringStateRelDefs exprLoweringProps
   wordLoadStorePtr bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr typedCopyPtr
   finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
   venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr robustCopyTransportPtr
@@ -499,3 +500,253 @@ Proof
    rpt strip_tac >> irule bool_mstore_robust >>
    goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)))
 QED
+
+Theorem ptr_inst_ok_raw_call_length_binop:
+  (opc = LT \/ opc = XOR \/ opc = MUL) /\
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx func G tn
+    (mk_inst iid opc [left;right] [out]) s
+Proof
+  strip_tac >> gvs[] >>
+  simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+    ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
+    venomInstTheory.mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[ptrDisciplineTheory.op_prov_def, finite_mapTheory.FLOOKUP_DEF]) >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  asm_simp_tac bool_ss [venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors,
+    venomInstTheory.instruction_accfupds, combinTheory.K_THM,
+    venomInstTheory.opcode_case_def] >>
+  simp[venomExecSemanticsTheory.exec_pure2_def, AllCaseEqs(),
+    venomStateTheory.update_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem raw_call_length_binop_step_base:
+  (opc = LT /\ f = (\x y. bool_to_word (w2n x < w2n y)) \/
+   opc = XOR /\ f = word_xor \/ opc = MUL /\ f = word_mul) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b ==>
+  step_inst_base (mk_inst iid opc [left;right] [out]) s =
+    OK (update_var out (f a b) s)
+Proof
+  strip_tac >> gvs[] >>
+  asm_simp_tac bool_ss [venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
+    venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds,
+    combinTheory.K_THM, venomInstTheory.opcode_case_def] >>
+  simp[venomExecSemanticsTheory.exec_pure2_def]
+QED
+
+Theorem raw_call_length_binop_step_ghost:
+  (opc = LT \/ opc = XOR \/ opc = MUL) ==>
+  ((opc = MUL ==> op_taint tn left = {} /\ op_taint tn right = {}) ==>
+   step_taint (mk_inst iid opc [left;right] [out]) s (update_var out w s) tn =
+     tn with t_var := tn.t_var |+ (out,{})) /\
+  step_prov PG G (mk_inst iid opc [left;right] [out]) (update_var out w s) =
+    DRESTRICT G (COMPL {out})
+Proof
+  strip_tac >> gvs[] >>
+  simp[ptrDisciplineTheory.step_taint_def, venomInstTheory.mk_inst_def,
+    ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.set_var_taint_def,
+    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,
+    ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.mem_taint_def,
+    ptrDisciplineTheory.new_site_bytes_def, ptrDisciplineTheory.step_writes_def,
+    ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_DEF,
+    ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+    ptrDisciplineTheory.out_prov_def] >>
+  Cases_on `eval_operand left s` >>
+  simp[SF CONJ_ss, ptrDisciplineTheory.taint_component_equality]
+QED
+
+Theorem raw_call_scalar_update_operand:
+  p <> Var out ==>
+  eval_operand p (update_var out w s with vs_inst_idx := k) = eval_operand p s /\
+  op_prov (DRESTRICT G (COMPL {out})) p = op_prov G p /\
+  op_taint (tn with t_var := tn.t_var |+ (out,{})) p = op_taint tn p
+Proof
+  Cases_on `p` >>
+  simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.update_var_def, ptrDisciplineTheory.op_prov_def,
+    ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE,
+    finite_mapTheory.FLOOKUP_DRESTRICT] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem raw_call_update_var_pc[local]:
+  update_var x w (s with vs_inst_idx := k) =
+    (update_var x w s) with vs_inst_idx := k
+Proof
+  gvs[venomStateTheory.update_var_def]
+QED
+
+Theorem raw_call_select_inst_seq_ptr:
+  eval_operand condop s = SOME cv /\ eval_operand tp s = SOME tv /\
+  eval_operand ep s = SOME ev /\
+  op_prov G condop = NONE /\ op_prov G tp = NONE /\ op_prov G ep = NONE /\
+  op_taint tn condop = {} /\ op_taint tn tp = {} /\ op_taint tn ep = {} /\
+  condop <> Var d /\ ep <> Var d /\ ep <> Var m /\ d <> m /\
+  ~ctx_has_dalloca ctx ==>
+  inst_seq_ptr D 0 ctx func PG G tn
+    [mk_inst i XOR [tp;ep] [d]; mk_inst j MUL [condop;Var d] [m];
+     mk_inst k XOR [ep;Var m] [out]] s
+    (DRESTRICT (DRESTRICT (DRESTRICT G (COMPL {d})) (COMPL {m})) (COMPL {out}))
+    (tn with t_var := ((tn.t_var |+ (d,{})) |+ (m,{})) |+ (out,{}))
+Proof
+  strip_tac >>
+  simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def] >> conj_tac
+  >- (irule ptr_inst_ok_raw_call_length_binop >> simp[]) >>
+  `step_inst_base (mk_inst i XOR [tp;ep] [d]) s =
+    OK (update_var d (word_xor tv ev) s)` by
+    (irule raw_call_length_binop_step_base >> simp[]) >>
+  simp[] >>
+  simp[raw_call_length_binop_step_ghost] >>
+  `eval_operand condop (update_var d (word_xor tv ev) s with
+     vs_inst_idx := SUC s.vs_inst_idx) = SOME cv /\
+   op_prov (DRESTRICT G (COMPL {d})) condop = NONE /\
+   op_taint (tn with t_var := tn.t_var |+ (d,{})) condop = {}` by
+    (simp[raw_call_scalar_update_operand]) >>
+  simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def] >> conj_tac
+  >- (irule ptr_inst_ok_raw_call_length_binop >>
+      simp[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def,
+        finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DRESTRICT]) >>
+  `step_inst_base (mk_inst j MUL [condop;Var d] [m])
+      (update_var d (word_xor tv ev) s with vs_inst_idx := SUC s.vs_inst_idx) =
+    OK (update_var m (word_mul cv (word_xor tv ev))
+      (update_var d (word_xor tv ev) s with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule raw_call_length_binop_step_base >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `op_taint (tn with t_var := tn.t_var |+ (d,{})) (Var d) = {}` by
+    simp[ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >> simp[raw_call_update_var_pc, raw_call_length_binop_step_ghost] >>
+  simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def] >> conj_tac
+  >- (irule ptr_inst_ok_raw_call_length_binop >>
+      simp[raw_call_scalar_update_operand, ptrDisciplineTheory.op_prov_def,
+        ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE,
+        finite_mapTheory.FLOOKUP_DRESTRICT] >>
+      Cases_on `ep` >> gvs[ptrDisciplineTheory.op_prov_def,
+        ptrDisciplineTheory.op_taint_def]) >>
+  `step_inst_base (mk_inst k XOR [ep;Var m] [out])
+      (update_var m (word_mul cv (word_xor tv ev)) (update_var d (word_xor tv ev) s)
+        with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
+    OK (update_var out (word_xor ev (word_mul cv (word_xor tv ev)))
+      (update_var m (word_mul cv (word_xor tv ev)) (update_var d (word_xor tv ev) s)
+        with vs_inst_idx := SUC (SUC s.vs_inst_idx)))` by
+    (irule raw_call_length_binop_step_base >>
+     simp[raw_call_scalar_update_operand, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `ep` >> gvs[venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[fragGasSeqPtrTheory.inst_seq_ptr_def, raw_call_update_var_pc,
+    raw_call_length_binop_step_ghost, pred_setTheory.INTER_ASSOC]
+QED
+
+Theorem raw_call_select_checked_code:
+  compile_select condop tp ep sa = (op,sb) /\
+  eval_operand condop s = SOME cv /\ eval_operand tp s = SOME tv /\
+  eval_operand ep s = SOME ev /\
+  op_prov G condop = NONE /\ op_prov G tp = NONE /\ op_prov G ep = NONE /\
+  op_taint tn condop = {} /\ op_taint tn tp = {} /\ op_taint tn ep = {} /\
+  (!x. condop = Var x ==> not_fresh_at sa x) /\
+  (!x. ep = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx ==>
+  ?HG un. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG un /\
+    op_prov HG op = NONE /\ op_taint un op = {} /\
+    un.t_mem = tn.t_mem /\ un.t_stor = tn.t_stor /\
+    un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule raw_call_select_code >> strip_tac >> simp[] >>
+  irule_at Any raw_call_select_inst_seq_ptr >> simp[] >>
+  conj_tac
+  >- (strip_tac >> fs[not_fresh_at_def] >>
+      first_x_assum (qspec_then `sa.cs_next_var` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (strip_tac >> fs[not_fresh_at_def] >>
+      first_x_assum (qspec_then `sa.cs_next_var` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (strip_tac >> fs[not_fresh_at_def] >>
+      first_x_assum (qspec_then `sa.cs_next_var + 1` mp_tac) >> simp[]) >>
+  simp[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def,
+    finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString sa.cs_next_var) /\
+   x <> STRING #"%" (toString (sa.cs_next_var + 1)) /\
+   x <> STRING #"%" (toString (sa.cs_next_var + 2))` by
+    (fs[not_fresh_at_def]) >> simp[]
+QED
+
+Theorem raw_call_select_state_frame:
+  compile_select condop tp ep sa = (op,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t = s with vs_vars := t.vs_vars /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule raw_call_select_code >> strip_tac >>
+  `!i u v. MEM i (emitted_insts sa sb) /\ step_inst_base i u = OK v ==>
+     v = u with vs_vars := v.vs_vars /\
+     (!x. not_fresh_at sa x ==> FLOOKUP v.vs_vars x = FLOOKUP u.vs_vars x)` by
+    (rpt gen_tac >> strip_tac >>
+     `MEM i.inst_opcode
+       [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+        EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT;
+        SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSERT; ASSERT_UNREACHABLE]` by
+       (gvs[venomInstTheory.mk_inst_def]) >>
+     drule_all emitHelperPropsTheory.step_pure_opcode_frame >> strip_tac >>
+     conj_tac >- simp[] >> rpt strip_tac >> first_x_assum irule >>
+     gvs[venomInstTheory.mk_inst_def] >> fs[not_fresh_at_def]) >>
+  drule_all emitHelperPropsTheory.run_inst_seq_protected_frame >>
+  simp[venomStateTheory.lookup_var_def]
+QED
+
+Theorem raw_call_select_run:
+  eval_operand condop s = SOME (bool_to_word b) /\
+  eval_operand tp s = SOME tv /\ eval_operand ep s = SOME ev /\
+  condop <> Var d /\ ep <> Var d /\ ep <> Var m /\ d <> m ==>
+  ?t. run_inst_seq
+    [mk_inst i XOR [tp;ep] [d]; mk_inst j MUL [condop;Var d] [m];
+     mk_inst k XOR [ep;Var m] [out]] s = OK t /\
+    eval_operand (Var out) t = SOME (if b then tv else ev)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst i XOR [tp;ep] [d]) s =
+    OK (update_var d (word_xor tv ev) s)` by
+    (irule raw_call_length_binop_step_base >> simp[]) >>
+  `eval_operand condop (update_var d (word_xor tv ev) s) =
+     SOME (bool_to_word b)` by
+    (Cases_on `condop` >> gvs[venomStateTheory.eval_operand_def,
+      venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst j MUL [condop;Var d] [m])
+    (update_var d (word_xor tv ev) s) =
+    OK (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+      (update_var d (word_xor tv ev) s))` by
+    (irule raw_call_length_binop_step_base >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `eval_operand ep (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+      (update_var d (word_xor tv ev) s)) = SOME ev` by
+    (Cases_on `ep` >> gvs[venomStateTheory.eval_operand_def,
+      venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst k XOR [ep;Var m] [out])
+    (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+      (update_var d (word_xor tv ev) s)) =
+    OK (update_var out (word_xor ev (word_mul (bool_to_word b) (word_xor tv ev)))
+      (update_var m (word_mul (bool_to_word b) (word_xor tv ev))
+        (update_var d (word_xor tv ev) s)))` by
+    (irule raw_call_length_binop_step_base >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[run_inst_seq_def] >>
+  Cases_on `b` >> simp[venomExecSemanticsTheory.bool_to_word_def,
+    venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+    wordsTheory.WORD_MULT_CLAUSES, wordsTheory.WORD_XOR_CLAUSES] >>
+  metis_tac[wordsTheory.WORD_XOR_ASSOC, wordsTheory.WORD_XOR_COMM,
+    wordsTheory.WORD_XOR_CLAUSES]
+QED
+
