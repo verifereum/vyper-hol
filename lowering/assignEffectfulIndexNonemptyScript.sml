@@ -12,7 +12,7 @@ Ancestors
   vyperStoragePlaceProvenance exprLowering
   vyperTypeEvalSoundness vyperTypeCallStackSoundness tuplePlaceWriteOutcome
   tuplePlaceBounds aggregateEvaluatedLayout valueEncodingProps context
-  abiStepAllocRecords venomExecProofs placeRelayoutFrag
+  abiStepAllocRecords venomExecProofs placeRelayoutFrag placeStoreStaticExit
 
 Theorem snapshot_gas_edge_allocations[local]:
   gas_path_edge ctx func s n (OK t) ==> s.vs_allocas SUBMAP t.vs_allocas
@@ -306,18 +306,16 @@ Resume assign_place_mutating_nonempty_case_with_store[store]:
   `expr_sim_inv cenv cx env
       (mid with gas_obs := gas_explicit marks' u.vs_gas_readings)` by
     metis_tac[expr_sim_inv_gas_obs] >>
-  `?ff. write_place cx p v (mid' with gas_obs := []) = (INL (),ff)` by
-    (Cases_on `write_place cx p v (mid' with gas_obs := [])` >>
-     rename1 `write_place _ _ _ _ = (wr,ff)` >>
-     `wr = INL ()` by
-       (irule tuple_place_source_write_success >>
-        qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
-        qpat_assum `eval_target_place _ _ _ = _` (irule_at Any) >>
-        qpat_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) t'` (irule_at Any) >>
-        qexistsl_tac [`dty`,`dtv`,`env`] >>
-        simp[target_pre_def, vyperTypeSystemTheory.well_typed_target_def] >>
-        metis_tac[expr_sim_inv_gas_obs]) >>
-     metis_tac[]) >>
+  `?wr ff. write_place cx p v (mid' with gas_obs := []) = (wr,ff)` by
+    metis_tac[pairTheory.PAIR] >>
+  drule_at (Pat `write_place _ _ _ _ = _`) tuple_place_source_write_outcome >>
+  disch_then (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`dty`,`dtv`,`env`] mp_tac) >>
+  impl_tac
+  >- (simp[target_pre_def, vyperTypeSystemTheory.well_typed_target_def] >>
+      metis_tac[expr_sim_inv_gas_obs]) >>
+  disch_then assume_tac >>
   `env.type_defs = get_tenv cx` by
     (qpat_assum `expr_sim_inv cenv cx env (mid' with gas_obs := [])` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
@@ -338,11 +336,6 @@ Resume assign_place_mutating_nonempty_case_with_store[store]:
       place_ptr_rel cenv cx t' (PlaceR p) dw (SOME loc) (Type dty)` by
     (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[target_post_def] >> metis_tac[]) >>
-  `loc = LocMemory ==> w2n dw + type_memory_size dtv < dimword (:256)` by
-    (strip_tac >> irule tuple_place_memory_end_bound >>
-     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
-     qpat_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) t'` (irule_at Any) >>
-     simp[] >> metis_tac[]) >>
   `0 < type_memory_size dtv` by metis_tac[cj 1 type_memory_size_pos] >>
   `type_alloc_ok cenv (lowered_value_type cenv e)` by
     (qpat_assum `assign_alloc_ok _ _ _` mp_tac >>
@@ -397,6 +390,14 @@ Resume assign_place_mutating_nonempty_case_with_store[store]:
          contextTheory.compile_ensure_in_memory_def, compileEnvTheory.comp_return_def]) >>
   `su = st /\ op = vv_operand vv` by metis_tac[pairTheory.PAIR_EQ] >>
   rpt BasicProvers.VAR_EQ_TAC >>
+  reverse (Cases_on `wr = INL ()`)
+  >- (suspend "static") >>
+  qpat_x_assum `wr = INL ()` SUBST_ALL_TAC >>
+  `loc = LocMemory ==> w2n dw + type_memory_size dtv < dimword (:256)` by
+    (strip_tac >> irule tuple_place_memory_end_bound >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) t'` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
   qpat_x_assum `!ee ss st u mid p dty dst loc s stv dtv v snap sw sf dw ff. _`
     (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qpat_x_assum `case FST _ of NONE => _ | SOME loc' => _`
@@ -516,6 +517,127 @@ Resume assign_place_mutating_nonempty_case_with_store[store]:
      simp[] >> metis_tac[ci_mono_def, cs_extends_trans]) >>
   simp[stmt_post_def, stmt_lands_def, stmtSimPropsTheory.cenv_top_ext_refl] >>
   metis_tac[]
+QED
+
+Resume assign_place_mutating_nonempty_case_with_store[static]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `wr = INL () \/ _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  `loc = slot_loc tr` by
+    (qpat_assum `place_ptr_rel _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[place_ptr_rel_def]) >>
+  `loc <> LocMemory` by (Cases_on `tr` >> simp[slot_loc_def]) >>
+  `eval_operand (vv_operand vv) t' = SOME w` by
+    metis_tac[tuplePlaceSnapshotTheory.tuple_place_target_operand] >>
+  `expr_val_rel cx (lowered_value_type cenv e) v (vv_operand vv) t'` by
+    (Cases_on `is_word_type (lowered_value_type cenv e)`
+     >- (fs[expr_val_rel_def] >> metis_tac[]) >>
+     `type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size tv` by
+       metis_tac[expr_sim_inv_memory_size] >>
+     `val_in_memory tv v (w2n w) t'.vs_memory` by
+       (qpat_x_assum `if is_word_type _ then _ else _` mp_tac >>
+        simp[] >> strip_tac >>
+        irule assign_effectful_target_snapshot_value >>
+        qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+        qexistsl_tac [`type_memory_bytes cenv (lowered_value_type cenv e)`,`aid`] >>
+        simp[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+     simp[expr_val_rel_def] >> metis_tac[]) >>
+  `local_ptrs_reserved cenv st` by metis_tac[compiler_ci_mono_reserved] >>
+  `~t'.vs_halted` by
+    (irule aug_place_marked_path_not_halted >>
+     qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+     metis_tac[]) >>
+  `!x. dst = Var x \/ vv_operand vv = Var x ==> not_fresh_at st x` by
+    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
+     qpat_assum `ci_mono ss st` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[target_post_def, ci_mono_def] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `~is_word_type (lowered_value_type cenv e) ==>
+    w2n w + type_memory_size tv <= t'.vs_alloca_next /\
+    w2n w + type_memory_size tv < dimword (:256) /\
+    (!aid b sz. FLOOKUP t'.vs_allocas aid = SOME (b,sz) /\ st.cs_next_id <= aid ==>
+      w2n w + type_memory_size tv <= b \/ b + sz <= w2n w)` by
+    (strip_tac >>
+     `type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size tv` by
+       metis_tac[expr_sim_inv_memory_size] >>
+     `?aid. aid < ss.cs_next_id /\
+       FLOOKUP t'.vs_allocas aid = SOME (w2n w,type_memory_size tv)` by
+       (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        qpat_assum `if is_word_type _ then _ else _` mp_tac >>
+        qpat_assum `~is_word_type _` mp_tac >>
+        qpat_assum `type_memory_bytes _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[target_post_def] >> metis_tac[]) >>
+     `alloca_next_valid t' /\ allocas_non_overlapping t' /\ alloca_room ctx func t'` by
+       (qpat_assum `stmt_state_rel _ _ _ _ _ t'` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+     `t'.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+     `w2n w + type_memory_size tv <= t'.vs_alloca_next` by
+       metis_tac[venomMemDefsTheory.alloca_next_valid_def] >>
+     simp[] >> rpt strip_tac >>
+     `aid <> aid'` by (fs[ci_mono_def] >> decide_tac) >>
+     qpat_assum `allocas_non_overlapping t'` mp_tac >>
+     qpat_assum `FLOOKUP t'.vs_allocas aid = _` mp_tac >>
+     qpat_assum `FLOOKUP t'.vs_allocas aid' = _` mp_tac >>
+     qpat_assum `aid <> aid'` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qpat_x_assum `case FST _ of NONE => _ | SOME loc' => _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
+    place_store_value_static_exit >>
+  disch_then (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  disch_then (qspec_then `tv` mp_tac) >>
+  impl_tac >-
+    (conj_tac >- (Cases_on `tr` >> simp[slot_loc_def]) >>
+     simp[arithmeticTheory.ADD_COMM] >>
+     Cases_on `is_word_type (lowered_value_type cenv e)`
+     >- (`lowered_value_type cenv e = dty` by
+           metis_tac[compileEnvTheory.type_widens_to_word] >>
+         qpat_assum `!x. dst = Var x \/ _ ==> _` mp_tac >>
+         qpat_assum `is_word_type _ \/ _ ==> _` mp_tac >>
+         qpat_assum `evaluate_type _ dty = SOME dtv` mp_tac >>
+         qpat_assum `evaluate_type _ _ = SOME tv` mp_tac >>
+         qpat_assum `lowered_value_type cenv e = dty` mp_tac >>
+         qpat_assum `is_word_type (lowered_value_type cenv e)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+         conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+         qpat_x_assum `lowered_value_type cenv e = dty` SUBST_ALL_TAC >>
+         `tv = dtv` by metis_tac[optionTheory.SOME_11] >>
+         `type_memory_size tv + 64 < dimword (:256)` by metis_tac[] >>
+         `type_memory_size tv < dimword (:256)` by decide_tac >>
+         simp[]) >>
+     qpat_assum `~is_word_type _ ==> _ /\ _ /\ _` mp_tac >>
+     qpat_assum `!x. dst = Var x \/ _ ==> _` mp_tac >>
+     qpat_assum `~is_word_type (lowered_value_type cenv e)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     simp[arithmeticTheory.ADD_COMM] >>
+     rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     gvs[arithmeticTheory.ADD_COMM] >>
+     metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
+  strip_tac >>
+  `!tail. write_place cx (StoragePlace tr slot tv') v (mid' with gas_obs := tail) =
+    (INR (Error (RuntimeError "write in static context")),mid' with gas_obs := tail)` by
+    (drule_all place_pointer_write_gas_obs >> simp[]) >>
+  qpat_assum `gas_marked_path F ctx func t' 0 r` mp_tac >>
+  qpat_assum `expr_exit _ r` mp_tac >>
+  qpat_assum `!tail. write_place _ _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,`mid'`,`r`] >>
+  conj_tac >- simp[gasSummaryTheory.gas_marked_exec_def] >>
+  disj2_tac >> Cases_on `r` >> gvs[stmt_exit_def, expr_exit_def,
+    fragExecTheory.exit_result_def]
 QED
 
 Finalise assign_place_mutating_nonempty_case_with_store
