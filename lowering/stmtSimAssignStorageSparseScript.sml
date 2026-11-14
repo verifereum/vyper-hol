@@ -134,7 +134,8 @@ Proof
 QED
 
 (* Assignment to a non-word storage or transient variable with no length
-   word, by the live-slot store.  The region fits the slot space. *)
+   word, by the live-slot store. Invalid roots produce a bad-storage
+   outcome after evaluating the RHS. *)
 Theorem compile_assign_storage_sparse_stmt_frag:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt env.
     get_module_code cx src = SOME ts /\
@@ -147,7 +148,6 @@ Theorem compile_assign_storage_sparse_stmt_frag:
     type_memory_bytes cenv typ = type_memory_size tvt /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME typ /\
-    slot + type_slot_size tvt <= dimword (:256) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     (!gs v es1.
        (do result <- eval_expr cx e; read_result cx result od)
@@ -183,6 +183,19 @@ Proof
     metis_tac[fn_has_code_split] >>
   drule_all eval_assign_toplevel_action >>
   disch_then (qspec_then `e` assume_tac) >>
+  reverse (Cases_on `slot + type_slot_size tvt <= dimword (:256)`)
+  >- (qpat_x_assum `eval_stmt _ _ = _` SUBST_ALL_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`st0`, `sa`, `sB`, `op`, `s0`] mp_tac) >>
+      (impl_tac >- (fs[] >> metis_tac[forced_then_admissible])) >>
+      disch_tac >>
+      drule_all (BETA_RULE (Q.INST
+        [`P` |-> `\H v ee t. expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+          t.vs_current_bb = sB.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sB.cs_current_insts`]
+        (SPEC_ALL assign_toplevel_bad_slot_outcome))) >>
+      disch_then MATCH_ACCEPT_TAC) >>
   match_mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `st0`, `lctx`, `RetQ`, `cenv`,
       `cenv`, `sa`, `sb`, `s0`,
       `Assign (BaseTarget (TopLevelNameTarget (src, id))) e`, `e`,
