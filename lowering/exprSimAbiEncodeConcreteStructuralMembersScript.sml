@@ -267,7 +267,11 @@ Proof
        (drule_all window_structural_member_static_cursor_frame >> simp[]) >>
      `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
      `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by
-       fs[window_structural_members_inv_def, window_member_prefix_def] >>
+        (qhdtm_assum `window_structural_members_inv`
+           (strip_assume_tac o PURE_REWRITE_RULE [window_structural_members_inv_def]) >>
+         qhdtm_assum `window_member_prefix`
+           (strip_assume_tac o PURE_REWRITE_RULE [window_member_prefix_def]) >>
+         decide_tac) >>
      drule_all window_member_tail_step >>
      fs[window_structural_members_inv_def]) >>
   `window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot

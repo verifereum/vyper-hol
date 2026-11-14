@@ -103,7 +103,8 @@ Proof
   (Cases_on `MEM inst.inst_opcode [INITIAL_FMP;BUMP]`
    >- (`taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
        `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
-         metis_tac[ld_global_selected, MEM] >>
+         (rpt strip_tac >> irule ld_global_selected >>
+          goal_assum (drule_at Any) >> qexists_tac `f` >> simp[]) >>
        drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
        drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
        drule ld_sync_memory >> strip_tac >>

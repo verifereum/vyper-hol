@@ -736,8 +736,10 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   `cv = STRCAT "%" (toString sa.cs_next_var)` by
-    (qpat_x_assum `fresh_var c = _` mp_tac >>
-     simp_tac (srw_ss()) [fresh_var_def] >> strip_tac >> gvs[]) >>
+    (qpat_assum `c.cs_next_var = sa.cs_next_var` mp_tac >>
+     qpat_x_assum `fresh_var c = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (srw_ss()) [fresh_var_def] >> rpt strip_tac >> gvs[]) >>
   fs[ci_mono_def, not_fresh_at_def,
      emitHelperPropsTheory.fresh_var_distinct] >>
   rpt strip_tac >> gvs[] >>
@@ -1754,8 +1756,8 @@ Proof
   drule_all store_slots_member_offset_run >>
   disch_then (qx_choose_then `u` (qx_choose_then `hs` strip_assume_tac)) >>
   `eval_operand src u = SOME sw /\ eval_operand slot u = SOME dw` by
-    (conj_tac >> Cases_on `src` >> Cases_on `slot` >>
-     gvs[eval_operand_def] >> metis_tac[]) >>
+     (conj_tac >> Cases_on `src` >> fs[eval_operand_def] >>
+      Cases_on `slot` >> fs[eval_operand_def] >> metis_tac[]) >>
   `!x. src = Var x \/ slot = Var x ==> not_fresh_at sc x` by
     (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
   qpat_x_assum `!tvs vs cenv ctx so src slot tr sa sb func s sw dw. _`
