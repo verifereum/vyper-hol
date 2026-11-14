@@ -4,7 +4,7 @@ Ancestors
   assignTuplePtrMixedReady assignTuplePtrBodyReady assignTuplePtrTargets
   bodyPtrPreds bodySim bodySimStmtCases bodyExprPreFacts gasContext
   supportedStmtTraverse supportedStmts exprSimHyps exprSimHypsDefs
-  exprSimAggregateLayout stmtSimReturn stmtSimDeclStore
+  exprSimAggregateLayout exprSimSource stmtSimReturn stmtSimDeclStore
   tupleTargetStoreProps vyperTypeInvariants vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperTypeValues vyperTypeSystem vyperTypeEnv
   vyperTypeExprSoundness vyperTyping vyperTypeDefaults

@@ -6,7 +6,7 @@ Ancestors
   compileEnv context bodyPtrMakeArrayConsBind gasSummaryComposePtr
   fragGasPathPtr gasExemptCert gasSummary vyperState exprSimHyps
   exprSimWordArgs bodyPtrMakeArrayConsInvariant valueEncoding valueEncodingDefs argsTailPtr
-  assignTuplePtrBodyReady freshWrites list option fragExec
+  exprSimSource freshWrites list option fragExec
   bodyPtrMakeArrayChildren
   exprSimAggregateLoops exprSimAggregateEncoding
 

@@ -324,6 +324,19 @@ Proof
       value_result_typed_def, is_HashMapRef_def]
 QED
 
+Theorem expr_body_pre_eval_gas_ptr:
+  expr_body_pre cenv cx env e es /\
+  vyperState$bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := obs) = (INL v, es') ==>
+  expr_sim_inv cenv cx env es' /\ value_runtime_typed env (expr_type e) v
+Proof
+  rpt strip_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
+  drule_all (SRULE [ETA_THM] expr_body_pre_eval) >>
+  simp[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
+       value_runtime_typed_def]
+QED
+
 Theorem expr_sim_pre_eval:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>

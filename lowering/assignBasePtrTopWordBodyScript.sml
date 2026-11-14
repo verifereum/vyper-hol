@@ -1,7 +1,7 @@
 (* Supported scalar module targets are runtime storage/transient slots. *)
 Theory assignBasePtrTopWordBody
 Ancestors assignBasePtrTopWordFragment assignBasePtrStorageBody
-  assignTuplePtrBodyReady bodyPtrPreds bodyPtrDefs bodySim bodyExprPreFacts
+  bodyPtrPreds bodyPtrDefs bodySim bodyExprPreFacts
   exprSimHypsDefs exprSimHyps exprSimSource exprSimTopLevelProps stmtSimAssignStorage
   compileEnv vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend
   vyperTypeEnv vyperTyping vyperTypeContractStaticMaps supportedDecls

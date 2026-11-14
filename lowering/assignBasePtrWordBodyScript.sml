@@ -1,6 +1,6 @@
 (* Body-level word-local wrapper, with the source layout checked at the RHS endpoint. *)
 Theory assignBasePtrWordBody
-Ancestors assignBasePtrWordFragment assignTuplePtrBodyReady bodyPtrPreds bodyPtrDefs
+Ancestors assignBasePtrWordFragment bodyPtrPreds bodyPtrDefs
   bodySim vyperTypeCallGraph exprSimSource bodyExprPreFacts
   stmtSimAssign stmtSimAssignStore stmtSimDeclStore exprSimHypsDefs
   exprSimHyps stmtSimProps stmtSimDefs exprSimDefs loweringPosts

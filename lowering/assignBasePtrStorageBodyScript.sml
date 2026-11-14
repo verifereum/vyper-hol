@@ -11,7 +11,7 @@ Ancestors
   vyperInterpreter vyperState vyperTypeValues valueEncodingProps
   stmtLowering exprLowering finite_map list words
   vyperTypeSystem vyperTypeCallGraph gasContext bodyStorageMetadata vyperTypeContract vyperTypeInvariants
-  assignTuplePtrBodyReady vyperTypeExprSoundness
+  vyperTypeExprSoundness
 Libs monadsyntax
 
 Theorem assign_base_storage_rhs_pre:
