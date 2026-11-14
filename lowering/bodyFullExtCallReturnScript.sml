@@ -8,6 +8,7 @@
 Theory bodyFullExtCallReturn
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
+  bodyFullExtCallReturnVoid
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
   extcallReturnCallerReject extcallReturnDefaultDecode
   extcallReturnDefaultResources extcallReturnDefaultOwnership
