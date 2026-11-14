@@ -10,7 +10,7 @@ Ancestors
 Theorem send_call_assert_path_full[local]:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst aid ASSERT [Var out] []) /\
@@ -98,6 +98,10 @@ Theorem send_read_checked_tail_full[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
+  (res = INR (Error (RuntimeError "write in static context")) /\
+   step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
+   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+     (Abort ExHalt_abort (halt_state (set_returndata [] s)),G,tn)) \/
   ?t u w.
     t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
                   vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
@@ -116,19 +120,23 @@ Theorem send_read_checked_tail_full[local]:
          step_prov PG G inst u, step_taint inst s u tn)))
 Proof
   strip_tac >>
-  `~s.vs_call_ctx.cc_static` by
-    gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-        loweringStateRelDefsTheory.state_rel_def] >>
   `ptr_inst_ok D lo 0 ctx fn G tn inst s` by
     (irule ptr_inst_ok_send_call_at >> metis_tac[]) >>
   `IS_SOME (eval_operand gas s)` by simp[] >>
   `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
     simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   drule_all send_read_call_step >> strip_tac
-  >- (qexistsl_tac [`s'`, `update_var out 1w s'`, `1w`] >> simp[] >>
+  >- (disj1_tac >> simp[] >> irule exit_inst_origin_ptr >>
+      simp[exit_result_def] >>
+      simp[step_inst_non_invoke, exit_result_def, mem_safe_step_non_invoke,
+        inst_mem_below_frontier_def, inst_dload_in_section_def,
+        source_memory_read_ranges_def, source_memory_write_ranges_def,
+        memory_range_of_operands_def, eval_operand_def,
+        gas_events_step_def, gas_count_step_def])
+  >- (disj2_tac >> qexistsl_tac [`s'`, `update_var out 1w s'`, `1w`] >> simp[] >>
       drule_at (Pat `step_inst_base _ _ = _`) send_call_assert_path_full >> simp[] >>
       strip_tac >> first_x_assum drule_all >> simp[]) >>
-  qexistsl_tac [`s'`, `update_var out 0w s'`, `0w`] >> simp[] >>
+  disj2_tac >> qexistsl_tac [`s'`, `update_var out 0w s'`, `0w`] >> simp[] >>
   drule_at (Pat `step_inst_base _ _ = _`) send_call_assert_path_full >> simp[] >>
       strip_tac >> first_x_assum drule_all >> simp[]
 QED
@@ -153,6 +161,11 @@ Theorem send_read_checked_tail_full_uniform:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
+  (res = INR (Error (RuntimeError "write in static context")) /\
+   step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s)) /\
+   !H. valid_horizon cx st0 H es'.storage_trace ==>
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) []
+       (Abort ExHalt_abort (halt_state (set_returndata [] s)),G,tn)) \/
   ?t u w.
     t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
                   vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
@@ -177,7 +190,14 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_all send_read_checked_tail_full >>
-  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac)
+  >- (disj1_tac >> simp[] >> qx_gen_tac `H1` >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H1` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+      drule_all send_read_checked_tail_full >>
+      disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >> gvs[]) >>
+  disj2_tac >>
   qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `stor_taint_ok_at (DF H0) _ _` kall_tac >>
   qexistsl_tac [`t`, `u`, `w`] >>
@@ -190,9 +210,6 @@ Proof
       `t.vs_vars = s.vs_vars` by
         (qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
       conj_tac >- (drule_all send_read_state_rel_any >> simp[]) >>
-      `~s.vs_call_ctx.cc_static` by
-        gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-            loweringStateRelDefsTheory.state_rel_def] >>
       `ptr_inst_ok (DF H1) lo 0 ctx fn G tn inst s` by
         (irule ptr_inst_ok_send_call_at >> metis_tac[]) >>
       drule_all send_call_assert_path_full >> simp[]) >>
@@ -200,9 +217,6 @@ Proof
   qx_gen_tac `H1` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H1` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by
-    gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-        loweringStateRelDefsTheory.state_rel_def] >>
   `ptr_inst_ok (DF H1) lo 0 ctx fn G tn inst s` by
     (irule ptr_inst_ok_send_call_at >> metis_tac[]) >>
   drule_all send_call_assert_path_full >> simp[]

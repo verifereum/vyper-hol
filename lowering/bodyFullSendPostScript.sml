@@ -68,7 +68,14 @@ Proof
     (res_tac >> fs[ghost_inv_at_def]) >>
   drule_all send_read_checked_tail_full_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
-  gvs[] >- suspend "normal" >> suspend "failed"
+  gvs[] >- suspend "static" >- suspend "normal" >> suspend "failed"
+QED
+
+Resume send_tail_path_full[static]:
+  qexistsl_tac [`G`,`tn`,
+    `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+  rpt strip_tac >> res_tac >>
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume send_tail_path_full[failed]:
@@ -83,7 +90,6 @@ QED
 Resume send_tail_path_full[normal]:
   qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
   `stmt_state_rel H0 ctx fn cenv cx es1 s` by metis_tac[] >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def,state_rel_def] >>
   `ghost_kept_at lo cenv es1 sm G tn s (step_prov PG G inst u)
      (step_taint inst s u tn)` by
     (drule_all send_call_runtime_frame >> strip_tac >>
