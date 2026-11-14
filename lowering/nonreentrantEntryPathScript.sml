@@ -241,8 +241,10 @@ Proof
     (transient_lock_checked_state sa nkey s)` by
     (mp_tac (SPEC_ALL transient_lock_checked_ghost_frame) >> simp[]) >>
   conj_tac
-  >- (irule stmt_state_rel_allocas_frame >>
-      qexistsl_tac [`es`, `transient_lock_checked_state sa nkey s`] >>
+  >- (match_mp_tac (Q.SPECL
+        [`H`, `func`, `cenv`, `cx`, `es`,
+         `transient_lock_checked_state sa nkey s`, `locked`, `u`, `ctx`]
+        stmt_state_rel_allocas_frame) >>
       simp[] >> Cases_on `iv` >>
       gvs[transient_lock_code_execution, stmt_state_rel_def,
           immutable_alloca_sep_def, immutable_base_zero_def,
