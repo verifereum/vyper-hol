@@ -43,6 +43,7 @@ Ancestors
   extcallReturnDefaultDecode extcallReturnDefaultOwnership extcallReturnDefaultIntervals
   extcallReturnInterface extcallReturnDefaultTypes
   exprSimAbiEncodeArgsMaterializePath exprSimMemorySource
+  exprLowering compileEnv abiEncodeMaterialize context aggregateEvaluatedLayout
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -536,6 +537,121 @@ Proof
   `val_footprint tv v <= type_memory_size tv` by
     metis_tac[exprSimPropsTheory.val_footprint_le] >>
   gvs[] >> decide_tac)
+QED
+
+Theorem extcall_request_positional_head_marked:
+  expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
+  post_value_type ce e = expr_type e /\
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  compile_snapshot_vv ce (exprs_can_mutate ce tail)
+    (ext_call_arg_value (lowered_value_type ce e) vv) sm = (snap,sb) /\
+  ~exprs_can_mutate ce tail /\
+  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL raw) ee (OK s) /\ ee.gas_obs = [] /\
+  read_result cx raw ee = (INL v,ee) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func ce cx e es sa sm s0 ee raw vv s) /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
+  local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+         ~is_word_type (expr_type e) ==>
+         type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME sv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv /\
+  value_has_type sv v /\ value_has_type dv v /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u.
+    gas_marked_exec F (ctx,func) (eval_exprs cx [e]) (es,s0)
+      marks (INL [v]) ee (OK u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (if is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv))
+     then ?op.
+       snap = StackValue (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) op /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+          expr_post H ctx func ce cx e es sa sb s0 ee v op u)
+     else sb = sm /\ u = s /\
+       (?tag p. vv = LocatedValue tag p /\
+          snap = LocatedValue (lowered_value_type ce e) p) /\
+       vv_holds ce cx (lowered_value_type ce e) raw snap ee u /\
+       vv_at ce cx (post_value_type ce e) sa sb ee raw snap u /\
+       val_footprint sv v = val_footprint dv v /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+          vv_post H ctx func ce cx e es sa sb s0 ee raw vv u))
+Proof
+  strip_tac >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  qpat_x_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  Cases_on `is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv))`
+  >- (drule_all extcall_request_word_snapshot_marked_horizons >>
+      strip_tac >>
+      `v' = v` by
+        (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
+         simp[gas_marked_exec_def] >>
+         disch_then (mp_tac o Q.SPEC `[]` o CONJUNCT1) >> gvs[]) >>
+      qpat_x_assum `v' = v` SUBST_ALL_TAC >>
+      qexists_tac `u` >> simp[] >>
+      conj_tac
+      >- (`gas_marked_exec F (ctx,func)
+             (bind (eval_expr cx e) (read_result cx)) (es,s0)
+             marks (INL v) ee (OK u)` by
+            (once_rewrite_tac[GSYM APPEND_NIL] >>
+             irule gas_marked_exec_bind_normal >>
+             goal_assum (drule_at Any) >> simp[]) >>
+          qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
+          simp[gas_marked_exec_def] >> strip_tac >>
+          simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_def,
+               exprSimWordArgsTheory.eval_exprs_nil, return_def]) >>
+      qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
+      simp[gas_marked_exec_def] >> strip_tac >>
+      drule fragGasModeTheory.gas_marked_path_exec >>
+      metis_tac[fragGasPathTheory.gas_path_normal]) >>
+  `vv_holds ce cx (post_value_type ce e) raw vv ee s /\
+   vv_at ce cx (post_value_type ce e) sa sm ee raw vv s` by
+    metis_tac[vv_post_def] >>
+  Cases_on `vv`
+  >- cheat >>
+  rename1 `LocatedValue tag p` >>
+  `~is_word_type (lowered_value_type ce e)` by
+    gvs[ext_call_arg_value_def, vv_type_def] >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[arg_type_fits_word_type] >>
+  `post_value_type ce e = lowered_value_type ce e \/
+   p.ptr_location = LocMemory /\
+   is_bytestring_type (post_value_type ce e) /\
+   is_bytestring_type (lowered_value_type ce e)` by
+    metis_tac[abiEncodeMaterializeTheory.materialize_compiled_nonword_capture_layout] >>
+  `sb = sm /\ snap = LocatedValue (lowered_value_type ce e) p /\
+   vv_holds ce cx (lowered_value_type ce e) raw snap ee s /\
+   vv_at ce cx (post_value_type ce e) sa sm ee raw snap s /\
+   val_footprint sv v = val_footprint dv v` by
+    (irule extcall_request_nonword_snapshot_capture >>
+     simp[] >> metis_tac[]) >>
+  `gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s)
+      [] (INL v) ee (OK s)` by
+    (simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
+          fragGasPathTheory.gas_path_rules] >>
+     drule read_result_gas_obs >> simp[]) >>
+  `gas_marked_exec F (ctx,func)
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      marks (INL v) ee (OK s)` by
+    (once_rewrite_tac[GSYM APPEND_NIL] >>
+     irule gas_marked_exec_bind_normal >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qexists_tac `s` >> gvs[] >>
+  qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
+  simp[gas_marked_exec_def] >> strip_tac >>
+  simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_def,
+       exprSimWordArgsTheory.eval_exprs_nil, return_def]
 QED
 
 Theorem extcall_request_setup:
