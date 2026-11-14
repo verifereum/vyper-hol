@@ -1001,7 +1001,7 @@ val _ = List.app (fn (name,th) =>
 (* Sequential transfers include the effect of overlapping source and destination. *)
 val _ = Parse.hide "count";
 
-Theorem immutable_loop_code[local]:
+Theorem immutable_loop_code:
   compile_word_copy_loop_base src dst count LocMemory LocCode T
     (SOME region) sa = (u,sb) /\
   fn_has_code sa sb func ==>
@@ -1102,7 +1102,7 @@ Proof
   gvs[finite_mapTheory.FLOOKUP_DEF]
 QED
 
-Theorem immutable_loop_operand_frame[local]:
+Theorem immutable_loop_operand_frame:
   fresh_vars_wrt sa s /\ fresh_vars_wrt sb t /\
   t.vs_labels = s.vs_labels /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
@@ -1121,7 +1121,7 @@ Definition immutable_loop_frame_def:
     (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t)
 End
 
-Theorem immutable_loop_frame_write[local]:
+Theorem immutable_loop_frame_write:
   immutable_loop_frame sa sb s a b i t /\
   (!x. not_fresh_at sa x ==> x <> name) /\ not_fresh_at sb name ==>
   immutable_loop_frame sa sb s a b i (update_var name v t)
@@ -1134,7 +1134,7 @@ Proof
   irule immutable_loop_fresh_write >> simp[]
 QED
 
-Theorem immutable_loop_frame_control[local]:
+Theorem immutable_loop_frame_control:
   (immutable_loop_frame sa sb s a b i (jump_to lbl t) <=>
    immutable_loop_frame sa sb s a b i t) /\
   (immutable_loop_frame sa sb s a b i (t with vs_inst_idx := k) <=>
@@ -1153,7 +1153,7 @@ Proof
                 immutable_transfers_def, istore_def, mstore_def]
 QED
 
-Theorem immutable_loop_frame_shared[local]:
+Theorem immutable_loop_frame_shared:
   immutable_loop_frame sa sb s a b i t ==>
   t.vs_labels = s.vs_labels /\ t.vs_halted = s.vs_halted
 Proof
@@ -1163,7 +1163,7 @@ Proof
   simp[store_copy_normalize_def, immutable_loop_prefix_shared]
 QED
 
-Theorem immutable_loop_frame_operand[local]:
+Theorem immutable_loop_frame_operand:
   immutable_loop_frame sa sb s a b i t /\
   (!x. p = Var x ==> not_fresh_at sa x) ==>
   eval_operand p t = eval_operand p s
@@ -1312,7 +1312,7 @@ Proof
   simp[run_inst_seq_def, Abbr `q5`, Abbr `q4`, Abbr `q3`, Abbr `q2`, Abbr `q1`]
 QED
 
-Theorem immutable_loop_body_run[local]:
+Theorem immutable_loop_body_run:
   eval_operand src q = SOME a /\ eval_operand dst q = SOME b /\
   eval_operand region q = SOME 0w /\
   eval_operand (Var cv) q = SOME (n2w i) /\
@@ -1376,7 +1376,7 @@ Proof
       lookup_var_def, fresh_vars_wrt_def]
 QED
 
-Theorem immutable_loop_body_frame[local]:
+Theorem immutable_loop_body_frame:
   immutable_loop_frame sa sb s a b i q /\
   (!x. MEM x [cv;mv;sv;vv;dm;dv;av;nv] ==> not_fresh_at sb x) /\
   (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dm;dv;av;nv]) ==>
@@ -1682,7 +1682,7 @@ QED
 
 Finalise compile_imm_store_loop_path
 
-Theorem immutable_transfers_normalize[local]:
+Theorem immutable_transfers_normalize:
   !n off t.
   store_copy_normalize s (immutable_transfers T T a b n off t) =
     immutable_transfers T T a b n off (store_copy_normalize s t)
