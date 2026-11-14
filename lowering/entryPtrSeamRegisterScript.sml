@@ -3517,7 +3517,7 @@ Resume registration_owned_locals_joint_nr[endpoint_domain]:
   simp[build_positional_args_FST]
 QED
 
-Finalise registration_owned_locals_joint_nr[local]
+Finalise registration_owned_locals_joint_nr
 
 Theorem registration_owned_locals_joint[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
