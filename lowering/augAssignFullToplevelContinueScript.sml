@@ -8,6 +8,10 @@ Ancestors
   stmtSimAugAssignStorage exprSimHypsDefs exprSimUnwrap
   vyperTypeStatePreservation vyperTyping vyperInterpreter vyperTypeSystem
   exprSimSource exprSimHyps exprBopSimProps stmtSimAugAssign
+  augAssignFullToplevelOperator augAssignFullToplevelLanding
+  augAssignFullStateFrame augAssignFullHistory stmtSimDefs freshWrites
+  loweringPosts emitHelperProps loweringShapeRules bodyMemoryDefs loweringStateRelDefs
+  stmtSimProps gasOutcomeFullCompose fragGasOriginPtr
 
 Theorem augassign_toplevel_store_relations_full:
   root_es.storage_trace = es.storage_trace ++ [StorageRoot tr slot tvt] /\
@@ -103,4 +107,191 @@ Proof
   simp[] >> reverse conj_tac
   >- (gvs[] >> drule_all augassign_toplevel_binop_admissible >> simp[]) >>
   metis_tac[]
+QED
+
+(* The loaded scalar remains clean across the RHS, and the RHS word is clean. *)
+Theorem augassign_toplevel_rhs_operands_full:
+  emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
+  lower_value compile_expr cenv ty e s1 = (op,s2) /\
+  expr_body_pre cenv cx env e root_es /\ is_word_type (expr_type e) /\
+  word_value rhs /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+  expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
+  ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr /\
+  ptr_val_ok cx (post_value_type cenv e) rhs op Gr tnr u /\
+  eval_operand (Var out) t = SOME (val_to_w256 cur) /\
+  op_prov Gload (Var out) = NONE /\ op_taint tnload (Var out) = {} ==>
+  eval_operand (Var out) u = SOME (val_to_w256 cur) /\
+  eval_operand op u = SOME (val_to_w256 rhs) /\
+  op_prov Gr (Var out) = NONE /\ op_taint tnr (Var out) = {} /\
+  op_prov Gr op = NONE /\ op_taint tnr op = {} /\
+  not_fresh_at s2 out /\ (!z. op = Var z ==> not_fresh_at s2 z) /\
+  (!l. op <> Label l)
+Proof
+  strip_tac >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
+  `not_fresh_at s1 out` by
+    (drule emit_op_facts >> simp[]) >>
+  `not_fresh_at s2 out` by metis_tac[not_fresh_at_mono] >>
+  `eval_operand (Var out) u = SOME (val_to_w256 cur)` by
+    (irule eval_operand_frame >> conj_tac >- simp[] >>
+     qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
+  `expr_val_rel cx (expr_type e) rhs op u` by gvs[expr_post_def] >>
+  `eval_operand op u = SOME (val_to_w256 rhs)` by
+    (irule expr_val_rel_word >> simp[] >>
+     qexistsl_tac [`cx`, `expr_type e`] >> simp[]) >>
+  gvs[ghost_kept_at_def, ptr_val_ok_def, op_prov_def, op_taint_def]
+QED
+
+Theorem augassign_toplevel_rhs_alloca_frame_full:
+  emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
+  root_es = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
+  t = update_var out (if tr then tload (n2w slot) s0 else sload (n2w slot) s0)
+    (s0 with vs_inst_idx := LENGTH s1.cs_current_insts) /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx root_es t /\
+  expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
+  MAP FDOM mid.scopes = MAP FDOM root_es.scopes /\
+  operated = (u with vs_inst_idx := pc) with vs_vars := operated.vs_vars /\
+  sa.cs_next_var <= s2.cs_next_var /\
+  (!z. not_fresh_at s2 z ==> lookup_var z operated = lookup_var z u) ==>
+  alloca_frame cenv es sa s0 cenv mid operated /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
+    lookup_var x operated = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+    FLOOKUP operated.vs_allocas aid = SOME b) /\
+  operated.vs_alloca_next = u.vs_alloca_next /\
+  t.vs_alloca_next = s0.vs_alloca_next
+Proof
+  strip_tac >>
+  `sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id` by
+    (drule emitted_insts_emit_op >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s1 x /\ not_fresh_at s2 x` by
+    metis_tac[not_fresh_at_mono] >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `alloca_frame cenv root_es s1 t cenv mid u` by
+    (drule_all expr_post_alloca_frame >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv mid u` by
+    (irule alloca_frame_expr_prefix >> simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     qexistsl_tac [`root_es`, `s1`, `t`] >> simp[] >>
+     qpat_x_assum `t = _` SUBST1_TAC >> simp[update_var_def]) >>
+  `!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
+     lookup_var x operated = SOME v` by
+    (rpt strip_tac >> gvs[expr_post_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule alloca_frame_of_mem_frame >> simp[] >>
+      reverse conj_tac >- metis_tac[] >>
+      qpat_x_assum `alloca_frame cenv es sa s0 cenv mid u` mp_tac >>
+      simp[alloca_frame_def] >>
+      qpat_x_assum `operated = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+      simp[] >> metis_tac[]) >>
+  simp[] >>
+  qpat_assum `operated = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+  gvs[expr_post_def, update_var_def]
+QED
+
+(* Transport the loaded reserved frame through the RHS and numeric endpoint. *)
+Theorem augassign_toplevel_rhs_operator_frame_full:
+  emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
+  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+  s2.cs_next_var <= s3.cs_next_var /\ t.vs_alloca_next <= u.vs_alloca_next /\
+  return_buf_frame d cenv s1 t /\ ret_pc_ok cenv s1 t /\
+  local_ptrs_reserved cenv s1 /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP Gload x = FLOOKUP G0 x /\
+    op_taint tnload (Var x) = op_taint tn0 (Var x)) /\
+  expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
+  ghost_inv_at (DF H) lo d cenv cx mid Gr tnr u /\
+  ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr /\
+  operated = (u with vs_inst_idx := LENGTH s3.cs_current_insts)
+    with vs_vars := operated.vs_vars /\
+  (!x. not_fresh_at s2 x ==> lookup_var x operated = lookup_var x u /\
+    FLOOKUP Gop x = FLOOKUP Gr x /\
+    op_taint tnop (Var x) = op_taint tnr (Var x)) /\
+  tnop.t_mem = tnr.t_mem /\ tnop.t_stor = tnr.t_stor /\
+  tnop.t_trans = tnr.t_trans /\ tnop.t_imm = tnr.t_imm ==>
+  stmt_state_rel H ctx func cenv cx mid operated /\
+  storage_well_formed_on cx mid (FST H) /\
+  ghost_inv_at (DF H) lo d cenv cx mid Gop tnop operated /\
+  return_buf_frame d cenv s3 operated /\ ret_pc_ok cenv s3 operated /\
+  local_ptrs_reserved cenv s3 /\
+  (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
+    op_taint tnop (Var x) = op_taint tn0 (Var x))
+Proof
+  strip_tac >>
+  `return_buf_frame d cenv s2 u` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `t`, `s1`] >>
+     gvs[expr_post_def]) >>
+  `ret_pc_ok cenv s2 u` by
+    (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `t`, `s1`] >>
+     gvs[expr_post_def]) >>
+  `local_ptrs_reserved cenv s2` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s2 x` by
+    metis_tac[not_fresh_at_mono] >>
+  `stmt_state_rel H ctx func cenv cx mid u /\
+   storage_well_formed_on cx mid (FST H)` by fs[expr_post_def] >>
+  drule_all augassign_exterior_state_frame >> strip_tac >> simp[] >>
+  gvs[ghost_kept_at_def] >> metis_tac[not_fresh_at_mono]
+QED
+
+(* Close the successful numeric/store continuation at the original statement frame. *)
+Theorem augassign_toplevel_store_outcome_full:
+  evaluate_binop bound tvt bop cur rhs = INL result /\
+  write_storage_slot cx tr (n2w slot) tvt result (mid with gas_obs := []) =
+    (INL (),fin) /\ fin.gas_obs = [] /\
+  ~u.vs_halted /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,Gr,tnr) []
+      (OK operated,Gop,tnop) /\
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (operated,Gop,tnop) []
+      (OK last,Gop,tnlast) /\
+    stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last /\
+    return_buf_frame d cenv sb last /\ alloca_history func last /\
+    s0.vs_alloca_next <= last.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gop tnlast last /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
+      op_taint tnlast (Var x) = op_taint tn0 (Var x))) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (bind (lift_sum (evaluate_binop bound tvt bop cur rhs))
+      (write_place cx (StoragePlace tr (n2w slot) tvt)))
+    (mid,u,Gr,tnr)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+        lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
+        op_taint tn (Var x) = op_taint tn0 (Var x)))
+    (\H res ee gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+Proof
+  strip_tac >> irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`Gop`, `fin`, `INL ()`, `last`, `tnlast`] >> conj_tac
+  >- (gen_tac >>
+      qspecl_then [`cx`, `tr`, `n2w slot`, `tvt`, `result`,
+        `mid with gas_obs := []`, `tail`] mp_tac write_storage_slot_gas_obs >>
+      simp[lift_sum_def, bind_def, return_def, write_place_def]) >>
+  qx_gen_tac `H` >> strip_tac >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,Gr,tnr) []
+     (OK operated,Gop,tnop) /\
+   gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (operated,Gop,tnop) []
+     (OK last,Gop,tnlast)` by metis_tac[] >>
+  conj_tac
+  >- (qpat_assum `gas_origin_ptr_path _ (u,Gr,tnr) [] (OK operated,Gop,tnop)`
+        (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+      disch_then (qspecl_then [`operated`, `Gop`, `tnop`, `[]`, `OK last`,
+        `Gop`, `tnlast`] mp_tac) >> simp[]) >>
+  `fin with gas_obs := [] = fin` by simp[evaluation_state_component_equality] >>
+  simp[] >> fs[stmt_post_def] >> metis_tac[]
 QED

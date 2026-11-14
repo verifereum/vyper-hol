@@ -116,6 +116,13 @@ Theorem augassign_toplevel_load_full:
     key_taint (if tr then tn.t_trans else tn.t_stor) (n2w slot) = {}) /\
   evaluate_type (get_tenv cx) ty = SOME tvt /\ is_word_type ty ==>
   ?t G' tn'.
+    t = update_var out (if tr then tload (n2w slot) s else sload (n2w slot) s)
+      (s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (s,G,tn) [] (OK t,G',tn')) /\
     eval_operand (Var out) t = SOME (typed_val_to_w256 tvt cur) /\
@@ -190,6 +197,19 @@ Theorem augassign_toplevel_rhs_entry_full:
     storage_holds cx tr ty (Value cur) (n2w slot) es s /\
     key_taint (if tr then tn.t_trans else tn.t_stor) (n2w slot) = {}) ==>
   ?t G' tn'.
+    t = update_var out (if tr then tload (n2w slot) s else sload (n2w slot) s)
+      (s with vs_inst_idx := LENGTH s1.cs_current_insts) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    return_buf_frame d cenv s1 t /\ ret_pc_ok cenv s1 t /\
+    local_ptrs_reserved cenv s1 /\
+    (!H. valid_horizon cx st0 H root_es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx root_es t /\
+      storage_well_formed_on cx root_es (FST H) /\
+      ghost_inv_at (DF H) lo d cenv cx root_es G' tn' t) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (s,G,tn) [] (OK t,G',tn')) /\
     eval_operand (Var out) t = SOME (typed_val_to_w256 tvt cur) /\
@@ -240,9 +260,10 @@ Proof
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x)` by
     (conj_tac >- metis_tac[not_fresh_at_mono] >> fs[ret_pc_ok_def]) >>
-  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[IgnAsm `root_es = _`] >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[IgnAsm `root_es = _`, IgnAsm `t = _`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   irule augassign_rhs_invoke_full >>
-  simp[IgnAsm `root_es = _`] >>
+  simp[IgnAsm `root_es = _`, IgnAsm `t = _`] >>
   reverse conj_tac >- metis_tac[] >>
   qexistsl_tac [`shadow_func`, `ss1`, `ss2`, `ty`] >> simp[]
 QED
