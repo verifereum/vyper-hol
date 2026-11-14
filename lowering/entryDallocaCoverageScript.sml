@@ -12,6 +12,52 @@ Proof
                   EXISTS_MEM, EVERY_MEM] >> metis_tac[]
 QED
 
+(* Both allocation predicates reduce to truth on the ordinary no-DALLOCA
+   route. Keep the former formula inline rather than introducing a legacy
+   predicate into the live resource interface. *)
+Theorem context_without_dalloca_fmp_room_iff:
+  ~ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
+  (fmp_room ctx func s <=>
+    ((EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) \/
+      (?g f. TC (fn_directly_calls ctx) func.fn_name g /\
+        MEM f ctx.ctx_functions /\ f.fn_name = g /\
+        EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))) ==>
+     s.vs_alloca_next + pending_alloca_size func s +
+     CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
+       unit_alloca_frame ctx <= w2n s.vs_fmp /\
+     w2n s.vs_fmp + 2 ** 65 < dimword (:256)))
+Proof
+  strip_tac >>
+  `!f. MEM f ctx.ctx_functions ==>
+    ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)` by
+    (fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >>
+     metis_tac[]) >>
+  `fmp_room ctx func s` by metis_tac[context_without_dalloca_fmp_room] >>
+  simp[] >> metis_tac[]
+QED
+
+(* alloca_room already supplies membership, so the statement relation
+   needs no additional membership premise on this route. *)
+Theorem context_without_dalloca_stmt_state_rel:
+  ~ctx_has_dalloca ctx ==>
+  (stmt_state_rel H ctx func cenv cx es s <=>
+   state_rel H func cenv cx es s /\ alloca_inv s /\ alloca_room ctx func s /\
+   immutable_alloca_sep func cenv cx es s /\ immutable_base_zero cenv s /\
+   !inst n base sz.
+     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     inst.inst_operands = [Lit n] /\
+     FLOOKUP s.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n)
+Proof
+  strip_tac >> rewrite_tac[stmt_state_rel_def] >> eq_tac >- (strip_tac >> simp[] >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  `MEM func ctx.ctx_functions` by
+    metis_tac[alloca_room_def, venomInstTheory.lookup_function_MEM] >>
+  `fmp_room ctx func s` by
+    (mp_tac context_without_dalloca_fmp_room >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
 (* DALLOCA coverage ledger (diagnostic, not a compiler exclusion theorem).
 
    Emission boundary:
