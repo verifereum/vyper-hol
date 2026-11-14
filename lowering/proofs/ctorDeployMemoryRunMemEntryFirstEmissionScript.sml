@@ -5121,18 +5121,6 @@ Proof
   simp[ctor_check_create_result_ci_mono]
 QED
 
-Theorem ctor_create_copy_ci_mono[local]:
-  !target value salt rof a.
-    ci_mono a (SND (compile_create_copy target value salt rof a))
-Proof
-  rpt gen_tac >> Cases_on `salt` >> Cases_on `rof` >>
-  simp[compile_create_copy_def, compile_alloc_dynamic_def] >>
-  rpt (FIRST [
-    ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op],
-    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void, ci_mono_comp_return],
-    gen_tac]) >> simp[ctor_check_create_result_ci_mono]
-QED
-
 Theorem ctor_create_blueprint_append_ci_mono[local]:
   !target value salt offset size ptr len rof a.
     ci_mono a (SND (compile_create_blueprint_append target value salt offset size ptr len rof a))

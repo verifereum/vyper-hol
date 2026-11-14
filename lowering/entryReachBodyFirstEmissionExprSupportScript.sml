@@ -1116,7 +1116,7 @@ Proof
   gen_tac >> BETA_TAC >> irule raw_create_suffix_extension_only >> first_assum ACCEPT_TAC
 QED
 
-Theorem create_call_extension_only[local]:
+Theorem create_call_extension_only:
   (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
   !ce ck salt rof es. cs_appends (compile_create_call cfn ce ck salt rof es)
 Proof
