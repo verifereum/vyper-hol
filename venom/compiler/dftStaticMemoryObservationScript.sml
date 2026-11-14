@@ -3,10 +3,33 @@ Theory dftStaticMemoryObservation
 Ancestors
   dftStaticShadowObservation dftStaticReachAvailability staticShadowEventReachable
   staticShadowDefs dftGasInvMemoryObservation dftGasInvPairedHistory
-  dftGasInvPairedPrefix dftGasInvCrossingProbe dftGasInvFlexibleTrace
+  dftGasInvPairedPrefix dftGasInvCrossingProbe dftGasInvFlexibleTrace dftGasInvTerminalReach
   dftGasInvPrefixRun dftGasOracleDefs dftGasInvExtraction dftRunRel dftScheduleOrder dftStructural dftDefs
   o1PassContract unitShapeDefs venomExecSemantics venomInst venomState
   venomWf venomExecProofs contextCodegenRel list
+
+Definition ev_shadow_prefix_reachable_def:
+  ev_shadow_prefix_reachable orc initial C p d fn inst sS <=>
+    ?s0 startinst bb bb' pseudos srcpre srcpost scheduled targetpost t.
+      MEM fn C.ctx_functions /\
+      ev_reachable orc initial C p d fn startinst s0 /\
+      lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+      dftScheduleOrder$dft_block_rel bb bb' /\
+      s0.vs_current_bb = t.vs_current_bb /\
+      s0.vs_inst_idx = LENGTH pseudos /\
+      bb.bb_instructions = pseudos ++ (srcpre ++ inst::srcpost) /\
+      bb'.bb_instructions = pseudos ++ (scheduled ++ inst::targetpost) /\
+      EVERY (\i. is_pseudo i.inst_opcode) pseudos /\
+      EVERY (\i. ~is_pseudo i.inst_opcode) (srcpre ++ inst::srcpost) /\
+      EVERY inst_shape_ok bb.bb_instructions /\
+      dft_remaining_inv fn bb (srcpre ++ inst::srcpost) s0 /\
+      inv_ev_ftrace orc p d C scheduled s0 t /\
+      inv_ev_prefix orc p d C bb (LENGTH srcpre) (static_shadow s0) sS /\
+      sS.vs_current_bb = s0.vs_current_bb /\
+      sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre /\
+      (!op. MEM op inst.inst_operands ==> eval_operand op sS = eval_operand op t) /\
+      sS.vs_initial_fmp = t.vs_initial_fmp
+End
 
 Theorem inv_reachable_memory_observation_shadow_prefix:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
@@ -77,6 +100,44 @@ Proof
   `s0.vs_current_bb = t.vs_current_bb` by metis_tac[lookup_block_label] >>
   qexistsl_tac [`fn`, `s0`, `startinst`, `bb`, `bb'`, `pseudos`,
                `srcpre`, `srcpost`, `scheduled`, `targetpost`, `sS`] >> gvs[] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  pure_asm_rewrite_tac [GSYM APPEND_ASSOC, APPEND]
+QED
+
+Theorem inv_reachable_memory_observation_shadow:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
+  initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
+  initial.vs_call_ctx.cc_static /\
+  ev_reachable orc initial C' p d fn' inst t /\
+  inv_memory_observation inst.inst_opcode ==>
+  ?fn sS. MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+    ev_shadow_prefix_reachable orc initial C p d fn inst sS /\
+    active_inst fn inst sS /\ sS.vs_current_bb = t.vs_current_bb /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op sS = eval_operand op t) /\
+    sS.vs_initial_fmp = t.vs_initial_fmp
+Proof
+  strip_tac >> drule_all inv_reachable_memory_observation_shadow_prefix >> strip_tac >>
+  `dftScheduleOrder$dft_block_rel bb bb'` by metis_tac[dft_fn_rel_lookup_order] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s0.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `inv_ev_ftrace orc p d C srcpre (static_shadow s0) sS <=>
+   inv_ev_prefix orc p d C bb (LENGTH srcpre) (static_shadow s0) sS` by
+    (irule inv_ev_ftrace_slice >> qexistsl_tac [`pseudos`, `inst::srcpost`] >>
+     simp[static_shadow_def, APPEND_ASSOC]) >>
+  `inv_ev_ftrace orc p d C srcpre (static_shadow s0) sS` by metis_tac[] >>
+  `sS.vs_current_bb = s0.vs_current_bb /\
+   sS.vs_inst_idx = LENGTH pseudos + LENGTH srcpre` by
+    (drule inv_ev_ftrace_current_bb >> drule inv_ev_ftrace_idx >>
+     simp[static_shadow_def]) >>
+  `active_inst fn inst sS` by
+    (simp[active_inst_def] >> qexists_tac `bb` >> simp[EL_APPEND_EQN]) >>
+  qexistsl_tac [`fn`, `sS`] >> simp[] >>
+  simp[ev_shadow_prefix_reachable_def] >>
+  qexistsl_tac [`s0`, `startinst`, `bb`, `bb'`, `pseudos`, `srcpre`,
+               `srcpost`, `scheduled`, `targetpost`, `t`] >> gvs[] >>
   rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
   pure_asm_rewrite_tac [GSYM APPEND_ASSOC, APPEND]
 QED
