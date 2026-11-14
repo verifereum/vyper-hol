@@ -32,8 +32,8 @@ Ancestors
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix
-  (* M7: closed-world producer of the callee-outcome storage guard *)
-  e2eOutcomesProducer
+  (* M7: closed-world callee-outcome guard and fixed-mark call correctness *)
+  e2eOutcomesGuard e2eCallAtMarks
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
