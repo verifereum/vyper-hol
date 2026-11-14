@@ -1004,19 +1004,33 @@ Proof
   gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_EL] >> metis_tac[]
 QED
 
-Theorem sue_stage_walk:
-  o1_run_contract rpolicy D 6
+Theorem o1_static_stage_sue:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 6 o1_fn_passes) (o1_walk_view rpolicy 6) C C' /\
+    o1_pre 6 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 6 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 6 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 6) C' vs
 Proof
-  simp[o1_run_contract_def, venomPassScheduleTheory.o1_fn_passes_def,
-       o1_stage_contract_def, o1_inv_def, pass_fuel_def] >>
+  simp[venomPassScheduleTheory.o1_fn_passes_def, o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[o1_pre_def, o1_ssa_inv_def, o1_lowered_inv_def,
-      o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+      unitTransformDefsTheory.o1_initial_state_ok_def] >>
   conj_tac >- (irule sue_stage_sim_fuel >> metis_tac[]) >>
   `EVERY wf_ssa C'.ctx_functions` by (irule sue_stage_wf_ssa >> metis_tac[]) >>
   simp[] >> qexists_tac `eom` >>
   conj_tac >- metis_tac[sue_stage_max_live_eom] >>
   irule sue_stage_mem_inv >> metis_tac[]
+QED
+
+Theorem sue_stage_walk:
+  o1_run_contract rpolicy D 6
+Proof
+  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`C`, `C'`, `vs`] o1_static_stage_sue) >>
+  gvs[o1_run_state_ok_def]
 QED
 
 Theorem o1_contract_sue:

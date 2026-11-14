@@ -1,4 +1,4 @@
-(* Request-emitting partners cannot cross a nonstatic, non-root abort.
+(* Request-emitting partners cannot cross a non-root abort.
  * This is the opcode boundary used by directional request swaps.
  *)
 Theory dftGasRequestPartner
@@ -8,9 +8,8 @@ Ancestors
 Libs
   stepInstBaseLib
 
-Theorem ev_abort_partner_request_free:
+Theorem ev_abort_partner_request_free_static:
   dft_gas_swap_pair x y /\ inst_wf x /\
-  ~s.vs_call_ctx.cc_static /\
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
     write_effects x.inst_opcode = empty_effects) /\
   x.inst_opcode <> INVOKE /\
@@ -30,4 +29,16 @@ Proof
   gvs[] >>
   qpat_x_assum `effects_independent _ _` mp_tac >>
   EVAL_TAC
+QED
+
+Theorem ev_abort_partner_request_free:
+  dft_gas_swap_pair x y /\ inst_wf x /\
+  ~s.vs_call_ctx.cc_static /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) /\
+  x.inst_opcode <> INVOKE /\
+  ev_step orc p d fuel C x s = Abort a t ==>
+  ~MEM y.inst_opcode [INVOKE; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]
+Proof
+  strip_tac >> drule_all ev_abort_partner_request_free_static >> simp[]
 QED

@@ -1568,14 +1568,20 @@ Proof
   once_rewrite_tac[arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC
 QED
 
-(* Row 8 (o1_lowered_inv and wf_ssa) to row 9 (o1_lowered_inv). *)
-Theorem cfg_norm_stage_walk:
-  o1_run_contract rpolicy D 8
+(* Row 8 to row 9 also holds for an incoming static frame. *)
+Theorem o1_static_stage_cfg_normalization:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 8 o1_fn_passes) (o1_walk_view rpolicy 8) C C' /\
+    o1_pre 8 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 8 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 8 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 8) C' vs
 Proof
-  simp[o1_run_contract_def, venomPassScheduleTheory.o1_fn_passes_def,
-       o1_stage_contract_def, o1_inv_def, pass_fuel_def] >>
+  simp[venomPassScheduleTheory.o1_fn_passes_def,
+       o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  gvs[o1_ssa_inv_def, o1_lowered_inv_def, o1_run_state_ok_def,
+  gvs[o1_ssa_inv_def, o1_lowered_inv_def,
       unitTransformDefsTheory.o1_initial_state_ok_def] >>
   conj_tac
   >- (simp[ctx_sim_fuel_def] >> rpt strip_tac >>
@@ -1583,6 +1589,15 @@ Proof
   qexists_tac `eom` >>
   conj_tac >- metis_tac[cfg_norm_stage_max_live_eom] >>
   irule cfg_norm_stage_mem_inv >> metis_tac[]
+QED
+
+Theorem cfg_norm_stage_walk:
+  o1_run_contract rpolicy D 8
+Proof
+  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  irule (SIMP_RULE (srw_ss()) [] o1_static_stage_cfg_normalization) >>
+  gvs[o1_run_state_ok_def] >> qexists_tac `rpolicy` >> simp[]
 QED
 
 Theorem o1_contract_cfg_normalization:

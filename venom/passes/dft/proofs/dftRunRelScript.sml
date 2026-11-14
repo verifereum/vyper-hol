@@ -2540,7 +2540,7 @@ QED
 (* Outside a static frame, an instruction that isn't a pure root aborts
    only as an INVOKE, or by an exceptional halt of RETURNDATACOPY, CREATE
    or CREATE2. *)
-Theorem dft_swap_nonstatic_abort_class[local]:
+Theorem dft_swap_nonstatic_abort_class:
   ~s.vs_call_ctx.cc_static /\
   inst_wf x /\ ~is_terminator x.inst_opcode /\
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
@@ -2566,7 +2566,7 @@ QED
 
 (* A swap partner of an exceptionally halting RETURNDATACOPY, CREATE or
    CREATE2 neither reverts nor invokes, and writes nothing they touch. *)
-Theorem dft_swap_exhalt_partner_class[local]:
+Theorem dft_swap_exhalt_partner_class:
   dft_gas_swap_pair x y /\
   MEM x.inst_opcode [RETURNDATACOPY; CREATE; CREATE2] ==>
   y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY /\

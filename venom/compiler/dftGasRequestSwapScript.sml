@@ -2,7 +2,7 @@
 Theory dftGasRequestSwap
 Ancestors
   dftGasRequestRel dftGasRequestObservation dftGasRequestPartner
-  dftGasSimSwap dftGasSimSwapStop dftGasSimLocalBoundary dftGasSimInvokeFrame
+  dftStaticSwap dftStaticEventAbort dftGasSimSwap dftGasSimSwapStop dftGasSimLocalBoundary dftGasSimInvokeFrame
   dftRunRel dftGasSimBoundary dftGasOracleDefs o1RequestContract venomExecSemantics
   venomState venomInst venomEffects list rich_list
 
@@ -28,20 +28,21 @@ Proof
   `t.vs_requests = sx.vs_requests` by
     (drule_all ev_step_abort_requests >> simp[]) >>
   `s.vs_requests <<= sx.vs_requests` by metis_tac[ev_step_requests_prefix] >>
-  drule_all ev_suffix_second_abort >> strip_tac >>
+  `?v. ev_step orc p d fuel C y sx = Abort a v` by
+    metis_tac[ev_step_nonterminator_abort_idx_iff] >>
   `?v. ev_step orc p d fuel C y s = Abort a v` by
-    metis_tac[ev_pair_abort_iff, ev_step_nonterminator_abort_idx_iff] >>
+    (drule_all ev_pair_abort_iff >> disch_then (qspec_then `a` mp_tac) >> simp[]) >>
+  drule_all ev_suffix_second_abort >> strip_tac >>
   `u.vs_requests = s.vs_requests` by
     (gvs[ev_suffix_def] >> metis_tac[ev_step_abort_requests]) >>
   metis_tac[isPREFIX_imp_request_prefix_rel]
 QED
 
-Theorem ev_suffix_first_abort_requests:
+Theorem ev_suffix_first_abort_requests_static:
   dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
-  ~s.vs_call_ctx.cc_static /\
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
     write_effects x.inst_opcode = empty_effects) /\
-  (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
+  (y.inst_opcode <> INVOKE ==>
    !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) /\
   ev_step orc p d fuel C x s = Abort a t /\
   ev_suffix orc p d fuel C (y::x::tail) s = Abort b u ==>
@@ -62,9 +63,9 @@ Proof
           gvs[] >> simp[request_prefix_rel_refl]) >>
       metis_tac[ev_invoke_partner_no_abort]) >>
   `~MEM y.inst_opcode [INVOKE; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` by
-    metis_tac[ev_abort_partner_request_free] >>
+    metis_tac[ev_abort_partner_request_free_static] >>
   `t.vs_requests = s.vs_requests` by metis_tac[ev_step_abort_requests] >>
-  drule_all ev_suffix_first_abort >> disch_then (qspec_then `[]` strip_assume_tac) >>
+  drule_all ev_suffix_first_abort_static >> disch_then (qspec_then `[]` strip_assume_tac) >>
   Cases_on `ev_step orc p d fuel C y s` >> gvs[ev_suffix_def]
   >- (rename1 `ev_step orc p d fuel C y s = OK sy` >>
       `sy.vs_requests = s.vs_requests` by
@@ -73,6 +74,32 @@ Proof
       gvs[] >>
       drule_all ev_step_abort_requests >> simp[request_prefix_rel_refl]) >>
   metis_tac[ev_step_abort_requests, request_prefix_rel_refl]
+QED
+
+Theorem ev_suffix_first_abort_requests:
+  dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~s.vs_call_ctx.cc_static /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) /\
+  (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
+   !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) /\
+  ev_step orc p d fuel C x s = Abort a t /\
+  ev_suffix orc p d fuel C (y::x::tail) s = Abort b u ==>
+  request_prefix_rel D t.vs_requests u.vs_requests
+Proof
+  strip_tac >>
+  `y.inst_opcode <> CODECOPY` by
+    (Cases_on `x.inst_opcode = INVOKE`
+     >- (drule_all dft_swap_invoke_partner_class >>
+         simp[write_effects_def, empty_effects_def] >> strip_tac >>
+         strip_tac >> gvs[write_effects_def, empty_effects_def]) >>
+     Cases_on `x.inst_opcode = GAS`
+     >- gvs[ev_step_def, ev_gas_def, AllCaseEqs()] >>
+     `~is_terminator x.inst_opcode` by fs[dft_gas_swap_pair_def] >>
+     `step_inst fuel C x s = Abort a t` by metis_tac[ev_step_ordinary] >>
+     drule_all dft_swap_nonstatic_abort_class >> strip_tac >>
+     metis_tac[dft_swap_exhalt_partner_class]) >>
+  irule ev_suffix_first_abort_requests_static >> simp[] >> metis_tac[]
 QED
 
 (* The old result contract supplies all non-abort observations. *)
@@ -102,4 +129,32 @@ Proof
       metis_tac[ev_suffix_second_abort_requests]) >>
   gvs[ev_suffix_def] >> asm_x "target" assume_tac >>
   metis_tac[ev_suffix_first_abort_requests]
+QED
+
+(* All-frame request boundary when CODECOPY operands are ready too. *)
+Theorem ev_suffix_swap_rq_ready:
+  dead_wf D /\ dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) /\
+  (y.inst_opcode <> INVOKE ==>
+   !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
+  dft_rq_res_rel D (ev_suffix orc p d fuel C (x::y::tail) s)
+                  (ev_suffix orc p d fuel C (y::x::tail) s)
+Proof
+  strip_tac >> simp[dft_rq_res_rel_def] >> conj_tac
+  >- (irule ev_suffix_swap_ready >> fs[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ev_suffix _ _ _ _ _ (y::x::tail) s = _` (mk_asm "target") >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  Cases_on `ev_step orc p d fuel C x s`
+  >- (rename1 `ev_step orc p d fuel C x s = OK sx` >>
+      Cases_on `ev_step orc p d fuel C y (sx with vs_inst_idx := SUC s.vs_inst_idx)`
+      >- (drule_all ev_suffix_pair_success >>
+          disch_then (qspec_then `tail` assume_tac) >>
+          asm_x "target" assume_tac >> gvs[] >> simp[request_prefix_rel_refl]) >>
+      gvs[ev_suffix_def] >> asm_x "target" assume_tac >>
+      metis_tac[ev_suffix_second_abort_requests]) >>
+  gvs[ev_suffix_def] >> asm_x "target" assume_tac >>
+  metis_tac[ev_suffix_first_abort_requests_static]
 QED
