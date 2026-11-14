@@ -2,6 +2,8 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  (* Temporary CI reach until the full builtin family is wired. *)
+  bodyFullBuiltinUint2Str
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
