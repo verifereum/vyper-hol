@@ -54,3 +54,5 @@ Ancestors
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
+  (* Constructor body GAS shadow placement *)
+  ctorDeployBodyShadow
