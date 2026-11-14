@@ -346,7 +346,9 @@ Resume aug_place_rhs_operator_write_mem[callback]:
   `alloca_frame cenv es0 sa s_entry cenv ee t` by
     (`alloca_frame cenv es s1 s0 cenv ee t` by
        (mp_tac (Q.INST [`H` |-> `H0`, `sa` |-> `s1`, `sb` |-> `s2`,
-                        `op` |-> `y`] stmtSimDefsTheory.expr_post_alloca_frame) >>
+                        `op` |-> `y`]
+                  (INST_TYPE [alpha |-> ``:256``]
+                    stmtSimDefsTheory.expr_post_alloca_frame)) >>
         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
         strip_tac >> first_assum ACCEPT_TAC) >>
      irule stmtSimDefsTheory.alloca_frame_trans >>
