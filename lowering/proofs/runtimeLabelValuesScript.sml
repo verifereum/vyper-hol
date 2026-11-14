@@ -507,3 +507,218 @@ Proof
   Cases_on `pval.ptr_location` >>
   simp[rb_step_return, rb_compile_ensure_in_memory]
 QED
+
+
+Theorem rb_typed_memory:
+  (!env dst dty src sty. rb_operand_ok dst /\ rb_operand_ok src ==>
+    rb_step (K T) (compile_store_memory_typed env dst dty src sty)) /\
+  (!env dst src dtys stys doff soff. rb_operand_ok dst /\ rb_operand_ok src ==>
+    rb_step (K T) (compile_typed_copy_fields env dst src dtys stys doff soff)) /\
+  (!env dst dty src sty n. rb_operand_ok dst /\ rb_operand_ok src ==>
+    rb_step (K T) (compile_copy_sarray_typed env dst dty src sty n)) /\
+  (!env dst dty cap src sty. rb_operand_ok dst /\ rb_operand_ok src ==>
+    rb_step (K T) (compile_copy_dynarray_typed env dst dty cap src sty)) /\
+  (!env dst src dfs sfs doff soff. rb_operand_ok dst /\ rb_operand_ok src ==>
+    rb_step (K T) (compile_struct_typed_copy env dst src dfs sfs doff soff))
+Proof
+  ho_match_mp_tac compile_store_memory_typed_ind >> rpt conj_tac
+  >- suspend "dispatch"
+  >- simp[compile_store_memory_typed_def, rb_step_return]
+  >- simp[compile_store_memory_typed_def, rb_step_return]
+  >- suspend "fields"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- simp[compile_store_memory_typed_def, rb_step_return]
+  >> suspend "struct"
+QED
+
+Resume rb_typed_memory[dispatch]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def] >>
+  Cases_on `is_word_type dty` >-
+    (simp[] >> irule rb_bind_emit_op >> simp[rb_emit_void]) >>
+  Cases_on `is_bytestring_type dty /\ is_bytestring_type sty` >-
+    simp[rb_compile_store_bytestring] >>
+  Cases_on `acyclic_struct_metadata env.ce_struct_fields` >>
+  simp[rb_emit_void] >>
+  Cases_on `dty` >> Cases_on `sty` >>
+  gvs[rb_compile_copy_memory, AllCaseEqs()] >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[rb_compile_copy_memory]
+QED
+
+Resume rb_typed_memory[fields]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_with_byte_offset]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_with_byte_offset]) >>
+  BETA_TAC >> gen_tac >> disch_tac >> simp[LET_THM] >>
+  irule rb_ignore >> conj_tac >> first_x_assum irule >> simp[]
+QED
+
+Resume rb_typed_memory[struct]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def] >>
+  simp[LET_THM] >> pairarg_tac >> gvs[] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_with_byte_offset]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_with_byte_offset]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_ignore >> conj_tac >> first_x_assum irule >> simp[]
+QED
+
+Resume rb_typed_memory[sarray]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def] >> simp[LET_THM] >>
+  IF_CASES_TAC >- simp[rb_compile_copy_memory] >>
+  ntac 3 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> disch_tac) >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  ntac 4 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >>
+  (conj_tac >- (first_x_assum irule >> metis_tac[])) >>
+  irule rb_bind_emit_op >> BETA_TAC >>
+  (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_bind_new_block >> BETA_TAC >> simp[rb_step_return]
+QED
+
+Resume rb_typed_memory[dynarray]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_memory_typed_def] >> simp[LET_THM] >>
+  ntac 3 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_void])) >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  IF_CASES_TAC >-
+   (irule rb_bind_emit_op >> simp[rb_compile_copy_memory_dynamic]) >>
+  ntac 3 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> disch_tac) >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  ntac 4 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >>
+  (conj_tac >- (first_x_assum irule >> gvs[])) >>
+  irule rb_bind_emit_op >> BETA_TAC >>
+  (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_bind_new_block >> BETA_TAC >> simp[rb_step_return]
+QED
+
+Finalise rb_typed_memory
+
+Theorem rb_compile_store_memory:
+  rb_operand_ok src /\ rb_operand_ok dst ==>
+  rb_step (K T) (compile_store_memory env src dst dty sty)
+Proof
+  strip_tac >> rewrite_tac[compile_store_memory_def] >>
+  Cases_on `is_word_type dty` >> simp[rb_emit_void] >>
+  Cases_on `is_bytestring_type dty` >> simp[rb_compile_store_bytestring] >>
+  IF_CASES_TAC >> simp[rb_compile_copy_memory, cj 1 rb_typed_memory]
+QED
+
+Theorem rb_compile_load_memory:
+  rb_operand_ok op ==> rb_step rb_operand_ok (compile_load_memory op prim)
+Proof
+  Cases_on `prim` >> simp[compile_load_memory_def, rb_emit_op, rb_step_return]
+QED
+
+Theorem rb_compile_encode_log_topic:
+  rb_operand_ok op ==> rb_step rb_operand_ok (compile_encode_log_topic op bytes)
+Proof
+  strip_tac >> Cases_on `bytes` >>
+  simp[compile_encode_log_topic_def, rb_step_return] >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  simp[rb_emit_op]
+QED
+
+Theorem rb_slots:
+  (!env src slot ty trans. rb_operand_ok src /\ rb_operand_ok slot ==>
+    rb_step (K T) (compile_store_slots env src slot ty trans)) /\
+  (!env src slot members moff soff trans. rb_operand_ok src /\ rb_operand_ok slot ==>
+    rb_step (K T) (compile_store_slots_members env src slot members moff soff trans)) /\
+  (!env src slot elem count_op trans.
+    rb_operand_ok src /\ rb_operand_ok slot /\ rb_operand_ok count_op ==>
+    rb_step (K T) (compile_copy_elements_to_slots env src slot elem count_op trans))
+Proof
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac
+  >- suspend "dispatch"
+  >- simp[compile_store_slots_def, rb_step_return]
+  >- suspend "members"
+  >> suspend "elements"
+QED
+
+Resume rb_slots[members]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_slots_def] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_lit_byte_offset]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+  (reverse conj_tac >- simp[rb_compile_lit_byte_offset]) >>
+  BETA_TAC >> gen_tac >> disch_tac >>
+  irule rb_ignore >> conj_tac >> first_x_assum irule >> simp[]
+QED
+
+Resume rb_slots[elements]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_slots_def] >> simp[LET_THM] >>
+  ntac 3 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> disch_tac) >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_emit_inst]) >>
+  irule rb_ignore >> (conj_tac >- simp[rb_new_block]) >>
+  ntac 4 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >>
+  (conj_tac >- (first_x_assum irule >> simp[])) >>
+  irule rb_bind_emit_op >> BETA_TAC >>
+  (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_bind_new_block >> BETA_TAC >> simp[rb_step_return]
+QED
+
+Resume rb_slots[dispatch]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rewrite_tac[Once compile_store_slots_def] >> simp[LET_THM] >>
+  IF_CASES_TAC >-
+   (IF_CASES_TAC >-
+     (irule rb_bind_emit_op >> simp[rb_emit_void]) >>
+    irule rb_ignore >> simp[rb_step_return] >>
+    Cases_on `trans` >>
+    simp[rb_compile_memory_to_storage, rb_compile_memory_to_transient]) >>
+  IF_CASES_TAC >-
+   (irule rb_step_bind >> qexists_tac `rb_operand_ok` >>
+    (reverse conj_tac >- simp[rb_compile_bytestring_word_count]) >>
+    BETA_TAC >> gen_tac >> disch_tac >>
+    irule rb_ignore >> simp[rb_compile_word_copy_loop_op, rb_step_return]) >>
+  IF_CASES_TAC >- simp[rb_emit_void] >>
+  Cases_on `ty` >> gvs[rb_emit_void] >>
+  Cases_on `b` >> gvs[] >>
+  ntac 3 (irule rb_bind_emit_op >> BETA_TAC >>
+    (reverse conj_tac >- simp[]) >> gen_tac >> disch_tac) >>
+  irule rb_ignore >>
+  (conj_tac >- (first_x_assum irule >> simp[])) >> simp[rb_emit_void]
+QED
+
+Finalise rb_slots
