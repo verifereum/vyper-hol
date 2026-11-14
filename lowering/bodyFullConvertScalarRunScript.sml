@@ -232,3 +232,22 @@ Resume scalar_fixed_source_run[bytes]:
   metis_tac[]
 QED
 Finalise scalar_fixed_source_run
+
+Theorem scalar_convert_physical_frame:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s /\
+  (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
+Proof
+  strip_tac >> drule_all scalar_dispatch_straight_fresh >>
+  disch_then (qspecl_then [`x`, `cenv`] mp_tac) >>
+  simp[straight_fresh_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
+  simp[lookup_var_def]
+QED
