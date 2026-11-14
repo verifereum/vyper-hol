@@ -89,7 +89,7 @@ Theorem stack_params_rel_def = codegenEntryRelTheory.stack_params_rel_def
 
 Theorem initial_state_rel_def = codegenEntryRelTheory.initial_state_rel_def
 
-Theorem initial_state_rel_entry_clauses[local]:
+Theorem initial_state_rel_entry_clauses:
   ∀cp prog off fn vs es ctxt rb rest.
     initial_state_rel cp prog off fn vs es /\
     es.contexts = (ctxt, rb) :: rest ==>
@@ -122,7 +122,7 @@ End
 (* Terminal state composition: venom_asm_terminal_rel + asm_evm_rel → final_state_rel.
    After asm execution ends at a terminal, the asm state relates to both Venom (terminal_rel)
    and EVM (evm_rel). Composing these gives the end-to-end final_state_rel. *)
-Theorem terminal_asm_evm_final[local]:
+Theorem terminal_asm_evm_final:
   !prog vs' as' es'.
     venom_asm_terminal_rel vs' as' /\
     asm_evm_rel prog as' es' ==>
@@ -138,7 +138,7 @@ QED
    region is located by [ops_contain_at]. *)
 
 (* Prefix of a list is an asm_block_at position 0 *)
-Theorem asm_block_at_prefix[local]:
+Theorem asm_block_at_prefix:
   !xs ys. asm_block_at (xs ++ ys) 0 xs
 Proof
   Induct >> simp[asm_block_at_def, EL_APPEND1]
