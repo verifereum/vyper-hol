@@ -3,7 +3,7 @@ Theory nonreentrantEntryPath
 Ancestors
   nonreentrantEquiv transientLockPtr transientLockFrameProps transientLockProps
   nonreentrantSource fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
-  fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun ptrSafeRun
+  fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun unitTransformDefs ptrSafeRun
   ptrDiscipline gasEvents gasCount allocaHistoryFragment allocaHistory
   exprSimPtrProps exprLoweringProps codegenRel contextCodegenRel
   bodyPtrDefs loweringPosts loweringStateRelDefs compileEnv context emitHelper
