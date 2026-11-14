@@ -367,3 +367,112 @@ Proof
       metis_tac[]) >>
   metis_tac[]
 QED
+
+Theorem array_tail_packet_memory_loader:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  pv = PlaceR (MemoryPlace id path) /\
+  emit_op MLOAD [FST rb] sn = (Var out,sl) ==>
+  ?a entry etv vs.
+    eval_operand (FST rb) t2 = SOME a /\
+    lookup_scopes id mid2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs)) /\
+    mload (w2n a) t2 = n2w (LENGTH vs) /\
+    array_length_step_ok lo ctx func MLOAD [FST rb] (mload (w2n a) t2)
+      sn out sl t2 G2 tn2 /\
+    op_taint (step_taint (mk_inst sn.cs_next_id MLOAD [FST rb] [out])
+      t2 (update_var out (mload (w2n a) t2) t2) tn2) (Var out) = {} /\
+    op_prov (step_prov PG G2 (mk_inst sn.cs_next_id MLOAD [FST rb] [out])
+      (update_var out (mload (w2n a) t2) t2)) (Var out) = NONE /\
+    evaluate_type (get_tenv cx) et = SOME etv
+Proof
+  strip_tac >>
+  drule_all array_tail_packet_memory_source >> strip_tac >>
+  drule_all array_tail_packet_source_index >> strip_tac >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  gvs[] >>
+  Cases_on `av` >> gvs[value_has_type_def] >>
+  `evaluate_type (get_tenv cx) (ArrayT et (Dynamic cap)) =
+     SOME (ArrayTV etv (Dynamic cap))` by
+    (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >> gvs[]) >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  conj_tac >- fs[valueEncodingDefsTheory.val_in_memory_def, GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+  fs[array_tail_packet_def] >> first_x_assum drule >> strip_tac >>
+  fs[place_ptr_rel_def] >>
+  `tv0 = entry.type` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     qpat_x_assum `!id entry. lookup_scopes id mid2.scopes = _ ==> _`
+       (qspecl_then [`id`, `entry`] mp_tac) >>
+     simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+     qpat_x_assum `!id ty. FLOOKUP env.var_types id = _ ==> cenv.ce_var_type id = _` drule >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `!id ty entry. _ /\ lookup_scopes id mid2.scopes = _ ==> _` drule_all >>
+     simp[]) >>
+  `local_ptrs_rel func cenv mid2.scopes t2` by
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+  `?root. lookup_var p t2 = SOME root /\
+     w2n root + sz <= t2.vs_alloca_next /\ type_memory_size entry.type <= sz` by
+    (fs[loweringStateRelDefsTheory.local_ptrs_rel_def] >>
+     qpat_x_assum `!name entry p sz. _ ==> ?w. _` drule_all >>
+     strip_tac >> gvs[]) >>
+  gvs[] >>
+  `ptr_covers G2 tn2 p t2 sz` by
+    (fs[ghost_inv_at_def] >> metis_tac[]) >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  `t2.vs_alloca_next < dimword (:256)` by
+    (irule alloca_room_next_lt >> fs[stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >> metis_tac[]) >>
+  `w2n b + k + 32 <= t2.vs_alloca_next /\ w2n b + k < dimword (:256)` by
+    (fs[type_memory_size_def] >> decide_tac) >>
+  `w2n (b + n2w k) = w2n b + k` by
+    (simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w] >>
+     `k < dimword (:256)` by decide_tac >> simp[]) >>
+  `mem_word_taint tn2.t_mem (w2n b + k) = {}` by
+    (irule array_tail_robust_path_header_clean >>
+     goal_assum (drule_at (Pos (el 3))) >>
+     goal_assum (drule_at (Pos (el 3))) >>
+     qexists_tac `t2.vs_memory` >>
+     fs[exprSimHypsDefsTheory.expr_sim_inv_def, state_well_typed_def] >>
+     conj_tac >-
+       (fs[ghost_inv_at_def] >>
+        qpat_x_assum `!name entry p sz. _ ==> _` drule_all >>
+        strip_tac >> gen_tac >> strip_tac >> first_x_assum irule >> simp[]) >>
+     drule_all vyperPlaceTypingTheory.lookup_scopes_well_typed_type >> strip_tac >>
+     drule_all vyperTypeStatePreservationTheory.lookup_scopes_well_typed_value_has_type >>
+     simp[]) >>
+  `not_fresh_at sm p` by
+    (irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[] >>
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+     qpat_x_assum `!n1 n2 p sz1 sz2. _ ==> _` drule >> simp[]) >>
+  `FLOOKUP G2 p = FLOOKUP G1 p` by fs[ghost_kept_at_def] >>
+  `op_prov G2 (FST rb) = FLOOKUP G2 p` by
+    (fs[target_ptr_ok_def] >> first_x_assum drule >> simp[]) >>
+  fs[ptr_covers_def] >>
+  simp[array_length_step_ok_def] >>
+  reverse conj_tac >-
+    (simp[op_taint_def, op_prov_def, step_taint_def, step_prov_def,
+          venomInstTheory.mk_inst_def, set_prov_def, set_var_taint_def, FLOOKUP_UPDATE,
+          mem_taint_def, memLocDefsTheory.mem_read_ops_def, memLocDefsTheory.mem_write_ops_def,
+          out_taint_def, out_prov_def, FLOOKUP_DRESTRICT]) >>
+  conj_tac >-
+    simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+         venomExecSemanticsTheory.exec_read1_def] >>
+  reverse conj_tac >-
+    (conj_tac >- simp[ptrDisciplineTheory.taint_ok_def, venomInstTheory.mk_inst_def] >>
+     conj_tac >- fs[ghost_inv_at_def] >>
+     simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          venomInstTheory.mk_inst_def]) >>
+  simp[ptrDisciplineTheory.access_ok_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       memLocDefsTheory.mem_read_ops_def, memLocDefsTheory.mem_write_ops_def,
+       venomInstTheory.mk_inst_def] >>
+  strip_tac >> Cases_on `FST rb` >> gvs[op_prov_def] >>
+  qexistsl_tac [`b'`, `sz'`] >>
+  fs[type_memory_size_def] >> decide_tac
+QED
