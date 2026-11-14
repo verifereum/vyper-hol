@@ -304,3 +304,103 @@ Resume store_slots_origin_ptr[struct_support]:
 QED
 
 Finalise store_slots_origin_ptr
+
+
+Theorem store_slots_live_fold_state:
+  !H cenv cx env ee ctx func s tr rootk region path delta tv
+   dw writes v ks (sw:bytes32).
+  expr_sim_inv cenv cx env ee /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  MEM (tr,rootk,region) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  storage_subregion region path delta tv /\
+  w2n dw = w2n rootk + delta /\ 0 < type_slot_size tv /\
+  encode_value tv v = SOME writes /\ value_has_type tv v /\
+  w2n dw + type_slot_size tv <= dimword(:256) /\
+  (!i. MEM i ks <=> MEM i (MAP FST writes)) /\
+  well_formed_type_value tv /\ val_in_memory tv v (w2n sw) s.vs_memory ==>
+  stmt_state_rel H ctx func cenv cx
+    (set_storage cx ee tr (apply_writes dw writes (get_storage cx ee tr)))
+    (FOLDL (\q i. (if tr then tstore else sstore) (dw+n2w i)
+      (mload (w2n sw+32*i) s) q) s ks)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule (BETA_RULE o PURE_REWRITE_RULE [GSYM wordsTheory.word_add_n2w,wordsTheory.n2w_w2n] $
+    (Q.INST [`start` |-> `w2n (dw:bytes32)`, `rd` |-> `\i. mload (w2n (sw:bytes32)+32*i) s`]
+      (SPEC_ALL placeStoreSlotsTheory.place_store_encoded_leaf_state_sparse))) >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `encode_value _ _ = _`)) >>
+  simp[] >> rpt strip_tac >>
+  rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
+  drule_at (Pat `val_in_memory _ _ _ _`)
+    storageCopyLiveTheory.encode_value_memory_live >>
+  disch_then (drule_at (Pat `encode_value _ _ = _`)) >>
+  disch_then (qspecl_then [`dw`,`get_storage cx ee tr`,`i`,`b`] mp_tac) >>
+  simp[valueEncodingPropsTheory.mem_word_at_eq_mload,
+       GSYM wordsTheory.word_add_n2w]
+QED
+
+Theorem store_slots_encoded_endpoint:
+  !ty tv v.
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  assignable_type tenv ty /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  !ctx lo root slot tr sa sb func s sw dw writes G tn.
+  compile_store_slots cenv (Var root) slot ty tr sa = ((),sb) /\
+  not_fresh_at sa root /\ (!x. slot=Var x ==> not_fresh_at sa x) /\
+  lookup_var root s=SOME sw /\ eval_operand slot s=SOME dw /\
+  op_prov G slot=NONE /\ op_taint tn slot={} /\
+  ptr_covers G tn root s (val_store_size tv v) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n sw) m) /\
+  w2n sw+type_memory_size tv<dimword(:256) /\
+  w2n dw+type_slot_size tv<=dimword(:256) /\
+  encode_value tv v=SOME writes /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb=sa.cs_current_bb /\
+  s.vs_inst_idx=LENGTH sa.cs_current_insts /\
+  ~s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  w2n sw+val_store_size tv v<=s.vs_alloca_next ==>
+  ?Gf tf u ks.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tf)) /\
+    store_copy_normalize s u =
+      FOLDL (\q k. (if tr then tstore else sstore) (dw+n2w k)
+        (mload (w2n sw+32*k) s) q) s ks /\
+    u.vs_memory=s.vs_memory /\ tf.t_mem=tn.t_mem /\ tf.t_imm=tn.t_imm /\
+    (if tr then tf.t_trans else tf.t_stor) =
+      FOLDL (\ta k. key_update ta (dw+n2w k)
+        (mem_word_taint tn.t_mem (w2n sw+32*k)))
+        (if tr then tn.t_trans else tn.t_stor) ks /\
+    (if tr then tf.t_stor else tf.t_trans)=(if tr then tn.t_stor else tn.t_trans) /\
+    (!k. MEM k ks <=> MEM k (MAP FST writes)) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u=lookup_var x s /\
+      FLOOKUP Gf x=FLOOKUP G x /\ op_taint tf (Var x)=op_taint tn (Var x)) /\
+    u.vs_allocas=s.vs_allocas /\ u.vs_alloca_next=s.vs_alloca_next /\
+    u.vs_labels=s.vs_labels /\ u.vs_call_ctx=s.vs_call_ctx /\
+    ~u.vs_halted /\ u.vs_current_bb=sb.cs_current_bb /\
+    u.vs_inst_idx=LENGTH sb.cs_current_insts /\
+    (!H cx env ee rootk region path delta.
+      expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+      MEM (tr,rootk,region) (FST H) /\ regions_consistent (FST H) /\
+      storage_locks_separated (FST H) (SND H) /\
+      storage_subregion region path delta tv /\
+      w2n dw = w2n rootk + delta /\ 0 < type_slot_size tv /\
+      well_formed_type_value tv ==>
+      stmt_state_rel H ctx func cenv cx
+        (set_storage cx ee tr (apply_writes dw writes (get_storage cx ee tr)))
+        (store_copy_normalize s u))
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all store_slots_origin_ptr >>
+  strip_tac >>
+  qexistsl_tac [`Gf`,`tf`,`u`,`ks`] >> asm_rewrite_tac[] >>
+  rpt strip_tac >> irule store_slots_live_fold_state >>
+  metis_tac[bodyPtrDefsTheory.mem_agree_outside_def]
+QED
