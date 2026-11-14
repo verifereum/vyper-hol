@@ -109,8 +109,8 @@ Proof
      OK (tstore key value ss)` by simp[step_TSTORE_lit] >>
   `ptr_inst_ok D 0 0 ctx func G tn
      (mk_inst id TSTORE [Lit key; Lit value] []) ss` by
-    (irule append_scalar_inst_check >> simp[op_taint_def] >>
-     qexists_tac `tstore key value ss` >> simp[tstore_def]) >>
+    (irule append_scalar_inst_check >> simp[tstore_def, op_taint_def] >>
+     rpt strip_tac >> gvs[]) >>
   `key_update tn.t_trans key {} = tn.t_trans` by
     (simp[key_update_def, EXTENSION] >>
      qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> metis_tac[]) >>
