@@ -251,6 +251,8 @@ Resume tuple_store_targets_abort_path[prefix]:
     `RetQ`, `err`, `es'`] mp_tac) >>
   (impl_tac >- suspend "tail_premises") >>
   disch_then (qx_choose_then `r` (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `halt_exit _ _ _ _`
+    (assume_tac o SIMP_RULE (srw_ss()) [halt_exit_def]) >>
   qexists `r` >> asm_rewrite_tac [] >>
   irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
   qexists `s1` >> simp[]
@@ -386,5 +388,5 @@ Proof
   drule_all tuple_store_targets_abort_path >>
   disch_then (qspec_then `RetQ` strip_assume_tac) >>
   qexistsl [`INR y`, `ee with gas_obs := es.gas_obs`, `r`] >>
-  simp[]
+  fs[halt_exit_def]
 QED

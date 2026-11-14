@@ -168,7 +168,7 @@ Resume assign_tuple_targets_suffix[stores]:
   >- (disj1_tac >> qexists `t'` >>
       simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
       suspend "frame") >>
-  simp[]
+  fs[halt_exit_def]
 QED
 
 Resume assign_tuple_targets_suffix[frame]:
