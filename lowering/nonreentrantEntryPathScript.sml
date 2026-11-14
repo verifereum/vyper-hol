@@ -239,8 +239,7 @@ Proof
     metis_tac[transient_lock_checked_stmt_state_rel] >>
   `ghost_inv H NONE cenv cx es G' tn'
     (transient_lock_checked_state sa nkey s)` by
-    (irule transient_lock_checked_ghost_frame >>
-     qexistsl_tac [`G`, `tn`] >> simp[]) >>
+    (mp_tac (SPEC_ALL transient_lock_checked_ghost_frame) >> simp[]) >>
   conj_tac
   >- (irule stmt_state_rel_allocas_frame >>
       qexistsl_tac [`es`, `transient_lock_checked_state sa nkey s`] >>
