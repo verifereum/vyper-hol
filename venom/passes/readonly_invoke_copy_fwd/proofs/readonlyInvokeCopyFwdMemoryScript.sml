@@ -114,6 +114,26 @@ QED
 
 (* The copy changes only memory and memory taint.  In particular it does
    not activate a translation in the caller's local-value map. *)
+Theorem ricf_cross_source_mcopy_frame:
+  ircf_cross tn gam s t /\
+  (db+len <= sb \/ sb+len <= db) /\
+  (!q. q < len /\ sb+q NOTIN tn.t_mem ==>
+    read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) /\
+  tn' = tn with t_mem :=
+    (tn.t_mem DIFF {i | db <= i /\ i < db+len}) UNION
+    {db+q | q < len /\ sb+q IN tn.t_mem} /\
+  (!b c z k. (b,c,z) IN gam /\ k < z ==>
+    ~(db <= b+k /\ b+k < db+len) /\
+    ~(db <= c+k /\ c+k < db+len)) ==>
+  ircf_cross tn' gam (mcopy db sb len s) t
+Proof
+  strip_tac >>
+  `ircf_cross tn' (gam UNION {(db,sb,len)}) (mcopy db sb len s) t` by
+    (match_mp_tac ricf_cross_activate_copy >> asm_rewrite_tac[]) >>
+  qpat_x_assum `ircf_cross tn' _ _ _` mp_tac >>
+  simp[ircf_cross_def] >> metis_tac[]
+QED
+
 Theorem ricf_frame_source_mcopy:
   ricf_frame_agree D X sites PG G tn s t /\
   {i | db <= i /\ i < db+len /\ i < s.vs_alloca_next} SUBSET X /\
@@ -191,26 +211,6 @@ Proof
   asm_simp_tac (srw_ss()) [GSYM merge_callee_state_def,
     merge_callee_state_def, SUBSET_DEF] >>
   metis_tac[]
-QED
-
-Theorem ricf_cross_source_mcopy_frame:
-  ircf_cross tn gam s t /\
-  (db+len <= sb \/ sb+len <= db) /\
-  (!q. q < len /\ sb+q NOTIN tn.t_mem ==>
-    read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) /\
-  tn' = tn with t_mem :=
-    (tn.t_mem DIFF {i | db <= i /\ i < db+len}) UNION
-    {db+q | q < len /\ sb+q IN tn.t_mem} /\
-  (!b c z k. (b,c,z) IN gam /\ k < z ==>
-    ~(db <= b+k /\ b+k < db+len) /\
-    ~(db <= c+k /\ c+k < db+len)) ==>
-  ircf_cross tn' gam (mcopy db sb len s) t
-Proof
-  strip_tac >>
-  `ircf_cross tn' (gam UNION {(db,sb,len)}) (mcopy db sb len s) t` by
-    (match_mp_tac ricf_cross_activate_copy >> asm_rewrite_tac[]) >>
-  qpat_x_assum `ircf_cross tn' _ _ _` mp_tac >>
-  simp[ircf_cross_def] >> metis_tac[]
 QED
 
 (* Both suspended index lists and the inherited local-value map stay fixed.
