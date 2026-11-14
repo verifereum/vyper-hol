@@ -1,6 +1,7 @@
 (* Body invariants supply the mixed tuple target boundary. *)
 Theory assignTuplePtrMixedReady
 Ancestors
+  targetPlaceSim
   assignTuplePtrBodyReady bodySim bodySimStmtCases bodyExprPreFacts
   tupleTargetStoreProps exprSimHyps exprSimHypsDefs exprSimTopLevelProps
   exprSimFieldLayout exprSimAttributeFields exprSimUnwrap

@@ -129,6 +129,7 @@ Theorem stmt_state_rel_write_storage_word:
     stmt_state_rel ctx func cenv cx es s /\
     (!u st. storage_dead cx tr (update_storage slot u st) =
             storage_dead cx tr st) /\
+    ~cx.txn.is_static /\
     write_storage_slot cx tr slot tvt v es = (res, es') /\
     encode_value tvt v = SOME [(0, w)] ==>
     res = INL () /\
@@ -136,7 +137,6 @@ Theorem stmt_state_rel_write_storage_word:
       (if tr then tstore slot w s else sstore slot w s)
 Proof
   rpt gen_tac >> strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -253,6 +253,7 @@ Theorem assign_storage_store_run:
   !ctx func cenv cx es' s tr slot op w st st'.
     emit_void (if tr then TSTORE else SSTORE) [Lit slot; op] st = ((), st') /\
     fn_has_code st st' func /\ ~s.vs_halted /\
+    ~s.vs_call_ctx.cc_static /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME w /\
@@ -336,6 +337,7 @@ Theorem assign_storage_word_suffix:
   !ctx func cx lctx cenv e es ee v op t sa sb sf s0 src id ts tr typ id_str
    slot tvt etv.
     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    ~cx.txn.is_static /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM ee.scopes = MAP FDOM es.scopes /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -370,7 +372,7 @@ Proof
   Cases_on `write_storage_slot cx tr (n2w slot) tvt v ee` >>
   rename1 `_ = (res, ee')` >>
   `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   drule_all assign_storage_store_path >>
   disch_then (qspec_then `ctx` assume_tac) >>
@@ -467,6 +469,20 @@ Proof
     (qpat_x_assum `_ (es with gas_obs := gs) = (INL v, ee)`
        (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
      simp[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+      `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
+        (gvs[expr_val_rel_def] >> metis_tac[]) >>
+      `t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `eval_operand (Lit (n2w slot)) t = SOME (n2w slot)` by
+        simp[eval_operand_def] >>
+      drule_all storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `ee`, `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+      simp[write_storage_slot_eq, exit_result_def, stmt_exit_def, expr_exit_def]) >>
   drule_all assign_storage_word_suffix >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`INL ()`, `ee'`, `r`] >> simp[]
