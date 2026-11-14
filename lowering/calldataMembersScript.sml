@@ -592,8 +592,8 @@ Theorem calldata_members_fixed_fn_invariant_rule:
         ?fuel'. run_from fuel' ctx fn s = r /\
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
 Proof
-  rpt gen_tac >>
-  qspecl_then [`ctx`,`fn`,`dst`,`src`,`I`,`T`] mp_tac
+  map_every qx_gen_tac [`ctx`,`fn`,`dst`,`src`,`Inv`] >>
+  qspecl_then [`ctx`,`fn`,`dst`,`src`,`Inv`,`T`] mp_tac
     calldata_members_fixed_fn_bad_invariant_rule >> simp[]
 QED
 

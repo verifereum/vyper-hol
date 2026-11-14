@@ -52,8 +52,8 @@ Theorem calldata_exact_array_loop_init_sequence:
     calldata_exact_init_fields st.cs_next_var header_st.cs_next_id
       ip cnt p d maxn srcword initial t
 Proof
-  strip_tac >> drule_all calldata_array_loop_init_accepted_sequence >>
-  simp_tac bool_ss [calldata_exact_init_fields_def]
+  PURE_REWRITE_TAC [calldata_exact_init_fields_def] >>
+  MATCH_ACCEPT_TAC calldata_array_loop_init_accepted_sequence
 QED
 
 Theorem calldata_exact_array_loop_init_accepted:
