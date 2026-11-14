@@ -13,7 +13,7 @@
  * Contents:
  *   vyper_call_gas_sufficient_identity -- the call case, identity finalizer
  *   e2e_deploy_gas_sufficient_identity -- the deployment case
- *   call_state_rel_add_frame_gas -- call_state_rel ignores the frame's gas
+ *   entry_venom_state_add_frame_gas -- entry fields at the enlarged gas
  *
  * Only gas starvation is ruled out: a StackOverflow outcome, which
  * frame_resource_starved also allows, does not depend on gas.
@@ -39,7 +39,7 @@ Ancestors
   o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
-  codegenCorrectness immutableCodeLayout frameOutcome frameGas
+  codegenCorrectness codegenEntryRel immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv o1OpcodeAbsence
   loweringRuntimeNoCreate venomPipelineDriverProps
   asmOptimizer callTrace
@@ -50,7 +50,7 @@ Ancestors
 
 val _ = Parse.hide "tops";
 
-(* ===== add_frame_gas keeps the call's state relation ===== *)
+(* ===== Entry facts at the enlarged gas ===== *)
 
 (* Only gas fields change, so the account maps and the return data the
    two bounds range over are the same. *)
@@ -78,6 +78,45 @@ Proof
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
   simp[add_frame_gas_wf_state, add_frame_gas_fields, add_frame_gas_bounded] >>
   fs[]
+QED
+
+(* Transport the entry fields directly, without assuming the full call
+   relation at the enlarged gas limit. *)
+Theorem entry_venom_state_add_frame_gas:
+  !prog cp g es.
+    entry_venom_state prog cp (add_frame_gas g es) =
+      (entry_venom_state prog cp es) with
+        <|vs_outcomes := MAP SND (call_trace (add_frame_gas g es));
+          vs_gas_readings := gas_readings (add_frame_gas g es)|>
+Proof
+  rpt gen_tac >> Cases_on `es.contexts`
+  >- simp[add_frame_gas_def, entry_venom_state_def] >>
+  PairCases_on `h` >> simp[add_frame_gas_def, entry_venom_state_def]
+QED
+
+Theorem initial_ctx_rel_add_frame_gas:
+  !cp prog ctx vs es g.
+    initial_ctx_rel cp prog ctx vs es ==>
+    initial_ctx_rel cp prog ctx
+      (vs with
+        <|vs_outcomes := MAP SND (call_trace (add_frame_gas g es));
+          vs_gas_readings := gas_readings (add_frame_gas g es)|>)
+      (add_frame_gas g es)
+Proof
+  rw[initial_ctx_rel_def] >>
+  drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
+  `(add_frame_gas g es).originalAccounts = es.originalAccounts` by
+    (simp[add_frame_gas_def] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]) >>
+  qexistsl_tac [`fn`, `fns`,
+    `ctxt with msgParams updated_by (\p. p with gasLimit updated_by $+ g)`,
+    `rb`,
+    `MAP (\x. (FST x with <|gasUsed updated_by $+ g;
+                            msgParams updated_by
+                              (\p. p with gasLimit updated_by $+ g)|>,
+              SND x)) rest`] >>
+  gvs[initial_state_rel_def, initial_codegen_state_rel_def,
+     stack_params_rel_def, msg_ctx_rel_def, blockhash_rel_def,
+     add_frame_gas_wf_state, add_frame_gas_fields]
 QED
 
 (* The creation frame's relation, at the new gas, from the old one and its
@@ -220,23 +259,45 @@ Proof
     metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
   (* the entry state at the new gas, as in vyper_call_correct *)
-  `call_state_rel tops (assemble prog) am tx (add_frame_gas g' es)` by
-    simp[call_state_rel_add_frame_gas] >>
+  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\
+   returndata_bounded es` by fs[call_state_rel_def] >>
   `call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es)))` by
-    metis_tac[call_state_rel_call_outcomes_ok] >>
-  `wf_state es` by fs[call_state_rel_def] >>
-  qpat_x_assum `call_state_rel _ _ _ _ es` kall_tac >>
-  qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
-  ONCE_REWRITE_TAC [GSYM (Q.SPECL [`g'`, `es`] add_frame_gas_calldata)] >>
-  strip_tac >>
+    (`EVERY (\co. LENGTH co.co_returnData < dimword(:256) /\
+                  accounts_runtime_well_typed co.co_accounts)
+        (MAP SND (call_trace (add_frame_gas g' es)))` by
+       (irule call_trace_outcomes_bounded >>
+        simp[add_frame_gas_wf_state, add_frame_gas_bounded]) >>
+     fs[call_outcomes_ok_def, call_outcomes_storage_ok_def, EVERY_MEM]) >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
   drule_all entry_venom_state_initial_ctx_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
+  `initial_venom_state_rel tops am tx
+     (entry_venom_state prog cplan (add_frame_gas g' es))` by
+    (qpat_x_assum `initial_venom_state_rel _ _ _
+                    (entry_venom_state _ _ es)` mp_tac >>
+     simp[entry_venom_state_add_frame_gas, initial_venom_state_rel_def,
+          venom_env_rel_def]) >>
+  `initial_ctx_rel cplan prog out.po_unit.cu_context
+     (entry_venom_state prog cplan (add_frame_gas g' es))
+     (add_frame_gas g' es)` by
+    (PURE_REWRITE_TAC [entry_venom_state_add_frame_gas] >>
+     irule initial_ctx_rel_add_frame_gas >> simp[]) >>
+  qpat_x_assum `initial_venom_state_rel _ _ _
+                 (entry_venom_state _ _ es)` kall_tac >>
+  qpat_x_assum `initial_ctx_rel _ _ _ _ es` kall_tac >>
+  qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
+  ONCE_REWRITE_TAC [GSYM (Q.SPECL [`g'`, `es`] add_frame_gas_calldata)] >>
+  strip_tac >>
   qspecl_then [`prog`, `cplan`, `add_frame_gas g' es`] assume_tac
     entry_venom_state_o1_initial_state_ok >>
   drule_all generated_entry_code_layout_shape >>
   disch_then (qspec_then `cplan` assume_tac) >>
+  `code_layout_valid
+     (entry_venom_state prog cplan (add_frame_gas g' es))` by
+    (qpat_x_assum `code_layout_valid (entry_venom_state _ _ es)` mp_tac >>
+     simp[entry_venom_state_add_frame_gas, code_layout_valid_def]) >>
+  qpat_x_assum `code_layout_valid (entry_venom_state _ _ es)` kall_tac >>
   qabbrev_tac `vs = entry_venom_state prog cplan (add_frame_gas g' es)` >>
   `vs.vs_outcomes = MAP SND (call_trace (add_frame_gas g' es)) /\
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
@@ -245,7 +306,8 @@ Proof
     by simp[Abbr`vs`, entry_venom_state_def] >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >>
-     gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
+     gvs[Abbr`vs`, entry_venom_state_add_frame_gas,
+         entry_venom_state_def, call_state_rel_def]) >>
   qabbrev_tac `D = external_call_dead tx
                      (call_external (SOME vs.vs_outcomes) [] am tx)` >>
   `dead_wf D` by simp[Abbr`D`, external_call_dead_wf] >>
