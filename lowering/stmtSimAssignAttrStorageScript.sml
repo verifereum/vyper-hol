@@ -845,7 +845,7 @@ Theorem assign_attr_storage_word_suffix[local]:
     gas_marked_path F ctx func s 0 r /\
     ((?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
       (ee' with gas_obs := []) t') \/
-     (exit_result r /\ expr_exit res r))
+     (exit_result r /\ expr_exit res r /\ halt_exit cx ee' res r))
 Proof
   strip_tac >>
   drule_all assign_attr_add_marked >> strip_tac >>
@@ -887,7 +887,7 @@ Proof
         fs[write_storage_slot_eq] >>
       qexistsl_tac [`res`, `ee'`,
         `Abort ExHalt_abort (halt_state (set_returndata [] u))`] >>
-      simp[expr_exit_def, exit_result_def] >>
+      simp[expr_exit_def, exit_result_def, halt_exit_def] >>
       qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >>
       metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>

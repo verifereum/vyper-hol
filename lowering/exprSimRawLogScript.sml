@@ -693,12 +693,12 @@ Theorem raw_log_static_tail_summary:
         type_check (LENGTH vals <= 4) "raw_log too many topics";
         check_not_static cx;
         push_log (encode_raw_event_values cx.txn.target vals bs');
-        return NoneV od) (es,s) Q (\rr ee r. expr_exit rr r)
+        return NoneV od) (es,s) Q (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> simp[gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
                `es`,`Abort ExHalt_abort t`] >>
-  simp[fragExecTheory.exit_result_def, expr_exit_def] >>
+  simp[fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def] >>
   irule gas_marked_exec_no_source_read >>
   simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
        assert_def, return_def]
@@ -718,7 +718,7 @@ Theorem raw_log_static_suffix_summary:
         type_check (LENGTH vals <= 4) "raw_log too many topics";
         check_not_static cx;
         push_log (encode_raw_event_values cx.txn.target vals bs');
-        return NoneV od) (es,s) Q (\rr ee r. expr_exit rr r)
+        return NoneV od) (es,s) Q (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\

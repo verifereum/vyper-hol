@@ -26,7 +26,7 @@ Theorem compile_struct_lit_body_value_owned:
         (!v. rv = Value v ==> vv_own cenv cx (expr_type (StructLit ann nsid fields)) sa sb ee rv vv s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `compile_expr ce ty (StructLit ann nsid fields) sa = (vv,sb)` >>

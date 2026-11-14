@@ -27,7 +27,7 @@ Theorem compile_make_array_body_value_owned:
         (!v. rv = Value v ==> vv_own cenv cx (expr_type (Builtin ann (MakeArray (SOME et) bd) args)) sa sb ee rv vv s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `MakeArray (SOME et) bnd` >>

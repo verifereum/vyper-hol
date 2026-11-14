@@ -4323,7 +4323,14 @@ Resume raw_call_tail_outcome[static_value_abort]:
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
   `0 < flags.rcf_max_outsize ==>
      ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)` by
-    (strip_tac >> drule_all raw_call_outbuf_capacity >> simp[]) >>
+    (strip_tac >> drule raw_call_pre_flags >> strip_tac >>
+     `type_alloc_ok cenv ann` by
+       fs[expr_body_pre_def, alloc_limits_expr_def] >>
+     Cases_on `flags.rcf_revert_on_failure` >>
+     gvs[raw_call_return_type_def, type_alloc_ok_def, is_word_type_def,
+         type_memory_bytes_def] >>
+     `2 ** 64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+     fs[] >> decide_tac) >>
   `ci_mono s6 s7 /\ ci_mono s7 sb` by
     metis_tac[ci_mono_compile_raw_call_outbuf,
               ci_mono_compile_raw_call_finish, pairTheory.SND] >>
