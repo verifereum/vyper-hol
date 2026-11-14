@@ -3,7 +3,7 @@ Theory bodyFullExtCallRequestSnapshotWord
 Ancestors
   bodyFullExtCallRequestSnapshot exprSimHypsDefs exprSimHyps
   aggregateEvaluatedLayout loweringPosts exprLowering context compileEnv
-  exprSimUnwrap
+  exprSimUnwrap valueEncodingProofs valueEncodingDefs
 
 Theorem extcall_request_word_snapshot_unwrap:
   expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
@@ -79,4 +79,30 @@ Proof
   simp[] >> conj_tac
   >- (qexistsl_tac [`sm`, `vv`] >> simp[]) >>
   metis_tac[]
+QED
+
+Theorem extcall_capture_memory_bytes_frame:
+  !ce cx ty sa sb es raw tag p s v tv w func cut ee u.
+    vv_at ce cx ty sa sb es raw (LocatedValue tag p) s /\
+    p.ptr_location = LocMemory /\
+    read_result cx raw es = (INL v,es) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    eval_operand p.ptr_operand s = SOME w /\
+    wb_frame ce es ee sb s u /\
+    pure_frame ce func es cut s u ==>
+    mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_at_def] >> strip_tac >> gvs[]
+  >- (gvs[wb_frame_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (gvs[pure_frame_def] >>
+      `mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        metis_tac[] >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[mem_bytes_at_def]
 QED
