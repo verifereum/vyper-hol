@@ -17,14 +17,13 @@ Theorem lower_dload_offset_equal[local]:
   eval_operand op f.lf_src = eval_operand op f.lf_tgt
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `inst.inst_opcode = DLOAD`
+  >- (gvs[] >> irule ld_dload_operand_equal >> metis_tac[]) >>
+  gvs[] >>
   `MEM op inst.inst_operands` by gvs[] >>
   `!v. op = Var v ==> v NOTIN fn_pv P f.lf_fn` by
-    (gen_tac >> disch_tac >>
-     Cases_on `inst.inst_opcode = DLOADBYTES`
-     >- (gvs[] >> irule ld_dloadbytes_scalar_nonpointer >> metis_tac[]) >>
-     irule ld_ptr_use_scalar >> simp[] >>
-     qexists `inst` >> gvs[mem_read_ops_def, mem_write_ops_def,
-       is_pointer_preserving_op_def]) >>
+    (gen_tac >> disch_tac >> gvs[] >>
+     irule ld_dloadbytes_scalar_nonpointer >> metis_tac[]) >>
   `op_prov f.lf_H op = NONE` by
     (irule ld_vars_nonpointer_provenance >> metis_tac[]) >>
   irule ld_vars_operand_equal >> simp[] >>

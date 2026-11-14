@@ -58,45 +58,15 @@ Theorem code_end_make_ssa_section[local]:
   mem_inv (\ctx fn inst s. inst_dload_in_section inst s) C' vs
 Proof
   strip_tac >>
-  `ctx_bisim C C'` by metis_tac[make_ssa_stage_bisim] >>
   `C'.ctx_entry = C.ctx_entry` by metis_tac[make_ssa_stage_functions] >>
-  `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
-      fn_entry_label fn' = fn_entry_label fn /\
-      frame_sim vs.vs_labels C C' fn fn') C.ctx_functions C'.ctx_functions` by
-    (irule make_ssa_src_stage_frame_sim >> metis_tac[]) >>
   fs[mem_inv_raw_reachable] >> conj_tac
-  >- (drule list_rel_lookup_function >> simp[] >>
-      disch_then (qspec_then `name` mp_tac) >>
-      simp[optionTheory.OPTREL_def] >> metis_tac[]) >>
+  >- (drule_all make_ssa_src_stage_lookup >> strip_tac >> metis_tac[]) >>
   rpt strip_tac >> rename1 `raw_reachable vs C' fn' inst' s'` >>
   reverse (Cases_on `inst'.inst_opcode = DLOAD \/ inst'.inst_opcode = DLOADBYTES`)
   >- fs[inst_dload_in_section_def] >>
-  `frame_origin vs C C' fn' inst' s'` by metis_tac[frame_sim_raw_origins] >>
-  fs[frame_origin_def] >>
-  `?n. n < LENGTH C'.ctx_functions /\ fn' = EL n C'.ctx_functions` by
-    metis_tac[MEM_EL, lookup_function_MEM] >>
-  `n < LENGTH C.ctx_functions` by metis_tac[make_ssa_stage_length] >>
-  drule_all make_ssa_stage_el >> strip_tac >>
-  `frame_lockstep vs.vs_labels C C' (EL n C.ctx_functions) fn'
-     (make_ssa_pos (EL n C.ctx_functions) fn')` by
-    (irule make_ssa_current_fn_frame_lockstep >> gvs[] >> metis_tac[]) >>
-  rename1 `lookup_function nm C.ctx_functions = SOME source_fn` >>
-  `lookup_function nm C.ctx_functions = SOME (EL n C.ctx_functions)` by
-    (`ALL_DISTINCT (MAP (\f. f.fn_name) C.ctx_functions)` by
-       fs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def] >>
-     simp[o1ScheduleDecompHelpersTheory.lookup_function_member_iff] >>
-     gvs[LIST_REL_EL_EQN] >> metis_tac[EL_MEM, lookup_function_selected_name]) >>
-  `source_fn = EL n C.ctx_functions` by gvs[] >>
-  gvs[] >>
-  fs[frame_lockstep_def] >>
-  `?inst s. frame_reach C (EL n C.ctx_functions) s0 inst s /\
-            inst.inst_opcode = inst'.inst_opcode /\
-            execution_frame s' = execution_frame s /\
-            LIST_REL (\op op'. eval_operand op' s' = eval_operand op s)
-              inst.inst_operands inst'.inst_operands` by
-    (irule frame_reach_lockstep >> fs[] >> metis_tac[]) >>
-  `raw_reachable vs C (EL n C.ctx_functions) inst s` by
-    (irule frame_reach_raw_reachable >> metis_tac[]) >>
+  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
+  drule_all make_ssa_src_stage_observation >> strip_tac >>
   `s'.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `execution_frame s' = execution_frame s` mp_tac >>
      simp[stateFrameTheory.execution_frame_def, venom_state_component_equality]) >>
