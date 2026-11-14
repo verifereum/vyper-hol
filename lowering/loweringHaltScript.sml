@@ -1771,14 +1771,6 @@ Theorem external_halt_success_unlock:
       es'.requests ss.vs_requests
 Proof
   rpt strip_tac >> gvs[] >>
-  `accounts_agree H tx.target =
-     accounts_agree H cx.txn.target /\
-   transient_agree H tx.target =
-     transient_agree H cx.txn.target /\
-   request_agree H tx.target =
-     request_agree H cx.txn.target` by
-    (irule agree_cx_cong >> simp[initial_evaluation_context_def]) >>
-  asm_rewrite_tac[] >>
   qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `cx.sources`, `exps`, `cx.layouts`] mp_tac
     external_halt_success_unlock_helper >>
