@@ -2,6 +2,7 @@
 Theory abiDecodePtrReentryStep
 Ancestors
   abiDecodePtrReentryObservations abiDecoderVarSequence abiDecoderVarExtend
+  abiDecoderAbortReentry
   ptrSafeRun ptrDiscipline contextCodegenRel codegenRel venomExecSemantics
   venomState venomInst list
 
@@ -98,6 +99,23 @@ Proof
   `step_inst fuel ctx inst s = OK u` by simp[step_inst_non_invoke] >>
   rename1 `step_inst_base inst t = OK v` >>
   `step_inst fuel ctx inst t = OK v` by simp[step_inst_non_invoke] >>
+  imp_res_tac abi_decode_ptr_reentry_check_frame >>
+  gvs[ptr_inst_ok_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
+QED
+
+Theorem abi_decode_ptr_reentry_revert_inst:
+  abi_decoder_vars_extend extras s t /\ abi_decoder_reentry_opcode inst.inst_opcode /\
+  step_inst_base inst s = Abort Revert_abort u /\
+  ptr_inst_ok D lo fuel ctx fn G tn inst s ==>
+  ptr_inst_ok D lo fuel ctx fn G tn inst t
+Proof
+  strip_tac >> drule_all abi_decoder_revert_inputs >> strip_tac >>
+  drule_all abi_decoder_revert_vars_extend >> strip_tac >>
+  drule_all abi_decode_ptr_reentry_access >> strip_tac >>
+  drule_all abi_decode_ptr_reentry_taint_ok >> strip_tac >>
+  drule_all abi_decoder_reentry_non_invoke >> strip_tac >>
+  `step_inst fuel ctx inst t = Abort Revert_abort v` by
+    simp[step_inst_non_invoke] >>
   imp_res_tac abi_decode_ptr_reentry_check_frame >>
   gvs[ptr_inst_ok_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED

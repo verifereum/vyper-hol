@@ -7,13 +7,14 @@ Ancestors
   abiDecoderReentry abiDecoderVarExtend
   abiDecoderVarSequence abiDecoderReentryPointer abiDecodePtrMemberFrame
   abiMalformedRecursiveInterface abiDecoderContract entryDecoderHistoryFrame
+  abiValidAllocatedObservations ctorAbiActualWorld
   decoderGhostFramePtr
   exprSimPtrLiteralBuffer valueEncodingDefs loweringPosts
   fragGasCopyLoop fragGasOriginPtrDead bodyPtrDefs ptrDiscipline compileEnv
   loweringStateRelDefs exprLoweringProps venomState venomExecSemantics venomMemDefs
   contractABI vyperTypeABI emitHelperProps finite_map words list arithmetic
 
-Theorem abi_valid_allocated_bytes_joint:
+Theorem abi_valid_allocated_bytes_joint_observations:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
   abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
@@ -38,7 +39,9 @@ Theorem abi_valid_allocated_bytes_joint:
       (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    s.vs_alloca_next = t.vs_alloca_next
+    s.vs_alloca_next = t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_valid_allocated_bytes_run >> strip_tac >>
@@ -106,6 +109,16 @@ Proof
   rename1 `abi_decoder_vars_extend s.vs_vars clean actual` >>
   `actual = t with vs_inst_idx := s.vs_inst_idx` by fs[] >>
   qpat_x_assum `actual = _` SUBST_ALL_TAC >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
+     (emitted_insts st en)` by fs[EVERY_MEM] >>
+  mp_tac (Q.SPECL [`emitted_insts st en`, `s`,
+    `t with vs_inst_idx := s.vs_inst_idx`] ctor_actual_sequence_world) >>
+  (impl_tac >- simp[]) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  mp_tac (Q.SPECL [`emitted_insts st en`, `s`,
+    `t with vs_inst_idx := s.vs_inst_idx`] abi_valid_allocated_sequence_static) >>
+  (impl_tac >- simp[]) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   drule_all abi_decoder_vars_extend_observations >> strip_tac >>
   `t.vs_memory = clean.vs_memory` by fs[] >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
@@ -203,4 +216,37 @@ Proof
      qpat_assum `!x. not_fresh_at st x ==> _ /\ _ /\ _`
        (ACCEPT_TAC o CONJUNCT2 o UNDISCH o Q.SPEC `x`)) >>
   qexistsl_tac [`t`, `G'`, `tn'`] >> asm_simp_tac bool_ss []
+QED
+
+Theorem abi_valid_allocated_bytes_joint:
+  (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
+  abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
+    st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
+  ~ctx_has_dalloca ctx /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
+  ptr_covers G tn output s (type_memory_bytes ce ty) /\
+  op_prov G pos = NONE /\ op_prov G hi = NONE /\
+  op_taint tn pos = {} /\ op_taint tn hi = {} /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
+  ?t G' tn'.
+    abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
+      d (type_memory_bytes ce ty) s t /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    ptr_covers G' tn' output t (type_memory_bytes ce ty) /\
+    abi_decode_ptr_window G' tn' t source (n2w B) L /\
+    (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+      val_in_memory tv v d mem) /\
+    (!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. ~(d <= i /\ i < d+type_memory_bytes ce ty) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    s.vs_alloca_next = t.vs_alloca_next
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_valid_allocated_bytes_joint_observations >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> asm_rewrite_tac[]
 QED

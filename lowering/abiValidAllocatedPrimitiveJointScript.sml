@@ -5,11 +5,12 @@ Ancestors
   abiDecodePtrWordJoint abiDecodePtrMemberFrame abiMalformedRecursiveInterface
   abiDecoderTypedContract abiDecoderWordTyped abiDecoderReentry abiDecoderCoherence
   abiDecoderClampedWord abiDecoderContract entryDecoderHistoryFrame
+  abiDecoderReentryPointer abiValidAllocatedObservations ctorAbiActualWorld
   exprPtrCleanBufferPost valueEncodingTyping valueEncodingDefs
   loweringStateRelDefs exprLoweringProps bodyPtrDefs ptrDiscipline compileEnv
   venomState venomMemDefs venomExecSemantics finite_map words list arithmetic
 
-Theorem abi_valid_allocated_primitive_joint:
+Theorem abi_valid_allocated_primitive_joint_observations:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
@@ -32,7 +33,9 @@ Theorem abi_valid_allocated_primitive_joint:
     (!i. ~(d <= i /\ i < d+32) ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    s.vs_alloca_next = t.vs_alloca_next
+    s.vs_alloca_next = t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables
 Proof
   strip_tac >> drule_all abi_valid_allocated_primitive_run >> strip_tac >>
   drule_all abi_valid_allocated_primitive_input >> strip_tac >>
@@ -64,6 +67,9 @@ Proof
       vs_inst_idx := LENGTH en.cs_current_insts = t` by
     (simp[venom_state_component_equality] >> fs[abi_valid_allocated_post_def]) >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_word_reentry_code >> strip_tac >>
+  drule_all ctor_actual_sequence_world >> strip_tac >>
+  drule_all abi_valid_allocated_sequence_static >> strip_tac >>
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st en)` by
     fs[EVERY_MEM] >>
@@ -98,4 +104,34 @@ Proof
   qexistsl_tac [`t`, `G'`, `tn'`] >>
   fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
     not_fresh_at_def, allocas_from_def] >> metis_tac[]
+QED
+
+Theorem abi_valid_allocated_primitive_joint:
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+  abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
+    st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
+  ~ctx_has_dalloca ctx /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
+  ptr_covers G tn output s (type_memory_bytes ce ty) /\
+  op_taint tn pos = {} /\ allocas_from lo s /\
+  lo <= s.vs_alloca_next /\ alloca_history func s ==>
+  ?t G' tn'.
+    abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
+      d (type_memory_bytes ce ty) s t /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    abi_decode_ptr_window G' tn' t output (n2w d) 32 /\
+    abi_decode_ptr_window G' tn' t source (n2w B) L /\
+    (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+      val_in_memory tv v d mem) /\
+    (!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. ~(d <= i /\ i < d+32) ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    s.vs_alloca_next = t.vs_alloca_next
+Proof
+  strip_tac >> drule_all abi_valid_allocated_primitive_joint_observations >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> asm_rewrite_tac[]
 QED

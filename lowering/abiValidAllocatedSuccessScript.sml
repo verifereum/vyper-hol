@@ -7,6 +7,8 @@ Ancestors
   abiValidAllocatedBytesJoint abiValidAllocatedPrimitiveJoint
   abiValidAllocatedComplexJoint abiDecodePtrSelectionJoint
   abiDecodeMemReentry abiDecodePtrRejectChecks
+  abiValidAllocatedMembersJoint abiMalformedAllocatedPrimitiveJoint
+  abiMalformedAllocatedBytesJoint
   exprLowering list
 
 Theorem abi_valid_allocated_success:

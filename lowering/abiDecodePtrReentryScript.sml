@@ -1,23 +1,30 @@
-(* Successful straight-line pointer replay from an extended runtime state. *)
+(* Straight-line pointer replay preserves successful and reverting runs. *)
 Theory abiDecodePtrReentry
 Ancestors
   abiDecodePtrReentryStep abiDecodePtrReentryGhost abiDecodePtrReentryObservations
-  abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend
+  abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend abiDecoderAbortReentry
   abiEncoderVarTransport fragGasSeqPtr fragExec venomExecSemantics
   bodyPtrDefs compileEnv exprLoweringProps instIdxIndep venomState venomInst list
 
-Theorem abi_decode_ptr_sequence_reentry:
+Theorem abi_decode_ptr_sequence_reentry_result:
   !insts extras s t u G tn G' tn'.
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
     ~is_terminator i.inst_opcode) insts /\
-  abi_decoder_vars_extend extras s t /\ run_inst_seq insts s = OK u /\
+  abi_decoder_vars_extend extras s t /\
+  (run_inst_seq insts s = OK u \/ run_inst_seq insts s = Abort Revert_abort u) /\
   inst_seq_ptr D lo ctx fn PG G tn insts s G' tn' ==>
   inst_seq_ptr D lo ctx fn PG G tn insts t G' tn'
 Proof
   Induct >- simp[inst_seq_ptr_def] >>
   qx_gen_tac `inst` >> rpt gen_tac >>
   simp_tac bool_ss [EVERY_DEF, run_inst_seq_def] >> strip_tac >>
-  Cases_on `step_inst_base inst s` >> gvs[] >>
+  Cases_on `step_inst_base inst s` >> gvs[]
+  >>~- ([`step_inst_base inst s = Abort Revert_abort u`],
+      drule_all abi_decoder_revert_vars_extend >> strip_tac >>
+      `ptr_inst_ok D lo 0 ctx fn G tn inst t` by
+        (fs[inst_seq_ptr_def] >>
+         metis_tac[abi_decode_ptr_reentry_revert_inst]) >>
+      fs[inst_seq_ptr_def]) >>
   rename1 `step_inst_base inst s = OK mid` >>
   `abi_decoder_inputs_defined inst s` by
     metis_tac[abi_decoder_step_inputs_defined] >>
@@ -34,14 +41,29 @@ Proof
     metis_tac[abi_decode_ptr_reentry_frame] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) insts` by
     fs[EVERY_MEM] >>
-  `run_inst_seq insts (mid with vs_inst_idx := SUC s.vs_inst_idx) =
-    OK (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+  `(run_inst_seq insts (mid with vs_inst_idx := SUC s.vs_inst_idx) =
+      OK (u with vs_inst_idx := SUC s.vs_inst_idx)) \/
+   (run_inst_seq insts (mid with vs_inst_idx := SUC s.vs_inst_idx) =
+      Abort Revert_abort (u with vs_inst_idx := SUC s.vs_inst_idx))` by
     simp[run_inst_seq_inst_idx, exec_result_map_def] >>
   `abi_decoder_vars_extend extras
     (mid with vs_inst_idx := SUC s.vs_inst_idx)
     (actual with vs_inst_idx := SUC s.vs_inst_idx)` by
     metis_tac[abi_encoder_vars_extend_idx] >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  first_x_assum irule >>
+  qexistsl_tac [`extras`, `mid with vs_inst_idx := SUC s.vs_inst_idx`,
+    `u with vs_inst_idx := SUC s.vs_inst_idx`] >> fs[] >> metis_tac[]
+QED
+
+Theorem abi_decode_ptr_sequence_reentry:
+  !insts extras s t u G tn G' tn'.
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
+    ~is_terminator i.inst_opcode) insts /\
+  abi_decoder_vars_extend extras s t /\ run_inst_seq insts s = OK u /\
+  inst_seq_ptr D lo ctx fn PG G tn insts s G' tn' ==>
+  inst_seq_ptr D lo ctx fn PG G tn insts t G' tn'
+Proof
+  metis_tac[abi_decode_ptr_sequence_reentry_result]
 QED
 
 Theorem abi_decode_ptr_sequence_extend:
