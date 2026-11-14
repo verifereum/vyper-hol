@@ -44,7 +44,8 @@ Theorem memory_offset_taint_empty:
 Proof
   strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[mem_write_ops_def, mem_read_ops_def, AllCaseEqs()] >>
+  fs[mem_write_ops_def, mem_read_ops_def] >>
+  gvs[AllCaseEqs()] >>
   fs[taint_ok_def] >>
   spose_not_then assume_tac >>
   qmatch_asmsub_rename_tac `op_taint tn addr <> {}` >>
