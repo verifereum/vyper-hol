@@ -10,7 +10,7 @@
 Theory makeSsaCurrentLockstepRf
 Ancestors
   o1FrameLockstep o1PassLift unitMemInv contextCodegenRel codegenRel
-  venomInst venomExecProps
+  venomInst venomExecProps stateFrame venomState
 
 Theorem lookup_block_MEM_some[local]:
   !bbs bb. MEM bb bbs ==> ?b. lookup_block bb.bb_label bbs = SOME b
@@ -45,6 +45,9 @@ Proof
   qexistsl [`inst`, `s`] >> simp[] >>
   drule_all lockstep_paired_mem_ranges >> strip_tac >>
   fs[state_rel_def] >> imp_res_tac execution_frame_fields >>
+  `s'.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_x_assum `execution_frame s' = execution_frame s` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
   conj_tac
   >- (strip_tac >> qpat_x_assum `~in_revert_forward fn' s'` mp_tac >>
       fs[in_revert_forward_def, active_inst_def] >>
