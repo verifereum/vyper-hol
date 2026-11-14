@@ -37,8 +37,12 @@ Proof
   rpt strip_tac >> gvs[]
   >- (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[vv_at_def, contextTheory.mk_ptr_def]) >>
-  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_at_def, contextTheory.mk_ptr_def, local_place_at_def] >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _`
+    (fn th => mp_tac (Q.SPEC `v`
+      (UNDISCH (CONJUNCT2 (PURE_REWRITE_RULE [vv_at_def] th))))) >>
+  pure_rewrite_tac[vv_at_def, contextTheory.mk_ptr_def] >>
+  simp[local_place_at_def] >>
+  rpt strip_tac >> res_tac >>
   metis_tac[]
 QED
 

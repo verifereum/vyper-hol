@@ -307,8 +307,11 @@ Resume body_assign_place_snapshot_mem[target]:
                   `gas_explicit target_marks snap.vs_gas_readings`] >> simp[]) >>
   `?dst loc. r = (dst,SOME loc,SOME (ValPT dty)) /\
     (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient)` by
-    (PairCases_on `r` >> fs[target_post_def, exprLoweringTheory.value_type_place_def] >>
-     Cases_on `p` >> fs[place_ptr_rel_def, slot_loc_def] >>
+    (qhdtm_assum `target_post` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+     PairCases_on `r` >> fs[target_post_def] >>
+     fs[exprLoweringTheory.value_type_place_def] >>
+     Cases_on `p` >> fs[place_ptr_rel_def] >> fs[slot_loc_def] >>
      Cases_on `b` >> gvs[slot_loc_def]) >>
   qpat_x_assum `r = _` SUBST_ALL_TAC >>
   suspend "transport"

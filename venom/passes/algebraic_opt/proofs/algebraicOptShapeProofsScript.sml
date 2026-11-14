@@ -631,7 +631,7 @@ Theorem ao_peephole_inst_unary:
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
   Cases_on `source.inst_opcode` >>
-  gvs[inst_wf_def] >> simp[ao_peephole_inst_def] >>
+  full_simp_tac bool_ss [inst_wf_def] >> simp[ao_peephole_inst_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >> gvs[] >>
   `inst.inst_opcode <> ISZERO /\ inst.inst_opcode <> ASSERT` by simp[] >>
   metis_tac[ao_simple_peephole_unary, ao_opt_eq_unary,

@@ -175,7 +175,8 @@ Theorem lower_dload_supply_prefix_raw:
 Proof
   strip_tac >>
   qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
-  simp[lower_dload_inst_supply_def] >>
+  pure_rewrite_tac[lower_dload_inst_supply_def] >>
+  asm_simp_tac bool_ss [] >>
   namedCases_on `fresh_ir_var u` ["a u1"] >>
   namedCases_on `fresh_ir_var u1` ["z u2"] >>
   namedCases_on `fresh_inst_id u2` ["ai u3"] >>

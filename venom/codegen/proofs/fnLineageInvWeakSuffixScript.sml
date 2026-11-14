@@ -47,13 +47,19 @@ Proof
    (simp[DROP_EQ_NIL] >> decide_tac) >>
  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
  once_rewrite_tac[generate_block_insts_plan_def] >> asm_rewrite_tac[] >>
- simp[Once generate_block_insts_plan_def, AllCaseEqs()] >> strip_tac >>
+ simp_tac (srw_ss()) [Once generate_block_insts_plan_def] >>
+ strip_tac >>
  ` (if LENGTH bb.bb_instructions <= SUC (j+p) then
       live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
     else live_vars_at (liveness_analyze fn) bb.bb_label (j+(p+1))) =
     live_vars_at (liveness_analyze fn) bb.bb_label (SUC (j+p))` by
    (IF_CASES_TAC >> simp[] >> AP_TERM_TAC >> decide_tac) >>
  gvs[] >>
+ qpat_x_assum `_ = SOME (ops,qs)` mp_tac >>
+ BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+ rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >> strip_tac >> gvs[] >>
+ rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (step_ops,ps')` >>
+ rename1 `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = SOME (rest_ops,qs)` >>
  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) analyzed_weak_envelope_step >>
  disch_then (qspecl_then [`m`,`core`,`base'`] mp_tac) >>
  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>

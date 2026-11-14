@@ -791,7 +791,9 @@ Resume abi_decode_bytes_member_prefix_ptr[compose]:
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ Hr tr (emitted_insts c3 c4) _ _ _` kall_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode)
      (emitted_insts c3 c4 ++ emitted_insts c4 c5)` by simp[EVERY_APPEND] >>
-  drule_all inst_seq_ptr_append_normalized >> strip_tac >>
+  qpat_assum `inst_seq_ptr _ _ _ _ _ H tm (emitted_insts c1 c3) _ _ _`
+    (mp_then Any mp_tac inst_seq_ptr_append_normalized) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ H tm (emitted_insts c1 c3) _ _ _` kall_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode)
      (emitted_insts c1 c3 ++ (emitted_insts c3 c4 ++ emitted_insts c4 c5))`

@@ -43,7 +43,8 @@ Proof
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   Cases_on `opc = ASSERT` >>
-  gvs[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
+  gvs[mk_inst_def] >>
+  gvs[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
       venomStateTheory.revert_state_def, venomStateTheory.halt_state_def,
       venomStateTheory.set_returndata_def,
       AllCaseEqs()] >>

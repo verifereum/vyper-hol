@@ -139,7 +139,7 @@ Resume ptr_paired_mcopy_endpoint_inputs[evaluations]:
   simp[ptr_observe_def, ptr_observation_component_equality] >>
   strip_tac >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
   strip_tac >> suspend "transport"
 QED
 

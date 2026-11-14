@@ -534,7 +534,8 @@ Proof
   `SUM (MAP abi_member_head_size (TAKE k ats)) +
    LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
     (drule_all window_members_inv_output_bounds >> strip_tac >>
-     `~is_dynamic (EL k ats)` by metis_tac[window_members_inv_source] >> gvs[] >> decide_tac) >>
+     `~is_dynamic (EL k ats)` by metis_tac[window_members_inv_source] >> qpat_assum `~is_dynamic (EL k ats)`
+       (fn th => qpat_x_assum `~is_dynamic (EL k ats) ==> _` (assume_tac o C MP th)) >> decide_tac) >>
   `EXISTS (\(_,_,_,dyn). dyn) infos ==>
     mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k))` by
     (strip_tac >>
