@@ -1,6 +1,6 @@
 Theory frontendConstantParity
 Ancestors
-  jsonToVyper vyperConstEval
+  jsonToVyper vyperConstEval vyperPinFold
 Libs
   jsonASTLib vyperConstEvalLib
 
@@ -45,6 +45,12 @@ val evaluate_tm = ``\cx ex. OPTION_BIND (eval_constant (translate_expr cx ex))
                               constant_literal``;
 fun computed ctx node =
   rhs (concl (EVAL (list_mk_comb (evaluate_tm, [ctx, node]))));
+val pin_evaluate_tm = ``\cx ex.
+  case pin_fold_expr (translate_expr cx ex) of
+    Literal ty l => SOME l
+  | _ => NONE``;
+fun pin_computed ctx node =
+  rhs (concl (EVAL (list_mk_comb (pin_evaluate_tm, [ctx, node]))));
 fun folded_literal ctx node = let
   val e = rhs (concl (EVAL ``translate_expr ^ctx ^node``))
   val (head, args) = strip_comb e
@@ -71,6 +77,8 @@ fun known path src got =
     known_differences;
 
 val matched = ref 0;
+val pin_matched = ref 0;
+val pin_mismatches = ref ([] : string list);
 val mismatches = ref ([] : string list);
 val known_found = ref ([] : string list);
 val unevaluated = ref ([] : (string * int) list);
@@ -91,6 +99,24 @@ fun count_unevaluated kind =
 
 fun decode decoder v = SOME (JSONDecode.decode decoder v) handle _ => NONE;
 
+fun check_pin_node path ctx source e expected = let
+  val got = pin_computed ctx e
+  val got =
+    if optionSyntax.is_none got then
+      case decode jsonASTLib.count_expr source of
+        SOME b => pin_computed ctx b
+      | NONE => got
+    else got
+  val src = string_field "src" source
+in
+  if optionSyntax.is_none got then ()
+  else if aconv got expected then pin_matched := !pin_matched + 1
+  else if known path src got then ()
+  else pin_mismatches :=
+    (path ^ " " ^ src ^ ": pin_fold_expr " ^ term_to_string got ^
+     ", compiler " ^ term_to_string expected) :: !pin_mismatches
+end;
+
 fun check_node path ctx node folded = let
   val kind = string_field "ast_type" node
   val source = without_folded node
@@ -100,6 +126,7 @@ in
       (case folded_literal ctx f of
          NONE => count_unevaluated (kind ^ " (non-scalar fold)")
        | SOME expected => let
+           val () = check_pin_node path ctx source e expected
            val got = computed ctx e
            val got =
              if optionSyntax.is_none got then
@@ -215,8 +242,15 @@ val () = app (fn (k, n) =>
   print ("  not evaluated: " ^ Int.toString n ^ " " ^ k ^ "\n")) (!unevaluated);
 val () = app (fn m => print ("  known difference " ^ m ^ "\n")) (rev (!known_found));
 val () = app (fn m => print ("  MISMATCH " ^ m ^ "\n")) (rev (!mismatches));
+val () = print ("pin_fold_expr parity: " ^ Int.toString (!pin_matched) ^
+  " values match the compiler, " ^ Int.toString (length (!pin_mismatches)) ^
+  " differ\n");
+val () = app (fn m => print ("  PIN MISMATCH " ^ m ^ "\n"))
+  (rev (!pin_mismatches));
 val () = app (fn p => print ("  UNDECODED " ^ p ^ "\n")) (rev (!undecoded_asts));
 val () = if null (!undecoded_asts) then ()
   else raise Fail "annotated-AST fixtures no longer decode";
 val () = if null (!mismatches) then ()
   else raise Fail "frontend constants differ from the compiler's folded values";
+val () = if null (!pin_mismatches) then ()
+  else raise Fail "pin_fold_expr differs from the compiler's folded values";
