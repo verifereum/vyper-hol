@@ -60,6 +60,51 @@ end;
 
 val uint256 = ``BaseT (UintT 256)``;
 
+(* Runtime-safe evaluation has different values and coverage from the pin's
+   AST folder. These witnesses keep that distinction explicit. *)
+Theorem bounded_shift_constant:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) (Bop Add)
+      [Builtin (BaseT (UintT 256)) (Bop ShR)
+        [Builtin (BaseT (UintT 256)) (Bop ShL)
+          [Literal (BaseT (UintT 256)) (IntL 1);
+           Literal (BaseT (UintT 256)) (IntL 256)];
+         Literal (BaseT (UintT 256)) (IntL 255)];
+       Literal (BaseT (UintT 256)) (IntL 1)]) = SOME (IntV 1)
+Proof
+  EVAL_TAC
+QED
+
+Theorem unsafe_add_constant:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Literal (BaseT (UintT 256))
+        (IntL 115792089237316195423570985008687907853269984665640564039457584007913129639935);
+       Literal (BaseT (UintT 256)) (IntL 0)]) =
+    SOME (IntV 115792089237316195423570985008687907853269984665640564039457584007913129639935)
+Proof
+  EVAL_TAC
+QED
+
+Theorem as_wei_constant_omitted:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) (AsWeiValue Gwei)
+      [Literal (BaseT (UintT 256))
+        (IntL 115792089237316195423570985008687907853269984665640564039457584007913)]) = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem addmod_constant_omitted:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) AddMod
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2);
+       Literal (BaseT (UintT 256)) (IntL 5)]) = NONE
+Proof
+  EVAL_TAC
+QED
+
 (* N = 1 + 2 sizes the array and is the exponent of x ** N. *)
 val bound = translate "constant_bound.json";
 val () = contains "array bound" ``ArrayT ^uint256 (Fixed 3)`` bound;
