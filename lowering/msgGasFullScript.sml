@@ -2,6 +2,8 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  bodyFullBuiltinCalldataSlice bodyFullBuiltinPrecompileRecoveryArgs
+  bodyFullBuiltinPrecompileRecoveryBuffers bodyFullBuiltinECRecover
   bodyFullBuiltinUint2Str
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
