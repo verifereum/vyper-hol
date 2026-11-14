@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem assign_tuple_targets_suffix[local]:
-  !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
+  !ctx func cx lctx RetQ cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
     lowered_value_type cenv e = TupleT tys /\
     expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
     stmt_state_rel ctx func cenv cx es s0 /\
@@ -71,12 +71,14 @@ Theorem assign_tuple_targets_suffix[local]:
     su.cs_next_var <= sl.cs_next_var /\ sl.cs_next_var <= ss.cs_next_var /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\ fn_has_code ss sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    ?ee' t'.
+    ?res ee' r.
       (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
-        (INL (), ee' with gas_obs := tail)) /\
-      gas_marked_path F ctx func sv 0 (OK t') /\
-      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
-        (ee' with gas_obs := []) t'
+        (res, ee' with gas_obs := tail)) /\
+      gas_marked_path F ctx func sv 0 r /\
+      ((?t'. r = OK t' /\
+         stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
+           (ee' with gas_obs := []) t') \/
+       (exit_result r /\ !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuple_type_value >> strip_tac >> gvs[] >>
@@ -88,13 +90,6 @@ Proof
      irule tuple_target_aligned_source >>
      qexistsl [`cenv`, `EL n tys`, `EL n vs`] >> simp[]) >>
   `LIST_REL value_has_type tvs vs` by simp[GSYM values_have_types_LIST_REL] >>
-  `~cx.txn.is_static` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
-  drule_all assign_tuple_targets_safe >> strip_tac >>
-  rename1 `assign_tuple_targets _ _ _ ee = (INL (),ee')` >>
-  qpat_assum `assign_tuple_targets _ _ _ _ = _`
-    (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
   suspend "prefix"
 QED
 
@@ -161,17 +156,18 @@ Resume assign_tuple_targets_suffix[stores]:
   qpat_x_assum `expr_val_rel _ (TupleT tys) _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`gs`, `T`] tuple_store_targets_path)) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
-    (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
-  qexistsl [`ee'`, `sfv`] >> conj_tac
-  >- (drule_all assign_tuple_target_list_gas_obs >>
-      simp[Once evaluate_def]) >>
+    (Q.SPECL [`gs`, `T`] tuple_store_targets_outcome)) >>
+  disch_then (qspec_then `RetQ`
+    (qx_choosel_then [`res`, `ee'`, `r`] (map_every assume_tac o CONJUNCTS))) >>
+  qexistsl [`res`, `ee'`, `r`] >> conj_tac
+  >- simp[Once evaluate_def] >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>
-  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  suspend "frame"
+  qpat_x_assum `(res = INL () /\ _) \/ _` strip_assume_tac
+  >- (disj1_tac >> qexists `t'` >>
+      simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+      suspend "frame") >>
+  simp[]
 QED
 
 Resume assign_tuple_targets_suffix[frame]:
@@ -253,7 +249,6 @@ Proof
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
   drule_all assign_tuple_targets_suffix >>
-  disch_then (qspec_then `lctx` strip_assume_tac) >>
-  qexistsl [`INL ()`, `ee'`, `OK t'`] >> simp[]
+  disch_then (qspecl_then [`lctx`, `RetQ`] mp_tac) >> simp[]
 QED
 
