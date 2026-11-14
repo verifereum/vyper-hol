@@ -415,19 +415,6 @@ Proof
   simp[invalidate_loads_def] >> IF_CASES_TAC >> simp[]
 QED
 
-Theorem mm_local_fold_ancestor[local]:
-  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
-  MEM h (ss.ss_copies ++ ss.ss_flushed) /\
-  mm_local_copy_ancestor c h ==>
-  ?g. MEM g (hard_barrier (FOLDL (scan_inst dfg mode) ss post)).ss_flushed /\
-      mm_local_copy_ancestor c g
-Proof
-  strip_tac >> drule_all mm_local_fold_fragment >>
-  disch_then (qspecl_then [`mode`, `dfg`, `post`] strip_assume_tac) >>
-  simp[hard_barrier_def] >>
-  metis_tac[MEM_APPEND, mm_local_copy_ancestor_trans]
-QED
-
 Theorem mm_local_prefix_cached_def_before_cut:
   wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
   index < LENGTH fn0.fn_blocks /\ k <= 4 /\
@@ -760,17 +747,6 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM_APPEND]
 QED
 
-Theorem mm_local_memzero_merge_effect[local]:
-  d1 <= d2 /\ d2 <= d1+n1 /\
-  cg = copy_merge (copy_memzero d1 n1 ids1) (copy_memzero d2 n2 ids2) ==>
-  write_memory_with_expansion d2 (REPLICATE n2 0w)
-    (write_memory_with_expansion d1 (REPLICATE n1 0w) s) =
-  write_memory_with_expansion cg.cg_dst (REPLICATE cg.cg_length 0w) s
-Proof
-  simp[copy_merge_def, copy_memzero_def] >>
-  metis_tac[venomWriteReplayPropsTheory.zero_write_merge]
-QED
-
 Definition mm_local_write_compatible_def:
   mm_local_write_compatible d bs a cs <=>
     !x. d <= x /\ x < d + LENGTH bs /\ a <= x /\ x < a + LENGTH cs ==>
@@ -781,19 +757,6 @@ Theorem mm_local_write_compatible_sym:
   mm_local_write_compatible d bs a cs <=> mm_local_write_compatible a cs d bs
 Proof
   metis_tac[mm_local_write_compatible_def]
-QED
-
-Theorem mm_local_write_compatible_disjoint[local]:
-  d + LENGTH bs <= a \/ a + LENGTH cs <= d ==>
-  mm_local_write_compatible d bs a cs
-Proof
-  rw[mm_local_write_compatible_def] >> gvs[]
-QED
-
-Theorem mm_local_write_compatible_empty[local]:
-  mm_local_write_compatible d [] a cs /\ mm_local_write_compatible a cs d []
-Proof
-  simp[mm_local_write_compatible_def]
 QED
 
 Theorem mm_local_replace_compatible_commute[local]:
@@ -878,18 +841,6 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem mm_local_invalidate_disjoint[local]:
-  0 < n /\
-  FLOOKUP (invalidate_loads ss (mk_interval dst n)).ss_loads v = SOME src ==>
-  src+32 <= dst \/ dst+n <= src
-Proof
-  strip_tac >> drule mm_local_invalidate_binding >>
-  simp[load_conflicts_def, mmIntervalTheory.interval_overlaps_def,
-       mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def,
-       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
-  rpt strip_tac >> gvs[] >> decide_tac
-QED
-
 Theorem mm_local_flush_hazards_read:
   MEM h (flush_hazards Mem2Mem ss c).ss_copies /\
   LENGTH bytes = c.cg_length ==>
@@ -965,43 +916,6 @@ Proof
     (irule mmCorrectnessProofsTheory.all_distinct_inst_id_idx >>
      qexists_tac `bb.bb_instructions` >> simp[EL_TAKE]) >>
   decide_tac
-QED
-
-Theorem mm_local_live_load_empty[local]:
-  !v src. FLOOKUP empty_scan_state.ss_loads v = SOME src ==>
-    lookup_var v s = SOME (mload src s)
-Proof
-  simp[empty_scan_state_def]
-QED
-
-Theorem mm_local_live_load_barrier[local]:
-  !v src. FLOOKUP (hard_barrier ss).ss_loads v = SOME src ==>
-    lookup_var v s = SOME (mload src s)
-Proof
-  simp[hard_barrier_def]
-QED
-
-Theorem mm_local_live_load_create[local]:
-  inst.inst_opcode = MLOAD /\ inst.inst_operands = [Lit a] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst s = OK t /\
-  (!v src. FLOOKUP ss.ss_loads v = SOME src ==>
-     lookup_var v s = SOME (mload src s)) /\
-  (!v src. FLOOKUP ss.ss_loads v = SOME src /\ v <> out ==>
-     lookup_var v t = lookup_var v s) ==>
-  !v src. FLOOKUP (scan_load Mem2Mem ss inst).ss_loads v = SOME src ==>
-    lookup_var v t = SOME (mload src t)
-Proof
-  strip_tac >>
-  `t = update_var out (mload (w2n a) s) s` by
-    gvs[venomExecSemanticsTheory.step_inst_base_def,
-        venomExecSemanticsTheory.exec_read1_def,
-        venomStateTheory.eval_operand_def] >>
-  gvs[scan_load_def, operand_lit_val_def, mode_allows_overlap_def] >>
-  IF_CASES_TAC >>
-  simp[flush_copies_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `out = v` >>
-  gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
-      venomStateTheory.mload_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem mm_local_live_load_write[local]:
@@ -1211,72 +1125,6 @@ Proof
   metis_tac[]
 QED
 
-(* Capture only the memory projection: bookkeeping is not part of the event. *)
-Theorem mm_local_capture_store_post_phis[local]:
-  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
-  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
-  mm_local_prefix fn0 supply index k = (bb,sk) /\
-  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
-  h = phi_prefix_length bb.bb_instructions /\ h <= j /\ j < LENGTH bb.bb_instructions /\
-  LENGTH states = SUC (j-h) /\
-  eval_phis s bb.bb_instructions = OK s_phi /\
-  EL 0 states = s_phi with vs_inst_idx := h /\
-  (!r. r < j-h ==>
-    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
-    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
-        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) /\
-  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state
-      (TAKE j bb.bb_instructions) /\
-  inst = EL j bb.bb_instructions /\ inst.inst_opcode = MSTORE /\
-  inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src /\
-  step_inst fuel ctx inst (EL (j-h) states) = OK t ==>
-  t.vs_memory = (write_memory_with_expansion (w2n dst)
-    (read_memory src 32 (EL (j-h) states)) (EL (j-h) states)).vs_memory
-Proof
-  strip_tac >>
-  `!u a. FLOOKUP ss.ss_loads u = SOME a ==>
-     lookup_var u (EL (j-h) states) = SOME (mload a (EL (j-h) states))` by
-    (match_mp_tac mm_local_live_load_post_phis >> simp[]) >>
-  irule venomWriteReplayPropsTheory.capture_store >> metis_tac[]
-QED
-
-Theorem mm_local_supply_append[local]:
-  !xs s ys t zs u ws.
-  mm_flat_map_supply f s xs = (ys,t) /\
-  mm_flat_map_supply f t zs = (ws,u) ==>
-  mm_flat_map_supply f s (xs ++ zs) = (ys ++ ws,u)
-Proof
-  Induct_on `xs` >> simp[mm_flat_map_supply_def] >>
-  rpt gen_tac >>
-  Cases_on `f s h` >> Cases_on `mm_flat_map_supply f r xs` >>
-  simp[mm_flat_map_supply_def, AllCaseEqs()] >>
-  rpt strip_tac >> first_x_assum drule >> gvs[]
-QED
-
-Theorem mm_local_supply_cut[local]:
-  j < LENGTH xs /\ mm_flat_map_supply f s xs = (ys,t) ==>
-  ?pre chunk post u v.
-    mm_flat_map_supply f s (TAKE j xs) = (pre,u) /\
-    f u (EL j xs) = (chunk,v) /\
-    mm_flat_map_supply f v (DROP (SUC j) xs) = (post,t) /\
-    ys = pre ++ chunk ++ post
-Proof
-  strip_tac >>
-  Cases_on `mm_flat_map_supply f s (TAKE j xs)` >>
-  rename1 `mm_flat_map_supply f s (TAKE j xs) = (pre,u)` >>
-  Cases_on `f u (EL j xs)` >> rename1 `f u (EL j xs) = (chunk,v)` >>
-  Cases_on `mm_flat_map_supply f v (DROP (SUC j) xs)` >>
-  rename1 `mm_flat_map_supply f v (DROP (SUC j) xs) = (post,z)` >>
-  `xs = TAKE j xs ++ EL j xs :: DROP (SUC j) xs` by
-    simp[rich_listTheory.TAKE_DROP_SUC] >>
-  `mm_flat_map_supply f u (EL j xs :: DROP (SUC j) xs) = (chunk ++ post,z)` by
-    simp[mm_flat_map_supply_def] >>
-  drule_all mm_local_supply_append >>
-  strip_tac >>
-  gvs[GSYM rich_listTheory.DROP_CONS_EL, listTheory.TAKE_DROP] >>
-  metis_tac[]
-QED
-
 Theorem mm_local_event_rep_position:
   ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\ j < LENGTH xs /\
   MEM (EL j xs).inst_id cg.cg_inst_ids ==>
@@ -1295,25 +1143,6 @@ Proof
   qpat_x_assum `MEM id (MAP _ xs)` mp_tac >> simp[MEM_EL] >> strip_tac >>
   qexists `n` >> gvs[EL_MAP] >>
   irule mm_local_rep_position_max >> metis_tac[]
-QED
-
-Theorem mm_local_mode_emission_cut[local]:
-  transform_block_mode_supply dfg mode supply bb = (cc,sk) /\
-  j < LENGTH bb.bb_instructions ==>
-  ?pre chunk post u v.
-    mm_flat_map_supply
-      (apply_groups_inst_supply mode
-        (nop_ids_of_groups dfg mode bb.bb_instructions (scan_block dfg mode bb).ss_flushed)
-        (rep_map_of_groups bb.bb_instructions (scan_block dfg mode bb).ss_flushed))
-      supply (TAKE j bb.bb_instructions) = (pre,u) /\
-    apply_groups_inst_supply mode
-      (nop_ids_of_groups dfg mode bb.bb_instructions (scan_block dfg mode bb).ss_flushed)
-      (rep_map_of_groups bb.bb_instructions (scan_block dfg mode bb).ss_flushed)
-      u (EL j bb.bb_instructions) = (chunk,v) /\
-    cc.bb_instructions = pre ++ chunk ++ post
-Proof
-  simp[transform_block_mode_supply_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >> drule_all mm_local_supply_cut >> metis_tac[]
 QED
 
 Theorem mm_local_rep_not_nop_own[local]:
@@ -1404,65 +1233,6 @@ Proof
     (irule mm_local_prefix_rep_write >> metis_tac[]) >>
   irule mm_local_scan_selected_rep >> simp[] >>
   metis_tac[mm_local_prefix_write_not_def]
-QED
-
-Theorem mm_local_selected_chunk[local]:
-  ~MEM i.inst_id ns /\ ALOOKUP rm i.inst_id = SOME cg /\
-  apply_groups_inst_supply mode ns rm u i = (chunk,v) ==>
-  ((cg.cg_length <> 32 \/ mode = DloadMerge) /\
-    chunk = [mk_bulk_copy_inst mode i cg] /\ v = u) \/
-  (cg.cg_length = 32 /\ mode <> DloadMerge /\ i.inst_opcode = MSTORE /\
-    chunk = [i] /\ v = u) \/
-  (cg.cg_length = 32 /\ mode <> DloadMerge /\ i.inst_opcode <> MSTORE /\
-    ?load_id s1 load_var. fresh_inst_id u = (load_id,s1) /\
-      fresh_ir_var s1 = (load_var,v) /\
-      chunk = [mk_load_inst mode (i with inst_id := load_id) cg.cg_src load_var;
-               mk_mstore_from_load i cg.cg_dst load_var])
-Proof
-  simp[apply_groups_inst_supply_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem mm_local_event_emission[local]:
-  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
-  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
-  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
-  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
-  j < LENGTH bb.bb_instructions /\
-  MEM (EL j bb.bb_instructions).inst_id cg.cg_inst_ids /\
-  MEM cg (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
-  transform_block_mode_supply (dfg_build_function fn0) mode sk bb = (cc,t) ==>
-  ?r pre chunk post u v.
-    j <= r /\ r < LENGTH bb.bb_instructions /\
-    rep_of_group bb.bb_instructions cg = SOME ((EL r bb.bb_instructions).inst_id,cg) /\
-    cc.bb_instructions = pre ++ chunk ++ post /\
-    mm_flat_map_supply
-      (apply_groups_inst_supply mode
-        (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
-          (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
-        (rep_map_of_groups bb.bb_instructions
-          (scan_block (dfg_build_function fn0) mode bb).ss_flushed))
-      sk (TAKE r bb.bb_instructions) = (pre,u) /\
-    (((cg.cg_length <> 32 \/ mode = DloadMerge) /\
-       chunk = [mk_bulk_copy_inst mode (EL r bb.bb_instructions) cg] /\ v = u) \/
-     (cg.cg_length = 32 /\ mode <> DloadMerge /\
-       (EL r bb.bb_instructions).inst_opcode = MSTORE /\
-       chunk = [EL r bb.bb_instructions] /\ v = u) \/
-     (cg.cg_length = 32 /\ mode <> DloadMerge /\
-       (EL r bb.bb_instructions).inst_opcode <> MSTORE /\
-       ?load_id s1 load_var. fresh_inst_id u = (load_id,s1) /\
-         fresh_ir_var s1 = (load_var,v) /\
-         chunk = [mk_load_inst mode ((EL r bb.bb_instructions) with inst_id := load_id)
-                    cg.cg_src load_var;
-                  mk_mstore_from_load (EL r bb.bb_instructions) cg.cg_dst load_var]))
-Proof
-  strip_tac >> drule_all mm_local_event_rep_position >> strip_tac >>
-  `MEM (EL r bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
-  drule_all mm_local_prefix_selected_rep >> strip_tac >>
-  drule mm_local_mode_emission_cut >> disch_then (qspec_then `r` mp_tac) >>
-  simp[] >> strip_tac >>
-  drule_all mm_local_selected_chunk >> strip_tac >>
-  qexistsl [`r`,`pre`,`chunk`,`post`,`u`,`v`] >> simp[]
 QED
 
 Theorem mm_local_zero_inst_ids[local]:
@@ -1615,72 +1385,6 @@ Proof
   qexistsl [`(scan_block_memzero dfg bb).mz_flushed`,`id`,`\x:num. T`] >> simp[]
 QED
 
-Theorem mm_local_zero_emission_cut[local]:
-  transform_block_memzero_supply dfg supply bb = (cc,sk) /\
-  j < LENGTH bb.bb_instructions ==>
-  ?pre chunk post u v.
-    mm_flat_map_supply
-      (apply_memzero_inst_supply
-        (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
-        (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed))
-      supply (TAKE j bb.bb_instructions) = (pre,u) /\
-    apply_memzero_inst_supply
-      (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
-      (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
-      u (EL j bb.bb_instructions) = (chunk,v) /\
-    cc.bb_instructions = pre ++ chunk ++ post
-Proof
-  simp[transform_block_memzero_supply_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >> drule_all mm_local_supply_cut >> metis_tac[]
-QED
-
-Theorem mm_local_zero_selected_chunk[local]:
-  ~MEM i.inst_id ns /\ ALOOKUP rm i.inst_id = SOME cg /\
-  apply_memzero_inst_supply ns rm u i = (chunk,v) ==>
-  (cg.cg_length = 32 /\ chunk = [mk_zero_store_inst i cg.cg_dst] /\ v = u) \/
-  (cg.cg_length <> 32 /\
-    ?cds_id s1 cds_var. fresh_inst_id u = (cds_id,s1) /\
-      fresh_ir_var s1 = (cds_var,v) /\
-      chunk = [<| inst_id := cds_id; inst_opcode := CALLDATASIZE;
-                  inst_operands := []; inst_outputs := [cds_var] |>;
-               mk_memzero_calldatacopy i cg cds_var])
-Proof
-  simp[apply_memzero_inst_supply_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem mm_local_zero_event_emission[local]:
-  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
-  j < LENGTH bb.bb_instructions /\
-  MEM (EL j bb.bb_instructions).inst_id cg.cg_inst_ids /\
-  MEM cg (scan_block_memzero dfg bb).mz_flushed /\
-  transform_block_memzero_supply dfg supply bb = (cc,t) ==>
-  ?r pre chunk post u v.
-    j <= r /\ r < LENGTH bb.bb_instructions /\
-    rep_of_group bb.bb_instructions cg = SOME ((EL r bb.bb_instructions).inst_id,cg) /\
-    cc.bb_instructions = pre ++ chunk ++ post /\
-    mm_flat_map_supply
-      (apply_memzero_inst_supply
-        (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
-        (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed))
-      supply (TAKE r bb.bb_instructions) = (pre,u) /\
-    ((cg.cg_length = 32 /\
-      chunk = [mk_zero_store_inst (EL r bb.bb_instructions) cg.cg_dst] /\ v = u) \/
-     (cg.cg_length <> 32 /\
-      ?cds_id s1 cds_var. fresh_inst_id u = (cds_id,s1) /\
-        fresh_ir_var s1 = (cds_var,v) /\
-        chunk = [<| inst_id := cds_id; inst_opcode := CALLDATASIZE;
-                    inst_operands := []; inst_outputs := [cds_var] |>;
-                 mk_memzero_calldatacopy (EL r bb.bb_instructions) cg cds_var]))
-Proof
-  strip_tac >> drule_all mm_local_event_rep_position >> strip_tac >>
-  drule_all mm_local_zero_selected_rep >> strip_tac >>
-  drule mm_local_zero_emission_cut >> disch_then (qspec_then `r` mp_tac) >>
-  simp[] >> strip_tac >>
-  drule_all mm_local_zero_selected_chunk >> strip_tac >>
-  qexistsl [`r`,`pre`,`chunk`,`post`,`u`,`v`] >> simp[]
-QED
-
 Definition mm_local_history_def:
   mm_local_history is H n <=>
     n <= LENGTH is /\
@@ -1783,33 +1487,6 @@ Proof
   gvs[mm_local_history_def]
 QED
 
-Theorem mm_local_write_capture_expansion[local]:
-  mm_local_history is H n /\ mm_local_write_capture is H n j = SOME (d,bs) ==>
-  LENGTH (H (SUC j)).vs_memory = MAX (LENGTH (H j).vs_memory) (d + LENGTH bs)
-Proof
-  strip_tac >> drule_all mm_local_write_capture_sound >>
-  disch_then SUBST1_TAC >> simp[venomMemPropsTheory.LENGTH_write_memory_with_expansion]
-QED
-
-Theorem mm_local_nonflushing_write_opcode[local]:
-  ss.ss_copies <> [] /\
-  (scan_inst dfg Mem2Mem ss i).ss_flushed = ss.ss_flushed ==>
-  i.inst_opcode = MSTORE \/ i.inst_opcode = MCOPY \/
-  ~(Eff_MEMORY IN write_effects i.inst_opcode)
-Proof
-  Cases_on `i.inst_opcode = MSTORE` >- simp[] >>
-  Cases_on `i.inst_opcode = MCOPY` >- simp[] >>
-  Cases_on `i.inst_opcode = MLOAD`
-  >- simp[venomEffectsTheory.write_effects_def, venomEffectsTheory.empty_effects_def] >>
-  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
-  Cases_on `is_volatile_memory i`
-  >- (simp[hard_barrier_def] >>
-      strip_tac >>
-      `LENGTH (ss.ss_flushed ++ ss.ss_copies) = LENGTH ss.ss_flushed` by simp[] >>
-      gvs[]) >>
-  gvs[is_volatile_memory_def]
-QED
-
 Theorem mm_local_history_noncapture_frame[local]:
   mm_local_history is H n /\ q < n /\
   ((EL q is).inst_opcode = MSTORE \/ (EL q is).inst_opcode = MCOPY \/
@@ -1852,17 +1529,6 @@ Proof
   irule venomInstProofs3Theory.step_inst_base_preserves_memory >> metis_tac[]
 QED
 
-Theorem mm_local_nonflushing_history_frame[local]:
-  mm_local_history is H n /\ q < n /\ ss.ss_copies <> [] /\
-  (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed = ss.ss_flushed /\
-  mm_local_write_capture is H n q = NONE ==>
-  (H (SUC q)).vs_memory = (H q).vs_memory
-Proof
-  strip_tac >> irule mm_local_history_noncapture_frame >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[mm_local_nonflushing_write_opcode]
-QED
-
 Definition mm_local_owned_def:
   mm_local_owned (cap:num -> (num # word8 list) option) rep n js <=>
     ALL_DISTINCT js /\ SORTED ($<) js /\
@@ -1882,13 +1548,6 @@ Proof
   simp[mm_local_pending_def]
 QED
 
-Theorem mm_local_history_last[local]:
-  mm_local_history is H (SUC n) ==>
-  mm_local_history is H n /\ step_inst_base (EL n is) (H n) = OK (H (SUC n))
-Proof
-  simp[mm_local_history_def] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem mm_local_pending_log:
   !js ws s t. mm_local_pending cap js s t /\
     LIST_REL (\j w. cap j = SOME w) js ws ==>
@@ -1906,66 +1565,6 @@ Proof
   gvs[]
 QED
 
-Theorem mm_local_history_interval_log[local]:
-  !b a js.
-  mm_local_history is H n /\ a <= b /\ b <= n /\
-  cap = mm_local_write_capture is H n /\
-  js = FILTER (\q. IS_SOME (cap q)) (GENLIST (\r. a+r) (b-a)) /\
-  (!q. a <= q /\ q < b /\ cap q = NONE ==>
-       (H (SUC q)).vs_memory = (H q).vs_memory) ==>
-  ?ws. LIST_REL (\q w. cap q = SOME w) js ws /\
-    (H b).vs_memory =
-      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) (H a) ws).vs_memory
-Proof
-  Induct_on `b`
-  >- (rpt strip_tac >> gvs[] >> qexists `[]` >> simp[]) >>
-  rpt strip_tac >>
-  Cases_on `a = SUC b`
-  >- (gvs[] >> qexists `[]` >> simp[]) >>
-  `a <= b` by simp[] >>
-  first_x_assum (qspecl_then [`a`, `FILTER (\q. IS_SOME (cap q))
-    (GENLIST (\r. a+r) (b-a))`] mp_tac) >>
-  impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  strip_tac >>
-  `SUC b - a = SUC (b-a) /\ a + (b-a) = b` by simp[] >>
-  gvs[GENLIST, FILTER_SNOC] >>
-  Cases_on `mm_local_write_capture is H n b`
-  >- (gvs[] >> qexists `ws` >> simp[] >>
-      ` (H (SUC b)).vs_memory = (H b).vs_memory` by
-        (first_x_assum irule >> simp[]) >> simp[]) >>
-  PairCases_on `x` >> gvs[] >>
-  qexists `ws ++ [(x0,x1)]` >>
-  simp[LIST_REL_APPEND, FOLDL_APPEND, rich_listTheory.SNOC_APPEND] >>
-  ` (H (SUC b)).vs_memory =
-    (write_memory_with_expansion x0 x1 (H b)).vs_memory` by
-    (irule mm_local_write_capture_sound >> qexistsl [`is`, `n`] >> gvs[]) >>
-  simp[write_as_replace]
-QED
-
-Theorem mm_local_scan_interval_log[local]:
-  mm_local_history is H n /\ a <= b /\ b <= n /\
-  cap = mm_local_write_capture is H n /\
-  js = FILTER (\q. IS_SOME (cap q)) (GENLIST (\r. a+r) (b-a)) /\
-  (!q. cuts q = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE q is)) /\
-  (!q. a <= q /\ q < b ==>
-    (cuts q).ss_copies <> [] /\ (cuts (SUC q)).ss_flushed = (cuts q).ss_flushed) ==>
-  ?ws. LIST_REL (\q w. cap q = SOME w) js ws /\
-    (H b).vs_memory =
-      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) (H a) ws).vs_memory
-Proof
-  strip_tac >> irule mm_local_history_interval_log >>
-  simp[] >> reverse conj_tac
-  >- (qexistsl [`is`, `n`] >> simp[]) >>
-  rpt strip_tac >>
-  `q < n /\ q < LENGTH is` by gvs[mm_local_history_def] >>
-  ` (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed = (cuts q).ss_flushed /\
-    (cuts q).ss_copies <> []` by
-    (first_x_assum (qspec_then `q` mp_tac) >>
-     simp[rich_listTheory.TAKE_SUC_BY_TAKE, FOLDL_SNOC]) >>
-  irule mm_local_nonflushing_history_frame >>
-  qexistsl [`dfg`, `is`, `n`, `cuts q`] >> gvs[]
-QED
-
 Theorem mm_local_pending_create:
   mm_local_pending cap js s t /\ cap n = SOME (d,bs) /\
   s'.vs_memory = (write_memory_with_expansion d bs s).vs_memory ==>
@@ -1974,77 +1573,6 @@ Proof
   simp[mm_local_pending_def] >> rpt strip_tac >>
   qexists `ws ++ [(d,bs)]` >>
   simp[LIST_REL_APPEND, FOLDL_APPEND, write_as_replace]
-QED
-
-Theorem mm_local_owned_create[local]:
-  mm_local_owned cap rep n js /\ cap n = SOME (d,bs) /\
-  SUC n <= rep n /\ EVERY (\j. SUC n <= rep j) js ==>
-  mm_local_owned cap rep (SUC n) (js ++ [n])
-Proof
-  simp[mm_local_owned_def, EVERY_MEM] >> strip_tac >>
-  `!j. MEM j js ==> j < n` by metis_tac[] >>
-  `~MEM n js` by metis_tac[prim_recTheory.LESS_REFL] >>
-  simp[ALL_DISTINCT_APPEND, sortingTheory.SORTED_APPEND,
-       relationTheory.transitive_def] >>
-  rpt strip_tac >> gvs[] >> irule prim_recTheory.SUC_LESS >> simp[]
-QED
-
-Theorem mm_local_pending_survivor[local]:
-  mm_local_pending cap js s t /\ LIST_REL (\j w. cap j = SOME w) js ws /\
-  EVERY (\(a,bs). a + LENGTH bs <= d \/ d + LENGTH payload <= a) ws /\
-  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
-  t'.vs_memory = (write_memory_with_expansion d payload t).vs_memory ==>
-  mm_local_pending cap js s' t'
-Proof
-  strip_tac >> drule_all mm_local_pending_log >> strip_tac >>
-  simp[mm_local_pending_def] >> qexists `ws` >> simp[] >>
-  drule venomWriteReplayPropsTheory.write_log_commute >>
-  disch_then (qspec_then `t` mp_tac) >> strip_tac >>
-  `s'.vs_memory =
-    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st)
-      (write_memory_with_expansion d payload t) ws).vs_memory` by
-    (qpat_x_assum `write_memory_with_expansion _ _ _ = _`
-       (fn th => once_rewrite_tac[GSYM th]) >> simp[write_as_replace]) >>
-  metis_tac[venomWriteReplayPropsTheory.write_log_memory_cong]
-QED
-
-Theorem mm_local_owned_discharge[local]:
-  mm_local_owned cap rep n (done ++ keep) /\
-  EVERY (\j. rep j = n) done /\ EVERY (\j. SUC n <= rep j) keep ==>
-  mm_local_owned cap rep (SUC n) keep
-Proof
-  simp[mm_local_owned_def, EVERY_MEM, ALL_DISTINCT_APPEND,
-       sortingTheory.SORTED_APPEND_GEN] >> rpt strip_tac >> gvs[] >>
-  simp[prim_recTheory.SUC_LESS]
-QED
-
-Theorem mm_local_pending_discharge_prefix[local]:
-  mm_local_pending cap (done ++ keep) s t /\
-  LIST_REL (\j w. cap j = SOME w) done old /\
-  LIST_REL (\j w. cap j = SOME w) keep rest /\
-  (!v. write_memory_with_expansion d payload
-    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
-    write_memory_with_expansion dst merged v) /\
-  EVERY (\(a,bs). a + LENGTH bs <= d \/ d + LENGTH payload <= a) rest /\
-  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
-  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
-  mm_local_pending cap keep s' t'
-Proof
-  strip_tac >>
-  `LIST_REL (\j w. cap j = SOME w) (done ++ keep) (old ++ rest)` by
-    (irule rich_listTheory.EVERY2_APPEND_suff >> simp[]) >>
-  drule_all mm_local_pending_log >> simp[FOLDL_APPEND] >> strip_tac >>
-  drule venomWriteReplayPropsTheory.write_log_commute >>
-  disch_then (qspec_then
-    `FOLDL (\st (a,bs). write_memory_with_expansion a bs st) t old` mp_tac) >>
-  simp[] >> strip_tac >>
-  `s'.vs_memory =
-    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st)
-      (write_memory_with_expansion dst merged t) rest).vs_memory` by
-    (qpat_x_assum `write_memory_with_expansion _ _ _ = _`
-       (fn th => once_rewrite_tac[GSYM th]) >> simp[write_as_replace]) >>
-  simp[mm_local_pending_def] >> qexists `rest` >> simp[] >>
-  metis_tac[venomWriteReplayPropsTheory.write_log_memory_cong]
 QED
 
 Theorem mm_local_snapshot_copy[local]:
@@ -2101,38 +1629,6 @@ Proof
   `step_inst 0 ARB inst s = OK t` by
     simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
   drule_all mm_local_snapshot_store >> simp[]
-QED
-
-Theorem mm_local_snapshot_segment[local]:
-  !b a. a <= b /\ mm_local_history is H b /\
-  (!j. a <= j /\ j < b ==>
-    (H (SUC j)).vs_memory = (H j).vs_memory \/
-    (?dst src len. (EL j is).inst_opcode = MCOPY /\
-      (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
-      c j = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
-                cg_inst_ids := [(EL j is).inst_id] |> /\
-      MEM g (flush_hazards Mem2Mem (ss j) (c j)).ss_copies) \/
-    (?dst v src. (EL j is).inst_opcode = MSTORE /\
-      (EL j is).inst_operands = [Lit dst; Var v] /\
-      lookup_var v (H j) = SOME (mload src (H j)) /\
-      (c j).cg_dst = w2n dst /\ (c j).cg_src = src /\ (c j).cg_length = 32 /\
-      MEM g (flush_hazards Mem2Mem
-        (invalidate_loads (ss j) (mk_interval (w2n dst) 32)) (c j)).ss_copies)) ==>
-  read_memory g.cg_src g.cg_length (H b) = read_memory g.cg_src g.cg_length (H a)
-Proof
-  Induct_on `b` >- simp[] >> rpt gen_tac >> strip_tac >>
-  Cases_on `a = SUC b` >- simp[] >>
-  `a <= b` by decide_tac >>
-  drule mm_local_history_last >> strip_tac >>
-  `read_memory g.cg_src g.cg_length (H (SUC b)) =
-   read_memory g.cg_src g.cg_length (H b)` by
-    (qpat_x_assum `!j. _` (qspec_then `b` mp_tac) >> simp[] >>
-     strip_tac
-     >- simp[venomStateTheory.read_memory_def]
-     >- (drule_all mm_local_snapshot_copy_base >> simp[]) >>
-     metis_tac[mm_local_snapshot_store_base]) >>
-  simp[] >> first_x_assum irule >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >> simp[]
 QED
 
 Definition mm_local_bytes_def:
@@ -2209,101 +1705,12 @@ Proof
   pure_rewrite_tac[mm_local_bytes_length] >> gvs[copy_merge_def]
 QED
 
-Theorem mm_local_bytes_merge_agreement[local]:
-  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
-  mm_local_bytes B c1.cg_src c1.cg_length = mm_local_bytes C c1.cg_src c1.cg_length /\
-  mm_local_bytes B c2.cg_src c2.cg_length = mm_local_bytes C c2.cg_src c2.cg_length ==>
-  mm_local_bytes B (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length =
-  mm_local_bytes C (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length
-Proof
-  simp[mm_local_bytes_def, GENLIST_FUN_EQ, copy_can_merge_def, copy_merge_def] >>
-  strip_tac >> qx_gen_tac `i` >> strip_tac >>
-  Cases_on `i < c1.cg_length`
-  >- (first_x_assum irule >> simp[]) >>
-  `c2.cg_src = c1.cg_src + (c2.cg_dst-c1.cg_dst)` by decide_tac >>
-  `c2.cg_dst-c1.cg_dst <= i /\ i-(c2.cg_dst-c1.cg_dst) < c2.cg_length` by
-    (qpat_x_assum `i < MAX _ _ - _` mp_tac >>
-     pure_rewrite_tac[arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
-  `c1.cg_src+i = c2.cg_src + (i-(c2.cg_dst-c1.cg_dst))` by decide_tac >>
-  metis_tac[arithmeticTheory.ADD_SYM]
-QED
-
 Theorem mm_local_read_memory_bytes:
   read_memory a n s =
   mm_local_bytes (\i. if i < LENGTH s.vs_memory then EL i s.vs_memory else 0w) a n
 Proof
   simp[venomStateTheory.read_memory_def, mm_local_bytes_def,
        memoryReadRelTheory.venom_returndata_read_byte, codegenRelTheory.read_byte_def]
-QED
-
-Theorem mm_local_capture_rebase[local]:
-  payload = read_memory a n (H j) /\
-  read_memory a n (H k) = read_memory a n (H j) ==>
-  payload = mm_local_bytes
-    (\i. if i < LENGTH (H k).vs_memory then EL i (H k).vs_memory else 0w) a n
-Proof
-  metis_tac[mm_local_read_memory_bytes]
-QED
-
-Theorem mm_local_history_copy_compatible[local]:
-  j < k /\ k < n /\ mm_local_history is H n /\
-  (EL j is).inst_opcode = MCOPY /\
-  (EL j is).inst_operands = [Lit dst1; Lit src1; Lit len1] /\
-  (EL k is).inst_opcode = MCOPY /\
-  (EL k is).inst_operands = [Lit dst2; Lit src2; Lit len2] /\
-  c1 = <| cg_dst := w2n dst1; cg_src := w2n src1; cg_length := w2n len1;
-           cg_inst_ids := [(EL j is).inst_id] |> /\
-  c2 = <| cg_dst := w2n dst2; cg_src := w2n src2; cg_length := w2n len2;
-           cg_inst_ids := [(EL k is).inst_id] |> /\
-  c1.cg_src + c2.cg_dst = c2.cg_src + c1.cg_dst /\
-  mm_local_write_capture is H n j = SOME (d,bs) /\
-  mm_local_write_capture is H n k = SOME (a,cs) /\
-  LIST_REL (\q w. mm_local_write_capture is H n q = SOME w) (j::between) ws /\
-  EVERY (\q. j < q /\ q < k) between /\
-  (H k).vs_memory =
-    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) (H j) ws).vs_memory /\
-  EVERY (\(a,bs). c2.cg_length = 0 \/ bs = [] \/
-    c2.cg_src + c2.cg_length <= a \/ a + LENGTH bs <= c2.cg_src) ws ==>
-  mm_local_write_compatible d bs a cs
-Proof
-  strip_tac >>
-  `j < n` by decide_tac >>
-  `mm_local_write_capture is H n j =
-    SOME (w2n dst1,read_memory (w2n src1) (w2n len1) (H j))` by
-    (irule (cj 1 mm_local_write_capture_copy) >> simp[]) >>
-  `mm_local_write_capture is H n k =
-    SOME (w2n dst2,read_memory (w2n src2) (w2n len2) (H k))` by
-    (irule (cj 1 mm_local_write_capture_copy) >> simp[]) >>
-  `read_memory c2.cg_src c2.cg_length (H k) =
-   read_memory c2.cg_src c2.cg_length (H j)` by
-    (irule venomWriteReplayPropsTheory.read_write_log_memory >> qexists_tac `ws` >> simp[]) >>
-  Cases_on `bs = []` >- simp[mm_local_write_compatible_def] >>
-  gvs[] >>
-  pure_rewrite_tac[mm_local_write_compatible_def, mm_local_read_memory_bytes,
-       mm_local_bytes_def, LENGTH_GENLIST] >> rpt strip_tac >>
-  `x - w2n dst1 < w2n len1 /\ x - w2n dst2 < w2n len2 /\
-   w2n src1 + (x - w2n dst1) = w2n src2 + (x - w2n dst2)` by decide_tac >>
-  asm_simp_tac bool_ss [EL_GENLIST] >> simp[]
-QED
-
-Theorem mm_local_capture_write_merge[local]:
-  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
-  p1 = read_memory c1.cg_src c1.cg_length (H j1) /\
-  p2 = read_memory c2.cg_src c2.cg_length (H j2) /\
-  read_memory c1.cg_src c1.cg_length (H k) = read_memory c1.cg_src c1.cg_length (H j1) /\
-  read_memory c2.cg_src c2.cg_length (H k) = read_memory c2.cg_src c2.cg_length (H j2) ==>
-  write_memory_with_expansion c2.cg_dst p2
-    (write_memory_with_expansion c1.cg_dst p1 s) =
-  write_memory_with_expansion (copy_merge c1 c2).cg_dst
-    (read_memory (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length (H k)) s
-Proof
-  strip_tac >>
-  `p1 = read_memory c1.cg_src c1.cg_length (H k) /\
-   p2 = read_memory c2.cg_src c2.cg_length (H k)` by metis_tac[] >>
-  qpat_x_assum `p1 = read_memory _ _ (H k)` (fn th => once_rewrite_tac[th]) >>
-  qpat_x_assum `p2 = read_memory _ _ (H k)` (fn th => once_rewrite_tac[th]) >>
-  simpLib.SIMP_TAC (srw_ss()) [mm_local_read_memory_bytes] >>
-  irule mm_local_bytes_write_merge >> simp[]
 QED
 
 Theorem mm_local_write_log_compatible_partition:
@@ -2339,60 +1746,6 @@ Proof
   drule mm_local_write_log_compatible_commute >> disch_then (qspec_then `s` mp_tac) >>
   simp[FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF] >>
   strip_tac >> simp[]
-QED
-
-Theorem mm_local_pending_partition[local]:
-  mm_local_pending cap js s t /\
-  (!pre j mid k post d bs a cs.
-    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
-    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
-    d + LENGTH bs <= a \/ a + LENGTH cs <= d) ==>
-  mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t
-Proof
-  simp[mm_local_pending_def] >> rpt strip_tac >>
-  drule venomWriteReplayPropsTheory.capture_log_canonical >> strip_tac >> gvs[] >>
-  qexists `MAP (THE o cap) (FILTER P js ++ FILTER (\j. ~P j) js)` >>
-  conj_tac
-  >- (simp[LIST_REL_MAP2] >> irule EVERY2_refl >>
-      gvs[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
-      `IS_SOME (cap x)` by metis_tac[] >>
-      Cases_on `cap x` >> gvs[]) >>
-  `FOLDL (\st j. write_memory_with_expansion
-      (FST (THE (cap j))) (SND (THE (cap j))) st) t js =
-    FOLDL (\st j. write_memory_with_expansion
-      (FST (THE (cap j))) (SND (THE (cap j))) st)
-      (FOLDL (\st j. write_memory_with_expansion
-        (FST (THE (cap j))) (SND (THE (cap j))) st) t (FILTER P js))
-      (FILTER (\j. ~P j) js)` by
-    (irule (SRULE [combinTheory.o_DEF]
-      (Q.INST [`wr` |-> `THE o cap`] venomWriteReplayPropsTheory.write_log_partition)) >>
-      rpt strip_tac >>
-      `IS_SOME (cap j) /\ IS_SOME (cap k)` by gvs[EVERY_MEM, MEM_APPEND] >>
-      Cases_on `cap j` >> Cases_on `cap k` >> gvs[] >>
-      PairCases_on `x` >> PairCases_on `x'` >> gvs[] >> metis_tac[]) >>
-  gvs[FOLDL_MAP, FOLDL_APPEND, pairTheory.UNCURRY, combinTheory.o_DEF]
-QED
-
-Theorem mm_local_pending_discharge_filter[local]:
-  mm_local_pending cap js s t /\
-  (!pre j mid k post d bs a cs.
-    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
-    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
-    d + LENGTH bs <= a \/ a + LENGTH cs <= d) /\
-  LIST_REL (\j w. cap j = SOME w) (FILTER P js) old /\
-  LIST_REL (\j w. cap j = SOME w) (FILTER (\j. ~P j) js) rest /\
-  (!v. write_memory_with_expansion d payload
-    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
-    write_memory_with_expansion dst merged v) /\
-  EVERY (\(a,bs). a + LENGTH bs <= d \/ d + LENGTH payload <= a) rest /\
-  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
-  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
-  mm_local_pending cap (FILTER (\j. ~P j) js) s' t'
-Proof
-  strip_tac >>
-  `mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t` by
-    (irule mm_local_pending_partition >> simp[] >> metis_tac[]) >>
-  drule_all mm_local_pending_discharge_prefix >> simp[]
 QED
 
 Theorem mm_local_pending_compatible_partition[local]:
@@ -2496,21 +1849,6 @@ Proof
   irule mm_local_pending_create >> metis_tac[]
 QED
 
-Theorem mm_local_pending_mcopy_birth[local]:
-  mm_local_pending cap js s t /\
-  LIST_REL (\j w. cap j = SOME w) js ws /\
-  EVERY (\(d,bs). src+len <= d \/ d+LENGTH bs <= src) ws /\
-  payload = read_memory src len s /\ cap n = SOME (dst,payload) ==>
-  payload = read_memory src len t /\ LENGTH payload = len /\
-  mm_local_pending cap (js ++ [n]) (mcopy dst src len s) t
-Proof
-  strip_tac >> irule mm_local_pending_copy_birth >>
-  conj_tac >- (qexists `ws` >> simp[] >>
-    gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
-  qexistsl [`dst`, `s`] >>
-  simp[venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
-QED
-
 Definition mm_local_group_captures_def:
   mm_local_group_captures is cap B g <=>
     !j d bs. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
@@ -2518,12 +1856,6 @@ Definition mm_local_group_captures_def:
       g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
       bs = mm_local_bytes B (g.cg_src + (d-g.cg_dst)) (LENGTH bs)
 End
-
-Theorem mm_local_group_captures_empty[local]:
-  mm_local_group_captures is (\j. NONE) B g
-Proof
-  simp[mm_local_group_captures_def]
-QED
 
 Theorem mm_local_group_captures_birth:
   j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
@@ -2688,23 +2020,6 @@ Proof
   rpt strip_tac >> gvs[FILTER_EQ_NIL, EVERY_MEM, MEM_FILTER]
 QED
 
-Theorem mm_local_hazards_capture_source_exclusion[local]:
-  MEM c1 (flush_hazards Mem2Mem ss c2).ss_copies /\
-  LENGTH bs = c1.cg_length ==>
-  c2.cg_length = 0 \/ bs = [] \/
-  c2.cg_src + c2.cg_length <= c1.cg_dst \/
-  c1.cg_dst + LENGTH bs <= c2.cg_src
-Proof
-  strip_tac >> drule mm_local_hazards_source_exclusion >>
-  simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
-       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
-       mmIntervalTheory.interval_end_def,
-       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `bs = []` >> gvs[] >>
-  `0 < LENGTH bs` by (Cases_on `bs` >> gvs[]) >> decide_tac
-QED
-
 Theorem mm_local_prefix_future_survivor[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -2737,77 +2052,6 @@ Proof
     (irule mm_local_prefix_fragment_ids_before_cut >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[APPEND_ASSOC]) >>
   metis_tac[]
-QED
-
-Theorem mm_local_prefix_future_hazard[local]:
-  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
-  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
-  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
-  bb.bb_instructions = pre ++ i::post /\
-  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state pre /\
-  hs = flush_hazards Mem2Mem (invalidate_loads ss iv) c /\
-  (scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed /\
-  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
-  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
-  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
-  ~MEM r (MAP (\i. i.inst_id) pre) ==>
-  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
-Proof
-  strip_tac >>
-  `MEM h hs.ss_copies` by (irule mm_local_prefix_future_survivor >> metis_tac[]) >>
-  simp[] >> gvs[] >> metis_tac[mm_local_hazards_source_exclusion]
-QED
-
-Theorem mm_local_prefix_bulk_future_hazard[local]:
-  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
-  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
-  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
-  bb.bb_instructions = pre ++ i::post /\
-  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state pre /\
-  i.inst_opcode = MCOPY /\ i.inst_operands = [Lit dst; Lit src; Lit len] /\
-  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
-         cg_inst_ids := [i.inst_id] |> /\
-  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c /\
-  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
-  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
-  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
-  ~MEM r (MAP (\i. i.inst_id) pre) ==>
-  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
-Proof
-  strip_tac >>
-  `(scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed` by
-    simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def,
-      scan_bulk_copy_def, operand_lit_val_def, mode_allows_overlap_def] >>
-  drule_all mm_local_prefix_future_hazard >> simp[]
-QED
-
-Theorem mm_local_prefix_store_future_hazard[local]:
-  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
-  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
-  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
-  bb.bb_instructions = pre ++ i::post /\
-  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state pre /\
-  i.inst_opcode = MSTORE /\ i.inst_operands = [Lit dst; Var v] /\
-  FLOOKUP ss.ss_loads v = SOME src /\
-  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
-         cg_inst_ids := [i.inst_id] ++
-           (case dfg_get_def (dfg_build_function fn0) v of
-              SOME li => [li.inst_id] | NONE => []) |> /\
-  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c /\
-  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
-  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
-  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
-  ~MEM r (MAP (\i. i.inst_id) pre) ==>
-  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
-Proof
-  strip_tac >>
-  `(scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed` by
-    (simp[scan_inst_def, mode_load_opcode_def, scan_store_def,
-      operand_lit_val_def, operand_var_def, mode_allows_overlap_def] >> gvs[]) >>
-  drule_all mm_local_prefix_future_hazard >> simp[]
 QED
 
 Theorem mm_local_prefix_wf_id_distinct:
@@ -2884,61 +2128,6 @@ Proof
     mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
     mmIntervalTheory.interval_end_def, arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
   rpt strip_tac >> gvs[] >> decide_tac
-QED
-
-Theorem mm_local_self_overlap_partner_contained[local]:
-  copy_overwrites_src c /\ c.cg_src <> c.cg_dst /\
-  c.cg_src + d.cg_dst = c.cg_dst + d.cg_src /\
-  c.cg_dst <= d.cg_dst + d.cg_length /\
-  d.cg_dst <= c.cg_dst + c.cg_length /\
-  ~copy_overwrites c (copy_src_interval d) /\
-  ~copy_overwrites d (copy_src_interval c) /\ 0 < d.cg_length ==>
-  c.cg_dst <= d.cg_dst /\
-  d.cg_dst + d.cg_length <= c.cg_dst + c.cg_length
-Proof
-  strip_tac >>
-  fs[copy_overwrites_src_def, copy_overwrites_def,
-       copy_dst_interval_def, copy_src_interval_def,
-       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
-       mmIntervalTheory.interval_end_def,
-       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
-  decide_tac
-QED
-
-Theorem mm_local_self_overlap_merge_geometry[local]:
-  copy_overwrites_src c /\ c.cg_src <> c.cg_dst /\
-  c.cg_dst <= d.cg_dst /\ copy_can_merge c d /\
-  ~copy_overwrites c (copy_src_interval d) /\
-  ~copy_overwrites d (copy_src_interval c) /\ 0 < d.cg_length ==>
-  (copy_merge c d).cg_dst = c.cg_dst /\
-  (copy_merge c d).cg_src = c.cg_src /\
-  (copy_merge c d).cg_length = c.cg_length
-Proof
-  strip_tac >>
-  `c.cg_dst <= d.cg_dst /\
-   d.cg_dst + d.cg_length <= c.cg_dst + c.cg_length` by
-    (irule mm_local_self_overlap_partner_contained >>
-     gvs[copy_can_merge_def] >> decide_tac) >>
-  simp[copy_merge_def, arithmeticTheory.MAX_DEF]
-QED
-
-Theorem mm_local_self_overlap_merge_left_geometry[local]:
-  copy_overwrites_src c /\ c.cg_src <> c.cg_dst /\
-  d.cg_dst <= c.cg_dst /\ copy_can_merge d c /\
-  ~copy_overwrites c (copy_src_interval d) /\
-  ~copy_overwrites d (copy_src_interval c) /\ 0 < d.cg_length ==>
-  (copy_merge d c).cg_dst = c.cg_dst /\
-  (copy_merge d c).cg_src = c.cg_src /\
-  (copy_merge d c).cg_length = c.cg_length
-Proof
-  strip_tac >>
-  `c.cg_dst <= d.cg_dst /\
-   d.cg_dst + d.cg_length <= c.cg_dst + c.cg_length` by
-    (irule mm_local_self_overlap_partner_contained >>
-     gvs[copy_can_merge_def] >> decide_tac) >>
-  `d.cg_dst = c.cg_dst /\ d.cg_src = c.cg_src` by
-    (fs[copy_can_merge_def] >> decide_tac) >>
-  simp[copy_merge_def, arithmeticTheory.MAX_DEF]
 QED
 
 Theorem mm_local_scan_step_war_exclusion:
@@ -3039,69 +2228,6 @@ Proof
   simp[venomStateTheory.read_memory_def] >>
   irule frameViewMemoryTheory.padded_memory_read_cong >> rpt strip_tac >>
   irule frameViewMemoryTheory.write_memory_byte_outside >> decide_tac
-QED
-
-Theorem mm_local_surviving_source_read[local]:
-  mm_local_history is H n /\ q < n /\ MEM h ss.ss_copies /\
-  ~MEM h (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
-  h.cg_src <= a /\ a + len <= h.cg_src + h.cg_length ==>
-  read_memory a len (H (SUC q)) = read_memory a len (H q)
-Proof
-  strip_tac >>
-  `q < LENGTH is` by gvs[mm_local_history_def] >>
-  `(H (SUC q)).vs_memory =
-    (case mm_local_write_capture is H n q of NONE => H q
-     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
-    (Cases_on `mm_local_write_capture is H n q`
-     >- (simp[] >> metis_tac[mm_local_surviving_history_frame]) >>
-     PairCases_on `x` >> simp[] >> metis_tac[mm_local_write_capture_sound]) >>
-  metis_tac[mm_local_surviving_source_read_recurrence]
-QED
-
-Theorem mm_local_scan_interval_read[local]:
-  mm_local_history is H n /\ a <= b /\ b <= n /\
-  cap = mm_local_write_capture is H n /\
-  (!q. cuts q = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE q is)) /\
-  (!q. a <= q /\ q < b ==>
-    (cuts q).ss_copies <> [] /\ (cuts (SUC q)).ss_flushed = (cuts q).ss_flushed) /\
-  (!q d bs. a <= q /\ q < b /\ cap q = SOME (d,bs) ==>
-    ?h. ~copy_overwrites h (copy_src_interval c) /\
-      h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
-  read_memory c.cg_src c.cg_length (H b) = read_memory c.cg_src c.cg_length (H a)
-Proof
-  strip_tac >>
-  qabbrev_tac `js = FILTER (\q. IS_SOME (cap q)) (GENLIST (\r. a+r) (b-a))` >>
-  `?ws. LIST_REL (\q w. cap q = SOME w) js ws /\
-    (H b).vs_memory =
-      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) (H a) ws).vs_memory` by
-    (irule mm_local_scan_interval_log >> metis_tac[]) >>
-  irule venomWriteReplayPropsTheory.read_write_log_memory >> qexists `ws` >> simp[] >>
-  simp[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
-  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
-  `a <= x /\ x < b` by
-    (gvs[Abbr `js`, MEM_FILTER, MEM_GENLIST] >> decide_tac) >>
-  fs[] >> qpat_x_assum `!q d bs. _` drule_all >> strip_tac >>
-  drule_all (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem mm_local_hazard_interval_read[local]:
-  mm_local_history is H n /\ a <= b /\ b <= n /\
-  cap = mm_local_write_capture is H n /\
-  (!q. cuts q = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE q is)) /\
-  (!q. a <= q /\ q < b ==>
-    (cuts q).ss_copies <> [] /\ (cuts (SUC q)).ss_flushed = (cuts q).ss_flushed) /\
-  (!q d bs. a <= q /\ q < b /\ cap q = SOME (d,bs) ==>
-    ?h. MEM h (flush_hazards Mem2Mem (invalidate_loads ss iv) c).ss_copies /\
-      h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
-  read_memory c.cg_src c.cg_length (H b) = read_memory c.cg_src c.cg_length (H a)
-Proof
-  strip_tac >> irule mm_local_scan_interval_read >> simp[] >>
-  qexistsl [`cuts`, `dfg`, `is`, `n`] >>
-  simp[] >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!q d bs. _` drule_all >> strip_tac >>
-  qexists `h` >> simp[] >> irule mm_local_hazards_source_exclusion >>
-  metis_tac[]
 QED
 
 Theorem mm_local_bulk_cut_fragment:
