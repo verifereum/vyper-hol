@@ -36,7 +36,7 @@ Theorem body_append_local_full:
 Proof
   rpt strip_tac >>
   Cases_on `supported_full_word_type (expr_type e)`
-  >- (irule body_append_local_word_full >> simp[]) >>
+  >- (irule body_append_local_word_full >> metis_tac[]) >>
   rw[body_stmt_full_ok_def] >>
   fs[supported_stmt_def]
 QED
