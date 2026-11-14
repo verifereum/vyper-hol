@@ -8,7 +8,7 @@
  * pointer.  The typing declares only a name not in env.var_types, and
  * ce_locals_declared (bodySim) binds no other local, so the name is
  * unbound (declared_name_unbound).  The loop's scope pop also rests on
- * bodySimStmtCases' eval_stmts_popped_keys_indexed.
+ * bodyExprPreFacts' eval_stmts_popped_keys_indexed.
  *
  * TOP-LEVEL:
  *   declared_name_unbound        — a declared name is unbound
@@ -34,7 +34,7 @@ Ancestors
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
+  list finite_map bodySim allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
@@ -630,7 +630,7 @@ Proof
   `type_widens_to env.type_defs (expr_type e) typ` by
     gvs[type_stmt_def, AllCaseEqs()] >>
   `~is_bytestring_type (expr_type e)` by
-    metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+    metis_tac[type_widens_to_def, valueCopyBytesTheory.arg_type_fits_bytestring_target] >>
   irule body_annassign_widened_aggregate_call >> metis_tac[]
 QED
 
@@ -717,9 +717,7 @@ Proof
    (extend_local env id fty F).bare_globals = env.bare_globals` by
     (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
      simp[extend_local_def]) >>
-  ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
-  conj_tac >- fs[extend_local_def] >>
-  irule storage_conjs_scopes >> simp[]
+  ASM_REWRITE_TAC [expr_sim_inv_def] >> fs[extend_local_def]
 QED
 
 (* After an iteration that goes on (a normal end or a continue), with the
@@ -788,27 +786,9 @@ Proof
        simp[for_pushed_popped_keys] >>
      drule_all (cj 2 eval_stmts_popped_keys_indexed) >> simp[]) >>
   `popped_keys_indexed rest` by gvs[popped_keys_indexed_def] >>
-  `contract_storage_well_formed cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))) /\
-   oracle_storage_ok cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>)))` by
-    (irule storage_conjs_scopes >> simp[]) >>
-  `runtime_storage_consistent (extend_local env id fty F) cx
-     (es with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                               popped := []|>))) /\
-   IS_SOME (es with scopes updated_by
-              CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
-                                     popped := []|>))).outcomes` by
-    simp[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 2 eval_stmts_storage_conjs) >> strip_tac >>
-  `contract_storage_well_formed cx (es2 with scopes := rest) /\
-   oracle_storage_ok cx (es2 with scopes := rest)` by
-    (irule storage_conjs_scopes >> simp[]) >>
+  `IS_SOME es2.outcomes` by
+    (drule (cj 2 eval_outcome_suffix_mutual) >>
+     rw[outcome_suffix_def] >> fs[]) >>
   qpat_x_assum `es2.scopes = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   RULE_ASSUM_TAC (REWRITE_RULE [TL]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
@@ -1649,7 +1629,10 @@ Proof
   simp[] >> rpt conj_tac
   >- metis_tac[compile_stmts_grows]
   >- (rpt strip_tac >> metis_tac[fixed_array_elements_typed])
-  >- (rpt strip_tac >> irule array_snapshot_memory >> metis_tac[])
+  >- (rpt strip_tac >>
+      irule (INST_TYPE [alpha |-> ``:256``] array_snapshot_memory) >> simp[] >>
+      qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `ei`, `entry`, `func`,
+                     `name`, `az`] >> simp[])
   >- (rpt strip_tac >> irule array_body_fragment_callback >>
       metis_tac[fixed_array_elements_typed]) >>
   rpt gen_tac >> strip_tac >>

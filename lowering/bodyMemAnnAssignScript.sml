@@ -116,7 +116,7 @@ Proof
   >- (Cases_on `is_bytestring_type typ`
       >- suspend "bytes" >>
       `lowered_value_type cenv e = expr_type e` by
-        metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+        metis_tac[type_widens_to_def, valueCopyBytesTheory.arg_type_fits_bytestring_target] >>
       Cases_on `expr_type e = typ`
       >- suspend "copy" >>
       irule body_annassign_widened_aggregate_mem >> metis_tac[]) >>

@@ -5,7 +5,8 @@ Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
   sourceEntryCode supportedProgram supportedProgramProps supportedDecls compileEnv moduleLowering
   fragExec compileVyper list packagedRegistrationProps argumentRegistrationOpen
   exprOpenPrimitives vyperLoweringCorrect vyperCompiler venomWf venomInst
-  exprOpenTerminals allocaFrontierBound
+  exprOpenTerminals allocaFrontierBound externalEntryChecks runtimeBodyStartDefs
+  entryDispatchProps
 
 Theorem source_selected_entry_prefix_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -21,6 +22,8 @@ Theorem source_selected_entry_prefix_code:
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>
   ?fb ds de opened st cenv sa st'.
+    runtime_selected_body_start tops rpolicy
+      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) st /\
     compile_selector_dispatch_linear
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops))))
@@ -69,6 +72,30 @@ Proof
   `cs_extends after external_st` by
     (qspec_then `l2` mp_tac compile_external_fn_bodies_shape >>
      simp[shape_step_def] >> disch_then drule >> simp[shape_extends_def]) >>
+  `ALL_DISTINCT (MAP FST
+     (l1 ++ (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt)::l2))` by
+    (drule external_names_distinct_numeric_namespace >>
+     disch_then (mp_tac o MATCH_MP externalEntryChecksTheory.classified_external_labels_distinct) >>
+     strip_tac >>
+     qpat_x_assum `_ ++ _ = MAP _ _`
+       (mp_tac o Q.AP_TERM `\ps. ALL_DISTINCT (MAP FST ps)`) >>
+     qpat_x_assum `ALL_DISTINCT (MAP _ (FST (classify_functions tops)))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac std_ss [MAP_APPEND, MAP, MAP_MAP_o, combinTheory.o_DEF,
+         pairTheory.LAMBDA_PROD, set_external_package_target_def,
+         package_external_fn_def, LET_THM, GSYM APPEND_ASSOC, APPEND,
+         pairTheory.FST, pairTheory.SND, stringTheory.STRCAT_EQNS] >> metis_tac[]) >>
+  `runtime_selected_body_start tops rpolicy
+     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) checked` by
+    (simp[runtime_selected_body_start_def] >>
+     qexistsl_tac [`FST (classify_functions tops)`,
+       `FST (SND (classify_functions tops))`,
+       `FST (SND (SND (classify_functions tops)))`,
+       `SND (SND (SND (classify_functions tops)))`,
+       `l1`, `l2`, `fallback`, `label_st`, `dispatch_st`, `before`, `opened`] >>
+     gvs[ALL_DISTINCT_APPEND] >>
+     qpat_x_assum `!e. MEM e (MAP FST l1) ==> _`
+       (qspec_then `lbl` mp_tac) >> simp[]) >>
   qexistsl_tac [`fallback`, `label_st`, `dispatch_st`, `opened`, `checked`,
     `ce`, `registered`, `after`] >>
   gvs[] >> rpt conj_tac
@@ -130,6 +157,8 @@ Theorem source_selected_entry_prefix_structure:
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>
   ?fb ds de opened st cenv sa st'.
+    runtime_selected_body_start tops rpolicy
+      (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) st /\
     compile_selector_dispatch_linear
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops))))

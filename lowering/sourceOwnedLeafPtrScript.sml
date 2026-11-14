@@ -3,16 +3,24 @@
    (copied in bulk).  Neither allocates scratch. *)
 Theory sourceOwnedLeafPtr
 Ancestors
-  sourcePrimitiveGasMem sourceBulkGasMem
-  sourceOwnedArrayLoopPtr sourcePrimitiveReentryPtr abiDecoderSequenceReach
-  decoderPrimitiveObservations decoderWorldFramePtr
-  sourceBulkArrayLayout calldataBulkReentry calldataBulkUniformPtr
-  abiDecoderBulkExecute abiStaticDynarrayLayout calldataTypedRobustPtr dynarrayLiveRobustPtr
-  abiDecoderClampedWord abiDecoderBytesTyped abiValueEncoding
-  abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry
-  venomState abiDecoderBytes calldataDynOwned abiDecoderFrameCompose
-  allocaFrontierBound allocaBudgetProps venomMemDefs ptrDiscipline bodyPtrDefs arithmetic
-
+  fragGasOriginPtr fragGasSeqPtr fragGasSeqMem venomExecSemantics emitHelper
+  emitHelperProps compileEnv finite_map pred_set valueEncodingProps
+  ptrSafetyTransport fragExecPtr entryDispatchPtr calldataClampPtr decoderNavigationPtr
+  venomInstProps abiEncoder abiDecoderContract calldataWordPtr instSeqComposePtr
+  calldataOverwritePtr venomInst list unitTransformDefs ptrSafeRun
+  contextCodegenRel memSafeRun codegenRel fragExec loweringStateRelDefs
+  decoderGhostFramePtr exprLoweringProps ghostPcTransportPtr instIdxIndep abiDecoderArrayHeader
+  decoderArraySetupPtr decoderSetupStepPtr wordLoadStorePtr fragGasOrigin instMemFrontier
+  words ptrDiscipline sourcePrimitiveGasMem sourceBulkGasMem abiDecoderGuards
+  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderBulk venomExecProofs decoderArrayInitPtr
+  decoderGuardClampCorePtr venomInstProofs rich_list memLocDefs decoderRawEndpointPtr
+  abiDecoderComposition moduleLoweringProps sourceOwnedArrayLoopPtr sourcePrimitiveReentryPtr abiDecoderSequenceReach
+  decoderPrimitiveObservations decoderWorldFramePtr sourceBulkArrayLayout calldataBulkReentry calldataBulkUniformPtr
+  abiDecoderBulkExecute abiStaticDynarrayLayout calldataTypedRobustPtr dynarrayLiveRobustPtr abiDecoderClampedWord
+  abiDecoderBytesTyped abiValueEncoding abiCanonicalBytes valueTypingMemoryProps exprSimProps
+  abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry venomState
+  abiDecoderBytes calldataDynOwned abiDecoderFrameCompose allocaFrontierBound allocaBudgetProps
+  venomMemDefs bodyPtrDefs arithmetic calldataBulkPayloadPtr
 Theorem source_owned_primitive_decoder_ptr:
   abi_decoder_coherent ce env sf ty tv /\
   ((?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\ is_word_type ty) \/
@@ -112,8 +120,13 @@ Proof
      rpt strip_tac >>
      metis_tac[calldata_operand_live_not_fresh]) >>
   `eval_operand (Var child) r = SOME (n2w e)` by simp[eval_operand_def] >>
+  `base_addr + owner_cap <= r.vs_alloca_next` by
+    metis_tac[alloca_inv_def, alloca_next_valid_def] >>
+  `e + type_memory_size tv <= r.vs_alloca_next` by decide_tac >>
   `?t H u.
     run_inst_seq (emitted_insts middle end_st) r = OK (t with vs_inst_idx := r.vs_inst_idx) /\
+    (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (r,G,tn) [] (OK t,H,u)) /\
     ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
     t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ptr_covers H u child t (type_memory_size tv) /\
@@ -129,11 +142,13 @@ Proof
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r)` by
-    (irule source_primitive_decoder_reentry_ptr >>
-     metis_tac[]) >>
-  `base_addr + owner_cap <= r.vs_alloca_next` by
-    metis_tac[alloca_inv_def, alloca_next_valid_def] >>
-  `e + type_memory_size tv <= r.vs_alloca_next` by decide_tac >>
+    (mp_tac (Q.INST [`p` |-> `child`, `src` |-> `childsrc`,
+       `s` |-> `r`, `sa` |-> `middle`, `sb` |-> `end_st`,
+       `d` |-> `e`, `C` |-> `type_memory_size tv`, `lo` |-> `lower`,
+       `ei` |-> `type_to_abi_dec_info sf ce ty`]
+       source_primitive_decoder_reentry_ptr_origin) >>
+     impl_tac >- metis_tac[] >> strip_tac >>
+     qexistsl_tac [`t`,`H`,`u`] >> simp[]) >>
   `gas_path_mem ctx fn r 0
      (OK ((t with vs_inst_idx := r.vs_inst_idx) with
        vs_inst_idx := LENGTH end_st.cs_current_insts))` by
@@ -325,8 +340,11 @@ Proof
     (conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
      conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
      rpt strip_tac >> metis_tac[calldata_operand_live_not_fresh]) >>
-  drule_all calldata_bulk_decoder_endpoint_ptr_uniform >>
+  `e+32+LENGTH vs * type_memory_size etv <= r.vs_alloca_next` by decide_tac >>
+  drule_all calldata_bulk_decoder_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  qpat_x_assum `_ ==> !D explicit. gas_origin_ptr_path _ _ _ _`
+    (drule_all_then assume_tac) >>
   `val_in_memory tv v e t.vs_memory` by
     (pure_asm_rewrite_tac [] >>
      irule static_dynarray_canonical_layout >> metis_tac[]) >>

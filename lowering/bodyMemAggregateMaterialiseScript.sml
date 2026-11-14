@@ -288,7 +288,7 @@ Resume aggregate_code_materialise_post_capacity[ctor]:
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
      qexists_tac `mk_inst sm.cs_next_id ALLOCA
        [Lit (n2w (type_memory_size tv))]

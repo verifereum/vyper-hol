@@ -23,12 +23,12 @@ Ancestors
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
   rawEntryCode entryCheckIntervals sourceEntrySelection actualRegistrationCode
-  entryLocals actualEntryAllocationFrame
+  entryLocals actualEntryAllocationFrame runtimeBodyStartDefs
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
+  bodyPtrDefs moduleLowering venomWf
 
 Theorem vars_pc_only_gas_readings:
   !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
@@ -74,11 +74,9 @@ Theorem external_entry_reaches_registration_ptr:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -98,6 +96,9 @@ Theorem external_entry_reaches_registration_ptr:
             tx.function_name, args, [], ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
+      runtime_selected_body_start tops rpolicy
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+         rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code st sa efn /\ fn_has_code sa st' efn /\
@@ -129,9 +130,7 @@ Theorem external_entry_reaches_registration_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
-  qpat_x_assum `source_storage_ok _ _ _` kall_tac >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
-  qpat_x_assum `call_outcomes_ok _ _ _` kall_tac >>
   `o1_source_unit_ok unit` by
     (irule lower_vyper_runtime_unit_source_unit_ok_shape >>
      goal_assum (drule_at Any) >> conj_tac
@@ -224,16 +223,14 @@ Resume external_entry_reaches_registration_ptr[checks]:
   `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
     (ss,FEMPTY,entry_taint) [] (OK u,G2,tn2)` by
     (irule prefix_joint_then >> qexistsl_tac [`G1`, `tn1`, `tt`] >> simp[]) >>
+  `vars_pc_only ss u` by
+    (irule vars_pc_only_trans >> qexists_tac `tt` >> simp[]) >>
+  `u.vs_gas_readings = vs.vs_gas_readings` by
+    (qpat_assum `vars_pc_only ss u`
+       (mp_tac o MATCH_MP vars_pc_only_gas_readings) >> simp[Abbr `ss`]) >>
   qpat_x_assum `Abbrev (ss = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
-  simp[entry_taint_def] >>
-  (conj_tac >- metis_tac[vars_pc_only_trans]) >>
-  (conj_tac >-
-    (`vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                               vs_inst_idx := 0 |>) u`
-       by metis_tac[vars_pc_only_trans] >>
-     drule vars_pc_only_gas_readings >> simp[])) >>
-  all_tac >>
+  fs[entry_taint_def, stringTheory.STRCAT_EQNS] >>
   `cs_extends opened st` by
     (qspec_then `pkg3` (qspec_then `mut = Payable` mp_tac) compile_entry_checks_shape >>
      pure_rewrite_tac[shape_step_def] >>
@@ -253,7 +250,8 @@ Resume external_entry_reaches_registration_ptr[checks]:
        [STRING #"%" (toString ds.cs_next_var)]`] >> gvs[mk_inst_def])) >>
   rewrite_tac[GSYM entry_taint_def] >>
   `!fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] G1 tn1 tt` suffices_by
-    metis_tac[] >>
+    (qpat_x_assum `!D. (!fuel. ptr_safe_blocks _ 0 fuel _ _ [] G1 tn1 tt) ==> _`
+       (qspec_then `D` mp_tac) >> simp[entry_taint_def]) >>
   irule ptr_safe_blocks_from_phi_free_run >>
   simp[] >>
   qexists_tac `bb` >> gvs[]

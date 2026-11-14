@@ -6,11 +6,17 @@
  * statement state relation and the zero-GAS pointer path from __entry to s0.
  * The endpoint is chosen before any horizon.
  *
- * r4: st is pinned by runtime_selected_body_start.  The statement is fixed; its proof is open (cheat) and is being done on
- * the canonical registration path.
+ * r4: st is pinned by runtime_selected_body_start.
+ *
+ * Proof: the prefix seam (external_entry_reaches_registration_ptr) runs
+ * __entry to the start s1 of argument registration; the registration seam
+ * (register_positional_args_ptr) runs s1 to the body start s0.  Both carry
+ * the zero-GAS memory-checked path and the joint pointer path, which
+ * compose; the remaining facts at s0 follow from the composed path.
  *
  * TOP-LEVEL:
  *   external_entry_joint
+ *   runtime_entry_function_no_phi, entry_path_endpoint_facts
  *)
 Theory externalEntryJoint
 Ancestors
@@ -19,6 +25,74 @@ Ancestors
   fragExec fragGasPath fragGasPathMem allocaHistory loweringStateRelDefs
   loweringPosts exprLoweringProps vyperStorageFootprint ptrSafeRun
   ptrDiscipline bodyPtrDefs runtimeBodyStartDefs fragGasOriginPtr
+  entryPtrSeamPrefix entryPtrSeamRegister externalEntryChecks entryStateRel
+  selectedBodyCode bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
+  moduleLoweringProps vyperCompiler
+
+(* Helper: the runtime entry function, its label and its phi-free entry block. *)
+Theorem runtime_entry_function_no_phi:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  unit.cu_context.ctx_entry = SOME "__entry" /\
+  ?func bb.
+    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    lookup_block "__entry" func.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >>
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule_all external_lookup_raw_package_member >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`,
+    `lookup_raw_return_or_F (NONE:num option) name External tops`,
+    `name`, `args`, `ret`, `fbody`] strip_assume_tac selected_external_package >>
+  drule_all source_runtime_entry_checks_code >> strip_tac >>
+  `sa.cs_current_bb = "__entry" /\ sa.cs_current_insts = []` by
+    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
+     simp[fresh_label_def, initial_compile_state_def, LET_THM] >>
+     strip_tac >> gvs[]) >>
+  drule_all linear_dispatch_entry_no_phi >> strip_tac >>
+  simp[] >> qexists_tac `bb` >>
+  gvs[fn_entry_label_def, entry_block_def, listTheory.NULL_EQ]
+QED
+
+(* Helper: facts at the end s0 of a zero-GAS memory-checked path from the
+   initial __entry state. *)
+Theorem entry_path_endpoint_facts:
+  initial_venom_state_rel tops am tx vs /\
+  fn_inst_ids_distinct func /\
+  gas_path_mem ctx func
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0 |>) 0 (OK s0) ==>
+  gas_path ctx func
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0 |>) 0 (OK s0) /\
+  alloca_history func s0 /\
+  s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
+  runs_through ctx func
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0 |>) s0
+Proof
+  strip_tac >>
+  qabbrev_tac `ss = vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                               vs_inst_idx := 0 |>` >>
+  `ss.vs_allocas = FEMPTY /\ ss.vs_inst_idx = 0` by
+    fs[Abbr `ss`, initial_venom_state_rel_def] >>
+  drule gas_path_mem_exec >> strip_tac >> gvs[fragExecTheory.exit_result_def] >>
+  drule gas_path_code_labels >> simp[] >> strip_tac >>
+  rpt conj_tac
+  >- (irule gas_path_mem_zero_history >> simp[] >>
+      qexistsl_tac [`ctx`, `ss`] >> simp[alloca_history_empty] >>
+      rpt strip_tac >> irule aggregate_mem_path_alloca_inv >>
+      metis_tac[alloca_inv_empty_proof])
+  >- fs[Abbr `ss`]
+  >- fs[Abbr `ss`] >>
+  simp[runs_through_def] >> metis_tac[]
+QED
+
 
 Theorem external_entry_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
@@ -96,5 +170,36 @@ Theorem external_entry_joint:
                         vs_inst_idx := 0 |>, FEMPTY, entry_taint)
             [] (OK s0, G0, tn0)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
+  drule source_typing_ok_external_names_distinct >> strip_tac >>
+  drule_all runtime_entry_function_no_phi >> strip_tac >>
+  drule_all external_entry_reaches_registration_ptr >> strip_tac >>
+  drule_all (INST_TYPE [beta |-> ``:256``] register_positional_args_ptr) >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  `gas_path_mem unit.cu_context func
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                 vs_inst_idx := 0 |>) (0 + 0) (OK s0)` by
+    (irule gas_path_mem_then >> qexists_tac `s1` >> simp[]) >>
+  fs[] >>
+  drule_all entry_path_endpoint_facts >> strip_tac >>
+  qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `s0`, `G0`, `tn0`] >>
+  simp[return_buf_frame_def] >>
+  conj_tac >-
+    (rpt strip_tac >> irule entry_context_continuation >> simp[] >>
+     qexistsl_tac [`fuel`, `s0`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `IEC = initial_evaluation_context am.sources am.layouts tx NONE` >>
+  qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ /\ ghost_inv _ _ _ _ _ _ _ _`
+    (qspec_then `H` strip_assume_tac) >>
+  simp[GSYM ghost_inv_cx_dead] >>
+  gen_tac >>
+  qpat_x_assum `!D explicit. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
+    (qspecl_then [`cx_dead H IEC`, `explicit`] assume_tac) >>
+  qpat_x_assum `!D explicit. gas_origin_ptr_path _ (s1,G1,tn1) _ _`
+    (qspecl_then [`cx_dead H IEC`, `explicit`] assume_tac) >>
+  qpat_x_assum `gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
+    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+  disch_then (qspecl_then [`s1`, `G1`, `tn1`, `[]`, `OK s0`, `G0`, `tn0`] mp_tac) >>
+  simp[]
 QED

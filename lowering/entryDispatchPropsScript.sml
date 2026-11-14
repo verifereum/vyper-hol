@@ -36,6 +36,35 @@ Libs
 
 val _ = Parse.hide "body";
 
+Theorem external_name_keys_flat_source:
+  !tops src.
+    FLAT (MAP (external_name_keys_toplevel src) tops) =
+    MAP (\name. (src,name))
+      (FLAT (MAP (\top. MAP SND (external_name_keys_toplevel () top)) tops))
+Proof
+  Induct_on `tops` >> simp[] >> Cases_on `h` >>
+  simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
+  >~ [`FunctionDecl vis`] >- (
+    Cases_on `vis` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`VariableDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`HashMapDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+QED
+
+Theorem external_names_distinct_numeric_namespace:
+  !tops src.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel src) tops)) ==>
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))
+Proof
+  rpt gen_tac >> simp_tac std_ss [external_name_keys_flat_source] >> strip_tac >>
+  irule ALL_DISTINCT_MAP_INJ >> simp[] >>
+  drule ALL_DISTINCT_MAP >> simp[]
+QED
+
 (* ===== The 4-byte selector ===== *)
 
 Theorem function_selector_length:

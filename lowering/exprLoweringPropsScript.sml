@@ -272,7 +272,7 @@ Definition fmp_room_def:
     CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
       unit_alloca_frame ctx <= w2n ss.vs_initial_fmp /\
     w2n ss.vs_initial_fmp <= w2n ss.vs_fmp /\
-    w2n ss.vs_initial_fmp + 2 ** 65 < dimword (:256) /\
+    w2n ss.vs_initial_fmp < 2 ** 254 /\
     w2n ss.vs_fmp <= MAX (w2n ss.vs_initial_fmp) (LENGTH ss.vs_memory + 31)
 End
 

@@ -1,6 +1,7 @@
 (* Pointer destination navigation, including stale output registers. *)
 Theory decoderNavigationPtr
-Ancestors memSafeRun fragGasOriginPtr fragGasSeqPtr fragGasSeqMem stmtForRangeMemoryParts instMemFrontier wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
+Ancestors unitTransformDefs fragGasOriginPtrLoop fragGasPathPtr fragGasPathMem fragGasOrigin gasCount venomExecProofs
+  memSafeRun fragGasOriginPtr fragGasSeqPtr fragGasSeqMem stmtForRangeMemoryParts instMemFrontier wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   ptrDiscipline venomInst arithmetic abiEncoder abiDecoderContract
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
@@ -23,7 +24,25 @@ fun calldata_pos th =
      cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
     (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
 
-Theorem navigation_instruction_origin[local]:
+Theorem straight_line_step_origin:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+  ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx fn G tn i s /\
+  step_inst_base i s = OK t ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i t, step_taint i s t tn)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`n` |-> `s.vs_inst_idx`]
+    calldataDecodePtrTheory.decoder_indexed_origin_step) >> simp[]
+QED
+
+Theorem navigation_instruction_origin:
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ [i] /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
@@ -44,23 +63,7 @@ Proof
     (drule_all fn_has_code_same_block >> strip_tac >>
      qexists_tac `bb` >> simp[] >>
      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `gas_path_mem_edge ctx func s 0
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    metis_tac[fragGasSeqMemTheory.straight_line_mem_edge] >>
-  `gas_path_ptr_edge D lower ctx func PG G tn s 0
-    (step_prov PG G i t) (step_taint i s t tn)
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    metis_tac[fragGasSeqPtrTheory.straight_line_ptr_edge] >>
-  `step_inst 0 ctx i s = OK t` by simp[step_inst_non_invoke] >>
-  `~t.vs_halted` by metis_tac[step_preserves_halted] >>
-  `gas_origin_ptr_edge (D,lower,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G i t, step_taint i s t tn)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[cj 1 gas_origin_ptr_path_rules]
+  irule straight_line_step_origin >> simp[] >> metis_tac[]
 QED
 
 Theorem emitted_ptr_scalar_offset_frag_ptr_origin_core[local]:
@@ -391,6 +394,74 @@ Proof
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
+Theorem straight_line_checked_step_origin:
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_safe_step D lo 0 ctx fn PG G tn i s /\ step_inst_base i s = OK u ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i u, step_taint i s u tn)
+Proof
+  strip_tac >> irule straight_line_step_origin >>
+  fs[ptr_safe_step_def] >> metis_tac[]
+QED
+
+Theorem jump_origin_ptr_path:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
+  ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to lbl s),G,tn)
+Proof
+  strip_tac >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn
+     (mk_inst id JMP [Label lbl] []) s` by
+    simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+      mk_inst_def, step_inst_non_invoke, step_inst_base_def, jump_to_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def, op_taint_def] >>
+  mp_tac (Q.INST
+    [`i` |-> `mk_inst id JMP [Label lbl] []`, `func` |-> `fn`]
+    fragGasOriginPtrLoopTheory.jump_origin_ptr_path) >>
+  fs[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+    inst_dload_in_section_def, source_memory_read_ranges_def,
+    source_memory_write_ranges_def, step_inst_base_opcode_eqs] >> metis_tac[]
+QED
+
+Theorem jnz_origin_ptr_path:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JNZ [op;Label yes;Label no] []) /\
+  ~s.vs_halted /\ eval_operand op s = SOME v /\ op_taint tn op = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to (if v <> 0w then yes else no) s),G,tn)
+Proof
+  strip_tac >>
+  qabbrev_tac `i = mk_inst id JNZ [op;Label yes;Label no] []` >>
+  qabbrev_tac `t = jump_to (if v <> 0w then yes else no) s` >>
+  `step_inst_base i s = OK t` by
+    (Cases_on `v = 0w` >> simp[Abbr `i`, Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def]) >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn i s` by
+    (simp[Abbr `i`, ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+       jump_to_def, op_taint_def] >>
+     (conj_tac >- (gen_tac >> Cases_on `op' = op` >>
+       Cases_on `op' = Label yes` >> Cases_on `op' = Label no` >> gvs[op_taint_def])) >>
+     Cases_on `v = 0w` >> simp[jump_to_def] >>
+     gvs[Abbr `t`, jump_to_def, allocas_from_def, allocas_below_fmp_def]) >>
+  mp_tac (Q.INST
+    [`i` |-> `i`, `func` |-> `fn`,
+     `lbl` |-> `if (v:256 word) <> 0w then yes else no`]
+    fragGasOriginPtrLoopTheory.jump_origin_ptr_path) >>
+  fs[Abbr `i`, Abbr `t`, mk_inst_def, is_terminator_def,
+    inst_mem_below_frontier_def, inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >> metis_tac[]
+QED
+
+
 Theorem scalar_binop_frag_ptr[local]:
   !cx ctx PG sa sb id opc f left right out s a b G tn R.
     (opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul) /\
@@ -436,34 +507,6 @@ Theorem scalar_add_frag_ptr:
         op_taint u (Var q) = op_taint tn (Var q))
 Proof
   rpt strip_tac >> irule scalar_binop_frag_ptr >> simp[] >> metis_tac[]
-QED
-
-Theorem navigation_load_joint_step[local]:
-  ~s.vs_halted /\ ~t.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
-  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-  step_inst_base i s = OK t /\ ptr_inst_ok D lo 0 ctx fn G tn i s ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i t,
-     step_taint i s t tn)
-Proof
-  strip_tac >>
-  `gas_path_mem_edge ctx fn s 0 (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (irule for_range_straight_line_mem_edge >> simp[] >>
-     qexistsl_tac [`bb`,`i`,`t`] >> simp[]) >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s 0 (step_prov PG G i t)
-     (step_taint i s t tn) (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (drule_all straight_line_ptr_edge >> simp[]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-     (OK (t with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i t,
-      step_taint i s t tn)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[cj 1 gas_origin_ptr_path_rules]
 QED
 
 Theorem calldata_load_frag_ptr_origin_core:
@@ -517,7 +560,7 @@ Proof
     `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
     simp[NoAsms, Abbr `HG`, Abbr `u`] >>
     qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` (fn th => pure_rewrite_tac [th]) >>
-    irule navigation_load_joint_step >>
+    irule straight_line_step_origin >>
     simp[Abbr `inst`, Abbr `t`, mk_inst_def, is_terminator_def,
       update_var_def, below_frontier_no_ranges, inst_dload_in_section_other,
       step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
@@ -1307,7 +1350,7 @@ Proof
     simp[NoAsms, Abbr `HG`, Abbr `u`] >>
     qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx`
       (fn th => pure_rewrite_tac [th]) >>
-    irule navigation_load_joint_step >>
+    irule straight_line_step_origin >>
     simp[Abbr `ins`, mk_inst_def, is_terminator_def,
       inst_dload_in_section_other] >>
     rpt conj_tac >>
