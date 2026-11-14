@@ -756,3 +756,64 @@ Resume return_default_check_joint[compose]:
   disch_then assume_tac >> gvs[wordsTheory.n2w_11] >> metis_tac[]
 QED
 Finalise return_default_check_joint
+
+Theorem return_default_suffix_path_joint:
+  (if skip then comp_return () else compile_extcodesize_check addr) a = ((),b) /\
+  emit_inst JMP [Label lbl] [] b = ((),j) /\
+  fn_has_code a b func /\ fn_has_code b j func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ op_taint tn addr = {} ==>
+  ?r G1 tn1.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G1,tn1)) /\
+    (skip ==> r = OK (jump_to lbl s) /\ G1 = G /\ tn1 = tn) /\
+    (~skip ==>
+      ?u. u = (update_var (STRING #"%" (toString a.cs_next_var))
+        (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s)
+        with vs_inst_idx := LENGTH a.cs_current_insts + 1 /\
+      r = (if (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code):bytes32) = 0w
+           then Abort Revert_abort (revert_state (set_returndata [] u))
+           else OK (jump_to lbl u)) /\
+      G1 = DRESTRICT G (COMPL {STRING #"%" (toString a.cs_next_var)}) /\
+      tn1 = tn with t_var := tn.t_var |+ (STRING #"%" (toString a.cs_next_var),{}))
+Proof
+  strip_tac >> Cases_on `skip`
+  >- (gvs[comp_return_def] >>
+      gen_tac >> irule return_default_join_joint >> simp[] >>
+      qexistsl_tac [`a`, `j`] >> simp[]) >>
+  gvs[] >> drule_all return_default_check_joint >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    ((if (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code):bytes32) = 0w
+      then Abort Revert_abort (revert_state (set_returndata [] u))
+      else OK (jump_to lbl u)),G1,tn1)` suffices_by gvs[] >>
+  gen_tac >> Cases_on `(n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code):bytes32) = 0w`
+  >- (first_x_assum (qspec_then `D` mp_tac) >>
+      pure_asm_rewrite_tac [] >> simp[]) >>
+  suspend "join"
+QED
+Resume return_default_suffix_path_joint[join]:
+  `b.cs_current_bb = a.cs_current_bb` by
+    gvs[exprLoweringTheory.compile_extcodesize_check_def, comp_bind_def,
+      emit_op_def, emit_void_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def] >>
+  `~u.vs_halted /\ allocas_from lo u /\ u.vs_current_bb = b.cs_current_bb` by
+    (gvs[update_var_def, allocas_from_def] >> metis_tac[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (u with vs_inst_idx := LENGTH b.cs_current_insts,G1,tn1) []
+     (OK (jump_to lbl u),G1,tn1)` by
+    (`jump_to lbl u = jump_to lbl (u with vs_inst_idx := LENGTH b.cs_current_insts)` by
+       simp[jump_to_def] >>
+     pop_assum SUBST1_TAC >>
+     irule return_default_join_joint >> simp[allocas_from_def] >>
+     qexistsl_tac [`b`, `j`] >> simp[]) >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _`
+    (qspec_then `D` mp_tac) >>
+  pure_asm_rewrite_tac [] >> pure_rewrite_tac [COND_CLAUSES] >> strip_tac >>
+  qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+    (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  disch_then assume_tac >> pure_asm_rewrite_tac [] >>
+  metis_tac[listTheory.APPEND_NIL]
+QED
+Finalise return_default_suffix_path_joint
