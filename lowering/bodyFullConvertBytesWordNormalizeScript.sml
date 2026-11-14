@@ -7,47 +7,6 @@ Ancestors
   arithmetic pred_set fragExec ptrSafeRun ptrDiscipline instIdxIndep
   emitHelperProps exprLoweringProps codegenRel contextCodegenRel
 
-Theorem normalize_ghost_chain[local]:
-  ALL_DISTINCT [len;data;sub;bits;dst] /\
-  lookup_var len s = SOME nv /\ lookup_var data s = SOME dw /\
-  op_prov G (Var len) = NONE /\ op_prov G (Var data) = NONE /\
-  op_taint tn (Var len) = {} /\
-  u = update_var sub (32w-nv) s /\
-  v = update_var bits ((32w-nv)*8w) u /\
-  t = update_var dst (word_lsr dw (w2n ((32w-nv)*8w))) v ==>
-  step_prov PG G (mk_inst j SUB [Lit 32w;Var len] [sub]) u =
-    DRESTRICT G (COMPL {sub}) /\
-  step_taint (mk_inst j SUB [Lit 32w;Var len] [sub]) s u tn =
-    (tn with t_var := tn.t_var |+ (sub,{})) /\
-  step_prov PG (DRESTRICT G (COMPL {sub}))
-    (mk_inst k MUL [Var sub;Lit 8w] [bits]) v =
-    DRESTRICT G (COMPL {sub} INTER COMPL {bits}) /\
-  step_taint (mk_inst k MUL [Var sub;Lit 8w] [bits]) u v
-    (tn with t_var := tn.t_var |+ (sub,{})) =
-    (tn with t_var := tn.t_var |+ (sub,{}) |+ (bits,{})) /\
-  step_prov PG (DRESTRICT G (COMPL {sub} INTER COMPL {bits}))
-    (mk_inst l SHR [Var bits;Var data] [dst]) t =
-    DRESTRICT G (COMPL {sub} INTER COMPL {bits} INTER COMPL {dst}) /\
-  step_taint (mk_inst l SHR [Var bits;Var data] [dst]) v t
-    (tn with t_var := tn.t_var |+ (sub,{}) |+ (bits,{})) =
-    (tn with t_var := tn.t_var |+ (sub,{}) |+ (bits,{}) |+
-       (dst,shift_taint SHR (w2n ((32w-nv)*8w)) (op_taint tn (Var data))))
-Proof
-  strip_tac >>
-  `op_prov G (Lit 32w) = NONE /\ op_taint tn (Lit 32w) = {}` by
-    simp[op_prov_def, op_taint_def] >>
-  gvs[] >> fs[op_prov_def, op_taint_def, lookup_var_def] >>
-  simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def,
-       step_taint_def, set_var_taint_def, out_taint_def, mk_inst_def,
-       mem_taint_def, step_writes_def, source_memory_write_ranges_def,
-       written_taint_def, store_taint_def, adopt_reset_def,
-       imm_taint_def, range_bytes_def, taint_component_equality,
-       new_site_bytes_def, update_var_def, FLOOKUP_DEF, EXTENSION,
-       op_taint_def, FLOOKUP_UPDATE, eval_operand_def, lookup_var_def,
-       SF CONJ_ss] >>
-  simp[op_prov_def, FAPPLY_FUPDATE_THM]
-QED
-
 Theorem bytes_word_normalize_fixed_frame:
   ALL_DISTINCT [len;dp;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
   lookup_var len s = SOME (n2w n) /\ n <= 32 /\ lookup_var dp s = SOME a /\
