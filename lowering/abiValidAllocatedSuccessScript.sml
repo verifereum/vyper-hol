@@ -4,6 +4,9 @@ Theory abiValidAllocatedSuccess
 Ancestors
   abiValidAllocatedMembers abiValidAllocatedLeaves abiValidAllocatedAggregate
   abiValidAllocatedDynamic abiDecoderCoherence abiValidAllocatedContract
+  abiValidAllocatedBytesJoint abiValidAllocatedPrimitiveJoint
+  abiValidAllocatedComplexJoint abiDecodePtrSelectionJoint
+  abiDecodeMemReentry abiDecodePtrRejectChecks
   exprLowering list
 
 Theorem abi_valid_allocated_success:
