@@ -8,7 +8,7 @@ Ancestors
   bodySim bodyExprPreFacts vyperTypeSystem vyperTypeInvariants
   exprSimHyps exprSimHypsDefs exprSimDefs valueEncoding finite_map list
   valueTypingMemoryProps vyperTypeValues vyperTyping vyperTypeDefaults
-  vyperTypeExprSoundness compileVyper vyperCompiler exprSimSource bodySimStmtCases
+  vyperTypeExprSoundness compileVyper vyperCompiler exprSimSource exprSimAggregateLayout
 Libs
   monadsyntax
 

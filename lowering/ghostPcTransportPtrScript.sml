@@ -26,6 +26,17 @@ Proof
   simp[ptr_covers_def, lookup_var_def]
 QED
 
+Theorem ghost_inv_at_inst_idx:
+  ghost_inv_at D lo d cenv cx es G tn (s with vs_inst_idx := k) <=>
+  ghost_inv_at D lo d cenv cx es G tn s
+Proof
+  Cases_on `d` >>
+  simp[ghost_inv_at_def,return_buf_ptr_def,ptr_covers_def,
+       stor_taint_ok_at_def,allocas_from_def,lookup_var_def] >>
+  PairCases_on `x` >>
+  simp[return_buf_ptr_def,ptr_covers_def,lookup_var_def]
+QED
+
 Theorem step_taint_inst_idx[simp]:
   step_taint inst (s with vs_inst_idx := k) (t with vs_inst_idx := j) tn =
   step_taint inst s t tn
