@@ -62,6 +62,7 @@ Proof
     FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)` by
     (gen_tac >> disch_tac >>
      drule_all toplevel_code_runtime_witness_old >> simp[NoAsms]) >>
+  pop_assum (mk_asm "old_sm") >> asm "old_sm" assume_tac >>
   drule_all toplevel_code_runtime_history >> strip_tac >>
   `s.vs_alloca_next <= z.vs_alloca_next` by fs[] >>
   `!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s /\
@@ -82,6 +83,10 @@ Resume toplevel_code_ctor_frame_posts[retained]:
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory` by
     (`w2n d = buffer_allocation_base s sm.cs_next_id` by simp[] >> metis_tac[]) >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  `!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tf (Var x) = op_taint tn (Var x)` by metis_tac[] >>
+  `!x. not_fresh_at sm x ==> FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tf (Var x) = op_taint tn (Var x)` by metis_tac[] >>
   drule_all toplevel_code_runtime_retained >> strip_tac >>
   `vv_post H ctx func cenv cx (TopLevelName ann nsid) ee sm sm s ee
     raw (LocatedValue t p) s` by
@@ -91,9 +96,11 @@ Resume toplevel_code_ctor_frame_posts[retained]:
      simp[vv_post_def, vv_at_def, vv_own_def, locals_kept_def]) >>
   `ghost_kept_at lo cenv ee sm G tn s G tn` by simp[ghost_kept_at_def] >>
   `ghost_kept_at lo cenv ee sm G tn s Gf tf` by
-    (qpat_assum `ghost_kept_at lo cenv ee sm G tn s G tn`
-       (mp_then (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`) mp_tac toplevel_code_runtime_retained) >>
-     disch_then drule_all >> simp[]) >>
+    (irule toplevel_code_runtime_retained >>
+     qpat_assum `vv_post _ _ _ _ _ _ ee sm sm s ee _ _ s` (irule_at Any) >>
+     qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_alloc_buffer _ _ = _` (irule_at Any) >>
+     qexistsl [`tn`, `G`] >> simp[] >> rpt strip_tac >> simp[]) >>
   suspend "writeback"
 QED
 
@@ -113,14 +120,34 @@ Resume toplevel_code_ctor_frame_posts[writeback]:
      rpt strip_tac >> Cases_on `aid = sm.cs_next_id` >> gvs[]) >>
   `wb_frame cenv ee ee sm s z` by
     (irule toplevel_code_runtime_wb_frame >>
-     goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-     simp[] >> metis_tac[]) >>
+     qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_alloc_buffer _ _ = _` (irule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[] >> rpt strip_tac >> simp[]) >>
   suspend "normalize"
 QED
 
 Resume toplevel_code_ctor_frame_posts[normalize]:
-  cheat
+  conj_tac
+  >- (qpat_assum `ghost_inv_at D lo ret cenv cx ee Gf tf z` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `ret`
+      >- (rw[ghost_inv_at_def, lookup_var_def, local_region_def,
+              ptr_covers_def, stor_taint_ok_at_def, allocas_from_def,
+              return_buf_ptr_def] >> metis_tac[]) >>
+      PairCases_on `x` >>
+      rw[ghost_inv_at_def, lookup_var_def, local_region_def,
+           ptr_covers_def, stor_taint_ok_at_def, allocas_from_def,
+           return_buf_ptr_def] >> metis_tac[]) >>
+  `wb_frame cenv ee ee sm s (z with vs_inst_idx := LENGTH sc.cs_current_insts)` by
+    (qpat_assum `wb_frame cenv ee ee sm s z` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[wb_frame_def, lookup_var_def, local_region_def] >> metis_tac[]) >>
+  simp[] >> rpt strip_tac >>
+  asm "old_sm" (qspec_then `x` mp_tac) >>
+  qpat_assum `not_fresh_at sm x` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[lookup_var_def] >> metis_tac[]
 QED
 
 Finalise toplevel_code_ctor_frame_posts
