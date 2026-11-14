@@ -1,6 +1,6 @@
 (* Destination-rank assembly of counted, memory-safe typed stores. *)
 Theory typedCopyRankPathMem
-Ancestors
+Ancestors bodyDeclZeroGasPath
   typedCopyPrimitivePathMem typedCopyArraySemanticPathMem
   typedCopyFieldsSemanticPathMem typedNormalizeRecursiveMem
   typedNormalizeStructEntryMem typedMemoryCopy typedCopyMetadata
@@ -366,7 +366,7 @@ Resume typed_store_rank_path_mem[equal_numeric]:
 QED
 Resume typed_store_rank_path_mem[equal_finish]:
   `gas_path_mem ctx fn s 0 (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
-    (irule bodyDeclMemoryCountedTheory.body_decl_zero_gas_path >>
+    (irule bodyDeclZeroGasPathTheory.body_decl_zero_gas_path >>
      simp[] >> qexists_tac `sa` >> simp[] >>
      drule typed_dynarray_equal_shape >>
      simp[same_blocks_def, mk_inst_def, is_terminator_def]) >>
