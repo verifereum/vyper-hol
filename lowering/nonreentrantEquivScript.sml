@@ -186,7 +186,8 @@ Proof
   >- simp[lock_if_nr_def, acquire_nonreentrant_lock_execution,
           vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
           vyperStateTheory.return_def, check_not_static_def,
-          vyperStateTheory.check_def, vyperStateTheory.raise_def] >>
+          vyperStateTheory.check_def, vyperStateTheory.assert_def,
+          vyperStateTheory.raise_def] >>
   drule compile_nonreentrant_lock_transient_code >>
   simp[transient_lock_code_execution]
 QED
