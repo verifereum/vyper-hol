@@ -44,7 +44,8 @@ QED
  * ABI tail to source binding, simulate its Call-free body and runtime-return
  * epilogue, then apply Verifereum handle_create/handle_exception in the SINGLE
  * fresh creation frame. Deposit gas/size failures are resource starvation.
- * Exclude the 0xEF runtime prefix. Match installed runtime code and all remaining
+ * The runtime never starts with 0xEF (compile_vyper_runtime_not_ef). Match
+ * installed runtime code and all remaining
  * account fields, transient storage and logs; use explicit source failure
  * cases, exempting only the existing exact dynamic ABI strictness predicate.
  *
@@ -70,8 +71,7 @@ Theorem e2e_deploy_correctness_identity:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
+    deploy_state_rel tops deploy_bc am tx es
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -122,6 +122,8 @@ Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>
   drule compile_vyper_runtime_nonempty >> strip_tac >>
+  `K SOME IN accepted_finalizers` by simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
@@ -198,8 +200,7 @@ Theorem e2e_deploy_correctness_asm_opt:
     ~program_reads_self_code tops /\
     supported_program tops /\ constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
+    deploy_state_rel tops deploy_bc am tx es
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -261,8 +262,7 @@ Theorem e2e_deploy_correctness:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
+    deploy_state_rel tops deploy_bc am tx es
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -321,8 +321,8 @@ QED
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
  * no theorem dependency. The clean result-case definition must expand to
  * precisely the literal 5.11 conclusion above, including its explicit failure
- * cases and no-prefix guard. Whether the theorem depends on a cheat is
- * checked with `holbuild check`.
+ * cases. Whether the theorem depends on a cheat is checked with
+ * `holbuild check`.
  *)
 val savedDeploymentAdmission = DB.fetch "e2eDeployCorrectness" "e2e_deploy_correctness";
 val _ =
@@ -334,8 +334,7 @@ val _ =
       supported_program tops /\ supported_program_deploy tops /\
       constructor_call_free tops /\
       deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-      deploy_state_rel tops deploy_bc am tx es /\
-      ~(?t. runtime_bc = 0xEFw :: t) ==>
+      deploy_state_rel tops deploy_bc am tx es ==>
       ?r es'. run_call es = SOME (r,es') /\
         (frame_resource_starved es r es' \/
          ?gobs. deploy_result_rel tops runtime_bc tx es r es'

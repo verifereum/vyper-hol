@@ -5,57 +5,6 @@ Ancestors
   exprSimSource exprSimCalldataSlice exprSimWordArgs builtinBytes emitHelper
   vyperInterpreter vyperContext vyperState compileEnv exprSimHypsDefs exprLowering exprBopLowering
 
-Theorem code_slice_self_addr_action:
-  eval_exprs cx [Builtin st (Env SelfAddr) []] =
-    return [AddressV cx.txn.target]
-Proof
-  `eval_exprs cx [] = return []` by
-    simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
-  simp[FUN_EQ_THM, eval_exprs_cons_action, Once evaluate_def,
-       builtin_args_length_ok_def, code_slice_source_def,
-       precompile_call_success_def, precompile_builtin_def,
-       vyperContextTheory.evaluate_builtin_def,
-       type_check_def, assert_def, get_accounts_def,
-       lift_sum_def, read_result_def, bind_def, ignore_bind_def, return_def]
-QED
-
-Theorem code_slice_self_action:
-  eval_expr cx
-    (Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
-      [Builtin ct (Acc Code) [Builtin st (Env SelfAddr) []]; start; len]) =
-  do sv <- bind (eval_expr cx start) (read_result cx);
-     lv <- bind (eval_expr cx len) (read_result cx);
-     acc <- get_accounts;
-     v <- lift_sum (evaluate_slice (BytesV cx.txn.code) sv lv n);
-     return (Value v)
-  od
-Proof
-  `eval_exprs cx [] = return []` by
-    simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
-  rewrite_tac[slice_eval_extcode] >>
-  simp[code_slice_self_addr_action, eval_exprs_cons_action,
-       is_self_addr_def, evaluate_code_source_def, bind_return, bind_assoc] >>
-  simp[FUN_EQ_THM, get_accounts_def, lift_sum_def, bind_def, return_def,
-       vyperContextTheory.evaluate_builtin_def]
-QED
-
-Theorem code_slice_self_compile_decompose:
-  compile_slice_code start len sz sa = (r, sb) ==>
-  ?out dst sc sd se sf limit.
-    r = out /\
-    emit_op CODESIZE [] sa = (limit,sc) /\
-    compile_assert_slice_bounds start len limit sc = ((),sd) /\
-    compile_slice_out_buf sz sd = ((out,dst),se) /\
-    emit_void CODECOPY [dst;start;len] se = ((),sf) /\
-    emit_void MSTORE [out;len] sf = ((),sb)
-Proof
-  simp[compile_slice_code_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >>
-       simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
-  strip_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem code_slice_length_literal:
   slice_operands_ok (Slice n) [Builtin ct (Acc Code) [a]; start; len] ==>
   ?lt j. len = Literal lt (IntL j) /\ 1 <= j /\ j <= &n
@@ -208,7 +157,7 @@ Proof
     metis_tac[expr_body_pre_lower_value_word_shape, is_word_type_def] >>
   `cs_extends sa sn` by metis_tac[compileEnvTheory.cs_extends_trans] >>
   `fn_has_code sa sn func` by metis_tac[fragExecTheory.fn_has_code_split] >>
-  rewrite_tac[code_slice_self_action] >>
+  rewrite_tac[slice_self_code_actions] >>
   ho_match_mp_tac (code_slice_two_uint_outcome_ptr |> Q.INST
     [`arg_ty` |-> `K ty`, `Inv` |-> `expr_sim_inv cenv cx env`, `sb` |-> `sn`]) >>
   simp[] >> suspend "certificates"
@@ -234,7 +183,7 @@ Resume code_slice_self_vv_ptr[certificates]:
 QED
 
 Resume code_slice_self_vv_ptr[continuation]:
-  drule code_slice_self_compile_decompose >> strip_tac >> gvs[] >>
+  drule slice_code_decompose >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env start es /\ expr_body_pre cenv cx env len es /\
    is_word_type (expr_type start) /\ is_word_type (expr_type len)` by
     (simp[is_word_type_def] >> metis_tac[]) >>

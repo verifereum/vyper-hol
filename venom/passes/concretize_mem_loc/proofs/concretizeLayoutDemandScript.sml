@@ -1,5 +1,5 @@
 Theory concretizeLayoutDemand
-Ancestors concretizeAnalysisOwnerDemand concretizeAnalysisImportedDemand
+Ancestors concretizeLayoutCutSafe concretizeAnalysisOwnerDemand concretizeAnalysisImportedDemand
   concretizeAnalysisTemporalDemand frameOpenCall frameJointTrace frameJointTransition
   frameActivationCache o1PassContract ptrDiscipline venomInst finite_map list arithmetic
 
@@ -9,7 +9,7 @@ Theorem concretize_common_call_activation_livesets:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ c < n /\ n <= j /\ j <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
   joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
@@ -68,6 +68,7 @@ Proof
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
      goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      qexists_tac `byteA` >> simp[] >> metis_tac[]) >>
   `activation_cache (EL n (q0::qs)) dB ownerB aidB (bB,szB)` by metis_tac[] >>
   `?addrsB. FLOOKUP (context_mem_livesets (concretize_memloc_fuel caller)
@@ -92,7 +93,7 @@ Theorem concretize_common_call_livesets:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ c < n /\ n <= j /\ j <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
   joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\

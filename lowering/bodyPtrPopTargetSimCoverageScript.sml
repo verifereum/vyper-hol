@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimCoverage
 Ancestors
+  targetPlaceSim
   bodyPtrPopTargetSimCurrentLocal assignBasePtrOffset assignBasePtrLocalSource
   bodyPtrDefs bodyPtrPopTargetDefs ptrDiscipline compileEnv loweringStateRelDefs
   loweringPosts exprSimProps exprSimHypsDefs vyperTypeInvariants
@@ -57,7 +58,7 @@ Theorem target_current_dynamic_header_ptr:
 Proof
   strip_tac >>
   `entry.type = tv` by
-    (drule_all stmtSimAugAssignTheory.expr_sim_inv_local >>
+    (drule_all targetPlaceSimTheory.expr_sim_inv_local >>
      strip_tac >> metis_tac[optionTheory.SOME_11]) >>
   drule_all target_current_local_dynamic_ptr >> strip_tac >>
   `off + 32 <= type_memory_size entry.type` by
@@ -138,7 +139,7 @@ Theorem target_index_dynamic_header_ptr:
         (w2n a) mem)
 Proof
   strip_tac >> drule_all target_memory_index_frame_ptr >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by (gvs[expr_sim_inv_def] >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx ef u` by (gvs[expr_post_def] >> metis_tac[]) >>
   `local_ptrs_rel func cenv ef.scopes u /\ u.vs_alloca_next < dimword(:256)` by

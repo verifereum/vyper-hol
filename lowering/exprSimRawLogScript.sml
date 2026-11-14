@@ -1,6 +1,8 @@
 (* Common RawLog source/compiler and LOG execution interfaces. *)
 Theory exprSimRawLog
 Ancestors
+  logEmitStep
+  gasSummary fragGasMode fragGasSeqAbort
   exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimHyps exprSimPrecompiles exprSimWordArgs exprSimSend exprSimAggregateSource compileEnv loweringStateRelDefs extCallOracleStep allocLimits
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
@@ -223,8 +225,8 @@ Proof
   simp[Once evaluate_def]
 QED
 
-Theorem raw_log_source_eval:
-  LENGTH topics <= n /\ ~cx.txn.is_static ==>
+Theorem raw_log_source_eval_checked:
+  LENGTH topics <= n ==>
   eval_expr cx
     (Call ann RawLog
       [Builtin a (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
@@ -233,6 +235,7 @@ Theorem raw_log_source_eval:
       dv <- (do tv <- eval_expr cx data; read_result cx tv od);
       bs <- lift_option_type (dest_BytesV dv) "raw_log data";
       type_check (LENGTH vs <= 4) "raw_log too many topics";
+      check_not_static cx;
       push_log (encode_raw_event_values cx.txn.target vs bs);
       return (Value NoneV)
    od) es
@@ -252,6 +255,25 @@ Proof
   Cases_on `read_result cx tv ds` >> rename1 `read_result cx tv ds = (vr, ds')` >>
   Cases_on `vr` >>
   simp[dest_ArrayV_def, lift_option_type_def, return_def, bind_def]
+QED
+
+Theorem raw_log_source_eval:
+  LENGTH topics <= n /\ ~cx.txn.is_static ==>
+  eval_expr cx
+    (Call ann RawLog
+      [Builtin a (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
+       data] dflt) es =
+  (do vs <- eval_exprs cx topics;
+      dv <- (do tv <- eval_expr cx data; read_result cx tv od);
+      bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+      type_check (LENGTH vs <= 4) "raw_log too many topics";
+      push_log (encode_raw_event_values cx.txn.target vs bs);
+      return (Value NoneV)
+   od) es
+Proof
+  strip_tac >> simp[raw_log_source_eval_checked] >>
+  simp[bind_def, ignore_bind_def, FUN_EQ_THM] >>
+  rpt (CASE_TAC >> gvs[])
 QED
 
 Theorem raw_log_dynamic_data_view:
@@ -361,6 +383,7 @@ Proof
 QED
 
 Theorem raw_log_core_frame:
+  ~cx.txn.is_static /\
   inst.inst_opcode = LOG /\
   inst.inst_operands = Lit (n2w (LENGTH ops)) ::
     (REVERSE ops ++ [sz; pop]) /\ LENGTH ops < dimword (:256) /\
@@ -376,7 +399,8 @@ Theorem raw_log_core_frame:
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
 Proof
   strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all raw_log_core_step >>
   disch_then SUBST1_TAC >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
@@ -387,6 +411,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_tail_core:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op, s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
@@ -512,6 +537,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_tail_core:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
@@ -574,4 +600,136 @@ Proof
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
   simp[lookup_var_def]
+QED
+
+Theorem raw_log_dynamic_static_run:
+  cx.txn.is_static /\
+  emit_op MLOAD [data_op] sm = (len_op, s1) /\
+  emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) ::
+    (REVERSE ops ++ [len_op;ptr_op])) [] s2 = ((),sb) /\
+  (!x. data_op = Var x ==> not_fresh_at sm x) /\
+  EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) ops /\
+  eval_operand data_op s = SOME (n2w b) /\
+  eval_operands ops s = SOME topics /\ mload b s = n2w (LENGTH bs) /\
+  TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++ REPLICATE (LENGTH bs) 0w) = bs /\
+  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
+  ?u. run_inst_seq (emitted_insts sm sb) s = Abort ExHalt_abort u
+Proof
+  strip_tac >> drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
+  `s2.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm s2 /\
+   sb.cs_current_insts = s2.cs_current_insts ++
+    [mk_inst s2.cs_next_id LOG
+      (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [len_op;ptr_op])) []]` by
+    gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+        fresh_var_def, fresh_id_def, emit_def, comp_return_def,
+        emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+  `emitted_insts sm sb = emitted_insts sm s2 ++
+    [mk_inst s2.cs_next_id LOG
+      (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [len_op;ptr_op])) []]` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_x_assum `sb.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `s2.cs_current_insts = _` SUBST1_TAC >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `step_inst_base (mk_inst s2.cs_next_id LOG
+      (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [len_op;ptr_op])) []) t =
+    Abort ExHalt_abort (halt_state (set_returndata [] t))` by
+    (irule log_emit_static_step >> simp[mk_inst_def] >> metis_tac[]) >>
+  qexists_tac `halt_state (set_returndata [] t)` >>
+  asm_rewrite_tac[] >>
+  drule run_inst_seq_append >> disch_then (fn th => rewrite_tac[th]) >>
+  fs[run_inst_seq_def]
+QED
+
+Theorem raw_log_fixed_static_run:
+  s.vs_call_ctx.cc_static /\
+  emit_void MSTORE [ptr_op;data_op] sm = ((),s1) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) ::
+    (REVERSE ops ++ [Lit 32w;ptr_op])) [] s1 = ((),sb) /\
+  eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
+  eval_operands ops s = SOME topics ==>
+  ?u. run_inst_seq (emitted_insts sm sb) s = Abort ExHalt_abort u
+Proof
+  strip_tac >>
+  `emitted_insts sm sb =
+    [mk_inst sm.cs_next_id MSTORE [ptr_op;data_op] [];
+     mk_inst s1.cs_next_id LOG (Lit (n2w (LENGTH ops)) ::
+       (REVERSE ops ++ [Lit 32w;ptr_op])) []]` by
+    gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_return_def,
+        fresh_id_def, emit_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+  `eval_operand ptr_op (mstore (w2n p) w s) = SOME p /\
+   eval_operands ops (mstore (w2n p) w s) = SOME topics` by
+    (`eval_operands ops (mstore (w2n p) w s) = eval_operands ops s` by
+       (rpt (pop_assum kall_tac) >> Induct_on `ops` >>
+        simp[eval_operands_def] >> Cases_on `h` >>
+        simp[eval_operand_def, mstore_def, lookup_var_def]) >>
+     simp[] >> Cases_on `ptr_op` >>
+     gvs[eval_operand_def, mstore_def, lookup_var_def]) >>
+  `step_inst_base (mk_inst s1.cs_next_id LOG
+     (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [Lit 32w;ptr_op])) [])
+     (mstore (w2n p) w s) =
+     Abort ExHalt_abort (halt_state (set_returndata [] (mstore (w2n p) w s)))` by
+    (irule (Q.INST [`topic_ops` |-> `ops`, `len_op` |-> `Lit 32w`,
+                    `ptr_op` |-> `ptr_op`, `off` |-> `p`, `sz` |-> `32w`,
+                    `topics` |-> `topics`] log_emit_static_step) >>
+     simp[mk_inst_def, eval_operand_def] >> simp[mstore_def]) >>
+  qexists_tac `halt_state (set_returndata [] (mstore (w2n p) w s))` >>
+  `step_inst_base (mk_inst sm.cs_next_id MSTORE [ptr_op;data_op] []) s =
+     OK (mstore (w2n p) w s)` by
+    simp[step_inst_base_opcode_eqs, exec_write2_def] >>
+  fs[run_inst_seq_def]
+QED
+
+Theorem raw_log_static_tail_summary:
+  cx.txn.is_static /\ dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
+  gas_marked_path memory ctx func s n (Abort ExHalt_abort t) ==>
+  gas_summary_at memory (ctx,func) (REPLICATE n F)
+    (do bs' <- lift_option_type (dest_BytesV dv) "raw_log data";
+        type_check (LENGTH vals <= 4) "raw_log too many topics";
+        check_not_static cx;
+        push_log (encode_raw_event_values cx.txn.target vals bs');
+        return NoneV od) (es,s) Q (\rr ee r. expr_exit rr r)
+Proof
+  strip_tac >> simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+               `es`,`Abort ExHalt_abort t`] >>
+  simp[fragExecTheory.exit_result_def, expr_exit_def] >>
+  irule gas_marked_exec_no_source_read >>
+  simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
+       assert_def, return_def]
+QED
+
+Theorem raw_log_static_suffix_summary:
+  cx.txn.is_static /\ dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
+  fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = Abort ExHalt_abort t ==>
+  gas_summary_at F (ctx,func) []
+    (do bs' <- lift_option_type (dest_BytesV dv) "raw_log data";
+        type_check (LENGTH vals <= 4) "raw_log too many topics";
+        check_not_static cx;
+        push_log (encode_raw_event_values cx.txn.target vals bs');
+        return NoneV od) (es,s) Q (\rr ee r. expr_exit rr r)
+Proof
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     qexists_tac `l` >>
+     PURE_REWRITE_TAC[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >> simp[]) >>
+  drule_all run_inst_seq_abort_zero_path >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `j` strip_assume_tac) >>
+  mp_tac (Q.INST [`memory` |-> `F`, `n` |-> `0`,
+                  `t` |-> `t with vs_inst_idx := j`] raw_log_static_tail_summary) >>
+  simp[]
 QED

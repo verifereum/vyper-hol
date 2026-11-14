@@ -55,7 +55,7 @@ Proof
   `!op. MEM op ops ==> MEM op i.inst_operands` by
     (gvs[decode_invoke_def, AllCaseEqs()] >> simp[]) >>
   `!op. MEM op ops ==> op_taint tn op = {}` by
-    metis_tac[dload_invoke_operand_untainted] >>
+    metis_tac[taint_ok_invoke_operand] >>
   drule_all dload_matched_operands_backwards >> strip_tac >>
   `?cs. setup_callee fn xs s = SOME cs` by simp[setup_callee_def] >>
   qexistsl_tac [`xs`, `cs`] >> simp[] >>

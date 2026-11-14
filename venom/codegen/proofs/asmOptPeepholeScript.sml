@@ -478,7 +478,7 @@ QED
 
 (* ===== The rule ===== *)
 
-Theorem stack_peephole_opts_cons3[local]:
+Theorem stack_peephole_opts_cons3:
   stack_peephole_opts (a :: b :: c :: rest) = SOME (out, ch) ⇒
   (a = AsmOp "DUP1" ∧ b = AsmOp "SWAP2" ∧ c = AsmOp "SWAP1" ∧
    ∃ch'. stack_peephole_opts (AsmOp "SWAP1" :: AsmOp "DUP2" :: rest) =

@@ -600,6 +600,28 @@ Proof
   rw[] >> gvs[]
 QED
 
+Theorem supported_struct_fields_get_tenv:
+  get_module_code cx NONE = SOME tops /\
+  supported_struct_fields tops sid = SOME fields ==>
+  FLOOKUP (get_tenv cx) sid = SOME (StructArgs fields)
+Proof
+  strip_tac >>
+  `FST sid = NONE` by
+    (Cases_on `tops` >> PairCases_on `sid` >>
+     gvs[supported_struct_fields_def] >> CCONTR_TAC >> gvs[]) >>
+  drule supported_struct_fields_type_env >> strip_tac >>
+  gvs[get_module_code_def, get_tenv_def, AllCaseEqs(), type_env_def] >>
+  PairCases_on `sid` >> gvs[] >>
+  qpat_x_assum `ALOOKUP _ NONE = SOME tops` mp_tac >>
+  qid_spec_tac `mods` >> Induct >> simp[type_env_all_modules_def] >>
+  gen_tac >> PairCases_on `h` >> simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
+  Cases_on `h0 = NONE` >> simp[] >> strip_tac >> gvs[] >>
+  `FLOOKUP (type_env_for_module h0 h1) (NONE,sid1) = NONE` by
+    (Induct_on `h1` >> simp[type_env_for_module_def] >>
+     Cases_on `h` >> simp[type_env_for_module_def, FLOOKUP_UPDATE]) >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
+
 Theorem supported_word_type_assignable:
   !tenv ty. supported_word_type ty ==> assignable_type tenv ty
 Proof

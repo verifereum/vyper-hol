@@ -31,7 +31,7 @@ Theorem body_bop_in_literal_word_case:
 Proof
   (* rpt strip_tac splits bop = In \/ bop = NotIn into two goals, so the
      mapping half is closed under each of them *)
-  rpt strip_tac >> simp[body_expr_ok_def] >>
+  rpt strip_tac >> simp[Once body_expr_ok_def] >>
   (reverse conj_tac
    >- (rpt strip_tac >> drule expr_map_pre_shape >> simp[])) >>
   rpt gen_tac >> strip_tac >>
@@ -42,8 +42,13 @@ Proof
           vyperTypeBuiltinsTheory.well_typed_builtin_app_length) >>
      simp[]) >>
   `!xs. body_exprs_ok cx xs ==> exprs_case F ctx func cenv cx xs` by
-    (Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
-     gvs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
+    (Induct >- simp[body_exprs_ok_def, exprs_case_def] >>
+     gen_tac >> strip_tac >>
+     rename1 `body_exprs_ok cx (head::tail)` >>
+     fs[body_exprs_ok_def] >> rw[exprs_case_def] >>
+     qpat_x_assum `body_expr_ok _ head`
+       (strip_assume_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+     fs[expr_sim_case_def, expr_vv_case_def] >>
      metis_tac[]) >>
   `exprs_case F ctx func cenv cx (e1::elems)` by
     (first_x_assum irule >> simp[body_exprs_ok_def] >> metis_tac[]) >>

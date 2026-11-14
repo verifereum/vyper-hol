@@ -269,6 +269,26 @@ Proof
   gvs[LIST_REL_CONS2] >> first_x_assum irule >> metis_tac[]
 QED
 
+Theorem make_ssa_stage_src_rows_initial:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\
+    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+    callee_first names C.ctx_functions ==>
+    EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+    fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
+    mem_inv dload_headroom_ok C' vs /\ callee_first names C'.ctx_functions
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
+    gvs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  fs[o1_src_inv_def] >>
+  metis_tac[make_ssa_src_stage_shape, make_ssa_src_stage_fmp_free,
+            make_ssa_src_stage_callee_first, make_ssa_src_stage_headroom,
+            make_ssa_src_stage_dload_ok]
+QED
+
 Theorem make_ssa_stage_src_rows:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
@@ -279,11 +299,6 @@ Theorem make_ssa_stage_src_rows:
     fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
     mem_inv dload_headroom_ok C' vs /\ callee_first names C'.ctx_functions
 Proof
-  rpt gen_tac >> strip_tac >>
-  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
-  fs[o1_src_inv_def] >>
-  metis_tac[make_ssa_src_stage_shape, make_ssa_src_stage_fmp_free,
-            make_ssa_src_stage_callee_first, make_ssa_src_stage_headroom,
-            make_ssa_src_stage_dload_ok]
+  rw[o1_run_state_ok_def] >>
+  drule_all make_ssa_stage_src_rows_initial >> simp[]
 QED
