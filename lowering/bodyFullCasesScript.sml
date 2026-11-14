@@ -14,7 +14,7 @@ Ancestors
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
-  exprSimHyps exprSimAggregateLayout bodyExprPreFacts supportedStmts
+  exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
@@ -286,7 +286,8 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      irule word_builtin_sim_full >> metis_tac[expr_vv_sim_stack_full]) >>
+      irule word_builtin_sim_full >>
+      metis_tac[expr_vv_sim_stack_full, post_value_type_word]) >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
