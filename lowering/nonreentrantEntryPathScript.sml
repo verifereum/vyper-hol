@@ -191,7 +191,7 @@ Theorem transient_lock_checked_ghost_frame:
     (transient_lock_checked_state sa nkey s)
 Proof
   strip_tac >> irule ghost_inv_fresh_frame >>
-  qexistsl_tac [`G`, `tn`, `s`, `sa`, `es`] >>
+  qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >>
   simp[transient_lock_checked_state_def, update_var_def] >>
   rpt strip_tac >>
   `x <> STRING #"%" (toString sa.cs_next_var) /\
