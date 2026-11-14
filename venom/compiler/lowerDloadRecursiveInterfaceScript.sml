@@ -3011,7 +3011,7 @@ val ld_recursive_load_witness_candidate =
   in list_mk_abs(args,list_mk_conj [current,saved,
        mk_disj(ld_retain_saved_normal normal,exceptional)]) end;
 
-Theorem ld_recursive_geometry_load_next_witness[local]:
+val ld_geometry_load_witness_header = ``
   !R. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
@@ -3020,7 +3020,10 @@ Theorem ld_recursive_geometry_load_next_witness[local]:
   step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
   (^ld_recursive_load_witness_candidate) vs0 CT stk (step_taint j t z un) gn j'
-    (z with vs_inst_idx := SUC t.vs_inst_idx)
+    (z with vs_inst_idx := SUC t.vs_inst_idx)``;
+
+Theorem ld_recursive_geometry_load_next_witness_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_geometry_load_witness_header)
 Proof
   gen_tac >> BETA_TAC >> strip_tac >>
   qpat_x_assum `!q. q < LENGTH astk ==> _` (mk_asm "saved") >>
@@ -3330,7 +3333,7 @@ Proof
   qpat_x_assum `(if _ then _ else _) <= _` mp_tac >> decide_tac
 QED
 
-Resume ld_recursive_geometry_load_next_witness[revert_successor]:
+Resume ld_recursive_geometry_load_next_witness_static[revert_successor]:
   `lookup_block (zs with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
      fn.fn_blocks = SOME bb` by
     (qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` mp_tac >> simp[]) >>
@@ -3367,9 +3370,19 @@ Resume ld_recursive_geometry_load_next_witness[revert_successor]:
   disj2_tac >> qexistsl_tac [`gb`, `copypos`, `endpos`] >> gvs[]
 QED
 
-Finalise ld_recursive_geometry_load_next_witness
+Finalise ld_recursive_geometry_load_next_witness_static
 
-Theorem ld_recursive_geometry_load_next:
+Theorem ld_recursive_geometry_load_next_witness[local]:
+  ^ld_geometry_load_witness_header
+Proof
+  rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_geometry_load_next_witness_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  first_x_assum (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+val ld_geometry_load_header = ``
   ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
@@ -3378,11 +3391,24 @@ Theorem ld_recursive_geometry_load_next:
   step_inst fuel CT j t = OK z /\
   active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
   (^ld_recursive_geometry_candidate) vs0 CT stk (step_taint j t z un) gn j'
-    (z with vs_inst_idx := SUC t.vs_inst_idx)
+    (z with vs_inst_idx := SUC t.vs_inst_idx)``;
+
+Theorem ld_recursive_geometry_load_next_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_geometry_load_header)
 Proof
   qspec_then `\E astk gstk savedkeys. T` mp_tac
-    ld_recursive_geometry_load_next_witness >>
+    ld_recursive_geometry_load_next_witness_static >>
   BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
+QED
+
+Theorem ld_recursive_geometry_load_next:
+  ^ld_geometry_load_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_geometry_load_next_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  first_x_assum (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* CALL/RETURN compatibility audit (geometry refinement, C2.calls_compatibility).
@@ -3616,13 +3642,16 @@ val ld_recursive_guarded_call_goal =
   in subst [v0 |-> mk_var("vs0",type_of v0),
             ct |-> mk_var("CT",type_of ct)] (list_mk_forall(rest,b)) end;
 
-Theorem ld_recursive_guarded_call_clause[local]:
+val ld_guarded_call_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_guarded_call_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_guarded_call_goal``;
+
+Theorem ld_recursive_guarded_call_clause_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_guarded_call_header)
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >> rule_assum_tac BETA_RULE >> rpt gen_tac >> strip_tac >>
   drule_all ld_recursive_guarded_call_anchor >>
   qpat_x_assum `(^ld_recursive_guarded_candidate) _ _ _ _ _ _ _` kall_tac >>
   CONV_TAC (LAND_CONV (DEPTH_CONV BETA_CONV)) >> strip_tac >>
@@ -3795,7 +3824,7 @@ Proof
     Abbr `sf`, Abbr `tf`]
 QED
 
-Resume ld_recursive_guarded_call_clause[exceptional_child_entry]:
+Resume ld_recursive_guarded_call_clause_static[exceptional_child_entry]:
   `MEM child obs.cu_context.ctx_functions /\ ir_supply_covers_unit supply obs` by
     (qpat_assum `fn_pass_step _ _ obs supply child output` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -3830,17 +3859,38 @@ Resume ld_recursive_guarded_call_clause[exceptional_child_entry]:
   disj2_tac >> qexistsl_tac [`gb'`, `copypos`, `endpos`] >> asm_rewrite_tac []
 QED
 
-Finalise ld_recursive_guarded_call_clause
+Finalise ld_recursive_guarded_call_clause_static
 
-Theorem ld_recursive_geometry_call_clause:
+Theorem ld_recursive_guarded_call_clause[local]:
+  ^ld_guarded_call_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_guarded_call_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+val ld_geometry_call_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_geometry_call_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_geometry_call_goal``;
+
+Theorem ld_recursive_geometry_call_clause_static:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_geometry_call_header)
 Proof
-  mp_tac (Q.INST [`b` |-> `F`] ld_recursive_guarded_call_clause) >>
+  mp_tac (Q.INST [`b` |-> `F`] ld_recursive_guarded_call_clause_static) >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   pure_rewrite_tac [IMP_CLAUSES, AND_CLAUSES] >> disch_then ACCEPT_TAC
+QED
+
+Theorem ld_recursive_geometry_call_clause:
+  ^ld_geometry_call_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_geometry_call_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED
 
 (* RETURN restoration diagnostic (not an asserted theorem).
