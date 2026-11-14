@@ -10,7 +10,7 @@ Theorem concretize_guarded_pointer_range:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\ s.vs_alloca_next < dimword (:256) /\
   vs0.vs_allocas = FEMPTY /\
   joint_config_reachable vs0 C
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
@@ -40,7 +40,7 @@ Proof
       concretize_positions C' owner aid` by
     metis_tac[resolved_activation_lookup] >>
   `b+sz < dimword (:256)` by
-    (drule_all joint_activation_cache_strict >> simp[]) >>
+    (drule_all joint_activation_cache_strict_frontier >> simp[]) >>
   drule_all concretize_positions_activation_numeric >> strip_tac >>
   irule guarded_pointer_range >> simp[] >> metis_tac[]
 QED

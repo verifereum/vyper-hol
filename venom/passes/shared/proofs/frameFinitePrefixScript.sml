@@ -105,9 +105,10 @@ Resume gas_events_take_prefix[blocks]:
   >- (`gas_events_blocks (SUC f) C fn s = []` by
         simp[Once gas_events_blocks_def] >> gvs[]) >>
   rename1 `lookup_block _ _ = SOME bb` >>
-  Cases_on `eval_phis s bb.bb_instructions` >>
-  TRY (`gas_events_blocks (SUC f) C fn s = []` by
-         simp[Once gas_events_blocks_def] >> gvs[] >> NO_TAC) >>
+  reverse (qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs)
+  >- (`gas_events_blocks (SUC f) C fn s = []` by
+        simp[Once gas_events_blocks_def] >> gvs[]) >>
   rename1 `eval_phis _ _ = OK sphi` >> gvs[] >>
   qpat_x_assum `n <= LENGTH (gas_events_blocks _ _ _ _)` mp_tac >>
   drule_all gas_events_blocks_at >>

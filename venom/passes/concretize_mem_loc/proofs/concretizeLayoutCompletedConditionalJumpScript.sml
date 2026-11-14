@@ -1,5 +1,5 @@
 Theory concretizeLayoutCompletedConditionalJump
-Ancestors concretizeLayoutCompletedJump concretizeLayoutEntryFlags
+Ancestors concretizeLayoutCutSafe concretizeLayoutCompletedJump concretizeLayoutEntryFlags
   concretizeLayoutLocalConditionalJump concretizeLayoutPhaseOrigin
   frameJointTrace frameJointTransition frameOriginHistory frameOriginReachable
   frameRelocationLocal frameRelocationEnvironment ptrDiscipline
@@ -9,7 +9,7 @@ Theorem layout_completed_conditional_jump:
   ~a.lop_pending /\
   layout_ordinary_entry D lo vs0 C C' q0 es qs q a s t /\
   a.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
-  vs0.vs_allocas = FEMPTY /\ ~vs0.vs_halted /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ ~vs0.vs_halted /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -20,6 +20,8 @@ Theorem layout_completed_conditional_jump:
   ?tpost. layout_completed_jump D lo vs0 C C' q0 es qs q a inst inst s t post tpost
 Proof
   strip_tac >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
   drule_all layout_ordinary_entry_nonhalting >> strip_tac >>
   `layout_ordinary_trace vs0 C q0 es qs q a s /\
    layout_ordinary_state D lo C' q0 es qs a s t` by
