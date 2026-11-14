@@ -1867,4 +1867,3 @@ Resume compile_augassign_place_storage_case[rhs_normal]:
 QED
 
 Finalise compile_augassign_place_storage_case
-
