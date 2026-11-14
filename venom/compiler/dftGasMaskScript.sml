@@ -7,7 +7,8 @@ Ancestors
   dftRunRel dftDefs o1PassContract gasEvents gasCount
   cfgNormSupplySim lowerDloadReturnCallContext venomWf venomExecProofs
   venomExecProps simplifyCfgDefs unitLabelMapIdentity
-  venomExecSemantics venomState list rich_list sorting option
+  venomExecSemantics venomState gasOracleReplay dftGasInvCallerInput
+  list rich_list sorting option
 
 (* U identifies unreachable GAS occurrences; site retains their original owner/id.
    Legacy packets are not changed, so their exact TAKE witnesses remain usable. *)
@@ -653,125 +654,10 @@ Proof
   strip_tac >> simp[venom_state_component_equality]
 QED
 
-Theorem invoke_state_equality[local]:
-  (s = t) <=>
-  (s with vs_vars := FEMPTY) = (t with vs_vars := FEMPTY) /\
-  (!k. lookup_var k s = lookup_var k t)
-Proof
-  simp[venom_state_component_equality, lookup_var_def,
-       finite_mapTheory.fmap_eq_flookup] >> metis_tac[]
-QED
-
-Theorem invoke_fold_compare[local]:
-  !outs xs ys a b c d.
-    LENGTH outs = LENGTH xs /\ LENGTH outs = LENGTH ys /\
-    (((a with vs_vars := FEMPTY) = (b with vs_vars := FEMPTY)) <=>
-     ((c with vs_vars := FEMPTY) = (d with vs_vars := FEMPTY))) /\
-    (!k. (lookup_var k a = lookup_var k b) <=>
-         (lookup_var k c = lookup_var k d)) ==>
-    ((FOLDL (\s (k,v). update_var k v s) a (ZIP (outs,xs)) =
-      FOLDL (\s (k,v). update_var k v s) b (ZIP (outs,ys))) <=>
-     (FOLDL (\s (k,v). update_var k v s) c (ZIP (outs,xs)) =
-      FOLDL (\s (k,v). update_var k v s) d (ZIP (outs,ys))))
-Proof
-  Induct
-  >- (simp[] >> rpt strip_tac >>
-      pure_once_rewrite_tac[invoke_state_equality] >> metis_tac[]) >>
-  Cases_on `xs` >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >> simp[update_var_def, lookup_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE] >>
-  gen_tac >> IF_CASES_TAC >> gvs[lookup_var_def]
-QED
-
-Theorem invoke_return_compare[local]:
-  !outs ir jr u v a b.
-    a.vs_fmp = b.vs_fmp /\
-    LENGTH outs = LENGTH ir.iret_values /\
-    LENGTH outs = LENGTH jr.iret_values ==>
-    ((THE (bind_outputs outs ir.iret_values
-        (adopt_return_fmp ir (merge_callee_state a u))) =
-      THE (bind_outputs outs jr.iret_values
-        (adopt_return_fmp jr (merge_callee_state a v)))) <=>
-     (THE (bind_outputs outs ir.iret_values
-        (adopt_return_fmp ir (merge_callee_state b u))) =
-      THE (bind_outputs outs jr.iret_values
-        (adopt_return_fmp jr (merge_callee_state b v)))))
-Proof
-  rpt gen_tac >> strip_tac >> simp[bind_outputs_def] >>
-  irule invoke_fold_compare >> simp[] >>
-  Cases_on `ir.iret_adopt_fmp` >> Cases_on `jr.iret_adopt_fmp` >>
-  simp[adopt_return_fmp_def, merge_callee_state_def,
-       venom_state_component_equality, lookup_var_def]
-QED
-
-Theorem invoke_return_replace_gas[local]:
-  LENGTH outs = LENGTH ir.iret_values ==>
-  THE (bind_outputs outs ir.iret_values
-    (adopt_return_fmp ir (merge_callee_state a (u with vs_gas_readings := gs)))) =
-  (THE (bind_outputs outs ir.iret_values
-    (adopt_return_fmp ir (merge_callee_state a u))) with vs_gas_readings := gs)
-Proof
-  strip_tac >>
-  `merge_callee_state a (u with vs_gas_readings := gs) =
-   (merge_callee_state a u with vs_gas_readings := gs)` by
-    simp[merge_callee_state_def] >>
-  simp[gasOracleReplayTheory.gas_adopt_return,
-       gasOracleReplayTheory.gas_bind_outputs] >> simp[bind_outputs_def]
-QED
-
-Theorem invoke_return_compare_gas[local]:
-  !outs ir jr u v a b gs hs.
-    a.vs_fmp = b.vs_fmp /\
-    LENGTH outs = LENGTH ir.iret_values /\
-    LENGTH outs = LENGTH jr.iret_values ==>
-    (((THE (bind_outputs outs ir.iret_values
-        (adopt_return_fmp ir (merge_callee_state a u))) with vs_gas_readings := gs) =
-      (THE (bind_outputs outs jr.iret_values
-        (adopt_return_fmp jr (merge_callee_state a v))) with vs_gas_readings := hs)) <=>
-     ((THE (bind_outputs outs ir.iret_values
-        (adopt_return_fmp ir (merge_callee_state b u))) with vs_gas_readings := gs) =
-      (THE (bind_outputs outs jr.iret_values
-        (adopt_return_fmp jr (merge_callee_state b v))) with vs_gas_readings := hs)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[GSYM invoke_return_replace_gas] >>
-  irule invoke_return_compare >> simp[]
-QED
-
-Theorem invoke_bind_case[local]:
-  (case bind_outputs outs vals s of
-     SOME t => OK t | NONE => Error e) =
-  (if LENGTH outs = LENGTH vals then OK (THE (bind_outputs outs vals s))
-   else Error e)
-Proof
-  simp[bind_outputs_def] >> IF_CASES_TAC >> simp[]
-QED
-
-Theorem invoke_return_readings[local]:
-  LENGTH outs = LENGTH ir.iret_values ==>
-  (THE (bind_outputs outs ir.iret_values
-    (adopt_return_fmp ir (merge_callee_state a u)))).vs_gas_readings =
-  u.vs_gas_readings
-Proof
-  strip_tac >>
-  `bind_outputs outs ir.iret_values
-    (adopt_return_fmp ir (merge_callee_state a u)) =
-   SOME (THE (bind_outputs outs ir.iret_values
-    (adopt_return_fmp ir (merge_callee_state a u))))` by simp[bind_outputs_def] >>
-  drule gasOracleReplayTheory.gas_bind_outputs_readings >> simp[]
-QED
-
-Theorem invoke_gas_equality[local]:
-  (s = (t with vs_gas_readings := tail)) <=>
-  (s with vs_gas_readings := []) = (t with vs_gas_readings := []) /\
-  s.vs_gas_readings = tail
-Proof
-  simp[venom_state_component_equality] >> metis_tac[]
-QED
-
 Theorem invoke_finish_observations[local]:
-  !outs a b r r'. a.vs_fmp = b.vs_fmp ==>
-  let packet_finish = (\s res.
+  !outs a b r r' packet_finish.
+  a.vs_fmp = b.vs_fmp /\
+  packet_finish = (\s res.
     case res of
       IntRet ir u =>
         if LENGTH outs = LENGTH ir.iret_values then
@@ -779,8 +665,7 @@ Theorem invoke_finish_observations[local]:
             (adopt_return_fmp ir (merge_callee_state s u))))
         else Error "invoke: return arity mismatch"
     | Halt u => Halt u | Abort e u => Abort e u | Error e => Error e
-    | OK u => Error "invoke: callee did not return")
-  in
+    | OK u => Error "invoke: callee did not return") ==>
     (terminates (packet_finish a r) <=> terminates (packet_finish b r)) /\
     (!P. (!u. (packet_finish a r = OK u \/ (?ir. packet_finish a r = IntRet ir u)) ==>
                  P u.vs_gas_readings) <=>
@@ -795,7 +680,7 @@ Theorem invoke_finish_observations[local]:
     (!tail. residual_result tail (packet_finish a r) (packet_finish a r') <=>
             residual_result tail (packet_finish b r) (packet_finish b r'))
 Proof
-  rpt gen_tac >> strip_tac >> simp_tac bool_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `r` >> Cases_on `r'` >>
   simp[passSimulationDefsTheory.terminates_def,
        restore_result_def, dftRunRelTheory.dft_res_rel_def,
@@ -964,89 +849,19 @@ Theorem invoke_fixed_segment_updates[local]:
                  ~MEM (FST q) y.inst_outputs) us ==>
     (P (FOLDL (\st q. update_var (FST q) (SND q) st) t us) <=> P t)
 Proof
-  ntac 7 gen_tac >> BasicProvers.LET_ELIM_TAC >>
-  `!n D st. step_inst n D y
-      (FOLDL (\st q. update_var (FST q) (SND q) st) st us) =
-    (case step_inst n D y st of
-       OK u => OK (FOLDL (\st q. update_var (FST q) (SND q) st) u us)
-     | Halt u => Halt u | Abort a u => Abort a u
-     | IntRet ir u => IntRet ir u | Error e => Error e)` by
-    (rpt gen_tac >> irule invoke_updates_concrete_frame >> simp[]) >>
-  `!us st gs.
-    (FOLDL (\st q. update_var (FST q) (SND q) st) st us).vs_gas_readings = st.vs_gas_readings /\
-    (FOLDL (\st q. update_var (FST q) (SND q) st) st us).vs_current_bb = st.vs_current_bb /\
-    ((FOLDL (\st q. update_var (FST q) (SND q) st) st us) with vs_gas_readings := gs) =
-    FOLDL (\st q. update_var (FST q) (SND q) st) (st with vs_gas_readings := gs) us` by
-    (Induct >- simp[] >> rpt gen_tac >> simp[Once FOLDL] >>
-     first_x_assum (qspecl_then [`update_var (FST h) (SND h) st`, `gs'`] mp_tac) >>
-     simp[update_var_def]) >>
-  eq_tac >- suspend "reverse" >> strip_tac >>
-  fs[Abbr `P`] >> conj_tac
-  >- (rpt strip_tac >> Cases_on `step_inst fuel C' y t` >> gvs[] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >>
-  `!owner st. gas_events_step fuel C owner y
-     (FOLDL (\st q. update_var (FST q) (SND q) st) st us) =
-     gas_events_step fuel C owner y st` by
-    (rpt gen_tac >> irule gas_events_invoke_updates >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  simp[] >>
-  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
-  strip_tac >>
-  `?j. terminates (step_inst j C y (t with vs_gas_readings := gs ++ tail))` by
-    (qexists_tac `j` >>
-     qpat_x_assum `terminates _` mp_tac >> simp[] >>
-     Cases_on `step_inst j C y (t with vs_gas_readings := gs ++ tail)` >>
-     simp[passSimulationDefsTheory.terminates_def]) >>
-  qpat_x_assum `(?j. _) ==> _` mp_tac >>
-  (impl_tac >- metis_tac[]) >> simp[] >> strip_tac >>
-  Cases_on `step_inst fuel C y (t with vs_gas_readings := gs ++ tail)` >>
-  Cases_on `step_inst fuel C' y t` >>
-  gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
-      passSimulationDefsTheory.terminates_def, residual_result_def,
-      stateEquivTheory.lift_result_def] >> metis_tac[]
+  rpt gen_tac >> simp_tac bool_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> irule invoke_fixed_segment_setup >>
+  `(\st q. update_var (FST q) (SND q) st) =
+   (\st (out,w). update_var out w st)` by
+    simp[FUN_EQ_THM, pairTheory.FORALL_PROD] >>
+  simp[gas_fold_updates_readings,
+       dftGasInvCallerInputTheory.inv_setup_callee_updates] >>
+  qid_spec_tac `t` >> Induct_on `us` >> simp[] >>
+  gen_tac >> PairCases_on `h` >> simp[] >>
+  rpt strip_tac >> Cases_on `op` >>
+  gvs[eval_operand_def, lookup_var_def, update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
-
-Resume invoke_fixed_segment_updates[reverse]:
-  strip_tac >> fs[Abbr `P`] >> conj_tac >- metis_tac[] >> conj_tac
-  >- (rpt strip_tac >> Cases_on `step_inst fuel C' y t` >> gvs[] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >>
-  `!owner st. gas_events_step fuel C owner y
-     (FOLDL (\st q. update_var (FST q) (SND q) st) st us) =
-     gas_events_step fuel C owner y st` by
-    (rpt gen_tac >> irule gas_events_invoke_updates >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
-  simp[] >> strip_tac >>
-  `?j. terminates (step_inst j C y
-     (FOLDL (\st q. update_var (FST q) (SND q) st)
-       (t with vs_gas_readings := gs ++ tail) us))` by
-    (qexists_tac `j` >> simp[] >>
-     qpat_x_assum `terminates _` mp_tac >>
-     Cases_on `step_inst j C y (t with vs_gas_readings := gs ++ tail)` >>
-     simp[passSimulationDefsTheory.terminates_def]) >>
-  qpat_x_assum `(?j. _) ==> _` mp_tac >>
-  (impl_tac >- metis_tac[]) >> simp[] >> strip_tac >>
-  Cases_on `step_inst fuel C y (t with vs_gas_readings := gs ++ tail)` >>
-  Cases_on `step_inst fuel C' y t` >>
-  gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
-      passSimulationDefsTheory.terminates_def, residual_result_def,
-      stateEquivTheory.lift_result_def] >>
-  `!k. MEM k (MAP FST us) ==> lookup_var k v = lookup_var k v'` by
-    (rpt strip_tac >>
-     `~MEM k y.inst_outputs` by
-       (gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
-     `~is_terminator y.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
-     `lookup_var k v = lookup_var k (t with vs_gas_readings := gs ++ tail)` by
-       (irule venomInstPropsTheory.step_preserves_non_output_vars >> metis_tac[]) >>
-     `lookup_var k v' = lookup_var k t` by
-       (irule venomInstPropsTheory.step_preserves_non_output_vars >> metis_tac[]) >>
-     gvs[lookup_var_def]) >>
-  conj_tac >> irule supported_updates_cancel >> qexists_tac `us` >>
-  simp[lookup_var_def] >> metis_tac[lookup_var_def]
-QED
-Finalise invoke_fixed_segment_updates[local]
 
 (* Reuse the very same packet when replacing a successful call's suffix. *)
 Theorem invoke_fixed_segment_target_suffix[local]:
@@ -3839,32 +3654,9 @@ Theorem invoke_fixed_segment_inst_idx[local]:
   in !t j. y.inst_opcode = INVOKE ==>
     (P (t with vs_inst_idx := j) <=> P t)
 Proof
-  ntac 7 gen_tac >> BasicProvers.LET_ELIM_TAC >>
-  `!t j. y.inst_opcode = INVOKE /\ P t ==> P (t with vs_inst_idx := j)` by
-    (rpt gen_tac >> strip_tac >> fs[Abbr `P`] >>
-     simp[gas_events_invoke_inst_idx,
-          analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
-          GSYM venom_state_accfupds] >>
-     conj_tac
-     >- (rpt strip_tac >> Cases_on `step_inst fuel C' y t` >> gvs[] >> metis_tac[]) >>
-     rpt gen_tac >> strip_tac >> strip_tac >>
-     `?n. terminates (step_inst n C y (t with vs_gas_readings := gs ++ tail))` by
-       (qexists_tac `n` >> qpat_x_assum `terminates _` mp_tac >>
-        Cases_on `step_inst n C y (t with vs_gas_readings := gs ++ tail)` >>
-        simp[passSimulationDefsTheory.terminates_def]) >>
-     qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-       (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
-     qpat_x_assum `(?n. _) ==> _` mp_tac >>
-     (impl_tac >- metis_tac[]) >> strip_tac >>
-     Cases_on `step_inst fuel C y (t with vs_gas_readings := gs ++ tail)` >>
-     Cases_on `step_inst fuel C' y t` >>
-     gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
-         passSimulationDefsTheory.terminates_def, residual_result_def,
-         stateEquivTheory.lift_result_def]) >>
-  rpt strip_tac >> eq_tac
-  >- (strip_tac >> first_x_assum (qspecl_then
-        [`t with vs_inst_idx := j`, `t.vs_inst_idx`] mp_tac) >> simp[]) >>
-  metis_tac[]
+  rpt gen_tac >> simp_tac bool_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> irule invoke_fixed_segment_setup >>
+  simp[instIdxIndepTheory.eval_op_inst_idx, setup_callee_def]
 QED
 
 Theorem invoke_gas_adjacent_packet[local]:

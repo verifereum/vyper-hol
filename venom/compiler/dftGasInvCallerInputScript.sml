@@ -10,7 +10,7 @@ Proof
   simp[setup_callee_def]
 QED
 
-Theorem inv_setup_callee_updates[local]:
+Theorem inv_setup_callee_updates:
   !pairs s. setup_callee callee args
     (FOLDL (\st (out,w). update_var out w st) s pairs) =
     setup_callee callee args s

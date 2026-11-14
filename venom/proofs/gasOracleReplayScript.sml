@@ -1238,3 +1238,119 @@ Proof
   pure_rewrite_tac[gas_replay_def, gas_replay_at_def, gas_prefix_def] >>
   metis_tac[]
 QED
+
+(* Equality of native return reconstruction is independent of caller registers. *)
+Theorem invoke_state_equality:
+  (s = t) <=>
+  (s with vs_vars := FEMPTY) = (t with vs_vars := FEMPTY) /\
+  (!k. lookup_var k s = lookup_var k t)
+Proof
+  simp[venom_state_component_equality, lookup_var_def,
+       finite_mapTheory.fmap_eq_flookup] >> metis_tac[]
+QED
+
+Theorem invoke_fold_compare:
+  !outs xs ys a b c d.
+    LENGTH outs = LENGTH xs /\ LENGTH outs = LENGTH ys /\
+    (((a with vs_vars := FEMPTY) = (b with vs_vars := FEMPTY)) <=>
+     ((c with vs_vars := FEMPTY) = (d with vs_vars := FEMPTY))) /\
+    (!k. (lookup_var k a = lookup_var k b) <=>
+         (lookup_var k c = lookup_var k d)) ==>
+    ((FOLDL (\s (k,v). update_var k v s) a (ZIP (outs,xs)) =
+      FOLDL (\s (k,v). update_var k v s) b (ZIP (outs,ys))) <=>
+     (FOLDL (\s (k,v). update_var k v s) c (ZIP (outs,xs)) =
+      FOLDL (\s (k,v). update_var k v s) d (ZIP (outs,ys))))
+Proof
+  Induct
+  >- (simp[] >> rpt strip_tac >>
+      pure_once_rewrite_tac[invoke_state_equality] >> metis_tac[]) >>
+  Cases_on `xs` >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[update_var_def, lookup_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> IF_CASES_TAC >> gvs[lookup_var_def]
+QED
+
+Theorem invoke_return_compare:
+  !outs ir jr u v a b.
+    a.vs_fmp = b.vs_fmp /\
+    LENGTH outs = LENGTH ir.iret_values /\
+    LENGTH outs = LENGTH jr.iret_values ==>
+    ((THE (bind_outputs outs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state a u))) =
+      THE (bind_outputs outs jr.iret_values
+        (adopt_return_fmp jr (merge_callee_state a v)))) <=>
+     (THE (bind_outputs outs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state b u))) =
+      THE (bind_outputs outs jr.iret_values
+        (adopt_return_fmp jr (merge_callee_state b v)))))
+Proof
+  rpt gen_tac >> strip_tac >> simp[bind_outputs_def] >>
+  irule invoke_fold_compare >> simp[] >>
+  Cases_on `ir.iret_adopt_fmp` >> Cases_on `jr.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, merge_callee_state_def,
+       venom_state_component_equality, lookup_var_def]
+QED
+
+Theorem invoke_return_replace_gas:
+  LENGTH outs = LENGTH ir.iret_values ==>
+  THE (bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state a (u with vs_gas_readings := gs)))) =
+  (THE (bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state a u))) with vs_gas_readings := gs)
+Proof
+  strip_tac >>
+  `merge_callee_state a (u with vs_gas_readings := gs) =
+   (merge_callee_state a u with vs_gas_readings := gs)` by
+    simp[merge_callee_state_def] >>
+  simp[gas_adopt_return, gas_bind_outputs] >> simp[bind_outputs_def]
+QED
+
+Theorem invoke_return_compare_gas:
+  !outs ir jr u v a b gs hs.
+    a.vs_fmp = b.vs_fmp /\
+    LENGTH outs = LENGTH ir.iret_values /\
+    LENGTH outs = LENGTH jr.iret_values ==>
+    (((THE (bind_outputs outs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state a u))) with vs_gas_readings := gs) =
+      (THE (bind_outputs outs jr.iret_values
+        (adopt_return_fmp jr (merge_callee_state a v))) with vs_gas_readings := hs)) <=>
+     ((THE (bind_outputs outs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state b u))) with vs_gas_readings := gs) =
+      (THE (bind_outputs outs jr.iret_values
+        (adopt_return_fmp jr (merge_callee_state b v))) with vs_gas_readings := hs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM invoke_return_replace_gas] >>
+  irule invoke_return_compare >> simp[]
+QED
+
+Theorem invoke_bind_case:
+  (case bind_outputs outs vals s of
+     SOME t => OK t | NONE => Error e) =
+  (if LENGTH outs = LENGTH vals then OK (THE (bind_outputs outs vals s))
+   else Error e)
+Proof
+  simp[bind_outputs_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem invoke_return_readings:
+  LENGTH outs = LENGTH ir.iret_values ==>
+  (THE (bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state a u)))).vs_gas_readings =
+  u.vs_gas_readings
+Proof
+  strip_tac >>
+  `bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state a u)) =
+   SOME (THE (bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state a u))))` by simp[bind_outputs_def] >>
+  drule gas_bind_outputs_readings >> simp[]
+QED
+
+Theorem invoke_gas_equality:
+  (s = (t with vs_gas_readings := tail)) <=>
+  (s with vs_gas_readings := []) = (t with vs_gas_readings := []) /\
+  s.vs_gas_readings = tail
+Proof
+  simp[venom_state_component_equality] >> metis_tac[]
+QED
