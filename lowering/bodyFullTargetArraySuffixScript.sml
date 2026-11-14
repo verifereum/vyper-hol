@@ -476,3 +476,79 @@ Proof
   qexistsl_tac [`b'`, `sz'`] >>
   fs[type_memory_size_def] >> decide_tac
 QED
+
+Theorem array_tail_live_storage_header_clean[local]:
+  storage_read_live (H : (bool # bytes32 # type_value) list # num list) tr st slot tv /\
+  0 < type_slot_size tv /\
+  storage_agree (storage_dead H tr st) st rt /\
+  (!key b. (key,b) IN X ==> storage_dead H tr rt (w2n key) b) ==>
+  key_taint X slot = {}
+Proof
+  strip_tac >>
+  drule accountsRelPropsTheory.storage_agree_storage_dead >> strip_tac >>
+  simp[key_taint_def, pred_setTheory.EXTENSION] >>
+  metis_tac[accountsRelPropsTheory.storage_read_live_head]
+QED
+
+Theorem array_tail_packet_storage_loader:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  pv = PlaceR (StoragePlace tr slot tv) /\
+  emit_op (if tr then TLOAD else SLOAD) [FST rb] sn = (Var out,sl) ==>
+  ?etv. tv = ArrayTV etv (Dynamic cap) /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    eval_operand (FST rb) t2 = SOME slot /\
+    storage_read_live H tr (get_storage cx mid2 tr) slot tv /\
+    w2n slot + type_slot_size tv <= dimword (:256) /\
+    w2n (lookup_storage slot (get_storage cx mid2 tr)) <= cap /\
+    (if tr then tload slot t2 else sload slot t2) =
+      lookup_storage slot (get_storage cx mid2 tr) /\
+    array_length_step_ok lo ctx func (if tr then TLOAD else SLOAD) [FST rb]
+      (if tr then tload slot t2 else sload slot t2) sn out sl t2 G2 tn2 /\
+    op_taint (step_taint (mk_inst sn.cs_next_id (if tr then TLOAD else SLOAD) [FST rb] [out])
+      t2 (update_var out (if tr then tload slot t2 else sload slot t2) t2) tn2) (Var out) = {} /\
+    op_prov (step_prov PG G2 (mk_inst sn.cs_next_id (if tr then TLOAD else SLOAD) [FST rb] [out])
+      (update_var out (if tr then tload slot t2 else sload slot t2) t2)) (Var out) = NONE
+Proof
+  strip_tac >>
+  drule_all array_tail_packet_storage_source >> strip_tac >>
+  drule_all array_tail_packet_source_index >> strip_tac >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  gvs[] >>
+  `w = slot` by fs[place_ptr_rel_def] >> gvs[] >>
+  `w2n slot + type_slot_size (ArrayTV etv (Dynamic cap)) <= dimword (:256)` by decide_tac >>
+  drule_all target_storage_array_len_ok >> strip_tac >>
+  simp[] >>
+  `storage_agree (storage_dead H tr (get_storage cx mid2 tr))
+     (get_storage cx mid2 tr) (if tr then contract_transient t2 else contract_storage t2)` by
+    (Cases_on `tr` >> fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.storage_rel_def, loweringStateRelDefsTheory.transient_rel_def,
+       vyperStorageBackendTheory.get_storage_def, vfmStateTheory.lookup_account_def]) >>
+  fs[array_tail_packet_def] >> first_x_assum drule >> strip_tac >>
+  `key_taint (if tr then tn2.t_trans else tn2.t_stor) slot = {}` by
+    (irule array_tail_live_storage_header_clean >>
+     goal_assum (drule_at (Pos (el 4))) >>
+     goal_assum (drule_at (Pos (el 3))) >>
+     simp[type_slot_size_def] >>
+     fs[ghost_inv_at_def, stor_taint_ok_at_def, dead_lo_ok_def,
+        sourceUnitExecutionTheory.cx_dead_def] >>
+     qpat_x_assum `!H'. dead_sub _ _ /\ _` (qspec_then `H` strip_assume_tac) >>
+     Cases_on `tr` >>
+     gvs[venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
+         pred_setTheory.SUBSET_DEF] >>
+     rpt strip_tac >> first_x_assum drule >>
+     rw[] >> gvs[vfmStateTheory.lookup_account_def]) >>
+  Cases_on `tr` >>
+  gvs[array_length_step_ok_def, op_taint_def, op_prov_def, step_taint_def, step_prov_def,
+      venomInstTheory.mk_inst_def, set_prov_def, set_var_taint_def, FLOOKUP_UPDATE,
+      mem_taint_def, memLocDefsTheory.mem_read_ops_def, memLocDefsTheory.mem_write_ops_def,
+      out_taint_def, out_prov_def, FLOOKUP_DRESTRICT] >>
+  simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       venomExecSemanticsTheory.exec_read1_def, ptrDisciplineTheory.access_ok_def,
+       ptrDisciplineTheory.taint_ok_def, unitTransformDefsTheory.inst_mem_below_frontier_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def, ghost_inv_at_def] >>
+  fs[op_taint_def, ghost_inv_at_def]
+QED
