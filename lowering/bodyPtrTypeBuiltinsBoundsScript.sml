@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsBounds
 Ancestors
+  augAssignPtrScalarCertificate
   builtinBytes exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context
   venomInst venomState venomExecSemantics finite_map list words arithmetic
   fragGasSeqPtr ptrDiscipline ptrSafeRun codegenRel contextCodegenRel
@@ -129,3 +130,13 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
+Theorem slice_bounds_scalar_code:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  scalar_available A a /\ scalar_available A n /\ scalar_available A limit ==>
+  scalar_code A (emitted_insts sa sb)
+Proof
+  strip_tac >> drule compile_assert_slice_bounds_shape >> strip_tac >>
+  simp[scalar_code_def, scalar_shape_def, scalar_binary_def,
+       scalar_unary_def, mk_inst_def, scalar_available_def] >>
+  gvs[scalar_available_def] >> simp[]
+QED

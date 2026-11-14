@@ -9,51 +9,6 @@ Ancestors
 
 (* Integer branches reuse the generic scalar clamp interface. The remaining
    basetypes either return unchanged or perform a scalar check of the word. *)
-Theorem scalar_clamp_basetype_code:
-  compile_clamp_basetype raw typ sa = (result,sb) /\ scalar_available A raw ==>
-  scalar_code A (emitted_insts sa sb)
-Proof
-  strip_tac >> Cases_on `typ` >>
-  gvs[compile_clamp_basetype_def, comp_return_def, emitted_insts_refl, scalar_code_def] >>
-  Cases_on `b`
-  >~ [`compile_clamp_basetype raw (BaseT (UintT n)) sa = _`] >-
-    (Cases_on `n < 256` >>
-     gvs[compile_clamp_basetype_def, comp_return_def, emitted_insts_refl, scalar_code_def] >>
-     drule_all scalar_clamp_and_return_code >> simp[])
-  >~ [`compile_clamp_basetype raw (BaseT (IntT n)) sa = _`] >-
-    (Cases_on `n < 256` >>
-     gvs[compile_clamp_basetype_def, comp_return_def, emitted_insts_refl, scalar_code_def] >>
-     drule_all scalar_clamp_and_return_code >> simp[])
-  >~ [`compile_clamp_basetype raw (BaseT (BytesT bt)) sa = _`] >-
-    (Cases_on `bt` >>
-     gvs[compile_clamp_basetype_def, comp_return_def, emitted_insts_refl, scalar_code_def,
-         AllCaseEqs()] >> suspend "bytes") >>
-  gvs[compile_clamp_basetype_def, comp_return_def, emitted_insts_refl, scalar_code_def] >>
-  suspend "address"
-QED
-
-Resume scalar_clamp_basetype_code[bytes]:
-  Cases_on `n < 32` >> gvs[comp_return_def, emitted_insts_refl, scalar_code_def] >>
-  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def] >>
-  simp[emitted_insts_def] >> rewrite_tac[GSYM APPEND_ASSOC] >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND,
-       scalar_code_def, scalar_shape_def, scalar_binary_def, scalar_unary_def,
-       mk_inst_def, scalar_available_def] >>
-  gvs[scalar_available_def]
-QED
-
-Resume scalar_clamp_basetype_code[address]:
-  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def] >>
-  simp[emitted_insts_def] >> rewrite_tac[GSYM APPEND_ASSOC] >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND,
-       scalar_code_def, scalar_shape_def, scalar_binary_def, scalar_unary_def,
-       mk_inst_def, scalar_available_def] >>
-  gvs[scalar_available_def]
-QED
-Finalise scalar_clamp_basetype_code
-
 Theorem clamp_basetype_returns_input:
   compile_clamp_basetype raw typ sa = (result,sb) ==> result = raw
 Proof

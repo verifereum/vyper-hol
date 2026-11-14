@@ -1,6 +1,7 @@
 (* Actual straight-line clamp execution, independent of simulation judgments. *)
 Theory exprSimExtract32Run
 Ancestors
+  varsExt freshWrites
   exprSimHashBoundary
   exprSimExtract32Read exprSimExtract32Value convertScalarOutputs exprSimHash
   fragGasMode
@@ -405,3 +406,62 @@ Proof
   gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND, EVERY_MEM] >>
   metis_tac[]
 QED
+
+Theorem extract32_tail_run_any:
+  extract32_result_base_ok bt /\
+  (case bt of UintT k => k <= 256 | IntT k => 0 < k /\ k <= 256 |
+    BytesT (Fixed k) => k <= 32 | _ => T) /\
+  val_in_memory (BaseTV (BytesT (Dynamic m))) (BytesV bs) p s.vs_memory /\
+  LENGTH bs < dimword(:256) /\ n < dimword(:256) /\
+  p+32+LENGTH bs < dimword(:256) /\
+  eval_operand len s = SOME (n2w (LENGTH bs)) /\
+  eval_operand dp s = SOME (n2w (p+32)) /\ eval_operand off s = SOME (n2w n) /\
+  (!z. len = Var z \/ dp = Var z \/ off = Var z ==> not_fresh_at sa z) /\
+  compile_extract32_load len dp off sa = (raw,sm) /\
+  compile_clamp_basetype raw (BaseT bt) sm = (op,sb) ==>
+  case evaluate_extract32 bs n bt of
+    INL v => ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      eval_operand op t = SOME (typed_val_to_w256 (BaseTV bt) v)
+  | INR err => ?msg t. err = RuntimeError msg /\
+      run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `eval_operand len (drop_fresh sa s) = SOME (n2w (LENGTH bs)) /\
+   eval_operand dp (drop_fresh sa s) = SOME (n2w (p+32)) /\
+   eval_operand off (drop_fresh sa s) = SOME (n2w n)` by
+    metis_tac[eval_operand_drop_fresh] >>
+  `val_in_memory (BaseTV (BytesT (Dynamic m))) (BytesV bs) p
+     (drop_fresh sa s).vs_memory` by simp[drop_fresh_def] >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+     ~is_ext_call_op j.inst_opcode) (emitted_insts sa sb)` by
+    (drule_all extract32_tail_straight_noext >> simp[EVERY_MEM]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+     (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  Cases_on `evaluate_extract32 bs n bt`
+  >- suspend "success" >> suspend "error"
+QED
+
+Resume extract32_tail_run_any[success]:
+  `?v. run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK v /\
+       eval_operand op v = SOME (typed_val_to_w256 (BaseTV bt) x)` by
+    (drule_all extract32_tail_success >> metis_tac[]) >>
+  gvs[vars_ext_result_def] >>
+  gvs[vars_ext_def] >>
+  drule eval_operand_vars_ext >> disch_then (qspec_then `op` mp_tac) >> simp[] >>
+  metis_tac[]
+QED
+
+Resume extract32_tail_run_any[error]:
+  `?msg. y = RuntimeError msg` by
+    (irule extract32_error_runtime >> goal_assum (drule_at Any) >>
+     Cases_on `bt` >> gvs[]) >> gvs[] >>
+  `LENGTH bs < dimword(:256) /\ p+32+LENGTH bs < dimword(:256)` by decide_tac >>
+  `?v. run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) =
+     Abort Revert_abort v` by
+    (drule_all extract32_tail_error >> metis_tac[]) >>
+  gvs[vars_ext_result_def] >> metis_tac[]
+QED
+
+Finalise extract32_tail_run_any

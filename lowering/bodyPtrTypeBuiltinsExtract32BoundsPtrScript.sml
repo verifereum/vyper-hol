@@ -20,17 +20,6 @@ Proof
   simp[bop_scalar_seq_def, mk_inst_def]
 QED
 
-Theorem slice_bounds_scalar_code:
-  compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  scalar_available A a /\ scalar_available A n /\ scalar_available A limit ==>
-  scalar_code A (emitted_insts sa sb)
-Proof
-  strip_tac >> drule compile_assert_slice_bounds_shape >> strip_tac >>
-  simp[scalar_code_def, scalar_shape_def, scalar_binary_def,
-       scalar_unary_def, mk_inst_def, scalar_available_def] >>
-  gvs[scalar_available_def] >> simp[]
-QED
-
 Theorem scalar_code_certificate_cursor:
   !code A G tn s H tm.
   scalar_code A code /\
