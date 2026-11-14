@@ -127,7 +127,7 @@ Proof
      vs_gas_readings := readings|> =
    t with <|vs_vars := t.vs_vars |+ (out,z); vs_gas_readings := readings|>` by
     simp[venom_state_component_equality] >>
-  simp[update_var_def]
+  gvs[update_var_def]
 QED
 
 Theorem dload_boundary_core_gas_index:

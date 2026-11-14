@@ -83,14 +83,14 @@ QED
 
 Resume dload_joint_reachable_if_next[next]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
-  strip_tac >> strip_tac >> imp_res_tac frame_next_gas_cut >>
+  strip_tac >> strip_tac >> imp_res_tac o1SafeUptoTheory.frame_next_gas_cut >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
 Resume dload_joint_reachable_if_next[block]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
-  strip_tac >> strip_tac >> imp_res_tac frame_block_gas_cut >>
+  strip_tac >> strip_tac >> imp_res_tac o1SafeUptoTheory.frame_block_gas_cut >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   unabbrev_all_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
@@ -101,7 +101,7 @@ QED
 
 Resume dload_joint_reachable_if_next[call]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
-  strip_tac >> strip_tac >> imp_res_tac frame_call_gas_cut >>
+  strip_tac >> strip_tac >> imp_res_tac o1SafeUptoTheory.frame_call_gas_cut >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   unabbrev_all_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>
@@ -112,7 +112,7 @@ QED
 
 Resume dload_joint_reachable_if_next[return]:
   rpt gen_tac >> qabbrev_tac `J = ^joint` >>
-  strip_tac >> strip_tac >> imp_res_tac frame_ret_gas_cut >>
+  strip_tac >> strip_tac >> imp_res_tac o1SafeUptoTheory.frame_ret_gas_cut >>
   qpat_x_assum `_ ==> _` (drule_all_then assume_tac) >>
   qpat_x_assum `!ds PH H un g j t next t1 fuel. _` kall_tac >>
   unabbrev_all_tac >> CONV_TAC (REDEPTH_CONV BETA_CONV) >>

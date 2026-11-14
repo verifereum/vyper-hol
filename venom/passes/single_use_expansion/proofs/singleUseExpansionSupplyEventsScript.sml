@@ -4,14 +4,6 @@ Ancestors
   singleUseExpansionSupplySim gasEvents o1PassLift
   venomExecSemantics stateEquiv stateFrame analysisSimDefs venomInst venomState
 
-Theorem sue_eval_operands_related:
-  !xs ys. LIST_REL (\op newop. eval_operand newop t = eval_operand op s) xs ys ==>
-    eval_operands ys t = eval_operands xs s
-Proof
-  Induct >> Cases_on `ys` >>
-  simp[venomStateTheory.eval_operands_def] >>
-  rpt strip_tac >> res_tac >> simp[]
-QED
 
 Theorem sue_supply_lookup_functions:
   LIST_REL (\f g. ?t t'.
@@ -44,22 +36,6 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem sue_rewritten_invoke_args:
-  inst_wf inst /\ inst.inst_opcode = INVOKE /\
-  LIST_REL (\op newop. eval_operand newop u = eval_operand op s)
-    inst.inst_operands ops /\
-  (!i. i < LENGTH inst.inst_operands ==>
-    !lbl. EL i inst.inst_operands = Label lbl ==> EL i ops = Label lbl) ==>
-  OPTION_MAP (\(name,args). (name, eval_operands args u))
-    (decode_invoke (inst with inst_operands := ops)) =
-  OPTION_MAP (\(name,args). (name, eval_operands args s))
-    (decode_invoke inst)
-Proof
-  strip_tac >> gvs[venomWfTheory.inst_wf_def] >>
-  `newop = Label lbl` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  gvs[decode_invoke_def] >> irule sue_eval_operands_related >> simp[]
-QED
 
 Theorem sue_result_rel_frame:
   sue_result_rel P r r' ==>
@@ -110,19 +86,7 @@ Proof
   simp[lift_result_def]
 QED
 
-Theorem sue_assign_events_step:
-  a.inst_opcode = ASSIGN ==> gas_events_step fuel ctx owner a t = []
-Proof
-  simp[gas_events_step_def]
-QED
 
-Theorem sue_gas_events_step_noninvoke:
-  inst.inst_opcode <> INVOKE ==>
-  gas_events_step fuel C owner inst s =
-  gas_events_step fuel C' owner (inst with inst_operands := ops) u
-Proof
-  simp[gas_events_step_def]
-QED
 
 Theorem sue_assign_events_prefix:
   !assigns k bb tail t u.
@@ -142,7 +106,7 @@ Proof
    DROP (SUC k) bb.bb_instructions = assigns ++ tail` by
     gvs[rich_listTheory.DROP_BY_DROP_SUC] >>
   Cases_on `step_inst fuel ctx h t` >> gvs[run_insts_def] >>
-  simp[Once gas_events_block_def, get_instruction_def, sue_assign_events_step,
+  simp[Once gas_events_block_def, get_instruction_def, gasEventsTheory.gas_events_step_plain,
        analysisSimProofsBaseTheory.step_inst_idx_indep,
        is_terminator_def, instIdxIndepTheory.exec_result_map_def] >>
   first_x_assum (qspec_then `SUC k` mp_tac) >>
@@ -269,7 +233,7 @@ Proof
           eval_operand (EL n inst.inst_operands) s` by
            (irule sue_state_rel_eval_operand >> qexists_tac `P` >> simp[] >>
             metis_tac[listTheory.MEM_EL]) >> simp[]) >>
-      drule_all sue_rewritten_invoke_args >> strip_tac >>
+      drule_all venomExecProofsTheory.sue_rewritten_invoke_args >> strip_tac >>
       conj_tac
       >- (irule sue_gas_events_invoke >> metis_tac[]) >>
       irule sue_step_invoke_frame >> metis_tac[]) >>
@@ -358,14 +322,6 @@ Proof
   pure_rewrite_tac[sue_step_inst_idx_norm] >> simp[]
 QED
 
-Theorem sue_gas_events_step_index:
-  gas_events_step fuel C owner inst (s with vs_inst_idx := k) =
-  gas_events_step fuel C owner inst s
-Proof
-  `!f args. setup_callee f args (s with vs_inst_idx := k) = setup_callee f args s` by
-    (rpt gen_tac >> irule setup_callee_execution_frame >> simp[execution_frame_def]) >>
-  simp[gas_events_step_def, instIdxIndepTheory.eval_ops_inst_idx]
-QED
 
 Theorem sue_segment_indexed_events:
   ir_supply_inst_ok supply /\ P SUBSET set supply.irs_used_vars /\
@@ -453,7 +409,7 @@ Resume sue_segment_indexed_events[expanded]:
   qexistsl [`sue_segment_offset segs i + LENGTH assigns`,
     `u with vs_inst_idx := sue_segment_offset segs i + LENGTH assigns`,
     `inst with inst_operands := ops`] >>
-  simp[sue_gas_events_step_index, sue_frame_step_indices] >>
+  simp[gasEventsTheory.sue_gas_events_step_index, sue_frame_step_indices] >>
   gvs[]
 QED
 

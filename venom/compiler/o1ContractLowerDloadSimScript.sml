@@ -155,30 +155,8 @@ Proof
 QED
 
 (* A nonempty event list of an INVOKE is its callee's run events. *)
-Theorem ld_invoke_events_inversion:
-  i.inst_opcode = INVOKE /\ gas_events_step k C owner i s <> [] ==>
-  ?nm ops callee args cs.
-    decode_invoke i = SOME (nm,ops) /\
-    lookup_function nm C.ctx_functions = SOME callee /\
-    eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
-    gas_events_step k C owner i s = gas_events_blocks k C callee cs
-Proof
-  strip_tac >> fs[gas_events_step_def] >> BasicProvers.every_case_tac >> gvs[]
-QED
 
 (* A callee that returns before its budget ends inside the cut. *)
-Theorem ld_blocks_ret_cut[local]:
-  run_blocks k C fn s = IntRet ir se /\
-  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
-  LENGTH (gas_events_blocks k C fn s) < j ==>
-  gas_cut ncut vs se
-Proof
-  strip_tac >> fs[gas_events_length] >>
-  mp_tac (cj 3 gas_count_suffix) >>
-  disch_then (qspecl_then [`k`,`C`,`fn`,`s`] mp_tac) >>
-  simp[gas_count_suffix_def] >> strip_tac >>
-  simp[gas_cut_def, LENGTH_DROP] >> decide_tac
-QED
 
 val ldStepClause = fst (dest_conj (fst (dest_imp
   (concl ld_runner_conditional_induction_events_fuel))));
@@ -193,15 +171,15 @@ Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[] >>
-  drule_all ld_budget_cut >> strip_tac >>
+  drule_all o1SafeUptoTheory.ld_budget_cut >> strip_tac >>
   `ptr_discipline_upto lo ncut C vs` by
     fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   reverse conj_tac
   >- (strip_tac >>
       `gas_events_step fuel C fn.fn_name inst s <> []` by
         (strip_tac >> gvs[]) >>
-      drule_all ld_invoke_events_inversion >> strip_tac >>
-      `?sn. enters_block callee cs sn` by metis_tac[ld_run_enters] >>
+      drule_all gasEventsTheory.ld_invoke_events_inversion >> strip_tac >>
+      `?sn. enters_block callee cs sn` by metis_tac[o1SafeUptoTheory.ld_run_enters] >>
       `j + LENGTH vs.vs_gas_readings <= ncut + LENGTH cs.vs_gas_readings` by
         (drule ld_setup_callee_gas_readings >> simp[]) >>
       drule_all lower_dload_stage_invoke_entry >> strip_tac >>
@@ -219,11 +197,11 @@ Proof
   `gas_events_step fuel C fn.fn_name inst s =
    gas_events_blocks fuel C callee cs` by simp[gas_events_step_def] >>
   `LENGTH (gas_events_blocks fuel C callee cs) < j` by metis_tac[] >>
-  `?sn. enters_block callee cs sn` by metis_tac[ld_run_enters] >>
+  `?sn. enters_block callee cs sn` by metis_tac[o1SafeUptoTheory.ld_run_enters] >>
   `j + LENGTH vs.vs_gas_readings <= ncut + LENGTH cs.vs_gas_readings` by
     (drule ld_setup_callee_gas_readings >> simp[]) >>
   `!ir' se'. run_blocks fuel C callee cs = IntRet ir' se' ==>
-     gas_cut ncut vs se'` by metis_tac[ld_blocks_ret_cut] >>
+     gas_cut ncut vs se'` by metis_tac[o1SafeUptoTheory.ld_blocks_ret_cut] >>
   drule_all lower_dload_stage_invoke_entry >> strip_tac >>
   qpat_x_assum `enters_block callee cs sn` kall_tac >>
   first_x_assum (drule_all_then (mp_tac o CONJUNCT1) o
@@ -517,6 +495,9 @@ QED
 val _ = if null (hyp lower_dload_stage_sim)
         then () else raise Fail "lower_dload_stage_sim proof audit failed";
 
+val _ = if null (hyp lower_dload_stage_sim_fuel)
+        then () else raise Fail "lower_dload_stage_sim_fuel proof audit failed";
+
 (* The first n events of a run inside the cut, with no termination. *)
 Theorem lower_dload_stage_events_upto:
   !rpolicy D view C C' vs names lo n fuel name fn lbl.
@@ -543,11 +524,11 @@ Proof
       disch_then (qspec_then `vs` strip_assume_tac) >>
       qexists_tac `fn'` >> simp[]) >>
   `gas_events_blocks fuel C fn ^ldS0 <> []` by (strip_tac >> gvs[]) >>
-  `?s1. enters_block fn ^ldS0 s1` by metis_tac[ld_run_enters] >>
+  `?s1. enters_block fn ^ldS0 s1` by metis_tac[o1SafeUptoTheory.ld_run_enters] >>
   `0 < n /\ n <= n` by decide_tac >>
   drule_all ld_root_simulation_events_fuel >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`fuel`, `fn'`] >> simp[] >>
-  metis_tac[ld_take_length]
+  metis_tac[gasEventsTheory.ld_take_length]
 QED

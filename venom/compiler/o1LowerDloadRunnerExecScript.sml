@@ -55,7 +55,7 @@ Proof
     (drule ld_joint_source >>
      disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_projection) >>
      fs[Once frame_reachable_cases] >> metis_tac[]) >>
-  `gas_cut ncut vs s` by metis_tac[ld_budget_cut] >>
+  `gas_cut ncut vs s` by metis_tac[o1SafeUptoTheory.ld_budget_cut] >>
   `ptr_discipline_upto lo ncut C vs /\ taint_within_upto D ncut C vs /\
    fmp_free_ctx C` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   `LENGTH (gas_events_step fuel C fn.fn_name i s) <=
@@ -107,7 +107,7 @@ Resume ld_runner_exec_clause_events_fuel[step_prefix]:
   qspecl_then [`fuel`,`C`,`fn.fn_name`,`bb`,`s`,`i`] mp_tac
     gas_events_block_at >>
   simp[] >> rpt (disch_then SUBST1_TAC) >>
-  irule ld_take_append_eq >> simp[]
+  irule gasEventsTheory.ld_take_append_eq >> simp[]
 QED
 
 Resume ld_runner_exec_clause_events_fuel[ok]:
@@ -135,7 +135,7 @@ Resume ld_runner_exec_clause_events_fuel[ok]:
   `j - LENGTH (gas_events_step fuel C fn.fn_name i s) +
      LENGTH vs.vs_gas_readings <= ncut + LENGTH v.vs_gas_readings /\
    0 < j - LENGTH (gas_events_step fuel C fn.fn_name i s)` by
-    (irule ld_step_budget >> simp[]) >>
+    (irule gasEventsTheory.ld_step_budget >> simp[]) >>
   Cases_on `i.inst_opcode = INVOKE` >- suspend "call_ok" >>
   `~in_revert_forward fn s` by
     (spose_not_then assume_tac >>
@@ -166,7 +166,7 @@ Resume ld_runner_exec_clause_events_fuel[ok]:
   qpat_x_assum `_ <= _ ==> _` mp_tac >>
   impl_tac >- (fs[] >> decide_tac) >> strip_tac >>
   gvs[] >> simp[] >>
-  irule ld_take_append_right >> simp[]
+  irule gasEventsTheory.ld_take_append_right >> simp[]
 QED
 
 Resume ld_runner_exec_clause_events_fuel[halt]:
@@ -263,7 +263,7 @@ Resume ld_runner_exec_clause_events_fuel[call_ok]:
   `j - LENGTH (gas_events_step fuel C fn.fn_name i s) +
      LENGTH vs.vs_gas_readings <= ncut + LENGTH v.vs_gas_readings /\
    0 < j - LENGTH (gas_events_step fuel C fn.fn_name i s)` by
-    (irule ld_step_budget >> simp[]) >>
+    (irule gasEventsTheory.ld_step_budget >> simp[]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   `t1.vs_current_bb = t.vs_current_bb` by
     (imp_res_tac ld_joint_current_bb >> fs[]) >>
@@ -286,7 +286,7 @@ Resume ld_runner_exec_clause_events_fuel[call_ok]:
   strip_tac >>
   qpat_x_assum `_ <= _ ==> _` mp_tac >>
   impl_tac >- (fs[] >> decide_tac) >> strip_tac >>
-  gvs[] >> simp[] >> irule ld_take_append_right >> simp[]
+  gvs[] >> simp[] >> irule gasEventsTheory.ld_take_append_right >> simp[]
 
 QED
 Finalise ld_runner_exec_clause_events_fuel

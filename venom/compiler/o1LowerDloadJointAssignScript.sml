@@ -200,6 +200,7 @@ Proof
   qpat_x_assum `G1 = _` SUBST_ALL_TAC >>
   qpat_x_assum `H1 = _` SUBST_ALL_TAC >>
   qpat_x_assum `tn1 = _` SUBST_ALL_TAC >>
+  fs[gasOracleReplayTheory.gas_update_var] >>
   simp[ld_joint_boundary_def] >> conj_tac
   >- (qexists_tac `u` >>
       gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,

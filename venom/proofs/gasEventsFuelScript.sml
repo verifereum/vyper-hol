@@ -171,3 +171,22 @@ Proof
                     venomExecSemanticsTheory.run_block_entry_def]) >>
   gvs[venomExecSemanticsTheory.run_block_entry_def]
 QED
+
+Theorem gas_events_blocks_terminates_le:
+  terminates (run_blocks f ctx fn s) /\ f <= M ==>
+  run_blocks M ctx fn s = run_blocks f ctx fn s /\
+  gas_events_blocks M ctx fn s = gas_events_blocks f ctx fn s
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`f`, `ctx`, `fn`, `s`, `M`] (cj 3 gas_events_fuel_extension)) >>
+  impl_tac >- simp[] >> strip_tac >> first_x_assum irule >>
+  Cases_on `run_blocks f ctx fn s` >> gvs[passSimulationDefsTheory.terminates_def]
+QED
+
+Theorem gas_events_blocks_terminates_eq:
+  terminates (run_blocks f1 ctx fn s) /\ terminates (run_blocks f2 ctx fn s) ==>
+  gas_events_blocks f1 ctx fn s = gas_events_blocks f2 ctx fn s
+Proof
+  strip_tac >> `f1 <= f1 + f2 /\ f2 <= f1 + f2` by decide_tac >>
+  metis_tac[gas_events_blocks_terminates_le]
+QED

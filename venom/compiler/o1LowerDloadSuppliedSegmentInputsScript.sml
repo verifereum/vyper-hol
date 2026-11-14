@@ -41,7 +41,7 @@ Proof
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   qpat_x_assum `ptr_discipline_upto _ _ _ _`
-    (strip_assume_tac o MATCH_MP ptr_discipline_upto_fn_ptr_ok) >>
+    (strip_assume_tac o MATCH_MP o1SafeUptoTheory.ptr_discipline_upto_fn_ptr_ok) >>
   drule frame_reachable_prov_support >>
   disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
   `MEM inst (fn_insts fn)` by

@@ -78,58 +78,11 @@ Proof
 QED
 
 (* One-step unfoldings at a known instruction or block. *)
-Theorem run_blocks_at:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  eval_phis s bb.bb_instructions = OK phi ==>
-  run_blocks (SUC n) C fn s =
-    case exec_block n C bb
-           (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) of
-      OK p => if p.vs_halted then Halt p else run_blocks n C fn p
-    | IntRet v p => IntRet v p
-    | Halt p => Halt p
-    | Abort a p => Abort a p
-    | Error e => Error e
-Proof
-  strip_tac >> CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
-  simp[] >> CASE_TAC >> simp[]
-QED
 
-Theorem exec_block_step_nonerror:
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  (!e. exec_block k C bb s <> Error e) ==>
-  !e. step_inst k C i s <> Error e
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `!e. exec_block _ _ _ _ <> _`
-    (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
-  simp[]
-QED
 
-Theorem run_blocks_block_nonerror:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  eval_phis s bb.bb_instructions = OK phi /\
-  (!e. run_blocks (SUC n) C fn s <> Error e) ==>
-  !e. exec_block n C bb
-        (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) <>
-      Error e
-Proof
-  rpt strip_tac >> imp_res_tac run_blocks_at >> gvs[]
-QED
 
-Theorem run_blocks_zero_error:
-  run_blocks 0 C fn s = Error "out of fuel"
-Proof
-  simp[Once run_blocks_def]
-QED
 
 (* Steps. *)
-Theorem gas_events_step_plain:
-  i.inst_opcode <> INVOKE ==>
-  gas_events_step k C owner i s =
-    if i.inst_opcode = GAS then [(owner,i.inst_id)] else []
-Proof
-  simp[gas_events_step_def]
-QED
 
 Theorem step_events_agree_plain:
   i.inst_opcode <> INVOKE /\ j.inst_opcode <> INVOKE /\
@@ -137,7 +90,7 @@ Theorem step_events_agree_plain:
   (i.inst_opcode = GAS ==> j.inst_id = i.inst_id) ==>
   step_events_agree C C' i s j t r r'
 Proof
-  rw[step_events_agree_def, gas_events_step_plain]
+  rw[step_events_agree_def, gasEventsTheory.gas_events_step_plain]
 QED
 
 Theorem step_events_agree_invoke:
@@ -179,7 +132,7 @@ Theorem block_events_agree_term:
 Proof
   rpt strip_tac >> simp[block_events_agree_def] >> rpt strip_tac >>
   `step_inst k C i s = OK p /\ step_inst k' C' j t = OK p'` by
-    metis_tac[step_inst_finite_eq, exec_block_step_nonerror] >>
+    metis_tac[step_inst_finite_eq, venomExecProofsTheory.exec_block_step_nonerror] >>
   qpat_x_assum `step_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [step_events_agree_def]) >>
   disch_then (qspecl_then [`owner`, `k`, `k'`] mp_tac) >> simp[] >>
@@ -198,7 +151,7 @@ Theorem block_events_agree_next:
 Proof
   rpt strip_tac >> simp[block_events_agree_def] >> rpt strip_tac >>
   `step_inst k C i s = OK p /\ step_inst k' C' j t = OK p'` by
-    metis_tac[step_inst_finite_eq, exec_block_step_nonerror] >>
+    metis_tac[step_inst_finite_eq, venomExecProofsTheory.exec_block_step_nonerror] >>
   qpat_x_assum `step_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [step_events_agree_def]) >>
   disch_then (qspecl_then [`owner`, `k`, `k'`] mp_tac) >> simp[] >>
@@ -226,7 +179,7 @@ Theorem block_events_agree_skip:
 Proof
   rpt strip_tac >> simp[block_events_agree_def] >> rpt strip_tac >>
   `step_inst k C i s = OK p` by
-    metis_tac[step_inst_finite_eq, exec_block_step_nonerror] >>
+    metis_tac[step_inst_finite_eq, venomExecProofsTheory.exec_block_step_nonerror] >>
   qpat_x_assum `block_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
   disch_then (qspecl_then [`owner`, `k`, `k'`] mp_tac) >>
@@ -235,7 +188,7 @@ Proof
         (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
       simp[]) >>
   strip_tac >> imp_res_tac gas_events_block_at >>
-  simp[gas_events_step_plain]
+  simp[gasEventsTheory.gas_events_step_plain]
 QED
 
 Theorem block_events_agree_exit:
@@ -248,7 +201,7 @@ Theorem block_events_agree_exit:
 Proof
   rpt strip_tac >> simp[block_events_agree_def] >> rpt strip_tac >>
   `step_inst k C i s = r /\ step_inst k' C' j t = r'` by
-    metis_tac[step_inst_finite_eq, exec_block_step_nonerror] >>
+    metis_tac[step_inst_finite_eq, venomExecProofsTheory.exec_block_step_nonerror] >>
   qpat_x_assum `step_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [step_events_agree_def]) >>
   disch_then (qspecl_then [`owner`, `k`, `k'`] mp_tac) >> simp[] >>
@@ -257,11 +210,6 @@ Proof
 QED
 
 (* Runs. *)
-Theorem run_blocks_nonerror_suc:
-  (!e. run_blocks k C fn s <> Error e) ==> ?n. k = SUC n
-Proof
-  Cases_on `k` >> simp[run_blocks_zero_error]
-QED
 
 Theorem run_events_agree_next:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -284,18 +232,18 @@ Theorem run_events_agree_next:
 Proof
   rpt strip_tac >> simp[run_events_agree_def] >>
   rpt strip_tac >>
-  `?n. k = SUC n` by metis_tac[run_blocks_nonerror_suc] >>
-  `?n'. k' = SUC n'` by metis_tac[run_blocks_nonerror_suc] >>
+  `?n. k = SUC n` by metis_tac[venomExecProofsTheory.run_blocks_nonerror_suc] >>
+  `?n'. k' = SUC n'` by metis_tac[venomExecProofsTheory.run_blocks_nonerror_suc] >>
   rpt (qpat_x_assum `_ = SUC _` SUBST_ALL_TAC) >>
   `exec_block n C bb
      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
-   OK post` by metis_tac[exec_block_finite_eq, run_blocks_block_nonerror] >>
+   OK post` by metis_tac[exec_block_finite_eq, venomExecProofsTheory.run_blocks_block_nonerror] >>
   `exec_block n' C' bb'
      (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) =
-   OK post'` by metis_tac[exec_block_finite_eq, run_blocks_block_nonerror] >>
+   OK post'` by metis_tac[exec_block_finite_eq, venomExecProofsTheory.run_blocks_block_nonerror] >>
   `run_blocks n C fn post = r /\ run_blocks n' C' fn' post' = r'` by
     (rpt (qpat_x_assum `run_blocks (SUC _) _ _ _ = _` mp_tac) >>
-     imp_res_tac run_blocks_at >> simp[]) >>
+     imp_res_tac venomExecProofsTheory.run_blocks_at >> simp[]) >>
   qpat_x_assum `run_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [run_events_agree_def]) >>
   disch_then (qspecl_then [`n`, `n'`] mp_tac) >>
@@ -325,15 +273,15 @@ Theorem run_events_agree_exit:
   run_events_agree C C' fn s fn' t r r'
 Proof
   rpt strip_tac >> simp[run_events_agree_def] >> rpt strip_tac >>
-  `?n. k = SUC n` by metis_tac[run_blocks_nonerror_suc] >>
-  `?n'. k' = SUC n'` by metis_tac[run_blocks_nonerror_suc] >>
+  `?n. k = SUC n` by metis_tac[venomExecProofsTheory.run_blocks_nonerror_suc] >>
+  `?n'. k' = SUC n'` by metis_tac[venomExecProofsTheory.run_blocks_nonerror_suc] >>
   rpt (qpat_x_assum `_ = SUC _` SUBST_ALL_TAC) >>
   `exec_block n C bb
      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = rb`
-    by metis_tac[exec_block_finite_eq, run_blocks_block_nonerror] >>
+    by metis_tac[exec_block_finite_eq, venomExecProofsTheory.run_blocks_block_nonerror] >>
   `exec_block n' C' bb'
      (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = rb'`
-    by metis_tac[exec_block_finite_eq, run_blocks_block_nonerror] >>
+    by metis_tac[exec_block_finite_eq, venomExecProofsTheory.run_blocks_block_nonerror] >>
   `(!e. rb <> Error e) /\ (!e. rb' <> Error e)` by
     metis_tac[cj 2 finite_execution_nonerror] >>
   qpat_x_assum `block_events_agree _ _ _ _ _ _ _ _`

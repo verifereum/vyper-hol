@@ -51,7 +51,7 @@ Proof
      drule_all step_preserves_control_flow >> simp[] >> metis_tac[]) >>
   `~MEM inst.inst_opcode [MEMTOP; DRET; GETFMP; SETFMP; RETFMP; FMP_PARAM]` by
     (`?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-       metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
+       metis_tac[o1SafeUptoTheory.ptr_discipline_upto_fn_ptr_ok] >>
      fs[EVERY_MEM] >> first_x_assum drule >>
      simp[fn_ptr_ok_def] >> strip_tac >> first_x_assum drule >> simp[MEM]) >>
   `inst.inst_opcode <> DALLOCA` by

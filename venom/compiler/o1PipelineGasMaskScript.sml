@@ -1,16 +1,15 @@
 (*
- * One gas-slot mask through the O1 pipeline.
+ * Conditional gas-slot mask transport through the O1 pipeline.
  *
- * DFT chooses one mask of the output's readings before every filling
- * (o1DftStageSim.dft_stage_gas_mask).  The runs before it keep a source
- * run's gas events, each terminating run having a terminating image with
- * the same events; the CFG normalization after it keeps termination both
- * ways and the event count.  Composing these gives the mask's sites as a
- * prefix of the raw unit's events for every terminating filling, and the
- * all-dead simulation from the filled raw state to the output state.
- * When DFT's block lemma holds, the runs before it also keep the first n
- * events of a run safe up to the cut n, terminating or not, so the sites
- * start with those n raw events.
+ * Assuming dft_blocks_gas_prefix, DFT selects a mask before every filling
+ * (o1DftStageSim.dft_stage_gas_mask_prefix). The preceding runs preserve
+ * source gas events, and subsequent CFG normalization preserves terminating
+ * runs and event counts. Every terminating raw run's events form a prefix
+ * of the mask sites: sites = raw_events ++ extra. The same conditional
+ * construction supplies the all-dead simulation from the filled raw state
+ * to the output state. Before a finite gas cut, safe source prefixes are
+ * preserved whether or not the source run terminates. This theory does not
+ * prove the dft_blocks_gas_prefix producer.
  *)
 Theory o1PipelineGasMask
 Ancestors
@@ -29,31 +28,8 @@ Ancestors
 
 (* ===== Runs at the entry ===== *)
 
-Theorem run_state_ok_gas_readings[local]:
-  o1_run_state_ok vs ==> o1_run_state_ok (vs with vs_gas_readings := g)
-Proof
-  simp[o1_run_state_ok_def, o1_initial_state_ok_def,
-       lowerDloadDefsTheory.code_layout_valid_def]
-QED
 
-Theorem gas_events_blocks_terminates_le[local]:
-  terminates (run_blocks f ctx fn s) /\ f <= M ==>
-  run_blocks M ctx fn s = run_blocks f ctx fn s /\
-  gas_events_blocks M ctx fn s = gas_events_blocks f ctx fn s
-Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`f`, `ctx`, `fn`, `s`, `M`] (cj 3 gas_events_fuel_extension)) >>
-  impl_tac >- simp[] >> strip_tac >> first_x_assum irule >>
-  Cases_on `run_blocks f ctx fn s` >> gvs[terminates_def]
-QED
 
-Theorem gas_events_blocks_terminates_eq[local]:
-  terminates (run_blocks f1 ctx fn s) /\ terminates (run_blocks f2 ctx fn s) ==>
-  gas_events_blocks f1 ctx fn s = gas_events_blocks f2 ctx fn s
-Proof
-  strip_tac >> `f1 <= f1 + f2 /\ f2 <= f1 + f2` by decide_tac >>
-  metis_tac[gas_events_blocks_terminates_le]
-QED
 
 (* ===== Event transport, run by run ===== *)
 
@@ -144,7 +120,7 @@ Proof
   `f <= f + f' /\ f' <= f + f'` by decide_tac >>
   `gas_events_blocks (f + f') A fa st = gas_events_blocks f A fa st /\
    gas_events_blocks (f + f') B fb st = gas_events_blocks f' B fb st` by
-    metis_tac[gas_events_blocks_terminates_le] >>
+    metis_tac[gasEventsFuelTheory.gas_events_blocks_terminates_le] >>
   metis_tac[]
 QED
 
@@ -792,7 +768,7 @@ Proof
   `fn9 = fn` by gvs[] >> pop_assum SUBST_ALL_TAC >>
   first_x_assum (qspecl_then [`e`, `fuel8`] mp_tac) >> simp[] >> strip_tac >>
   `gas_events_blocks fuel' (stage 9) fn e = gas_events_blocks fuel (stage 9) fn e` by
-    (irule gas_events_blocks_terminates_eq >> metis_tac[]) >>
+    (irule gasEventsFuelTheory.gas_events_blocks_terminates_eq >> metis_tac[]) >>
   `gas_count_blocks fuel8 (stage 8) fn8 e <= LENGTH vs_out.vs_gas_readings` by
     (`gas_count_blocks fuel8 (stage 8) fn8 e = gas_count_blocks fuel (stage 9) fn e` by
        (simp[GSYM (cj 3 gas_events_length)] >> metis_tac[APPEND_NIL]) >>
@@ -817,7 +793,7 @@ Proof
                 o1_walk_before_dft_prefix) >>
       impl_tac
       >- (rpt conj_tac >> asm_rewrite_tac [] >>
-          simp[run_state_ok_gas_readings]) >>
+          simp[o1SafeUptoTheory.run_state_ok_gas_readings]) >>
       disch_then (qspec_then `7` mp_tac) >> impl_tac >- simp[] >>
       disch_then (qspecl_then [`nm`, `fa`, `la`, `f`] mp_tac) >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -828,7 +804,7 @@ Proof
       metis_tac[take_prefix_extend]) >>
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `w = vs_out with vs_gas_readings := gobs ++ tail` >>
-  `o1_run_state_ok w` by simp[Abbr `w`, run_state_ok_gas_readings] >>
+  `o1_run_state_ok w` by simp[Abbr `w`, o1SafeUptoTheory.run_state_ok_gas_readings] >>
   qpat_x_assum `!gobs tail. _` (qspecl_then [`gobs`, `tail`] mp_tac) >>
   simp[] >> strip_tac >>
   mp_tac (Q.INST [`w` |-> `w`] o1_walk_before_dft) >>
@@ -860,7 +836,7 @@ Proof
      (w with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) =
    gas_events_blocks f' (stage 7) fn7
      (w with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)` by
-    (irule gas_events_blocks_terminates_eq >> metis_tac[]) >>
+    (irule gasEventsFuelTheory.gas_events_blocks_terminates_eq >> metis_tac[]) >>
   fs[]
 QED
 
@@ -1056,7 +1032,7 @@ Proof
       RULE_ASSUM_TAC (REWRITE_RULE [GSYM filled_entry_state]) >>
       rewrite_tac [GSYM filled_entry_state] >>
       `o1_run_state_ok (vs_out with vs_gas_readings := gobs ++ tail)` by
-        simp[run_state_ok_gas_readings] >>
+        simp[o1SafeUptoTheory.run_state_ok_gas_readings] >>
       `o1_safe_upto D lo n (stage 0) (vs_out with vs_gas_readings := gobs ++ tail)` by
         (qpat_x_assum `stage 0 = _` (fn th => rewrite_tac[th]) >>
          qunabbrev_tac `P` >>
@@ -1103,7 +1079,7 @@ Proof
   qpat_x_assum `dft_blocks_gas_prefix ==> _` kall_tac >>
   qpat_x_assum `!gobs tail D. _` (qspecl_then [`gobs`, `tail`, `D`] assume_tac) >>
   qabbrev_tac `w = vs_out with vs_gas_readings := gobs ++ tail` >>
-  `o1_run_state_ok w` by simp[Abbr `w`, run_state_ok_gas_readings] >>
+  `o1_run_state_ok w` by simp[Abbr `w`, o1SafeUptoTheory.run_state_ok_gas_readings] >>
   `ctx_sim D unit.cu_context pre.cu_context w w /\
    o1_walk_src_inv D pre.cu_context w` by
     metis_tac[ctx_sim_fuel_imp_ctx_sim] >>

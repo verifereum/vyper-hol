@@ -31,7 +31,7 @@ Proof
   gs[] >>
   (`frame_reachable vs C stk PG G tn fn inst s` by
        metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-      `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
+      `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[o1SafeUptoTheory.ptr_discipline_upto_fn_ptr_ok] >>
       `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
         metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
       `ptr_use_ok P (fn_pv P fn) inst` by

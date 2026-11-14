@@ -52,7 +52,7 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   qpat_x_assum `ptr_discipline_upto _ _ _ _`
-    (strip_assume_tac o MATCH_MP ptr_discipline_upto_fn_ptr_ok) >>
+    (strip_assume_tac o MATCH_MP o1SafeUptoTheory.ptr_discipline_upto_fn_ptr_ok) >>
   drule frame_reachable_prov_support >>
   disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
   `affine_pointer_ops fn (ptr_roots P fn)` by

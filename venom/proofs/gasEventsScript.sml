@@ -2,6 +2,7 @@
    the same fuel and machine states as gasCount, including INVOKE callees. *)
 Theory gasEvents
 Ancestors
+  instIdxIndep
   gasCount venomExecSemantics venomInst venomState list rich_list arithmetic
 
 Definition gas_events_defs:
@@ -226,4 +227,91 @@ Proof
   strip_tac >>
   CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [gas_events_blocks_def])) >>
   simp[]
+QED
+
+Theorem gas_events_step_plain:
+  i.inst_opcode <> INVOKE ==>
+  gas_events_step k C owner i s =
+    if i.inst_opcode = GAS then [(owner,i.inst_id)] else []
+Proof
+  simp[gas_events_step_def]
+QED
+
+Theorem ld_budget_drop:
+  v.vs_gas_readings = DROP k s.vs_gas_readings /\
+  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
+  k < j ==>
+  j - k + LENGTH vs.vs_gas_readings <= ncut + LENGTH v.vs_gas_readings /\
+  0 < j - k
+Proof
+  rw[LENGTH_DROP] >> decide_tac
+QED
+
+Theorem ld_step_budget:
+  step_inst fuel C inst s = OK v /\
+  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
+  LENGTH (gas_events_step fuel C owner inst s) < j ==>
+  j - LENGTH (gas_events_step fuel C owner inst s) + LENGTH vs.vs_gas_readings <=
+    ncut + LENGTH v.vs_gas_readings /\
+  0 < j - LENGTH (gas_events_step fuel C owner inst s)
+Proof
+  strip_tac >> drule gas_events_step_ok_readings >>
+  disch_then (qspec_then `owner` assume_tac) >>
+  drule_all ld_budget_drop >> simp[]
+QED
+
+Theorem ld_block_budget:
+  exec_block fuel C bb s = OK v /\
+  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
+  LENGTH (gas_events_block fuel C owner bb s) < j ==>
+  j - LENGTH (gas_events_block fuel C owner bb s) + LENGTH vs.vs_gas_readings <=
+    ncut + LENGTH v.vs_gas_readings /\
+  0 < j - LENGTH (gas_events_block fuel C owner bb s)
+Proof
+  strip_tac >> drule gas_events_block_ok_readings >>
+  disch_then (qspec_then `owner` assume_tac) >>
+  drule_all ld_budget_drop >> simp[]
+QED
+
+Theorem sue_gas_events_step_index:
+  gas_events_step fuel C owner inst (s with vs_inst_idx := k) =
+  gas_events_step fuel C owner inst s
+Proof
+  simp[gas_events_step_def, setup_callee_def,
+       instIdxIndepTheory.eval_ops_inst_idx]
+QED
+
+Theorem ld_take_length:
+  TAKE j b = TAKE j a /\ j <= LENGTH a ==> j <= LENGTH b
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  qpat_x_assum `TAKE j b = _` (mp_tac o AP_TERM ``LENGTH:'a list -> num``) >>
+  simp[LENGTH_TAKE_EQ] >> decide_tac
+QED
+
+Theorem ld_take_append_eq:
+  j <= LENGTH a /\ TAKE j b = TAKE j a ==>
+  TAKE j (b ++ y) = TAKE j (a ++ x)
+Proof
+  strip_tac >> `j <= LENGTH b` by metis_tac[ld_take_length] >>
+  simp[listTheory.TAKE_APPEND1]
+QED
+
+Theorem ld_take_append_right:
+  LENGTH a < j /\ TAKE (j - LENGTH a) y = TAKE (j - LENGTH a) x ==>
+  TAKE j (a ++ y) = TAKE j (a ++ x)
+Proof
+  rpt strip_tac >> simp[listTheory.TAKE_APPEND2]
+QED
+
+
+Theorem ld_invoke_events_inversion:
+  i.inst_opcode = INVOKE /\ gas_events_step k C owner i s <> [] ==>
+  ?nm ops callee args cs.
+    decode_invoke i = SOME (nm,ops) /\
+    lookup_function nm C.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+    gas_events_step k C owner i s = gas_events_blocks k C callee cs
+Proof
+  strip_tac >> fs[gas_events_step_def] >> BasicProvers.every_case_tac >> gvs[]
 QED

@@ -12,6 +12,7 @@
  *)
 Theory o1SafeUpto
 Ancestors
+  gasEvents
   o1PassContract memSafeRun contextRawReachable contextCodegenRel unitMemInv
   ptrDiscipline lowerDloadDefs staticLayoutDefs venomExecSemantics
   venomExecProofs venomState stateFrame frameRawProjection list
@@ -297,4 +298,105 @@ Theorem taint_within_upto_halt:
   ret_taint T0 inst s SUBSET D.d_ret s_h.vs_returndata
 Proof
   strip_tac >> fs[taint_within_upto_def] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem ptr_discipline_upto_fn_ptr_ok:
+  ptr_discipline_upto lo n ctx vs ==>
+  lo <= vs.vs_alloca_next /\
+  ?P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+      !stk PG G tn fn inst s.
+        frame_reachable vs ctx stk PG G tn fn inst s /\ gas_cut n vs s ==>
+        access_ok lo G fn inst s /\ taint_ok fn tn inst s /\
+        allocas_from lo s /\
+        (ctx_has_dalloca ctx ==> allocas_below_fmp s)
+Proof
+  rewrite_tac[ptr_discipline_upto_def] >> strip_tac >> asm_rewrite_tac[] >>
+  qexists_tac `P` >> asm_rewrite_tac[] >>
+  fs[EVERY_MEM]
+QED
+
+Theorem frame_next_gas_cut:
+  step_inst fuel ctx inst s = OK s' /\
+  gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
+Proof
+  rw[] >> drule gasCountTheory.step_inst_gas_le >> strip_tac >>
+  `LENGTH (s' with vs_inst_idx := k).vs_gas_readings <=
+   LENGTH s.vs_gas_readings` by simp[] >>
+  metis_tac[gas_cut_readings_mono]
+QED
+
+Theorem frame_block_gas_cut:
+  step_inst fuel ctx inst s = OK s' /\ enters_block fn s' s1 /\
+  gas_cut cut vs s1 ==> gas_cut cut vs s
+Proof
+  rw[] >> imp_res_tac gasCountTheory.step_inst_gas_le >> imp_res_tac enters_block_readings >>
+  `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
+  metis_tac[gas_cut_readings_mono]
+QED
+
+Theorem frame_call_gas_cut:
+  setup_callee callee args s = SOME cs /\ enters_block callee cs s1 /\
+  gas_cut cut vs s1 ==> gas_cut cut vs s
+Proof
+  rw[] >> imp_res_tac gasOracleReplayTheory.gas_setup_callee_readings >>
+  imp_res_tac enters_block_readings >>
+  `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
+  metis_tac[gas_cut_readings_mono]
+QED
+
+Theorem frame_ret_gas_cut:
+  step_inst fuel ctx rinst s = IntRet ret s_end /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state c s_end)) = SOME s' /\
+  gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
+Proof
+  rw[] >> imp_res_tac gasCountTheory.step_inst_int_ret_gas_le >>
+  imp_res_tac gasOracleReplayTheory.gas_bind_outputs_readings >>
+  `(s' with vs_inst_idx := k).vs_gas_readings = s_end.vs_gas_readings` by
+    (Cases_on `ret.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
+  `gas_cut cut vs s_end` by gvs[gas_cut_def] >>
+  metis_tac[gas_cut_readings_mono]
+QED
+
+Theorem ld_budget_cut:
+  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
+  0 < j ==>
+  gas_cut ncut vs s
+Proof
+  rw[gas_cut_def] >> decide_tac
+QED
+
+Theorem ld_blocks_ret_cut:
+  run_blocks k C fn s = IntRet ir se /\
+  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
+  LENGTH (gas_events_blocks k C fn s) < j ==>
+  gas_cut ncut vs se
+Proof
+  strip_tac >> fs[gas_events_length] >>
+  mp_tac (cj 3 gasCountTheory.gas_count_suffix) >>
+  disch_then (qspecl_then [`k`,`C`,`fn`,`s`] mp_tac) >>
+  simp[gasCountTheory.gas_count_suffix_def] >> strip_tac >>
+  simp[gas_cut_def, LENGTH_DROP] >> decide_tac
+QED
+
+Theorem run_state_ok_gas_readings:
+  o1_run_state_ok vs ==> o1_run_state_ok (vs with vs_gas_readings := g)
+Proof
+  simp[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
+       lowerDloadDefsTheory.code_layout_valid_def]
+QED
+
+Theorem ld_run_enters:
+  terminates (run_blocks k C fn v) \/ gas_events_blocks k C fn v <> [] ==>
+  ?sn. enters_block fn v sn
+Proof
+  Cases_on `k` >- simp[venomExecProofsTheory.run_blocks_zero_error, Once gas_events_blocks_def, passSimulationDefsTheory.terminates_def] >>
+  simp[Once run_blocks_def, Once gas_events_blocks_def] >>
+  Cases_on `lookup_block v.vs_current_bb fn.fn_blocks` >> simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_block v.vs_current_bb fn.fn_blocks = SOME dest` >>
+  `(?p. eval_phis v dest.bb_instructions = OK p) \/
+   (?e. eval_phis v dest.bb_instructions = Error e)` by
+    metis_tac[eval_phis_ok_or_error_defs] >>
+  gvs[passSimulationDefsTheory.terminates_def, enters_block_def]
 QED

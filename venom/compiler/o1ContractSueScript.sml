@@ -544,7 +544,7 @@ Proof
   `newop = Label lbl` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   gvs[venomExecSemanticsTheory.decode_invoke_def] >>
-  irule sue_eval_operands_related >> simp[]
+  irule venomExecProofsTheory.sue_eval_operands_related >> simp[]
 QED
 
 Theorem sue_rewritten_read_ranges_plain[local]:
@@ -593,7 +593,7 @@ Theorem sue_rewritten_dret_ranges[local]:
     inst.inst_operands ops ==>
   inst_mem_ranges (inst with inst_operands := ops) t = inst_mem_ranges inst s
 Proof
-  strip_tac >> drule sue_eval_operands_related >> strip_tac >>
+  strip_tac >> drule venomExecProofsTheory.sue_eval_operands_related >> strip_tac >>
   simp[unitMemInvTheory.inst_mem_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        contextCodegenRelTheory.dret_memory_read_ranges_def,
@@ -616,7 +616,7 @@ Proof
     metis_tac[listTheory.LIST_REL_REVERSE] >>
   `eval_operands (DROP 2 (REVERSE tail)) t =
    eval_operands (DROP 2 (REVERSE rest)) s` by
-    (irule sue_eval_operands_related >>
+    (irule venomExecProofsTheory.sue_eval_operands_related >>
      irule rich_listTheory.LIST_REL_DROP >> simp[]) >>
   `eval_operand (EL 0 (REVERSE tail)) t =
    eval_operand (EL 0 (REVERSE rest)) s /\

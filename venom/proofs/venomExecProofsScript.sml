@@ -3065,3 +3065,79 @@ Proof
   gvs[step_inst_non_invoke] >>
   drule_all step_inst_base_ok_terminator_jump >> simp[]
 QED
+
+Theorem run_blocks_at:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK phi ==>
+  run_blocks (SUC n) C fn s =
+    case exec_block n C bb
+           (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) of
+      OK p => if p.vs_halted then Halt p else run_blocks n C fn p
+    | IntRet v p => IntRet v p
+    | Halt p => Halt p
+    | Abort a p => Abort a p
+    | Error e => Error e
+Proof
+  strip_tac >> CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  simp[] >> CASE_TAC >> simp[]
+QED
+
+Theorem exec_block_step_nonerror:
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  (!e. exec_block k C bb s <> Error e) ==>
+  !e. step_inst k C i s <> Error e
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!e. exec_block _ _ _ _ <> _`
+    (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
+  simp[]
+QED
+
+Theorem run_blocks_block_nonerror:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK phi /\
+  (!e. run_blocks (SUC n) C fn s <> Error e) ==>
+  !e. exec_block n C bb
+        (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) <>
+      Error e
+Proof
+  rpt strip_tac >> imp_res_tac run_blocks_at >> gvs[]
+QED
+
+Theorem run_blocks_zero_error:
+  run_blocks 0 C fn s = Error "out of fuel"
+Proof
+  simp[Once run_blocks_def]
+QED
+
+Theorem run_blocks_nonerror_suc:
+  (!e. run_blocks k C fn s <> Error e) ==> ?n. k = SUC n
+Proof
+  Cases_on `k` >> simp[run_blocks_zero_error]
+QED
+
+Theorem sue_eval_operands_related:
+  !xs ys. LIST_REL (\op newop. eval_operand newop t = eval_operand op s) xs ys ==>
+    eval_operands ys t = eval_operands xs s
+Proof
+  Induct >> Cases_on `ys` >>
+  simp[venomStateTheory.eval_operands_def] >>
+  rpt strip_tac >> res_tac >> simp[]
+QED
+
+Theorem sue_rewritten_invoke_args:
+  inst_wf inst /\ inst.inst_opcode = INVOKE /\
+  LIST_REL (\op newop. eval_operand newop u = eval_operand op s)
+    inst.inst_operands ops /\
+  (!i. i < LENGTH inst.inst_operands ==>
+    !lbl. EL i inst.inst_operands = Label lbl ==> EL i ops = Label lbl) ==>
+  OPTION_MAP (\(name,args). (name, eval_operands args u))
+    (decode_invoke (inst with inst_operands := ops)) =
+  OPTION_MAP (\(name,args). (name, eval_operands args s))
+    (decode_invoke inst)
+Proof
+  strip_tac >> gvs[venomWfTheory.inst_wf_def] >>
+  `newop = Label lbl` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  gvs[decode_invoke_def] >> irule sue_eval_operands_related >> simp[]
+QED

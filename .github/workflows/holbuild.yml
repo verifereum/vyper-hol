@@ -64,6 +64,12 @@ jobs:
             holbuild check "$theory"
           done
 
+      - name: Check LowerDload stage contracts for cheats and axioms
+        run: >-
+          holbuild check
+          o1ContractLowerDloadSimTheory:lower_dload_stage_sim
+          o1ContractLowerDloadSimTheory:lower_dload_stage_sim_fuel
+
       - name: Verify no successful-build checkpoints remain
         run: |
           if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then

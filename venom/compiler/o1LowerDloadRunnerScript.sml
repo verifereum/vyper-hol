@@ -164,95 +164,17 @@ QED
 
 (* ===== Cut budgets and event prefixes ===== *)
 
-Theorem ld_budget_cut:
-  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
-  0 < j ==>
-  gas_cut ncut vs s
-Proof
-  rw[gas_cut_def] >> decide_tac
-QED
-
-Theorem ld_budget_drop:
-  v.vs_gas_readings = DROP k s.vs_gas_readings /\
-  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
-  k < j ==>
-  j - k + LENGTH vs.vs_gas_readings <= ncut + LENGTH v.vs_gas_readings /\
-  0 < j - k
-Proof
-  rw[LENGTH_DROP] >> decide_tac
-QED
-
-Theorem ld_take_length:
-  TAKE j b = TAKE j a /\ j <= LENGTH a ==> j <= LENGTH b
-Proof
-  rpt strip_tac >> spose_not_then assume_tac >>
-  qpat_x_assum `TAKE j b = _` (mp_tac o AP_TERM ``LENGTH:'a list -> num``) >>
-  simp[LENGTH_TAKE_EQ] >> decide_tac
-QED
-
-Theorem ld_take_append_eq:
-  j <= LENGTH a /\ TAKE j b = TAKE j a ==>
-  TAKE j (b ++ y) = TAKE j (a ++ x)
-Proof
-  strip_tac >> `j <= LENGTH b` by metis_tac[ld_take_length] >>
-  simp[listTheory.TAKE_APPEND1]
-QED
-
-Theorem ld_take_append_right:
-  LENGTH a < j /\ TAKE (j - LENGTH a) y = TAKE (j - LENGTH a) x ==>
-  TAKE j (a ++ y) = TAKE j (a ++ x)
-Proof
-  rpt strip_tac >> simp[listTheory.TAKE_APPEND2]
-QED
 
 
 
 
-Theorem ld_step_budget:
-  step_inst fuel C inst s = OK v /\
-  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
-  LENGTH (gas_events_step fuel C owner inst s) < j ==>
-  j - LENGTH (gas_events_step fuel C owner inst s) + LENGTH vs.vs_gas_readings <=
-    ncut + LENGTH v.vs_gas_readings /\
-  0 < j - LENGTH (gas_events_step fuel C owner inst s)
-Proof
-  strip_tac >> drule gas_events_step_ok_readings >>
-  disch_then (qspec_then `owner` assume_tac) >>
-  drule_all ld_budget_drop >> simp[]
-QED
 
-Theorem ld_block_budget:
-  exec_block fuel C bb s = OK v /\
-  j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
-  LENGTH (gas_events_block fuel C owner bb s) < j ==>
-  j - LENGTH (gas_events_block fuel C owner bb s) + LENGTH vs.vs_gas_readings <=
-    ncut + LENGTH v.vs_gas_readings /\
-  0 < j - LENGTH (gas_events_block fuel C owner bb s)
-Proof
-  strip_tac >> drule gas_events_block_ok_readings >>
-  disch_then (qspec_then `owner` assume_tac) >>
-  drule_all ld_budget_drop >> simp[]
-QED
 
-Theorem ld_run_zero[local]:
-  run_blocks 0 C fn s = Error "out of fuel" /\ gas_events_blocks 0 C fn s = []
-Proof
-  conj_tac >- simp[Once run_blocks_def] >> simp[Once gas_events_blocks_def]
-QED
 
-Theorem ld_run_enters:
-  terminates (run_blocks k C fn v) \/ gas_events_blocks k C fn v <> [] ==>
-  ?sn. enters_block fn v sn
-Proof
-  Cases_on `k` >- simp[ld_run_zero, terminates_def] >>
-  simp[Once run_blocks_def, Once gas_events_blocks_def] >>
-  Cases_on `lookup_block v.vs_current_bb fn.fn_blocks` >> simp[terminates_def] >>
-  rename1 `lookup_block v.vs_current_bb fn.fn_blocks = SOME dest` >>
-  `(?p. eval_phis v dest.bb_instructions = OK p) \/
-   (?e. eval_phis v dest.bb_instructions = Error e)` by
-    metis_tac[eval_phis_ok_or_error_defs] >>
-  gvs[terminates_def, enters_block_def]
-QED
+
+
+
+
 
 val sinT = ``s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions``;
 val tinT = ``s_phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions``;
@@ -274,7 +196,7 @@ Proof
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
   `s1.vs_call_ctx = s.vs_call_ctx /\ s1.vs_halted = s.vs_halted` by
     metis_tac[ld_enters_block_call_ctx, ld_enters_block_halted] >>
-  Cases_on `fuel` >- gvs[ld_run_zero, terminates_def] >>
+  Cases_on `fuel` >- gvs[venomExecProofsTheory.run_blocks_zero_error, Once gas_events_blocks_def, terminates_def] >>
   qpat_assum `enters_block fn s s1`
     (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
   qpat_assum `enters_block fn' t0 t1`
@@ -348,7 +270,7 @@ Resume ld_runner_run_clause_events_fuel[prefix]:
   first_x_assum (drule_all_then (mp_tac o CONJUNCT2)) >>
   impl_tac >- simp[] >> strip_tac >> gvs[] >>
   simp[] >>
-  irule ld_take_append_eq >> simp[]
+  irule gasEventsTheory.ld_take_append_eq >> simp[]
 QED
 
 val ld_run_final_tac =
@@ -394,13 +316,13 @@ Resume ld_runner_run_clause_events_fuel[branch]:
       (strip_assume_tac o SIMP_RULE (srw_ss())
         [REWRITE_RULE [markerTheory.Abbrev_def] rr])) >>
   `MEM bi.inst_opcode [JMP; JNZ; DJMP]` by simp[] >>
-  `?sn. enters_block fn v sn` by metis_tac[ld_run_enters] >>
+  `?sn. enters_block fn v sn` by metis_tac[o1SafeUptoTheory.ld_run_enters] >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_branch_endpoint_consume) >>
   strip_tac >> gvs[] >>
   `j - LENGTH (gas_events_block k C fn.fn_name bb (^sinT)) +
      LENGTH vs.vs_gas_readings <= ncut + LENGTH v.vs_gas_readings /\
    0 < j - LENGTH (gas_events_block k C fn.fn_name bb (^sinT))` by
-    (irule ld_block_budget >> simp[]) >>
+    (irule gasEventsTheory.ld_block_budget >> simp[]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   `exec_block k C' bb' (^tinT) = OK te` by simp[] >>
   `~te.vs_halted` by metis_tac[exec_block_OK_not_halted] >>
@@ -409,7 +331,7 @@ Resume ld_runner_run_clause_events_fuel[branch]:
   `j - LENGTH (gas_events_block k C fn.fn_name bb (^sinT)) <=
    LENGTH (gas_events_blocks k C fn v)` by decide_tac >>
   qpat_x_assum `_ <= _ ==> _` (drule_then strip_assume_tac) >>
-  simp[] >> irule ld_take_append_right >> simp[]
+  simp[] >> irule gasEventsTheory.ld_take_append_right >> simp[]
 QED
 
 Finalise ld_runner_run_clause_events_fuel

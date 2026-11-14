@@ -1238,3 +1238,83 @@ Proof
   pure_rewrite_tac[gas_replay_def, gas_replay_at_def, gas_prefix_def] >>
   metis_tac[]
 QED
+
+Theorem gas_replay_at_zero_pad:
+  !n f s N.
+    gas_replay_at n f s /\ n <= LENGTH s.vs_gas_readings + N ==>
+    lift_result
+      (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+             b = a with vs_gas_readings :=
+                   DROP n (s.vs_gas_readings ++ REPLICATE N 0w))
+      (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+             b = a with vs_gas_readings :=
+                   DROP n (s.vs_gas_readings ++ REPLICATE N 0w))
+      (\a b. a.vs_gas_readings = DROP n s.vs_gas_readings /\
+             b = a with vs_gas_readings :=
+                   DROP n (s.vs_gas_readings ++ REPLICATE N 0w))
+      (f s)
+      (f (s with vs_gas_readings := s.vs_gas_readings ++ REPLICATE N 0w))
+Proof
+  rw[gas_replay_at_def] >>
+  first_x_assum (qspec_then
+    `DROP n (s.vs_gas_readings ++ REPLICATE N 0w)` mp_tac) >>
+  `gas_prefix n s.vs_gas_readings ++
+   DROP n (s.vs_gas_readings ++ REPLICATE N 0w) =
+   s.vs_gas_readings ++ REPLICATE N 0w` by
+    (simp[gas_prefix_def] >>
+     qspecl_then [`n`, `s.vs_gas_readings`, `n`, `N`, `0w`] mp_tac gas_take_pad >>
+     impl_tac >- simp[] >> disch_then SUBST1_TAC >> simp[]) >>
+  simp[]
+QED
+
+Theorem zero_pad_replay_ok:
+  !n m f s j t'.
+    gas_replay_at n f s /\
+    gas_replay_at m f
+      (s with vs_gas_readings := s.vs_gas_readings ++ REPLICATE j 0w) /\
+    f (s with vs_gas_readings := s.vs_gas_readings ++ REPLICATE j 0w) =
+      OK t' ==>
+    ?s' j'. f s = OK s' /\
+      t' = s' with vs_gas_readings := s'.vs_gas_readings ++ REPLICATE j' 0w
+Proof
+  rpt strip_tac >>
+  qspecl_then [`n`, `f`, `s`, `j + (n + m)`] mp_tac gas_replay_at_zero_pad >>
+  impl_tac >- simp[] >>
+  qspecl_then [`m`, `f`,
+    `s with vs_gas_readings := s.vs_gas_readings ++ REPLICATE j 0w`,
+    `n + m`] mp_tac gas_replay_at_zero_pad >>
+  impl_tac >- simp[] >>
+  simp[AC ADD_ASSOC ADD_COMM] >>
+  PURE_REWRITE_TAC[GSYM APPEND_ASSOC, REPLICATE_APPEND] >>
+  simp[AC ADD_ASSOC ADD_COMM] >>
+  Cases_on `f (s with vs_gas_readings :=
+              s.vs_gas_readings ++ REPLICATE (j + (n + m)) 0w)` >>
+  gvs[lift_result_def, AC ADD_ASSOC ADD_COMM] >>
+  Cases_on `f s` >> gvs[lift_result_def, AC ADD_ASSOC ADD_COMM] >>
+  rpt strip_tac >>
+  rename1 `f s = OK a` >>
+  `n = m` by
+    (qpat_x_assum `t' with vs_gas_readings := _ = a with vs_gas_readings := _`
+       (mp_tac o Q.AP_TERM `\z. LENGTH z.vs_gas_readings`) >>
+     simp[LENGTH_DROP]) >>
+  gvs[] >> qexists_tac `j - (m - LENGTH s.vs_gas_readings)` >>
+  gvs[venom_state_component_equality, DROP_APPEND]
+QED
+
+Theorem step_inst_zero_pad:
+  step_inst fuel ctx inst
+    (s with vs_gas_readings := s.vs_gas_readings ++ REPLICATE j 0w) =
+    OK t' ==>
+  ?s' j'. step_inst fuel ctx inst s = OK s' /\
+    t' = s' with vs_gas_readings := s'.vs_gas_readings ++ REPLICATE j' 0w
+Proof
+  strip_tac >>
+  `gas_replay (step_inst fuel ctx inst) s /\
+   gas_replay (step_inst fuel ctx inst)
+     (s with vs_gas_readings := s.vs_gas_readings ++ REPLICATE j 0w)` by
+    simp[gas_replay_fuel] >>
+  fs[gas_replay_def] >>
+  qspecl_then [`n`, `n'`, `step_inst fuel ctx inst`, `s`, `j`, `t'`]
+    mp_tac zero_pad_replay_ok >>
+  simp[]
+QED

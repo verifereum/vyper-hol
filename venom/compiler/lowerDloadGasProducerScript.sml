@@ -23,7 +23,7 @@ Proof
   >- (qexistsl_tac [`0w`, `[]`] >>
       `s with vs_gas_readings := [] = s` by simp[venom_state_component_equality] >>
       `t with vs_gas_readings := [] = t` by simp[venom_state_component_equality] >>
-      simp[]) >>
+      simp[update_var_def, venom_state_component_equality]) >>
   metis_tac[]
 QED
 
@@ -58,7 +58,8 @@ Proof
   conj_tac
   >- (irule ld_owned_set_selection >> simp[ld_owned_selection_def]) >>
   conj_tac
-  >- (irule ld_owned_vars_update_supported >>
+  >- (pure_once_rewrite_tac[GSYM gasOracleReplayTheory.gas_update_var] >>
+      irule ld_owned_vars_update_supported >>
       qexistsl_tac [`{}`, `{}`, `tn`, `un`] >>
       simp[step_taint_def, ld_gas_out_taint, ld_owned_value_def, ld_mask_word_def] >>
       fs[ld_owned_vars_def, lookup_var_def]) >>
