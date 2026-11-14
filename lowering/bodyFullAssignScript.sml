@@ -376,7 +376,7 @@ Resume body_assign_local_widened_full[memory_continue]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >>
   qpat_x_assum `INL v = INL _` (SUBST_ALL_TAC o REWRITE_RULE [sumTheory.INL_11]) >>
-  rename1 `expr_store_bound cx (expr_type e) v op u` >>
+  rename1 `expr_store_bound cx (post_value_type cenv e) v op u` >>
   drule_all stmtSimAssignSourceTheory.assign_local_continuation_all_tails >>
   disch_then (qx_choosel_then [`pre`,`sc`,`ent`,`rest`] strip_assume_tac) >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid u` by
