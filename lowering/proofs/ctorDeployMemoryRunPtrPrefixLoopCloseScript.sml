@@ -347,7 +347,11 @@ Proof
   disch_then (drule_at (Pat `fresh_vars_wrt limit_st s`)) >>
   disch_then (drule_at (Pat `~ctx_has_dalloca ctx`)) >>
   disch_then (qspecl_then [`op_prov G dst`,`fn`,`PG`,`Ddead`] mp_tac) >>
-  simp[LENGTH_TAKE,MIN_DEF,ADD_COMM,wordsTheory.w2n_n2w,Excl "enc_def"]
+  simp[LENGTH_TAKE,MIN_DEF,ADD_COMM,wordsTheory.w2n_n2w,Excl "enc_def"] >>
+  disch_then (qx_choose_then `t`
+    (qx_choose_then `H` (qx_choose_then `qt` strip_assume_tac))) >>
+  qexistsl_tac [`t`,`H`,`qt`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 
