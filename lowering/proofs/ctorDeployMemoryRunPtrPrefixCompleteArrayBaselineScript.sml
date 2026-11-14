@@ -9,7 +9,7 @@ Ancestors
   abiDecoderReentry abiEncoderRegisteredEffect
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryCompleteScalar
   compileEnv venomState venomMemDefs valueEncodingProps
-  ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set
+  ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set fragGasOriginPtr
 
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
@@ -100,6 +100,7 @@ val InitialPremMode = ``(^InitialPrem) /\ (checked ==>
 Theorem prefix_complete_array_initial_exit_pair_mode_exact:
   (^CshiftMode) checked ty tv ==> (^InitialPremMode) ==>
   ?actual Hout qout A slot.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
     (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x actual = lookup_var x initial) /\
@@ -111,6 +112,7 @@ Proof
   strip_tac >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
+  asm_x "child" kall_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   `st.cs_next_var <= loop_st.cs_next_var` by
     (drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
@@ -127,21 +129,12 @@ Proof
      [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))] initial actual` by
     (irule abi_encoder_registered_effect_trans >> qexists `prepared` >> asm_rewrite_tac[]) >>
   qexistsl [`actual`,`Hout`,`qout`,`A`,`slot`] >>
-  simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `abi_decoder_older_vars loop_st.cs_next_var x` by res_tac >>
-      qpat_x_assum `!x w. _ /\ lookup_var x initial = SOME w ==> _` drule_all >>
-      disch_tac >>
-      qpat_x_assum `!x w. _ /\ lookup_var x prepared = SOME w ==> _` irule >>
-      asm_rewrite_tac[]) >>
+  simp_tac std_ss [] >>
+  conj_tac >-
+    (strip_tac >> qpat_x_assum `checked ==> !D explicit. _` drule >>
+     simp_tac std_ss []) >>
+  asm_simp_tac bool_ss [] >>
   conj_tac >- (irule SUBSET_TRANS >> qexists `qt.t_mem` >> asm_rewrite_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `abi_decoder_older_vars loop_st.cs_next_var x` by res_tac >>
-      qpat_x_assum `!x. _ ==> FLOOKUP Hout x = _ /\ _` drule >> strip_tac >>
-      qpat_x_assum `!x. _ ==> FLOOKUP H x = _ /\ _` drule >> strip_tac >>
-      asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `mem_bytes_at a 1 prepared.vs_memory = mem_bytes_at a 1 initial.vs_memory` by
     (qpat_x_assum `!a n. _ ==> mem_bytes_at a n prepared.vs_memory = _` irule >>
