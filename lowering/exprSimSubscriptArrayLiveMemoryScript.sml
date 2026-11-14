@@ -120,7 +120,7 @@ Proof
   simp[contextTheory.mk_ptr_def]
 QED
 
-Theorem live_memory_array_suffix_summary:
+Theorem live_memory_array_suffix_summary_family:
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),t) /\
@@ -128,12 +128,15 @@ Theorem live_memory_array_suffix_summary:
   ee.gas_obs = [] /\
   (!entry. lookup_scopes id ee.scopes = SOME entry ==>
      ?v. evaluate_subscripts entry.type entry.value path = INL v) /\
-  vv_post H ctx func cenv cx obj es sa sb s0 t (PlaceR (MemoryPlace id path))
-    (LocatedValue (ArrayT et bd) p) u /\
-  expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+  P Hw /\
+  (!H. P H ==>
+    vv_post H ctx func cenv cx obj es sa sb s0 t (PlaceR (MemoryPlace id path))
+      (LocatedValue (ArrayT et bd) p) u /\
+    expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+    stmt_state_rel H ctx func cenv cx es s0) /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\ (!l. p.ptr_operand <> Label l) /\
   (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
-  expr_sim_inv cenv cx env t /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  expr_sim_inv cenv cx env t /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
   MAP FDOM es.scopes = MAP FDOM t.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -148,13 +151,15 @@ Theorem live_memory_array_suffix_summary:
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
   gas_summary_at F (ctx,func) []
     (select_result cx (ArrayT et bd) (PlaceR (MemoryPlace id path)) (ValueSubscript iv)) (ee,s)
-    (\res ee' q. ?child. res = INL child /\
-      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
-        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+    (\res ee' q. ?child. res = INL child /\ ee' = ee /\
+      (!H. P H ==> vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+        (LocatedValue ann (mk_ptr dst p.ptr_location)) q) /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee' outcome. expr_exit res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `!H. P H ==> _` (qspec_then `Hw` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all_then assume_tac exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >>
   drule_all_then assume_tac exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
@@ -162,7 +167,7 @@ Proof
   drule_all framed_array_index_post_view >> strip_tac >>
   `expr_sim_inv cenv cx env ee` by
     (drule_all exprSimSourceTheory.expr_body_pre_eval_result >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ee s` by fs[expr_post_def] >>
+  `stmt_state_rel Hw ctx func cenv cx ee s` by fs[expr_post_def] >>
   drule_all live_memory_array_current_view >> strip_tac >>
   `subscripts_type entry.type path = SOME (ArrayTV etv bd)` by
     (drule_all place_ptr_rel_memory_current >> simp[]) >>
@@ -204,7 +209,7 @@ Proof
   suspend "selection"
 QED
 
-Resume live_memory_array_suffix_summary[selection]:
+Resume live_memory_array_suffix_summary_family[selection]:
   `val_wf (ArrayTV etv bd) (ArrayV av)` by metis_tac[value_has_type_memory_wf] >>
   `((case bd of Fixed _ => F | Dynamic _ => T) ==> 
      mload (w2n b) s = n2w (array_length (ArrayTV etv bd) av)) /\
@@ -237,18 +242,18 @@ Resume live_memory_array_suffix_summary[selection]:
   gvs[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]
 QED
 
-Resume live_memory_array_suffix_summary[valid]:
+Resume live_memory_array_suffix_summary_family[valid]:
   `idx_in_range (is_signed_type (expr_type idx)) iw
       (if (case bd of Fixed _ => F | Dynamic _ => T) then mload (w2n b) s
        else n2w (case bd of Fixed n => n | Dynamic _ => 0))` by
     (Cases_on `bd` >> fs[] >> metis_tac[]) >>
   qpat_x_assum `p.ptr_location = LocMemory` SUBST_ALL_TAC >>
-  drule_all target_memory_array_path >> strip_tac >>
+  drule_all target_memory_array_path_fields >> strip_tac >>
   rename1 `gas_marked_path F ctx func s 0 (OK q)` >>
   suspend "child"
 QED
 
-Resume live_memory_array_suffix_summary[child]:
+Resume live_memory_array_suffix_summary_family[child]:
   `0 <= i /\ Num i < array_length (ArrayTV etv bd) av` by
     (fs[vyperArrayTheory.valid_index_def] >>
      metis_tac[integerTheory.NUM_LT, integerTheory.NUM_OF_INT, integerTheory.INT_POS]) >>
@@ -273,10 +278,16 @@ Resume live_memory_array_suffix_summary[child]:
   `eval_operand dst q = SOME (b + n2w k)` by
     fs[compileEnvTheory.word_scale_def, compileEnvTheory.elem_size_in_location_def,
        compileEnvTheory.is_slot_addressed_def] >>
-  `vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee
+  `!H. P H ==> vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee
      (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV i)])))
      (LocatedValue et (mk_ptr dst LocMemory)) q` by
-    (`sb.cs_next_id <= sd.cs_next_id` by decide_tac >>
+    (rpt strip_tac >>
+     qpat_assum `!H. P H ==> _` (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee s` by fs[expr_post_def] >>
+     `stmt_state_rel H ctx func cenv cx ee q` by
+       (irule stmt_state_rel_fields_transport >> (metisTools.METIS_TAC [])) >>
+     `sb.cs_next_id <= sd.cs_next_id` by decide_tac >>
      drule live_memory_selection_post >> disch_then drule >>
      disch_then irule >> simp[] >>
      rpt conj_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]) >>
@@ -295,4 +306,44 @@ Resume live_memory_array_suffix_summary[child]:
   gvs[]
 QED
 
-Finalise live_memory_array_suffix_summary
+Finalise live_memory_array_suffix_summary_family
+
+Theorem live_memory_array_suffix_summary:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),t) /\
+  eval_expr cx idx t = (INL ir,ee) /\ read_result cx ir ee = (INL iv,ee) /\
+  ee.gas_obs = [] /\
+  (!entry. lookup_scopes id ee.scopes = SOME entry ==>
+     ?v. evaluate_subscripts entry.type entry.value path = INL v) /\
+  vv_post H ctx func cenv cx obj es sa sb s0 t (PlaceR (MemoryPlace id path))
+    (LocatedValue (ArrayT et bd) p) u /\
+  expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\ (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  expr_sim_inv cenv cx env t /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
+  MAP FDOM es.scopes = MAP FDOM t.scopes /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sc.cs_next_id /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale p.ptr_location) (elem_size_in_location cenv p.ptr_location et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT et bd) (PlaceR (MemoryPlace id path)) (ValueSubscript iv)) (ee,s)
+    (\res ee' q. ?child. res = INL child /\
+      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  strip_tac >>
+  mp_tac (live_memory_array_suffix_summary_family |> Q.INST [`P` |-> `(\h. h = H)`, `Hw` |-> `H`]) >>
+  (impl_tac >- simp[]) >>
+  simp[gasSummaryTheory.gas_summary_at_def] >> metis_tac[]
+QED
