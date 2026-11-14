@@ -7,6 +7,17 @@ Ancestors
   exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
   loweringStateRelDefs
 
+(* A successful read exposes the physical post of a stack capture, without
+   restricting its annotation or its memory representation. *)
+Theorem materialize_stack_vv_post_read:
+  vv_post H ctx func ce cx e es sa sm s0 ee raw (StackValue tag op) s /\
+  read_result cx raw ee = (INL v,ee) ==>
+  expr_post H ctx func ce cx e es sa sm s0 ee v op s
+Proof
+  metis_tac[exprSimUnwrapPropsTheory.vv_post_read_result,
+            exprSimUnwrapTheory.expr_post_of_vv_post_stack]
+QED
+
 Theorem materialize_post_lowered_classify:
   !ce e. ~is_word_type (expr_type e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) ==>
