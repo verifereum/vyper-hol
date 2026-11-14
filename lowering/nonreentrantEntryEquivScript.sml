@@ -25,7 +25,7 @@ Theorem nonreentrant_entry_lock_source_correct:
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
-  (mut = View \/ ~cx.txn.is_static) /\
+  (~(mut = View) ==> ~cx.txn.is_static) /\
   tload (n2w global_nonreentrant_slot) ss <> 1w ==>
   ?vs' ss'.
     (case cx.nonreentrant_slot of
@@ -74,7 +74,7 @@ Theorem nonreentrant_entry_unlock_source_correct:
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
   state_rel func cenv cx vs ss /\
   compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View) st = ((),st') /\
-  (mut = View \/ ~cx.txn.is_static) ==>
+  (~(mut = View) ==> ~cx.txn.is_static) ==>
   ?vs' ss'.
     (if ~(mut = View \/ mut = Pure) then
        case cx.nonreentrant_slot of
@@ -103,7 +103,7 @@ Theorem checked_nonreentrant_entry_lock:
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   local_ptrs_rel func cenv scopes ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
-  (mut = View \/ ~cx.txn.is_static) /\
+  (~(mut = View) ==> ~cx.txn.is_static) /\
   tload (n2w global_nonreentrant_slot) ss <> 1w ==>
   ?vs' ss'.
     (case cx.nonreentrant_slot of

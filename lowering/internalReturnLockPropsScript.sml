@@ -9,6 +9,7 @@ Ancestors
 
 Theorem compile_return_unlock_source_correct:
   state_rel func cenv cx vs ss /\
+  (~is_view ==> ~cx.txn.is_static) /\
   cenv.ce_nonreentrant = (T,key,T,is_view) /\
   compile_return_unlock cenv st = ((),st') ==>
   ?vs' ss'.
