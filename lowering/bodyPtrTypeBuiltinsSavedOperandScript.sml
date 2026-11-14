@@ -67,7 +67,12 @@ Proof
     (irule eval_operand_frame >> simp[] >> qexistsl_tac [`sb`, `s`] >>
      gvs[expr_post_def]) >>
   gvs[] >>
-  drule_all saved_operand_footprint_window >> strip_tac
+  Q.ISPECL_THEN
+    [`H`, `cenv`, `cx`, `ty`, `sa`, `sb`, `es`, `v`, `op`, `s`,
+     `tv`, `w`, `env`, `ctx`, `func`, `e`, `sc`, `es'`, `v'`, `op'`,
+     `s'`, `G`, `tn`, `G'`, `tn'`] mp_tac
+    (Q.GEN `H` saved_operand_footprint_window) >>
+  simp[] >> strip_tac
   >~ [`val_in_memory _ _ _ _`]
   >- (irule robust_val_in_memory_decreasing_taint_transport >> simp[] >>
       qexistsl_tac [`s.vs_memory`, `s'.vs_memory`, `val_footprint tv v`,
