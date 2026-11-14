@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointSafety
-Ancestors lowerDloadPtrJointReachable lowerDloadPtrTerminalClosure
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrJointReachable lowerDloadPtrTerminalClosure
   lowerDloadPtrRel lowerDloadPtrAggregate ptrDiscipline list
   venomExecSemantics venomState venomMemProps venomInst finite_map
   lowerDloadPtrPhase lowerDloadPtrPhaseNext lowerDloadDefs
@@ -110,6 +110,72 @@ Proof
   drule_all dload_prefix_allocas_lower_bound >> simp[]
 QED
 
+Theorem dload_prefix_frontier[local]:
+  !n t H un.
+    t0.vs_alloca_next < dimword (:256) /\
+    (!k. k < n ==> ~is_terminator (EL k xs).inst_opcode /\
+      ~is_ext_call_op (EL k xs).inst_opcode /\
+      (EL k xs).inst_opcode <> INVOKE /\
+      ((EL k xs).inst_opcode = ALLOCA ==>
+        k = 0 /\ (EL 0 xs).inst_operands = [Lit 32w] /\
+        (FLOOKUP t0.vs_allocas (EL 0 xs).inst_id = NONE ==>
+         t0.vs_alloca_next + 32 < dimword (:256)))) /\
+    dload_prefix_match fuel C PH xs n t0 H0 un0 t H un ==>
+    t.vs_alloca_next < dimword (:256)
+Proof
+  Induct_on `n` >- simp[dload_prefix_match_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule dload_prefix_successor >> strip_tac >>
+  qpat_assum `!k. k < SUC n ==> _` (qspec_then `n` mp_tac) >>
+  impl_tac >- decide_tac >> strip_tac >>
+  Cases_on `(EL n xs).inst_opcode = ALLOCA`
+  >- (qpat_x_assum `_ = ALLOCA ==> _`
+        (fn th => first_assum (strip_assume_tac o MATCH_MP th)) >>
+      qpat_x_assum `!k. _` kall_tac >> qpat_x_assum `!t H un. _` kall_tac >>
+      gvs[dload_prefix_zero] >>
+      gvs[step_inst_non_invoke, step_inst_base_def] >>
+      Cases_on `FLOOKUP t0.vs_allocas (HD xs).inst_id` >>
+      gvs[exec_alloca_def, update_var_def, AllCaseEqs(),
+          wordsTheory.dimword_def]) >>
+  `u.vs_alloca_next < dimword (:256)` by
+    (qpat_x_assum `!t H un. _` irule >>
+     conj_tac
+     >- (gen_tac >> strip_tac >>
+         qpat_x_assum `!k. k < SUC n ==> _` (qspec_then `k` mp_tac) >>
+         impl_tac >- decide_tac >> disch_then ACCEPT_TAC) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`J`,`vn`] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `_ = ALLOCA ==> _` kall_tac >>
+  qpat_x_assum `!k. _` kall_tac >> qpat_x_assum `!t H un. _` kall_tac >>
+  `~is_alloca_op (EL n xs).inst_opcode` by
+    (qpat_x_assum `(EL n xs).inst_opcode <> ALLOCA` mp_tac >>
+     Cases_on `(EL n xs).inst_opcode` >> simp[is_alloca_op_def]) >>
+  drule_all step_inst_preserves_alloca_state >> strip_tac >> gvs[]
+QED
+
+(* Inside an expansion the frontier moves only at the DLOAD's leading
+   ALLOCA, and then only when its site is fresh. *)
+Theorem dload_supply_prefix_frontier:
+  lower_dload_inst_supply supply i = (xs,next) /\
+  dload_prefix_match fuel Ct PH xs n t0 H0 un0 t H un /\ n < LENGTH xs /\
+  t0.vs_alloca_next < dimword (:256) /\
+  (i.inst_opcode = DLOAD /\ 0 < n /\
+   FLOOKUP t0.vs_allocas (EL 0 xs).inst_id = NONE ==>
+   t0.vs_alloca_next + 32 < dimword (:256)) ==>
+  t.vs_alloca_next < dimword (:256)
+Proof
+  strip_tac >>
+  irule dload_prefix_frontier >>
+  goal_assum (drule_at (Pat `dload_prefix_match`)) >> simp[] >>
+  gen_tac >> strip_tac >>
+  `SUC k < LENGTH xs` by decide_tac >>
+  drule_all dload_supply_interior_shape >> strip_tac >>
+  gvs[is_terminator_def, is_ext_call_op_def] >>
+  qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
+  simp[lower_dload_inst_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `k = 0 \/ k = 1 \/ k = 2` by decide_tac >> gvs[]
+QED
+
 Theorem dload_boundary_cached_scratch_bounds[local]:
   dload_boundary_core lo (r::rs) V Ws PG PH G H0 tn un0 s t0 cs ds /\
   id IN r.dr_scratch /\ FLOOKUP t0.vs_allocas id = SOME (bb,sz) ==>
@@ -128,9 +194,79 @@ Proof
   fs[dload_live_layout_def]
 QED
 
+Theorem dload_normal_fresh_reserve:
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo cut C vs /\
+  callee_first names C.ctx_functions /\
+  frame_reachable vs C cs PG G tn f i s /\
+  dload_boundary_core lo fs V Ws PG PH G H0 tn un0 s t0 cs ds /\
+  dload_control_match q f g s t0 i emitted 0 /\
+  dload_prefix_match pfuel C' PH emitted n t0 H0 un0 t H un /\
+  frame_reachable vs C' ds PH H un g j t /\
+  LENGTH fs = SUC (LENGTH cs) /\ LENGTH cs = LENGTH ds /\
+  (!k. k < LENGTH fs ==>
+    (EL k fs).dr_scratch =
+      FDOM (EL k (t0::MAP (\d. d.cf_state) ds)).vs_allocas DIFF
+      {id | ?ci. MEM ci (fn_insts (EL k (f::MAP (\c. c.cf_fn) cs))) /\
+                 ci.inst_id = id}) /\
+  ir_supply_covers_fn q f /\
+  lower_dload_function_supply q f = (g,q') /\
+  (!k. k < LENGTH cs ==>
+    ?qc qc'. lower_dload_function_supply qc (EL k cs).cf_fn =
+      ((EL k ds).cf_fn,qc')) /\
+  i.inst_opcode = DLOAD /\ 0 < n /\ n < 4 /\
+  FLOOKUP t0.vs_allocas (EL 0 emitted).inst_id = NONE ==>
+  t0.vs_alloca_next + 32 < dimword (:256)
+Proof
+  strip_tac >>
+  Cases_on `fs` >- gvs[] >> rename1 `LENGTH (r::rs) = _` >>
+  `MEM i (fn_insts f)` by
+    (qpat_x_assum `dload_control_match q f g s t0 i emitted 0` mp_tac >>
+     simp[dload_control_match_def, active_inst_def, fn_insts_def,
+       fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `MEM f C.ctx_functions` by
+    (qpat_assum `frame_reachable vs C cs PG G tn f i s`
+       (mp_then Any mp_tac frame_reachable_raw_certificate) >>
+     simp[] >> strip_tac >> simp[]) >>
+  `o1_fn_shape C f` by fs[o1_ctx_shape_def, EVERY_MEM] >>
+  `?off out. i.inst_operands = [off] /\ i.inst_outputs = [out]` by
+    (`fn_inst_wf f` by fs[o1_fn_shape_def] >>
+     `inst_wf i` by
+       (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
+        metis_tac[]) >>
+     gvs[inst_wf_def] >>
+     Cases_on `i.inst_operands` >> gvs[] >>
+     Cases_on `i.inst_outputs` >> gvs[]) >>
+  drule_all dload_control_supply_origins >> strip_tac >>
+  `vs.vs_allocas = FEMPTY` by
+    fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `dload_headroom_ok C f i s` by
+    (irule o1_src_frame_dload_headroom_ok >> metis_tac[]) >>
+  `dload_table_stack (r::rs) (s::MAP (\c. c.cf_state) cs)
+    (t0::MAP (\d. d.cf_state) ds)` by
+    (drule dload_boundary_tables >> simp[]) >>
+  irule dload_positive_prefix_fresh_reserve >>
+  qpat_assum `frame_reachable vs C cs PG G tn f i s`
+    (irule_at (Pat `frame_reachable`)) >>
+  qpat_assum `frame_reachable vs C' ds PH H un g j t`
+    (irule_at (Pat `frame_reachable`)) >>
+  qpat_assum `dload_prefix_match pfuel C' PH emitted n t0 H0 un0 t H un`
+    (irule_at (Pat `dload_prefix_match`)) >>
+  qpat_assum `lower_dload_inst_supply supply i = (emitted,after)`
+    (irule_at (Pat `lower_dload_inst_supply`)) >>
+  qpat_assum `dload_table_stack (r::rs) _ _`
+    (irule_at (Pat `dload_table_stack`)) >>
+  qpat_assum `callee_first names C.ctx_functions`
+    (irule_at (Pat `callee_first`)) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> simp[EXTENSION] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `k`
+  >- (simp[] >> metis_tac[]) >>
+  fs[EL_MAP] >> metis_tac[]
+QED
+
 Theorem dload_normal_later_dload_safety:
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
-  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo cut C vs /\
+  gas_cut cut vs t /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   frame_reachable vs C' ds PH H un g j t /\
@@ -176,7 +312,9 @@ Proof
   `op_taint un0 off = {}` by suspend "clean" >>
   `?x. eval_operand off t0 = SOME x` by suspend "defined" >>
   `(FLOOKUP t0.vs_allocas (EL 0 emitted).inst_id = NONE ==>
-    t0.vs_alloca_next + 32 < dimword (:256))` by suspend "reserve" >>
+    t0.vs_alloca_next + 32 < dimword (:256))` by
+    (strip_tac >> `0 < n` by decide_tac >>
+     drule_all dload_normal_fresh_reserve >> simp[]) >>
   `!bb sz. FLOOKUP t0.vs_allocas (EL 0 emitted).inst_id = SOME (bb,sz) ==>
     sz = 32 /\ bb + 32 < dimword (:256)` by suspend "cached" >>
   irule dload_supply_prefix_safety >> simp[] >>
@@ -216,49 +354,16 @@ QED
 
 Resume dload_normal_later_dload_safety[clean]:
   rpt strip_tac >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   drule_all dload_offset_clean >> strip_tac >>
   drule dload_boundary_vars >> strip_tac >>
   Cases_on `off` >> gvs[op_taint_def] >>
   fs[dload_vars_match_def] >> metis_tac[]
-QED
-
-Resume dload_normal_later_dload_safety[reserve]:
-  rpt strip_tac >>
-  `vs.vs_allocas = FEMPTY` by
-    fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
-  `dload_headroom_ok C f i s` by suspend "headroom" >>
-  `dload_table_stack (r::rs) (s::MAP (\c. c.cf_state) cs)
-    (t0::MAP (\d. d.cf_state) ds)` by
-    (drule dload_boundary_tables >> simp[]) >>
-  irule dload_positive_prefix_fresh_reserve >>
-  qpat_assum `frame_reachable vs C cs PG G tn f i s`
-    (irule_at (Pat `frame_reachable`)) >>
-  qpat_assum `frame_reachable vs C' ds PH H un g j t`
-    (irule_at (Pat `frame_reachable`)) >>
-  qpat_assum `dload_prefix_match pfuel C' PH emitted n t0 H0 un0 t H un`
-    (irule_at (Pat `dload_prefix_match`)) >>
-  qpat_assum `lower_dload_inst_supply supply i = (emitted,after)`
-    (irule_at (Pat `lower_dload_inst_supply`)) >>
-  qpat_assum `dload_table_stack (r::rs) _ _`
-    (irule_at (Pat `dload_table_stack`)) >>
-  qpat_assum `callee_first names C.ctx_functions`
-    (irule_at (Pat `callee_first`)) >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> simp[EXTENSION] >> metis_tac[]) >>
-  rpt strip_tac >> Cases_on `k`
-  >- (simp[] >> metis_tac[]) >>
-  fs[EL_MAP] >> metis_tac[]
-QED
-
-Resume dload_normal_later_dload_safety[headroom]:
-  rpt strip_tac >>
-  qpat_assum `frame_reachable vs C cs PG G tn f i s`
-    (mp_then Any mp_tac o1_src_frame_dload_headroom_ok) >>
-  disch_then (qspec_then `D` mp_tac) >> simp[]
 QED
 
 Resume dload_normal_later_dload_safety[defined]:
@@ -276,7 +381,7 @@ QED
 Finalise dload_normal_later_dload_safety
 
 Theorem dload_normal_dloadbytes_safety:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\ gas_cut cut vs t /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_boundary_core lo fs
@@ -307,10 +412,12 @@ Proof
     lower_dload_inst_supply supply i = (emitted,after) /\
     fresh_ir_var supply = (cv,supply1) /\ cv NOTIN set (fn_ir_vars f)` by
     suspend "supply" >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   `~in_revert_forward f s` by suspend "forward" >>
   suspend "phases"
 QED
@@ -487,14 +594,17 @@ val normal = ``\ds PH H un g j t.
 Theorem dload_normal_safety:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   o1_ctx_shape C /\ EVERY fn_shape_ok C'.ctx_functions /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  ptr_discipline lo C vs /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C' ds PH H un g j t /\
   (^normal) ds PH H un g j t ==>
   access_ok lo H g j t /\ taint_ok g un j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >> gvs[] >>
+  `o1_ptr_safe_upto D lo cut C vs` by fs[o1_safe_upto_def] >>
+  `ptr_discipline_upto lo cut C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   `(ctx_has_dalloca C' ==> allocas_below_fmp t)` by
     (metis_tac[lower_dload_src_inv_below_fmp]) >>
   qpat_assum `dload_control_match q f g s t i emitted n`
@@ -581,10 +691,12 @@ QED
 
 Resume dload_normal_safety[early_clean]:
   `fn_ptr_ok P f` by fs[EVERY_MEM] >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   drule_all dload_offset_clean >> strip_tac >>
   drule dload_boundary_vars >> strip_tac >>
   Cases_on `off` >> gvs[op_taint_def] >>
@@ -592,6 +704,36 @@ Resume dload_normal_safety[early_clean]:
 QED
 
 Finalise dload_normal_safety
+
+Theorem dload_normal_frontier:
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo cut C vs /\
+  callee_first names C.ctx_functions /\
+  frame_reachable vs C' ds PH H un g j t /\
+  (^normal) ds PH H un g j t ==>
+  t.vs_alloca_next < dimword (:256)
+Proof
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >>
+  qpat_assum `dload_control_match q f g s t i emitted n`
+    (mp_then Any strip_assume_tac dload_control_match_expansion) >>
+  `t0.vs_alloca_next < dimword (:256)` by
+    (drule dload_boundary_layout >> simp[dload_live_layout_def]) >>
+  `i.inst_opcode = DLOAD /\ 0 < n /\
+   FLOOKUP t0.vs_allocas (EL 0 emitted).inst_id = NONE ==>
+   t0.vs_alloca_next + 32 < dimword (:256)` by
+    (strip_tac >>
+     `n < 4` by
+       (qpat_assum `dload_control_match q f g s t i emitted n`
+          (mp_then Any mp_tac dload_control_match_phase) >> fs[]) >>
+     `!k. k < LENGTH cs ==>
+        ?qc qc'. lower_dload_function_supply qc (EL k cs).cf_fn =
+          ((EL k ds).cf_fn,qc')` by
+       (rpt strip_tac >>
+        qpat_x_assum `!k. k < LENGTH cs ==> _`
+          (drule_then (strip_assume_tac o SIMP_RULE bool_ss [LET_THM])) >>
+        metis_tac[]) >>
+     drule_all dload_normal_fresh_reserve >> simp[]) >>
+  drule_all dload_supply_prefix_frontier >> simp[]
+QED
 
 Theorem lower_dload_stage_fn_shape:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -614,10 +756,9 @@ QED
 Theorem lower_dload_stage_dynamic_safety:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
-  frame_reachable vs C' ds PH H un g j t ==>
+  frame_reachable vs C' ds PH H un g j t /\ gas_cut cut vs t ==>
   access_ok lo H g j t /\ taint_ok g un j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
@@ -628,6 +769,26 @@ Proof
   disch_then (DISJ_CASES_THEN assume_tac)
   >- (rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
       drule_all (SIMP_RULE (srw_ss()) [] dload_normal_safety) >> simp[]) >>
+  `o1_ptr_safe_upto D lo cut C vs` by fs[o1_safe_upto_def] >>
+  `ptr_discipline_upto lo cut C vs` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   metis_tac[dload_terminal_mode_safety, dload_terminal_mode_allocas_from,
             lower_dload_src_inv_below_fmp]
+QED
+
+Theorem lower_dload_stage_alloca_frontier:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_safe_upto D lo n C vs /\ callee_first names C.ctx_functions ==>
+  alloca_frontier_upto n C' vs
+Proof
+  rw[alloca_frontier_upto_def] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def,
+        EVERY_MEM] >> metis_tac[]) >>
+  drule_all dload_joint_reachable >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  disch_then (DISJ_CASES_THEN assume_tac)
+  >- (rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+      drule_all (SIMP_RULE (srw_ss()) [] dload_normal_frontier) >> simp[]) >>
+  fs[dload_terminal_mode_def, dload_live_layout_def]
 QED

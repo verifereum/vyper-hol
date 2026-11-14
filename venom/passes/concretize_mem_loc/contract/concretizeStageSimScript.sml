@@ -56,15 +56,8 @@ QED
    The pass only rewrites ALLOCA (to ASSIGN of its position, or NOP) and
    drops NOPs inside each block; blocks, labels, terminators and INVOKEs
    are unchanged, and no block becomes empty.  So the output runs on the
-   input's fuel.  The existing proof goes through the fuel-free
-   finite_step / finite_block / finite_run (frameFiniteExecution) and
-   recovers fuel only existentially, by finite_execution_realizable at
-   the end of layout_stage_terminating_context.  The selected-simulation
-   relations (selected_step_match, selected_block_match,
-   selected_run_match in frameSelectedSimulation, used only by
-   concretize) could carry the same-fuel fact, e.g. that the output's
-   step / block / run at fuel k gives the matching result whenever the
-   input's does; non-INVOKE steps don't depend on fuel. *)
+   input's fuel. The shared selected fuel driver carries both the actual
+   matching result and GAS-event agreement through the same execution. *)
 Theorem concretize_stage_sim_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\

@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointReturn
-Ancestors lowerDloadPtrJointCall lowerDloadPtrNormalReturn
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrJointCall lowerDloadPtrNormalReturn
   lowerDloadPtrTerminalClosure lowerDloadPtrPhase o1ContractSimplifyCfg
   o1ContractSimplifyCfgSrcFrame o1PassContract o1ContractLowerDload lowerDloadPtrRawReachable unitShapeDefs ptrDiscipline venomWf
   lowerDloadPtrStatic lowerDloadPtrRel lowerDloadDefs venomInst contextCodegenRel
@@ -22,8 +22,8 @@ QED
 Theorem dload_joint_return_closed:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ((?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -140,8 +140,11 @@ QED
 Resume dload_joint_return_closed[origins]:
   `ptr_use_ok P (fn_pv P f) ri` by gvs[fn_ptr_ok_def] >>
   `taint_ok f tn ri s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (`gas_cut cut vs s` by
+       metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
+     qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `o1_fn_shape C f` by
     (qpat_x_assum `o1_ctx_shape C` mp_tac >>
      simp[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>

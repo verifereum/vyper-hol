@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointBytesClosure
-Ancestors lowerDloadPtrBackwardNext lowerDloadPtrNormalNext lowerDloadPtrReplay
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrBackwardNext lowerDloadPtrNormalNext lowerDloadPtrReplay
   lowerDloadPtrSourceInv lowerDloadPtrJointAllocClosure lowerDloadPtrStatic
   lowerDloadPtrBytesTransport lowerDloadPtrPhase lowerDloadPtrRel
   lowerDloadDefs o1PassContract ptrDiscipline venomExecSemantics venomState
@@ -45,8 +45,8 @@ QED
 Theorem dload_joint_tracked_dloadbytes_complete_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -162,9 +162,12 @@ Proof
     fresh_ir_var supply = (cv,supply1) /\ cv NOTIN set (fn_ir_vars f)` by
     suspend "supply" >>
   `fn_ptr_ok P f` by fs[EVERY_MEM] >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `!v. MEM (Var v) i.inst_operands ==>
      v IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by
     suspend "operands" >>
@@ -173,9 +176,7 @@ Proof
   `~in_revert_forward f s` by suspend "forward" >>
   `code_layout_valid s` by suspend "layout" >>
   `dload_offset_ok C f i s` by
-    (qpat_assum `frame_reachable vs C cs PG G tn f i s`
-       (mp_then Any mp_tac o1_src_frame_dload_offset_ok) >>
-     disch_then (qspec_then `D` mp_tac) >> simp[]) >>
+    (drule_all o1_src_frame_dload_offset_ok >> simp[]) >>
   qpat_assum `dload_prefix_match _ _ _ _ 2 _ _ _ _ _ _`
     (mp_then Any mp_tac dloadbytes_supply_boundary) >>
   disch_then (drule_at (Pat `dload_boundary_core`)) >>

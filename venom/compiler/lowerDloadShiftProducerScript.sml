@@ -1,5 +1,6 @@
 Theory lowerDloadShiftProducer
 Ancestors
+  o1SafeUpto
   lowerDloadOrdinaryExecution lowerDloadProvenanceSupport
   lowerDloadReachableDiscipline lowerDloadOperand ptrDiscipline
   words pred_set list venomInst venomExecSemantics venomState
@@ -100,7 +101,7 @@ QED
 
 Theorem ld_annotated_shift_backward:
   (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
   MEM i.inst_opcode [SHL;SHR;SAR] /\
   i.inst_operands = [n;v] /\ i.inst_outputs = [out] /\
@@ -159,7 +160,7 @@ QED
 
 Theorem ld_shift_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   MEM i.inst_opcode [SHL;SHR;SAR] /\
   i.inst_operands = [n;v] /\ i.inst_outputs = [out] /\

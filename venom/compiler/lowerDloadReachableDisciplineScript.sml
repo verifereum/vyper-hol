@@ -1,23 +1,23 @@
 Theory lowerDloadReachableDiscipline
 Ancestors
-  lowerDloadOwnership ptrDiscipline venomInst list pred_set
+  lowerDloadOwnership o1SafeUpto ptrDiscipline venomInst list pred_set
 
 Theorem ld_annotated_taint_ok:
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s ==>
   taint_ok fn tn i s
 Proof
   strip_tac >> drule ld_annotated_erasure >>
-  fs[ptr_discipline_def] >> metis_tac[]
+  fs[ptr_discipline_upto_def] >> metis_tac[]
 QED
 
 Theorem ld_annotated_access_ok:
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s ==>
   access_ok lo (ld_erase AG) fn i s
 Proof
   strip_tac >> drule ld_annotated_erasure >>
-  fs[ptr_discipline_def] >> metis_tac[]
+  fs[ptr_discipline_upto_def] >> metis_tac[]
 QED
 
 Theorem ld_taint_operand_clean:

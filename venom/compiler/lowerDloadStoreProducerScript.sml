@@ -1,5 +1,6 @@
 Theory lowerDloadStoreProducer
 Ancestors
+  o1SafeUpto
   lowerDloadLifetime arithmetic finite_map pred_set
   lowerDloadProvenanceSupport lowerDloadReachableDiscipline
   lowerDloadAccessClassification lowerDloadStoreExecution
@@ -56,7 +57,7 @@ QED
 
 Theorem ld_reachable_mstore_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
   i.inst_opcode = MSTORE /\ i.inst_operands = [dst;value] /\
   i.inst_outputs = [] /\ ~in_revert_forward fn s /\

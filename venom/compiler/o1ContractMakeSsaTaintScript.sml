@@ -6,21 +6,21 @@
  *)
 Theory o1ContractMakeSsaTaint
 Ancestors
+  o1SafeUpto
   o1PassContract ptrDiscipline unitMemInv venomPassSchedule list makeSsaCurrentLockstep
   makeSsaCurrentSim o1ContractMakeSsaReplay o1PassLift o1FrameLockstep unitTransformDefs
 
-Theorem make_ssa_stage_taint:
-  !rpolicy D view C C' vs names.
+Theorem make_ssa_stage_taint_upto:
+  !rpolicy D view C C' vs k.
     ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
-    callee_first names C.ctx_functions ==>
-    taint_within D C' vs
+    o1_ctx_shape C /\ o1_run_state_ok vs /\
+    EVERY make_ssa_input_ok C.ctx_functions /\
+    taint_within_upto D k C vs ==>
+    taint_within_upto D k C' vs
 Proof
   rpt strip_tac >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
-  `taint_within D C vs` by gvs[o1_src_inv_def] >>
   `C'.ctx_entry = C.ctx_entry /\
    LIST_REL (\fn fn'. ?t t'.
      ir_supply_covers_fn t fn /\ ir_supply_inst_ok t /\
@@ -63,5 +63,20 @@ Proof
      first_x_assum drule >> strip_tac >>
      qexists `make_ssa_pos (EL n C.ctx_functions) (EL n C'.ctx_functions)` >>
      irule make_ssa_current_fn_frame_lockstep >> metis_tac[]) >>
-  drule_all taint_within_lockstep >> simp[]
+  drule_all taint_within_upto_lockstep >> simp[]
+QED
+
+
+Theorem make_ssa_stage_taint:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+    callee_first names C.ctx_functions ==>
+    taint_within D C' vs
+Proof
+  rpt strip_tac >> irule taint_within_upto_all >>
+  irule make_ssa_stage_taint_upto >>
+  `taint_within D C vs` by gvs[o1_src_inv_def] >>
+  metis_tac[taint_within_upto_whole]
 QED

@@ -64,7 +64,7 @@ QED
    certificate's unconditional parameter-length premise is not valid at entry. *)
 Theorem ld_normal_clean_scalar_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -244,7 +244,7 @@ QED
 
 Theorem ld_normal_affine_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -288,7 +288,7 @@ QED
 
 Theorem ld_normal_shift_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!x. MEM (Var x) i.inst_operands ==> x IN V) /\
@@ -340,7 +340,7 @@ QED
 
 Theorem ld_normal_compare_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
   LIST_REL (\A g. FINITE A /\
@@ -410,7 +410,7 @@ Finalise ld_normal_compare_backward
 
 Theorem ld_normal_mload_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -528,7 +528,7 @@ QED
 
 Theorem ld_normal_mstore_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -568,7 +568,7 @@ QED
 
 Theorem ld_normal_mstore8_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -604,7 +604,7 @@ QED
 
 Theorem ld_normal_mcopy_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\

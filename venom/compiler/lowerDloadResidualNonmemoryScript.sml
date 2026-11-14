@@ -54,7 +54,7 @@ QED
 
 Theorem ld_normal_guard_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  o1_ctx_shape CS /\ ptr_discipline lo CS vs0 /\
+  o1_ctx_shape CS /\ ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -271,7 +271,7 @@ QED
 
 Theorem ld_annotated_residual_read_operands:
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
-  ptr_discipline lo CS vs0 /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ opaque_use_ok fn /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   MEM i.inst_opcode [BYTE; SIGNEXTEND; BUMP;
@@ -358,7 +358,7 @@ QED
 
 Theorem ld_normal_byte_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  o1_ctx_shape CS /\ ptr_discipline lo CS vs0 /\
+  o1_ctx_shape CS /\ ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -383,7 +383,7 @@ Proof
     ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
     (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
        ld_annotated_residual_read_operands >>
-     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     disch_then (qspecl_then [`ncut`,`lo`,`V`,`P`] mp_tac) >>
      strip_tac >> gen_tac >> disch_tac >>
      first_x_assum (qspec_then `op` mp_tac) >>
      impl_tac >- (simp[] >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
@@ -410,7 +410,7 @@ QED
 
 Theorem ld_normal_environment_read_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -432,7 +432,7 @@ Proof
     ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
     (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
        ld_annotated_residual_read_operands >>
-     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     disch_then (qspecl_then [`ncut`,`lo`,`V`,`P`] mp_tac) >>
      strip_tac >> gen_tac >> disch_tac >>
      first_x_assum (qspec_then `op` mp_tac) >>
      impl_tac >- (simp[] >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
@@ -460,7 +460,7 @@ QED
 
 Theorem ld_normal_bump_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\ i.inst_opcode = BUMP /\
@@ -479,7 +479,7 @@ Proof
     ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
     (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
        ld_annotated_residual_read_operands >>
-     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     disch_then (qspecl_then [`ncut`,`lo`,`V`,`P`] mp_tac) >>
      strip_tac >> gen_tac >> disch_tac >>
      first_x_assum (qspec_then `op` mp_tac) >> simp[] >> metis_tac[]) >>
   `ld_owned_vars U E AG BH tn un s t` by
@@ -536,7 +536,7 @@ Finalise ld_normal_bump_backward
 
 Theorem ld_normal_storage_read_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -556,7 +556,7 @@ Proof
     ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
     (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
        ld_annotated_residual_read_operands >>
-     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     disch_then (qspecl_then [`ncut`,`lo`,`V`,`P`] mp_tac) >>
      strip_tac >> gen_tac >> disch_tac >>
      first_x_assum (qspec_then `op` mp_tac) >>
      impl_tac >- (simp[] >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
@@ -648,7 +648,7 @@ QED
 
 Theorem ld_normal_account_read_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -668,7 +668,7 @@ Proof
     ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
     (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
        ld_annotated_residual_read_operands >>
-     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     disch_then (qspecl_then [`ncut`,`lo`,`V`,`P`] mp_tac) >>
      strip_tac >> gen_tac >> disch_tac >>
      first_x_assum (qspec_then `op` mp_tac) >>
      impl_tac >- (simp[] >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
@@ -798,7 +798,7 @@ QED
 
 Theorem ld_annotated_storage_operands:
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
-  ptr_discipline lo CS vs0 /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ opaque_use_ok fn /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   MEM i.inst_opcode [SSTORE; TSTORE] /\ i.inst_operands = [a;v] ==>
@@ -833,7 +833,7 @@ QED
 
 Theorem ld_normal_storage_write_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\

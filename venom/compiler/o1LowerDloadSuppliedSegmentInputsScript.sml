@@ -1,5 +1,6 @@
 Theory o1LowerDloadSuppliedSegmentInputs
 Ancestors
+  o1SafeUpto
   o1LowerDloadPtrDiscipline o1LowerDloadJointScalar o1LowerDloadJointRelation o1LowerDloadOccurrence
   o1LowerDloadGhost o1LowerDloadOpaque o1LowerDloadJointAssign
   ptrDiscipline pointerConfinedDefs memLocDefs unitShapeDefs o1PassContract
@@ -14,7 +15,7 @@ QED
 
 Theorem ld_joint_dload_inputs_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ inst.inst_opcode = DLOAD ==>
   !op. MEM op inst.inst_operands ==>
     op_prov H op = NONE /\ op_taint tn op = {} /\
@@ -28,7 +29,7 @@ QED
 
 Theorem ld_joint_dloadbytes_inputs_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dst;src;sz] ==>
   !op. MEM op [src;sz] ==>
@@ -38,9 +39,9 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
-  qpat_x_assum `ptr_discipline _ _ _`
-    (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
+  qpat_x_assum `ptr_discipline_upto _ _ _ _`
+    (strip_assume_tac o MATCH_MP ptr_discipline_upto_fn_ptr_ok) >>
   drule frame_reachable_prov_support >>
   disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
   `MEM inst (fn_insts fn)` by

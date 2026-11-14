@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointVariable
-Ancestors lowerDloadPtrCall lowerDloadPtrNormalNext lowerDloadPtrJointInterior lowerDloadPtrParameters
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrCall lowerDloadPtrNormalNext lowerDloadPtrJointInterior lowerDloadPtrParameters
   lowerDloadPtrOrdinary lowerDloadPtrJointNext lowerDloadPtrAggregate lowerDloadPtrPhase
   lowerDloadPtrRel lowerDloadPtrStatic lowerDloadDefs o1ContractLowerDload
   o1PassContract lowerDloadPtrRawReachable ptrDiscipline unitShapeDefs codegenRel
@@ -9,8 +9,8 @@ Ancestors lowerDloadPtrCall lowerDloadPtrNormalNext lowerDloadPtrJointInterior l
 Theorem dload_joint_tracked_variable_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\

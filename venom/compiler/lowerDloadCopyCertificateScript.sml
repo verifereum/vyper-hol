@@ -31,7 +31,7 @@ QED
 
 Theorem ld_mcopy_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn) /\
   i.inst_opcode = MCOPY /\ i.inst_operands = [dst;src;lenop] /\
   i.inst_outputs = [] /\ ~in_revert_forward fn s /\

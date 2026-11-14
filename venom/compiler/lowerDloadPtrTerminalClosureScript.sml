@@ -1,6 +1,7 @@
 Theory lowerDloadPtrTerminalClosure
 Ancestors
-  lowerDloadPtrTerminal contextCodegenRel list lowerDloadPtrRawReachable venomInst
+  lowerDloadPtrTerminal lowerDloadPtrGasCut o1SafeUpto o1PassContract oracleExecProps
+  contextCodegenRel list lowerDloadPtrRawReachable venomInst
 
 (* Canonical memory-free terminal disjunct. The indexed witness is kept here
    once so reachable-state consumers need not repeat its existential spine. *)
@@ -32,16 +33,18 @@ Definition dload_terminal_mode_def:
        G H tn un s t /\
     dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
     dload_table_stack fs (s::MAP (\c. c.cf_state) cs)
-                        (t::MAP (\c. c.cf_state) ds)
+                        (t::MAP (\c. c.cf_state) ds) /\
+    s.vs_gas_readings = t.vs_gas_readings
 End
 
 Theorem dload_terminal_mode_safety:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
-  dload_terminal_mode lo P vs C ds H un g j t ==>
+  dload_terminal_mode lo P vs C ds H un g j t /\ gas_cut cut vs t ==>
   access_ok lo H g j t /\ taint_ok g un j t
 Proof
   simp[dload_terminal_mode_def] >> rpt strip_tac >>
+  `gas_cut cut vs s` by fs[gas_cut_def] >>
   drule_all dload_indexed_terminal_safety >> simp[]
 QED
 
@@ -53,7 +56,7 @@ Proof
 QED
 
 Theorem dload_actual_copy_terminal_mode:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i [i] 0 /\ ir_supply_covers_fn q f /\
@@ -67,7 +70,7 @@ Theorem dload_actual_copy_terminal_mode:
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   (in_revert_forward g t \/ about_to_revert g i t) /\
-  step_inst fuel Ct i t = OK t' ==>
+  step_inst fuel Ct i t = OK t' /\ gas_cut cut vs t ==>
   !jnext. active_inst g jnext (t' with vs_inst_idx := SUC t.vs_inst_idx) ==>
   dload_terminal_mode lo P vs C ds (step_prov PH H i t')
     (step_taint i t t' un) g jnext
@@ -76,6 +79,14 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all dload_actual_copy_terminal_entry >>
   disch_then (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  `s.vs_gas_readings = t.vs_gas_readings` by
+    metis_tac[dload_boundary_core_gas_readings] >>
+  `s'.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_x_assum `step_inst _ _ _ s = OK s'`
+       (mp_then Any mp_tac step_inst_noninvoke_gas_readings) >> fs[]) >>
+  `t'.vs_gas_readings = t.vs_gas_readings` by
+    (qpat_x_assum `step_inst _ _ _ t = OK t'`
+       (mp_then Any mp_tac step_inst_noninvoke_gas_readings) >> fs[]) >>
   rpt strip_tac >>
   `jnext = HD mid` by
     (irule terminal_active_unique >>
@@ -135,6 +146,15 @@ Proof
   gvs[] >> drule_all dload_terminal_assign_next >>
   disch_then (qspec_then `PH` mp_tac) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  `k < LENGTH mid` by decide_tac >>
+  `(EL k mid).inst_opcode = ASSIGN` by
+    (drule_all dload_terminal_slice_opcode >> simp[]) >>
+  `s'.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_x_assum `step_inst _ _ _ s = OK s'`
+       (mp_then Any mp_tac step_inst_noninvoke_gas_readings) >> fs[]) >>
+  `t'.vs_gas_readings = t.vs_gas_readings` by
+    (qpat_x_assum `step_inst _ _ _ t = OK t'`
+       (mp_then Any mp_tac step_inst_noninvoke_gas_readings) >> fs[]) >>
   `jnext = EL (k+1) mid` by
     (irule terminal_active_unique >>
      qexistsl [`g`,`t' with vs_inst_idx := SUC t.vs_inst_idx`] >>

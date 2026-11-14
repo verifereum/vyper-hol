@@ -23,7 +23,7 @@ QED
 Theorem ld_normal_ordinary_next_backward:
   !nt.
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
   LIST_REL (\A g. FINITE A /\

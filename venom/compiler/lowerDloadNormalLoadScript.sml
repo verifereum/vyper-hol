@@ -9,7 +9,7 @@ Theorem ld_load_normal_data_backward:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn u0 s t0
     astk live keys d0 A suspended gstk f /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn inst s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn) /\
   inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
   ~in_revert_forward fn s /\ dload_offset_ok CS fn inst s /\
@@ -65,7 +65,9 @@ Proof
   disch_then (fn th =>
     qpat_assum `ld_alloc_account _ _ _ _ _` (mp_then Any mp_tac th)) >>
   disch_then (fn th =>
-    qpat_assum `ptr_discipline _ _ _` (mp_then Any mp_tac th)) >>
+    qpat_assum `ptr_discipline_upto _ _ _ _` (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `gas_cut _ _ _` (mp_then Any mp_tac th)) >>
   disch_then (fn th =>
     qpat_assum `!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn`
       (mp_then Any mp_tac th)) >>

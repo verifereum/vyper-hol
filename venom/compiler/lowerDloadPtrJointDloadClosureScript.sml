@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointDloadClosure
-Ancestors lowerDloadPtrJointBytesClosure lowerDloadPtrDloadOrigins
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrJointBytesClosure lowerDloadPtrDloadOrigins
   lowerDloadPtrBackwardNext lowerDloadPtrNormalNext lowerDloadPtrReplay
   lowerDloadPtrSourceInv lowerDloadPtrStatic lowerDloadPtrPhase lowerDloadPtrRel
   lowerDloadDefs o1PassContract ptrDiscipline venomExecSemantics venomState
@@ -13,8 +13,8 @@ Ancestors lowerDloadPtrJointBytesClosure lowerDloadPtrDloadOrigins
 Theorem dload_joint_tracked_dload_complete_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -131,9 +131,12 @@ Proof
     (EL 0 emitted).inst_id NOTIN {ci.inst_id | MEM ci (fn_insts f)}` by
     suspend "supply" >>
   `fn_ptr_ok P f` by fs[EVERY_MEM] >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `!v. off = Var v ==> v IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by
     suspend "operand" >>
   `off <> Var av` by
@@ -141,12 +144,8 @@ Proof
   `code_layout_valid s` by suspend "layout" >>
   `dload_offset_ok C f i s /\ dload_headroom_ok C f i s` by
     (conj_tac
-     >- (qpat_assum `frame_reachable vs C cs PG G tn f i s`
-           (mp_then Any mp_tac o1_src_frame_dload_offset_ok) >>
-         disch_then (qspec_then `D` mp_tac) >> simp[]) >>
-     qpat_assum `frame_reachable vs C cs PG G tn f i s`
-       (mp_then Any mp_tac o1_src_frame_dload_headroom_ok) >>
-     disch_then (qspec_then `D` mp_tac) >> simp[]) >>
+     >- (drule_all o1_src_frame_dload_offset_ok >> simp[]) >>
+     drule_all o1_src_frame_dload_headroom_ok >> simp[]) >>
   `FDOM s.vs_allocas SUBSET {ci.inst_id | MEM ci (fn_insts f)}` by
     suspend "source_domain" >>
   `r.dr_scratch = FDOM t0.vs_allocas DIFF {ci.inst_id | MEM ci (fn_insts f)}` by

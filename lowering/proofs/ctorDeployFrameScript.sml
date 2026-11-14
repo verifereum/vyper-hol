@@ -62,6 +62,19 @@ Proof
   gen_tac >> irule shadow_root_frame_outcome_exc >> metis_tac[]
 QED
 
+Theorem deploy_shadow_not_starved:
+  es.contexts = [(ctxt, rb)] /\
+  run_call es = SOME (r, es') /\
+  ~creation_resource_starved es r es' /\
+  run_call (shadow_root es) = SOME (sr, sg) ==>
+  ~frame_resource_starved (shadow_root es) sr sg
+Proof
+  strip_tac >> strip_tac >>
+  gvs[frame_resource_starved_def] >>
+  drule_all deploy_frame_exception >> strip_tac >> gvs[] >>
+  fs[creation_resource_starved_def] >> metis_tac[]
+QED
+
 (* A halting shadow run is the real run up to the root's halt handler. *)
 Theorem deploy_frame_halt_mid[local]:
   es.contexts = [(c0,rb0)] /\

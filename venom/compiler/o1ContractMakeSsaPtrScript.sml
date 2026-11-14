@@ -5,25 +5,24 @@
  *)
 Theory o1ContractMakeSsaPtr
 Ancestors
+  o1SafeUpto
   o1PassContract ptrDiscipline unitMemInv venomPassSchedule list makeSsaCurrentOrigin
   makeSsaCurrentLockstep makeSsaCurrentSim makeSsaCurrentProps
   makeSsaCurrentRevertForward o1ContractMakeSsaReplay o1PassLift
   o1FrameLockstep unitTransformDefs contextCodegenRel
   o1ContractMakeSsaPtrOk o1ContractMakeSsaPtrRows o1ContractMakeSsaPtrPos
 
-Theorem make_ssa_stage_ptr:
-  !rpolicy D view C C' vs names lo.
+Theorem make_ssa_stage_ptr_upto:
+  !rpolicy view C C' vs lo k.
     ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
-    callee_first names C.ctx_functions /\
-    fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
-    ptr_discipline lo C' vs
+    o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+    EVERY make_ssa_input_ok C.ctx_functions /\
+    fixed_region_reserved lo C /\ ptr_discipline_upto lo k C vs ==>
+    ptr_discipline_upto lo k C' vs
 Proof
   rpt strip_tac >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
-  `~ctx_has_dalloca C` by gvs[o1_src_inv_def] >>
   `C'.ctx_entry = C.ctx_entry /\
    LIST_REL (\fn fn'. ?t t'.
      ir_supply_covers_fn t fn /\ ir_supply_inst_ok t /\
@@ -85,10 +84,10 @@ Proof
      qpat_x_assum `~ctx_has_dalloca C` mp_tac >>
      simp[ctx_has_dalloca_def, EXISTS_MEM, MEM_EL] >>
      gvs[EXISTS_MEM, MEM_EL] >> metis_tac[]) >>
-  qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-  rewrite_tac[ptr_discipline_def] >> strip_tac >>
-  simp[ptr_discipline_def] >> qexists `P` >> conj_tac
-  >- (gvs[EVERY_EL] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ptr_discipline_upto lo k C vs` mp_tac >>
+  rewrite_tac[ptr_discipline_upto_def] >> strip_tac >>
+  simp[ptr_discipline_upto_def] >> conj_tac
+  >- (qexists `P` >> gvs[EVERY_EL] >> rpt gen_tac >> strip_tac >>
       `fn_ptr_ok P (EL n C.ctx_functions)` by metis_tac[] >>
       qpat_x_assum `!n. n < LENGTH C.ctx_functions ==> make_ssa_input_ok _ /\ _`
         (qspec_then `n` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
@@ -97,10 +96,12 @@ Proof
   rename1 `frame_reachable vs C' stk2 PG G2 tn2 fn2 inst2 s2` >>
   drule frame_reachable_lockstep >>
   disch_then (qspecl_then [`Q`, `C`] mp_tac) >> simp[] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
   qpat_x_assum `Q _ _ _` mp_tac >> simp[Abbr `Q`] >> strip_tac >>
   gvs[] >>
   drule_all lockstep_rel >> strip_tac >>
+  `execution_frame s2 = execution_frame s` by fs[state_rel_def] >>
+  drule_all gas_cut_execution_frame >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
   `s2.vs_allocas = s.vs_allocas` by
     metis_tac[state_rel_def, execution_frame_fields] >>
   `allocas_from lo s2` by
@@ -116,4 +117,20 @@ Proof
   `~p /\ inst2.inst_opcode = NOP ==> inst2.inst_operands = []` by
     (strip_tac >> gvs[]) >>
   drule_all lockstep_ptr_rows >> simp[]
+QED
+
+
+Theorem make_ssa_stage_ptr:
+  !rpolicy D view C C' vs names lo.
+    ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+    callee_first names C.ctx_functions /\
+    fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
+    ptr_discipline lo C' vs
+Proof
+  rpt strip_tac >> irule ptr_discipline_upto_all >>
+  irule make_ssa_stage_ptr_upto >>
+  `~ctx_has_dalloca C` by gvs[o1_src_inv_def] >>
+  metis_tac[ptr_discipline_upto_whole]
 QED
