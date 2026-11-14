@@ -118,12 +118,12 @@ Proof
         (qpat_x_assum `!tail. bind (eval_expr cx e) _ _ = _`
            (qspec_then `tail` mp_tac) >> simp[]) >>
       drule_all augAssignStorageFieldSourceTheory.augassign_storage_place_rhs_normal >>
-      disch_then (qspecl_then [`ty`, `bop`] SUBST1_TAC) >>
+      disch_then (qspecl_then [`ty`, `bop`] assume_tac) >>
       qpat_x_assum `!tail. bind (lift_sum _) _ _ = _`
-        (qspec_then `tail` mp_tac) >> simp[gas_explicit_def]) >>
+        (qspec_then `tail` assume_tac) >> fs[gas_explicit_def] >> metis_tac[]) >>
   `gas_marked_path memory ctx func s0 (LENGTH marks) (OK u)` by
-    (drule_all gas_marked_path_then >> simp[]) >>
-  drule_all gas_marked_path_then >> simp[]
+    metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
+  metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES, LENGTH]
 QED
 
 (* S1 stmtSimAugAssignStorage's augassign_storage_continuation_exec, at
@@ -168,7 +168,7 @@ Theorem augassign_attr_storage_code_parts_mem_src[local]:
       emit_void (if tr then TSTORE else SSTORE) [dst; res_op] s3 = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
+  drule_all stmtSimAssignStorageFactsTheory.compile_get_target_ptr_toplevel >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   asm_simp_tac (srw_ss())
@@ -449,11 +449,22 @@ Resume compile_augassign_attr_storage_mem[load]:
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `well_formed_type_value (StructTV fs) /\ well_formed_type_value ftv` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `valid_horizon cx st0 H1 es.storage_trace /\
+   MEM (tr,n2w slot,StructTV fs) (FST H1) /\ regions_consistent (FST H1)` by
+    (qpat_assum `!H. valid_horizon _ _ H (_ ++ _) ==> _`
+       (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  `stmt_state_rel H1 ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H1)` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   drule_all augAssignStorageFieldSourceTheory.augassign_storage_field_read >> strip_tac >>
   rename1 `read_storage_slot _ _ _ _ _ = (INL v0, _)` >>
   qspecl_then [`n2w slot`, `n2w off`, `sa`, `dst`, `sn`, `tr`, `cur_op`, `s1`,
     `func`, `s0`, `cenv`, `ctx`, `cx`, `es`, `ty`, `v0`, `ftv`] mp_tac
-    (Q.INST [`H` |-> `H1`] augassign_attr_storage_load_mem) >>
+    (Q.INST [`H` |-> `H1`]
+      (INST_TYPE [alpha |-> ``:256``] augassign_attr_storage_load_mem)) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   `!H. valid_horizon cx st0 H
          (es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) ==>
@@ -476,8 +487,9 @@ Resume compile_augassign_attr_storage_mem[load]:
           (qspec_then `H` mp_tac) >>
         impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
      `stmt_state_rel H ctx func cenv cx es t` by
-       (irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-        qexistsl_tac [`H1`, `s0`] >> rpt conj_tac >> metis_tac[]) >>
+       (irule (INST_TYPE [alpha |-> ``:256``]
+          exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
+        metis_tac[]) >>
      `storage_well_formed_on cx
         ((es with storage_trace :=
             es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
@@ -692,7 +704,7 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
   `eval_operand res_op s = SOME (typed_val_to_w256 ftv result)` by
     simp[typed_val_to_w256_word_value] >>
   `encode_value ftv result = SOME [(0, typed_val_to_w256 ftv result)]` by
-    metis_tac[encode_value_word_typed] >>
+    metis_tac[stmtSimAssignStorageFactsTheory.encode_value_word_typed] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
        storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
@@ -711,7 +723,8 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
     (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
      simp[write_storage_slot_eq]) >>
   pop_assum SUBST_ALL_TAC >>
-  `fin.gas_obs = [] /\ fin.scopes = ee.scopes` by
+  `fin.gas_obs = [] /\ fin.scopes = ee.scopes /\
+   fin.storage_trace = ee.storage_trace` by
     (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
      simp[write_storage_slot_eq] >> Cases_on `tr` >>
      Cases_on `cx.txn.is_static` >>
@@ -746,7 +759,10 @@ Resume compile_augassign_attr_storage_mem[store]:
      (eval_stmt cx
         (AugAssign ty (AttributeTarget (TopLevelNameTarget (src,id)) fld)
            bop e)) (es,s0) marks (INL ()) fin (OK last)` by
-    (irule augassign_place_rhs_normal_exec_mem_src >> metis_tac[]) >>
+    (irule augassign_place_rhs_normal_exec_mem_src >>
+     qexistsl_tac [`ee`, `[StorageRoot tr slot (StructTV fs)]`,
+       `n2w slot + n2w off`, `t`, `tr`, `ftv`, `u`, `v`, `v0`] >>
+     simp[]) >>
   qexistsl_tac [`INL ()`, `fin`, `OK last`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> qexists_tac `last` >> conj_tac >- REFL_TAC >>
@@ -799,7 +815,7 @@ Resume compile_augassign_attr_storage_mem[post]:
      irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ee with gas_obs := []`, `n2w slot + n2w off`, `ftv`, `result`] >>
+     qexistsl [`result`, `n2w slot + n2w off`, `ftv`] >>
      simp[] >> decide_tac) >>
   `sa.cs_next_var <= s1.cs_next_var` by simp[] >>
   `s3.cs_next_var <= sb.cs_next_var` by
@@ -814,6 +830,9 @@ Resume compile_augassign_attr_storage_mem[post]:
      Cases_on `s3.cs_current_insts` >> Cases_on `tr` >>
      simp[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
           venomInstTheory.mk_inst_def, is_terminator_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x last = SOME w` by
     (rpt strip_tac >>
@@ -822,15 +841,17 @@ Resume compile_augassign_attr_storage_mem[post]:
        metis_tac[freshWritesTheory.not_fresh_at_mono,
                  arithmeticTheory.LESS_EQ_TRANS] >>
      `lookup_var x u = SOME w` by
-       (qpat_x_assum `expr_post H2 _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def]) >>
+       (qpat_x_assum `expr_post H _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+        pure_rewrite_tac[expr_post_def] >> strip_tac >>
+        first_x_assum irule >> simp[]) >>
      metis_tac[]) >>
   `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP last.vs_allocas aid = SOME b` by
     (rpt strip_tac >>
      `FLOOKUP u.vs_allocas aid = SOME b` by
-       (qpat_x_assum `expr_post H2 _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def] >> metis_tac[]) >>
+       (qpat_x_assum `expr_post H _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+        pure_rewrite_tac[expr_post_def] >> strip_tac >>
+        first_x_assum irule >> simp[]) >>
      metis_tac[]) >>
   `s0.vs_alloca_next <= last.vs_alloca_next` by decide_tac >>
   `sa.cs_next_var <= sb.cs_next_var` by decide_tac >>
@@ -839,9 +860,14 @@ Resume compile_augassign_attr_storage_mem[post]:
   >- first_assum ACCEPT_TAC
   >- simp[]
   >- simp[cenv_top_ext_refl]
-  >- (Cases_on `tr` >>
-      gvs[stmt_state_rel_inst_idx, sstore_def, tstore_def, LET_THM])
-  >- (qpat_x_assum `storage_well_formed_on cx fin (FST H)` mp_tac >> simp[])
+  >- (qpat_x_assum `last = _` SUBST1_TAC >>
+      rewrite_tac[stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC)
+  >- (qpat_x_assum `storage_well_formed_on cx fin (FST H)` mp_tac >>
+      simp[storage_well_formed_on_def] >> strip_tac >>
+      map_every qx_gen_tac [`b`, `sl`, `rtv`] >>
+      strip_tac >>
+      qpat_x_assum `!b slot tv. _` drule >>
+      Cases_on `b` >> simp[get_storage_def])
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (irule return_buf_frame_frame >>
@@ -976,13 +1002,12 @@ Proof
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
-  `?v0. read_storage_slot cx tr (n2w lslot) (StructTV fs) es = (INL v0, es)` by
-    (irule toplevel_storage_read_decodes >>
-     gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  drule_all read_storage_slot_field >> strip_tac >>
-  drule_all augAssignStorageFieldSourceTheory.eval_target_place_attr_toplevel_field >> strip_tac >>
   `body_expr_mem_ok cx e` by
-    (first_x_assum irule >> simp[read_place_def] >> metis_tac[]) >>
+    (mp_tac (Q.SPECL [`cx`, `cenv`, `env`, `es`, `NONE`, `id`, `fld`,
+       `tops`, `tr`, `sid`, `id`, `lslot`, `ty`, `fsz`]
+       stmtSimAugAssignAttrStorageTheory.augassign_attr_storage_place) >>
+     impl_tac >- simp[] >> strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
   `!gs. expr_sim_mem ctx func cenv cx ty e
      ((es with storage_trace :=
          es.storage_trace ++ [StorageRoot tr lslot (StructTV fs)])
