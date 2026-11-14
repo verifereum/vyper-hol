@@ -117,9 +117,12 @@ Proof
      `s3`,`cx with stk updated_by CONS (src_id_opt,fn)`,
      `s3 with scopes := [penv]`] mp_tac) >>
   impl_tac
-  >- simp[type_check_def, assert_def, lift_option_type_def, return_def,
-          get_scopes_def, finally_def, ignore_bind_def, bind_def,
-          set_scopes_def, push_function_def] >>
+  >- (`LENGTH dflts - (LENGTH args - LENGTH es) =
+       LENGTH dflts + LENGTH es - LENGTH args` by decide_tac >>
+      qpat_x_assum `eval_exprs _ (DROP _ _) _ = _` mp_tac >>
+      simp[type_check_def, assert_def, lift_option_type_def, return_def,
+           get_scopes_def, finally_def, ignore_bind_def, bind_def,
+           set_scopes_def, push_function_def]) >>
   simp[]
 QED
 
@@ -403,7 +406,8 @@ Proof
   irule intcall_args_frame_setup >> simp[] >>
   qexistsl_tac [`args`,`cenv`,`dflts`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
                 `ty`,`vv`] >>
-  simp[] >> rpt strip_tac >>
+  simp[] >> rpt strip_tac
+  >~ [`body_exprs_ok _ _`] >- metis_tac[] >>
   Cases_on `cenv.ce_func_return_type (nsid_to_string (NONE,fn)) = v16` >|
   map (qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,
                     `es`,`v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,
