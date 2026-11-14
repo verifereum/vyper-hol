@@ -5,29 +5,6 @@ Ancestors
   bodyPtrIfExpAllocFrame allocationPtr exprSimAlloc loweringHalt fragExec
   bodyPtrDefs decoderGhostFramePtr ptrDiscipline venomInst venomMemDefs
 
-(* Allocation extends the site map, unlike the variable-only frame. *)
-Theorem vv_at_alloc_map_frame:
-  vv_at cenv cx ty sa sb es raw vv s /\
-  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-               FLOOKUP q.vs_allocas aid = SOME entry) /\
-  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
-  (!n b sz. local_region cenv es.scopes q n b sz <=>
-            local_region cenv es.scopes s n b sz) /\
-  sb.cs_next_id <= sm.cs_next_id ==>
-  vv_at cenv cx ty sa sm es raw vv q
-Proof
-  Cases_on `vv` >>
-  simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
-  rpt strip_tac >> gvs[]
-  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
-        disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
-        rpt strip_tac >>
-        qpat_x_assum `!n lb lsz. local_region _ _ s _ _ _ ==> _` drule >> simp[])
-  >>~- ([`local_region cenv es.scopes s n b sz`],
-        disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
-  >> metis_tac[]
-QED
-
 Theorem vv_post_alloc_map_frame:
   post_value_type cenv e = expr_type e /\
   vv_post H ctx fn cenv cx e es sa sb s0 es' raw vv s /\
@@ -48,7 +25,7 @@ Proof
   `vv_holds cenv cx (expr_type e) raw vv es' q` by
     (irule vv_holds_vars_frame >> simp[] >> qexists_tac `s` >> gvs[vv_post_def]) >>
   `vv_at cenv cx (expr_type e) sa sc es' raw vv q` by
-    (irule vv_at_alloc_map_frame >> simp[] >>
+    (irule vv_at_alloc_mono_frame >> simp[] >>
      qexistsl_tac [`s`, `sb`] >> gvs[vv_post_def]) >>
   `locals_kept cenv es es' s0 q` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> gvs[vv_post_def]) >>

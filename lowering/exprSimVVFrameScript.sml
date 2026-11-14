@@ -177,3 +177,77 @@ Proof
   qexistsl_tac [`s`, `sm`] >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
+
+Theorem vv_at_alloc_mono_frame:
+  vv_at cenv cx ty sa sm es tv vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP t.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes t n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_at cenv cx ty sa sn es tv vv t
+Proof
+  Cases_on `vv` >>
+  simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem vv_own_alloc_mono_frame:
+  vv_own cenv cx ty sa sm es tv vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP t.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes t n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_own cenv cx ty sa sn es tv vv t
+Proof
+  Cases_on `vv` >>
+  simp[vv_own_def, vv_operand_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[]) >>
+  metis_tac[]
+QED
+
+(* Allocation changes provenance monotonically, but not the represented value. *)
+Theorem vv_post_alloc_mono_frame:
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
+  stmt_state_rel H ctx func ce cx ee u /\
+  u.vs_memory = s.vs_memory /\
+  contract_storage u = contract_storage s /\
+  contract_transient u = contract_transient s /\
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\
+  (!n b sz. local_region ce ee.scopes u n b sz <=>
+            local_region ce ee.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_post H ctx func ce cx e es sa sn s0 ee tv vv u
+Proof
+  strip_tac >>
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  `vv_holds ce cx (post_value_type ce e) tv vv ee u` by
+    (irule vv_holds_vars_frame >> goal_assum (drule_at Any) >> simp[]) >>
+  `vv_at ce cx (post_value_type ce e) sa sn ee tv vv u` by
+    (irule vv_at_alloc_mono_frame >> qexistsl [`s`, `sm`] >> simp[]) >>
+  `post_value_type ce e <> expr_type e ==>
+    vv_own ce cx (post_value_type ce e) sa sn ee tv vv u` by
+    (strip_tac >> irule vv_own_alloc_mono_frame >>
+     qexistsl [`s`, `sm`] >> simp[]) >>
+  `locals_kept ce es ee s0 u` by
+    (irule locals_kept_mem_tail >> goal_assum (drule_at Any) >> simp[]) >>
+  `vv_storage_live H cx vv ee s ==> vv_storage_live H cx vv ee u` by
+    (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
+QED

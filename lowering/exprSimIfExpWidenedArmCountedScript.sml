@@ -359,7 +359,7 @@ Proof
      strip_tac >> irule local_region_frame_fwd >>
      qexistsl_tac [`s`, `sa`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
   `vv_post H ctx func ce cx e es origin sm s0 ee tvv vv u` by
-    (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl_tac [`s`, `sa`] >> simp[] >>
+    (irule exprSimVVFrameTheory.vv_post_alloc_mono_frame >> simp[] >> qexistsl_tac [`s`, `sa`] >> simp[] >>
      conj_tac >- metis_tac[not_fresh_at_mono] >>
      Cases_on `vv_operand vv` >> simp[eval_operand_def] >> metis_tac[]) >>
   `origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id` by decide_tac >>
