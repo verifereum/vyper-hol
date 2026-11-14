@@ -2000,3 +2000,292 @@ Proof
   irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
   first_x_assum irule >> simp[]
 QED
+
+Theorem rb_compile_materialize_vv:
+  rb_env_ok ce /\ rb_value_ok vv ==>
+  rb_step rb_operand_ok (compile_materialize_vv ce ty vv)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_materialize_vv_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_compile_store_memory, rb_step_return]
+QED
+
+Theorem rb_compile_ifexp_arm:
+  rb_env_ok ce /\ rb_value_ok vv ==>
+  rb_step rb_operand_ok (compile_ifexp_arm ce rty aty vv)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_ifexp_arm_def] >>
+  IF_CASES_TAC >- simp[rb_unwrap_value] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_compile_store_memory, rb_step_return]
+QED
+
+Theorem rb_compile_snapshot_vv:
+  rb_env_ok ce /\ rb_value_ok vv ==>
+  rb_step rb_value_ok (compile_snapshot_vv ce copy vv)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_snapshot_vv_def] >>
+  IF_CASES_TAC
+  >- (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      simp[rb_unwrap_value, rb_step_return, rb_value_ok_def]) >>
+  Cases_on `copy` >> simp[rb_step_return] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[rb_compile_materialize_vv, rb_step_return, rb_value_ok_def, rb_mk_ptr]
+QED
+
+Theorem rb_compile_abi_encode_args:
+  !es. rb_env_ok ce /\
+  (!e. MEM e es ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step (EVERY rb_operand_ok) (compile_abi_encode_args cfn ce es)
+Proof
+  Induct >> simp[compile_abi_encode_args_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_materialize_vv, rb_unwrap_value]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+  simp[rb_step_return]
+QED
+
+Theorem rb_compile_subscript:
+  rb_env_ok ce /\ rb_step rb_value_ok (cfn ce ty be) /\
+  rb_step rb_value_ok (cfn ce (expr_type ie) ie) /\
+  rb_step rb_value_ok (cfn ce ty ie) ==>
+  rb_step rb_value_ok (compile_subscript cfn ce ret_ty ty be ie)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_subscript_def] >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_snapshot_vv, rb_step_return]) >>
+  gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  reverse (Cases_on `place_type ce be`)
+  >- (rename1 `ValPT bt` >> Cases_on `bt` >> simp[] >>
+      pure_rewrite_tac[LET_THM] >> BETA_TAC
+      >~ [`compile_tuple_subscript _ _`] >- suspend "tuple"
+      >~ [`compile_tuple_subscript _ _`] >- suspend "tuple"
+      >> suspend "array") >>
+  simp[] >> irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_keccak256_key, rb_step_return]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[rb_compile_mapping_subscript, rb_value_operand, rb_step_return,
+       rb_value_ok_def, rb_mk_ptr]
+QED
+
+Resume rb_compile_subscript[tuple]:
+  markerLib.RESUME_TAC >>
+  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   simp[rb_compile_tuple_subscript, rb_value_operand, rb_step_return,
+        rb_value_ok_def, rb_mk_ptr])
+QED
+
+Resume rb_compile_subscript[array]:
+  markerLib.RESUME_TAC >>
+  (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   conj_tac >- simp[rb_step_return, rb_value_ok_def, rb_mk_ptr] >>
+   irule rb_compile_array_subscript >> simp[rb_value_operand] >>
+   gen_tac >> strip_tac >> irule rb_compile_ptr_load >> gvs[rb_env_ok_def])
+QED
+Finalise rb_compile_subscript
+
+Theorem rb_every_zip_fst:
+  !xs ys P. EVERY P xs ==> EVERY (P o FST) (ZIP (xs,ys))
+Proof
+  Induct >> Cases_on `ys` >> simp[listTheory.ZIP_def]
+QED
+
+Theorem rb_ext_call_arg_value:
+  !vv. rb_value_ok vv ==> rb_value_ok (ext_call_arg_value ty vv)
+Proof
+  Cases >> simp[ext_call_arg_value_def, rb_value_ok_def]
+QED
+
+Theorem rb_compile_ext_call_args:
+  !es tys. rb_env_ok ce /\
+  (!e. MEM e es ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step (EVERY rb_value_ok) (compile_ext_call_args cfn ce kws tys es)
+Proof
+  Induct >> simp[compile_ext_call_args_def, rb_step_return] >> rpt strip_tac >>
+  Cases_on `tys` >> simp[compile_ext_call_args_def, rb_step_return] >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_snapshot_vv, rb_ext_call_arg_value] >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+  simp[rb_step_return]
+QED
+
+Theorem rb_compile_ext_call_kwarg:
+  rb_env_ok ce /\ (!ty. rb_step rb_value_ok (cfn ce ty e)) ==>
+  rb_step (rb_operand_ok o FST) (compile_ext_call_kwarg cfn ce rty k e)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_ext_call_kwarg_def] >>
+  IF_CASES_TAC
+  >- (pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+      irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      simp[rb_compile_materialize_vv, rb_step_return]) >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[rb_lower_value, rb_step_return]
+QED
+
+Theorem rb_compile_ext_call_kwargs:
+  !es ks. rb_env_ok ce /\
+  (!e ty. MEM e es ==> rb_step rb_value_ok (cfn ce ty e)) ==>
+  rb_step (\p. OPTION_ALL rb_operand_ok (FST p) /\
+               OPTION_ALL rb_operand_ok (FST (SND p)) /\
+               OPTION_ALL (rb_operand_ok o FST) (SND (SND p)))
+    (compile_ext_call_kwargs cfn ce rty ks es)
+Proof
+  Induct >> simp[compile_ext_call_kwargs_def, rb_step_return] >> rpt strip_tac >>
+  Cases_on `ks` >> simp[compile_ext_call_kwargs_def, rb_step_return] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_ext_call_kwarg] >>
+  Cases >> simp[] >> strip_tac >>
+  irule rb_step_bind >>
+  qexists_tac `\p. OPTION_ALL rb_operand_ok (FST p) /\
+                   OPTION_ALL rb_operand_ok (FST (SND p)) /\
+                   OPTION_ALL (rb_operand_ok o FST) (SND (SND p))` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+  PairCases >> simp[] >> strip_tac >>
+  rpt IF_CASES_TAC >> simp[rb_step_return]
+QED
+
+Theorem rb_compile_create_salt:
+  !salt. rb_env_ok ce /\
+  (!e. salt = SOME e ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step (OPTION_ALL rb_operand_ok) (compile_create_salt cfn ce salt)
+Proof
+  Cases >> simp[compile_create_salt_def, rb_step_return] >> rpt strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[rb_lower_value, rb_step_return]
+QED
+
+Theorem rb_compile_create_ctor_tuple:
+  rb_env_ok ce /\
+  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step rb_operand_ok (compile_create_ctor_tuple cfn ce args)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_create_ctor_tuple_def, LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_multi_vvs] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_ignore >> simp[rb_compile_extcall_store_values, rb_every_zip_fst, rb_step_return]
+QED
+
+(* Encoder antecedent: conjunct 2 of runtimeLabelABI$rb_abi_encode. *)
+Theorem rb_compile_create_blueprint_args:
+  (!dst src info. rb_operand_ok dst /\ rb_operand_ok src ==>
+     rb_step rb_operand_ok (compile_abi_encode_to_buf dst src info)) /\
+  rb_env_ok ce /\
+  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step (\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p))
+    (compile_create_blueprint_args cfn ce raw args)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_create_blueprint_args_def] >>
+  Cases_on `raw` >> simp[]
+  >- (Cases_on `args` >> simp[]
+      >- (irule rb_ignore >> simp[rb_emit_inst, rb_step_return]) >>
+      Cases_on `t` >> simp[]
+      >- (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+          reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
+          irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+          irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
+      irule rb_ignore >> simp[rb_emit_inst, rb_step_return]) >>
+  Cases_on `args = []` >> simp[rb_step_return] >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  simp[rb_step_return]
+QED
+
+Theorem rb_compile_create_snapshot:
+  rb_env_ok ce /\ rb_value_ok vv ==>
+  rb_step rb_operand_ok (compile_create_snapshot ce vv ty)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_create_snapshot_def, LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_ignore >> reverse conj_tac >- simp[rb_step_return] >>
+  Cases_on `vv_location vv` >> simp[]
+  >- (irule rb_bind_emit_op >> BETA_TAC >> simp[rb_value_operand] >>
+      gen_tac >> strip_tac >> irule rb_bind_emit_op >> BETA_TAC >>
+      simp[rb_value_operand, rb_compile_copy_memory_dynamic]) >>
+  Cases_on `x'` >> simp[]
+  >~ [`compile_imm_copy_to_memory _ _ _ _ _ _`]
+  >- (irule rb_ignore >> conj_tac >- (irule rb_compile_imm_copy_to_memory >>
+          gvs[rb_env_ok_def, rb_value_operand]) >> simp[rb_step_return])
+  >~ [`compile_slot_to_memory _ _ _ _`]
+  >- (irule rb_ignore >> simp[rb_compile_slot_to_memory, rb_value_operand, rb_step_return])
+  >~ [`compile_slot_to_memory _ _ _ _`]
+  >- (irule rb_ignore >> simp[rb_compile_slot_to_memory, rb_value_operand, rb_step_return]) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_value_operand] >>
+  gen_tac >> strip_tac >> irule rb_bind_emit_op >> BETA_TAC >>
+  simp[rb_value_operand, rb_compile_copy_memory_dynamic]
+QED
+
+Theorem rb_compile_raw_create:
+  (!dst src info. rb_operand_ok dst /\ rb_operand_ok src ==>
+     rb_step rb_operand_ok (compile_abi_encode_to_buf dst src info)) /\
+  rb_env_ok ce /\ rb_step rb_value_ok (cfn ce (expr_type be) be) /\
+  rb_step rb_value_ok (cfn ce (expr_type ve) ve) /\
+  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) /\
+  (!e. salt_e = SOME e ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
+  rb_step rb_operand_ok (compile_raw_create cfn ce be ve args salt_e rof)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_raw_create_def, LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_create_snapshot] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_lower_value] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >>
+  qexists_tac `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)` >> BETA_TAC >>
+  reverse conj_tac
+  >- (Cases_on `args = []` >> simp[rb_step_return] >>
+      irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+      gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+      irule rb_ignore >> conj_tac >- simp[rb_compile_copy_memory_dynamic] >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_compile_create_ctor_tuple] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
+  Cases >> simp[] >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `OPTION_ALL rb_operand_ok` >> BETA_TAC >>
+  simp[rb_compile_create_salt, rb_compile_create_dispatch] >>
+  Cases >> simp[rb_compile_create_dispatch]
+QED
