@@ -14,6 +14,7 @@
  *)
 Theory bodyFullExprCore
 Ancestors
+  bodyFullToplevelValue bodyFullToplevelVV
   bodyFullLiteralWord bodyFullLiteralBuffer bodyFullLiteralNonword
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord exprSimOperators
   bodyFullBopInLiteralOperands bodyFullBopInLiteralTail exprSimBopInLiteralWord
@@ -48,7 +49,10 @@ QED
 Theorem toplevel_name_expr_full_ok:
   !cx ann nsid. body_expr_full_ok cx (TopLevelName ann nsid)
 Proof
-  cheat
+  simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule toplevel_name_value_full >> metis_tac[]) >>
+  irule toplevel_name_vv_full >> metis_tac[]
 QED
 
 (* A flag member compiles to StackValue (Lit _) and emits no instruction

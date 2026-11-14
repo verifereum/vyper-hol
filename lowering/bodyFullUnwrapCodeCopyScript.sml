@@ -10,7 +10,7 @@ Ancestors
 
 (* Both checks are established on the range execution's raw endpoint.
    Only the joint path advances its instruction cursor. *)
-Theorem code_copy_ctor_range_origin_ptr[local]:
+Theorem code_copy_ctor_range_origin_ptr:
   compile_imm_copy_to_memory T imm src (Var root) n off sa = ((),sb) /\
   copy_old_operand sa src /\ not_fresh_at sa root /\
   eval_operand src s = SOME a /\ lookup_var root s = SOME b /\
