@@ -1276,31 +1276,6 @@ Proof
             compile_alloc_dynamic_labels, compile_check_create_result_labels])
 QED
 
-Theorem first_emission_create_blueprint_check[local]:
-  !is_lit target offset a x b. compile_create_blueprint_check is_lit target offset a = (x,b) ==>
-  cs_extends a b /\
-  (!fn. fn_has_code a b fn ==> ?bb i.
-    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
-Proof
-  rpt gen_tac >> Cases_on `is_lit` >>
-  (simp_tac (srw_ss()) [builtinCreateTheory.compile_create_blueprint_check_def] >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt strip_tac >> drule_at Any
-       (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
-  gen_tac >> map_every qx_gen_tac [`a`, `x`, `b`] >>
-  qmatch_goalsub_abbrev_tac `tail a = (x,b)` >>
-  `!s. cs_extends s (SND (tail s)) /\
-       EVERY (isPREFIX "@") (added_labels s (SND (tail s)))` suffices_by
-    (strip_tac >> strip_tac >> first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
-  gen_tac >> simp_tac (srw_ss()) [Abbr `tail`] >>
-  rpt (FIRST [irule comp_bind_labels >> conj_tac,
-              irule comp_ignore_bind_labels >> conj_tac] >>
-       rpt gen_tac >> BETA_TAC >>
-       simp[comp_return_labels, emit_op_labels, emit_void_labels]))
-QED
-
 Theorem first_emission_create_salt[local]:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -1397,7 +1372,7 @@ Resume first_emission_create_call[blueprint]:
       ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[first_emission_create_blueprint_check] >>
+  >- metis_tac[compilerFirstEmissionTheory.ctor_create_blueprint_check_first_emission_strong] >>
   gen_tac >> BETA_TAC >> map_every qx_gen_tac [`a`, `res`, `last`] >>
   qmatch_goalsub_abbrev_tac `tail a = (res,last)` >>
   `cs_appends tail` by

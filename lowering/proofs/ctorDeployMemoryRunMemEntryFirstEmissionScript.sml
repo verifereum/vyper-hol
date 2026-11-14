@@ -5152,25 +5152,6 @@ Proof
     ho_match_mp_tac cs_appends_ignore_bind >> conj_tac])
 QED
 
-Theorem ctor_create_blueprint_check_first_emission_strong:
-  !is_lit target offset a x b. compile_create_blueprint_check is_lit target offset a = (x,b) ==>
-    cs_extends a b /\
-    (!fn. fn_has_code a b fn ==> ?bb i.
-      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
-Proof
-  ntac 3 gen_tac >> Cases_on `is_lit` >>
-  (simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[]) >>
-  rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
-  rpt (FIRST [gen_tac,
-    CHANGED_TAC (simp[cs_appends_emit_helpers, cs_appends_return]),
-    ho_match_mp_tac cs_appends_bind >> conj_tac,
-    ho_match_mp_tac cs_appends_ignore_bind >> conj_tac]))
-QED
-
 Theorem ctor_create_copy_first_emission_strong:
   !target value salt rof a x b. compile_create_copy target value salt rof a = (x,b) ==>
     cs_extends a b /\
@@ -5330,7 +5311,7 @@ Resume ctor_create_call_first_emission[blueprint]:
   >- (rpt CASE_TAC >> simp[comp_return_def, cs_extends_refl] >>
       ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >> gen_tac >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[ctor_create_blueprint_check_first_emission_strong] >>
+  >- metis_tac[compilerFirstEmissionTheory.ctor_create_blueprint_check_first_emission_strong] >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >> irule ctor_ci_mono_appends >>
   gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
   >- simp[ci_mono_compile_create_blueprint_args] >>
