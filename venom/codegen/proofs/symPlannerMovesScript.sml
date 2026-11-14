@@ -1496,14 +1496,6 @@ Proof
   metis_tac[sym_restore_short_swap_rotated, APPEND]
 QED
 
-Theorem asm_block_at_restores_swap[local]:
-  asm_block_at p pc (execute_plan f (ops ++ [SOSwap k])) ==>
-  asm_block_at p pc (execute_plan f ops) /\
-  asm_block_at p (pc + LENGTH (execute_plan f ops)) (execute_plan f [SOSwap k])
-Proof
-  simp[execute_plan_def, stackOpSimTheory.asm_block_at_append]
-QED
-
 Theorem list_rel_dup_restore_short_values[local]:
   LENGTH a = k /\ 0 < k /\ LIST_REL R
     (REVERSE (MAP (\j. EL j a) (GENLIST (\i. k-2-i) (k-1) ++ [k-1]))) top ==>
