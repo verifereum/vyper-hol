@@ -112,3 +112,87 @@ Proof
       fs[stmt_state_rel_def, state_rel_def] >> qexistsl [`op`, `sb`] >> simp[]) >>
   Cases_on `tr` >> gvs[sstore_def, tstore_def, ghost_kept_at_def]
 QED
+
+Theorem body_assign_toplevel_word_full_continue:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\ type_slot_size tvt = 1 /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+  is_word_type (expr_type e) /\ value_has_type tvt v /\
+  encode_value tvt v = SOME [(0,typed_val_to_w256 etv v)] /\
+  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);op] sb = ((),sf) /\
+  fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\ MAP FDOM ee.scopes = MAP FDOM es0.scopes /\
+  ee.gas_obs = [] /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_taint tn op = {} /\
+  return_buf_frame d cenv sb t /\ alloca_history func t /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\
+  ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
+  storage_trace_domain cx st0 (ee.storage_trace ++ [StorageRoot tr slot tvt]) /\
+  (!H. valid_horizon cx st0 H (ee.storage_trace ++ [StorageRoot tr slot tvt]) ==>
+    expr_post H ctx func cenv cx e es0 sa sb s0 ee v op t /\
+    stmt_state_rel H ctx func cenv cx es0 s0 /\ dead_lo_ok H (DF H) lo cenv cx /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+      (write_storage_slot cx tr (n2w slot) tvt v)) (ee,t,G,tn)
+    (\H res ef Gf tnf tf.
+      res = INL () /\ stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ef tf /\
+      return_buf_frame d cenv sf tf /\ alloca_history func tf /\
+      s0.vs_alloca_next <= tf.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ef Gf tnf tf /\
+      (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
+           op_taint tnf (Var x) = op_taint tn0 (Var x))) R
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon
+      (ee.storage_trace ++ [StorageRoot tr slot tvt]))
+      (ee.storage_trace ++ [StorageRoot tr slot tvt])` by fs[storage_trace_domain_def] >>
+  `~cx.txn.is_static /\ ~t.vs_call_ctx.cc_static` by
+    (first_x_assum drule >> simp[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
+  Cases_on `write_storage_slot cx tr (n2w slot) tvt v ee` >>
+  rename1 `write_storage_slot _ _ _ _ _ _ = (res,ef)` >>
+  `res = INL ()` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >> simp[write_storage_slot_eq]) >>
+  gvs[] >>
+  `ef.storage_trace = ee.storage_trace` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq] >> Cases_on `tr` >> simp[set_storage_def] >> strip_tac >> gvs[]) >>
+  irule gas_outcome_full_intro >>
+  qexistsl [`G`,
+    `ef with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`, `[]`,
+    `OK ((if tr then tstore (n2w slot) (typed_val_to_w256 etv v) t
+           else sstore (n2w slot) (typed_val_to_w256 etv v) t)
+          with vs_inst_idx := LENGTH sf.cs_current_insts)`, `INL ()`,
+    `if tr then tn with t_trans := key_update tn.t_trans (n2w slot) {}
+     else tn with t_stor := key_update tn.t_stor (n2w slot) {}`] >>
+  simp[] >> conj_tac
+  >- (simp[ignore_bind_def, record_storage_event_def, return_def, bind_def] >>
+      gen_tac >> drule write_storage_slot_storage_trace >>
+      disch_then (qspec_then `ee.storage_trace ++ [StorageRoot tr slot tvt]` assume_tac) >>
+      simp[write_storage_slot_gas_obs]) >>
+  qx_gen_tac `H` >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
+    (gvs[expr_post_def, expr_val_rel_def, post_value_type_word] >> metis_tac[]) >>
+  conj_tac
+  >- (irule storage_word_store_origin_ptr >> simp[] >>
+      conj_tac >- fs[ghost_inv_at_def] >>
+      conj_tac >- fs[ghost_inv_at_def] >>
+      qexistsl [`Lit (n2w slot)`, `op`, `sb`] >>
+      simp[eval_operand_def, op_taint_def]) >>
+  `ef.gas_obs = []` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq] >> Cases_on `tr` >>
+     simp[set_storage_def] >> strip_tac >> gvs[]) >>
+  `MEM (tr,n2w slot,tvt) (FST H) /\ regions_consistent (FST H)` by
+    (qpat_x_assum `valid_horizon cx st0 H _` mp_tac >>
+     simp[valid_horizon_def, storage_observations_ok_def,
+          storage_trace_regions_def, MAP_APPEND, FLAT_APPEND, EVERY_APPEND]) >>
+  drule_all body_assign_toplevel_word_full_store_post >>
+  disch_then (qspec_then `lctx` strip_assume_tac) >>
+  disj1_tac >> pure_once_rewrite_tac[GSYM evaluation_state_fupdcanon] >>
+  `(ef with gas_obs := []) = ef` by simp[evaluation_state_component_equality] >>
+  simp[stmt_post_storage_trace]
+QED
