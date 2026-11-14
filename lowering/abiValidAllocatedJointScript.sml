@@ -2,6 +2,7 @@
 Theory abiValidAllocatedJoint
 Ancestors
  abiValidAllocatedMembersJoint abiValidAllocatedMemberEntry abiValidMembers
+ abiDecodePtrArrayJoint
  abiValidAllocatedComplexJoint abiValidAllocatedComplex abiValidAllocatedObservations
  abiDecoderComplexExecute abiDecoderComplexGuard ctorAbiActualWorld fragGasOriginPtr
  abiDecoderFixedMemory abiDecoderMembers abiDecoderStruct abiValidAggregateHeads
