@@ -712,7 +712,7 @@ End
 (* Deploy lowering owns both the runtime size and runtime data installation.
    The constructor's immutables occupy [0, immutables_len), and the unit's
    alloca frontier starts past them, so the budget check also leaves room
-   for that region below 2^256; and the epilogue returns runtime_size +
+   for that region below 2^254; and the epilogue returns runtime_size +
    immutables_len bytes, so it leaves room for the runtime code too. *)
 Definition run_deploy_lowering_def:
   run_deploy_lowering has_constructor (rpolicy : resolved_compiler_policy)
@@ -736,7 +736,7 @@ Definition run_deploy_lowering_def:
                unit_alloca_budget ctx' +
                32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
                               (FLAT (MAP fn_insts ctx'.ctx_functions))) <
-               dimword (:256)
+               2 ** 254
           then
             SOME <| cu_context := ctx';
                     cu_data_segment :=
@@ -746,6 +746,18 @@ Definition run_deploy_lowering_def:
           else NONE
     else NONE
 End
+
+Theorem run_deploy_lowering_static_headroom:
+  run_deploy_lowering has_constructor rpolicy runtime_bc immutables_len
+    constructor_args data_size ctor_internal_fns cenv stmts is_payable
+    is_nonreentrant nkey use_transient entry_label = SOME unit ==>
+  LENGTH runtime_bc + immutables_len + unit_alloca_budget unit.cu_context +
+    32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+      (FLAT (MAP fn_insts unit.cu_context.ctx_functions))) < 2 ** 254
+Proof
+  simp[run_deploy_lowering_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
 
 Theorem run_deploy_lowering_global_reserved:
   run_deploy_lowering has_constructor rpolicy runtime_bytecode immutables_len

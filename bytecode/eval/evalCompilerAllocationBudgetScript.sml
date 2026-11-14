@@ -220,34 +220,38 @@ Proof
 QED
 
 (* CREATE checker fixtures; no producer change. *)
+Definition allocation_test_word_def:
+  allocation_test_word = Name (BaseT (UintT 256)) "word"
+End
+
+Definition allocation_test_array_def:
+  allocation_test_array n =
+    Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args"
+End
 Theorem create_raw_alloc_boundary_eval:
-  let w = Name (BaseT (UintT 256)) "word";
-      a = \n. Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args" in
-    ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
-      [w;w;a (2 ** 59 - 1537)] /\
-    ~ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
-      [w;w;a (2 ** 59 - 1536)] /\
-    ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
-      [w;w;a (2 ** 59 - 1537);w] /\
-    ~ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
-      [w;w;a (2 ** 59 - 1536);w]
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1537)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1536)] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1537);allocation_test_word] /\
+  ~ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
+    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1536);allocation_test_word]
 Proof
   EVAL_TAC
 QED
 
 Theorem create_blueprint_alloc_boundary_eval:
-  let w = Name (BaseT (UintT 256)) "word";
-      a = \n. Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args" in
-    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
-      [w;w;w;a (2 ** 59 - 1)] /\
-    ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
-      [w;w;w;a (2 ** 59)] /\
-    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
-      [w;w;w;w;a (2 ** 59 - 1)] /\
-    ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
-      [w;w;w;w;a (2 ** 59)] /\
-    ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
-      [w;w;w;a (2 ** 58);a (2 ** 58)]
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59)] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59)] /\
+  ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;allocation_test_array (2 ** 58);allocation_test_array (2 ** 58)]
 Proof
   EVAL_TAC
 QED
@@ -255,18 +259,16 @@ QED
 (* Empty, raw, fixed-buffer, and malformed cases allocate no new variable
    static constructor buffer. Their operands remain checked recursively. *)
 Theorem create_alloc_nonallocating_paths_eval:
-  let w = Name (BaseT (UintT 256)) "word";
-      huge = Name (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 59))) "args" in
-    ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [w;w] /\
-    ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [w;w;w] /\
-    ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [w;w] /\
-    ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [w] /\
-    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T []) [w;w;w] /\
-    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T T []) [w;w;w] /\
-    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint T) F T [])
-      [w;w;w;huge] /\
-    ext_call_alloc_ok cenv (CreateTarget CreateCopyOf F T []) [w;w;huge] /\
-    ext_call_alloc_ok cenv (CreateTarget CreateMinimalProxy F T []) [w;w;huge]
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [allocation_test_word;allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T []) [allocation_test_word;allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T T []) [allocation_test_word;allocation_test_word;allocation_test_word] /\
+  ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint T) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;(allocation_test_array (2 ** 59))] /\
+  ext_call_alloc_ok cenv (CreateTarget CreateCopyOf F T []) [allocation_test_word;allocation_test_word;(allocation_test_array (2 ** 59))] /\
+  ext_call_alloc_ok cenv (CreateTarget CreateMinimalProxy F T []) [allocation_test_word;allocation_test_word;(allocation_test_array (2 ** 59))]
 Proof
   EVAL_TAC
 QED
@@ -274,15 +276,31 @@ QED
 (* Struct metadata can describe a larger staging footprint than its ABI
    fields. The checker must use the environment's actual physical size. *)
 Theorem create_alloc_struct_environment_eval:
-  let w = Name (BaseT (UintT 256)) "word";
-      arg = Name (StructT (NONE,"S")) "args";
-      c = cenv with ce_struct_fields :=
-        FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)]) in
-    abi_size_bound c.ce_struct_fields (TupleT [expr_type arg]) = 32 /\
-    type_memory_bytes c (TupleT [expr_type arg]) = 2 ** 64 /\
-    ~ext_call_alloc_ok c (CreateTarget RawCreate F T []) [w;w;arg] /\
-    ~ext_call_alloc_ok c (CreateTarget (CreateFromBlueprint F) F T [])
-      [w;w;w;arg]
+  abi_size_bound (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])).ce_struct_fields (TupleT [expr_type (Name (StructT (NONE,"S")) "args")]) = 32 /\
+  type_memory_bytes (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (TupleT [expr_type (Name (StructT (NONE,"S")) "args")]) = 2 ** 64 /\
+  ~ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget RawCreate F T []) [allocation_test_word;allocation_test_word;(Name (StructT (NONE,"S")) "args")] /\
+  ~ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;(Name (StructT (NONE,"S")) "args")]
+Proof
+  EVAL_TAC
+QED
+
+(* Isolate the existing combined deploy guard: the raw context is accepted
+   by lowering_context_ok even at the newly rejected combined endpoint.
+   This exercises the generic lowering API, not a valid-source claim. *)
+Theorem allocation_deploy_combined_boundary_eval:
+  lowering_context_ok (install_immutable_reservation (2 ** 253)
+  (FST (run_deploy_lowering_pair_compat F 0 (2 ** 253) [] 0 []
+    cenv [] F F 0 F "__deploy"))) /\
+  unit_alloca_budget (install_immutable_reservation (2 ** 253)
+  (FST (run_deploy_lowering_pair_compat F 0 (2 ** 253) [] 0 []
+    cenv [] F F 0 F "__deploy"))) = 2 ** 253 /\
+  IS_SOME (run_deploy_lowering F
+  ((ARB : resolved_compiler_policy) with <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear; rpol_final_assembly := FAP_Optimize |>)
+  [] (2 ** 253 - 1) [] 0 [] cenv [] F F 0 F "__deploy") /\
+  run_deploy_lowering F
+  ((ARB : resolved_compiler_policy) with <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear; rpol_final_assembly := FAP_Optimize |>)
+  [] (2 ** 253) [] 0 [] cenv [] F F 0 F "__deploy" = NONE
 Proof
   EVAL_TAC
 QED

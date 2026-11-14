@@ -141,8 +141,8 @@ This is an explicit HOL acceptance narrowing associated with the pending
 RawCreate producer port, not a claim that Python rejects those allocations.
 The producer and its bytecode remain unchanged here.
 
-The HOL compiler reserves initial headroom for the separate dynamic-allocation
-proof by narrowing two existing acceptance comparisons. These are HOL-only
+The HOL compiler reserves initial headroom `H = 2 ** 254` for the separate
+dynamic-allocation proof by narrowing three existing acceptance comparisons. These are HOL-only
 restrictions: pinned Python has a per-buffer allocation limit, but no matching
 whole-unit budget or initial-FMP cap.
 
@@ -150,6 +150,7 @@ whole-unit budget or initial-FMP cap.
 |---|---|---|
 | `lowering_context_ok` | `unit_alloca_budget ctx + 32 * D < dimword (:256)` | `unit_alloca_budget ctx + 32 * D < 2 ** 254` |
 | `generate_context_plan_with` | `cp.cp_initial_fmp < dimword (:256)` | `cp.cp_initial_fmp < 2 ** 254` |
+| `run_deploy_lowering` | `R + imm + unit_alloca_budget ctx + 32 * D < dimword (:256)` | `R + imm + unit_alloca_budget ctx + 32 * D < 2 ** 254` |
 
 Here `D` counts DLOAD instructions across every function, including uncalled
 functions. With `I` INVOKE sites and static ALLOCA sizes summing to `S`,
@@ -179,12 +180,21 @@ generic planner check: its generator and static-end metadata are inputs.
 Static-end, reserved-region and spill-end rejection must retain their separate
 accounting rather than inherit the allocation-budget estimate.
 
-`run_deploy_lowering` still checks
-`runtime_length + immutables_length + unit_alloca_budget + 32 * D < dimword (:256)`.
-The runtime lowering path does not call it. Deployment inherits the stricter
-unit budget through its existing `lowering_context_ok` call, and codegen checks
-its reserved intervals through the plan bound. These checks alone establish
-neither a deployment allocation horizon nor dynamic no-wrap safety.
+`run_deploy_lowering` also narrows its existing combined check to
+`runtime_length + immutables_length + unit_alloca_budget + 32 * D < H`.
+Its newly rejected range is
+`H <= R + imm + (1 + I) * S + 32 * D < 2 ** 256`.
+The generic API supplies `R` and `imm`, so this check has no unconditional
+minimum instruction count. The pinned fixture population is unaffected;
+this does not claim Python rejects programs in that range.
+
+The runtime lowering path does not call this deployment check. Checking the
+reserved interval and the unit budget separately does not bound their sum.
+The combined bound supplies numeric headroom for a raw-stage floor chosen as
+`MAX cp_initial_fmp (alloca_next + unit_alloca_budget + 32 * D)`, with
+`alloca_next = imm` at deployment. The entry-state definitions are unchanged;
+this does not establish stage transport, a deployment allocation horizon or
+dynamic no-wrap safety.
 
 ### Venom IR and semantics
 
