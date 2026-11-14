@@ -12,7 +12,7 @@ Ancestors
   augAssignFullLoad augAssignFullStore augAssignFullStoreGhost augAssignFullOperator
   augAssignFullAddress augAssignFullFieldRead augAssignFullSource augAssignFullSourcePrefix
   augAssignFullRhs augAssignFullStateFrame augAssignFullHistory augAssignFullFieldStore
-  gasOutcomeFullRunning
+  gasOutcomeFullRunning augAssignFullToplevelCase augAssignPtrToplevelMetadata
   augAssignFullFieldCase bodyStorageMetadata bodyExprPreFacts
   exprSimFieldLayout exprSimAttributeFields exprSimTopLevelProps stmtSimAugAssign
   stmtSimAssignAttr gasContext supportedStmtTraverse supportedExprTraverse
@@ -83,7 +83,44 @@ Theorem body_augassign_toplevel_word_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)))
       (eval_stmt cx (AugAssign aty (TopLevelNameTarget nsid) bop e)) es
 Proof
-  cheat
+  rpt gen_tac >> Cases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >> strip_tac >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule augassign_supported_scalar_target_decl >> strip_tac >> gvs[] >>
+  rename1 `MEM (VariableDecl vis mut id dty init) tops` >>
+  `get_module_code cx NONE = SOME tops /\ supported_program tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+   cenv.ce_hashmap_info = build_hashmap_info tops /\
+   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
+    fs[body_inv_def] >>
+  drule_all build_maps_variable >> strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `type_place_target env (TopLevelNameTarget (NONE,id)) = SOME (Type aty) /\
+   well_typed_expr env e /\ assignable_type env.type_defs aty /\
+   well_typed_binop aty bop aty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+   (bop = Exp ==> nonneg_int_literal e) /\
+   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
+  >- (drule_all augassign_env_assignable_find_none >> strip_tac >> gvs[]) >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
+  strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  rename1 `find_var_decl_by_name id tops = SOME (StorageVarDecl tr _,_)` >>
+  `dty = aty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  `expr_body_pre cenv cx env e es` by
+    (`cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+     `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+        is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
+     irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def, optionTheory.IS_SOME_EXISTS] >>
+     qexists_tac `[]` >> simp[]) >>
+  irule compile_augassign_toplevel_case_full >> simp[DISJ_IMP_THM] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `env` >> simp[] >> metis_tac[assignable_type_well_formed]
 QED
 
 (* A field of a struct local. *)
