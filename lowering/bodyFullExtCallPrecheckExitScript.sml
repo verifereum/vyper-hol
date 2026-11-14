@@ -1,7 +1,7 @@
 (* Rejected external-call code checks, at an arbitrary allocation floor. *)
 Theory bodyFullExtCallPrecheckExit
 Ancestors
-  exprSimSliceExtcode exprSimAccounts exprSimDefs typedCopyOriginPtrBase
+  exprSimSliceExtcode exprSimAccounts exprSimDefs typedCopyOriginPtrBase extCallCodeCheck
   fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasPathPtr
   fragExec emitHelper emitHelperProps exprLoweringProps exprLowering compileEnv
   ptrSafeRun ptrDiscipline memSafeRun instMemFrontier unitTransformDefs codegenRel contextCodegenRel gasEvents gasCount
@@ -23,20 +23,16 @@ Theorem extcall_extcodesize_checked[local]:
       (s,G,tn) [] (OK t,G',tn')
 Proof
   strip_tac >>
+  drule_all extcall_extcodesize_exact_edge >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   `b.cs_current_bb = a.cs_current_bb` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH a.cs_current_insts) =
-    SOME (mk_inst a.cs_next_id EXTCODESIZE [addr]
-      [STRING #"%" (toString a.cs_next_var)])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME inst` >>
+  qabbrev_tac `inst = mk_inst a.cs_next_id EXTCODESIZE [addr]
+    [STRING #"%" (toString a.cs_next_var)]` >>
   qabbrev_tac `w : bytes32 = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)` >>
   qabbrev_tac `u = update_var (STRING #"%" (toString a.cs_next_var)) w s` >>
-  `step_inst_base inst s = OK u` by
-    simp[Abbr `inst`, Abbr `u`, Abbr `w`, slice_extcodesize_step] >>
   qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`,
     `step_prov PG G inst u`, `step_taint inst s u tn`] >>
   conj_tac >- simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
@@ -44,22 +40,8 @@ Proof
     out_taint_def, op_taint_def, FLOOKUP_UPDATE, mk_inst_def] >>
   conj_tac >- (gvs[Abbr `u`, allocas_from_def, update_var_def] >> metis_tac[]) >>
   simp[Abbr `u`, update_var_def] >> gen_tac >>
-  `ptr_inst_ok D lo 0 ctx func G tn inst s` by
-    (`inst.inst_opcode <> INVOKE` by simp[Abbr `inst`, mk_inst_def] >>
-     simp[ptr_inst_ok_def, step_inst_non_invoke, update_var_def] >>
-     simp[Abbr `inst`, access_ok_def, taint_ok_def,
-       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def]) >>
-  `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
-   inst_mem_below_frontier inst s /\ inst_dload_in_section inst s` by
-    simp[Abbr `inst`, mk_inst_def, inst_mem_below_frontier_def,
-      inst_dload_in_section_def, source_memory_write_ranges_def,
-      source_memory_read_ranges_def, is_terminator_def] >>
-  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-   get_instruction bb s.vs_inst_idx = SOME inst` by metis_tac[] >>
-  drule_all straight_line_origin_ptr_edge >>
-  simp[Abbr `inst`, mk_inst_def] >> strip_tac >>
-  pop_assum (qspecl_then [`explicit`, `PG`] mp_tac) >>
-  simp[update_var_def] >> strip_tac >>
+  qpat_x_assum `!D lo. _` (qspecl_then [`D`,`lo`] mp_tac) >>
+  simp[Abbr `inst`, Abbr `w`, update_var_def] >> strip_tac >>
   drule (cj 2 gas_origin_ptr_path_rules) >>
   disch_then (qspec_then `[]` mp_tac) >> simp[] >>
   disch_then irule >>
