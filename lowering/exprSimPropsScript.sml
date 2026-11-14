@@ -28,6 +28,21 @@ Definition val_store_size_def:
     | _ => type_memory_size tv
 End
 
+Theorem topcopy_val_store_size:
+  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_store_size tv v = type_memory_size tv
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[val_store_size_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
+  Cases_on `ty` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
+QED
+
 Theorem mem_path_offset_snoc:
   !path tv k ptv sb k2 etv.
     mem_path_offset tv path = SOME (k,ptv) /\

@@ -292,21 +292,6 @@ Proof
   gvs[type_memory_size_slots]
 QED
 
-Theorem topcopy_val_store_size:
-  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
-  val_store_size tv v = type_memory_size tv
-Proof
-  rpt strip_tac >> Cases_on `v` >> simp[val_store_size_def] >>
-  Cases_on `tv` >> simp[] >>
-  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
-  Cases_on `ty` >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
-QED
-
 Theorem topcopy_source_bound:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   ~is_word_type ty /\ ~is_bytestring_type ty /\
@@ -314,6 +299,6 @@ Theorem topcopy_source_bound:
   0 < type_memory_size tv ==>
   w2n b + type_memory_size tv <= s.vs_alloca_next
 Proof
-  strip_tac >> drule_all topcopy_val_store_size >> disch_tac >>
+  strip_tac >> drule_all exprSimPropsTheory.topcopy_val_store_size >> disch_tac >>
   gvs[expr_store_bound_def]
 QED

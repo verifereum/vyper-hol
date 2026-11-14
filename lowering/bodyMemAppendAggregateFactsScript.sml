@@ -3,7 +3,7 @@ Theory bodyMemAppendAggregateFacts
 Ancestors
   bodyAppendStorageAdapter bodyAppendStorageFacts bodyMemAssignTopCopyFacts
   supportedStmts supportedExprs loweringPosts exprSimMemDefs
-  valueEncodingProps vyperAST bodySim bodyStorageMetadata supportedProgram
+  valueEncodingProps exprSimProps vyperAST bodySim bodyStorageMetadata supportedProgram
   supportedDecls supportedTypes compileEnv exprSimHyps whitelistVisibility
   vyperValue vyperTypeValues
 
@@ -42,7 +42,7 @@ Proof
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
   simp[expr_val_rel_def] >> strip_tac >>
   qexists_tac `w` >> simp[] >>
-  drule_all topcopy_val_store_size >> strip_tac >>
+  drule_all exprSimPropsTheory.topcopy_val_store_size >> strip_tac >>
   gvs[expr_store_bound_def, type_memory_size_slots]
 QED
 
