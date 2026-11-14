@@ -12,6 +12,7 @@
 Theory bodyFullExtCall
 Ancestors
   bodyFullExtCallRequest bodyFullExtCallStep bodyFullExtCallReturn
+  bodyFullExtCallCompose
   bodyFullPreds bodyFullOfVV
   gasShadowCompile gasOutcomeFullCompose bodySimFull exprLowering compileEnv context pair
   vyperInterpreter vyperAST list
@@ -75,5 +76,10 @@ Theorem extcall_expr_full_ok:
     body_expr_full_ok cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[Once body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule extcall_value_from_vv_full >>
+      metis_tac[extcall_vv_full_ok]) >>
+  metis_tac[extcall_vv_full_ok]
 QED
