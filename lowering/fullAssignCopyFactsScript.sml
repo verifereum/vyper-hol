@@ -551,3 +551,14 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >>
   metis_tac[cj 1 store_slots_open]
 QED
+
+Theorem assign_base_nonbytes_footprint:
+  !ty tenv tv v.
+    ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+    val_footprint tv v = type_memory_size tv
+Proof
+  Cases_on `ty` >> simp[is_bytestring_type_def, evaluate_type_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[is_bytestring_type_def] >>
+  Cases_on `v` >> simp[val_footprint_def]
+QED

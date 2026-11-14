@@ -5,16 +5,6 @@ Ancestors assignBasePtrStorageTypes exprSimHyps exprSimHypsDefs
   supportedTypes loweringPosts vyperValue vyperTyping exprLowering compileEnv bodySim supportedExprs
   stmtSimReturn exprSimTypedAlloc assignBasePtrEndpointAudit words arithmetic
 
-Theorem assign_base_nonbytes_footprint:
-  !ty tenv tv v.
-    ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
-    val_footprint tv v = type_memory_size tv
-Proof
-  Cases_on `ty` >> simp[is_bytestring_type_def, evaluate_type_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[is_bytestring_type_def] >>
-  Cases_on `v` >> simp[val_footprint_def]
-QED
 
 Theorem assign_base_storage_rhs_footprint:
   !cenv e tops ctx cx env es tv v.
