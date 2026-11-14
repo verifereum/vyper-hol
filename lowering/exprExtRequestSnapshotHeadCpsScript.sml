@@ -1,7 +1,8 @@
 (* Single immediate-read producer/snapshot boundary. *)
 Theory exprExtRequestSnapshotHeadCps
 Ancestors
-  exprExtRequestSnapshotCellIntro exprExtRequestSnapshotWord
+  exprExtRequestSnapshotCellIntro exprExtRequestSnapshotWord extcallProtFrameRaw
+  exprExtRequestSnapshotStoreInterface
   exprExtRequestSnapshotNonword exprExtRequestKwargCps
   exprExtRequestStrongCapture exprExtRequestHistoryCompose
   exprExtRequestJointUnwrap exprExtRequestReadProbe exprExtRequestTypedCells
@@ -37,13 +38,22 @@ Theorem extrequest_snapshot_read_endpoint[local]:
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
   ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  (!pa pk. prot pa pk ==> pa + pk <= t.vs_alloca_next /\
+    mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk M /\
+    !i b n. FLOOKUP t.vs_allocas i = SOME (b,n) ==>
+      loweringStateRelDefs$regions_disjoint pa pk b n) ==>
   ?u tv. gas_marked_exec F (ctx,func) (read_result cx r) (ee,t) [] (INL v) ee (OK u) /\
-    extrequest_snapshot_cell ctx func ce cx ee sb u (sv,lowered_value_type ce e,tv,v) /\
+    extrequest_snapshot_cell_protected prot M ctx func ce cx ee sb u
+      (sv,lowered_value_type ce e,tv,v) /\
     stmt_state_rel ctx func ce cx ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    extrequest_history_frame ce cx ee sc t ee sb u
+    extrequest_history_frame ce cx ee sc t ee sb u /\
+    (!pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\
+      mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk M /\
+      !i b n. FLOOKUP u.vs_allocas i = SOME (b,n) ==>
+        loweringStateRelDefs$regions_disjoint pa pk b n)
 Proof
   strip_tac >>
   `vv_type vv = expr_type e` by
@@ -58,13 +68,17 @@ Proof
     metis_tac[exprExtRequestSnapshotProbeTheory.extrequest_snapshot_nonword_no_copy,
       pairTheory.PAIR_EQ] >> gvs[] >>
   rename1 `compile_expr ce (expr_type e) e sa = (vv,sc)` >>
-  `?tv. extrequest_snapshot_cell ctx func ce cx ee sc t
+  `?tv. extrequest_snapshot_cell_protected prot M ctx func ce cx ee sc t
       (ext_call_arg_value (lowered_value_type ce e) vv,lowered_value_type ce e,tv,v)` by
-    (irule extrequest_snapshot_cell_nonword_intro >> metis_tac[]) >>
-  qexistsl_tac [`t`, `tv`] >> simp[extrequest_history_frame_refl] >>
-  simp[gas_marked_exec_def] >> conj_tac
-  >- metis_tac[read_result_gas_obs] >>
-  simp[gas_marked_path_def] >> metis_tac[gas_path_rules]
+    (irule extrequest_snapshot_cell_nonword_intro_protected >> metis_tac[]) >>
+  `!tail. read_result cx r (ee with gas_obs := tail) =
+    (INL v,ee with gas_obs := tail)` by
+    (irule read_result_gas_obs >> simp[]) >>
+  `gas_path ctx func t 0 (OK t)` by
+    (irule (cj 1 gas_path_rules) >> simp[]) >>
+  qexistsl_tac [`t`, `tv`] >>
+  simp[extrequest_history_frame_refl, gas_marked_exec_def, gas_marked_path_def] >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Resume extrequest_snapshot_read_endpoint[word]:
@@ -85,16 +99,20 @@ Resume extrequest_snapshot_read_endpoint[word]:
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!aid p k. aid < sc.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
-    extrequest_history_frame ce cx ee sc t ee sb u` by
-    (irule extrequest_snapshot_word_endpoint >>
+    extrequest_history_frame ce cx ee sc t ee sb u /\
+    (!pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\
+      mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk M /\
+      !i b n. FLOOKUP u.vs_allocas i = SOME (b,n) ==>
+        loweringStateRelDefs$regions_disjoint pa pk b n)` by
+    (irule extrequest_snapshot_word_endpoint_protected >>
      qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      simp[extrequest_history_frame_refl] >> metis_tac[]) >>
   `?tv. extrequest_tuple_cell ctx func ce cx ee sc t ee
       (e,r,vv,lowered_value_type ce e,tv,v)` by
     (irule extrequest_typed_cell >> metis_tac[]) >>
-  `extrequest_snapshot_cell ctx func ce cx ee sb u
+  `extrequest_snapshot_cell_protected prot M ctx func ce cx ee sb u
       (StackValue (lowered_value_type ce e) op,lowered_value_type ce e,tv,v)` by
-    (irule extrequest_snapshot_cell_word_intro >>
+    (irule extrequest_snapshot_cell_word_intro_protected >>
      fs[exprExtRequestTupleFoldTheory.extrequest_tuple_cell_def] >> metis_tac[]) >>
   qexistsl_tac [`u`, `tv`] >> gvs[] >>
   fs[gas_marked_exec_def, gas_marked_path_def] >> metis_tac[gas_path_normal]
@@ -103,7 +121,7 @@ QED
 Finalise extrequest_snapshot_read_endpoint
 
 
-Theorem extrequest_snapshot_head_cps:
+Theorem extrequest_snapshot_head_prot_cps:
   expr_vv_case nocalls ctx func ce cx e /\
   expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
   (nocalls ==> int_calls_expr e = []) /\
@@ -113,6 +131,10 @@ Theorem extrequest_snapshot_head_cps:
   local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!pa pk. prot pa pk ==> pa + pk <= s0.vs_alloca_next /\
+    mem_bytes_at pa pk s0.vs_memory = mem_bytes_at pa pk M /\
+    !i b n. FLOOKUP s0.vs_allocas i = SOME (b,n) ==>
+      loweringStateRelDefs$regions_disjoint pa pk b n) /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!e ee sm sn t ef r vv u ty p w tv.
     vv_post ctx func ce cx e ee sm sn t ef r vv u /\
@@ -135,7 +157,12 @@ Theorem extrequest_snapshot_head_cps:
         loweringStateRelDefs$regions_disjoint off len b sz) ==>
       mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory)) /\
   (!v ee u tv.
-    extrequest_snapshot_cell ctx func ce cx ee sb u (sv,lowered_value_type ce e,tv,v) /\
+    extrequest_snapshot_cell_protected prot M ctx func ce cx ee sb u
+      (sv,lowered_value_type ce e,tv,v) /\
+    (!pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\
+      mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk M /\
+      !i b n. FLOOKUP u.vs_allocas i = SOME (b,n) ==>
+        loweringStateRelDefs$regions_disjoint pa pk b n) /\
     stmt_state_rel ctx func ce cx ee u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved ce sb /\ ee.gas_obs = [] /\
@@ -205,7 +232,7 @@ Proof
   suspend "capture"
 QED
 
-Resume extrequest_snapshot_head_cps[capture]:
+Resume extrequest_snapshot_head_prot_cps[capture]:
   `vv_post ctx func ce cx e (es with gas_obs := []) sa sc s0
     (mid with gas_obs := []) r vv t` by simp[vv_post_initial_gas] >>
   `extrequest_history_frame ce cx (es with gas_obs := []) sa s0
@@ -250,16 +277,29 @@ Resume extrequest_snapshot_head_cps[capture]:
   suspend "snapshot_suffix"
 QED
 
-Resume extrequest_snapshot_head_cps[snapshot_suffix]:
+Resume extrequest_snapshot_head_prot_cps[snapshot_suffix]:
+  `(!pa pk. prot pa pk ==> pa + pk <= t.vs_alloca_next /\
+    mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk M /\
+    !i b n. FLOOKUP t.vs_allocas i = SOME (b,n) ==>
+      loweringStateRelDefs$regions_disjoint pa pk b n)` by
+    (match_mp_tac (GEN_ALL pure_vv_marked_path_protected) >>
+     qpat_assum `vv_post _ _ _ _ e es _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
+       (irule_at Any o cj 2 o SRULE [gas_marked_exec_def]) >>
+     simp[] >> metis_tac[]) >>
   `?u tv. gas_marked_exec F (ctx,func) (read_result cx r)
       (mid with gas_obs := [],t) [] (INL v) (mid with gas_obs := []) (OK u) /\
-    extrequest_snapshot_cell ctx func ce cx (mid with gas_obs := []) sb u
+    extrequest_snapshot_cell_protected prot M ctx func ce cx (mid with gas_obs := []) sb u
       (sv,lowered_value_type ce e,tv,v) /\
     stmt_state_rel ctx func ce cx (mid with gas_obs := []) u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     extrequest_history_frame ce cx (mid with gas_obs := []) sc t
-      (mid with gas_obs := []) sb u` by
+      (mid with gas_obs := []) sb u /\
+    (!pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\
+      mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk M /\
+      !i b n. FLOOKUP u.vs_allocas i = SOME (b,n) ==>
+        loweringStateRelDefs$regions_disjoint pa pk b n)` by
     (irule extrequest_snapshot_read_endpoint >>
      qpat_assum `vv_post _ _ _ _ e es _ _ _ _ _ _ _` (irule_at Any) >>
      simp[] >> fs[ci_mono_def] >> metis_tac[]) >>
@@ -279,9 +319,64 @@ Resume extrequest_snapshot_head_cps[snapshot_suffix]:
   irule extrequest_kwarg_suffix_cps >>
   qpat_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` (irule_at Any) >>
   simp[] >> first_x_assum irule >> simp[] >>
-  conj_tac >- (qexists `gas_explicit marks s0.vs_gas_readings` >>
-    simp[evaluation_state_component_equality]) >> metis_tac[]
+  rpt strip_tac >> metis_tac[evaluation_state_component_equality]
 
 QED
 
-Finalise extrequest_snapshot_head_cps
+Finalise extrequest_snapshot_head_prot_cps
+
+Theorem extrequest_snapshot_head_cps:
+  expr_vv_case nocalls ctx func ce cx e /\
+  expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
+  (nocalls ==> int_calls_expr e = []) /\
+  compile_expr ce (expr_type e) e sa = (vv,sc) /\
+  compile_snapshot_vv ce F (ext_call_arg_value (lowered_value_type ce e) vv) sc = (sv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+  (!e ee sm sn t ef r vv u ty p w tv.
+    vv_post ctx func ce cx e ee sm sn t ef r vv u /\
+    ~expr_has_effect e /\ vv = LocatedValue ty p /\
+    eval_operand p.ptr_operand u = SOME w /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    (p.ptr_location = LocStorage ==>
+      storage_read_live cx F (get_storage cx ef F) w tv) /\
+    (p.ptr_location = LocTransient ==>
+      storage_read_live cx T (get_storage cx ef T) w tv)) /\
+  (!e ee sm sn t ef r vv u.
+    vv_post ctx func ce cx e ee sm sn t ef r vv u /\
+    ~expr_has_effect e ==>
+    (!n b sz. local_region ce ee.scopes t n b sz ==>
+      mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz t.vs_memory) /\
+    (!off len.
+      (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        sm.cs_next_id <= inst.inst_id /\
+        FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
+        loweringStateRelDefs$regions_disjoint off len b sz) ==>
+      mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory)) /\
+  (!v ee u tv.
+    extrequest_snapshot_cell ctx func ce cx ee sb u (sv,lowered_value_type ce e,tv,v) /\
+    stmt_state_rel ctx func ce cx ee u /\ ~u.vs_halted /\
+    u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved ce sb /\ ee.gas_obs = [] /\
+    wb_frame ce es ee sa s0 u /\
+    extrequest_history_frame ce cx (es with gas_obs := []) sa s0 ee sb u /\
+    (?used. !tail. bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := used ++ tail) = (INL v,ee with gas_obs := tail)) ==>
+    gas_outcome F (cx_tops cx) (ctx,func)
+      ((kont : value -> evaluation_state -> eval_result evaluation_result) v) (ee,u) Q
+      (\res ef result. expr_exit res result)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx)) kont) (es,s0) Q
+    (\res ef result. expr_exit res result)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`prot` |-> `\pa pk. F`, `M` |-> `ARB`]
+    extrequest_snapshot_head_prot_cps) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      metis_tac[extrequest_snapshot_cell_protected_plain]) >>
+  simp[]
+QED

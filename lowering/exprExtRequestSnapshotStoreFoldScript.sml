@@ -9,7 +9,7 @@ Ancestors
 Libs wordsLib
 
 Theorem snapshot_store_head[local]:
-  extrequest_snapshot_cell ctx func ce cx eb cb tb (vv,ty,tv,v) /\
+  extrequest_snapshot_cell_protected prot M ctx func ce cx eb cb tb (vv,ty,tv,v) /\
   emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
   (if is_word_type ty then emit_void MSTORE [dst;op]
@@ -32,7 +32,11 @@ Theorem snapshot_store_head[local]:
      regions_disjoint io (type_memory_size itv)
        (w2n (w + n2w off)) (type_memory_size tv)) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!pa pk. prot pa pk ==> pa + pk <= s.vs_alloca_next /\
+    mem_bytes_at pa pk s.vs_memory = mem_bytes_at pa pk M /\
+    !i b n. FLOOKUP s.vs_allocas i = SOME (b,n) ==>
+      loweringStateRelDefs$regions_disjoint pa pk b n) ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
     stmt_state_rel ctx func ce cx ee q /\
     val_in_memory tv v (w2n (w + n2w off)) q.vs_memory /\
@@ -57,7 +61,11 @@ Theorem snapshot_store_head[local]:
        FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
        mem_bytes_at io (type_memory_size itv) q.vs_memory =
-       mem_bytes_at io (type_memory_size itv) s.vs_memory)
+       mem_bytes_at io (type_memory_size itv) s.vs_memory) /\
+    (!pa pk. prot pa pk ==> pa + pk <= q.vs_alloca_next /\
+      mem_bytes_at pa pk q.vs_memory = mem_bytes_at pa pk M /\
+      !i b n. FLOOKUP q.vs_allocas i = SOME (b,n) ==>
+        loweringStateRelDefs$regions_disjoint pa pk b n)
 Proof
   strip_tac >>
   `local_ptrs_reserved ce sm` by fs[extrequest_history_frame_def] >>
@@ -66,10 +74,20 @@ Proof
   rename1 `gas_marked_path F ctx func s 0 (OK t)` >>
   `extrequest_history_frame ce cx eb cb tb ee sn t` by
     (drule_all extrequest_history_frame_trans >> simp[]) >>
-  qpat_x_assum `extrequest_snapshot_cell _ _ _ _ _ _ _ _` mp_tac >>
-  simp[extrequest_snapshot_cell_def] >> strip_tac >>
+  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+   t.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_assum `t with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `(!pa pk. prot pa pk ==> pa + pk <= t.vs_alloca_next /\
+  mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk M /\
+  !i b n. FLOOKUP t.vs_allocas i = SOME (b,n) ==>
+    loweringStateRelDefs$regions_disjoint pa pk b n)` by metis_tac[] >>
+  qpat_x_assum `extrequest_snapshot_cell_protected _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[extrequest_snapshot_cell_protected_def] >> strip_tac >>
   `local_ptrs_reserved ce sn` by fs[extrequest_history_frame_def] >>
   first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `extrequest_snapshot_cell _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SRULE [extrequest_snapshot_cell_def]) >>
   rename1 `gas_marked_path F ctx func t 0 (OK u)` >>
   `extrequest_history_frame ce cx ee sm s ee su u` by
     metis_tac[extrequest_history_frame_trans] >>
@@ -140,9 +158,20 @@ Resume snapshot_store_head[frames]:
     (qpat_assum `gas_marked_path F ctx func s 0 (OK u)`
        (mp_then Any mp_tac gas_marked_path_then) >>
      disch_then (qspecl_then [`OK q`, `0`] mp_tac) >> simp[]) >>
-  `q.vs_allocas = u.vs_allocas` by
+  `q.vs_allocas = u.vs_allocas /\ q.vs_alloca_next = u.vs_alloca_next` by
     (qpat_x_assum `q with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = u` mp_tac >>
      simp[venom_state_component_equality]) >>
+  `!pa pk. prot pa pk ==> pa + pk <= q.vs_alloca_next /\
+     mem_bytes_at pa pk q.vs_memory = mem_bytes_at pa pk M /\
+     !i b n. FLOOKUP q.vs_allocas i = SOME (b,n) ==>
+       loweringStateRelDefs$regions_disjoint pa pk b n` by
+    (rpt gen_tac >> strip_tac >>
+     `loweringStateRelDefs$regions_disjoint pa pk tuple_base sz` by metis_tac[] >>
+     `mem_bytes_at pa pk q.vs_memory = mem_bytes_at pa pk u.vs_memory` by
+       (qpat_x_assum `!a k. a + k <= w2n _ \/ _ ==> mem_bytes_at a k q.vs_memory = _`
+          irule >>
+        fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+     metis_tac[]) >>
   qexists_tac `q` >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -196,27 +225,92 @@ Resume snapshot_store_head[local_bytes]:
 QED
 
 Resume snapshot_store_head[immutable_bytes]:
+  conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at io (type_memory_size itv) u.vs_memory =
+       mem_bytes_at io (type_memory_size itv) s.vs_memory` by
+        (qpat_assum `extrequest_history_frame ce cx ee sm s ee su u`
+           (mp_tac o Q.SPECL [`name`, `itv`, `iv`, `io`] o
+            UNDISCH o last o CONJUNCTS o
+            REWRITE_RULE [extrequest_history_frame_def]) >> simp[]) >>
+      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   rpt strip_tac >>
-  `mem_bytes_at io (type_memory_size itv) u.vs_memory =
-   mem_bytes_at io (type_memory_size itv) s.vs_memory` by
-    (fs[extrequest_history_frame_def] >> metis_tac[]) >>
-  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
+  qpat_assum `!pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\ _`
+    (drule_all_then strip_assume_tac) >> first_x_assum drule_all >> simp[]
 QED
 
 Finalise snapshot_store_head[local]
 
-Theorem extrequest_snapshot_store_fold:
-  extrequest_snapshot_store_contract ctx func ce cx
+Theorem extrequest_snapshot_store_fold_protected:
+  !cells off sm sb s eb cb tb ee buf live tuple_base sz w.
+    EVERY (extrequest_snapshot_cell_protected prot M ctx func ce cx eb cb tb) cells /\
+    compile_extcall_store_values ce
+      (MAP (\(vv,ty,tv,v). (vv,ty)) cells) buf off sm = ((),sb) /\
+    stmt_state_rel ctx func ce cx eb tb /\
+    stmt_state_rel ctx func ce cx ee s /\
+    extrequest_history_frame ce cx eb cb tb ee sm s /\
+    cb.cs_next_id <= live /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    ee.gas_obs = [] /\ safe_operand sm buf /\ eval_operand buf s = SOME w /\
+    FLOOKUP s.vs_allocas live = SOME (tuple_base,sz) /\ live < sm.cs_next_id /\
+    tuple_base <= w2n w + off /\
+    w2n w + off + SUM (MAP (\(vv,ty,tv,v). type_memory_size tv) cells) <=
+      tuple_base + sz /\
+    tuple_base + sz < dimword (:256) /\
+    (!name b len. local_region ce ee.scopes s name b len ==>
+       regions_disjoint tuple_base sz b len) /\
+    (ce.ce_is_ctor ==> !name itv iv io.
+       FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+       FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+       regions_disjoint io (type_memory_size itv) tuple_base sz) /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    (!pa pk. prot pa pk ==> pa + pk <= s.vs_alloca_next /\
+      mem_bytes_at pa pk s.vs_memory = mem_bytes_at pa pk M /\
+      !i b n. FLOOKUP s.vs_allocas i = SOME (b,n) ==>
+        loweringStateRelDefs$regions_disjoint pa pk b n) ==>
+    ?q. gas_marked_path F ctx func s 0 (OK q) /\
+      stmt_state_rel ctx func ce cx ee q /\
+      tuple_in_memory (MAP (\(vv,ty,tv,v). v) cells)
+        (MAP (\(vv,ty,tv,v). tv) cells) (w2n w + off) q.vs_memory /\
+      extrequest_history_frame ce cx eb cb tb ee sb q /\
+      FLOOKUP q.vs_allocas live = SOME (tuple_base,sz) /\
+      (!a k. tuple_base <= a /\ a + k <= tuple_base + sz /\
+         regions_disjoint a k (w2n w + off)
+           (SUM (MAP (\(vv,ty,tv,v). type_memory_size tv) cells)) ==>
+         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+      ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+      q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!x z. not_fresh_at sm x /\ lookup_var x s = SOME z ==>
+         lookup_var x q = SOME z) /\
+      (!aid p k. aid < sm.cs_next_id /\ aid <> live /\
+         FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+         mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory) /\
+      (!name b len. local_region ce ee.scopes s name b len ==>
+         mem_bytes_at b len q.vs_memory = mem_bytes_at b len s.vs_memory) /\
+      (ce.ce_is_ctor ==> !name itv iv io.
+         FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+         FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+           | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+         mem_bytes_at io (type_memory_size itv) q.vs_memory =
+         mem_bytes_at io (type_memory_size itv) s.vs_memory) /\
+      (!pa pk. prot pa pk ==> pa + pk <= q.vs_alloca_next /\
+        mem_bytes_at pa pk q.vs_memory = mem_bytes_at pa pk M /\
+        !i b n. FLOOKUP q.vs_allocas i = SOME (b,n) ==>
+          loweringStateRelDefs$regions_disjoint pa pk b n)
 Proof
-  rewrite_tac[extrequest_snapshot_store_contract_def] >> Induct
+  Induct
   >- (simp[compile_extcall_store_values_def, comp_return_def] >>
       rpt strip_tac >> qexists_tac `s` >>
       simp[valueEncodingDefsTheory.val_in_memory_def, gas_marked_path_def] >>
-      irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]) >>
+      conj_tac
+      >- (irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]) >>
+      rpt strip_tac >> metis_tac[]) >>
   qx_gen_tac `cell` >> PairCases_on `cell` >> rpt gen_tac >>
   simp[compile_extcall_store_values_def, comp_bind_def, comp_ignore_bind_def] >>
   strip_tac >>
-  rename1 `extrequest_snapshot_cell _ _ _ _ _ _ _ (vv,ty,tv,v)` >>
+  rename1 `extrequest_snapshot_cell_protected _ _ _ _ _ _ _ _ _ (vv,ty,tv,v)` >>
   qpat_x_assum `(\(dst,st). _) _ = _` mp_tac >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   strip_tac >>
@@ -248,7 +342,7 @@ Proof
   `w2n (w + n2w off) = w2n w + off` by
     (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> simp[]) >>
   `type_memory_bytes ce ty = type_memory_size tv` by
-    fs[extrequest_snapshot_cell_def] >>
+    fs[extrequest_snapshot_cell_protected_def, extrequest_snapshot_cell_def] >>
   `tuple_base <= w2n (w + n2w off) /\
    w2n (w + n2w off) + type_memory_size tv <= tuple_base + sz` by decide_tac >>
   `ce.ce_is_ctor ==> !name itv iv io.
@@ -263,7 +357,7 @@ Proof
   suspend "tail"
 QED
 
-Resume extrequest_snapshot_store_fold[tail]:
+Resume extrequest_snapshot_store_fold_protected[tail]:
   rename1 `gas_marked_path F ctx func s 0 (OK h)` >>
   `eval_operand buf h = SOME w` by
     (Cases_on `buf` >>
@@ -284,7 +378,7 @@ Resume extrequest_snapshot_store_fold[tail]:
   suspend "finish"
 QED
 
-Resume extrequest_snapshot_store_fold[finish]:
+Resume extrequest_snapshot_store_fold_protected[finish]:
   rename1 `gas_marked_path F ctx func h 0 (OK q)` >>
   `mem_bytes_at (w2n w + off) (type_memory_size tv) q.vs_memory =
    mem_bytes_at (w2n w + off) (type_memory_size tv) h.vs_memory` by
@@ -292,7 +386,7 @@ Resume extrequest_snapshot_store_fold[finish]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `val_in_memory tv v (w2n w + off) q.vs_memory` by
     (irule val_in_memory_mem_agree >>
-     conj_tac >- fs[extrequest_snapshot_cell_def] >>
+     conj_tac >- fs[extrequest_snapshot_cell_protected_def, extrequest_snapshot_cell_def] >>
      qexistsl_tac [`type_memory_size tv`, `h.vs_memory`] >> gvs[]) >>
   `!x z. not_fresh_at sm x /\ lookup_var x s = SOME z ==>
       lookup_var x q = SOME z` by
@@ -321,7 +415,7 @@ Resume extrequest_snapshot_store_fold[finish]:
   rpt strip_tac >> metis_tac[]
 QED
 
-Resume extrequest_snapshot_store_fold[windows]:
+Resume extrequest_snapshot_store_fold_protected[windows]:
   rpt strip_tac >>
   `mem_bytes_at a k q.vs_memory = mem_bytes_at a k h.vs_memory` by
     (qpat_assum `!a k. tuple_base <= a /\ _ ==> mem_bytes_at a k q.vs_memory = _` irule >> simp[] >>
@@ -332,4 +426,20 @@ Resume extrequest_snapshot_store_fold[windows]:
   metis_tac[]
 QED
 
-Finalise extrequest_snapshot_store_fold
+Finalise extrequest_snapshot_store_fold_protected
+
+Theorem extrequest_snapshot_store_fold:
+  extrequest_snapshot_store_contract ctx func ce cx
+Proof
+  rewrite_tac[extrequest_snapshot_store_contract_def] >> rpt strip_tac >>
+  `EVERY (extrequest_snapshot_cell_protected (\pa pk. F) ARB ctx func ce cx eb cb tb)
+     cells` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     irule extrequest_snapshot_cell_unprotected >> simp[]) >>
+  mp_tac (Q.SPECL [`cells`, `off`, `sm`, `sb`, `s`, `eb`, `cb`, `tb`, `ee`, `buf`,
+      `live`, `tuple_base`, `sz`, `w`]
+    (Q.INST [`prot` |-> `\pa pk. F`, `M` |-> `ARB`]
+      extrequest_snapshot_store_fold_protected)) >>
+  simp[] >> (impl_tac >- metis_tac[]) >>
+  strip_tac >> qexists_tac `q` >> simp[] >> metis_tac[]
+QED
