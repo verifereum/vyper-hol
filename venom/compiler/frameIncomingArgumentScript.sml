@@ -83,7 +83,8 @@ Proof
   simp[argument_origins_def] >> rpt strip_tac >>
   drule origin_step_lookup >> strip_tac
   >- metis_tac[argument_origins_def] >>
-  metis_tac[argument_origins_out, argument_frame_def]
+  irule argument_origins_out >> qexistsl_tac [`PG`, `inst`, `om`, `s`] >>
+  simp[argument_frame_def]
 QED
 
 Theorem argument_frame_entry:

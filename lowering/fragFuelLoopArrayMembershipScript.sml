@@ -24,19 +24,6 @@ Proof
   simp[venomStateTheory.eval_operand_def, vars_kept_def] >> metis_tac[]
 QED
 
-(* Modular distance decreases even when the index itself wraps.  Its
-   uniform bound is wordsTheory.w2n_lt (with dimword(:256) = 2 ** 256). *)
-Theorem loop_distance_decreases[local]:
-  !(i:256 word) l.
-    i <> l ==> w2n (l - (i + 1w)) < w2n (l - i)
-Proof
-  rpt strip_tac >> rewrite_tac[wordsTheory.WORD_SUB_PLUS] >>
-  irule wordsTheory.WORD_PRED_THM >>
-  strip_tac >>
-  `i + (l - i) = l` by simp[wordsTheory.WORD_SUB_ADD2] >>
-  gvs[wordsTheory.WORD_ADD_0]
-QED
-
 (* With every jump treated as an exit, the loop has a compositional
    structural certificate; this does not discharge its back edge. *)
 Theorem array_membership_loop_open_exits[local]:
