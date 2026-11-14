@@ -187,7 +187,9 @@ Resume target_array_normal_suffix_ptr[memory_typed]:
 QED
 
 Resume target_array_normal_suffix_ptr[memory_fixed]:
-  `?av. cv = ArrayV av` by (Cases_on `cv` >> fs[value_has_type_def]) >> gvs[] >>
+  `?av. cv = ArrayV av` by
+    (qpat_x_assum `value_has_type _ cv` mp_tac >> Cases_on `cv` >>
+     simp_tac (srw_ss()) [value_has_type_def]) >> gvs[] >>
   `loc = SOME LocMemory` by fs[place_ptr_rel_def] >> gvs[] >>
   `type_memory_bytes cenv et = type_memory_size tv'` by
     (irule expr_sim_inv_memory_size >> metis_tac[]) >>

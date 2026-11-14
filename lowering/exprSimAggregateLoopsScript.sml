@@ -821,8 +821,9 @@ Proof
   >- (qpat_x_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _`
         (irule o MATCH_MP aggregate_tuple_gas_outcome_mono) >>
       simp[] >> rpt strip_tac >>
-      qpat_x_assum `(mty = expr_type h \/ _) /\ _` kall_tac >>
-      Cases_on `res` >> gvs[expr_exit_def]) >>
+      qpat_x_assum `expr_exit res r` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `res` >> simp[expr_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rename1 `gas_marked_exec F _ (eval_expr cx h) _ m1 (INL tv) es1 (OK t1)` >>
   suspend "child_success"
