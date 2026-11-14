@@ -3,15 +3,9 @@ Ancestors
   bodyPtrDefs bodyPtrBytestringBuiltinsCalldataCopy
   immutableMemoryFrame valueEncodingProps loweringStateRelDefs
   ptrDiscipline venomState finite_map words list pred_set byte
-  localPtrsProps exprSimProps
-
-Theorem u2s_clean_store_kept_at:
-  ghost_kept_at lo cenv es a G0 tn0 s0 G tn ==>
-  ghost_kept_at lo cenv es a G0 tn0 s0 G
-    (tn with t_mem := tn.t_mem DIFF {j | at <= j /\ j < at+32})
-Proof
-  simp[ghost_kept_at_def, op_taint_def] >> metis_tac[]
-QED
+  localPtrsProps exprSimProps exprSimUint2Str fragGasSeqPtr
+  bodyPtrBytestringBuiltinsUintGhost ptrSafeRun venomExecSemantics venomInst
+  exprLoweringProps emitHelperProps codegenRel contextCodegenRel bodyFullUnwrapRun
 
 Theorem u2s_clean_store_ghost_at:
   ghost_inv_at D lo d cenv cx es G tn s /\
@@ -62,3 +56,54 @@ Proof
   >> gvs[op_taint_def, stor_taint_ok_at_def, allocas_from_def,
          mstore_def, write_memory_with_expansion_def] >> metis_tac[]
 QED
+
+Theorem u2s_clean_scalar_seq_cons:
+  MEM opc [Mod; Div; EQ; ADD] /\
+  (!op. MEM op ops ==> op_taint tn op = {} /\ op_prov G op = NONE) /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out w s) /\
+  inst_seq_ptr D lo ctx fn PG (DRESTRICT G (COMPL {out}))
+    (tn with t_var := tn.t_var |+ (out,{})) ys
+    (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx fn PG G tn (mk_inst id opc ops [out]::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_prov PG G (mk_inst id opc ops [out]) (update_var out w s) =
+     DRESTRICT G (COMPL {out}) /\
+   step_taint (mk_inst id opc ops [out]) s (update_var out w s) tn =
+     (tn with t_var := tn.t_var |+ (out,{}))` by
+    (irule uint_scalar_ghost >> simp[update_var_def] >> metis_tac[]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id opc ops [out]) s` by
+    (`!v. MEM (Var v) ops ==> FLOOKUP G v = NONE` by
+       (rpt strip_tac >> first_x_assum drule >> simp[op_prov_def]) >>
+     gvs[] >>
+     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     gvs[update_var_def, FLOOKUP_DEF] >> metis_tac[]) >>
+  simp[Once inst_seq_ptr_def, mk_inst_def] >>
+  gvs[mk_inst_def]
+QED
+
+Theorem u2s_clean_assign_seq_cons:
+  op_prov G op = NONE /\ op_taint tn op = {} /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out w s) /\
+  inst_seq_ptr D lo ctx fn PG (DRESTRICT G (COMPL {out}))
+    (tn with t_var := tn.t_var |+ (out,{})) ys
+    (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx fn PG G tn (mk_inst id ASSIGN [op] [out]::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_prov PG G (mk_inst id ASSIGN [op] [out]) (update_var out w s) =
+     DRESTRICT G (COMPL {out}) /\
+   step_taint (mk_inst id ASSIGN [op] [out]) s (update_var out w s) tn =
+     (tn with t_var := tn.t_var |+ (out,{}))` by
+    (irule uint_assign_ghost >> simp[update_var_def]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id ASSIGN [op] [out]) s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def]) >>
+  simp[Once inst_seq_ptr_def, mk_inst_def] >> gvs[mk_inst_def]
+QED
+
