@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsExtract32Ready
 Ancestors
+  extract32Certificate
   bodyPtrTypeBuiltinsExtract32Assembly bodyPtrTypeBuiltinsExtract32Suffix
   exprSimExtract32Run exprSimExtract32Post exprSimExtract32Read
   bodyPtrDefs loweringPosts compileEnv exprLoweringProps exprLowering

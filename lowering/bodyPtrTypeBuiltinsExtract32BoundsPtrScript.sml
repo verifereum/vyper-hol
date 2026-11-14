@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsExtract32BoundsPtr
 Ancestors
+  extract32Certificate
   bodyPtrTypeBuiltinsBounds bodyPtrBopScalarDynamic bodyPtrBopScalarOutcome
   augAssignPtrScalarRun augAssignPtrScalarCertificate augAssignPtrScalarSafety
   ghostPcTransportPtr instIdxIndep venomExecSemantics
@@ -20,60 +21,7 @@ Proof
   simp[bop_scalar_seq_def, mk_inst_def]
 QED
 
-Theorem scalar_code_certificate_cursor:
-  !code A G tn s H tm.
-  scalar_code A code /\
-  (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  ~ctx_has_dalloca ctx /\ inst_seq_ptr D 0 ctx fn PG G tn code s H tm ==>
-  !k. inst_seq_ptr D 0 ctx fn PG G tn code (s with vs_inst_idx := k) H tm
-Proof
-  Induct >- simp[inst_seq_ptr_def] >>
-  rpt gen_tac >> simp[scalar_code_def] >> strip_tac >>
-  `EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) h.inst_operands` by
-    (gvs[EVERY_MEM] >> metis_tac[scalar_available_clean]) >>
-  `~is_terminator h.inst_opcode` by metis_tac[scalar_shape_control] >>
-  `!k. ptr_inst_ok D 0 0 ctx fn G tn h (s with vs_inst_idx := k)` by
-    (rpt strip_tac >> irule scalar_ptr_inst_ok >> simp[]) >>
-  Cases_on `step_inst_base h s` >>
-  gvs[Once inst_seq_ptr_def] >>
-  simp[Once inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
-  rename1 `step_inst_base h s = OK u` >>
-  `!v. v IN A UNION set h.inst_outputs ==>
-    op_prov (step_prov PG G h u) (Var v) = NONE /\
-    op_taint (step_taint h s u tn) (Var v) = {}` by
-    (ho_match_mp_tac scalar_step_clean >> simp[]) >>
-  first_x_assum drule >> disch_then drule >> simp[] >>
-  disch_then drule >> simp[]
-QED
-
 (* The same ghosts certify every cursor, including an aborting assertion. *)
-Theorem slice_bounds_fixed_certificate:
-  compile_assert_slice_bounds a n limit sa = ((),sb) /\
-  scalar_available A a /\ scalar_available A n /\ scalar_available A limit /\
-  (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  ~ctx_has_dalloca ctx ==>
-  ?H th. (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
-      (s with vs_inst_idx := k) H th) /\
-    (!z. not_fresh_at sa z ==> FLOOKUP H z = FLOOKUP G z /\
-      op_taint th (Var z) = op_taint tn (Var z)) /\
-    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
-Proof
-  strip_tac >> drule_all slice_bounds_scalar_code >> strip_tac >>
-  drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`, `s`] strip_assume_tac) >>
-  drule_all scalar_seq_metadata_frame >> strip_tac >>
-  qexistsl_tac [`H`, `tm`] >>
-  conj_tac >- (irule scalar_code_certificate_cursor >> simp[] >>
-    qexists_tac `A` >> simp[]) >> simp[] >>
-  `!z. not_fresh_at sa z ==>
-    ~MEM z (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb)))` by
-    (drule compile_assert_slice_bounds_shape >> strip_tac >>
-     simp[mk_inst_def] >> rpt strip_tac >>
-     gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LE_ADD]) >>
-  metis_tac[]
-QED
-
 Theorem slice_bounds_normal_ptr_path:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
   op_prov G a = NONE /\ op_taint tn a = {} /\

@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsExtract32Assembly
 Ancestors
+  extract32Certificate
   bodyPtrTypeBuiltinsExtract32Suffix bodyPtrTypeBuiltinsExtract32Read exprSimExtract32Post
   bodyPtrDefs loweringPosts exprBopSimProps vyperTypeSystem vyperAST
   valueEncoding integer_word words freshWrites exprLowering compileEnv
@@ -78,72 +79,6 @@ Proof
   irule ghost_kept_suffix_compose >> goal_assum (drule_at Any) >>
   simp[]
 QED
-
-Theorem extract32_tail_ready_certificate:
-  compile_extract32_load (Var len) (Var data) offset sa = (raw,sm) /\
-  compile_clamp_basetype raw typ sm = (result,sb) /\
-  not_fresh_at sa len /\ not_fresh_at sa data /\
-  (!z. offset = Var z ==> not_fresh_at sa z) /\ (!l. offset <> Label l) /\
-  op_prov G offset = NONE /\ op_taint tn offset = {} /\
-  op_prov G (Var len) = NONE /\ op_taint tn (Var len) = {} /\
-  ptr_mem_ok cx ty (BytesV bs) src G tn s /\
-  evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic m))) /\
-  eval_operand src s = SOME (n2w p) /\
-  eval_operand (Var data) s = SOME (n2w (p+32)) /\
-  eval_operand (Var len) s = SOME (n2w (LENGTH bs)) /\
-  eval_operand offset s = SOME (n2w n) /\
-  n < dimword(:256) /\ p+32+LENGTH bs < dimword(:256) /\
-  (!span. 0 < LENGTH bs /\ span <= LENGTH bs ==> ptr_covers G tn data s span) /\
-  ~ctx_has_dalloca ctx ==>
-  ?HG th.
-    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
-      (s with vs_inst_idx := k) HG th) /\
-    (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-      op_prov HG result = NONE /\ op_taint th result = {}) /\
-    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint th (Var x) = op_taint tn (Var x))
-Proof
-  strip_tac >>
-  qabbrev_tac `A = {x | op_prov G (Var x) = NONE /\ op_taint tn (Var x) = {}}` >>
-  `scalar_available A offset /\ scalar_available A (Var len)` by
-    (Cases_on `offset` >> gvs[scalar_available_def, Abbr `A`]) >>
-  `!x. x IN A ==> op_prov G (Var x) = NONE /\ op_taint tn (Var x) = {}` by
-    simp[Abbr `A`] >>
-  `LENGTH bs < dimword(:256) /\ p+32 < dimword(:256)` by decide_tac >>
-  `!z. offset = Var z \/ Var len = Var z ==> not_fresh_at sa z` by
-    (simp[] >> metis_tac[]) >>
-  Cases_on `n+32 <= LENGTH bs`
-  >- suspend "inbounds" >>
-  `~(w2n (n2w n:bytes32)+32 <= w2n (n2w (LENGTH bs):bytes32))` by
-    simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  drule_all extract32_tail_bounds_abort_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`th`] >> simp[]
-QED
-
-Resume extract32_tail_ready_certificate[inbounds]:
-  `n < dimword(:256) /\ p+32 < dimword(:256) /\
-   p+32+n < dimword(:256) /\
-   (!i. p+32+n <= i /\ i < p+32+n+32 ==> i NOTIN tn.t_mem)` by
-    (irule extract32_payload_window >> goal_assum (drule_at Any) >>
-     simp[] >> metis_tac[]) >>
-  `ptr_covers G tn data s (LENGTH bs)` by
-    (first_assum irule >> simp[] >> decide_tac) >>
-  `lookup_var data s = SOME (n2w (p+32))` by gvs[eval_operand_def] >>
-  `w2n (n2w n:bytes32)+32 <= w2n (n2w (LENGTH bs):bytes32) /\
-   w2n (n2w n:bytes32)+32 <= LENGTH bs /\
-   w2n (n2w (p+32):bytes32)+w2n (n2w n:bytes32) < dimword(:256) /\
-   (!i. w2n (n2w (p+32):bytes32)+w2n (n2w n:bytes32) <= i /\
-     i < w2n (n2w (p+32):bytes32)+w2n (n2w n:bytes32)+32 ==> i NOTIN tn.t_mem)` by
-    simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  drule_all extract32_tail_bounds_normal_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  qexistsl_tac [`HG`,`th`] >> simp[]
-QED
-
-Finalise extract32_tail_ready_certificate
 
 Theorem extract32_tail_outcome_of_runs_ptr:
   compile_extract32_load len dp off sa = (raw,sm) /\

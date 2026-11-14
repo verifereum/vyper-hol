@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsExtract32Clamp
 Ancestors
+  extract32Certificate
   augAssignPtrScalarClamp augAssignPtrScalarCertificate augAssignPtrScalarRun
   augAssignPtrScalarFrame
   bodyPtrTypeBuiltinsExtract32BoundsPtr exprSimExtract32Read
@@ -9,60 +10,6 @@ Ancestors
 
 (* Integer branches reuse the generic scalar clamp interface. The remaining
    basetypes either return unchanged or perform a scalar check of the word. *)
-Theorem clamp_basetype_returns_input:
-  compile_clamp_basetype raw typ sa = (result,sb) ==> result = raw
-Proof
-  strip_tac >> Cases_on `typ` >> gvs[compile_clamp_basetype_def, comp_return_def] >>
-  Cases_on `b`
-  >~ [`compile_clamp_basetype raw (BaseT (UintT n)) sa = _`] >-
-    (Cases_on `n < 256` >>
-     gvs[compile_clamp_basetype_def, clamp_and_return_def, comp_bind_def,
-         comp_ignore_bind_def, comp_return_def] >> pairarg_tac >> gvs[])
-  >~ [`compile_clamp_basetype raw (BaseT (IntT n)) sa = _`] >-
-    (Cases_on `n < 256` >>
-     gvs[compile_clamp_basetype_def, clamp_and_return_def, comp_bind_def,
-         comp_ignore_bind_def, comp_return_def] >> pairarg_tac >> gvs[])
-  >~ [`compile_clamp_basetype raw (BaseT (BytesT bt)) sa = _`] >-
-    (Cases_on `bt` >> gvs[compile_clamp_basetype_def, comp_return_def] >>
-     Cases_on `n < 32` >>
-     gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     rpt (pairarg_tac >> gvs[])) >>
-  gvs[compile_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
-Theorem clamp_basetype_fixed_certificate:
-  compile_clamp_basetype (Var x) typ sa = (result,sb) /\
-  not_fresh_at sa x /\ op_prov G (Var x) = NONE /\ op_taint tn (Var x) = {} /\
-  ~ctx_has_dalloca ctx ==>
-  ?H th.
-    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
-      (s with vs_inst_idx := k) H th) /\
-    result = Var x /\ op_prov H result = NONE /\ op_taint th result = {} /\
-    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
-      op_taint th (Var p) = op_taint tn (Var p)) /\
-    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
-    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
-Proof
-  strip_tac >>
-  `result = Var x` by metis_tac[clamp_basetype_returns_input] >>
-  `scalar_code {x} (emitted_insts sa sb)` by
-    (irule scalar_clamp_basetype_code >> simp[scalar_available_def] >> metis_tac[]) >>
-  `!v. v IN {x} ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}` by simp[] >>
-  drule_all scalar_code_inst_seq_ptr >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`,`s`] strip_assume_tac) >>
-  drule_all scalar_seq_metadata_frame >> strip_tac >>
-  `!p. not_fresh_at sa p ==>
-    ~MEM p (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb)))` by
-    (mp_tac (Q.SPECL [`Var x`,`typ`] extract32_read_clamp_basetype) >>
-     simp[extract32_straight_read_frame_def] >> disch_then drule >>
-     simp[EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
-  qexistsl_tac [`H`,`tm`] >> simp[] >>
-  conj_tac >- (irule scalar_code_certificate_cursor >> simp[] >>
-    qexists_tac `{x}` >> simp[]) >>
-  gvs[op_prov_def] >> metis_tac[]
-QED
-
 Theorem clamp_basetype_normal_ptr_path:
   compile_clamp_basetype (Var x) typ sa = (result,sb) /\
   not_fresh_at sa x /\ op_prov G (Var x) = NONE /\ op_taint tn (Var x) = {} /\
