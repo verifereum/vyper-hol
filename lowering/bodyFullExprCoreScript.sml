@@ -531,7 +531,7 @@ Resume bop_bytes_eq_sim_full[joint]:
        (conj_tac >- (qpat_assum `stmt_state_rel H ctx func cenv cx mid2
           (u' with vs_inst_idx := _)` mp_tac >>
           qpat_assum `sb.cs_current_insts = _ ++ _` mp_tac >>
-          POP_ASSUM_LIST (K all_tac) >> simp[])) >>
+          POP_ASSUM_LIST (K all_tac) >> simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx])) >>
        qexistsl_tac [`mid`, `s1`, `s2`, `t`, `u`, `v`, `v'`, `x`, `y`] >>
        simp[] >>
        (conj_tac >- (qpat_assum `!z. not_fresh_at s2 z ==> FLOOKUP u'.vs_vars z = _` mp_tac >>
