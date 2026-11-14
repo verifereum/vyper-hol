@@ -159,7 +159,7 @@ Proof
   first_x_assum drule >> strip_tac >> gvs[fn_bisim_def] >> metis_tac[]
 QED
 
-Theorem make_ssa_src_stage_frame_sim[local]:
+Theorem make_ssa_src_stage_frame_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions ==>
   LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\

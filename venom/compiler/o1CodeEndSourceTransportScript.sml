@@ -43,37 +43,11 @@ Theorem code_end_simplify_cfg_section[local]:
   mem_inv (\ctx fn inst s. inst_dload_in_section inst s) C vs ==>
   mem_inv (\ctx fn inst s. inst_dload_in_section inst s) C' vs
 Proof
-  strip_tac >>
-  `C'.ctx_functions = MAP simplify_cfg_fn C.ctx_functions /\
-   C'.ctx_entry = C.ctx_entry` by
-    metis_tac[simplify_cfg_stage_functions, ctx_pass_stage_def] >>
-  `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
-  `EVERY scfg_static C.ctx_functions` by
-    (fs[o1_ctx_shape_def, EVERY_MEM, scfg_static_def] >>
-     metis_tac[o1_fn_shape_def, simplifyCfgShapeCoreTheory.fn_shape_ok_scfg_shape]) >>
-  irule code_end_scfg_section >> simp[] >> qexists_tac `C` >> simp[] >> conj_tac
-  >- (`LIST_REL (\f g. g.fn_name = f.fn_name /\ scfg_function_trace f g)
-        C.ctx_functions C'.ctx_functions` by
-        (simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt gen_tac >> strip_tac >> simp[EL_MAP] >>
-         conj_tac
-         >- (`fn_bisim (EL n C.ctx_functions)
-                 (simplify_cfg_fn (EL n C.ctx_functions))` by
-               (irule simplify_cfg_fn_correct >> fs[o1_ctx_shape_def, EVERY_MEM] >>
-                metis_tac[o1_fn_shape_def, EL_MEM]) >> fs[fn_bisim_def]) >>
-         irule scfg_function_trace_simplify_cfg >>
-         fs[EVERY_MEM] >> metis_tac[EL_MEM]) >>
-      drule list_rel_lookup_function >> simp[] >> rpt strip_tac >>
-      first_x_assum (qspec_then `nm` mp_tac) >> simp[optionTheory.OPTREL_def]) >>
-  simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt gen_tac >> strip_tac >>
-  `MEM (EL n C.ctx_functions) C.ctx_functions` by metis_tac[MEM_EL] >>
-  `o1_fn_shape C (EL n C.ctx_functions) /\
-   simplify_cfg_fn_ok (EL n C.ctx_functions)` by
-    fs[o1_ctx_shape_def, EVERY_MEM] >>
-  `fn_bisim (EL n C.ctx_functions) (simplify_cfg_fn (EL n C.ctx_functions))` by
-    (irule simplify_cfg_fn_correct >> fs[o1_fn_shape_def]) >>
-  conj_tac >- fs[fn_bisim_def] >>
-  conj_tac >- fs[fn_bisim_def] >>
-  irule simplify_cfg_frame_sim >> fs[o1_fn_shape_def] >> metis_tac[]
+  strip_tac >> irule code_end_scfg_section >> simp[] >>
+  qexists_tac `C` >> simp[] >>
+  drule_all simplify_cfg_stage_frame_interface >>
+  disch_then (qspec_then `vs.vs_labels` strip_assume_tac) >> gvs[] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem code_end_make_ssa_section[local]:
@@ -89,14 +63,7 @@ Proof
   `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
       fn_entry_label fn' = fn_entry_label fn /\
       frame_sim vs.vs_labels C C' fn fn') C.ctx_functions C'.ctx_functions` by
-    (drule make_ssa_stage_length >> strip_tac >>
-     simp[LIST_REL_EL_EQN] >> rpt gen_tac >> strip_tac >>
-     drule_all make_ssa_stage_el >> strip_tac >>
-     `fn_bisim (EL n C.ctx_functions) (EL n C'.ctx_functions)` by
-       (irule make_ssa_current_fn_fn_bisim >> fs[make_ssa_input_ok_def] >> metis_tac[]) >>
-     conj_tac >- fs[fn_bisim_def] >>
-     conj_tac >- fs[fn_bisim_def] >>
-     irule make_ssa_current_fn_frame_sim >> fs[make_ssa_input_ok_def] >> metis_tac[]) >>
+    (irule make_ssa_src_stage_frame_sim >> metis_tac[]) >>
   fs[mem_inv_raw_reachable] >> conj_tac
   >- (drule list_rel_lookup_function >> simp[] >>
       disch_then (qspec_then `name` mp_tac) >>

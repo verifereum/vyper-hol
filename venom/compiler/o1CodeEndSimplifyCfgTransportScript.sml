@@ -15,11 +15,14 @@ Theorem code_end_fix_phis_uses[local]:
     MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY
 Proof
   rpt strip_tac >>
-  `code_end_var f x` by metis_tac[simplify_fix_phis_code_end_backward_no_phi, opcode_distinct] >>
+  `!inst x. MEM inst (fn_insts f) /\ inst.inst_opcode = PHI /\
+     code_end_var f x ==> ~MEM (Var x) inst.inst_operands` by
+    (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  `code_end_var f x` by metis_tac[simplify_fix_phis_code_end_backward_no_phi] >>
   drule scfg_fix_all_phis_inst_mem >>
   disch_then (qx_choosel_then [`inst`,`actual_preds`] strip_assume_tac) >> gvs[] >>
   `fix_phi_inst actual_preds inst = inst` by
-    (irule fix_phi_inst_code_end_identity >> metis_tac[opcode_distinct]) >>
+    (irule fix_phi_inst_code_end_identity >> qexistsl_tac [`f`,`x`] >> simp[]) >>
   metis_tac[]
 QED
 
@@ -130,12 +133,13 @@ Theorem code_end_cleanup_static[local]:
   (!x. code_end_var (fix_all_phis (remove_unreachable_blocks f)) x ==> code_end_var f x)
 Proof
   strip_tac >>
+  `PHI <> ASSIGN /\ PHI <> CODECOPY` by simp[] >>
   `!x i. code_end_var (remove_unreachable_blocks f) x /\
     MEM i (fn_insts (remove_unreachable_blocks f)) /\ MEM (Var x) i.inst_operands ==>
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY` by
     metis_tac[code_end_unreachable_uses] >>
   conj_tac >- metis_tac[code_end_fix_phis_uses] >>
-  metis_tac[simplify_fix_phis_code_end_backward_no_phi, opcode_distinct, code_end_var_instruction_subset,
+  metis_tac[simplify_fix_phis_code_end_backward_no_phi, code_end_var_instruction_subset,
     simplify_unreachable_inst_subset]
 QED
 

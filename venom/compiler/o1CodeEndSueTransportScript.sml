@@ -34,6 +34,7 @@ Proof
   `LENGTH i.inst_operands = LENGTH (LAST segment).inst_operands` by
     metis_tac[LIST_REL_LENGTH] >>
   simp[LIST_EQ_REWRITE, EL_MAP] >> rpt strip_tac >>
+  rename1 `x < LENGTH (LAST segment).inst_operands` >>
   qpat_x_assum `LIST_REL _ _ _` mp_tac >>
   simp[LIST_REL_EL_EQN] >> strip_tac >>
   first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
@@ -133,7 +134,8 @@ Theorem sue_code_end_stage_pairs[local]:
 Proof
   strip_tac >> `ctx_bisim C C'` by metis_tac[sue_stage_bisim] >>
   drule sue_stage_functions >> strip_tac >>
-  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  rename1 `n < LENGTH C'.ctx_functions` >> first_x_assum drule >> strip_tac >>
   drule sue_expand_function_supply_identity >> strip_tac >> simp[] >>
   `wf_ssa (EL n C.ctx_functions) /\ fn_inst_wf (EL n C.ctx_functions) /\
    wf_function (EL n C.ctx_functions) /\
