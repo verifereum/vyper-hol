@@ -37,7 +37,10 @@ Ancestors
   bodyIntCallJointPureSource exprCanMutateProps bodyFullExtCallRequestInterfaces
   bodyFullExtCallRequestSnapshot bodyFullExtCallRequestSnapshotWord valueCopyBytes
   vyperStorageTrace vyperStorageFootprint gasStorage gasOutcome gasSummary
-  gasSummaryCompose aggregateCountedOutcome
+  gasSummaryCompose aggregateCountedOutcome compileEnv emitHelper context
+  venomExecSemantics venomState venomInst exprLoweringProps memoryReadProps
+  fragGasSeq fragGasSeqAbort fragGasPath fragGasMode fragExec gasCount
+  finite_map arithmetic
   extcallReturnCallerSuccess extcallReturnCallerReject extCallCodeCheck
   extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
   extcallReturnDefaultDecode extcallReturnDefaultOwnership extcallReturnDefaultIntervals
@@ -672,6 +675,181 @@ Proof
   simp[storage_trace_frame_checks] >>
   irule storage_trace_frame_bind_all >>
   simp[storage_trace_frame_call_value, storage_trace_frame_ext_effects]
+QED
+
+Theorem extcall_call_finish_shape:
+  comp_bind (fresh_label "extcall_fail") (\fail_lbl.
+    comp_bind (fresh_label "extcall_cont") (\cont_lbl.
+    comp_ignore_bind
+      (emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [])
+    (comp_ignore_bind (new_block fail_lbl)
+    (comp_bind (emit_op RETURNDATASIZE []) (\rds.
+    comp_bind (compile_alloc_buffer 0) (\fail_buf.
+    comp_ignore_bind
+      (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
+    (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
+      (new_block cont_lbl)))))))) sc = (u,sr) ==>
+  let fl = fresh_label_output "extcall_fail" sc.cs_next_label;
+      cl = fresh_label_output "extcall_cont" (sc.cs_next_label + 1);
+      rv = STRING #"%" (toString sc.cs_next_var);
+      bv = STRING #"%" (toString (sc.cs_next_var + 1)) in
+  u = fl /\ sr.cs_current_bb = cl /\ sr.cs_current_insts = [] /\
+  sr.cs_next_var = sc.cs_next_var + 2 /\
+  sr.cs_next_id = sc.cs_next_id + 5 /\
+  sr.cs_next_label = sc.cs_next_label + 2 /\
+  sr.cs_blocks =
+    <|bb_label := fl; bb_instructions :=
+      [mk_inst (sc.cs_next_id + 1) RETURNDATASIZE [] [rv];
+       mk_inst (sc.cs_next_id + 2) ALLOCA [Lit 0w] [bv];
+       mk_inst (sc.cs_next_id + 3) RETURNDATACOPY [Var bv; Lit 0w; Var rv] [];
+       mk_inst (sc.cs_next_id + 4) REVERT [Var bv; Var rv] []]|> ::
+    <|bb_label := sc.cs_current_bb; bb_instructions :=
+      sc.cs_current_insts ++
+      [mk_inst sc.cs_next_id JNZ [success; Label cl; Label fl] []]|> ::
+    sc.cs_blocks
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_label_def, emit_inst_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, new_block_def,
+       compile_alloc_buffer_def] >> strip_tac >> gvs[]
+QED
+
+Theorem extcall_call_revert_run[local]:
+  rv <> bv /\ LENGTH s.vs_returndata < dimword (:256) ==>
+  ?mid z.
+    run_inst_seq
+      [mk_inst id RETURNDATASIZE [] [rv];
+       mk_inst (id + 1) ALLOCA [Lit 0w] [bv];
+       mk_inst (id + 2) RETURNDATACOPY [Var bv; Lit 0w; Var rv] []] s = OK mid /\
+    step_inst_base (mk_inst (id + 3) REVERT [Var bv; Var rv] [])
+      (mid with vs_inst_idx := 3) = Abort Revert_abort z /\
+    z.vs_returndata = s.vs_returndata /\
+    mid.vs_current_bb = s.vs_current_bb /\ mid.vs_halted = s.vs_halted
+Proof
+  strip_tac >>
+  qabbrev_tac `s1 = update_var rv (n2w (LENGTH s.vs_returndata)) s` >>
+  `?s2 w. exec_alloca (mk_inst (id + 1) ALLOCA [Lit 0w] [bv]) s1 (0w:bytes32) = OK s2 /\
+      lookup_var bv s2 = SOME w /\
+      lookup_var rv s2 = SOME (n2w (LENGTH s.vs_returndata)) /\
+      s2.vs_returndata = s.vs_returndata /\
+      s2.vs_current_bb = s.vs_current_bb /\ s2.vs_halted = s.vs_halted` by
+    (Cases_on `FLOOKUP s1.vs_allocas (id + 1)`
+     >- gvs[exec_alloca_def, mk_inst_def, lookup_var_def, update_var_def,
+            FLOOKUP_UPDATE, Abbr `s1`] >>
+     PairCases_on `x` >>
+     gvs[exec_alloca_def, mk_inst_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE, Abbr `s1`]) >>
+  fs[Abbr `s1`, mk_inst_def] >>
+  qabbrev_tac `mid = write_memory_with_expansion (w2n w) s.vs_returndata s2` >>
+  qexists_tac `mid` >>
+  `run_inst_seq
+      [mk_inst id RETURNDATASIZE [] [rv];
+       mk_inst (id + 1) ALLOCA [Lit 0w] [bv];
+       mk_inst (id + 2) RETURNDATACOPY [Var bv; Lit 0w; Var rv] []] s = OK mid` by
+    (simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+          exec_read0_def, is_terminator_def] >>
+     qpat_x_assum `exec_alloca _ _ _ = OK _` (fn th => rewrite_tac[th]) >>
+     simp[eval_operand_def, wordsTheory.w2n_n2w, LESS_MOD, Abbr `mid`]) >>
+  simp[] >>
+  `lookup_var bv mid = SOME w /\
+   lookup_var rv mid = SOME (n2w (LENGTH s.vs_returndata))` by
+    simp[Abbr `mid`, lookup_var_def, write_memory_with_expansion_def,
+         GSYM lookup_var_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+       lookup_var_def, wordsTheory.w2n_n2w, LESS_MOD] >>
+  fs[mk_inst_def] >>
+  simp[revert_state_def, set_returndata_def, GSYM read_memory_def,
+       Abbr `mid`, read_memory_write_self] >>
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem extcall_call_revert_path[local]:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\ rv <> bv /\
+  LENGTH s.vs_returndata < dimword (:256) /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME
+    <|bb_label := fl; bb_instructions :=
+      [mk_inst id RETURNDATASIZE [] [rv];
+       mk_inst (id + 1) ALLOCA [Lit 0w] [bv];
+       mk_inst (id + 2) RETURNDATACOPY [Var bv; Lit 0w; Var rv] [];
+       mk_inst (id + 3) REVERT [Var bv; Var rv] []]|> ==>
+  ?z. gas_marked_path F ctx func s 0 (Abort Revert_abort z) /\
+      z.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >> drule_all extcall_call_revert_run >>
+  disch_then (qspec_then `id` strip_assume_tac) >>
+  `gas_path ctx func s 0 (OK (mid with vs_inst_idx := 3))` by
+    (drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+     simp[mk_inst_def, is_terminator_def] >>
+     disch_then irule >> simp[] >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >>
+     qexists_tac `[mk_inst (id + 3) REVERT [Var bv; Var rv] []]` >> simp[]) >>
+  `gas_path_edge ctx func (mid with vs_inst_idx := 3) 0 (Abort Revert_abort z)` by
+    (simp[gas_path_edge_def] >> qexists_tac `0` >>
+     simp[get_instruction_def, step_inst_non_invoke, mk_inst_def,
+          gas_count_step_def, fragExecTheory.exit_result_def] >>
+     fs[mk_inst_def, fragExecTheory.exit_result_def]) >>
+  qexists_tac `z` >> simp[gas_marked_path_def] >>
+  `gas_path ctx func (mid with vs_inst_idx := 3) 0 (Abort Revert_abort z)` by
+    (irule (cj 3 gas_path_rules) >> simp[fragExecTheory.exit_result_def]) >>
+  metis_tac[gas_path_then, ADD_CLAUSES]
+QED
+
+Theorem extcall_call_finish_path:
+  comp_bind (fresh_label "extcall_fail") (\fail_lbl.
+    comp_bind (fresh_label "extcall_cont") (\cont_lbl.
+    comp_ignore_bind
+      (emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [])
+    (comp_ignore_bind (new_block fail_lbl)
+    (comp_bind (emit_op RETURNDATASIZE []) (\rds.
+    comp_bind (compile_alloc_buffer 0) (\fail_buf.
+    comp_ignore_bind
+      (emit_void RETURNDATACOPY [fail_buf.buf_operand; Lit 0w; rds])
+    (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
+      (new_block cont_lbl)))))))) sc = (u,sr) /\
+  fn_has_code sc sr func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  eval_operand success s = SOME (if ok then 1w else 0w) /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  cs_extends sc sr /\ sr.cs_current_insts = [] /\
+  (if ok then
+     gas_marked_path F ctx func s 0 (OK (jump_to sr.cs_current_bb s))
+   else ?z. gas_marked_path F ctx func s 0 (Abort Revert_abort z) /\
+            z.vs_returndata = s.vs_returndata)
+Proof
+  strip_tac >> drule extcall_call_finish_shape >> simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `sr.cs_blocks = fb :: jb :: sc.cs_blocks` >>
+  `cs_extends sc sr` by
+    simp[cs_extends_def, Abbr `jb`, IS_PREFIX_APPEND] >>
+  simp[] >>
+  `lookup_block sc.cs_current_bb func.fn_blocks = SOME jb /\
+   lookup_block u func.fn_blocks = SOME fb` by
+    (`jb.bb_label = sc.cs_current_bb /\ fb.bb_label = u` by
+       simp[Abbr `jb`, Abbr `fb`] >>
+     fs[fn_has_code_def, emitted_blocks_def] >> metis_tac[]) >>
+  `gas_path_edge ctx func s 0
+     (OK (jump_to (if ok then sr.cs_current_bb else u) s))` by
+    (simp[gas_path_edge_def] >> qexists_tac `0` >>
+     simp[Abbr `jb`, get_instruction_def, EL_LENGTH_APPEND,
+          step_inst_non_invoke, mk_inst_def, gas_count_step_def,
+          step_inst_base_opcode_eqs, eval_operand_def, is_terminator_def,
+          jump_to_def] >> Cases_on `ok` >> simp[] >> metis_tac[]) >>
+  Cases_on `ok` >> gvs[]
+  >- (simp[gas_marked_path_def] >>
+      metis_tac[gas_path_rules, gas_path_edge_normal, ADD_CLAUSES]) >>
+  `?z. gas_marked_path F ctx func
+         (jump_to (fresh_label_output "extcall_fail" sc.cs_next_label) s)
+         0 (Abort Revert_abort z) /\
+       z.vs_returndata =
+         (jump_to (fresh_label_output "extcall_fail" sc.cs_next_label) s).vs_returndata` by
+    (irule extcall_call_revert_path >>
+     simp[jump_to_def, Abbr `fb`, ASCIInumbersTheory.toString_11] >>
+     qexistsl_tac [`STRING #"%" (toString (sc.cs_next_var + 1))`,
+                   `sc.cs_next_id + 1`, `STRING #"%" (toString sc.cs_next_var)`] >>
+     simp[ASCIInumbersTheory.toString_11, ADD_ASSOC]) >>
+  qexists_tac `z` >> simp[gas_marked_path_def] >>
+  fs[gas_marked_path_def] >> simp[jump_to_def] >>
+  metis_tac[cj 2 gas_path_rules, ADD_CLAUSES]
 QED
 
 Theorem extcall_call_step:
