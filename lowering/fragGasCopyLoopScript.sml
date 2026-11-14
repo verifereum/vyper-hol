@@ -586,7 +586,7 @@ Proof
   Cases_on `ops2` >> simp[]
 QED
 
-Theorem copy_store_taint_bound_step[local]:
+Theorem copy_store_taint_bound_step:
   X SUBSET (T0 DIFF {(k + n2w i, j) | (i,j) | i < m}) UNION
            {(k + n2w i, j) | (i,j) | i < m /\ j < 32 /\ c + 32*i + j IN M} ==>
   key_update X (k + n2w m) (mem_word_taint M (c + 32*m)) SUBSET

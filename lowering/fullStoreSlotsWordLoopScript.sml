@@ -172,3 +172,54 @@ Proof
   gvs[exprSimPtrTopLevelStorageCopyTheory.toplevel_copy_source_taint_def] >>
   metis_tac[]
 QED
+
+Theorem store_slots_word_body_invariant:
+  Inv = (\i Gi ti q.
+    store_copy_frame sa loc b k sbase i q /\
+    eval_operand (Var cv) q = SOME (n2w i) /\
+    op_taint ti (Var cv) = {} /\ op_prov Gi (Var cv) = NONE /\
+    allocas_from lo q /\
+    (!y. not_fresh_at sa y ==> FLOOKUP Gi y = FLOOKUP Gbase y /\
+      op_taint ti (Var y) = op_taint tbase (Var y)) /\
+    ti.t_mem = tbase.t_mem /\ ti.t_imm = tbase.t_imm /\
+    (if loc = LocStorage then ti.t_trans = tbase.t_trans else ti.t_stor = tbase.t_stor) /\
+    toplevel_copy_source_taint loc ti SUBSET
+      toplevel_copy_source_taint loc tbase DIFF
+        {(k+n2w ii,jj) | (ii,jj) | ii<i} UNION
+        {(k+n2w ii,jj) | ii<i /\ jj<32 /\ w2n b+32*ii+jj IN tbase.t_mem}) /\
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  eval_operand (Var x) sbase = SOME b /\ eval_operand dst sbase = SOME k /\
+  not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
+  ALL_DISTINCT [cv;mv;sv;vv;dv;nv] /\
+  (!y. not_fresh_at sa y ==> ~MEM y [cv;mv;sv;vv;dv;nv]) /\
+  ptr_covers G tn x s (32*n) /\ op_taint tn dst = {} /\
+  j < n /\ w2n b + 32*n < dimword (:256) /\
+  w2n b + 32*n <= sbase.vs_alloca_next /\
+  ~sbase.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  code = [mk_inst id MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+1) ADD [Var x;Var mv] [sv];
+    mk_inst (id+2) MLOAD [Var sv] [vv];
+    mk_inst (id+3) ADD [dst;Var cv] [dv];
+    mk_inst (id+4) (if loc = LocStorage then SSTORE else TSTORE) [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+  get_instruction bb (s.vs_inst_idx + LENGTH code) =
+    SOME (mk_inst (id+7) JMP [Label hdr] []) /\ Inv j G tn s ==>
+  ?u Gf tf.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tf)) /\
+    Inv (j+1) Gf tf u /\ ~u.vs_halted /\ u.vs_inst_idx = 0 /\
+    u.vs_current_bb = hdr
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `Inv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `(\i Gi ti q. _) j G tn s`
+    (strip_assume_tac o BETA_RULE) >>
+  drule_all store_slots_word_body_scalar_origin_ptr >>
+  disch_then (qx_choosel_then [`u`,`Gf`,`tf`] strip_assume_tac) >>
+  drule copy_store_taint_bound_step >> disch_then assume_tac >>
+  qexistsl_tac [`u`,`Gf`,`tf`] >> fs[ADD1,Excl "isPREFIX"] >>
+  gvs[Excl "isPREFIX"] >> metis_tac[]
+QED
