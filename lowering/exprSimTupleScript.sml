@@ -1050,9 +1050,11 @@ Proof
       rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
   >~ [`HashMapRef tr slot kt vt`]
   >- (Cases_on `vt` >>
-      simp[select_result_def, extend_place_def, bind_def,
-           lift_option_type_def, return_def, raise_def, LET_THM] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+      simp[select_result_def, extend_place_def, bind_def, ignore_bind_def,
+           record_storage_event_def, lift_option_type_def, return_def,
+           raise_def, LET_THM] >>
+      rpt (BasicProvers.FULL_CASE_TAC >>
+           gvs[return_def, raise_def, evaluation_state_component_equality])) >>
   rename1 `PlaceR pl` >> Cases_on `pl`
   >~ [`StoragePlace tr slot ptv`]
   >- (Cases_on `ptv` >> TRY (Cases_on `b`) >> Cases_on `tr` >>
@@ -1153,10 +1155,14 @@ Proof
   simp[expr_vv_res_ok_def]
 QED
 
-(* A completed base execution: the ADD's path and the element's post. *)
+
+
+
+(* A completed base execution: the ADD's path and the element's post, for
+   every horizon of the base's trace. *)
 Theorem tuple_summary_ok[local]:
   !ctx func cenv cx env ty obj ity k es tys sa sm p sb bvv s0 marks btv fe
-   t R.
+   t R st0 H0.
     expr_body_pre cenv cx env
       (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
     expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
@@ -1170,20 +1176,28 @@ Theorem tuple_summary_ok[local]:
     fn_has_code sm sb func /\
     gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks
       (INL btv) fe (OK t) /\
-    vv_post H ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
-    t.vs_current_bb = sm.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    (!H. valid_horizon cx st0 H fe.storage_trace ==>
+         vv_post H ctx func cenv cx obj es sa sm s0 (fe with gas_obs := [])
+           btv bvv t /\
+         t.vs_current_bb = sm.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sm.cs_current_insts) /\
+    valid_horizon cx st0 H0 fe.storage_trace ==>
     gas_summary_at F (ctx,func) marks
       (eval_expr cx (Subscript (EL k tys) obj (Literal ity (IntL (&k)))))
       (es,s0)
-      (\res ee t. ?tv. res = INL tv /\
+      (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+         ?tv. res = INL tv /\
          vv_post H ctx func cenv cx
            (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0
            ee tv (LocatedValue (EL k tys) (mk_ptr p (vv_loc bvv))) t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `vv_post H0 ctx func cenv cx obj es sa sm s0 (fe with gas_obs := [])
+     btv bvv t /\
+   t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
   `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL btv, fe with gas_obs := [])` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
@@ -1195,11 +1209,17 @@ Proof
             `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
             `tys`,`btv`,`fe with gas_obs := []`] tuple_base_facts) >>
   simp[] >> strip_tac >>
-  drule_all attr_add_path >> strip_tac >>
+  `?w. eval_operand (vv_operand bvv) t = SOME w` by
+    (qpat_x_assum `vv_post H0 _ _ _ _ obj _ _ sm _ _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     Cases_on `bvv` >> gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+  drule_all (Q.SPEC `H0` attr_add_step) >> strip_tac >>
   rename1 `gas_path ctx func t 0 (OK t1)` >>
-  qspecl_then [`func`,`cenv`,`cx`,`obj`,`es`,`sa`,`sb`,`s0`,
+  qpat_x_assum `t1 = _`
+    (assume_tac o PURE_ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  qspecl_then [`H0`,`func`,`cenv`,`cx`,`obj`,`es`,`sa`,`sb`,`s0`,
                `fe with gas_obs := []`,`btv`,`bvv`,`t1`,`w`,`tys`,`tvs`,
-               `ctx`] mp_tac tuple_base_read >>
+               `ctx`] mp_tac (Q.GEN `H` tuple_base_read) >>
   simp[] >> strip_tac >>
   Cases_on `select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k)))
               (fe with gas_obs := [])` >>
@@ -1209,6 +1229,9 @@ Proof
                `sres`,`es2`] mp_tac select_tuple_read >>
   simp[] >> strip_tac >> gvs[] >>
   rename1 `select_result _ _ _ _ _ = (INL tv2, _)` >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  qpat_assum `select_result _ _ _ _ _ = (INL tv2, _)`
+    (assume_tac o MATCH_MP select_result_memory_place) >>
   drule tuple_select_gas_obs >> simp[] >> strip_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL tv2`, `fe`, `OK t1`] >> simp[] >> conj_tac
@@ -1217,10 +1240,15 @@ Proof
                |> REWRITE_RULE [APPEND_NIL]) >>
       qexistsl_tac [`fe`,`t`,`btv`] >> simp[] >>
       simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def]) >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  qpat_assum `select_result _ _ _ _ _ = (INL tv2, _)`
-    (assume_tac o MATCH_MP select_result_memory_place) >>
-  disj1_tac >> irule tuple_vv_post >> simp[] >>
+  disj1_tac >> gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H fe.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- fs[]) >> strip_tac >>
+  drule_all (Q.SPEC `H` attr_add_step) >> strip_tac >>
+  qpat_x_assum `Abbrev (t1 = _)`
+    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  gvs[] >>
+  irule tuple_vv_post >> simp[] >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`btv`, `vs`] >> simp[]
 QED
@@ -1248,20 +1276,52 @@ Proof
     metis_tac[tuple_operand_admissible] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  >- (qexists_tac `marks` >> disj1_tac >> rewrite_tac[tuple_source] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_select])
+  >- (qexists_tac `marks` >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
-      >- (drule_all tuple_summary_ok >> simp[]) >>
-      Cases_on `res` >> gvs[] >>
-      rename1 `gas_marked_exec _ _ _ _ marks (INR exn) fe fr` >>
+        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      strip_tac
+      >- (gvs[] >> rename1 `gas_marked_exec _ _ _ _ _ _ fe _` >>
+          reverse (Cases_on `storage_trace_domain cx st0 fe.storage_trace`)
+          >- (disj1_tac >> rewrite_tac[tuple_source] >>
+              irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+              simp[vyperStorageTraceTheory.storage_trace_frame_select] >>
+              metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+          `?H0. valid_horizon cx st0 H0 fe.storage_trace` by
+            metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          `?btv. res = INL btv` by
+            (qpat_x_assum `!H. valid_horizon _ _ H fe.storage_trace ==> _`
+               (qspec_then `H0` mp_tac) >> simp[] >> metis_tac[]) >>
+          qpat_x_assum `res = _` SUBST_ALL_TAC >>
+          qpat_x_assum `!H. valid_horizon _ _ H fe.storage_trace ==> _`
+            (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          disj2_tac >> disj1_tac >>
+          irule tuple_summary_ok >> simp[] >> conj_tac
+          >- (qexists_tac `env` >> simp[]) >>
+          qexistsl_tac [`H0`,`btv`,`fe`,`sm`,`t`,`ty`] >> simp[] >> metis_tac[]) >>
+      rename1 `gas_marked_exec _ _ _ _ _ _ fe _` >>
+      reverse (Cases_on `storage_trace_domain cx st0 fe.storage_trace`)
+      >- (disj1_tac >> rewrite_tac[tuple_source] >>
+          irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+          simp[vyperStorageTraceTheory.storage_trace_frame_select] >>
+          metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+      disj2_tac >> disj1_tac >>
+      Cases_on `res`
+      >- (gvs[] >>
+          metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
       simp[gas_summary_at_def] >>
-      qexistsl_tac [`INR exn`,`fe`,`fr`] >> simp[] >>
-      rewrite_tac[tuple_source] >> irule gas_marked_exec_bind_exception >>
-      simp[]) >>
-  qexists_tac `marks` >> disj2_tac >> metis_tac[tuple_exempt_cert]
+      rename1 `gas_marked_exec _ _ _ _ marks (INR exn) fe fr` >>
+      qexistsl_tac [`INR exn`,`fe`,`fr`] >>
+      simp[] >> conj_tac
+      >- (rewrite_tac[tuple_source] >> irule gas_marked_exec_bind_exception >>
+          simp[]) >>
+      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[tuple_exempt_cert]
 QED
 
 Theorem compile_subscript_tuple_sim:

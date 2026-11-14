@@ -543,7 +543,7 @@ QED
 
 (* attr_add_path with its endpoint named, so it is the same state at
    every horizon whose post holds. *)
-Theorem attr_add_step[local]:
+Theorem attr_add_step:
   !H ctx func cenv cx e es ty sa vv sm off dst sn s0 es' tv t w.
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
