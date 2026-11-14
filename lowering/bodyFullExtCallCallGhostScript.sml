@@ -4,24 +4,6 @@ Ancestors
   bodyFullExtCallGhost bodyFullExtCallFrames bodyFullUnwrapSlotPost
   bodyPtrDefs ptrDiscipline venomState venomInst finite_map pred_set
 
-Theorem extcall_call_storage_ghost:
-  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-  stor_taint_ok_at D tn s /\ u.vs_call_ctx = s.vs_call_ctx /\
-  u.vs_immutables = s.vs_immutables /\
-  (~(inst.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-      u.vs_requests <> s.vs_requests /\ u.vs_outcomes <> s.vs_outcomes /\
-      (HD s.vs_outcomes).co_success) ==>
-    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient) ==>
-  stor_taint_ok_at D (step_taint inst s u tn) u
-Proof
-  strip_tac >>
-  Cases_on `inst.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-    u.vs_requests <> s.vs_requests /\ u.vs_outcomes <> s.vs_outcomes /\
-    (HD s.vs_outcomes).co_success` >>
-  gvs[stor_taint_ok_at_def, step_taint_def, adopt_reset_def,
-      store_taint_def, imm_taint_def] >> metis_tac[]
-QED
-
 Theorem extcall_request_window_ghost:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
@@ -110,7 +92,8 @@ Proof
   simp[eval_operand_def] >> disch_then (drule_at (Pat `_.vs_allocas = _`)) >>
   simp[] >> disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   `stor_taint_ok_at D (step_taint inst t z tn) z` by
-    (irule extcall_call_storage_ghost >> fs[ghost_inv_at_def] >> metis_tac[]) >>
+    (irule bodyFullExtCallGhostTheory.extcall_call_storage_ghost >>
+     fs[ghost_inv_at_def] >> metis_tac[]) >>
   `ghost_inv_at D lo d cenv cx ee (step_prov PG G inst z)
      (step_taint inst t z tn) z` suffices_by (strip_tac >> gvs[ghost_inv_at_def] >> metis_tac[]) >>
   irule extcall_request_window_ghost >> simp[] >>
