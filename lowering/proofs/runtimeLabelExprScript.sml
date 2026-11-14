@@ -472,7 +472,7 @@ Theorem rb_literal_or_bytestring_hash[local]:
       SOME h => (Lit h, st)
     | NONE => UNCURRY compile_bytestring_hash (lower_value cfn ce ty e st))
 Proof
-  strip_tac >> Cases_on `bytestring_literal_hash e` >> simp[UNCURRY_DEF]
+  strip_tac >> Cases_on `bytestring_literal_hash e` >> simp[pairTheory.UNCURRY_DEF]
   >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
         (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
       conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value]) >>
@@ -483,7 +483,7 @@ QED
 Resume rb_compile_builtin_dispatch_body[hashing]:
   ntac 2 (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
-    (conj_tac >- (irule (SIMP_RULE (srw_ss()) [LET_THM, UNCURRY_DEF] rb_literal_or_bytestring_hash) >> simp[])) >>
+    (conj_tac >- (irule (SIMP_RULE (srw_ss()) [LET_THM, pairTheory.UNCURRY_DEF] rb_literal_or_bytestring_hash) >> simp[])) >>
     gen_tac >> strip_tac) >>
   Cases_on `b = Eq` >> simp[]
   >- (irule rb_as_stack_val >> simp[rb_emit_op]) >>
