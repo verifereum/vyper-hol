@@ -145,6 +145,9 @@ Proof
   strip_tac >> simp[Excl "consume_call_outcome_eq"] >> rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH stk ==> _` (qspec_then `j` mp_tac) >>
   simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
+  `r.vs_gas_readings = s.vs_gas_readings /\
+   u.vs_gas_readings = t.vs_gas_readings` by
+    metis_tac[gasOracleReplayTheory.gas_consume_outcome_readings, pairTheory.SND] >>
   drule ricf_opaque_frame_consume_call >>
   disch_then (qspecl_then [`z`,`w`,`merge_callee_state (EL j targets) u`,
     `rs`,`rq2`,`rq1`,`ro`,`merge_callee_state (EL j stk).cf_state r`] mp_tac) >>
@@ -193,6 +196,9 @@ Proof
   strip_tac >> simp[Excl "consume_call_outcome_eq"] >> rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH stk ==> _` (qspec_then `j` mp_tac) >>
   simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
+  `r.vs_gas_readings = s.vs_gas_readings /\
+   u.vs_gas_readings = t.vs_gas_readings` by
+    metis_tac[gasOracleReplayTheory.gas_consume_outcome_readings, pairTheory.SND] >>
   drule ricf_opaque_frame_consume_call_zero >>
   disch_then (qspecl_then [`z`,`w`,`merge_callee_state (EL j targets) u`,
     `rq2`,`rq1`,`ro2`,`ro1`,`merge_callee_state (EL j stk).cf_state r`] mp_tac) >>
