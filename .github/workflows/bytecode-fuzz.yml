@@ -3,7 +3,8 @@ name: bytecode-fuzz
 # Random programs compiled natively and by the patched pinned Vyper
 # (tools/bytecode_fuzz.py). Each scheduled run uses a new seed, its run number;
 # a divergence or runner error fails the run and keeps the programs as an
-# artefact.
+# artefact. Byte mismatches outside supported_program are reported as
+# `outside` and don't fail it.
 on:
   schedule:
     - cron: '23 4 * * *'

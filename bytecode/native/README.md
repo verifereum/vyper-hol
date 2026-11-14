@@ -149,8 +149,9 @@ job runs it on every PR and keeps the per-contract report.
 `.github/workflows/bytecode-fuzz.yml`. It generates random programs,
 exports each one with the pinned compiler as the witness suites do, and
 compares the result. Programs that `check_programs.sml` rejects are counted
-as `checker-gap`, not as divergences. With `--minimize`, it also reduces
-each divergence to `<name>.min.vy`.
+as `checker-gap`, and byte mismatches on programs outside
+`supported_program` as `outside`; neither is a divergence or fails the run.
+With `--minimize`, it also reduces each divergence to `<name>.min.vy`.
 
 ## What the generator exports
 
