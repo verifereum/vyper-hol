@@ -173,9 +173,10 @@ QED
    the frame's older allocations outside live locals (those expr_post
    keeps) gain no taint, and nor do the live locals' bytes that
    locals_kept keeps (all but the length words of the dynamic arrays
-   inside them), nor does the fixed region [0, lo). *)
+   inside them). The fixed region's dead immutable bytes may gain taint;
+   ghost_inv_at bounds that taint by imm_section_dead. *)
 Definition ghost_kept_at_def:
-  ghost_kept_at lo cenv (es : evaluation_state) (sa : compile_state) G0 tn0
+  ghost_kept_at (lo:num) cenv (es : evaluation_state) (sa : compile_state) G0 tn0
     (s0 : venom_state) G tn <=>
     (!x. not_fresh_at sa x ==>
          FLOOKUP G x = FLOOKUP G0 x /\
@@ -190,8 +191,7 @@ Definition ghost_kept_at_def:
        local_region cenv es.scopes s0 n b sz /\
        b <= i /\ i < b + sz /\
        i IN tn.t_mem ==>
-       i IN tn0.t_mem) /\
-    (!i. i < lo /\ i IN tn.t_mem ==> i IN tn0.t_mem)
+       i IN tn0.t_mem)
 End
 
 Definition ghost_kept_zero:
