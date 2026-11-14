@@ -121,7 +121,8 @@ val dload_joint_return_closed_static_header =
       dload_joint_return_closed_header)));
 
 Theorem dload_joint_return_closed_static:
-  ^dload_joint_return_closed_static_header
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (dload_joint_return_closed_static_header))))
 Proof
   strip_tac >- suspend "normal" >>
   metis_tac[dload_terminal_mode_no_return]
@@ -220,6 +221,7 @@ Finalise dload_joint_return_closed_static
 Theorem dload_joint_return_closed:
   ^dload_joint_return_closed_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   disch_tac >> match_mp_tac dload_joint_return_closed_static >>
   rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
   asm_simp_tac bool_ss []

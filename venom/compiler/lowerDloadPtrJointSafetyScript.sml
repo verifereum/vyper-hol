@@ -510,7 +510,8 @@ val normal_safety_header = ``
   (ctx_has_dalloca C' ==> allocas_below_fmp t)``;
 
 Theorem dload_normal_safety_static:
-  ^(subst [``o1_run_state_ok`` |-> static_run] normal_safety_header)
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |-> static_run] normal_safety_header))))
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >> gvs[] >>
   `(ctx_has_dalloca C' ==> allocas_below_fmp t)` by
@@ -614,6 +615,7 @@ Finalise dload_normal_safety_static
 Theorem dload_normal_safety:
   ^normal_safety_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
   match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) dload_normal_safety_static) >>
   rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>

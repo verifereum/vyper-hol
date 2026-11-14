@@ -65,10 +65,11 @@ val dload_joint_reachable_if_next_header = ``
   (^joint) ds PH H un g j t``;
 
 Theorem dload_joint_reachable_if_next_static:
-  ^(subst [``o1_run_state_ok`` |->
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
     ``\s:venom_state. o1_initial_state_ok s /\
       s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-    dload_joint_reachable_if_next_header)
+    dload_joint_reachable_if_next_header))))
 Proof
   ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
   >- suspend "entry"
@@ -134,6 +135,7 @@ Finalise dload_joint_reachable_if_next_static
 Theorem dload_joint_reachable_if_next:
   ^dload_joint_reachable_if_next_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   rpt gen_tac >> disch_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule dload_joint_reachable_if_next_static >> disch_then irule >>
@@ -165,10 +167,11 @@ val dload_joint_reachable_header = ``
   (^joint) ds PH H un g j t``;
 
 Theorem dload_joint_reachable_static:
-  ^(subst [``o1_run_state_ok`` |->
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
     ``\s:venom_state. o1_initial_state_ok s /\
       s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-    dload_joint_reachable_header)
+    dload_joint_reachable_header))))
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
   qpat_x_assum `(\s:venom_state. _) vs` (strip_assume_tac o BETA_RULE) >>
@@ -189,6 +192,7 @@ QED
 Theorem dload_joint_reachable:
   ^dload_joint_reachable_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   rpt gen_tac >> disch_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule dload_joint_reachable_static >> disch_then irule >>

@@ -94,11 +94,12 @@ val dload_joint_interior_next_closed_header = ``
           c.cf_inst [c.cf_inst] 0))``;
 
 Theorem dload_joint_interior_next_closed_static:
-  ^(rhs (concl (DEPTH_CONV BETA_CONV
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
     (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_interior_next_closed_header))))
+      dload_joint_interior_next_closed_header)))))))
 Proof
   strip_tac >>
   `MEM f C.ctx_functions` by
@@ -126,6 +127,7 @@ QED
 Theorem dload_joint_interior_next_closed:
   ^dload_joint_interior_next_closed_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   disch_tac >> match_mp_tac dload_joint_interior_next_closed_static >>
   rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
   asm_simp_tac bool_ss []

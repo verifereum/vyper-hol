@@ -95,11 +95,12 @@ val dload_joint_covered_next_header = ``
     (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
 
 Theorem dload_joint_covered_next_static:
-  ^(rhs (concl (DEPTH_CONV BETA_CONV
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
     (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_covered_next_header))))
+      dload_joint_covered_next_header)))))))
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac
   >~ [`SUC n < LENGTH emitted`]
@@ -156,6 +157,7 @@ QED
 Theorem dload_joint_covered_next:
   ^dload_joint_covered_next_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   disch_tac >> match_mp_tac dload_joint_covered_next_static >>
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
@@ -183,10 +185,11 @@ val dload_joint_covered_shift_next_header = ``
     (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
 
 Theorem dload_joint_covered_shift_next_static:
-  ^(subst [``o1_run_state_ok`` |->
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_covered_shift_next_header)
+      dload_joint_covered_shift_next_header))))
 Proof
   qabbrev_tac `old = ^covered` >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac
@@ -208,6 +211,7 @@ QED
 Theorem dload_joint_covered_shift_next:
   ^dload_joint_covered_shift_next_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   disch_tac >> match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) dload_joint_covered_shift_next_static) >>
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
@@ -297,10 +301,11 @@ val dload_joint_covered_environment_next_header = ``
     (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
 
 Theorem dload_joint_covered_environment_next_static:
-  ^(subst [``o1_run_state_ok`` |->
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_covered_environment_next_header)
+      dload_joint_covered_environment_next_header))))
 Proof
   qabbrev_tac `old = ^covered_shift` >>
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac
@@ -326,6 +331,7 @@ QED
 Theorem dload_joint_covered_environment_next:
   ^dload_joint_covered_environment_next_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   disch_tac >> match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) dload_joint_covered_environment_next_static) >>
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
@@ -374,11 +380,12 @@ val dload_joint_next_header = ``
     (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))``;
 
 Theorem dload_joint_next_static:
-  ^(rhs (concl (DEPTH_CONV BETA_CONV
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
     (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_next_header))))
+      dload_joint_next_header)))))))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule (CONV_RULE (DEPTH_CONV BETA_CONV) dload_joint_covered_environment_next_static) >>
@@ -398,6 +405,7 @@ QED
 Theorem dload_joint_next:
   ^dload_joint_next_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   disch_tac >> match_mp_tac dload_joint_next_static >>
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
@@ -421,11 +429,12 @@ val dload_joint_entry_header = ``
   (^normal) (\i n emitted. T) [] [] FEMPTY entry_taint g j t``;
 
 Theorem dload_joint_entry_static:
-  ^(rhs (concl (DEPTH_CONV BETA_CONV
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
     (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_entry_header))))
+      dload_joint_entry_header)))))))
 Proof
   strip_tac >> drule_all dload_actual_joint_entry_tracked_static >>
   disch_then (qspec_then `P` strip_assume_tac) >>
@@ -464,6 +473,7 @@ QED
 Theorem dload_joint_entry:
   ^dload_joint_entry_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   disch_tac >> match_mp_tac dload_joint_entry_static >>
   rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>

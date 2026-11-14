@@ -67,11 +67,12 @@ val dload_joint_tracked_environment_read_next_header = ``
     (t1 with vs_inst_idx := SUC t.vs_inst_idx)``;
 
 Theorem dload_joint_tracked_environment_read_next_static:
-  ^(rhs (concl (DEPTH_CONV BETA_CONV
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
     (subst [``o1_run_state_ok`` |->
       ``\s:venom_state. o1_initial_state_ok s /\
         s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
-      dload_joint_tracked_environment_read_next_header))))
+      dload_joint_tracked_environment_read_next_header)))))))
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> pure_rewrite_tac[AND_CLAUSES] >>
   strip_tac >>
@@ -151,6 +152,7 @@ Finalise dload_joint_tracked_environment_read_next_static
 Theorem dload_joint_tracked_environment_read_next:
   ^dload_joint_tracked_environment_read_next_header
 Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   disch_tac >> match_mp_tac dload_joint_tracked_environment_read_next_static >>
   rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
