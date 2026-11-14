@@ -47,9 +47,10 @@ class NativeInputTests(unittest.TestCase):
 
     @staticmethod
     def empty_call() -> dict:
-        # An unknown target runs as a raw EVM call: empty code returns empty
-        # output, so the call passes without deployment. The dumped input
-        # still exposes all imported byte strings and hashes.
+        # An unknown target with empty expected output passes without
+        # deployment: as a zero-value transfer, or, with calldata, as a raw
+        # EVM call to empty code. The dumped input still exposes all imported
+        # byte strings and hashes.
         return {
             "trace_type": "call",
             "call_args": {
