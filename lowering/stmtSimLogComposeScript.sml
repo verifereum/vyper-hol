@@ -396,7 +396,7 @@ Resume compile_log_ready_stmt_frag[suffix]:
       qpat_x_assum `gas_marked_exec _ _ (bind (lift_option _ _) push_log) _ _ _ _ _`
         mp_tac >>
       qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
-      simp[Excl "enc_def"]) >>
+      simp[ETA_THM, Excl "enc_def"]) >>
   suspend "post"
 QED
 
@@ -413,8 +413,7 @@ Resume compile_log_ready_stmt_frag[post]:
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
     (qpat_assum `stmt_state_rel H1 _ _ _ _ _ t`
        (mp_then (Pos hd) irule log_suffix_alloca_frame) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     simp[Excl "enc_def"]) >>
+     simp[Excl "enc_def"] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `sa.cs_next_id <= sm.cs_next_id` by
     (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
