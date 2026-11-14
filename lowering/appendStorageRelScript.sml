@@ -211,6 +211,7 @@ Theorem stmt_state_rel_append_storage_word:
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
   encode_value tv v = SOME [(0,w)] /\
+  ~cx.txn.is_static /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
     (res, es') ==>
   res = INL () /\
@@ -221,7 +222,6 @@ Proof
   strip_tac >>
   drule_all stmt_state_rel_append_storage_updates >>
   disch_then (qspec_then `w` assume_tac) >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all append_storage_word_success >> strip_tac >> gvs[] >>
   `!st1 st2. set_storage cx (set_storage cx es tr st1) tr st2 =
     set_storage cx es tr st2` by
