@@ -18,7 +18,7 @@ Ancestors
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract codegenCorrectness
   vyperStorageFootprint ctorDeployMemoryFrontier fragGasPathMem fragExecMem
   fragGasOrigin fragGasMode fragExec memSafeRun venomExecProofs unitShapeDefs
-  loweringShapeSource
+  loweringShapeSource immutableCodeLayout
 
 Theorem call_at_horizon_composition[local]:
   run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
