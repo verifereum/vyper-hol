@@ -84,13 +84,18 @@ End
 Theorem opt_entry_initial_venom_state_rel:
   !tops prog prog' am tx es cplan.
   call_state_rel tops (assemble prog') am tx es ==>
-  initial_venom_state_rel tops am tx (opt_entry_state prog prog' cplan es)
+  initial_venom_state_rel tops am
+    (tx with code := (opt_entry_state prog prog' cplan es).vs_code)
+    (opt_entry_state prog prog' cplan es)
 Proof
   rpt strip_tac >>
   drule_then (qspec_then `cplan` mp_tac) entry_venom_state_initial_venom_state_rel >>
   simp[initial_venom_state_rel_def, venom_env_rel_def, opt_entry_state_def,
        entry_venom_state_frame_fields] >>
-  simp[entry_venom_state_def] >> strip_tac >> fs[]
+  simp[entry_venom_state_def] >> strip_tac >>
+  gvs[value_transfer_ok_def, accounts_after_transfer_def,
+      loweringStateRelDefsTheory.tx_env_ok_def,
+      loweringStateRelDefsTheory.call_ctx_rel_def]
 QED
 
 (* code_layout_valid reads no GAS readings. *)
@@ -130,6 +135,23 @@ Proof
   qpat_x_assum `prog = _` (SUBST_ALL_TAC o SYM) >>
   conj_tac >- (qexists_tac `LENGTH (assemble prog)` >> asm_rewrite_tac[]) >>
   decide_tac
+QED
+
+Theorem opt_entry_data_section_bound:
+  !tops prog prog' am tx es cplan policy unit.
+    call_state_rel tops (assemble prog') am tx es /\
+    codegen_assembly policy unit = SOME prog /\ unit_shape_ok unit /\
+    assemble prog <> [] ==>
+    LENGTH (opt_entry_state prog prog' cplan es).vs_data_section <
+      dimword (:256) DIV 2
+Proof
+  rpt strip_tac >>
+  drule_all opt_entry_code_layout_valid >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  qabbrev_tac `vs = opt_entry_state prog prog' cplan es` >>
+  `vs.vs_code = assemble prog ++ vs.vs_data_section` by
+    simp[Abbr `vs`, opt_entry_state_def, entry_venom_state_frame_fields] >>
+  drule_all code_layout_valid_data_section_bound >> simp[]
 QED
 
 (* opt_entry_state reads everything but the code and the layout from es. *)
