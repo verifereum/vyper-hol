@@ -82,7 +82,8 @@ Proof
   `inv_memory_observation obs.inst_opcode` by simp[inv_memory_observation_def] >>
   `?u. inv_ev_trace orc p d 0 ctx (FILTER (\i. ~MEM i consumed) srcpre) sT u /\
        (!op. MEM op obs.inst_operands ==> eval_operand op u = eval_operand op sT)` by
-    (drule_all inv_remaining_trace_extension_observation >>
+    (drule_at (Pat `dft_remaining_inv _ _ _ _`)
+       inv_remaining_trace_extension_observation >>
      simp[inv_memory_observation_def] >> metis_tac[]) >>
   `inv_ev_ftrace orc p d ctx (FILTER (\i. ~MEM i consumed) srcpre) sT u` by
     metis_tac[inv_ev_trace_ftrace] >>
