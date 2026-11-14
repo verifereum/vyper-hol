@@ -1,7 +1,8 @@
-(* Same-run source and target entry facts for the successful lock prefix. *)
+(* Same-run source and target entry facts for the lock prefix. *)
 Theory nonreentrantEntryPath
 Ancestors
   nonreentrantEquiv transientLockPtr transientLockFrameProps transientLockProps
+  bodyFullHashShaOrigin bodyFullHashShaAbortOrigin
   nonreentrantSource accountsRelProps ghostPcTransportPtr
   fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
   fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun unitTransformDefs ptrSafeRun
@@ -408,4 +409,137 @@ Proof
         LENGTH (transient_lock_code nkey (mut = View) sa)`, `G'`, `tn'`] >>
   simp[return_buf_frame_def] >>
   rpt strip_tac >> fs[] >> metis_tac[]
+QED
+
+Theorem nonreentrant_entry_abort_joint:
+  function_header_ok vis mut T rr name args dflts ret /\
+  cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
+  lock_if_nr cx T (is_view_mut mut) es_reg = (INR exc, es_abort) /\
+  compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
+  fn_has_code sa body_sa func /\
+  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  s_reg.vs_current_bb = sa.cs_current_bb /\
+  s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!H : (bool # 'a word # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es_reg s_reg /\
+       ghost_inv H NONE cenv cx es_reg G_reg tn_reg s_reg) ==>
+  ?a s_abort G_abort tn_abort.
+    gas_path ctx func s_reg 0 (Abort a s_abort) /\
+    gas_path_mem ctx func s_reg 0 (Abort a s_abort) /\
+    (!D explicit.
+       gas_origin_ptr_path (D, 0, explicit, ctx, func, [])
+         (s_reg, G_reg, tn_reg) [] (Abort a s_abort, G_abort, tn_abort)) /\
+    expr_exit (INR exc : unit + exception) (Abort a s_abort) /\
+    ((tload (n2w nkey) s_reg = 1w /\ a = Revert_abort /\
+      exc = Error (RuntimeError "nonreentrant lock")) \/
+     (tload (n2w nkey) s_reg <> 1w /\ mut <> View /\ cx.txn.is_static /\
+      a = ExHalt_abort /\
+      exc = Error (RuntimeError "write in static context"))) /\
+    s_abort.vs_gas_readings = s_reg.vs_gas_readings /\
+    s_abort.vs_memory = s_reg.vs_memory /\
+    s_abort.vs_allocas = s_reg.vs_allocas /\
+    s_abort.vs_alloca_next = s_reg.vs_alloca_next /\
+    s_abort.vs_code = s_reg.vs_code /\ s_abort.vs_labels = s_reg.vs_labels
+Proof
+  strip_tac >>
+  `is_view_mut mut = (mut = View)` by
+    (drule function_header_nonreentrant_view >> simp[is_view_mut_def]) >>
+  qpat_assum `!H. _`
+    (qspec_then `([], [nkey])` strip_assume_tac) >>
+  `state_rel ([], [nkey]) func cenv cx es_reg s_reg` by
+    fs[stmt_state_rel_def] >>
+  `lookup_storage (n2w nkey) (es_reg.tStorage cx.txn.target) =
+    tload (n2w nkey) s_reg` by
+    (match_mp_tac (Q.INST [`H` |-> `([], [nkey])`]
+      (SPEC_ALL nonreentrant_lock_agreement)) >>
+     simp[vyperStorageFootprintTheory.storage_locks_separated_def]) >>
+  `cx.txn.is_static = s_reg.vs_call_ctx.cc_static` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  `(tload (n2w nkey) s_reg = 1w /\
+      exc = Error (RuntimeError "nonreentrant lock")) \/
+   (tload (n2w nkey) s_reg <> 1w /\ mut <> View /\ cx.txn.is_static /\
+      exc = Error (RuntimeError "write in static context"))` by
+    (Cases_on `tload (n2w nkey) s_reg = 1w` >>
+     Cases_on `mut = View` >> Cases_on `cx.txn.is_static` >>
+     gvs[lock_if_nr_def, acquire_nonreentrant_lock_execution,
+         check_not_static_def, vyperStateTheory.check_def,
+         vyperStateTheory.assert_def, vyperStateTheory.ignore_bind_def,
+         vyperStateTheory.bind_def, vyperStateTheory.return_def,
+         vyperStateTheory.raise_def]) >>
+  `?a t. run_inst_seq (transient_lock_code nkey (mut = View) sa) s_reg =
+       Abort a t /\
+     ((tload (n2w nkey) s_reg = 1w /\ a = Revert_abort /\
+       exc = Error (RuntimeError "nonreentrant lock")) \/
+      (tload (n2w nkey) s_reg <> 1w /\ mut <> View /\ cx.txn.is_static /\
+       a = ExHalt_abort /\
+       exc = Error (RuntimeError "write in static context")))` by
+    (Cases_on `tload (n2w nkey) s_reg = 1w` >>
+     fs[] >> simp[transient_lock_code_execution]) >>
+  `t.vs_gas_readings = s_reg.vs_gas_readings /\
+   t.vs_memory = s_reg.vs_memory /\ t.vs_allocas = s_reg.vs_allocas /\
+   t.vs_alloca_next = s_reg.vs_alloca_next /\
+   t.vs_code = s_reg.vs_code /\ t.vs_labels = s_reg.vs_labels` by
+    (Cases_on `tload (n2w nkey) s_reg = 1w` >>
+     gvs[transient_lock_code_execution, transient_lock_checked_state_def,
+         revert_state_def, halt_state_def, set_returndata_def, update_var_def]) >>
+  `key_taint tn_reg.t_trans (n2w nkey) = {}` by
+    (`!b. ~((n2w nkey,b) IN tn_reg.t_trans)` by
+      (match_mp_tac (Q.INST
+        [`H` |-> `([], [nkey])`, `tn` |-> `tn_reg`, `ss` |-> `s_reg`]
+        (SPEC_ALL nonreentrant_slot_untainted)) >> fs[ghost_inv_def]) >>
+     simp[key_taint_def, EXTENSION]) >>
+  mp_tac (Q.INST [`D` |-> `ARB:dead`, `PG` |-> `[]`,
+    `ss` |-> `s_reg`, `st` |-> `sa`, `iv` |-> `mut = View`,
+    `G` |-> `G_reg`, `tn` |-> `tn_reg`]
+    (SPEC_ALL transient_lock_abort_ptr_ghost)) >> simp[] >> strip_tac >>
+  `!D. inst_seq_ptr D 0 ctx func [] G_reg tn_reg
+    (transient_lock_code nkey (mut = View) sa) s_reg G' tn'` by
+    (gen_tac >>
+     mp_tac (Q.INST [`PG` |-> `[]`, `ss` |-> `s_reg`, `st` |-> `sa`,
+       `iv` |-> `mut = View`, `G` |-> `G_reg`, `tn` |-> `tn_reg`]
+       (SPEC_ALL transient_lock_abort_ptr_ghost)) >> simp[] >> strip_tac >>
+     metis_tac[inst_seq_ptr_ghost_unique]) >>
+  `?bb. lookup_block s_reg.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (transient_lock_code nkey (mut = View) sa)
+      (DROP s_reg.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[compile_nonreentrant_lock_transient_prefix] >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode)
+    (transient_lock_code nkey (mut = View) sa)` by
+    (Cases_on `mut = View` >>
+     simp[transient_lock_code_def, mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq_mem_ok (transient_lock_code nkey (mut = View) sa) s_reg` by
+    (irule run_inst_seq_mem_ok_every >> Cases_on `mut = View` >>
+     simp[transient_lock_code_def, mk_inst_def,
+       inst_mem_below_frontier_def, inst_dload_in_section_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  mp_tac (Q.INST [`D` |-> `ARB:dead`, `lo` |-> `0`,
+    `explicit` |-> `{}`, `PG` |-> `[]`]
+    (Q.SPECL [`transient_lock_code nkey (mut = View) sa`, `s_reg`, `t`,
+       `a`, `G_reg`, `tn_reg`, `G'`, `tn'`, `ctx`, `func`, `bb`]
+       sha_zero_origin_abort)) >> simp[] >> strip_tac >>
+  `!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+    (s_reg,G_reg,tn_reg) [] (Abort a (t with vs_inst_idx := j),G',tn')` by
+    (rpt gen_tac >>
+     mp_tac (Q.INST [`lo` |-> `0`, `PG` |-> `[]`]
+       (Q.SPECL [`transient_lock_code nkey (mut = View) sa`, `s_reg`, `t`,
+         `a`, `G_reg`, `tn_reg`, `G'`, `tn'`, `ctx`, `func`, `bb`]
+         sha_zero_origin_abort)) >> simp[] >>
+     disch_then (qx_choose_then `k` assume_tac) >>
+     `(t with vs_inst_idx := k) = (t with vs_inst_idx := j)` by
+       (irule sha_origin_abort_endpoint_unique >>
+        goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+     metis_tac[]) >>
+  `gas_origin_path T {} ctx func s_reg [] (Abort a (t with vs_inst_idx := j)) /\
+   gas_path_ptr (ARB:dead) 0 ctx func [] G_reg tn_reg s_reg 0 G' tn'
+     (Abort a (t with vs_inst_idx := j))` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+       (qspecl_then [`ARB:dead`, `{}`] mp_tac) >>
+     strip_tac >> drule gas_origin_ptr_path_projections >> simp[]) >>
+  `gas_path ctx func s_reg 0 (Abort a (t with vs_inst_idx := j))` by
+    (drule gas_path_ptr_erase >> simp[]) >>
+  `gas_path_mem ctx func s_reg 0 (Abort a (t with vs_inst_idx := j))` by
+    (drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
+  qexistsl_tac [`a`, `t with vs_inst_idx := j`, `G'`, `tn'`] >>
+  simp[] >> fs[exprSimDefsTheory.expr_exit_def]
 QED
