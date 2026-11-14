@@ -2,7 +2,9 @@
 Theory sourceCallCount
 Ancestors
   vyperInterpreter vyperCallOutcome extCallOracle vyperRuntimeAccounts
-  finite_map list option pair
+  finite_map list option pair vyperTypeDeploymentMachine vyperStorageTrace
+  vyperEvalOutcomeSuffix vyperEvalOutcomeReplace vyperCallOutcomeStorage
+Libs BasicProvers evalWalkLib
 
 val _ = Parse.hide "body";
 
@@ -120,3 +122,1879 @@ Definition deploy_source_calls_within_def:
   deploy_source_calls_within n tops am tx os gobs =
     entry_calls_within n os (\xs. deploy_entry_run xs gobs tops am tx)
 End
+
+Definition outcome_prefix_causal_def:
+  outcome_prefix_causal f <=>
+    !st prefix next tail res fin.
+      f (st with outcomes := SOME (prefix ++ next::tail)) = (res,fin) /\
+      fin.outcomes = SOME (next::tail) ==>
+      !tail'. f (st with outcomes := SOME (prefix ++ tail')) =
+              (res,fin with outcomes := SOME tail')
+End
+
+Theorem call_entry_run_selected:
+  !os gobs am tx all_mods src cx ts mut nr args dflts ret fbody.
+    src = find_function_module am tx.target tx.function_name /\
+    cx = initial_evaluation_context am.sources am.layouts tx src /\
+    ALOOKUP am.sources tx.target = SOME all_mods /\
+    (case src of NONE => get_self_code cx
+              | SOME sid => get_module_code cx (SOME sid)) = SOME ts /\
+    lookup_exported_function cx am tx.function_name =
+      SOME (mut,nr,args,dflts,ret,fbody) ==>
+    call_entry_run os gobs am tx =
+      fn_entry_run os gobs am cx nr mut all_mods args dflts tx.args fbody /\
+    call_external (SOME os) gobs am tx =
+      (case call_external_function (SOME os) gobs am cx nr mut ts all_mods
+              args dflts tx.args fbody ret of
+         (INL v,am',rqs) => (INL v,finalize_pending_deletions am',rqs)
+       | (INR HaltException,am',rqs) =>
+           (INR HaltException,finalize_pending_deletions am',rqs)
+       | failure => failure)
+Proof
+  rw[call_entry_run_def, call_external_def, call_external_trace_def,
+     call_external_function_def] >> gvs[] >> every_case_tac >> gvs[]
+QED
+
+Theorem deploy_entry_run_selected:
+  !os gobs tops am tx imms am0 cx mut nr args dflts ret fbody.
+    initial_immutables (type_env_all_modules [(NONE,tops)]) [(NONE,tops)] =
+      SOME imms /\
+    am0 = am with <|immutables updated_by CONS (tx.target,imms);
+                   exports updated_by CONS (tx.target,[])|> /\
+    lookup_function NONE tx.function_name Deploy tops =
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    cx = (initial_evaluation_context ((tx.target,[(NONE,tops)])::am0.sources)
+            am0.layouts (tx with created_in_tx := T) NONE) with in_deploy := T ==>
+    deploy_entry_run os gobs tops am tx =
+      fn_entry_run os gobs am0 cx nr mut [(NONE,tops)] args dflts tx.args fbody /\
+    load_contract (SOME os) gobs am tx [(NONE,tops)] [] =
+      (case call_external_function (SOME os) gobs am0 cx nr mut tops [(NONE,tops)]
+              args dflts tx.args fbody ret of
+         (INR HaltException,am',rqs) =>
+           INL (finalize_pending_deletions am',rqs)
+       | (INR e,_,_) => INR e
+       | (_,am',rqs) =>
+           INL (finalize_pending_deletions
+             (am' with sources updated_by CONS (tx.target,[(NONE,tops)])),rqs))
+Proof
+  rw[deploy_entry_run_def, load_contract_def, load_contract_trace_def,
+     call_external_function_def] >> gvs[] >> every_case_tac >> gvs[]
+QED
+
+Theorem take_request_outcome_exhausted_replay:
+  !rq st.
+    take_request_outcome rq (st with outcomes := SOME []) =
+    take_request_outcome rq
+      (st with outcomes := SOME [failed_outcome rq])
+Proof
+  rw[take_request_outcome_def, take_outcome_def, failed_outcome_def] >>
+  every_case_tac >> simp[]
+QED
+
+Theorem take_create_outcome_exhausted_replay:
+  !kind value code st.
+    take_create_outcome kind value code (st with outcomes := SOME []) =
+    take_create_outcome kind value code
+      (st with outcomes := SOME
+        [failed_outcome (create_outcome_request kind value code st)])
+Proof
+  simp[take_create_outcome_def, take_outcome_def, failed_outcome_def] >>
+  simp[create_outcome_request_def]
+QED
+
+Theorem precompile_call_success_exhausted_replay:
+  !bt st.
+    precompile_builtin bt ==>
+    precompile_call_success bt (st with outcomes := SOME []) =
+    precompile_call_success bt
+      (st with outcomes := SOME [empty_failed_outcome])
+Proof
+  simp[precompile_call_success_def, empty_failed_outcome_def]
+QED
+
+Theorem fn_entry_run_agrees:
+  !os gobs am cx nr mut ts all_mods args dflts vals fbody ret res st.
+    fn_entry_run os gobs am cx nr mut all_mods args dflts vals fbody =
+      SOME (res,st) ==>
+    call_external_function (SOME os) gobs am cx nr mut ts all_mods
+      args dflts vals fbody ret =
+    (case res of
+       INL () =>
+         (case unlock_if_nr cx nr (is_view_mut mut) st of
+            (INL (),s) =>
+              (INL NoneV,
+               abstract_machine_from_state am.sources am.exports am.layouts s,
+               s.requests)
+          | (INR e,s) => (INR e,am,s.requests))
+     | INR (ReturnException v) =>
+         (case unlock_if_nr cx nr (is_view_mut mut) st of
+            (INL (),s) =>
+              (case evaluate_type (type_env_all_modules all_mods) ret of
+                 NONE => (INR (Error (TypeError "eval ret")),am,s.requests)
+               | SOME tv =>
+                 case safe_cast tv v of
+                   NONE => (INR (Error (TypeError "ext cast ret")),am,s.requests)
+                 | SOME v' =>
+                   (INL v',
+                    abstract_machine_from_state am.sources am.exports am.layouts s,
+                    s.requests))
+          | (INR e,s) => (INR e,am,s.requests))
+     | INR HaltException =>
+         (INR HaltException,
+          abstract_machine_from_state am.sources am.exports am.layouts st,
+          st.requests)
+     | INR e => (INR e,am,st.requests))
+Proof
+  rw[fn_entry_run_def, Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
+     Excl "is_view_mut_def"] >>
+  gvs[AllCaseEqs(), Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
+      Excl "is_view_mut_def"] >>
+  imp_res_tac evaluate_all_constants_preserves_machine_static_components >>
+  qmatch_assum_abbrev_tac `counter_core counter_initial = (res,st)` >>
+  `storage_trace_frame counter_core` by
+    simp[Abbr`counter_core`, storage_trace_frame_external_entry,
+         Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+  `counter_initial.storage_trace = []` by
+    simp[Abbr`counter_initial`, initial_state_def] >>
+  `!p. counter_core (counter_initial with storage_trace := p) =
+       (res,st with storage_trace := p ++ st.storage_trace)` by
+    (gen_tac >> drule_all storage_trace_frame_result >>
+     disch_then (qspec_then `p` mp_tac) >>
+     simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"]) >>
+  `storage_trace_frame (unlock_if_nr cx nr (is_view_mut mut))` by
+    simp[storage_trace_frame_optional_locks, Excl "unlock_if_nr_def",
+         Excl "is_view_mut_def"] >>
+  qpat_x_assum `storage_trace_frame (unlock_if_nr _ _ _)`
+    (assume_tac o PURE_REWRITE_RULE [storage_trace_frame_action]) >>
+  Cases_on `evaluate_module_constants_trace cx am cx.txn.target
+              (constants_order all_mods)` >>
+  fs[evaluate_all_constants_def, evaluate_module_constants_def,
+     Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+  simp[call_external_function_def, call_external_function_trace_def,
+       Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+  fs[Abbr`counter_core`, Abbr`counter_initial`,
+     Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+  Cases_on `res` >>
+  simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> every_case_tac >>
+  gvs[abstract_machine_from_state_storage_trace]
+QED
+
+Theorem call_entry_run_requests_agree:
+  !os gobs am tx res st.
+    call_entry_run os gobs am tx = SOME (res,st) ==>
+    (case call_external (SOME os) gobs am tx of
+       (result,am',rqs) => rqs = st.requests)
+Proof
+  rw[call_entry_run_def] >> gvs[AllCaseEqs()] >>
+  simp[call_external_def, call_external_trace_def] >>
+  qmatch_goalsub_rename_tac
+    `call_external_function_trace _ _ _ _ _ _ ts _ _ _ _ _ ret` >>
+  qpat_x_assum `fn_entry_run _ _ _ _ _ _ _ _ _ _ _ = _`
+    (mp_tac o MATCH_MP
+      (INST_TYPE [alpha |-> ``:toplevel list``] fn_entry_run_agrees)) >>
+  disch_then (qspecl_then [`ts`,`ret`] mp_tac) >>
+  simp[call_external_function_def] >>
+  Cases_on `res` >>
+  simp[unlock_if_nr_def, release_nonreentrant_lock_def,
+      vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.update_transient_def] >>
+  every_case_tac >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.bind_def,
+      vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.update_transient_def]
+QED
+
+Theorem entry_calls_within_from_head_cong[local]:
+  !k os out run next.
+    (!xs. run (out::xs) = next xs) ==>
+    (entry_calls_within_from k (out::os) run <=>
+     entry_calls_within_from k os next)
+Proof
+  Induct
+  >- (rpt strip_tac >> simp[entry_calls_within_from_def]) >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_assum_rename_tac `!xs. runner (head::xs) = next xs` >>
+  `!p. entry_calls_within_from k (head::p) runner <=>
+       entry_calls_within_from k p next` by
+    (gen_tac >> first_assum irule >> simp[]) >>
+  simp[entry_calls_within_from_def] >> every_case_tac >> gvs[]
+QED
+
+Theorem entry_calls_within_head_cong[local]:
+  !n os out run next.
+    (!xs. run (out::xs) = next xs) ==>
+    (entry_calls_within (SUC n) (out::os) run <=>
+     entry_calls_within n os next)
+Proof
+  rpt strip_tac >> simp[entry_calls_within_def] >>
+  irule entry_calls_within_from_head_cong >> simp[]
+QED
+
+Theorem entry_calls_within_fixed_drop[local]:
+  !c n os run.
+    (!xs. ?res fin. run xs = SOME (res,fin) /\
+                    fin.outcomes = SOME (DROP c xs)) ==>
+    (entry_calls_within n os run <=> c < n)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_assum_rename_tac
+    `!xs. ?res fin. runner xs = SOME (res,fin) /\
+                   fin.outcomes = SOME (DROP c xs)` >>
+  `!k xs. entry_calls_within_from k xs runner <=> c < LENGTH xs + k` by
+    (Induct
+     >- (gen_tac >>
+         qpat_x_assum `!ys. ?res fin. runner ys = SOME (res,fin) /\
+                        fin.outcomes = SOME (DROP c ys)`
+           (qspec_then `xs` strip_assume_tac) >>
+         simp[entry_calls_within_from_def, DROP_EQ_NIL]) >>
+     gen_tac >>
+     qpat_x_assum `!ys. ?res fin. runner ys = SOME (res,fin) /\
+                    fin.outcomes = SOME (DROP c ys)`
+       (qspec_then `xs ++ [probe_failed_outcome]` strip_assume_tac) >>
+     simp[entry_calls_within_from_def, DROP_EQ_NIL] >> rw[] >> decide_tac) >>
+  `LENGTH (TAKE n os) <= n` by
+    (simp[LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac) >>
+  simp[entry_calls_within_def] >> decide_tac
+QED
+
+Theorem deploy_entry_run_requests_agree:
+  !os gobs tops am tx res st am' rqs.
+    deploy_entry_run os gobs tops am tx = SOME (res,st) /\
+    load_contract (SOME os) gobs am tx [(NONE,tops)] [] = INL (am',rqs) ==>
+    rqs = st.requests
+Proof
+  rw[deploy_entry_run_def] >> gvs[AllCaseEqs()] >>
+  qpat_x_assum `load_contract _ _ _ _ _ _ = _` mp_tac >>
+  simp[load_contract_def, load_contract_trace_def] >>
+  qmatch_goalsub_rename_tac
+    `call_external_function_trace _ _ _ _ _ _ ts _ _ _ _ _ ret` >>
+  qpat_x_assum `fn_entry_run _ _ _ _ _ _ _ _ _ _ _ = _`
+    (mp_tac o MATCH_MP
+      (INST_TYPE [alpha |-> ``:toplevel list``] fn_entry_run_agrees)) >>
+  disch_then (qspecl_then [`ts`,`ret`] mp_tac) >>
+  simp[call_external_function_def] >>
+  Cases_on `res` >>
+  simp[unlock_if_nr_def, release_nonreentrant_lock_def,
+      vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.update_transient_def] >>
+  every_case_tac >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.bind_def,
+      vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.update_transient_def]
+QED
+
+Theorem take_request_outcome_budget_step:
+  !n os out rq st res fin k.
+    take_request_outcome rq (st with outcomes := SOME [out]) = (res,fin) ==>
+    (entry_calls_within (SUC n) (out::os)
+       (\xs. SOME ((monad_bind (take_request_outcome rq) k)
+                      (st with outcomes := SOME xs))) <=>
+     entry_calls_within n os
+       (\xs. SOME (case res of
+          INL v => k v (fin with outcomes := SOME xs)
+        | INR e => (INR e,fin with outcomes := SOME xs))))
+Proof
+  rpt strip_tac >> irule entry_calls_within_head_cong >> gen_tac >>
+  gvs[take_request_outcome_def, take_outcome_def,
+      vyperStateTheory.bind_def, AllCaseEqs()] >>
+  every_case_tac >> gvs[] >> rpt (PURE_CASE_TAC >> gvs[])
+QED
+
+Theorem take_create_outcome_budget_step:
+  !n os out kind value code st res fin k.
+    take_create_outcome kind value code (st with outcomes := SOME [out]) =
+      (res,fin) ==>
+    (entry_calls_within (SUC n) (out::os)
+       (\xs. SOME ((monad_bind (take_create_outcome kind value code) k)
+                      (st with outcomes := SOME xs))) <=>
+     entry_calls_within n os
+       (\xs. SOME (case res of
+          INL v => k v (fin with outcomes := SOME xs)
+        | INR e => (INR e,fin with outcomes := SOME xs))))
+Proof
+  rpt strip_tac >> irule entry_calls_within_head_cong >> gen_tac >>
+  gvs[vyperStateTheory.bind_def, take_create_outcome_def,
+      take_outcome_def, AllCaseEqs()] >>
+  gvs[create_outcome_request_def, vyperStateTheory.bind_def, AllCaseEqs()] >>
+  rpt (PURE_CASE_TAC >> gvs[])
+QED
+
+Theorem precompile_call_success_budget_step:
+  !n os out bt st res fin k.
+    precompile_builtin bt /\
+    precompile_call_success bt (st with outcomes := SOME [out]) = (res,fin) ==>
+    (entry_calls_within (SUC n) (out::os)
+       (\xs. SOME ((monad_bind (precompile_call_success bt) k)
+                      (st with outcomes := SOME xs))) <=>
+     entry_calls_within n os
+       (\xs. SOME (case res of
+          INL v => k v (fin with outcomes := SOME xs)
+        | INR e => (INR e,fin with outcomes := SOME xs))))
+Proof
+  rpt strip_tac >> irule entry_calls_within_head_cong >> gen_tac >>
+  gvs[precompile_call_success_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def,
+      AllCaseEqs()] >> rpt (PURE_CASE_TAC >> gvs[])
+QED
+
+
+Theorem take_request_outcome_budget_unit:
+  !n os rq st.
+    entry_calls_within n os
+      (\xs. SOME (take_request_outcome rq (st with outcomes := SOME xs))) <=>
+    1 < n
+Proof
+  rpt gen_tac >> irule entry_calls_within_fixed_drop >> gen_tac >>
+  Cases_on `xs` >>
+  simp[take_request_outcome_def, take_outcome_def, DROP_def] >>
+  rpt (PURE_CASE_TAC >> gvs[])
+QED
+
+Theorem take_create_outcome_budget_unit:
+  !n os kind value code st.
+    entry_calls_within n os
+      (\xs. SOME (take_create_outcome kind value code
+                    (st with outcomes := SOME xs))) <=> 1 < n
+Proof
+  rpt gen_tac >> irule entry_calls_within_fixed_drop >> gen_tac >>
+  Cases_on `xs` >>
+  simp[take_create_outcome_def, take_outcome_def, DROP_def] >>
+  rpt (PURE_CASE_TAC >> gvs[])
+QED
+
+Theorem precompile_call_success_budget_unit:
+  !n os bt st.
+    entry_calls_within n os
+      (\xs. SOME (precompile_call_success bt (st with outcomes := SOME xs))) <=>
+    (if precompile_builtin bt then 1 < n else 0 < n)
+Proof
+  rpt gen_tac >> Cases_on `precompile_builtin bt` >> simp[] >>
+  irule entry_calls_within_fixed_drop >> gen_tac >> Cases_on `xs` >>
+  simp[precompile_call_success_def, vyperStateTheory.check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, DROP_def] >>
+  rpt (PURE_CASE_TAC >> gvs[])
+QED
+
+Theorem fn_entry_run_probe_budget_step:
+  !k os gobs am cx nr mut mods args dflts vals fbody res_p st_p o_next.
+    fn_entry_run (os ++ [probe_failed_outcome]) gobs am cx nr mut mods
+      args dflts vals fbody = SOME (res_p,st_p) /\
+    st_p.outcomes = SOME [] /\
+    o_next =
+      (case fn_entry_run (os ++ [empty_failed_outcome]) gobs am cx
+              nr mut mods args dflts vals fbody of
+         SOME (res_e,_) =>
+           if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+              res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+              ~NULL st_p.requests
+           then failed_outcome (LAST st_p.requests)
+           else empty_failed_outcome
+       | NONE => empty_failed_outcome) ==>
+    (entry_calls_within (LENGTH os + SUC k) os
+       (\xs. fn_entry_run xs gobs am cx nr mut mods args dflts vals fbody) <=>
+     entry_calls_within (LENGTH os + SUC k) (os ++ [o_next])
+       (\xs. fn_entry_run xs gobs am cx nr mut mods args dflts vals fbody))
+Proof
+  rpt strip_tac >>
+  `TAKE (LENGTH os + SUC k) os = os` by
+    (irule TAKE_LENGTH_TOO_LONG >> decide_tac) >>
+  `TAKE (LENGTH os + SUC k) (os ++ [o_next]) = os ++ [o_next]` by
+    (irule TAKE_LENGTH_TOO_LONG >> simp[] >> decide_tac) >>
+  `LENGTH os + SUC k - LENGTH os = SUC k` by decide_tac >>
+  `LENGTH os + SUC k - LENGTH (os ++ [o_next]) = k` by
+    (simp[] >> decide_tac) >>
+  simp[entry_calls_within_def, entry_calls_within_from_def]
+QED
+
+Theorem entry_calls_within_erase_trace_cong:
+  !n os run1 run2.
+    (!xs. OPTION_MAP (\(r,s). (r,erase_storage_trace s)) (run1 xs) =
+          OPTION_MAP (\(r,s). (r,erase_storage_trace s)) (run2 xs)) ==>
+    (entry_calls_within n os run1 <=> entry_calls_within n os run2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!xs. OPTION_MAP (\(r,s). (r,s.outcomes,s.requests)) (run1 xs) =
+        OPTION_MAP (\(r,s). (r,s.outcomes,s.requests)) (run2 xs)` by
+    (gen_tac >>
+     qpat_x_assum `!ys. OPTION_MAP _ (run1 ys) = _`
+       (qspec_then `xs` mp_tac) >>
+     Cases_on `run1 xs` >> Cases_on `run2 xs` >>
+     simp[OPTION_MAP_DEF] >>
+     rename1 `run1 xs = SOME rp1` >>
+     rename1 `run2 xs = SOME rp2` >>
+     Cases_on `rp1` >> Cases_on `rp2` >>
+     gvs[vyperStateTheory.erase_storage_trace_def,
+         vyperStateTheory.evaluation_state_component_equality]) >>
+  `!k xs. entry_calls_within_from k xs run1 <=>
+          entry_calls_within_from k xs run2` by
+    (Induct
+     >- (gen_tac >>
+         qpat_x_assum `!ys. OPTION_MAP (\(r,s). (r,s.outcomes,s.requests)) (run1 ys) = _`
+           (qspec_then `xs` mp_tac) >>
+         Cases_on `run1 xs` >> Cases_on `run2 xs` >>
+         simp[entry_calls_within_from_def, OPTION_MAP_DEF] >>
+         every_case_tac >>
+         gvs[]) >>
+     gen_tac >>
+     qpat_assum `!ys. OPTION_MAP (\(r,s). (r,s.outcomes,s.requests)) (run1 ys) = _`
+       (qspec_then `xs ++ [probe_failed_outcome]` assume_tac) >>
+     qpat_x_assum `!ys. OPTION_MAP (\(r,s). (r,s.outcomes,s.requests)) (run1 ys) = _`
+       (qspec_then `xs ++ [empty_failed_outcome]` assume_tac) >>
+     simp[entry_calls_within_from_def] >>
+     Cases_on `run1 (xs ++ [probe_failed_outcome])` >>
+     Cases_on `run2 (xs ++ [probe_failed_outcome])` >>
+     gvs[OPTION_MAP_DEF] >>
+     rename1 `run1 (xs ++ [probe_failed_outcome]) = SOME probe1` >>
+     rename1 `run2 (xs ++ [probe_failed_outcome]) = SOME probe2` >>
+     Cases_on `probe1` >> Cases_on `probe2` >> gvs[] >>
+     Cases_on `run1 (xs ++ [empty_failed_outcome])` >>
+     Cases_on `run2 (xs ++ [empty_failed_outcome])` >>
+     gvs[OPTION_MAP_DEF] >>
+     rename1 `run1 (xs ++ [empty_failed_outcome]) = SOME empty1` >>
+     rename1 `run2 (xs ++ [empty_failed_outcome]) = SOME empty2` >>
+     Cases_on `empty1` >> Cases_on `empty2` >> gvs[]) >>
+  simp[entry_calls_within_def]
+QED
+
+Theorem outcome_prefix_causal_frame[local]:
+  !f.
+    (!st os. f (st with outcomes := os) =
+      (FST (f st),(SND (f st)) with outcomes := os)) ==>
+    outcome_prefix_causal f
+Proof
+  rpt gen_tac >> strip_tac >> rw[outcome_prefix_causal_def] >>
+  qpat_x_assum `!s os. _`
+    (qspecl_then [`st`,`SOME (prefix ++ next::tail)`] mp_tac) >>
+  Cases_on `f st` >> simp[] >> strip_tac >> gvs[APPEND_EQ_SELF]
+QED
+
+Theorem outcome_prefix_causal_result_bind[local]:
+  !f g.
+    outcomes_suffix f /\ outcome_prefix_causal f /\
+    (!s r t. f s = (r,t) ==>
+       outcomes_suffix (g r) /\ outcome_prefix_causal (g r)) ==>
+    outcome_prefix_causal (\st. case f st of (r,t) => g r t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once outcome_prefix_causal_def] >>
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  Cases_on `f (st with outcomes := SOME (prefix ++ next::tail))` >>
+  rename1 `f (st with outcomes := SOME (prefix ++ next::tail)) = (head_res,mid)` >>
+  gvs[] >>
+  qpat_x_assum `!s r t. f s = (r,t) ==> _`
+    (qspecl_then [`st with outcomes := SOME (prefix ++ next::tail)`,
+                  `head_res`,`mid`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `outcome_suffix (SOME (prefix ++ next::tail)) mid.outcomes` by
+    (qpat_x_assum `outcomes_suffix f` mp_tac >>
+     simp[outcomes_suffix_def] >>
+     disch_then (qspec_then `st with outcomes := SOME (prefix ++ next::tail)`
+                  mp_tac) >> simp[]) >>
+  `outcome_suffix mid.outcomes (SOME (next::tail))` by
+    (qpat_x_assum `outcomes_suffix (g head_res)` mp_tac >>
+     simp[outcomes_suffix_def] >>
+     disch_then (qspec_then `mid` mp_tac) >> simp[]) >>
+  `?used2. mid.outcomes = SOME (used2 ++ next::tail)` by
+    (qpat_x_assum `outcome_suffix mid.outcomes (SOME (next::tail))` mp_tac >>
+     simp[outcome_suffix_def]) >>
+  `?used1. prefix = used1 ++ used2` by
+    (qpat_x_assum `outcome_suffix (SOME (prefix ++ next::tail)) mid.outcomes`
+       mp_tac >> simp[outcome_suffix_def, APPEND_ASSOC]) >>
+  `mid with outcomes := SOME (used2 ++ next::tail) = mid` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qpat_x_assum `outcome_prefix_causal (g head_res)` mp_tac >>
+  simp[outcome_prefix_causal_def] >>
+  disch_then (qspecl_then [`mid`,`used2`,`next`,`tail`,`res`,`fin`] mp_tac) >>
+  simp[] >> disch_then (qspec_then `tail'` assume_tac) >>
+  Cases_on `used2`
+  >- (qpat_x_assum `outcome_prefix_causal f` mp_tac >>
+      simp[outcome_prefix_causal_def] >>
+      disch_then (qspecl_then [`st`,`prefix`,`next`,`tail`,`head_res`,`mid`] mp_tac) >>
+      simp[] >> disch_then (qspec_then `tail'` mp_tac) >> gvs[]) >>
+  rename1 `mid.outcomes = SOME ((out::rest) ++ next::tail)` >>
+  qpat_x_assum `prefix = used1 ++ out::rest` SUBST_ALL_TAC >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  qpat_x_assum `outcome_prefix_causal f` mp_tac >>
+  simp[outcome_prefix_causal_def] >>
+  disch_then (qspecl_then [`st`,`used1`,`out`,`rest ++ next::tail`,
+                          `head_res`,`mid`] mp_tac) >>
+  asm_simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
+  disch_then (qspec_then `out::(rest ++ tail')` mp_tac) >>
+  PURE_REWRITE_TAC [GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem outcome_prefix_causal_bind_guarded[local]:
+  !f g.
+    outcomes_suffix f /\ outcome_prefix_causal f /\
+    (!st v mid. f st = (INL v,mid) ==>
+       outcomes_suffix (g v) /\ outcome_prefix_causal (g v)) ==>
+    outcome_prefix_causal (monad_bind f g)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `monad_bind f g =
+    (\st. case f st of (ans,mid) =>
+      (case ans of INL v => g v | INR e => raise e) mid)` by
+    (simp[FUN_EQ_THM, vyperStateTheory.bind_def] >> gen_tac >>
+     Cases_on `f st` >> rename1 `f st = (ans,mid)` >>
+     Cases_on `ans` >> simp[vyperStateTheory.raise_def]) >>
+  pop_assum SUBST1_TAC >>
+  ho_match_mp_tac outcome_prefix_causal_result_bind >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  rename1 `f seed = (answer,midpoint)` >>
+  Cases_on `answer` >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV)
+  >- (rename1 `f seed = (INL value,midpoint)` >>
+      qpat_x_assum `!st v mid. f st = (INL v,mid) ==> _`
+        (qspecl_then [`seed`,`value`,`midpoint`] mp_tac) >> simp[]) >>
+  conj_tac
+  >- simp[outcomes_suffix_def, vyperStateTheory.raise_def] >>
+  irule outcome_prefix_causal_frame >>
+  simp[vyperStateTheory.raise_def]
+QED
+
+Theorem outcome_prefix_causal_bind[local]:
+  !f g.
+    outcomes_suffix f /\ outcome_prefix_causal f /\
+    (!v. outcomes_suffix (g v) /\ outcome_prefix_causal (g v)) ==>
+    outcome_prefix_causal (monad_bind f g)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule outcome_prefix_causal_bind_guarded >> simp[]
+QED
+
+Theorem outcome_prefix_causal_primitive_steps[local]:
+  (!rq. outcome_prefix_causal (take_request_outcome rq)) /\
+  (!kind value code.
+     outcome_prefix_causal (take_create_outcome kind value code)) /\
+  (!bt. outcome_prefix_causal (precompile_call_success bt))
+Proof
+  conj_tac
+  >- (gen_tac >> rw[outcome_prefix_causal_def] >>
+      Cases_on `prefix` >>
+      gvs[take_request_outcome_def, take_outcome_def, AllCaseEqs(),
+          APPEND_EQ_SELF, vyperStateTheory.evaluation_state_component_equality] >>
+      rpt (FULL_CASE_TAC >>
+        gvs[APPEND_EQ_SELF, vyperStateTheory.evaluation_state_component_equality])) >>
+  conj_tac
+  >- (rpt gen_tac >> rw[outcome_prefix_causal_def] >>
+      Cases_on `prefix` >>
+      gvs[take_create_outcome_def, create_outcome_request_def, take_outcome_def,
+          AllCaseEqs(), APPEND_EQ_SELF,
+          vyperStateTheory.evaluation_state_component_equality] >>
+      rpt (FULL_CASE_TAC >>
+        gvs[APPEND_EQ_SELF, vyperStateTheory.evaluation_state_component_equality])) >>
+  gen_tac >> rw[outcome_prefix_causal_def] >>
+  Cases_on `prefix` >>
+  gvs[precompile_call_success_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs(), APPEND_EQ_SELF,
+      vyperStateTheory.evaluation_state_component_equality] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[APPEND_EQ_SELF, vyperStateTheory.evaluation_state_component_equality])
+QED
+
+val PREFIX_RESULT_TAC =
+  conj_tac
+  >- simp[outcomes_suffix_def, vyperStateTheory.return_def,
+          vyperStateTheory.raise_def] >>
+  irule outcome_prefix_causal_frame >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def];
+
+val PREFIX_CLEANUP_TAC =
+  rewrite_tac[vyperStateTheory.ignore_bind_def] >>
+  conj_tac
+  >- (match_mp_tac outcomes_suffix_bind_guarded >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      rpt gen_tac >> strip_tac >>
+      simp[outcomes_suffix_def, vyperStateTheory.return_def,
+           vyperStateTheory.raise_def]) >>
+  match_mp_tac outcome_prefix_causal_bind >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >> gen_tac >> PREFIX_RESULT_TAC;
+
+Theorem outcome_prefix_causal_handlers[local]:
+  (!f h.
+     outcomes_suffix f /\ outcome_prefix_causal f /\
+     (!e. outcomes_suffix (h e) /\ outcome_prefix_causal (h e)) ==>
+     outcome_prefix_causal (try f h)) /\
+  (!f cleanup.
+     outcomes_suffix f /\ outcome_prefix_causal f /\
+     outcomes_suffix cleanup /\ outcome_prefix_causal cleanup ==>
+     outcome_prefix_causal (finally f cleanup)) /\
+  (!f cleanup.
+     outcomes_suffix f /\ outcome_prefix_causal f /\
+     outcomes_suffix cleanup /\ outcome_prefix_causal cleanup ==>
+     outcome_prefix_causal (finally_unless_halt f cleanup))
+Proof
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `try f h = (\st. case f st of (ans,mid) =>
+         (case ans of INL v => return v | INR e => h e) mid)` by
+        (simp[FUN_EQ_THM, vyperStateTheory.try_def] >> gen_tac >>
+         Cases_on `f st` >> rename1 `f st = (ans,mid)` >>
+         Cases_on `ans` >> simp[vyperStateTheory.return_def]) >>
+      pop_assum SUBST1_TAC >>
+      ho_match_mp_tac outcome_prefix_causal_result_bind >> simp[] >>
+      rpt gen_tac >> strip_tac >> rename1 `f seed = (answer,midpoint)` >>
+      Cases_on `answer` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV)
+      >- PREFIX_RESULT_TAC >>
+      rename1 `f seed = (INR fault,midpoint)` >>
+      qpat_x_assum `!e. _ /\ _` (qspec_then `fault` ACCEPT_TAC)) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `finally f cleanup = (\st. case f st of (ans,mid) =>
+         (case ans of
+            INL v => ignore_bind cleanup (return v)
+          | INR e => ignore_bind cleanup (raise e)) mid)` by
+        (simp[FUN_EQ_THM, vyperStateTheory.finally_def] >> gen_tac >>
+         Cases_on `f st` >> rename1 `f st = (ans,mid)` >>
+         Cases_on `ans` >> simp[]) >>
+      pop_assum SUBST1_TAC >>
+      ho_match_mp_tac outcome_prefix_causal_result_bind >> simp[] >>
+      rpt gen_tac >> strip_tac >> rename1 `f seed = (answer,midpoint)` >>
+      Cases_on `answer` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      PREFIX_CLEANUP_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  `finally_unless_halt f cleanup = (\st. case f st of (ans,mid) =>
+     (case ans of
+        INL v => ignore_bind cleanup (return v)
+      | INR e => if e = HaltException then raise HaltException
+                 else ignore_bind cleanup (raise e)) mid)` by
+    (simp[FUN_EQ_THM, vyperStateTheory.finally_unless_halt_def] >> gen_tac >>
+     Cases_on `f st` >> rename1 `f st = (ans,mid)` >>
+     Cases_on `ans` >> simp[vyperStateTheory.raise_def] >>
+     rename1 `f st = (INR caught_error,mid)` >>
+     Cases_on `caught_error` >> simp[vyperStateTheory.raise_def]) >>
+  pop_assum SUBST1_TAC >>
+  ho_match_mp_tac outcome_prefix_causal_result_bind >> simp[] >>
+  rpt gen_tac >> strip_tac >> rename1 `f seed = (answer,midpoint)` >>
+  Cases_on `answer` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV)
+  >- PREFIX_CLEANUP_TAC >>
+  rename1 `f seed = (INR fault,midpoint)` >>
+  Cases_on `fault` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV)
+  >~ [`outcomes_suffix (raise HaltException) /\ _`] >- PREFIX_RESULT_TAC >>
+  PREFIX_CLEANUP_TAC
+QED
+
+val prefix_atomic_defs =
+  map (fn name => oneline (DB.fetch "vyperState" name))
+    ["return_def", "raise_def", "bind_def", "ignore_bind_def",
+     "assert_def", "check_def", "type_check_def", "check_not_static_def",
+     "record_storage_event_def", "record_storage_backend_def",
+     "get_accounts_def", "update_accounts_def", "get_transient_storage_def",
+     "update_transient_def", "append_logs_def", "push_log_def",
+     "get_pending_deletions_def", "update_pending_deletions_def",
+     "get_storage_backend_def", "set_storage_backend_def",
+     "read_storage_slot_def", "write_storage_slot_def",
+     "get_address_immutables_def", "get_immutables_def",
+     "set_address_immutables_def", "set_immutable_def", "set_global_def",
+     "lookup_global_def", "lookup_flag_mem_def",
+     "get_scopes_def", "set_scopes_def", "push_scope_def", "pop_scope_def",
+     "push_scope_with_var_def", "new_variable_def",
+     "lift_option_type_def", "lift_option_def", "lift_sum_def",
+     "lift_sum_runtime_def", "read_result_def", "read_place_def",
+     "place_type_value_def", "write_place_def", "get_place_def",
+     "conditional_result_def", "result_array_length_def",
+     "extend_storage_place_def", "extend_place_def", "select_result_def",
+     "append_place_def", "pop_place_def"] @
+  map (fn name => oneline (DB.fetch "vyperInterpreter" name))
+    ["frame_call_value_def", "transfer_value_def", "push_function_def",
+     "pop_function_def", "handle_loop_exception_def", "handle_function_def",
+     "acquire_nonreentrant_lock_def", "release_nonreentrant_lock_def",
+     "next_gas_reading_def", "array_iterator_results_def"] @
+  [oneline vyperCreateTheory.check_create_blueprint_def,
+   oneline adopt_call_outcome_def, extCallOracleTheory.adopt_outcome_def,
+   extCallOracleTheory.adopt_outcome_deletions_def];
+
+val prefix_input_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
+  [outcomes_replace_return, outcomes_replace_raise, outcomes_replace_basic,
+   outcomes_replace_lifts, outcomes_replace_storage_backend,
+   outcomes_replace_read_storage_slot, outcomes_replace_write_storage_slot,
+   outcomes_replace_get_address_immutables, outcomes_replace_get_immutables,
+   outcomes_replace_read_place, outcomes_replace_read_result,
+   outcomes_replace_read_results, outcomes_replace_place_type_value,
+   outcomes_replace_conditional_result,
+   outcomes_replace_set_address_immutables, outcomes_replace_set_immutable,
+   outcomes_replace_write_place, outcomes_replace_scopes,
+   outcomes_replace_new_variable, outcomes_replace_handlers,
+   outcomes_replace_get_place, outcomes_replace_resolve_array_element,
+   outcomes_replace_lookup_flag_mem, outcomes_replace_lookup_global,
+   outcomes_replace_result_array_length, outcomes_replace_array_iterator_results,
+   outcomes_replace_extend_storage_place, outcomes_replace_extend_place,
+   outcomes_replace_select_result, outcomes_replace_append_place,
+   outcomes_replace_pop_place, outcomes_replace_next_gas_reading]);
+
+val PREFIX_ATOMIC_FRAME_TAC =
+  irule outcome_prefix_causal_frame >> rpt gen_tac >>
+  FIRST [FIRST (map MATCH_ACCEPT_TAC prefix_input_facts),
+    (simp_tac (srw_ss()) prefix_atomic_defs >>
+     rpt (FULL_CASE_TAC >>
+       gvs (vyperStateTheory.evaluation_state_component_equality ::
+            prefix_atomic_defs)))];
+
+Theorem outcome_prefix_causal_basic[local]:
+  outcome_prefix_causal (return v) /\
+  outcome_prefix_causal (raise e) /\
+  outcome_prefix_causal (check b msg) /\
+  outcome_prefix_causal (get_storage_backend cx tr) /\
+  outcome_prefix_causal (read_result cx r)
+Proof
+  rpt conj_tac >> PREFIX_ATOMIC_FRAME_TAC
+QED
+
+Theorem outcome_prefix_causal_read_results[local]:
+  !cx vs. outcome_prefix_causal (read_results cx vs)
+Proof
+  rpt gen_tac >> irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_read_results
+QED
+
+Theorem outcome_prefix_causal_write_place[local]:
+  outcome_prefix_causal (write_place cx p v)
+Proof
+  rpt gen_tac >> irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_write_place
+QED
+
+Theorem outcome_prefix_causal_read_place[local]:
+  outcome_prefix_causal (read_place cx p)
+Proof
+  rpt gen_tac >> irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_read_place
+QED
+
+Theorem outcome_prefix_causal_place_type[local]:
+  outcome_prefix_causal (place_type_value cx p)
+Proof
+  rpt gen_tac >> irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_place_type_value
+QED
+
+Theorem outcome_prefix_causal_place_primitives[local]:
+  outcome_prefix_causal (lift_sum x) /\
+  outcome_prefix_causal (lift_option_type opt msg) /\
+  outcome_prefix_causal (type_check b msg) /\
+  outcome_prefix_causal get_scopes /\
+  outcome_prefix_causal (set_scopes sc) /\
+  outcome_prefix_causal (get_immutables cx src) /\
+  outcome_prefix_causal (set_immutable cx src id tv v)
+Proof
+  rpt conj_tac >> PREFIX_ATOMIC_FRAME_TAC
+QED
+
+val prefix_suffix_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
+  [eval_outcomes_suffix_with_results, outcomes_suffix_ext_call,
+   outcomes_suffix_send, outcomes_suffix_raw_call, outcomes_suffix_create,
+   outcomes_suffix_precompile_call_success]) @
+  map (GEN_ALL o MATCH_MP outcomes_suffix_frame o SPEC_ALL)
+    (List.concat (map (CONJUNCTS o SPEC_ALL)
+      [outcomes_frame_read_results, outcomes_frame_places,
+       outcomes_frame_write_place, outcomes_frame_append_place,
+       outcomes_frame_pop_place, outcomes_frame_resolve_array, outcomes_frame_reads,
+       outcomes_frame_primitives, outcomes_frame_handlers,
+       outcomes_frame_return, outcomes_frame_raise, outcomes_frame_static,
+       outcomes_frame_adopt]));
+
+val prefix_leaf_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
+  [outcome_prefix_causal_basic, outcome_prefix_causal_read_results,
+   outcome_prefix_causal_write_place,
+   outcome_prefix_causal_read_place, outcome_prefix_causal_place_type,
+   outcome_prefix_causal_place_primitives,
+   outcome_prefix_causal_primitive_steps]);
+
+val prefix_rules = map SPEC_ALL
+  ([outcome_prefix_causal_bind_guarded, outcomes_suffix_bind_guarded,
+    outcomes_suffix_try, outcomes_suffix_finally,
+    outcomes_suffix_finally_unless_halt] @
+   CONJUNCTS outcome_prefix_causal_handlers);
+
+val prefix_net = evalWalkLib.walk_net prefix_rules
+  (map (fn th => (concl (SPEC_ALL th), MATCH_ACCEPT_TAC th))
+    (prefix_leaf_facts @ prefix_suffix_facts));
+
+fun PREFIX_ATOM_TAC (g as (_,w)) =
+  let val (prop,args) = strip_comb w
+      val computation = hd args
+      val head = fst (strip_comb computation)
+      val name = #Name (dest_thy_const head)
+      val names = map (fn th => #Name (dest_thy_const
+        (fst (strip_comb (lhs (concl (SPEC_ALL th))))))) prefix_atomic_defs
+  in
+    if List.exists (fn n => n = name) names andalso
+       not (List.exists (fn n => n = name) ["bind","ignore_bind"])
+    then
+      (if #Name (dest_thy_const prop) = "outcome_prefix_causal"
+       then PREFIX_ATOMIC_FRAME_TAC
+       else (simp_tac (srw_ss()) (outcomes_suffix_def :: prefix_atomic_defs) >>
+         rpt (FULL_CASE_TAC >> gvs prefix_atomic_defs))) g
+    else NO_TAC g
+  end;
+
+fun PREFIX_STEP g = FIRST
+  [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+   evalWalkLib.IH_TAC {stop = K false, normalise = I},
+   (fn goal as (_,w) => FIRST (Net.match w prefix_net) goal),
+   CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
+   CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+   CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
+   CONV_TAC (RAND_CONV (evalWalkLib.unfold_conv
+     [oneline vyperStateTheory.append_place_def,
+      oneline vyperStateTheory.pop_place_def])),
+   CHANGED_TAC PREFIX_ATOM_TAC,
+   strip_tac, conj_tac, evalWalkLib.HEAD_CASE_TAC] g;
+
+Theorem source_prefix_joint_bind[local]:
+  !f g.
+    (outcomes_suffix f /\ outcome_prefix_causal f) /\
+    (!v. outcomes_suffix (g v) /\ outcome_prefix_causal (g v)) ==>
+    (outcomes_suffix (monad_bind f g) /\
+     outcome_prefix_causal (monad_bind f g))
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (match_mp_tac outcomes_suffix_bind_guarded >> simp[]) >>
+  match_mp_tac outcome_prefix_causal_bind >> simp[]
+QED
+
+Theorem source_prefix_joint_bind_guarded[local]:
+  !f g.
+    (outcomes_suffix f /\ outcome_prefix_causal f) /\
+    (!st v mid. f st = (INL v,mid) ==>
+       outcomes_suffix (g v) /\ outcome_prefix_causal (g v)) ==>
+    (outcomes_suffix (monad_bind f g) /\
+     outcome_prefix_causal (monad_bind f g))
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (match_mp_tac outcomes_suffix_bind_guarded >> metis_tac[]) >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >> metis_tac[]
+QED
+
+val joint_leaf_tac =
+  conj_tac
+  >- FIRST (map MATCH_ACCEPT_TAC prefix_suffix_facts) >>
+  FIRST (map MATCH_ACCEPT_TAC prefix_leaf_facts);
+
+fun JOINT_STEP g = FIRST
+  [joint_leaf_tac, match_mp_tac source_prefix_joint_bind,
+   CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+   CHANGED_TAC (BETA_TAC >> simp_tac bool_ss []),
+   CONV_TAC (BINOP_CONV (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv))),
+   CONV_TAC (BINOP_CONV (RAND_CONV
+     (REWR_CONV vyperStateTheory.ignore_bind_def))),
+   conj_tac] g;
+
+Theorem outcome_prefix_causal_place_actions[local]:
+  (!cx p v. outcome_prefix_causal (append_place cx p v)) /\
+  (!cx p. outcome_prefix_causal (pop_place cx p))
+Proof
+  rpt conj_tac >> rpt gen_tac >> irule outcome_prefix_causal_frame >>
+  FIRST [MATCH_ACCEPT_TAC outcomes_replace_append_place,
+         MATCH_ACCEPT_TAC outcomes_replace_pop_place]
+QED
+
+Theorem outcome_prefix_causal_call_steps[local]:
+  outcome_prefix_causal (take_call_outcome target calldata value_opt) /\
+  outcome_prefix_causal (take_delegate_outcome target calldata value_opt)
+Proof
+  conj_tac >>
+  simp_tac bool_ss [outcome_prefix_causal_def,
+    take_call_outcome_def, take_delegate_outcome_def,
+    delegate_outcome_request_def, call_outcome_request_def] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (cj 1 outcome_prefix_causal_primitive_steps) >>
+  simp_tac bool_ss [outcome_prefix_causal_def] >>
+  disch_then (drule_at Any) >> gvs[] >> metis_tac[]
+QED
+
+val prefix_net = evalWalkLib.walk_net prefix_rules
+  (map (fn th => (concl (SPEC_ALL th), MATCH_ACCEPT_TAC th))
+    (CONJUNCTS outcome_prefix_causal_call_steps @
+     [outcomes_suffix_take, outcomes_suffix_take_delegate] @
+     prefix_leaf_facts @ prefix_suffix_facts));
+
+fun EXTERNAL_STEP g = FIRST
+  [(fn goal as (_,w) => FIRST (Net.match w prefix_net) goal),
+   PREFIX_STEP] g;
+
+Theorem outcome_prefix_causal_call_oracle[local]:
+  outcome_prefix_causal
+    (bind (take_call_outcome target calldata value_opt) (\(rq, outcome).
+       ignore_bind
+         (if call_outcome_success outcome then return ()
+          else raise (Error (RevertData (call_outcome_return_data outcome))))
+         (ignore_bind (adopt_call_outcome rq outcome)
+            (return (call_outcome_return_data outcome)))))
+Proof
+  rpt EXTERNAL_STEP
+QED
+
+Theorem outcome_prefix_causal_call_effects[local]:
+  outcome_prefix_causal
+    (eval_ext_call_effects cx target calldata value_opt gas accounts)
+Proof
+  mp_tac outcome_prefix_causal_call_oracle >>
+  simp_tac (srw_ss()) [outcome_prefix_causal_def, eval_ext_call_effects_def,
+    vyperStateTheory.bind_def, vyperStateTheory.return_def,
+    vyperStateTheory.ignore_bind_def]
+QED
+
+Theorem source_prefix_suffix_call_effects[local]:
+  outcomes_suffix
+    (eval_ext_call_effects cx target calldata value_opt gas accounts)
+Proof
+  simp_tac bool_ss [eval_ext_call_effects_def, LET_THM] >>
+  rpt (FIRST [MATCH_ACCEPT_TAC outcomes_suffix_read, EXTERNAL_STEP])
+QED
+
+Theorem outcome_prefix_causal_external_primitives[local]:
+  outcome_prefix_causal get_accounts /\
+  outcome_prefix_causal (frame_call_value cx value_opt) /\
+  outcome_prefix_causal (lift_sum_runtime x) /\
+  outcome_prefix_causal (lift_option opt msg) /\
+  outcome_prefix_causal (adopt_call_outcome rq outcome)
+Proof
+  rpt conj_tac >> PREFIX_ATOMIC_FRAME_TAC
+QED
+
+val external_prefix_leaves =
+  CONJUNCTS outcome_prefix_causal_external_primitives @
+  CONJUNCTS outcome_prefix_causal_call_steps @
+  [outcome_prefix_causal_call_effects] @ prefix_leaf_facts;
+val external_suffix_leaves =
+  [source_prefix_suffix_call_effects, outcomes_suffix_take,
+   outcomes_suffix_take_delegate] @ prefix_suffix_facts;
+val external_leaf_net = evalWalkLib.walk_net []
+  (map (fn th => (concl (SPEC_ALL th), MATCH_ACCEPT_TAC th))
+    (external_suffix_leaves @ external_prefix_leaves));
+fun EXTERNAL_LEAF_TAC (g as (_,w)) = FIRST (Net.match w external_leaf_net) g;
+val external_joint_leaf_tac = conj_tac
+  >- FIRST [EXTERNAL_LEAF_TAC, PREFIX_ATOM_TAC] >>
+  FIRST [EXTERNAL_LEAF_TAC, PREFIX_ATOM_TAC];
+Theorem source_prefix_extcall_value_joint[local]:
+  outcomes_suffix ((if static then return NONE else
+    case ext_call_kwarg EKValue opts args of
+      NONE => return (SOME 0)
+    | SOME v => bind (lift_option_type (dest_NumV v) "ExtCall value not int")
+                    (\n. return (SOME n)))) /\
+  outcome_prefix_causal ((if static then return NONE else
+    case ext_call_kwarg EKValue opts args of
+      NONE => return (SOME 0)
+    | SOME v => bind (lift_option_type (dest_NumV v) "ExtCall value not int")
+                    (\n. return (SOME n))))
+Proof
+  simp_tac bool_ss [LET_THM] >> Cases_on `static` >>
+  simp_tac bool_ss []
+  >- external_joint_leaf_tac >>
+  Cases_on `ext_call_kwarg EKValue opts args` >> simp_tac (srw_ss()) []
+  >- external_joint_leaf_tac >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >> external_joint_leaf_tac
+QED
+
+Theorem source_prefix_extcall_return_joint[local]:
+  outcomes_suffix ((case (if returnData = [] then ext_call_kwarg EKDefault opts args else NONE) of
+       NONE => bind
+         (lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ty returnData))
+         (\ret_val. return (Value ret_val))
+     | SOME default_v => bind get_accounts (\accounts'.
+         bind (check (skip_check \/ ext_call_has_code target_addr accounts')
+                 "ExtCall target has no code") (\x. return (Value default_v))))) /\
+  outcome_prefix_causal ((case (if returnData = [] then ext_call_kwarg EKDefault opts args else NONE) of
+       NONE => bind
+         (lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ty returnData))
+         (\ret_val. return (Value ret_val))
+     | SOME default_v => bind get_accounts (\accounts'.
+         bind (check (skip_check \/ ext_call_has_code target_addr accounts')
+                 "ExtCall target has no code") (\x. return (Value default_v)))))
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  Cases_on `if returnData = [] then ext_call_kwarg EKDefault opts args else NONE` >>
+  simp_tac (srw_ss()) []
+  >- (match_mp_tac source_prefix_joint_bind >>
+      conj_tac >- external_joint_leaf_tac >>
+      gen_tac >> BETA_TAC >> external_joint_leaf_tac) >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >> match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >> external_joint_leaf_tac
+QED
+
+val external_stage_facts = map (SIMP_RULE bool_ss [LET_THM])
+  [source_prefix_extcall_value_joint, source_prefix_extcall_return_joint];
+Theorem outcome_prefix_causal_create_oracle[local]:
+  outcome_prefix_causal (create_oracle_result salt value code rof)
+Proof
+  `create_oracle_result salt value code rof =
+    bind (take_create_outcome
+      (case salt of NONE => CreateCall | SOME s => Create2Call s) value code)
+      (\(rq,outcome). bind (adopt_call_outcome rq outcome) (\x.
+        if outcome.co_success /\ outcome.co_created <> 0w
+        then return (Value (AddressV outcome.co_created))
+        else if rof then raise (Error (RevertData outcome.co_returnData))
+        else return (Value (AddressV 0w))))` by
+    (simp_tac bool_ss [FUN_EQ_THM, vyperCreateTheory.create_oracle_result_def,
+       vyperStateTheory.bind_def] >> gen_tac >>
+     Cases_on `take_create_outcome
+       (case salt of NONE => CreateCall | SOME s => Create2Call s) value code x` >>
+     rename1 `take_create_outcome _ _ _ x = (ans,fin)` >>
+     Cases_on `ans` >> simp_tac (srw_ss()) [] >>
+     rename1 `take_create_outcome _ _ _ x = (INL pair,fin)` >>
+     PairCases_on `pair` >>
+     simp[adopt_call_outcome_equation, vyperStateTheory.bind_def, COND_RATOR,
+       vyperStateTheory.return_def,
+       vyperStateTheory.raise_def]) >>
+  pop_assum SUBST1_TAC >>
+  match_mp_tac outcome_prefix_causal_bind >>
+  conj_tac
+  >- (simp[outcomes_suffix_def] >> gen_tac >>
+      Cases_on `take_create_outcome
+        (case salt of NONE => CreateCall | SOME s => Create2Call s) value code st` >>
+      drule take_create_outcome_outcome_suffix >> simp[]) >>
+  conj_tac >- MATCH_ACCEPT_TAC (cj 2 outcome_prefix_causal_primitive_steps) >>
+  CONV_TAC (HO_REWR_CONV FORALL_PROD) >> rpt gen_tac >> simp_tac (srw_ss()) [] >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  IF_CASES_TAC >> simp_tac bool_ss []
+  >- external_joint_leaf_tac >>
+  Cases_on `rof` >> simp_tac bool_ss [] >> external_joint_leaf_tac
+QED
+
+Theorem source_prefix_rawcall_return_joint[local]:
+  outcomes_suffix ((if flags.rcf_revert_on_failure then
+    bind (if success then return () else raise (Error (RevertData returnData)))
+      (\x. if flags.rcf_max_outsize = 0 then return (Value NoneV)
+       else return (Value (BytesV (TAKE flags.rcf_max_outsize returnData))))
+    else if flags.rcf_max_outsize = 0 then return (Value (BoolV success))
+    else return (Value (ArrayV (TupleV [BoolV success;
+      BytesV (TAKE flags.rcf_max_outsize returnData)]))))) /\
+  outcome_prefix_causal ((if flags.rcf_revert_on_failure then
+    bind (if success then return () else raise (Error (RevertData returnData)))
+      (\x. if flags.rcf_max_outsize = 0 then return (Value NoneV)
+       else return (Value (BytesV (TAKE flags.rcf_max_outsize returnData))))
+    else if flags.rcf_max_outsize = 0 then return (Value (BoolV success))
+    else return (Value (ArrayV (TupleV [BoolV success;
+      BytesV (TAKE flags.rcf_max_outsize returnData)])))))
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  Cases_on `flags.rcf_revert_on_failure` >> asm_simp_tac bool_ss []
+  >- (match_mp_tac source_prefix_joint_bind >>
+      conj_tac >- (Cases_on `success` >> simp_tac bool_ss [] >> external_joint_leaf_tac) >>
+      gen_tac >> BETA_TAC >> Cases_on `flags.rcf_max_outsize = 0` >>
+      asm_simp_tac bool_ss [] >> external_joint_leaf_tac) >>
+  Cases_on `flags.rcf_max_outsize = 0` >> asm_simp_tac bool_ss [] >> external_joint_leaf_tac
+QED
+val rawcall_return_joint = SIMP_RULE bool_ss [LET_THM] source_prefix_rawcall_return_joint;
+
+Theorem outcome_prefix_causal_external_actions:
+  (!cx static skip_check sig opts vs.
+    outcome_prefix_causal (eval_ext_call cx static skip_check sig opts vs)) /\
+  (!cx has_gas vs. outcome_prefix_causal (eval_send cx has_gas vs)) /\
+  (!cx flags target calldata amount gas.
+    outcome_prefix_causal (eval_raw_call cx flags target calldata amount gas)) /\
+  (!cx kind has_salt rof arg_tys vs blueprint_size.
+    outcome_prefix_causal (eval_create cx kind has_salt rof arg_tys vs blueprint_size))
+Proof
+  conj_tac >- suspend "extcall" >>
+  conj_tac >- suspend "send" >> conj_tac >- suspend "rawcall" >>
+  suspend "create"
+QED
+Resume outcome_prefix_causal_external_actions[extcall]:
+  rpt gen_tac >> PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, outcome_prefix_causal_basic] >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM,
+    vyperStateTheory.ignore_bind_def] >>
+  match_mp_tac outcome_prefix_causal_bind >>
+  conj_tac >- FIRST (map MATCH_ACCEPT_TAC external_suffix_leaves) >>
+  conj_tac >- FIRST (map MATCH_ACCEPT_TAC external_prefix_leaves) >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- MATCH_ACCEPT_TAC (hd external_stage_facts) >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >>
+  gen_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (el 2 external_stage_facts)
+QED
+Resume outcome_prefix_causal_external_actions[send]:
+  rpt gen_tac >> Cases_on `vs`
+  >- simp[eval_send_def, outcome_prefix_causal_basic] >>
+  rename1 `h::t` >> Cases_on `t`
+  >- simp[eval_send_def, outcome_prefix_causal_basic] >>
+  simp_tac bool_ss [eval_send_def, LET_THM,
+    vyperStateTheory.ignore_bind_def] >>
+  match_mp_tac outcome_prefix_causal_bind >>
+  conj_tac >- EXTERNAL_LEAF_TAC >>
+  conj_tac >- EXTERNAL_LEAF_TAC >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  conj_tac
+  >- (match_mp_tac outcomes_suffix_bind_guarded >>
+      conj_tac >- MATCH_ACCEPT_TAC outcomes_suffix_read >>
+      rpt gen_tac >> strip_tac >> Cases_on `v''` >>
+      simp_tac (srw_ss()) []
+      >- suspend "send_native_suffix" >>
+      suspend "send_oracle_suffix") >>
+  `outcome_prefix_causal
+    (bind (take_call_outcome v [] v') (\(rq,outcome).
+      bind (check outcome.co_success "send failed") (\x.
+        bind (adopt_call_outcome rq outcome) (\x. return (Value NoneV)))))`
+    by (match_mp_tac outcome_prefix_causal_bind >>
+        conj_tac >- EXTERNAL_LEAF_TAC >>
+        conj_tac >- EXTERNAL_LEAF_TAC >>
+        CONV_TAC (HO_REWR_CONV FORALL_PROD) >>
+        rpt gen_tac >> simp_tac (srw_ss()) [] >>
+        match_mp_tac source_prefix_joint_bind >>
+        conj_tac >- external_joint_leaf_tac >>
+        gen_tac >> BETA_TAC >>
+        match_mp_tac source_prefix_joint_bind >>
+        conj_tac >- external_joint_leaf_tac >>
+        gen_tac >> BETA_TAC >> external_joint_leaf_tac) >>
+  pop_assum mp_tac >>
+  simp_tac (srw_ss()) [outcome_prefix_causal_def,
+    vyperStateTheory.bind_def, vyperStateTheory.return_def]
+QED
+(* Bounded suffix composition for the native send spine. *)
+val EXTERNAL_SUFFIX_BIND_TAC =
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- FIRST [EXTERNAL_LEAF_TAC, PREFIX_ATOM_TAC] >>
+  rpt gen_tac >> strip_tac >> BETA_TAC;
+
+Resume outcome_prefix_causal_external_actions[send_native_suffix]:
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_LEAF_TAC
+QED
+Resume outcome_prefix_causal_external_actions[send_oracle_suffix]:
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- EXTERNAL_LEAF_TAC >>
+  rpt gen_tac >> strip_tac >> PairCases_on `v''` >>
+  simp_tac (srw_ss()) [] >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_LEAF_TAC
+QED
+Resume outcome_prefix_causal_external_actions[rawcall]:
+  rpt gen_tac >>
+  simp_tac bool_ss [eval_raw_call_def, LET_THM,
+    vyperStateTheory.ignore_bind_def] >>
+  match_mp_tac outcome_prefix_causal_bind >>
+  conj_tac >- EXTERNAL_LEAF_TAC >>
+  conj_tac >- EXTERNAL_LEAF_TAC >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  conj_tac >- suspend "rawcall_dispatch_suffix" >>
+  `outcome_prefix_causal
+    (bind
+      (bind (if flags.rcf_is_delegate then take_delegate_outcome target calldata v
+             else take_call_outcome target calldata v)
+        (\(rq,outcome). bind (adopt_call_outcome rq outcome)
+          (\x. return (outcome.co_success,outcome.co_returnData))))
+      (\(success,returnData).
+        if flags.rcf_revert_on_failure then
+          bind (if success then return () else raise (Error (RevertData returnData)))
+            (\x. if flags.rcf_max_outsize = 0 then return (Value NoneV)
+             else return (Value (BytesV (TAKE flags.rcf_max_outsize returnData))))
+        else if flags.rcf_max_outsize = 0 then return (Value (BoolV success))
+        else return (Value (ArrayV (TupleV [BoolV success;
+          BytesV (TAKE flags.rcf_max_outsize returnData)])))))`
+    by suspend "rawcall_oracle_prefix" >>
+  pop_assum mp_tac >>
+  simp_tac (srw_ss()) [outcome_prefix_causal_def,
+    vyperStateTheory.bind_def, vyperStateTheory.return_def]
+QED
+Resume outcome_prefix_causal_external_actions[rawcall_oracle_prefix]:
+  match_mp_tac outcome_prefix_causal_bind >>
+  conj_tac >- suspend "rawcall_oracle_effect_suffix" >>
+  conj_tac
+  >- (match_mp_tac outcome_prefix_causal_bind >>
+      conj_tac >- (Cases_on `flags.rcf_is_delegate` >> asm_simp_tac bool_ss [] >> EXTERNAL_LEAF_TAC) >>
+      conj_tac >- (Cases_on `flags.rcf_is_delegate` >> asm_simp_tac bool_ss [] >> EXTERNAL_LEAF_TAC) >>
+      CONV_TAC (HO_REWR_CONV FORALL_PROD) >> rpt gen_tac >> simp_tac (srw_ss()) [] >>
+      match_mp_tac source_prefix_joint_bind >>
+      conj_tac >- external_joint_leaf_tac >>
+      gen_tac >> BETA_TAC >> external_joint_leaf_tac) >>
+  CONV_TAC (HO_REWR_CONV FORALL_PROD) >> rpt gen_tac >> simp_tac (srw_ss()) [] >>
+  MATCH_ACCEPT_TAC rawcall_return_joint
+QED
+Resume outcome_prefix_causal_external_actions[rawcall_oracle_effect_suffix]:
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- (Cases_on `flags.rcf_is_delegate` >> asm_simp_tac bool_ss [] >> EXTERNAL_LEAF_TAC) >>
+  rpt gen_tac >> strip_tac >> PairCases_on `v'` >> simp_tac (srw_ss()) [] >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_LEAF_TAC
+QED
+Resume outcome_prefix_causal_external_actions[rawcall_dispatch_suffix]:
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- MATCH_ACCEPT_TAC outcomes_suffix_read >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- suspend "rawcall_effect_suffix" >>
+  rpt gen_tac >> strip_tac >> PairCases_on `v''` >> simp_tac (srw_ss()) [] >>
+  MATCH_ACCEPT_TAC (CONJUNCT1 rawcall_return_joint)
+QED
+Resume outcome_prefix_causal_external_actions[rawcall_effect_suffix]:
+  Cases_on `IS_SOME v'` >> asm_simp_tac bool_ss []
+  >- (match_mp_tac outcomes_suffix_bind_guarded >>
+      conj_tac >- (Cases_on `flags.rcf_is_delegate` >> asm_simp_tac bool_ss [] >> EXTERNAL_LEAF_TAC) >>
+      rpt gen_tac >> strip_tac >> PairCases_on `v''` >> simp_tac (srw_ss()) [] >>
+      EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_LEAF_TAC) >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac
+  >- (rename1 `outcomes_suffix (if ok then record_storage_backend else return ())` >>
+      Cases_on `ok` >> asm_simp_tac bool_ss [] >>
+      FIRST [EXTERNAL_LEAF_TAC, PREFIX_ATOM_TAC]) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_LEAF_TAC
+QED
+Resume outcome_prefix_causal_external_actions[create]:
+  rpt gen_tac >>
+  simp_tac bool_ss [vyperCreateTheory.eval_create_def, LET_THM, vyperStateTheory.ignore_bind_def] >>
+  match_mp_tac outcome_prefix_causal_bind >>
+  conj_tac >- EXTERNAL_LEAF_TAC >>
+  conj_tac >- EXTERNAL_LEAF_TAC >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  match_mp_tac source_prefix_joint_bind >>
+  conj_tac >- external_joint_leaf_tac >> gen_tac >> BETA_TAC >>
+  conj_tac >- suspend "create_dispatch_suffix" >>
+  `outcome_prefix_causal (create_oracle_result v.co_salt v.co_value v'.cc_initcode rof)`
+    by MATCH_ACCEPT_TAC outcome_prefix_causal_create_oracle >>
+  pop_assum mp_tac >>
+  simp_tac (srw_ss()) [outcome_prefix_causal_def, vyperStateTheory.bind_def]
+QED
+Resume outcome_prefix_causal_external_actions[create_dispatch_suffix]:
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- simp[outcomes_suffix_def] >>
+  qx_gen_tac `seed` >> qx_gen_tac `mode` >> qx_gen_tac `fin` >> strip_tac >>
+  BETA_TAC >> Cases_on `mode` >> simp_tac bool_ss []
+  >- MATCH_ACCEPT_TAC outcomes_suffix_create_oracle >>
+  EXTERNAL_SUFFIX_BIND_TAC >>
+  IF_CASES_TAC
+  >- (Cases_on `rof` >> simp[outcomes_suffix_def, vyperCreateTheory.create_soft_failure_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def]) >>
+  IF_CASES_TAC
+  >- (EXTERNAL_SUFFIX_BIND_TAC >>
+      Cases_on `rof` >> simp[outcomes_suffix_def, vyperCreateTheory.create_soft_failure_def,
+        vyperStateTheory.raise_def, vyperStateTheory.return_def]) >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >>
+  qmatch_goalsub_abbrev_tac `run_create_evm a b c d e f g h` >>
+  Cases_on `run_create_evm a b c d e f g h` >> simp_tac (srw_ss()) []
+  >- (EXTERNAL_SUFFIX_BIND_TAC >> Cases_on `rof` >>
+      simp[outcomes_suffix_def, vyperCreateTheory.create_soft_failure_def,
+        vyperStateTheory.raise_def, vyperStateTheory.return_def]) >>
+  PairCases_on `x` >> simp_tac (srw_ss()) [] >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_SUFFIX_BIND_TAC >>
+  Cases_on `x0` >> simp_tac (srw_ss()) []
+  >- (Cases_on `rof` >> simp_tac bool_ss [] >> EXTERNAL_LEAF_TAC) >>
+  EXTERNAL_SUFFIX_BIND_TAC >> EXTERNAL_LEAF_TAC
+QED
+Finalise outcome_prefix_causal_external_actions[local]
+
+Theorem source_prefix_extend_joint[local]:
+  !cx res sb. outcomes_suffix (extend_place cx res sb) /\
+               outcome_prefix_causal (extend_place cx res sb)
+Proof
+  rpt gen_tac >> conj_tac
+  >- (irule outcomes_suffix_frame >> MATCH_ACCEPT_TAC (cj 3 outcomes_frame_places)) >>
+  irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_extend_place
+QED
+
+Theorem source_prefix_select_joint[local]:
+  !cx ty res sb. outcomes_suffix (select_result cx ty res sb) /\
+                 outcome_prefix_causal (select_result cx ty res sb)
+Proof
+  rpt gen_tac >> conj_tac
+  >- (irule outcomes_suffix_frame >> simp[outcomes_frame_reads]) >>
+  irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_select_result
+QED
+
+Theorem source_prefix_array_length_joint[local]:
+  !cx res. outcomes_suffix (result_array_length cx res) /\
+           outcome_prefix_causal (result_array_length cx res)
+Proof
+  rpt gen_tac >> conj_tac
+  >- (irule outcomes_suffix_frame >> simp[outcomes_frame_reads]) >>
+  irule outcome_prefix_causal_frame >>
+  MATCH_ACCEPT_TAC outcomes_replace_result_array_length
+QED
+
+Theorem source_prefix_lock_joint:
+  (!cx nr view. outcomes_suffix (lock_if_nr cx nr view) /\
+                 outcome_prefix_causal (lock_if_nr cx nr view)) /\
+  (!cx nr view. outcomes_suffix (unlock_if_nr cx nr view) /\
+                 outcome_prefix_causal (unlock_if_nr cx nr view))
+Proof
+  conj_tac >> rpt gen_tac >> Cases_on `nr` >>
+  simp_tac (srw_ss()) [lock_if_nr_def, unlock_if_nr_def,
+                       vyperStateTheory.ignore_bind_def] >>
+  rpt JOINT_STEP >> suspend "lock_branch"
+QED
+Resume source_prefix_lock_joint[lock_branch]:
+  markerLib.RESUME_TAC >> evalWalkLib.HEAD_CASE_TAC >>
+  simp_tac (srw_ss()) [] >> rpt JOINT_STEP >> suspend "lock_leaf"
+QED
+Resume source_prefix_lock_joint[lock_leaf]:
+  markerLib.RESUME_TAC >> rpt PREFIX_STEP
+QED
+Finalise source_prefix_lock_joint[local]
+
+Theorem source_prefix_push[local]:
+  !fn env cx. outcome_prefix_causal (push_function fn env cx)
+Proof
+  rpt gen_tac >> PREFIX_ATOM_TAC
+QED
+Theorem source_prefix_pop[local]:
+  !sc. outcome_prefix_causal (pop_function sc)
+Proof
+  rpt gen_tac >> PREFIX_ATOM_TAC
+QED
+Theorem source_prefix_function_handler[local]:
+  !ex. outcome_prefix_causal (handle_function ex)
+Proof
+  rpt gen_tac >> PREFIX_ATOM_TAC
+QED
+
+(* Full source evaluator prefix law, with the reviewed eleven-function API.
+ * Constructor proofs below use checked action interfaces and guarded composition. *)
+Theorem eval_outcome_prefix_causal_mutual:
+  (!cx s. outcome_prefix_causal (eval_stmt cx s)) /\
+  (!cx ss. outcome_prefix_causal (eval_stmts cx ss)) /\
+  (!cx it. outcome_prefix_causal (eval_iterator cx it)) /\
+  (!cx tyv id fbody vs. outcome_prefix_causal (eval_for cx tyv id fbody vs)) /\
+  (!cx e. outcome_prefix_causal (eval_expr cx e)) /\
+  (!cx es. outcome_prefix_causal (eval_exprs cx es)) /\
+  (!cx t. outcome_prefix_causal (eval_base_place cx t)) /\
+  (!cx t. outcome_prefix_causal (eval_target_place cx t)) /\
+  (!cx g v. outcome_prefix_causal (assign_tuple_targets cx g v)) /\
+  (!cx gs vs. outcome_prefix_causal (assign_tuple_target_list cx gs vs)) /\
+  (!cx es. outcome_prefix_causal (eval_expr_results cx es))
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >- suspend "c01" >- suspend "c02" >- suspend "c03"
+  >- suspend "c04" >- suspend "c05" >- suspend "c06"
+  >- suspend "c07" >- suspend "c08" >- suspend "c09"
+  >- suspend "c10" >- suspend "c11" >- suspend "c12"
+  >- suspend "c13" >- suspend "c14" >- suspend "c15"
+  >- suspend "c16" >- suspend "c17" >- suspend "c18"
+  >- suspend "c19" >- suspend "c20" >- suspend "c21"
+  >- suspend "c22" >- suspend "c23" >- suspend "c24"
+  >- suspend "c25" >- suspend "c26" >- suspend "c27"
+  >- suspend "c28" >- suspend "c29" >- suspend "c30"
+  >- suspend "c31" >- suspend "c32" >- suspend "c33"
+  >- suspend "c34" >- suspend "c35" >- suspend "c36"
+  >- suspend "c37" >- suspend "c38" >- suspend "c39"
+  >- suspend "c40" >- suspend "c41" >- suspend "c42"
+  >- suspend "c43" >- suspend "c44" >- suspend "c45"
+  >- suspend "c46" >- suspend "c47" >- suspend "c48"
+  >- suspend "c49" >- suspend "c50" >- suspend "c51"
+  >- suspend "c52" >- suspend "c53" >- suspend "c54"
+  >- suspend "c55" >- suspend "c56" >- suspend "c57"
+  >- suspend "c58" >- suspend "c59" >- suspend "c60"
+  >- suspend "c61" >- suspend "c62" >> suspend "c63"
+QED
+
+(* Assembly uses checked action interfaces rather than unfolding compound actions. *)
+val prefix_assembly_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
+  [outcome_prefix_causal_place_actions,
+   outcome_prefix_causal_external_actions,
+   source_prefix_select_joint, source_prefix_extend_joint,
+   source_prefix_array_length_joint, cj 1 source_prefix_lock_joint,
+   cj 2 source_prefix_lock_joint, source_prefix_push, source_prefix_pop,
+   source_prefix_function_handler]);
+val prefix_assembly_net = evalWalkLib.walk_net prefix_rules
+  (map (fn th => (concl (SPEC_ALL th), MATCH_ACCEPT_TAC th))
+    (prefix_assembly_facts @ prefix_leaf_facts @ prefix_suffix_facts));
+fun PREFIX_STEP g = FIRST
+  [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+   evalWalkLib.IH_TAC {stop = K false, normalise = I},
+   (fn goal as (_,w) => FIRST (Net.match w prefix_assembly_net) goal),
+   conj_tac,
+   CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
+   CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+   CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
+   CHANGED_TAC PREFIX_ATOM_TAC,
+   strip_tac, conj_tac, evalWalkLib.HEAD_CASE_TAC] g;
+
+val PREFIX_CONSTRUCTOR_TAC = rpt strip_tac >>
+  simp_tac bool_ss [Once evaluate_def] >> rpt PREFIX_STEP;
+
+Resume eval_outcome_prefix_causal_mutual[c01]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c02]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c03]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c04]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c05]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[c06]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c07]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c08]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c09]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c10]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c11]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c12]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c13]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c14]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c15]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c16]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[c17]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c18]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c19]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c20]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c21]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c22]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c23]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c24]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c25]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- MATCH_ACCEPT_TAC (cj 5 eval_outcomes_suffix_with_results) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  rpt (FIRST [MATCH_ACCEPT_TAC
+    (MATCH_MP outcome_prefix_causal_frame outcomes_replace_array_iterator_results),
+    PREFIX_STEP])
+QED
+Resume eval_outcome_prefix_causal_mutual[c26]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c27]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c28]:
+  PREFIX_CONSTRUCTOR_TAC >> metis_tac[]
+QED
+Resume eval_outcome_prefix_causal_mutual[c29]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c30]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c31]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c32]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c33]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c34]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c35]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- MATCH_ACCEPT_TAC (cj 5 eval_outcomes_suffix_with_results) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  conj_tac >- suspend "subscript_suffix" >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- (IF_CASES_TAC >> rpt PREFIX_STEP) >>
+  conj_tac >- (IF_CASES_TAC >> rpt PREFIX_STEP) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[subscript_suffix]:
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- (IF_CASES_TAC >> rpt PREFIX_STEP) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[c36]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c37]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def,
+    vyperStateTheory.ignore_bind_def] >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- (FIRST (map MATCH_ACCEPT_TAC prefix_suffix_facts)) >>
+  conj_tac >- (FIRST (map MATCH_ACCEPT_TAC prefix_leaf_facts)) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  conj_tac >- suspend "builtin_suffix" >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- suspend "builtin_value_suffix" >>
+  conj_tac >- suspend "builtin_value_prefix" >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  simp[outcome_prefix_causal_basic, outcomes_suffix_def, vyperStateTheory.return_def]
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_value_prefix]:
+  IF_CASES_TAC >- suspend "builtin_len" >>
+  IF_CASES_TAC >- suspend "builtin_in" >>
+  IF_CASES_TAC >- suspend "builtin_gas" >>
+  suspend "builtin_other"
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_len]:
+  simp_tac bool_ss [] >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_in]:
+  simp_tac bool_ss [] >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_gas]:
+  simp_tac bool_ss [] >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_other]:
+  simp_tac bool_ss [] >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_value_suffix]:
+  IF_CASES_TAC >- (simp_tac bool_ss [] >> rpt PREFIX_STEP) >>
+  IF_CASES_TAC >- (simp_tac bool_ss [] >> rpt PREFIX_STEP) >>
+  IF_CASES_TAC >- (simp_tac bool_ss [] >> rpt PREFIX_STEP) >>
+  simp_tac bool_ss [] >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[builtin_suffix]:
+  match_mp_tac outcomes_suffix_bind_guarded >>
+  conj_tac >- suspend "builtin_value_suffix" >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >> rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[c38]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c39]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c40]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c41]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c42]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  simp_tac bool_ss [vyperStateTheory.ignore_bind_def] >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- (FIRST (map MATCH_ACCEPT_TAC prefix_suffix_facts)) >>
+  conj_tac >- (FIRST (map MATCH_ACCEPT_TAC prefix_leaf_facts)) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  conj_tac >- suspend "intcall_suffix1" >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- (FIRST (map MATCH_ACCEPT_TAC prefix_suffix_facts)) >>
+  conj_tac >- (FIRST (map MATCH_ACCEPT_TAC prefix_leaf_facts)) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  conj_tac >- suspend "intcall_suffix2" >>
+  match_mp_tac outcome_prefix_causal_bind_guarded >>
+  conj_tac >- FIRST (map MATCH_ACCEPT_TAC prefix_suffix_facts) >>
+  conj_tac >- FIRST (map MATCH_ACCEPT_TAC prefix_leaf_facts) >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  simp_tac bool_ss [LET_THM] >> suspend "intcall_body"
+QED
+Resume eval_outcome_prefix_causal_mutual[c43]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c44]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c45]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c46]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c47]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c48]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c49]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c50]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c51]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c52]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c53]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[c54]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c55]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c56]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c57]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c58]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c59]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c60]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c61]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c62]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+Resume eval_outcome_prefix_causal_mutual[c63]:
+  PREFIX_CONSTRUCTOR_TAC
+QED
+
+Resume eval_outcome_prefix_causal_mutual[intcall_suffix1]:
+  rpt PREFIX_STEP
+QED
+Resume eval_outcome_prefix_causal_mutual[intcall_suffix2]:
+  rpt PREFIX_STEP
+QED
+fun INTERNAL_JOINT_STEP g = FIRST
+  [match_mp_tac source_prefix_joint_bind_guarded,
+   (fn goal as (_,w) => FIRST (Net.match w prefix_assembly_net) goal),
+   evalWalkLib.IH_TAC {stop = K false,
+     normalise = PURE_REWRITE_RULE [vyperStateTheory.ignore_bind_def]},
+   CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+   CHANGED_TAC (BETA_TAC >> simp_tac bool_ss []),
+   CONV_TAC (BINOP_CONV (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv))),
+   CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
+   strip_tac, conj_tac, evalWalkLib.HEAD_CASE_TAC] g;
+
+Resume eval_outcome_prefix_causal_mutual[intcall_body]:
+  rpt INTERNAL_JOINT_STEP
+QED
+Finalise eval_outcome_prefix_causal_mutual
+
+Theorem eval_stmts_outcome_prefix_causal:
+  !cx fbody. outcome_prefix_causal (eval_stmts cx fbody)
+Proof
+  simp[eval_outcome_prefix_causal_mutual]
+QED
+
+Theorem eval_external_defaults_outcome_prefix_causal:
+  !cx dflts. outcome_prefix_causal (eval_external_defaults cx dflts)
+Proof
+  rpt gen_tac >> simp_tac bool_ss [eval_external_defaults_def] >>
+  rpt PREFIX_STEP >> simp[eval_outcome_prefix_causal_mutual]
+QED
+
+Theorem fn_entry_run_outcome_prefix:
+  !os next tail tail' gobs am cx nr mut mods args dflts vals fbody res st.
+    fn_entry_run (os ++ next::tail) gobs am cx nr mut mods args dflts vals fbody =
+      SOME (res,st) /\ st.outcomes = SOME (next::tail) ==>
+    fn_entry_run (os ++ tail') gobs am cx nr mut mods args dflts vals fbody =
+      SOME (res,st with outcomes := SOME tail')
+Proof
+  rpt gen_tac >> simp_tac bool_ss [fn_entry_run_def, LET_THM] >>
+  IF_CASES_TAC >> simp_tac (srw_ss()) [] >>
+  Cases_on `if cx.in_deploy then
+    evaluate_all_constants cx am cx.txn.target mods else SOME am` >>
+  simp_tac (srw_ss()) [] >>
+  qmatch_goalsub_abbrev_tac `entry_core (initial_state x [FEMPTY] with
+    <|outcomes := SOME (os ++ next::tail); requests := []; gas_obs := gobs|>)` >>
+  `outcome_prefix_causal entry_core` by
+    (qunabbrev_tac `entry_core` >>
+     simp_tac bool_ss [send_call_value_def, eval_external_defaults_def, LET_THM] >>
+     rpt PREFIX_STEP >>
+     simp[eval_outcome_prefix_causal_mutual,
+          eval_outcomes_suffix_with_results]) >>
+  strip_tac >>
+  qpat_x_assum `outcome_prefix_causal entry_core`
+    (mp_tac o Q.SPECL
+      [`initial_state x [FEMPTY] with <|requests := []; gas_obs := gobs|>`,
+       `os`, `next`, `tail`, `res`, `st`] o
+      REWRITE_RULE [outcome_prefix_causal_def]) >>
+  simp[] >> disch_then (qspec_then `tail'` ACCEPT_TAC)
+QED
+
+Theorem outcome_prefix_causal_truncate[local]:
+  !f seed os n res fin.
+    outcomes_suffix f /\ outcome_prefix_causal f /\
+    n <= LENGTH os /\
+    f (seed with outcomes := SOME os) = (res,fin) /\
+    (SND (f (seed with outcomes := SOME (TAKE n os)))).outcomes <> SOME [] ==>
+    ?rest. rest <> [] /\
+      f (seed with outcomes := SOME (TAKE n os)) =
+        (res,fin with outcomes := SOME rest) /\
+      fin.outcomes = SOME (rest ++ DROP n os)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f (seed with outcomes := SOME (TAKE n os))` >>
+  rename1 `f (seed with outcomes := SOME (TAKE n os)) = (short_res,short_fin)` >>
+  qpat_x_assum `outcomes_suffix f`
+    (mp_tac o REWRITE_RULE [outcomes_suffix_def]) >>
+  disch_then (qspec_then `seed with outcomes := SOME (TAKE n os)` mp_tac) >>
+  simp[outcome_suffix_def] >>
+  disch_then (qx_choose_then `used` (qx_choose_then `rest` strip_assume_tac)) >>
+  Cases_on `rest` >- gvs[] >>
+  rename1 `short_fin.outcomes = SOME (next::tail)` >>
+  `used ++ ((next::tail) ++ DROP n os) = os` by
+    metis_tac[TAKE_DROP, APPEND_ASSOC] >>
+  `f (seed with outcomes := SOME (used ++ next::tail)) = (short_res,short_fin)` by
+    metis_tac[] >>
+  qpat_x_assum `outcome_prefix_causal f`
+    (mp_tac o Q.SPECL [`seed`,`used`,`next`,`tail`,`short_res`,`short_fin`] o
+      REWRITE_RULE [outcome_prefix_causal_def]) >>
+  simp[] >> disch_then (qspec_then `(next::tail) ++ DROP n os` mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  simp[vyperStateTheory.evaluation_state_component_equality]
+QED
+
+Theorem fn_entry_run_truncate[local]:
+  !n os gobs am cx nr mut mods args dflts vals fbody res fin.
+    n <= LENGTH os /\
+    entry_calls_within n os
+      (\xs. fn_entry_run xs gobs am cx nr mut mods args dflts vals fbody) /\
+    fn_entry_run os gobs am cx nr mut mods args dflts vals fbody =
+      SOME (res,fin) ==>
+    ?rest. rest <> [] /\
+      fn_entry_run (TAKE n os) gobs am cx nr mut mods args dflts vals fbody =
+        SOME (res,fin with outcomes := SOME rest) /\
+      fin.outcomes = SOME (rest ++ DROP n os)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `n - LENGTH (TAKE n os) = 0` by
+    (simp[LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac) >>
+  fs[entry_calls_within_def, entry_calls_within_from_def] >>
+  Cases_on `LENGTH vals > LENGTH args \/ LENGTH args - LENGTH vals > LENGTH dflts`
+  >- gvs[fn_entry_run_def] >>
+  Cases_on `if cx.in_deploy then
+    evaluate_all_constants cx am cx.txn.target mods else SOME am`
+  >- gvs[fn_entry_run_def] >>
+  gvs[fn_entry_run_def, LET_THM] >>
+  qmatch_assum_abbrev_tac `entry_core entry_seed = (res,fin)` >>
+  `outcomes_suffix entry_core /\ outcome_prefix_causal entry_core` by
+    (conj_tac >> qunabbrev_tac `entry_core` >>
+     simp_tac bool_ss [send_call_value_def, eval_external_defaults_def, LET_THM] >>
+     rpt PREFIX_STEP >>
+     simp[eval_outcome_prefix_causal_mutual, eval_outcomes_suffix_with_results]) >>
+  fs[entry_calls_within_from_def] >>
+  mp_tac (Q.SPECL [`entry_core`,`entry_seed`,`os`,`n`,`res`,`fin`]
+    (INST_TYPE [alpha |-> ``:unit + exception``]
+      outcome_prefix_causal_truncate)) >>
+  simp[Abbr `entry_seed`] >>
+  Cases_on `entry_core (initial_state x [FEMPTY] with
+    <|outcomes := SOME (TAKE n os); requests := []; gas_obs := gobs|>)` >>
+  gvs[]
+QED
+
+Theorem source_calls_within_truncate:
+  !n am tx os gobs res st.
+    n <= LENGTH os /\ source_calls_within n am tx os gobs /\
+    call_entry_run os gobs am tx = SOME (res,st) ==>
+    ?rest. rest <> [] /\
+      call_entry_run (TAKE n os) gobs am tx =
+        SOME (res,st with outcomes := SOME rest) /\
+      st.outcomes = SOME (rest ++ DROP n os)
+Proof
+  rpt gen_tac >>
+  simp_tac bool_ss [source_calls_within_def, call_entry_run_def, LET_THM] >>
+  rpt TOP_CASE_TAC >> simp[] >> metis_tac[fn_entry_run_truncate]
+QED
+
+Theorem deploy_source_calls_within_truncate:
+  !n tops am tx os gobs res st.
+    n <= LENGTH os /\ deploy_source_calls_within n tops am tx os gobs /\
+    deploy_entry_run os gobs tops am tx = SOME (res,st) ==>
+    ?rest. rest <> [] /\
+      deploy_entry_run (TAKE n os) gobs tops am tx =
+        SOME (res,st with outcomes := SOME rest) /\
+      st.outcomes = SOME (rest ++ DROP n os)
+Proof
+  rpt gen_tac >>
+  simp_tac bool_ss
+    [deploy_source_calls_within_def, deploy_entry_run_def, LET_THM] >>
+  rpt TOP_CASE_TAC >> simp[] >> metis_tac[fn_entry_run_truncate]
+QED
