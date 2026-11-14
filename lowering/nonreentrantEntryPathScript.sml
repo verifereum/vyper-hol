@@ -240,18 +240,33 @@ Proof
   `ghost_inv H NONE cenv cx es G' tn'
     (transient_lock_checked_state sa nkey s)` by
     (mp_tac (SPEC_ALL transient_lock_checked_ghost_frame) >> simp[]) >>
+  `immutable_alloca_sep func cenv cx es
+    (transient_lock_checked_state sa nkey s)` by fs[stmt_state_rel_def] >>
+  `immutable_alloca_sep func cenv cx locked u` by
+    (match_mp_tac (Q.SPECL
+       [`func`, `cenv`, `cx`, `es`, `locked`,
+        `transient_lock_checked_state sa nkey s`, `u`]
+       immutable_alloca_sep_fields) >>
+     simp[] >> Cases_on `iv` >>
+     gvs[transient_lock_code_execution, tstore_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def, lookup_var_def]) >>
+  `immutable_base_zero cenv u` by
+    (Cases_on `iv` >> gvs[transient_lock_code_execution] >>
+     fs[stmt_state_rel_def, immutable_base_zero_alt, tstore_def]) >>
   conj_tac
   >- (match_mp_tac (Q.SPECL
         [`H`, `func`, `cenv`, `cx`, `es`,
          `transient_lock_checked_state sa nkey s`, `locked`, `u`, `ctx`]
         stmt_state_rel_allocas_frame) >>
       simp[] >> Cases_on `iv` >>
-      gvs[transient_lock_code_execution, stmt_state_rel_def,
-          immutable_alloca_sep_def, immutable_base_zero_def,
-          local_region_def, tstore_def, eval_operand_def, lookup_var_def] >>
-      rpt strip_tac >> fs[]) >>
+      gvs[transient_lock_code_execution, tstore_def]) >>
   Cases_on `iv` >> gvs[transient_lock_code_execution]
-  >- fs[ghost_inv_def] >>
-  irule nonreentrant_ghost_inv_frame >>
-  qexists_tac `es` >> simp[]
+  >- (qpat_x_assum `ghost_inv H NONE cenv cx es G' tn' _` mp_tac >>
+      simp[ghost_inv_def] >> strip_tac >> simp[]) >>
+  match_mp_tac (Q.INST
+    [`es'` |-> `locked`,
+     `ss` |-> `transient_lock_checked_state sa nkey s`,
+     `G` |-> `G'`, `tn` |-> `tn'`, `value` |-> `1w`]
+    nonreentrant_ghost_inv_frame) >> simp[]
 QED
