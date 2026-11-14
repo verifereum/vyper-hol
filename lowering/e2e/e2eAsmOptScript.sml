@@ -182,7 +182,8 @@ Theorem opt_entry_codegen_asm_entry_rel:
     (entry_asm_state (opt_entry_state prog prog' cplan es) es)
 Proof
   rpt strip_tac >>
-  simp[codegen_asm_entry_rel_def, entry_asm_state_def, shared_state_rel_def,
+  simp[codegenEntrySimTheory.codegen_asm_entry_rel_def,
+       entry_asm_state_def, shared_state_rel_def,
        venom_asm_terminal_rel_def, opt_entry_state_def,
        entry_venom_state_frame_fields, entry_venom_state_fresh] >>
   gvs[call_state_rel_def, entry_venom_state_def, venomStateTheory.init_venom_state_def,
