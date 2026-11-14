@@ -105,12 +105,21 @@ Proof
   gvs[] >> simp[asm_step_delegate, asm_exec_delegatecall_def]
 QED
 
-Theorem asm_frame_delegate_prepare_exit[local]:
+Theorem asm_frame_delegate_prepare_exit_progress[local]:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
   asm_call_prepare DelegateCall s = (INR e,t) ==>
-  asm_frame_step_ok gas_tail prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -157,14 +166,23 @@ Proof
   simp[asm_frame_step_ok_def]
 QED
 
-Theorem asm_frame_delegate_abort[local]:
+Theorem asm_frame_delegate_abort_progress:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
   asm_call_prepare DelegateCall s =
     (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
   ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
-  asm_frame_step_ok gas_tail prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -198,7 +216,8 @@ Proof
   suspend "effects"
 QED
 
-Resume asm_frame_delegate_abort[effects]:
+Resume asm_frame_delegate_abort_progress[effects]:
+  markerLib.RESUME_TAC >>
   `a.as_outcomes = failed_outcome (request_of s) :: MAP SND (call_trace t)` by
     (fs[asm_frame_rel_def] >> gvs[]) >>
   `take_outcome (request_of s) a.as_outcomes =
@@ -234,7 +253,8 @@ Resume asm_frame_delegate_abort[effects]:
   suspend "package"
 QED
 
-Resume asm_frame_delegate_abort[package]:
+Resume asm_frame_delegate_abort_progress[package]:
+  markerLib.RESUME_TAC >>
   `(a.as_call_ctx.cc_created_in_tx =
       account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
     (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
@@ -262,16 +282,43 @@ Resume asm_frame_delegate_abort[package]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
-  drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
+  `asm_frame_step_ok gas_tail prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\
+     asm_frame_rel gas_tail prog data es0 a1 t` by
+    (drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_result >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `s.contexts = _`)) >>
   disch_then (qspecl_then [`failed_outcome (request_of s)`,`c`,`az`,`ao`] mp_tac) >>
-  simp[call_has_value_def, failed_outcome_def] >> metis_tac[]
+  simp[call_has_value_def, failed_outcome_def] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`s.contexts = _`,
+     `EL a.as_pc prog = _`,
+     `asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`,
+     `step s = (INL (),_)`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+  simp[relationTheory.RTC_REFL]
 QED
-Finalise asm_frame_delegate_abort
+Finalise asm_frame_delegate_abort_progress[local]
 
-Theorem asm_frame_delegate_terminal_exception[local]:
+Theorem asm_frame_delegate_abort:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare DelegateCall s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_delegate_abort_progress))
+QED
+
+Theorem asm_frame_delegate_terminal_exception_progress:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
@@ -280,7 +327,16 @@ Theorem asm_frame_delegate_terminal_exception[local]:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR (SOME exc),v) /\ exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
-  asm_frame_step_ok gas_tail prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -324,7 +380,8 @@ Proof
   suspend "package"
 QED
 
-Resume asm_frame_delegate_terminal_exception[package]:
+Resume asm_frame_delegate_terminal_exception_progress[package]:
+  markerLib.RESUME_TAC >>
   `(a.as_call_ctx.cc_created_in_tx =
       account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
     (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
@@ -353,16 +410,45 @@ Resume asm_frame_delegate_terminal_exception[package]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
-  drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
+  `asm_frame_step_ok gas_tail prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\
+     asm_frame_rel gas_tail prog data es0 a1 t` by
+    (drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_result >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `s.contexts = _`)) >>
   disch_then (qspecl_then [`failed_outcome (request_of s)`,`c`,`az`,`ao`] mp_tac) >>
-  simp[call_has_value_def, failed_outcome_def] >> metis_tac[]
+  simp[call_has_value_def, failed_outcome_def] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`s.contexts = _`,
+     `EL a.as_pc prog = _`,
+     `asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`,
+     `step s = (INL (),_)`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+  simp[relationTheory.RTC_REFL]
 QED
-Finalise asm_frame_delegate_terminal_exception
+Finalise asm_frame_delegate_terminal_exception_progress[local]
 
-Theorem asm_frame_delegate_terminal_none[local]:
+Theorem asm_frame_delegate_terminal_exception:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare DelegateCall s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR (SOME exc),v) /\ exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_delegate_terminal_exception_progress))
+QED
+
+Theorem asm_frame_delegate_terminal_none_progress:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
@@ -371,7 +457,16 @@ Theorem asm_frame_delegate_terminal_none[local]:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR NONE,v) ==>
-  asm_frame_step_ok gas_tail prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -413,7 +508,8 @@ Proof
   suspend "package"
 QED
 
-Resume asm_frame_delegate_terminal_none[package]:
+Resume asm_frame_delegate_terminal_none_progress[package]:
+  markerLib.RESUME_TAC >>
   `(a.as_call_ctx.cc_created_in_tx =
       account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
     (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
@@ -436,16 +532,45 @@ Resume asm_frame_delegate_terminal_none[package]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
-  drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
+  `asm_frame_step_ok gas_tail prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\
+     asm_frame_rel gas_tail prog data es0 a1 t` by
+    (drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_result >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `s.contexts = _`)) >>
   disch_then (qspecl_then [`out`,`c`,`az`,`ao`] mp_tac) >>
-  simp[call_has_value_def] >> metis_tac[]
+  simp[call_has_value_def] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`s.contexts = _`,
+     `EL a.as_pc prog = _`,
+     `asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`,
+     `step s = (INL (),_)`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+  simp[relationTheory.RTC_REFL]
 QED
-Finalise asm_frame_delegate_terminal_none
+Finalise asm_frame_delegate_terminal_none_progress[local]
 
-Theorem asm_frame_delegate_terminal[local]:
+Theorem asm_frame_delegate_terminal_none:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare DelegateCall s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INR NONE,v) ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_delegate_terminal_none_progress))
+QED
+
+Theorem asm_frame_delegate_terminal_progress[local]:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
@@ -454,21 +579,30 @@ Theorem asm_frame_delegate_terminal[local]:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR result,v) ==>
-  asm_frame_step_ok gas_tail prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   Cases_on `result`
-  >- (drule_all asm_frame_delegate_terminal_none >> simp[]) >>
+  >- (drule_all asm_frame_delegate_terminal_none_progress >> simp[]) >>
   `~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   drule_at (Pat `asm_call_finish _ _ _ = _`) asm_call_prepared_terminal_kind >>
   disch_then (qspecl_then [`s`,`rest`,`rb`,`d`,`c`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `x <> Reverted` by gvs[] >>
-  drule_all asm_frame_delegate_terminal_exception >> simp[]
+  drule_all asm_frame_delegate_terminal_exception_progress >> simp[]
 QED
 
-Theorem asm_frame_delegate_enter_step_ok[local]:
+Theorem asm_frame_delegate_enter_step_ok_progress:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
@@ -478,7 +612,16 @@ Theorem asm_frame_delegate_enter_step_ok[local]:
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INL (),v) /\ step s = (INL (),v) /\ observable_call c /\
   run_call v = SOME (INL (),t) /\ LENGTH t.contexts = LENGTH s.contexts ==>
-  asm_frame_step_ok gas_tail prog data es0 a s
+  asm_frame_step_ok gas_tail prog data es0 a s /\
+  (!a1 r end_state. run_call s = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?next_es end_es. step s = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call s /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -515,7 +658,8 @@ Proof
   suspend "consume"
 QED
 
-Resume asm_frame_delegate_enter_step_ok[consume]:
+Resume asm_frame_delegate_enter_step_ok_progress[consume]:
+  markerLib.RESUME_TAC >>
   `(a.as_call_ctx.cc_created_in_tx =
       account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
     (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
@@ -544,19 +688,64 @@ Resume asm_frame_delegate_enter_step_ok[consume]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
-  drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
+  `asm_frame_step_ok gas_tail prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\
+     asm_frame_rel gas_tail prog data es0 a1 t` by
+    (drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_result >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `s.contexts = _`)) >>
   disch_then (qspecl_then [`out`,`c`,`az`,`ao`] mp_tac) >>
-  simp[call_has_value_def] >> metis_tac[]
+  simp[call_has_value_def] >> metis_tac[]) >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                step x = (INL (),y)) v t` by
+    (drule_at (Pat `run_call v = _`) run_call_inl_rtc >> strip_tac >>
+     irule relationTheory.RTC_MONOTONE >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`s.contexts = _`,
+     `EL a.as_pc prog = _`,
+     `asm_step _ _ _ a = AsmOK _`,
+     `asm_frame_rel gas_tail prog data es0 _ t`,
+     `run_call t = run_call s`,
+     `step s = (INL (),_)`,
+     `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (),y)) v t`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+  simp[relationTheory.RTC_REFL]
 QED
-Finalise asm_frame_delegate_enter_step_ok
+Finalise asm_frame_delegate_enter_step_ok_progress[local]
 
-Theorem asm_frame_delegate_step:
+Theorem asm_frame_delegate_enter_step_ok:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a s /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare DelegateCall s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
+  asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
+    (INL (),v) /\ step s = (INL (),v) /\ observable_call c /\
+  run_call v = SOME (INL (),t) /\ LENGTH t.contexts = LENGTH s.contexts ==>
+  asm_frame_step_ok gas_tail prog data es0 a s
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_delegate_enter_step_ok_progress))
+QED
+
+Theorem asm_frame_delegate_step_progress:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "DELEGATECALL" ==>
-  asm_frame_step_ok gas_tail prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es /\
+  (!a1 r end_state. run_call es = SOME (r,end_state) /\
+    ~frame_resource_starved es0 r end_state /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL as.as_pc prog) as = AsmOK a1 ==>
+    ?next_es end_es. step es = (INL (),next_es) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH es.contexts /\
+                 step x = (INL (),y)) next_es end_es /\
+      run_call end_es = run_call es /\
+      asm_frame_rel gas_tail prog data es0 a1 end_es)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by
@@ -567,17 +756,18 @@ Proof
       rename1 `asm_call_prepare DelegateCall es =
         (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u)` >>
       Cases_on `(lookup_account sender accounts).balance < value \/ 1024 < LENGTH es.contexts`
-      >- (drule_all asm_frame_delegate_abort >> simp[]) >>
+      >- (drule_all asm_frame_delegate_abort_progress >> simp[]) >>
       `value <= (lookup_account sender accounts).balance /\ LENGTH es.contexts <= 1024`
         by (qpat_x_assum `~(_ \/ _)` mp_tac >> simp[]) >>
       Cases_on `asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u` >>
       rename1 `asm_call_finish DelegateCall _ u = (q,v)` >> Cases_on `q`
       >- (Cases_on `x` >> suspend "entered") >>
-      drule_all asm_frame_delegate_terminal >> simp[]) >>
-  drule_all asm_frame_delegate_prepare_exit >> simp[]
+      drule_all asm_frame_delegate_terminal_progress >> simp[]) >>
+  drule_all asm_frame_delegate_prepare_exit_progress >> simp[]
 QED
 
-Resume asm_frame_delegate_step[entered]:
+Resume asm_frame_delegate_step_progress[entered]:
+  markerLib.RESUME_TAC >>
   `wf_state es /\ (?d. es.msdomain = Collect d) /\ ~c.msgParams.static /\
    asm_evm_rel (prog ++ [AsmDataItem data]) as es` by
     (fs[asm_frame_rel_def] >> gvs[]) >>
@@ -603,7 +793,15 @@ Resume asm_frame_delegate_step[entered]:
   drule_all asm_call_child_run_normal >> strip_tac >>
   `LENGTH t.contexts = LENGTH es.contexts` by
     (qpat_x_assum `LENGTH t.contexts + 1 = _` mp_tac >> simp[]) >>
-  drule_all asm_frame_delegate_enter_step_ok >> simp[]
+  drule_all asm_frame_delegate_enter_step_ok_progress >> simp[]
 QED
 
-Finalise asm_frame_delegate_step
+Finalise asm_frame_delegate_step_progress
+
+Theorem asm_frame_delegate_step:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
+  as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "DELEGATECALL" ==>
+  asm_frame_step_ok gas_tail prog data es0 as es
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 asm_frame_delegate_step_progress))
+QED

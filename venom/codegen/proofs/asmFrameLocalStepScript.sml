@@ -595,7 +595,7 @@ Proof
   metis_tac[frame_rel_singleton]
 QED
 
-Theorem frame_plain_step:
+Theorem frame_plain_step_progress:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "CALL" /\
@@ -605,7 +605,16 @@ Theorem frame_plain_step:
   EL a.as_pc prog <> AsmOp "CREATE2" /\
   EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
   EL a.as_pc prog <> AsmOp "GAS" ==>
-  asm_frame_step_ok gas_tail prog data es0 a es
+  asm_frame_step_ok gas_tail prog data es0 a es /\
+  (!a1 r t. run_call es = SOME (r,t) /\
+    ~frame_resource_starved es0 r t /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a = AsmOK a1 ==>
+    ?u es1. step es = (INL (),u) /\
+      RTC (\x y. LENGTH x.contexts >= LENGTH es.contexts /\
+                 step x = (INL (),y)) u es1 /\
+      run_call es1 = run_call es /\
+      asm_frame_rel gas_tail prog data es0 a1 es1)
 Proof
   strip_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
@@ -613,10 +622,14 @@ Proof
     gvs[asm_frame_rel_def] >>
   drule_all frame_local_opcode >> strip_tac >>
   drule_all frame_plain_singleton_sim >> strip_tac
-  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
-      irule frame_starved_lift >> metis_tac[]) 
-  >- (simp[asm_frame_step_ok_def] >> disj1_tac >>
-      irule frame_starved_lift >> metis_tac[]) >>
+  >- (`?r es'. run_call es = SOME (r,es') /\
+        frame_resource_starved es0 r es' /\ call_requests es = []` by
+        (irule frame_starved_lift >> metis_tac[]) >>
+      simp[asm_frame_step_ok_def] >> metis_tac[])
+  >- (`?r es'. run_call es = SOME (r,es') /\
+        frame_resource_starved es0 r es' /\ call_requests es = []` by
+        (irule frame_starved_lift >> metis_tac[]) >>
+      simp[asm_frame_step_ok_def] >> metis_tac[]) >>
   Cases_on `asm_step (SND (compute_label_offsets prog))
     (build_offset_to_pc prog) (EL a.as_pc prog) a` >>
   gvs[asm_frame_step_ok_def]
@@ -626,7 +639,7 @@ Proof
   >> suspend "fault"
 QED
 
-Resume frame_plain_step[ok]:
+Resume frame_plain_step_progress[ok]:
   drule_all (SRULE [MEM] frame_continue_transplant) >> strip_tac >>
   `next_opcode (FST (HD es.contexts)) <> SOME Gas /\
    ~observable_call (FST (HD es.contexts))` by simp[] >>
@@ -639,13 +652,16 @@ Resume frame_plain_step[ok]:
   `a'.as_requests = a.as_requests /\ a'.as_outcomes = a.as_outcomes /\
    a'.as_gas_readings = a.as_gas_readings /\ a'.as_call_ctx = a.as_call_ctx` by
     (irule frame_asm_step_observers >> metis_tac[]) >>
-  disj2_tac >> goal_assum (drule_at Any) >>
-  irule frame_continue_rel >> simp[] >>
-  conj_tac >- gvs[asm_frame_rel_def] >>
-  conj_tac >- gvs[asm_frame_rel_def] >>
-  qexistsl_tac [`a`,`es`] >> simp[]
+  `asm_frame_rel gas_tail prog data es0 a' es1` by
+    (irule frame_continue_rel >> simp[] >>
+     conj_tac >- gvs[asm_frame_rel_def] >>
+     conj_tac >- gvs[asm_frame_rel_def] >>
+     qexistsl_tac [`a`,`es`] >> simp[]) >>
+  conj_tac >- (disj2_tac >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >> qexists_tac `es1` >>
+  simp[relationTheory.RTC_REFL]
 QED
-Resume frame_plain_step[halt]:
+Resume frame_plain_step_progress[halt]:
   drule (SRULE [MEM] frame_terminal_rel_lift) >>
   disch_then drule >> simp[vfm_abort_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
@@ -659,7 +675,7 @@ Resume frame_plain_step[halt]:
   disj2_tac >> goal_assum (drule_at Any) >>
   gvs[asm_frame_rel_def]
 QED
-Resume frame_plain_step[revert]:
+Resume frame_plain_step_progress[revert]:
   drule (SRULE [MEM] frame_terminal_rel_lift) >>
   disch_then drule >> simp[vfm_abort_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
@@ -672,7 +688,7 @@ Resume frame_plain_step[revert]:
   disj2_tac >> goal_assum (drule_at Any) >>
   gvs[asm_frame_rel_def] >> metis_tac[]
 QED
-Resume frame_plain_step[fault]:
+Resume frame_plain_step_progress[fault]:
   drule_all (SRULE [MEM] frame_terminal_lift) >> strip_tac >>
   `!name. EL a.as_pc prog = AsmOp name ==>
     ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT"` by
@@ -683,7 +699,22 @@ Resume frame_plain_step[fault]:
   disj2_tac >> goal_assum (drule_at Any) >>
   gvs[asm_frame_rel_def] >> metis_tac[]
 QED
-Finalise frame_plain_step[local]
+Finalise frame_plain_step_progress
+
+Theorem frame_plain_step[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog <> AsmOp "CALL" /\
+  EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL a.as_pc prog <> AsmOp "CREATE" /\
+  EL a.as_pc prog <> AsmOp "CREATE2" /\
+  EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
+  EL a.as_pc prog <> AsmOp "GAS" ==>
+  asm_frame_step_ok gas_tail prog data es0 a es
+Proof
+  ACCEPT_TAC (SPEC_ALL (cj 1 frame_plain_step_progress))
+QED
 
 Theorem frame_rel_readings_update[local]:
   asm_evm_rel p a es ==>
