@@ -1,6 +1,6 @@
 Theory o1CodeEndScheduleRetention
 Ancestors
-  o1PassContract o1PipelineCompose o1ComposeSupport o1ScheduleDecomp o1PartialSchedule
+  o1PassContract o1PipelineCompose o1LabelFlowStaticContracts o1ComposeSupport o1ScheduleDecomp o1PartialSchedule
   o1FnScheduleDecomp o1FnScheduleDecompHelpers venomFnScheduleRunner
   venomFnScheduleRunnerProps list rich_list o1ScheduleDecompHelpers
   venomPassSchedule venomPipelineRunner venomInst irSupply venomCompilerWf venomWf unitShapeDefs fcgDefs
