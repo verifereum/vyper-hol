@@ -10,13 +10,13 @@ Ancestors
 Libs
   lowerDloadOwnedTransitionPackageLib lowerDloadReturnPackageLib
   lowerDloadForwardingPackageLib
-Theorem ld_raw_fixed_ambient:
+Theorem ld_raw_fixed_ambient_static:
   (!fn. MEM fn C.ctx_functions ==>
-    ^ld_covered_ambient lo C C' vs Sigma names fn
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
   mem_inv raw_mem_ok C vs ==>
   ?fn. MEM fn C.ctx_functions /\
-    ^ld_covered_ambient lo C C' vs Sigma names fn
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))
 Proof
   strip_tac >>
@@ -29,16 +29,16 @@ Proof
   qexists_tac `fn` >> simp[]
 QED
 
-Theorem ld_raw_owned_elim:
+Theorem ld_raw_owned_elim_static:
   callee_first names C.ctx_functions /\
   (!fn. MEM fn C.ctx_functions ==>
-    ^ld_covered_ambient lo C C' vs Sigma names fn
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
   ^ld_owned lo P C C' vs Sigma names fn' ti t ==>
   ?stk PG G tn fn inst s t0 A f fs N X p h.
     ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
     ^ld_probe_stable lo P Sigma names fs f A A (f::fs) /\
-    ^ld_covered_ambient lo C C' vs Sigma names fn fn' /\
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn fn' /\
     fn' = ld_image f /\
     ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
     ld_prefix C' fn' X p h t0 t /\ ti = EL h X
@@ -56,10 +56,10 @@ Proof
   simp[] >> metis_tac[ld_image_def]
 QED
 
-Theorem ld_raw_next_closed:
+Theorem ld_raw_next_closed_static:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (!fn. MEM fn C.ctx_functions ==>
-    ^ld_covered_ambient lo C C' vs Sigma names fn
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
   mem_inv raw_mem_ok C vs /\
   (^ld_owned lo P C C' vs Sigma names fn' ti t \/
@@ -80,10 +80,10 @@ Proof
   >> first_assum ACCEPT_TAC
 QED
 
-Resume ld_raw_next_closed[owned]:
-  drule_all ld_raw_fixed_ambient >> strip_tac >>
+Resume ld_raw_next_closed_static[owned]:
+  drule_all ld_raw_fixed_ambient_static >> strip_tac >>
   `callee_first names C.ctx_functions /\ o1_ctx_shape C` by fs[] >>
-  drule_all ld_raw_owned_elim >> strip_tac >>
+  drule_all ld_raw_owned_elim_static >> strip_tac >>
   qmatch_goalsub_abbrev_tac `Goal` >>
   rename1 `ld_envelope f.lf_supply source s s.vs_inst_idx X p` >>
   `ALL_DISTINCT (MAP (\b. b.bb_label) source.fn_blocks)` by
@@ -104,7 +104,7 @@ Resume ld_raw_next_closed[owned]:
   >- suspend "invoke"
   >> suspend "ordinary"
 QED
-Resume ld_raw_next_closed[forward_entry]:
+Resume ld_raw_next_closed_static[forward_entry]:
   `^ld_forward C' fn' ti t` by
     (qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' ti t` kall_tac >>
      `EVERY inst_wf (fn_insts source)` by
@@ -125,7 +125,7 @@ Resume ld_raw_next_closed[forward_entry]:
   simp[Abbr `Goal`] >> disj2_tac >> simp[] >>
   drule_all ld_forward_next >> simp[]
 QED
-Resume ld_raw_next_closed[invoke]:
+Resume ld_raw_next_closed_static[invoke]:
   qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' ti t` kall_tac >>
   `active_inst source inst s` by metis_tac[ld_sync_source] >>
   `X = [inst]` by (irule ld_envelope_ordinary >> simp[] >> metis_tac[]) >>
@@ -137,7 +137,7 @@ Resume ld_raw_next_closed[invoke]:
      (FST (lower_dload_function_supply (Sigma source.fn_name) source)).fn_blocks = SOME bb` by
     (irule MEM_lookup_block >> simp[]) >>
   qunabbrev_tac `Goal` >> disj1_tac >>
-  irule (BETA_RULE ld_owned_invoke_next) >>
+  irule (BETA_RULE ld_owned_invoke_next_static) >>
   simp[] >>
   goal_assum (drule_at Any) >>
   simp[] >>
@@ -146,7 +146,7 @@ Resume ld_raw_next_closed[invoke]:
   qpat_x_assum `!g. MEM g fs ==> _` mp_tac >>
   simp[] >> metis_tac[]
 QED
-Resume ld_raw_next_closed[ordinary]:
+Resume ld_raw_next_closed_static[ordinary]:
   qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' ti t` kall_tac >>
   `active_inst source inst s` by metis_tac[ld_sync_source] >>
   `h < LENGTH X` by metis_tac[ld_prefix_bound] >>
@@ -159,14 +159,14 @@ Resume ld_raw_next_closed[ordinary]:
   >- suspend "interior"
   >> `SUC h = LENGTH X` by decide_tac >>
   qunabbrev_tac `Goal` >> disj1_tac >>
-  BETA_TAC >> irule (BETA_RULE ld_owned_endpoint_next) >> simp[] >>
+  BETA_TAC >> irule (BETA_RULE ld_owned_endpoint_next_static) >> simp[] >>
   qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   gvs[] >>
   qpat_assum `ld_prefix _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `!g. MEM g fs ==> _` mp_tac >> simp[] >> metis_tac[]
 QED
-Resume ld_raw_next_closed[interior]:
+Resume ld_raw_next_closed_static[interior]:
   `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) X` by
     (irule ld_envelope_nonterminal >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
@@ -182,7 +182,7 @@ Resume ld_raw_next_closed[interior]:
      gvs[] >> qpat_x_assum `!g. MEM g fs ==> _` mp_tac >> simp[] >> metis_tac[]) >>
   suspend "interior_align"
 QED
-Resume ld_raw_next_closed[interior_align]:
+Resume ld_raw_next_closed_static[interior_align]:
   `active_inst fn' (EL (SUC h) X) (u with vs_inst_idx := SUC t.vs_inst_idx)` by
     (qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' (EL (SUC h) X) _` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[] >> rpt strip_tac >>
@@ -197,13 +197,13 @@ Resume ld_raw_next_closed[interior_align]:
   qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' (EL (SUC h) X) _`
     (mp_tac o BETA_RULE) >> simp[]
 QED
-Finalise ld_raw_next_closed
+Finalise ld_raw_next_closed_static
 
 
-Theorem ld_raw_coverage_fixed:
+Theorem ld_raw_coverage_fixed_static:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (!fn. MEM fn C.ctx_functions ==>
-    ^ld_covered_ambient lo C C' vs Sigma names fn
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
   mem_inv raw_mem_ok C vs /\ C'.ctx_entry = C.ctx_entry /\
   (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
@@ -228,16 +228,16 @@ Proof
   >> suspend "callee"
 QED
 
-Resume ld_raw_coverage_fixed[entry]:
+Resume ld_raw_coverage_fixed_static[entry]:
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  disj1_tac >> irule (SRULE [] ld_stage_root_coverage) >>
+  disj1_tac >> irule (SRULE [] ld_stage_root_coverage_static) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Resume ld_raw_coverage_fixed[next]:
+Resume ld_raw_coverage_fixed_static[next]:
   rpt gen_tac >> strip_tac >>
   disch_then (CONJUNCTS_THEN SUBST_ALL_TAC) >> BETA_TAC >>
-  irule (BETA_RULE ld_raw_next_closed) >>
+  irule (BETA_RULE ld_raw_next_closed_static) >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac
   >- (qpat_x_assum `!fn. MEM fn C.ctx_functions ==> _` mp_tac >> simp[]) >>
@@ -247,7 +247,7 @@ Resume ld_raw_coverage_fixed[next]:
     (mp_tac o REWRITE_RULE []) >> simp[]
 QED
 
-Resume ld_raw_coverage_fixed[block]:
+Resume ld_raw_coverage_fixed_static[block]:
   rpt gen_tac >> strip_tac >>
   disch_then (CONJUNCTS_THEN SUBST_ALL_TAC) >>
   qpat_x_assum `vs = vs /\ C' = C' ==> _`
@@ -257,10 +257,10 @@ Resume ld_raw_coverage_fixed[block]:
   drule_all (BETA_RULE ld_forward_no_terminator_ok) >>
   disch_then (qspecl_then [`s'`,`fuel`] mp_tac) >> simp[]
 QED
-Resume ld_raw_coverage_fixed[block_owned]:
-  drule_all ld_raw_fixed_ambient >> strip_tac >>
+Resume ld_raw_coverage_fixed_static[block_owned]:
+  drule_all ld_raw_fixed_ambient_static >> strip_tac >>
   `callee_first names C.ctx_functions /\ o1_ctx_shape C` by fs[] >>
-  drule_all ld_raw_owned_elim >> strip_tac >>
+  drule_all ld_raw_owned_elim_static >> strip_tac >>
   qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' ti t` kall_tac >>
   qmatch_goalsub_abbrev_tac `Goal` >>
   rename1 `ld_envelope f.lf_supply source s s.vs_inst_idx X p` >>
@@ -281,7 +281,7 @@ Resume ld_raw_coverage_fixed[block_owned]:
   `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
     (drule_all ld_terminator_ok_branch >> simp[]) >>
   qunabbrev_tac `Goal` >> BETA_TAC >> disj1_tac >>
-  irule (BETA_RULE ld_owned_control_entry) >> simp[] >>
+  irule (BETA_RULE ld_owned_control_entry_static) >> simp[] >>
   qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `fuel` >> simp[] >>
@@ -289,7 +289,7 @@ Resume ld_raw_coverage_fixed[block_owned]:
   qpat_x_assum `!g. MEM g fs ==> _` mp_tac >> simp[] >> metis_tac[]
 QED
 
-Resume ld_raw_coverage_fixed[callee]:
+Resume ld_raw_coverage_fixed_static[callee]:
   rpt gen_tac >> strip_tac >>
   disch_then (CONJUNCTS_THEN SUBST_ALL_TAC) >>
   qpat_x_assum `vs = vs /\ C' = C' ==> _`
@@ -298,10 +298,10 @@ Resume ld_raw_coverage_fixed[callee]:
   >> RULE_ASSUM_TAC BETA_RULE >>
   drule (BETA_RULE ld_forward_no_invoke) >> simp[]
 QED
-Resume ld_raw_coverage_fixed[callee_owned]:
-  drule_all ld_raw_fixed_ambient >> strip_tac >>
+Resume ld_raw_coverage_fixed_static[callee_owned]:
+  drule_all ld_raw_fixed_ambient_static >> strip_tac >>
   `callee_first names C.ctx_functions /\ o1_ctx_shape C` by fs[] >>
-  drule_all ld_raw_owned_elim >> strip_tac >>
+  drule_all ld_raw_owned_elim_static >> strip_tac >>
   qpat_x_assum `^ld_owned lo P C C' vs Sigma names fn' ti t` kall_tac >>
   qmatch_goalsub_abbrev_tac `Goal` >>
   rename1 `ld_envelope f.lf_supply source s s.vs_inst_idx X p` >>
@@ -326,9 +326,94 @@ Resume ld_raw_coverage_fixed[callee_owned]:
      drule venomExecProofsTheory.eval_phis_preserves_current_bb >>
      strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
   qunabbrev_tac `Goal` >> BETA_TAC >> disj1_tac >>
-  irule (BETA_RULE ld_owned_callee_entry) >> simp[] >>
+  irule (BETA_RULE ld_owned_callee_entry_static) >> simp[] >>
   qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >>
   qpat_x_assum `!g. MEM g fs ==> _` mp_tac >> simp[] >> metis_tac[]
 QED
-Finalise ld_raw_coverage_fixed
+Finalise ld_raw_coverage_fixed_static
+
+Theorem ld_raw_fixed_ambient:
+  (!fn. MEM fn C.ctx_functions ==>
+    ^ld_covered_ambient lo C C' vs Sigma names fn
+      (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  mem_inv raw_mem_ok C vs ==>
+  ?fn. MEM fn C.ctx_functions /\
+    ^ld_covered_ambient lo C C' vs Sigma names fn
+      (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))
+Proof
+  strip_tac >> mp_tac (BETA_RULE ld_raw_fixed_ambient_static) >>
+  (impl_tac >- (gvs[o1_run_state_ok_def] >> rpt strip_tac >>
+    first_x_assum drule >> simp[o1_run_state_ok_def])) >>
+  strip_tac >> qexists_tac `fn` >> simp[]
+QED
+
+Theorem ld_raw_owned_elim:
+  callee_first names C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    ^ld_covered_ambient lo C C' vs Sigma names fn
+      (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  ^ld_owned lo P C C' vs Sigma names fn' ti t ==>
+  ?stk PG G tn fn inst s t0 A f fs N X p h.
+    ld_sync lo P C vs stk PG G tn fn inst s t0 A (f::fs) N /\
+    ^ld_probe_stable lo P Sigma names fs f A A (f::fs) /\
+    ^ld_covered_ambient lo C C' vs Sigma names fn fn' /\
+    fn' = ld_image f /\
+    ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+    ld_prefix C' fn' X p h t0 t /\ ti = EL h X
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  mp_tac (BETA_RULE ld_raw_owned_elim_static) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    metis_tac[o1_run_state_ok_def])) >>
+  strip_tac >>
+  qexistsl_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`t0`,`A`,`f`,`fs`,`N`,`X`,`p`,`h`] >>
+  simp[] >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_sync_source >> strip_tac >>
+     drule_all frame_reachable_live_functions >> simp[pred_setTheory.SUBSET_DEF]) >>
+  `f.lf_fn = fn` by (drule ld_sync_active >> simp[]) >>
+  gvs[ld_image_def] >> metis_tac[]
+QED
+
+Theorem ld_raw_next_closed:
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    ^ld_covered_ambient lo C C' vs Sigma names fn
+      (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  mem_inv raw_mem_ok C vs /\
+  (^ld_owned lo P C C' vs Sigma names fn' ti t \/
+   (^ld_forward C' fn' ti t /\
+    ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks))) /\
+  ~is_terminator ti.inst_opcode /\ step_inst fuel C' ti t = OK u /\
+  active_inst fn' next (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
+  (^ld_owned lo P C C' vs Sigma names fn' next
+      (u with vs_inst_idx := SUC t.vs_inst_idx) \/
+   (^ld_forward C' fn' next (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+    ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)))
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  disch_then (strip_assume_tac o PURE_REWRITE_RULE [CONJ_ASSOC]) >>
+  mp_tac (BETA_RULE ld_raw_next_closed_static) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    metis_tac[o1_run_state_ok_def])) >> simp[]
+QED
+
+Theorem ld_raw_coverage_fixed:
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    ^ld_covered_ambient lo C C' vs Sigma names fn
+      (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  mem_inv raw_mem_ok C vs /\ C'.ctx_entry = C.ctx_entry /\
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
+  !fn' ti t. raw_reachable vs C' fn' ti t ==>
+    (^ld_owned lo P C C' vs Sigma names fn' ti t \/
+     ^ld_forward C' fn' ti t)
+Proof
+  strip_tac >> mp_tac (BETA_RULE ld_raw_coverage_fixed_static) >>
+  (impl_tac >- (gvs[o1_run_state_ok_def] >> rpt strip_tac >>
+    first_x_assum drule >> simp[o1_run_state_ok_def])) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_then ACCEPT_TAC
+QED

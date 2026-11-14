@@ -5,7 +5,7 @@ Ancestors lowerDloadPtrNormalBlock lowerDloadPtrControlInversion
   ptrDiscipline lowerDloadPtrRel lowerDloadPtrStatic lowerDloadDefs
   contextCodegenRel venomInst venomState venomWf list rich_list pred_set finite_map
 
-Theorem dload_joint_block_closed:
+val dload_joint_block_closed_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -91,14 +91,25 @@ Theorem dload_joint_block_closed:
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
           c.cf_inst [c.cf_inst] 0))) \/
     dload_terminal_mode lo P vs C ds (entry_prov g t1 H)
-      (entry_taint_vars g t1 un) g j' t2
+      (entry_taint_vars g t1 un) g j' t2``;
+
+val dload_joint_block_closed_static_header =
+  rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_block_closed_header)));
+
+Theorem dload_joint_block_closed_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (dload_joint_block_closed_static_header))))
 Proof
   strip_tac
   >- suspend "normal"
   >> metis_tac[dload_terminal_mode_no_block]
 QED
 
-Resume dload_joint_block_closed[normal]:
+Resume dload_joint_block_closed_static[normal]:
   drule_all dload_control_block_inversion >> strip_tac >>
   gnvs[dload_prefix_zero] >>
   `MEM f C.ctx_functions` by
@@ -144,7 +155,16 @@ Resume dload_joint_block_closed[normal]:
   simp[dload_prefix_zero] >> gnvs[]
 QED
 
-Finalise dload_joint_block_closed
+Finalise dload_joint_block_closed_static
+
+Theorem dload_joint_block_closed:
+  ^dload_joint_block_closed_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_block_closed_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
 
 (* Constructor interface audited against JointDispatch's normal quotation:
    the true guard is erased; scratch identities remain anchored at t0. *)

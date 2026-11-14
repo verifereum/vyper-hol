@@ -31,6 +31,20 @@ Definition dload_phase_core_def:
       dload_control_match supply fn gn s t inst emitted phase
 End
 
+Theorem dload_boundary_initial_static:
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ lo <= vs.vs_alloca_next /\
+  vs.vs_alloca_next < dimword (:256) /\ vs.vs_alloca_next <= fl ==>
+  dload_boundary_core fl lo
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    V [] [] [] FEMPTY FEMPTY entry_taint entry_taint vs vs [] []
+Proof
+  strip_tac >> drule_all dload_initial_components_static >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  simp[dload_boundary_core_def, dload_live_layout_initial,
+       dload_param_values_unprovenanced_refl, dload_shared_store_refl,
+       dload_equal_environment_refl]
+QED
+
 Theorem dload_boundary_initial:
   o1_run_state_ok vs /\ lo <= vs.vs_alloca_next /\
   vs.vs_alloca_next < dimword (:256) /\ vs.vs_alloca_next <= fl ==>
@@ -38,11 +52,7 @@ Theorem dload_boundary_initial:
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     V [] [] [] FEMPTY FEMPTY entry_taint entry_taint vs vs [] []
 Proof
-  strip_tac >> drule_all dload_initial_components >>
-  disch_then (strip_assume_tac o SPEC_ALL) >>
-  simp[dload_boundary_core_def, dload_live_layout_initial,
-       dload_param_values_unprovenanced_refl, dload_shared_store_refl,
-       dload_equal_environment_refl]
+  simp[o1_run_state_ok_def] >> metis_tac[dload_boundary_initial_static]
 QED
 
 Theorem dload_boundary_layout:

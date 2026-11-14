@@ -385,8 +385,8 @@ Proof
   simp[dload_control_match_def] >> metis_tac[]
 QED
 
-Theorem dload_initial_components:
-  o1_run_state_ok vs /\ vs.vs_alloca_next <= fl ==>
+Theorem dload_initial_components_static:
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ vs.vs_alloca_next <= fl ==>
   dload_table_stack
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     [vs] [vs] /\
@@ -402,6 +402,21 @@ Proof
     fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   simp[dload_table_stack_initial, dload_vars_match_empty_provenance,
        dload_memory_match_empty]
+QED
+
+Theorem dload_initial_components:
+  o1_run_state_ok vs /\ vs.vs_alloca_next <= fl ==>
+  dload_table_stack
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    [vs] [vs] /\
+  dload_vars_match fl
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    V FEMPTY FEMPTY entry_taint entry_taint vs vs /\
+  dload_memory_match fl lo
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    entry_taint entry_taint vs vs
+Proof
+  simp[o1_run_state_ok_def] >> metis_tac[dload_initial_components_static]
 QED
 
 Theorem scalar_operand_equal:

@@ -54,9 +54,9 @@ fun ld_on_head name tac (g as (_, w)) =
                else (#1 (dest_const (#1 (strip_comb w))) handle HOL_ERR _ => "")
   in if hd = name then tac g else NO_TAC g end
 
-Theorem ld_joint_dalloca_next[local]:
+Theorem ld_joint_dalloca_next_static[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   ptr_discipline lo C vs /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = DALLOCA /\
   step_inst fuel C inst s = OK s1 /\
@@ -180,16 +180,16 @@ Proof
             simp[NoAsms, ld_joint_allocas_def, venomStateTheory.update_var_def] >>
             rpt strip_tac >> metis_tac[]),
          fn (g as (_, w)) =>
-           (print ("ld_joint_dalloca_next: no frame case closes " ^
+           (print ("ld_joint_dalloca_next_static: no frame case closes " ^
                    term_to_string w ^ "\n"); NO_TAC g)]),
     gvs[venomStateTheory.update_var_def] >> NO_TAC,
-    fn (g as (_, w)) => (print ("ld_joint_dalloca_next: no case closes " ^
+    fn (g as (_, w)) => (print ("ld_joint_dalloca_next_static: no case closes " ^
         term_to_string w ^ "\n"); NO_TAC g)]
 QED
 
-Theorem ld_joint_ordinary_next:
+Theorem ld_joint_ordinary_next_static:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ o1_src_inv D C vs /\
   callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -227,7 +227,7 @@ Proof
      simp[fn_ptr_ok_def] >> strip_tac >> first_x_assum drule >> simp[MEM]) >>
   qexists_tac `inst2` >> simp[] >>
   Cases_on `inst.inst_opcode = DALLOCA`
-  >- (irule ld_joint_dalloca_next >> simp[]) >>
+  >- (irule ld_joint_dalloca_next_static >> simp[]) >>
   Cases_on `MEM inst.inst_opcode [ADD; SUB]`
   >- (irule ld_joint_arithmetic_next >> simp[]) >>
   Cases_on `MEM inst.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; SLT; SGT; AND; OR; XOR]`
@@ -285,4 +285,29 @@ Proof
   `inst.inst_opcode = PHI` by
     (Cases_on `inst.inst_opcode` >> gvs[MEM, is_terminator_def]) >>
   gvs[step_inst_non_invoke, step_inst_base_opcode_eqs]
+QED
+
+Theorem ld_joint_ordinary_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t n a U B HP H sites X ts /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
+  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME inst) /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DLOAD; DLOADBYTES; ALLOCA] /\
+  ~in_revert_forward fn s /\ step_inst fuel C inst s = OK s1 ==>
+  ?inst2 t1 u fn'.
+    active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+    step_inst fuel C' inst t = OK t1 /\
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+      n a U B HP (occurrence_step a HP H inst s1) sites X ts
+Proof
+  strip_tac >> irule ld_joint_ordinary_next_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

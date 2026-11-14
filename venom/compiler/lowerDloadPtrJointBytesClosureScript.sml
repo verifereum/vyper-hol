@@ -42,7 +42,7 @@ Proof
   strip_tac >> gvs[update_var_def]
 QED
 
-Theorem dload_joint_tracked_dloadbytes_complete_next:
+val dload_joint_tracked_dloadbytes_complete_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -129,7 +129,15 @@ Theorem dload_joint_tracked_dloadbytes_complete_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_dloadbytes_complete_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_dloadbytes_complete_next_header)))))))
 Proof
   strip_tac >>
   `MEM i (fn_insts f)` by
@@ -213,7 +221,7 @@ Proof
   simp[EVERY_MEM] >> disch_then irule >> fs[EVERY_MEM]
 QED
 
-Resume dload_joint_tracked_dloadbytes_complete_next[shape]:
+Resume dload_joint_tracked_dloadbytes_complete_next_static[shape]:
   rpt strip_tac >>
   `fn_inst_wf f` by fs[o1_fn_shape_def] >>
   `inst_wf i` by
@@ -226,7 +234,7 @@ Resume dload_joint_tracked_dloadbytes_complete_next[shape]:
   Cases_on `last` >> gvs[]
 QED
 
-Resume dload_joint_tracked_dloadbytes_complete_next[operands]:
+Resume dload_joint_tracked_dloadbytes_complete_next_static[operands]:
   rpt strip_tac >> simp[] >> conj_tac
   >- (irule fn_ir_vars_operand >> qexists `i` >> simp[]) >>
   `opaque_use_ok f` by fs[o1_fn_shape_def, fn_shape_ok_def] >>
@@ -234,7 +242,7 @@ Resume dload_joint_tracked_dloadbytes_complete_next[operands]:
   gvs[retpc_use_ok_def, MEM]
 QED
 
-Resume dload_joint_tracked_dloadbytes_complete_next[forward]:
+Resume dload_joint_tracked_dloadbytes_complete_next_static[forward]:
   rpt strip_tac >>
   `active_inst f i s` by fs[dload_control_match_def] >>
   `ALL_DISTINCT (fn_labels f)` by
@@ -248,12 +256,12 @@ Resume dload_joint_tracked_dloadbytes_complete_next[forward]:
   drule_all revert_forward_at_opcode >> simp[]
 QED
 
-Resume dload_joint_tracked_dloadbytes_complete_next[reachable]:
+Resume dload_joint_tracked_dloadbytes_complete_next_static[reachable]:
   rpt strip_tac >> irule frame_reachable_next >>
   fs[dload_control_match_def, is_terminator_def] >> metis_tac[]
 QED
 
-Resume dload_joint_tracked_dloadbytes_complete_next[supply]:
+Resume dload_joint_tracked_dloadbytes_complete_next_static[supply]:
   rpt strip_tac >>
   qpat_x_assum `dload_control_match q f g s t0 i emitted 0` mp_tac >>
   pure_rewrite_tac[dload_control_match_def] >> strip_tac >>
@@ -266,8 +274,17 @@ Resume dload_joint_tracked_dloadbytes_complete_next[supply]:
   fs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >> metis_tac[]
 QED
 
-Resume dload_joint_tracked_dloadbytes_complete_next[layout]:
-  rpt strip_tac >> drule_all o1_src_frame_code_layout_valid >> simp[]
+Resume dload_joint_tracked_dloadbytes_complete_next_static[layout]:
+  rpt strip_tac >> drule_all o1_src_frame_code_layout_valid_static >> simp[]
 QED
 
-Finalise dload_joint_tracked_dloadbytes_complete_next
+Finalise dload_joint_tracked_dloadbytes_complete_next_static
+
+Theorem dload_joint_tracked_dloadbytes_complete_next:
+  ^dload_joint_tracked_dloadbytes_complete_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_dloadbytes_complete_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED

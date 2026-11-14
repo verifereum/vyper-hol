@@ -8,14 +8,14 @@ Ancestors
 Libs
   lowerDloadReturnPackageLib lowerDloadOwnedTransitionPackageLib
 
-Theorem ld_stage_ambient:
+Theorem ld_stage_ambient_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
   ?lo P Sigma.
     EVERY (fn_ptr_ok P) C.ctx_functions /\
     (!fn. MEM fn C.ctx_functions ==>
-      ^ld_covered_ambient lo C C' vs Sigma names fn
+      ^ld_covered_ambient_static lo C C' vs Sigma names fn
         (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
     C'.ctx_entry = C.ctx_entry /\
     (?name fn lbl. C'.ctx_entry = SOME name /\
@@ -49,10 +49,30 @@ Proof
   fs[ctx_pass_stage_def] >> metis_tac[]
 QED
 
-Theorem ld_stage_root_coverage:
+Theorem ld_stage_ambient:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+  ?lo P Sigma.
+    EVERY (fn_ptr_ok P) C.ctx_functions /\
+    (!fn. MEM fn C.ctx_functions ==>
+      ^ld_covered_ambient lo C C' vs Sigma names fn
+        (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+    C'.ctx_entry = C.ctx_entry /\
+    (?name fn lbl. C'.ctx_entry = SOME name /\
+      lookup_function name C'.ctx_functions = SOME fn /\
+      fn_entry_label fn = SOME lbl)
+Proof
+  strip_tac >>
+  fs[o1_run_state_ok_def] >>
+  drule_all ld_stage_ambient_static >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ld_stage_root_coverage_static:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (!fn. MEM fn C.ctx_functions ==>
-    ^ld_covered_ambient lo C C' vs Sigma names fn
+    ^ld_covered_ambient_static lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
   mem_inv raw_mem_ok C vs /\ C'.ctx_entry = C.ctx_entry /\
   C'.ctx_entry = SOME name /\
@@ -83,8 +103,28 @@ Proof
      `o1_fn_shape C fn` by metis_tac[] >>
      drule o1_fn_shape_components >> simp[]) >>
   `lbl = lb` by metis_tac[optionTheory.SOME_11] >>
-  gvs[] >> irule (SRULE [] ld_owned_root) >>
+  gvs[] >> irule (SRULE [] ld_owned_root_static) >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ld_stage_root_coverage:
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    ^ld_covered_ambient lo C C' vs Sigma names fn
+      (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  mem_inv raw_mem_ok C vs /\ C'.ctx_entry = C.ctx_entry /\
+  C'.ctx_entry = SOME name /\
+  lookup_function name C'.ctx_functions = SOME fn' /\
+  fn_entry_label fn' = SOME lbl /\
+  enters_block fn'
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t /\
+  active_inst fn' ti t ==>
+  ^ld_owned lo P C C' vs Sigma names fn' ti t
+Proof
+  strip_tac >> mp_tac (BETA_RULE ld_stage_root_coverage_static) >>
+  (impl_tac >- (gvs[o1_run_state_ok_def] >> rpt strip_tac >>
+    first_x_assum drule >> simp[o1_run_state_ok_def])) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_then ACCEPT_TAC
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()

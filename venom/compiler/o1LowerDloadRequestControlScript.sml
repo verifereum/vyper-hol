@@ -16,10 +16,17 @@ val requestAssumptions = ``ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) vie
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
   ptr_discipline lo C vs``;
 
-Theorem ld_request_runner_run_clause:
-  ^(List.nth(requestClauses,2))
+val requestClausesStatic = strip_conj (fst (dest_imp
+  (concl ld_request_runner_induction_static)));
+val requestAssumptionsStatic = Term.subst
+  [``o1_run_state_ok vs`` |->
+   ``(o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs)``]
+  requestAssumptions;
+
+Theorem ld_request_runner_run_clause_static:
+  ^(List.nth(requestClausesStatic,2))
 Proof
-  qabbrev_tac `RR = ^requestPacket` >> qabbrev_tac `AA = ^requestAssumptions` >>
+  qabbrev_tac `RR = ^requestPacket` >> qabbrev_tac `AA = ^requestAssumptionsStatic` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
   `occ_frame_reachable vs C stk PG G tn fn i s1 n a U B HP H` by
@@ -71,7 +78,7 @@ Proof
   >> fs[terminates_def]
 QED
 
-Resume ld_request_runner_run_clause[halt]:
+Resume ld_request_runner_run_clause_static[halt]:
   `?te. bt = Halt te` by fs[Abbr `RR`] >>
   qpat_x_assum `Abbrev (Halt v = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
@@ -82,7 +89,7 @@ Resume ld_request_runner_run_clause[halt]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_request_runner_run_clause[abort]:
+Resume ld_request_runner_run_clause_static[abort]:
   `?te. bt = Abort a' te` by fs[Abbr `RR`] >>
   qpat_x_assum `Abbrev (Abort _ _ = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
@@ -93,7 +100,7 @@ Resume ld_request_runner_run_clause[abort]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_request_runner_run_clause[return]:
+Resume ld_request_runner_run_clause_static[return]:
   `?jr tr. bt = IntRet jr tr` by
     (fs[Abbr `RR`] >> metis_tac[]) >>
   qpat_x_assum `Abbrev (IntRet _ _ = _)`
@@ -105,7 +112,7 @@ Resume ld_request_runner_run_clause[return]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_request_runner_run_clause[branch]:
+Resume ld_request_runner_run_clause_static[branch]:
   qpat_x_assum `Abbrev (OK v = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `~v.vs_halted` by metis_tac[exec_block_OK_not_halted] >>
@@ -154,15 +161,15 @@ Resume ld_request_runner_run_clause[branch]:
     simp[Once run_blocks_def] >>
   qexists_tac `SUC (MAX m m')` >> simp[]
 QED
-Finalise ld_request_runner_run_clause
+Finalise ld_request_runner_run_clause_static
 
-Theorem ld_request_runner_step_clause:
-  ^(List.nth(requestClauses,0))
+Theorem ld_request_runner_step_clause_static:
+  ^(List.nth(requestClausesStatic,0))
 Proof
   qabbrev_tac `RR = ^requestPacket` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
-  drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
+  drule_at (Pat `terminates _`) o1LowerDloadSourceEntryTheory.ld_terminating_invoke_inversion >>
   disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
   simp[] >> strip_tac >>
   drule_all lower_dload_stage_invoke_entry >> strip_tac >>
@@ -174,7 +181,7 @@ Proof
   >- suspend "halt"
   >> suspend "abort"
 QED
-Resume ld_request_runner_step_clause[return]:
+Resume ld_request_runner_step_clause_static[return]:
   `wf_function fn` by
     (drule ld_joint_source >>
      disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_annotation) >>
@@ -194,10 +201,28 @@ Resume ld_request_runner_step_clause[return]:
   qexists_tac `m` >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
-Resume ld_request_runner_step_clause[halt]:
+Resume ld_request_runner_step_clause_static[halt]:
   qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
 QED
-Resume ld_request_runner_step_clause[abort]:
+Resume ld_request_runner_step_clause_static[abort]:
   qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
 QED
-Finalise ld_request_runner_step_clause
+Finalise ld_request_runner_step_clause_static
+
+Theorem ld_request_runner_run_clause:
+  ^(List.nth(requestClauses,2))
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (mp_tac ld_request_runner_run_clause_static >>
+      fs[o1_run_state_ok_def] >> simp[])
+  >> simp[]
+QED
+
+Theorem ld_request_runner_step_clause:
+  ^(List.nth(requestClauses,0))
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (mp_tac ld_request_runner_step_clause_static >>
+      fs[o1_run_state_ok_def] >> simp[])
+  >> simp[]
+QED

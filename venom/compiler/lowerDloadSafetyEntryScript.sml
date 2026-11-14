@@ -33,8 +33,8 @@ Proof
   metis_tac[]
 QED
 
-Theorem ld_sync_entry:
-  o1_run_state_ok vs0 /\
+Theorem ld_sync_entry_static:
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl /\
   enters_block fn
@@ -50,7 +50,7 @@ Proof
   `frame_reachable vs0 C [] [] FEMPTY entry_taint fn inst s` by
     (irule frame_reachable_entry >> metis_tac[]) >>
   `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
-  drule lower_dload_initial_allocations >> strip_tac >>
+  drule_all lower_dload_initial_allocations_static >> strip_tac >>
   `s.vs_inst_idx = 0` by simp[] >>
   drule_all ld_envelope_entry >> disch_then (qspec_then `u` strip_assume_tac) >>
   qexists_tac `<|lf_serial := 0; lf_supply := u; lf_fn := fn;
@@ -61,6 +61,21 @@ Proof
        ld_ghost_ok_def, ld_params_ok_def, ld_dyn_agree_def,
        fmap_eq_flookup, FLOOKUP_o_f] >>
   metis_tac[]
+QED
+
+Theorem ld_sync_entry:
+  o1_run_state_ok vs0 /\
+  C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl /\
+  enters_block fn
+    (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s /\
+  active_inst fn inst s /\ EVERY (fn_ptr_ok P) C.ctx_functions ==>
+  ?f. f.lf_fn = fn /\ f.lf_supply = u /\ f.lf_Q = [] /\
+    ld_sync lo P C vs0 [] [] FEMPTY entry_taint fn inst s s FEMPTY [f] 1 /\
+    ld_global lo FEMPTY [f]
+Proof
+  strip_tac >> fs[o1_run_state_ok_def] >>
+  irule ld_sync_entry_static >> goal_assum (drule_at Any) >> simp[]
 QED
 
 (* The pointer classification is supplied by the frozen source invariant,

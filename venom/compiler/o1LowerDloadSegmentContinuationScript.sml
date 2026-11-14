@@ -157,6 +157,61 @@ Proof
    drule_all ld_successful_supply_packet >> strip_tac >> gvs[])
 QED
 
+Theorem ld_joint_dloadbytes_continue_static:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  mem_inv dload_offset_ok C vs /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  inst.inst_opcode = DLOADBYTES /\ step_inst fuel C inst s = OK s1 ==>
+  ?inst2 t' fn' bb'.
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    exec_block fuel C' bb' t = exec_block fuel C' bb' t' /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) t'
+      n a U B HP (occurrence_step a HP H inst s1) sites X ts
+Proof
+  strip_tac >> drule_all ld_joint_dloadbytes_next_static >> strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es` by
+    (`MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+     rev_drule ld_joint_generated_slice >>
+     disch_then (drule_at (Pat `lookup_block _ _ = SOME _`)) >>
+     simp[] >> disch_then irule >> metis_tac[]) >>
+  `exec_block fuel C' bb' t =
+   exec_block fuel C' bb' (t3 with vs_inst_idx := t.vs_inst_idx+2)` by
+    (irule ld_two_step_packet_continuation >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ld_joint_dload_continue_static:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs /\
+  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = DLOAD /\ step_inst fuel C inst s = OK s1 ==>
+  ?inst2 t' fn' bb' X1.
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    exec_block fuel C' bb' t = exec_block fuel C' bb' t' /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) t'
+      n a U B HP (occurrence_step a HP H inst s1) sites X1 ts
+Proof
+  strip_tac >> drule_all ld_joint_dload_next_static >> strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es` by
+    (`MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+     rev_drule ld_joint_generated_slice >>
+     disch_then (drule_at (Pat `lookup_block _ _ = SOME _`)) >>
+     simp[] >> disch_then irule >> metis_tac[]) >>
+  `exec_block fuel C' bb' t =
+   exec_block fuel C' bb' (t4 with vs_inst_idx := t.vs_inst_idx+4)` by
+    (irule ld_four_step_packet_continuation >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem ld_joint_dloadbytes_continue:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -172,16 +227,8 @@ Theorem ld_joint_dloadbytes_continue:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t'
       n a U B HP (occurrence_step a HP H inst s1) sites X ts
 Proof
-  strip_tac >> drule_all ld_joint_dloadbytes_next >> strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es` by
-    (`MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
-     rev_drule ld_joint_generated_slice >>
-     disch_then (drule_at (Pat `lookup_block _ _ = SOME _`)) >>
-     simp[] >> disch_then irule >> metis_tac[]) >>
-  `exec_block fuel C' bb' t =
-   exec_block fuel C' bb' (t3 with vs_inst_idx := t.vs_inst_idx+2)` by
-    (irule ld_two_step_packet_continuation >> metis_tac[]) >>
-  metis_tac[]
+  strip_tac >> irule ld_joint_dloadbytes_continue_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_dload_continue:
@@ -200,14 +247,6 @@ Theorem ld_joint_dload_continue:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t'
       n a U B HP (occurrence_step a HP H inst s1) sites X1 ts
 Proof
-  strip_tac >> drule_all ld_joint_dload_next >> strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es` by
-    (`MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
-     rev_drule ld_joint_generated_slice >>
-     disch_then (drule_at (Pat `lookup_block _ _ = SOME _`)) >>
-     simp[] >> disch_then irule >> metis_tac[]) >>
-  `exec_block fuel C' bb' t =
-   exec_block fuel C' bb' (t4 with vs_inst_idx := t.vs_inst_idx+4)` by
-    (irule ld_four_step_packet_continuation >> metis_tac[]) >>
-  metis_tac[]
+  strip_tac >> irule ld_joint_dload_continue_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

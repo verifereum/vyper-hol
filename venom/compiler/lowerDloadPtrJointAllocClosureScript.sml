@@ -21,7 +21,7 @@ Proof
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem dload_joint_tracked_alloca_next:
+val dload_joint_tracked_alloca_next_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
@@ -108,7 +108,15 @@ Theorem dload_joint_tracked_alloca_next:
       (?qc. ir_supply_covers_fn qc c.cf_fn /\
         (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
         dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))
+          c.cf_inst [c.cf_inst] 0))``;
+
+Theorem dload_joint_tracked_alloca_next_static:
+  ^(rhs (concl (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)
+    (rhs (concl (DEPTH_CONV BETA_CONV
+    (subst [``o1_run_state_ok`` |->
+      ``\s:venom_state. o1_initial_state_ok s /\
+        s.vs_fmp = s.vs_initial_fmp /\ code_layout_valid s``]
+      dload_joint_tracked_alloca_next_header)))))))
 Proof
   strip_tac >>
   `emitted = [i] /\ n = 0 /\ j = i` by
@@ -154,7 +162,7 @@ Proof
   rpt strip_tac >> fs[EVERY_MEM, lookup_var_def] >> metis_tac[]
 QED
 
-Resume dload_joint_tracked_alloca_next[budget]:
+Resume dload_joint_tracked_alloca_next_static[budget]:
   rpt strip_tac >>
   irule dload_joint_runtime_scratch_budget >>
   conj_tac >- metis_tac[] >>
@@ -169,11 +177,20 @@ Resume dload_joint_tracked_alloca_next[budget]:
   suspend "budget_cover"
 QED
 
-Resume dload_joint_tracked_alloca_next[budget_cover]:
+Resume dload_joint_tracked_alloca_next_static[budget_cover]:
   rpt strip_tac >> Cases_on `k` >> simp[]
   >- metis_tac[] >>
   qpat_x_assum `!k. k < LENGTH ds ==> _` (qspec_then `n` mp_tac) >>
   simp[EL_MAP] >> metis_tac[]
 QED
 
-Finalise dload_joint_tracked_alloca_next
+Finalise dload_joint_tracked_alloca_next_static
+
+Theorem dload_joint_tracked_alloca_next:
+  ^dload_joint_tracked_alloca_next_header
+Proof
+  CONV_TAC (DEPTH_CONV (REWR_CONV LET_THM THENC BETA_CONV)) >>
+  disch_tac >> match_mp_tac dload_joint_tracked_alloca_next_static >>
+  rule_assum_tac (REWRITE_RULE [o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
