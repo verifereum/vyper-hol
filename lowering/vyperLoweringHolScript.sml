@@ -4,7 +4,6 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
-  constSubstStmts constSubstStmtsPreserve
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
