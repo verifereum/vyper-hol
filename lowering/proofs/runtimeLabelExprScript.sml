@@ -79,7 +79,7 @@ Resume rb_compile_type_builtin_dispatch_body[extract]:
       (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     simp[rb_compile_bytestring_src]) >>
-  gen_tac >> PairCases_on `x` >> simp[] >> strip_tac >>
+  PairCases >> simp[] >> strip_tac >>
   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
@@ -411,7 +411,7 @@ Resume rb_compile_builtin_dispatch_body[slice_bytes]:
     (Q.ISPEC `\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p)`
       (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_bytestring_src]) >>
-  gen_tac >> PairCases_on `x` >> simp[] >> strip_tac >>
+  PairCases >> simp[] >> strip_tac >>
   rpt (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind)))) >> BETA_TAC >>
     (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value])) >>
