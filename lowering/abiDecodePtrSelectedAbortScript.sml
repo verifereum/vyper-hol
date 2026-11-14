@@ -116,7 +116,7 @@ Resume abi_decode_selected_member_abort[selection_abort]:
   Cases_on `emit_op ADD [pos;Lit (n2w off)] sa` >>
   fs[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >> gvs[] >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  fs[run_inst_seq_def, step_inst_base_def, eval_operands_def, eval_operand_def,
+  fs[run_inst_seq_def, step_inst_base_opcode_eqs, eval_operands_def, eval_operand_def,
      mk_inst_def, exec_pure2_def]
 QED
 
