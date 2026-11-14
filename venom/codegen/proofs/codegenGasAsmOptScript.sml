@@ -68,7 +68,7 @@ Proof
     (qpat_x_assum `asm_refines _ _` mp_tac >> simp[asm_refines_def]) >>
   conj_tac >- metis_tac[asm_static_wf_frame_prog_ok] >>
   qabbrev_tac `x = vs.vs_data_section` >>
-  `as.as_pc = 0` by fs[codegen_asm_entry_rel_def] >>
+  `as.as_pc = 0` by fs[codegenEntrySimTheory.codegen_asm_entry_rel_def] >>
   (* the unoptimized run is bounded and uses its labels as labels *)
   `(?v. run_context fuel unit.cu_context vs = Halt v) \/
    (?a v. run_context fuel unit.cu_context vs = Abort a v)` by
