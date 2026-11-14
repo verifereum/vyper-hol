@@ -642,14 +642,16 @@ Proof
 QED
 
 Theorem array_invariant_layout[local]:
-  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
+  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s /\
+    alloca_frame cenv origin_es st old cenv ei s ==>
     ?addr. eval_operand saved_base s = SOME addr /\
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs) (w2n addr + k * stride) s.vs_memory /\
         w2n addr + k * stride < dimword (:256))) /\
   (!s. ret_pc_ok cenv st s ==> ret_pc_ok bc sb0 s) /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
-    ainst lbl st k es s /\ k < LENGTH vs ==>
+    ainst lbl st k es s /\
+  alloca_frame cenv origin_es st old cenv es s /\ k < LENGTH vs ==>
   val_in_memory tv (EL k vs) (w2n array_base + k * stride) s.vs_memory /\
   w2n array_base + k * stride < dimword (:256) /\ ret_pc_ok bc sb0 s
 Proof
@@ -659,7 +661,7 @@ Proof
 QED
 
 
-Theorem array_code_loop_counted[local]:
+Theorem array_code_loop_counted:
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
     p sz ainst idx dv ov ep nv cond exit bod incr
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
@@ -671,7 +673,8 @@ Theorem array_code_loop_counted[local]:
   (!x. saved_base = Var x ==> not_fresh_at sb0 x) /\
   (!l. saved_base <> Label l) /\ ret_pc_ok cenv st s0 /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
-  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
+  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s /\
+    alloca_frame cenv es st s0 cenv ei s ==>
     ?addr. eval_operand saved_base s = SOME addr /\
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs) (w2n addr + k * stride) s.vs_memory /\
@@ -902,7 +905,8 @@ Proof
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)` by
     (rpt strip_tac >> qpat_assum `!st0 bc sd ex inc ei k. _` drule_all >> simp[]) >>
   `!l. Var arr_ptr <> Label l` by simp[] >>
-  `!ei t. P ei /\ stmt_state_rel ctx func cenv cx ei t ==>
+  `!ei t. P ei /\ stmt_state_rel ctx func cenv cx ei t /\
+    alloca_frame cenv (es with gas_obs := []) st s0 cenv ei t ==>
     ?addr. eval_operand (Var arr_ptr) t = SOME addr /\
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs) (w2n addr + k * type_memory_bytes cenv et) t.vs_memory /\
