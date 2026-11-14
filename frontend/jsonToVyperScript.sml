@@ -573,9 +573,9 @@ Definition module_constants_def:
      then module_constants ctx rest else
      let e = translate_expr ctx init in
      let constants =
-       case OPTION_BIND (eval_constant e) constant_literal of
-       | SOME l => ((expr_current_nsid ctx, name), l) :: expr_constants ctx
-       | NONE => expr_constants ctx in
+       case pin_fold_expr e of
+       | Literal ty l => ((expr_current_nsid ctx, name), l) :: expr_constants ctx
+       | _ => expr_constants ctx in
      module_constants (expr_with_constants ctx constants) rest) ∧
   module_constants ctx (_ :: rest) = module_constants ctx rest
 End
