@@ -258,3 +258,29 @@ Proof
   irule rb_ignore >> conj_tac >- gvs[rb_emit_void] >>
   first_x_assum irule >> gvs[rb_env_bind_local, rb_location_ok_def]
 QED
+
+Theorem rb_compile_create_kwarg_allocas:
+  !specs. rb_step (EVERY (\(name,ptr,ty,e). rb_operand_ok ptr))
+    (compile_create_kwarg_allocas ce specs)
+Proof
+  Induct >> simp[compile_create_kwarg_allocas_def, rb_step_return] >>
+  PairCases >> rewrite_tac[compile_create_kwarg_allocas_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY (\(name,ptr,ty,e). rb_operand_ok ptr)` >>
+  BETA_TAC >> reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_return >> gvs[rb_buffer_ok_def]
+QED
+
+Theorem rb_compile_register_kwarg_vars:
+  !kwvars ce. rb_env_ok ce /\
+    EVERY (\(name,ptr,ty,e). rb_operand_ok ptr) kwvars ==>
+    rb_env_ok (compile_register_kwarg_vars ce kwvars)
+Proof
+  Induct >> simp[compile_register_kwarg_vars_def] >>
+  PairCases >> gen_tac >> strip_tac >>
+  rewrite_tac[compile_register_kwarg_vars_def] >>
+  first_x_assum irule >> gvs[rb_env_ok_def, rb_location_ok_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), rb_location_ok_def] >> metis_tac[]
+QED
