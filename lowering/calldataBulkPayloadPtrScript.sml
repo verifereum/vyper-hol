@@ -1,6 +1,6 @@
 (* Ghost frame for the payload-copy instruction; independent of the ABI type. *)
 Theory calldataBulkPayloadPtr
-Ancestors memSafeRun fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier calldataDecodePtr decoderRawEndpointPtr
+Ancestors decoderNavigationPtr memSafeRun fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier calldataDecodePtr decoderRawEndpointPtr
   bodyPtrDefs ptrDiscipline venomInst venomState finite_map pred_set
   decoderGhostFramePtr emitHelperProps fragExec venomExecSemantics
   codegenRel contextCodegenRel ptrSafeRun compileEnv loweringStateRelDefs emitHelper list arithmetic
@@ -128,35 +128,18 @@ Proof
      simp[ptr_inst_ok_def, mk_inst_def, step_inst_non_invoke,
        step_inst_base_opcode_eqs, write_memory_with_expansion_def,
        write_memory_def, expand_memory_def]) >>
-  `gas_path_ptr_edge D lower ctx func PG G tn s 0
-     (step_prov PG G (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) t)
-     (step_taint (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s t tn)
-     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (pure_rewrite_tac [mk_inst_def] >> irule (SRULE [mk_inst_def] (Q.INST
-       [`i` |-> `mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []`]
-       straight_line_ptr_edge)) >>
-     fs[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
   `inst_mem_below_frontier (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s` by
     simp[below_frontier_CALLDATACOPY] >>
-  `gas_path_mem_edge ctx func s 0 (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (pure_rewrite_tac [mk_inst_def] >> irule (SRULE [mk_inst_def] (Q.INST
-       [`i` |-> `mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []`]
-       straight_line_mem_edge)) >>
-     fs[mk_inst_def, is_terminator_def, inst_dload_in_section_def] >> metis_tac[]) >>
-  `gas_origin_ptr_edge (D,lower,explicit,ctx,func,PG) (s,G,tn) []
-     (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-      step_prov PG G (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) t,
-      step_taint (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s t tn)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[gas_path_mem_edge_zero_origin]) >>
-  `~t.vs_halted` by
-    simp[write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  rewrite_tac[listTheory.APPEND] >> disch_then irule >>
-  asm_rewrite_tac[ADD1] >>
-  irule (cj 1 gas_origin_ptr_path_rules) >>
-  simp[write_memory_with_expansion_def, write_memory_def, expand_memory_def]
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx`
+    (fn th => pure_rewrite_tac [th]) >>
+  qpat_assum `s.vs_inst_idx = LENGTH sa.cs_current_insts`
+    (fn th => pure_rewrite_tac [GSYM th, GSYM ADD1]) >>
+  pure_rewrite_tac [mk_inst_def] >>
+  irule (SRULE [mk_inst_def] (Q.INST
+    [`i` |-> `mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []`]
+    straight_line_step_origin)) >>
+  fs[mk_inst_def, is_terminator_def, inst_dload_in_section_def] >> metis_tac[]
 QED
 
 Theorem emit_calldatacopy_endpoint_ptr:
