@@ -1276,7 +1276,7 @@ Proof
   gvs[IgnAsm `!s r t. _`]
 QED
 
-Theorem typed_attribute_frames_mutual[local]:
+Theorem typed_attribute_frames_mutual:
   (!env ret_ty stmt env' ref arr_e et bd p root xs cx es res es'.
     place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\

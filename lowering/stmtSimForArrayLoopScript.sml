@@ -1561,6 +1561,7 @@ Theorem array_round_prepare:
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   (!s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
      ainst stmts_lbl st k es s /\
+     array_caller_frame caller old s /\
      alloca_frame cenv origin_es caller old cenv es s ==>
      val_in_memory tv (EL k vs) (w2n arr_base + k * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
@@ -1618,7 +1619,9 @@ Proof
   `alloca_frame cenv origin_es caller old cenv es s` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
-  qpat_x_assum `!s. _ /\ alloca_frame _ _ _ _ _ _ _ ==> _`
+  `array_caller_frame caller old s` by
+    (fs[array_caller_frame_def] >> metis_tac[]) >>
+  qpat_x_assum `!s. array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _ ==> _`
     drule_all >> strip_tac >>
   drule_all array_for_code_entry_inputs >> strip_tac >>
   drule array_for_code_iteration_static >> strip_tac >>
@@ -1660,6 +1663,7 @@ Theorem array_for_round_counted:
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   (!s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
      ainst stmts_lbl st k es s /\
+     array_caller_frame caller old s /\
      alloca_frame cenv origin_es caller old cenv es s ==>
      val_in_memory tv (EL k vs) (w2n arr_base + k * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
@@ -1832,6 +1836,7 @@ Theorem array_for_loop_counted:
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   (!j ei s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
      ainst stmts_lbl st j ei s /\
+     array_caller_frame caller old s /\
      alloca_frame cenv origin_es caller old cenv ei s /\ j < LENGTH vs ==>
      val_in_memory tv (EL j vs) (w2n arr_base + j * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
@@ -1929,6 +1934,7 @@ Resume array_for_loop_counted[round]:
     (qpat_x_assum `!gs r es2. _` mp_tac >> simp[Abbr `entry`]) >>
   `!t. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
       ainst stmts_lbl st j ei t /\
+      array_caller_frame caller old t /\
       alloca_frame cenv origin_es caller old cenv ei t ==>
     val_in_memory tv (EL j vs) (w2n arr_base + j * stride) t.vs_memory /\
     ret_pc_ok bc sb0 t` by metis_tac[] >>
