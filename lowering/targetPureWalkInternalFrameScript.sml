@@ -4,6 +4,7 @@ Ancestors
   targetPureWalkCallees vyperReadOnlyTargetCallFree vyperMachineFrame
   vyperCallOutcomeFrame vyperReadOnlyCalls vyperInterpreter vyperState
   vyperEvalFrame exprLowering compileVyper vyperTypeContract
+  exprOracleStorageInterfaces rich_list
 Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -64,14 +65,15 @@ Resume target_walk_internal_frame[after_lookup]:
   match_mp_tac walk_bind >> conj_tac >- (first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> match_mp_tac walk_bind >>
   conj_tac >- (machine_leaf >> simp[machine_frame_primitives]) >>
-  gen_tac >>
-  simp[Once evaluate_def, ignore_bind_def] >>
+  gen_tac >> BETA_TAC >>
   match_mp_tac walk_bind >>
   conj_tac >- (machine_leaf >>
     match_mp_tac state_rel_frame_finally >>
     conj_tac >- metis_tac[machine_frame_trans] >>
     simp[machine_frame_primitives] >>
-    match_mp_tac machine_frame_bind >> simp[machine_frame_primitives]) >>
+    match_mp_tac machine_frame_bind >> simp[machine_frame_primitives] >>
+    irule target_call_free_exprs_frame >>
+    fs[int_calls_exprs_empty_every] >> metis_tac[EVERY_DROP]) >>
   gen_tac >> BETA_TAC >> machine_leaf >>
   match_mp_tac machine_frame_bind >>
   conj_tac >- simp[machine_frame_primitives] >>
