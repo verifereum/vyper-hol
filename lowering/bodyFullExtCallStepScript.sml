@@ -66,6 +66,7 @@ Theorem extcall_call_full:
       [addr_op; value_op; gas_op; buf_op; call_offset; call_len; default_op] /\
     (?ao az. eval_operand call_offset t = SOME ao /\
        eval_operand call_len t = SOME az /\
+       (w2n az <> 0 ==> w2n ao + w2n az <= t.vs_alloca_next) /\
        (!i. w2n ao <= i /\ i < w2n ao + w2n az ==> i NOTIN tn.t_mem) /\
        (w2n az <> 0 ==>
         ?v b sz. call_offset = Var v /\ FLOOKUP G v = SOME (b,sz) /\
