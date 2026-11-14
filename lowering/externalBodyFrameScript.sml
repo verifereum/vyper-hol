@@ -875,7 +875,7 @@ Proof
     (drule external_send_call_value_frame >>
      simp[evaluation_state_component_equality, initial_state_def]) >>
   `outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes` by fs[] >>
-  drule external_source_context_typed >> strip_tac >>
+  drule_all external_source_context_typed >> strip_tac >>
   drule_all external_package_dec_metadata >> strip_tac >>
   drule_all external_package_global_maps >> strip_tac >>
   drule external_package_bare_globals >>

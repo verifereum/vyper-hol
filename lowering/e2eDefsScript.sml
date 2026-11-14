@@ -92,12 +92,154 @@ Proof
   rpt strip_tac >> simp[]
 QED
 
+Definition account_immutables_def:
+  account_immutables (am:abstract_machine) addr =
+    case ALOOKUP am.immutables addr of
+      NONE => empty_immutables
+    | SOME imms => imms
+End
+
+(* TOP-LEVEL: every declared bare global has a cell whose type tag is its
+   type.  Constants are bare globals, so this covers their cells too. *)
+Definition global_cells_typed_def:
+  global_cells_typed tops globals imms <=>
+    !src id ty.
+      FLOOKUP globals (src, id) = SOME ty ==>
+      ?tv v.
+        FLOOKUP (get_source_immutables src imms) id = SOME (tv, v) /\
+        evaluate_type (type_env tops) ty = SOME tv
+End
+
+(* TOP-LEVEL: the source checks, and the target's constant cells hold the
+   contract's folded constants (load_contract leaves them so). *)
 Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
-    ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
-          checked_contract_runtime_ready art [(NONE, tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx
+    ?art cenv.
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+      global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target) /\
+      constants_fold_module [(NONE, tops)] (account_immutables am tx.target) NONE tops FEMPTY = SOME cenv /\
+      cenv SUBMAP get_source_immutables NONE (account_immutables am tx.target) /\
+      machine_well_typed am /\ call_tx_well_typed tx
 End
+
+Theorem checked_contract_runtime_ready_global_cells_typed:
+  checked_contract_runtime_ready art [(NONE, tops)] am tx /\
+  source_deployment_rel tops am tx ==>
+  global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target)
+Proof
+  rw[global_cells_typed_def] >>
+  drule source_deployment_context >> strip_tac >>
+  fs[checked_contract_runtime_ready_def, immutables_ready_def,
+     account_immutables_def, vyperStateTheory.empty_immutables_def,
+     initial_evaluation_context_def] >>
+  metis_tac[optionTheory.IS_SOME_EXISTS, pairTheory.PAIR]
+QED
+
+(* The checker plus the cells clause give the runtime readiness the call
+   machinery reads; the deployment relation supplies the source lookup. *)
+Theorem source_typing_ok_runtime_ready:
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx ==>
+  ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+        checked_contract_runtime_ready art [(NONE, tops)] am tx /\
+        machine_well_typed am /\ call_tx_well_typed tx
+Proof
+  strip_tac >>
+  fs[source_typing_ok_def, global_cells_typed_def] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+   (case ALOOKUP am.exports tx.target of NONE => [] | SOME exps => exps) = []` by
+    (fs[source_deployment_rel_def] >>
+     Cases_on `ALOOKUP am.exports tx.target` >> gvs[]) >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  TRY (qexists_tac `art`) >>
+  simp[checked_contract_runtime_ready_def] >>
+  conj_tac >- metis_tac[check_contract_single_module_exports_ok] >>
+  mp_tac (Q.INST
+    [`layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+     `mods` |-> `[(NONE, tops)]`, `art` |-> `art`,
+     `sources` |-> `am.sources`, `tx` |-> `tx`]
+    vyperTypeContractStaticMapsTheory.check_contract_toplevel_vtypes_consistent_initial) >>
+  simp[] >> strip_tac >>
+  mp_tac (Q.INST
+    [`layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+     `mods` |-> `[(NONE, tops)]`, `art` |-> `art`,
+     `sources` |-> `am.sources`, `tx` |-> `tx`]
+    vyperTypeContractStaticMapsTheory.check_contract_bare_globals_consistent_initial) >>
+  simp[] >> strip_tac >>
+  fs[account_immutables_def, vyperStateTheory.empty_immutables_def,
+     vyperContextTheory.get_module_code_def, initial_evaluation_context_def] >>
+  simp[immutables_ready_def, initial_evaluation_context_def,
+       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.type_env_all_modules_def,
+       GSYM vyperContextTheory.type_env_def] >>
+  conj_tac >- metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  conj_tac >-
+   (rpt strip_tac >>
+    qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _` drule >>
+    strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP art.cta_toplevel_vtypes (NONE,id) = SOME (Type ty)` >>
+  Cases_on `FLOOKUP art.cta_bare_globals (NONE,id)`
+  >- (qpat_x_assum `!src id ty. _ /\ FLOOKUP art.cta_bare_globals (src,id) = NONE ==> _`
+        (qspecl_then [`NONE`,`id`,`ty`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  rename1 `FLOOKUP art.cta_bare_globals (NONE,id) = SOME bare_ty` >>
+  qpat_x_assum `!src id ty. _ ==> ?ts. _ /\ FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ _`
+    (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _`
+    (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
+  simp[]
+QED
+
+(* The constant-cell hypotheses of constSubstCorrect's
+   checked_module_consts_substitution, for the called contract. *)
+Theorem source_typing_ok_consts_ready:
+  source_typing_ok tops am tx ==>
+  ?art A.
+    check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+    constants_fold_module [(NONE, tops)] (account_immutables am tx.target)
+      NONE tops FEMPTY = SOME A /\
+    (!src. IS_SOME src ==>
+       get_source_immutables src (constant_machine_immutables am tx.target) =
+       get_source_immutables src (account_immutables am tx.target)) /\
+    (!id tv v. FLOOKUP A id = SOME (tv,v) ==>
+       FLOOKUP (get_source_immutables NONE
+         (constant_machine_immutables am tx.target)) id = SOME (tv,v)) /\
+    deployment_constant_cells_typed (type_env_all_modules [(NONE, tops)])
+      tx.target [(NONE, tops)] am
+Proof
+  rw[source_typing_ok_def] >>
+  `constant_machine_immutables am tx.target = account_immutables am tx.target` by
+    simp[vyperTypeConstantFoldTheory.constant_machine_immutables_def,
+         account_immutables_def, vyperStateTheory.empty_immutables_def] >>
+  qexistsl [`art`, `cenv`] >> simp[] >>
+  conj_tac >- metis_tac[finite_mapTheory.SUBMAP_FLOOKUP_EQN] >>
+  simp[vyperTypeConstantCellsTheory.deployment_constant_cells_typed_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `FLOOKUP art.cta_bare_globals (NONE, id) = SOME ty` by
+    (drule vyperTypeContractStaticMapsTheory.check_contract_artifact_fields >>
+     strip_tac >> simp[] >>
+     irule vyperTypeContractStaticMapsTheory.build_contract_type_artifact_bare_globals_complete >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `global_cells_typed _ _ _`
+    ((qspecl_then [`NONE`, `id`, `ty`] mp_tac) o REWRITE_RULE [global_cells_typed_def]) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `machine_well_typed am`
+    (strip_assume_tac o REWRITE_RULE [machine_well_typed_def]) >>
+  Cases_on `ALOOKUP am.immutables tx.target` >>
+  gvs[account_immutables_def, vyperStateTheory.empty_immutables_def,
+      vyperStateTheory.get_source_immutables_def] >>
+  conj_tac
+  >- gvs[vyperContextTheory.type_env_all_modules_def,
+         vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2] >>
+  qabbrev_tac `imms0 = constant_machine_immutables am tx.target` >>
+  `MEM (tx.target, imms0) am.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  gvs[listTheory.EVERY_MEM] >>
+  first_x_assum (qspec_then `(tx.target, imms0)` mp_tac) >> simp[] >>
+  Cases_on `ALOOKUP imms0 NONE` >> gvs[vyperTypeInvariantsTheory.imms_well_typed_def] >>
+  metis_tac[]
+QED
 
 Definition source_storage_ok_def:
   source_storage_ok am tx os gs <=>
@@ -166,13 +308,6 @@ Definition accounts_after_transfer_def:
 End
 
 (* ===== Fresh nonstatic frame: LIVE post-transfer accounts ===== *)
-
-Definition account_immutables_def:
-  account_immutables (am:abstract_machine) addr =
-    case ALOOKUP am.immutables addr of
-      NONE => empty_immutables
-    | SOME imms => imms
-End
 
 Definition call_state_rel_def:
   call_state_rel tops runtime_bc am tx es <=>

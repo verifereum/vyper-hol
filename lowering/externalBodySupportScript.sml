@@ -45,8 +45,10 @@ Proof
   >- (
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
    layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
-  gvs[source_typing_ok_def] >>
+  qpat_x_assum `source_typing_ok _ _ _` kall_tac >>
+  gvs[] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `External <> Deploy` by simp[] >>
@@ -67,8 +69,10 @@ Proof
   ) >>
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
    layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
-  gvs[source_typing_ok_def] >>
+  qpat_x_assum `source_typing_ok _ _ _` kall_tac >>
+  gvs[] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
@@ -177,13 +181,14 @@ Proof
 QED
 
 Theorem external_source_context_typed:
-  source_typing_ok tops am tx ==>
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx ==>
   context_well_typed
     (initial_evaluation_context am.sources am.layouts tx NONE) /\
   functions_well_typed
     (initial_evaluation_context am.sources am.layouts tx NONE)
 Proof
-  rw[source_typing_ok_def]
+  strip_tac >> drule_all source_typing_ok_runtime_ready >> strip_tac >>
+  conj_tac
   >- gvs[call_tx_well_typed_def, context_well_typed_def,
          initial_evaluation_context_def] >>
   irule check_contract_functions_well_typed_initial >>
