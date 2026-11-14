@@ -1,6 +1,6 @@
 (* Clean scalar validation fragments used by calldata decoders. *)
 Theory calldataClampPtr
-Ancestors fragGasOriginPtr fragGasSeqPtr memSafeRun instMemFrontier venomInstProofs abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
+Ancestors calldataDecodePtr fragGasOriginPtr fragGasSeqPtr memSafeRun instMemFrontier venomInstProofs abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   unitTransformDefs fragExec venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep contextCodegenRel
@@ -194,54 +194,6 @@ Proof
   rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem clamp_scalar_origin[local]:
-  MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
-  EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
-  ~s.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops outs) /\
-  step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G (mk_inst id opc ops outs) t,
-     step_taint (mk_inst id opc ops outs) s t tn)
-Proof
-  strip_tac >>
-  `?vars. t = s with vs_vars := vars` by
-    metis_tac[clamp_scalar_state_frame] >>
-  `step_inst 0 ctx (mk_inst id opc ops outs) s = OK t` by
-    (`(mk_inst id opc ops outs).inst_opcode <> INVOKE` by
-       (fs[MEM] >> simp[mk_inst_def]) >>
-     simp[step_inst_non_invoke]) >>
-  `ptr_safe_step D lo 0 ctx fn PG G tn (mk_inst id opc ops outs) s` by
-    (irule clamp_scalar_step_safe >> simp[] >>
-     metis_tac[venom_state_accfupds]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G (mk_inst id opc ops outs) t,
-     step_taint (mk_inst id opc ops outs) s t tn)` suffices_by
-    (strip_tac >> drule (cj 2 gas_origin_ptr_path_rules) >>
-     disch_then (qspec_then `[]` mp_tac) >>
-     simp[cj 1 gas_origin_ptr_path_rules] >> metis_tac[step_preserves_halted]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn)
-    (if (mk_inst id opc ops outs).inst_opcode = GAS then
-      [(fn.fn_name,(mk_inst id opc ops outs).inst_id) IN explicit] else [])
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G (mk_inst id opc ops outs) t,
-     step_taint (mk_inst id opc ops outs) s t tn)` suffices_by
-    (fs[MEM] >> simp[mk_inst_def]) >>
-  irule straight_line_origin_ptr_edge >>
-  simp[] >>
-  `?b. lookup_block s.vs_current_bb fn.fn_blocks = SOME b /\
-    get_instruction b s.vs_inst_idx = SOME (mk_inst id opc ops outs)` by
-    metis_tac[] >>
-  fs[ptr_safe_step_def, MEM] >>
-  simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
-    source_memory_read_ranges_def, source_memory_write_ranges_def,
-    inst_dload_in_section_def]
-QED
-
 Theorem clamp_scalar_indexed_origin[local]:
   MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
@@ -256,16 +208,35 @@ Theorem clamp_scalar_indexed_origin[local]:
      step_taint (mk_inst id opc ops outs) s t tn)
 Proof
   strip_tac >>
+  `?vars. t = s with vs_vars := vars` by
+    metis_tac[clamp_scalar_state_frame] >>
+  `opc <> INVOKE` by fs[MEM] >>
   `~is_terminator (mk_inst id opc ops outs).inst_opcode` by
     (fs[MEM] >> simp[mk_inst_def, is_terminator_def]) >>
-  `step_inst_base (mk_inst id opc ops outs) (s with vs_inst_idx := n) =
-    OK (t with vs_inst_idx := n)` by
-    simp[step_inst_inst_idx_indep, exec_result_map_def] >>
-  `allocas_from lo (s with vs_inst_idx := n)` by
-    (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
-  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := n`,
-    `t` |-> `t with vs_inst_idx := n`] clamp_scalar_origin) >>
-  simp[]
+  `step_inst 0 ctx (mk_inst id opc ops outs) s = OK t` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn (mk_inst id opc ops outs)
+      (s with vs_inst_idx := n)` by
+    (`allocas_from lo (s with vs_inst_idx := n)` by
+       (simp_tac (srw_ss()) [allocas_from_def] >>
+        qpat_assum `allocas_from lo s`
+          (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+     `step_inst_base (mk_inst id opc ops outs) (s with vs_inst_idx := n) =
+       OK (t with vs_inst_idx := n)` by
+       simp[step_inst_inst_idx_indep, exec_result_map_def] >>
+     `step_inst 0 ctx (mk_inst id opc ops outs) (s with vs_inst_idx := n) =
+       OK (t with vs_inst_idx := n)` by
+       simp[step_inst_non_invoke, mk_inst_def] >>
+     `t.vs_requests = s.vs_requests` by
+       (qpat_assum `t = s with vs_vars := vars` SUBST1_TAC >> simp[]) >>
+     mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := n`,
+       `t` |-> `t with vs_inst_idx := n`, `fuel` |-> `0:num`]
+       (SPEC_ALL clamp_scalar_step_safe)) >> simp[]) >>
+  irule (Q.INST [`i` |-> `mk_inst id opc ops outs`]
+    calldataDecodePtrTheory.decoder_indexed_origin_step) >>
+  fs[ptr_safe_step_def, MEM, mk_inst_def, is_terminator_def,
+    inst_mem_below_frontier_def, inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >> metis_tac[]
 QED
 
 Theorem calldata_clamp_overwrite_prefix_uniform_origin:

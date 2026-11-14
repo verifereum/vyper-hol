@@ -56,36 +56,6 @@ Proof
   Cases_on `tail` >> simp[]
 QED
 
-Theorem dispatch_joint_edge_path[local]:
-  gas_path_mem_edge ctx fn s 0 (OK t) /\
-  gas_path_ptr_edge D lo ctx fn PG G tn s 0 G' tn' (OK t) /\
-  ~t.vs_halted ==>
-  gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG)
-    (s, G, tn) [] (OK t, G', tn')
-Proof
-  strip_tac >>
-  `gas_origin_ptr_edge (D, lo, explicit, ctx, fn, PG)
-    (s, G, tn) [] (OK t, G', tn')` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  metis_tac[gas_origin_ptr_path_rules, APPEND]
-QED
-
-Theorem dispatch_scalar_edge_mem[local]:
-  (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
-     OK (update_var out value s)) /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
-  ~s.vs_halted /\ MEM opc [CALLDATASIZE; CALLDATALOAD; LT; EQ; ISZERO; SHR] ==>
-  gas_path_mem_edge ctx fn s 0
-    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx))
-Proof
-  strip_tac >> irule for_range_straight_line_mem_edge >> conj_tac >- simp[] >>
-  qexistsl_tac [`bb`, `mk_inst id opc ops [out]`, `update_var out value s`] >>
-  gvs[MEM, mk_inst_def, is_terminator_def, step_inst_non_invoke] >>
-  irule below_frontier_no_ranges >> simp[]
-QED
-
 Theorem dispatch_scalar_joint[local]:
   (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
      OK (update_var out value s)) /\
@@ -100,20 +70,22 @@ Theorem dispatch_scalar_joint[local]:
      step_prov PG G (mk_inst id opc ops [out]) (update_var out value s),
      step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn)
 Proof
-  strip_tac >> irule dispatch_joint_edge_path >> conj_tac
-  >- simp[update_var_def] >>
-  conj_tac
-  >- (irule dispatch_scalar_edge_mem >> simp[] >>
-      qexistsl_tac [`id`, `opc`, `ops`] >> gvs[MEM]) >>
-  simp[gas_path_ptr_edge_def] >>
-  qexists_tac `0` >>
-  simp[gas_count_step_def, mk_inst_def] >>
-  `opc <> GAS /\ opc <> INVOKE /\ ~is_terminator opc` by gvs[MEM, is_terminator_def] >>
-  simp[] >> conj_tac
-  >- (irule (REWRITE_RULE [mk_inst_def] ptr_safe_dispatch_scalar_step) >> simp[] >>
-      qexists_tac `update_var out value s` >> simp[update_var_def, GSYM mk_inst_def]) >>
-  simp[GSYM mk_inst_def, ghost_step_non_invoke] >>
-  gvs[MEM, mk_inst_def, is_terminator_def, update_var_def]
+  strip_tac >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn (mk_inst id opc ops [out]) s` by
+    (pure_rewrite_tac [mk_inst_def] >>
+     irule (REWRITE_RULE [mk_inst_def] ptr_safe_dispatch_scalar_step) >> simp[] >>
+     qexists_tac `update_var out value s` >> simp[update_var_def, GSYM mk_inst_def]) >>
+  `opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc` by
+    fs[MEM, is_terminator_def] >>
+  `step_inst_base (mk_inst id opc ops [out]) s = OK (update_var out value s)` by
+    (qpat_assum `!fuel. step_inst fuel _ _ _ = _`
+      (qspec_then `0` assume_tac) >> gvs[step_inst_non_invoke, mk_inst_def]) >>
+  irule (Q.INST [`i` |-> `mk_inst id opc ops [out]`]
+    straight_line_checked_step_origin) >>
+  fs[MEM] >>
+  gvs[mk_inst_def, is_terminator_def,
+    unitTransformDefsTheory.inst_mem_below_frontier_def, inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
 

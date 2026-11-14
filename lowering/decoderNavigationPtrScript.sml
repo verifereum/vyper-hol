@@ -38,15 +38,8 @@ Theorem straight_line_step_origin:
      step_prov PG G i t, step_taint i s t tn)
 Proof
   strip_tac >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G i t, step_taint i s t tn)` by
-    (drule_all straight_line_origin_ptr_edge >> simp[]) >>
-  `~t.vs_halted` by
-    metis_tac[step_preserves_halted, step_inst_non_invoke] >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[cj 1 gas_origin_ptr_path_rules]
+  mp_tac (Q.INST [`n` |-> `s.vs_inst_idx`]
+    calldataDecodePtrTheory.decoder_indexed_origin_step) >> simp[]
 QED
 
 Theorem navigation_instruction_origin:

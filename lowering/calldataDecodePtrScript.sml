@@ -139,7 +139,7 @@ Proof
   mp_tac (Q.INST [`R` |-> `{}:num set`] step_taint_memory_bound) >> simp[]
 QED
 
-Theorem decoder_indexed_origin_step[local]:
+Theorem decoder_indexed_origin_step:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb n = SOME i /\
