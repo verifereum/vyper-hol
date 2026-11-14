@@ -1620,3 +1620,40 @@ Proof
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
 QED
+
+Theorem rb_load_bytestring_as_word:
+  rb_operand_ok v ==>
+  rb_step (\p. rb_operand_ok (FST p) /\ rb_operand_ok (SND p))
+    (load_bytestring_as_word v opc)
+Proof
+  strip_tac >> pure_rewrite_tac[load_bytestring_as_word_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (Cases_on `opc = SAR` >> simp[rb_step_return] >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      simp[rb_emit_op]) >>
+  gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]
+QED
+
+Theorem rb_compile_int_clamp:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_int_clamp signed bits v)
+Proof
+  strip_tac >> Cases_on `signed` >>
+  simp[compile_int_clamp_def]
+  >- (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_ignore >> simp[rb_emit_void, rb_step_return]) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_step_return]
+QED
