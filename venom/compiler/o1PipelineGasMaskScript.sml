@@ -24,30 +24,10 @@ Ancestors
   venomPassSchedule venomExecSemantics venomInst venomState
   passSimulationDefs makeSsaCurrentEvents venomPipelineRunner
   o1FnScheduleDecompHelpers o1PrewalkSafeUpto o1SafeUpto
-  o1ContractLowerDloadStage concretizeStageShape o1ContractMakeSsaSrc
+  o1ContractLowerDloadStage o1LowerDloadRootEntry concretizeStageShape o1ContractMakeSsaSrc
   option list
 
 (* ===== Runs at the entry ===== *)
-
-Theorem run_context_terminates_entry[local]:
-  terminates (run_context fuel ctx s) ==>
-  ?nm fn lbl. ctx.ctx_entry = SOME nm /\
-    lookup_function nm ctx.ctx_functions = SOME fn /\
-    fn_entry_label fn = SOME lbl
-Proof
-  simp[run_context_def, run_function_def] >>
-  Cases_on `ctx.ctx_entry` >> simp[terminates_def] >>
-  Cases_on `lookup_function x ctx.ctx_functions` >> simp[terminates_def] >>
-  Cases_on `fn_entry_label x'` >> simp[terminates_def]
-QED
-
-Theorem run_state_ok_entry_state[local]:
-  o1_run_state_ok vs /\ fn_entry_label fn = SOME lbl ==>
-  fn_entry_state fn
-    (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-Proof
-  simp[o1_run_state_ok_def, o1_initial_state_ok_def, fn_entry_state_def]
-QED
 
 Theorem run_state_ok_gas_readings[local]:
   o1_run_state_ok vs ==> o1_run_state_ok (vs with vs_gas_readings := g)
@@ -142,7 +122,8 @@ Theorem gas_transport_same_fuel[local]:
       (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)
 Proof
   rpt strip_tac >>
-  drule run_context_terminates_entry >> strip_tac >>
+  drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+                        ld_run_context_entry)) >> strip_tac >>
   rename1 `lookup_function nm A.ctx_functions = SOME fa` >>
   rename1 `fn_entry_label fa = SOME lbl` >>
   qpat_x_assum `!nm fa. _` drule >> strip_tac >>
@@ -152,7 +133,9 @@ Proof
   qexistsl [`f'`, `nm`, `fa`, `fb`, `lbl`, `lbl`] >> gvs[] >>
   qabbrev_tac `st = w with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                               vs_inst_idx := 0 |>` >>
-  `fn_entry_state fa st` by metis_tac[run_state_ok_entry_state] >>
+  `fn_entry_state fa st` by
+    (simp[Abbr `st`] >> irule context_fn_entry_state >>
+     fs[o1_run_state_ok_def, o1_initial_state_ok_def]) >>
   `run_context f A w = run_blocks f A fa st /\
    run_context f' B w = run_blocks f' B fb st` by
     (simp[Abbr `st`] >> conj_tac >> irule run_context_entry_blocks >> gvs[]) >>
@@ -185,7 +168,8 @@ Theorem gas_transport_run_eq[local]:
       (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)
 Proof
   rpt strip_tac >>
-  drule run_context_terminates_entry >> strip_tac >>
+  drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+                        ld_run_context_entry)) >> strip_tac >>
   rename1 `lookup_function nm A.ctx_functions = SOME fa` >>
   rename1 `fn_entry_label fa = SOME lbl` >>
   qpat_x_assum `!nm fa. _` drule_all >> strip_tac >>
@@ -318,7 +302,8 @@ Proof
         (gvs[o1_inv_def, o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
          rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
          metis_tac[o1_fn_shape_def]) >>
-      drule run_context_terminates_entry >> strip_tac >>
+      drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+                            ld_run_context_entry)) >> strip_tac >>
       drule_all simplify_cfg_stage_gas_prefix >>
       disch_then (qspec_then `f` strip_assume_tac) >>
       gvs[] >> metis_tac[])
@@ -498,7 +483,8 @@ Proof
   qexistsl [`f`, `fb`, `la`] >>
   `fn_entry_state fa
      (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)` by
-    metis_tac[run_state_ok_entry_state] >>
+    (irule context_fn_entry_state >>
+     fs[o1_run_state_ok_def, o1_initial_state_ok_def]) >>
   qpat_x_assum `!f st. _`
     (qspecl_then [`f`, `w with <| vs_prev_bb := NONE; vs_current_bb := la;
                                   vs_inst_idx := 0 |>`] mp_tac) >>
@@ -790,7 +776,9 @@ Proof
   `fn_entry_label fn8 = SOME lbl` by gvs[] >>
   qabbrev_tac `e = vs_out with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                                   vs_inst_idx := 0 |>` >>
-  `fn_entry_state fn8 e` by metis_tac[run_state_ok_entry_state] >>
+  `fn_entry_state fn8 e` by
+    (simp[Abbr `e`] >> irule context_fn_entry_state >>
+     fs[o1_run_state_ok_def, o1_initial_state_ok_def]) >>
   `run_context fuel (stage 9) vs_out = run_blocks fuel (stage 9) fn e` by
     (simp[Abbr `e`] >> irule run_context_entry_blocks >> simp[]) >>
   `?fuel8. terminates (run_blocks fuel8 (stage 8) fn8 e)` by metis_tac[] >>
@@ -1145,7 +1133,9 @@ Proof
            (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>) =
          gas_events_blocks f unit.cu_context fa
            (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)` by
-    (rpt strip_tac >> drule run_context_terminates_entry >> strip_tac >>
+    (rpt strip_tac >>
+     drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+                           ld_run_context_entry)) >> strip_tac >>
      drule_all simplify_cfg_stage_gas_prefix >>
      disch_then (qspec_then `f` strip_assume_tac) >> gvs[] >> metis_tac[]) >>
   `!f. terminates (run_context f mid.cu_context w) ==>
@@ -1208,7 +1198,7 @@ Proof
   `unit.cu_context.ctx_entry = SOME entry` by gvs[] >>
   `?nm0 fn0 lbl0. unit.cu_context.ctx_entry = SOME nm0 /\
      lookup_function nm0 unit.cu_context.ctx_functions = SOME fn0 /\
-     fn_entry_label fn0 = SOME lbl0` by metis_tac[run_context_terminates_entry] >>
+     fn_entry_label fn0 = SOME lbl0` by metis_tac[ld_run_context_entry] >>
   `nm0 = entry` by gvs[] >> pop_assum SUBST_ALL_TAC >>
   qexistsl [`fn0`, `lbl0`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!f. terminates (run_context f unit.cu_context w) ==> _` drule >>
