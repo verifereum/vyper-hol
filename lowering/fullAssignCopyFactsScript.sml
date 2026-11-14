@@ -562,3 +562,27 @@ Proof
   gvs[is_bytestring_type_def] >>
   Cases_on `v` >> simp[val_footprint_def]
 QED
+
+Theorem eval_assign_toplevel_action:
+  !cx src id e ts tr typ id_str slot tvt.
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+             (write_storage_slot cx tr (n2w slot) tvt v))
+Proof
+  rpt gen_tac >> strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e x` >> rename1 `eval_expr cx e x = (r1, es1)` >>
+  Cases_on `r1` >> simp[] >>
+  Cases_on `read_result cx x' es1` >>
+  rename1 `read_result cx _ es1 = (r2, es2)` >>
+  Cases_on `r2` >> simp[] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, lookup_global_def, bind_def,
+       lift_option_type_def, return_def, LET_THM, get_place_def,
+       write_place_def, ignore_bind_def, record_storage_event_def]
+QED
