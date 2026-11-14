@@ -14,7 +14,7 @@ Theorem store_slots_elements_origin_ptr:
     compile_store_slots cenv (Var root) slot ty tr sa = ((),sb) /\
     not_fresh_at sa root /\ (!x. slot = Var x ==> not_fresh_at sa x) /\
     lookup_var root s = SOME sw /\ eval_operand slot s = SOME dw /\
-    op_taint tn slot = {} /\ ptr_covers G tn root s (val_store_size tv (EL i vs)) /\
+    op_prov G slot = NONE /\ op_taint tn slot = {} /\ ptr_covers G tn root s (val_store_size tv (EL i vs)) /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv (EL i vs) (w2n sw) m) /\
     w2n sw + type_memory_size tv < dimword(:256) /\

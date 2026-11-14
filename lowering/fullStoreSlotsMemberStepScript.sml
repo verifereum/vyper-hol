@@ -45,6 +45,7 @@ Theorem store_slots_member_offsets_origin_ptr:
     u.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~u.vs_halted /\
     lookup_var out u = SOME (sw+n2w mo) /\ ptr_covers Gf tf out u n /\
     eval_operand slot u = SOME (dw+n2w so) /\ op_taint tf slot = {} /\
+    op_prov Gf slot = op_prov G dst /\
     execution_frame u = execution_frame s /\
     tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
@@ -67,8 +68,9 @@ Proof
   `!x. slot = Var x ==> not_fresh_at sc x` by
     (drule_at (Pat `compile_lit_byte_offset dst _ _ = _`)
        placeStoreSlotsTheory.store_slots_lit_offset_fresh >> simp[]) >>
-  `eval_operand dst p = SOME dw /\ op_taint tp dst = {}` by
-    (Cases_on `dst` >> gvs[eval_operand_def,op_taint_def]) >>
+  `eval_operand dst p = SOME dw /\ op_taint tp dst = {} /\
+   op_prov Gp dst = op_prov G dst` by
+    (Cases_on `dst` >> gvs[eval_operand_def,op_taint_def,op_prov_def]) >>
   `allocas_from lo p` by metis_tac[allocas_from_def] >>
   drule_all store_slots_clean_offset_origin_ptr >>
   disch_then (qspec_then `Gp` (qx_choose_then `Gf`
@@ -84,7 +86,7 @@ Theorem store_slots_member_step_origin_ptr:
     compile_store_slots cenv (Var root) slot ty tr sa = ((),sb) /\
     not_fresh_at sa root /\ (!x. slot = Var x ==> not_fresh_at sa x) /\
     lookup_var root s = SOME sw /\ eval_operand slot s = SOME dw /\
-    op_taint tn slot = {} /\ ptr_covers G tn root s (val_store_size tv v) /\
+    op_prov G slot = NONE /\ op_taint tn slot = {} /\ ptr_covers G tn root s (val_store_size tv v) /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n sw) m) /\
     w2n sw + type_memory_size tv < dimword(:256) /\
@@ -121,7 +123,8 @@ Theorem store_slots_member_step_origin_ptr:
   not_fresh_at sa root /\ (!x. dst = Var x ==> not_fresh_at sa x) /\
   lookup_var root s = SOME sw /\ ptr_covers G tn root s capacity /\
   mo + val_store_size tv v <= capacity /\
-  eval_operand dst s = SOME dw /\ op_taint tn dst = {} /\
+  eval_operand dst s = SOME dw /\ op_prov G dst = NONE /\
+  op_taint tn dst = {} /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n sw+mo) m) /\
   w2n sw+mo+type_memory_size tv < dimword(:256) /\

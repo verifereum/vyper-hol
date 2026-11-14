@@ -69,7 +69,7 @@ Theorem store_slots_element_step_origin_ptr:
     compile_store_slots cenv (Var root) slot ty tr sa = ((),sb) /\
     not_fresh_at sa root /\ (!x. slot = Var x ==> not_fresh_at sa x) /\
     lookup_var root s = SOME sw /\ eval_operand slot s = SOME dw /\
-    op_taint tn slot = {} /\ ptr_covers G tn root s (val_store_size tv v) /\
+    op_prov G slot = NONE /\ op_taint tn slot = {} /\ ptr_covers G tn root s (val_store_size tv v) /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n sw) m) /\
     w2n sw + type_memory_size tv < dimword(:256) /\
@@ -179,7 +179,7 @@ Proof
     val_in_memory tv v (w2n (n2w (w2n sw+j*ms):bytes32)) m` by simp[] >>
   qpat_x_assum `!root slot tr sa sb func s sw dw writes G tn. _` drule >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
-  simp[eval_operand_def] >>
+  simp[eval_operand_def,op_prov_def] >>
   disch_then drule_all >>
   disch_then (qx_choose_then `Gu` (qx_choose_then `tu`
     (qx_choose_then `u` (qx_choose_then `ks` strip_assume_tac)))) >>
