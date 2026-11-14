@@ -35,7 +35,7 @@ Theorem expr_stack_outcome_ptr:
       ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r) ==>
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
     (\res ee G tn u. ?tv. res = INL tv /\
       vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
@@ -45,7 +45,7 @@ Theorem expr_stack_outcome_ptr:
       ptr_vv_ok cx (post_value_type cenv e) tv (StackValue t op) ee G tn u /\
       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rw[gas_outcome_ptr_def] >> qexists_tac `marks`
   >- (disj1_tac >> gvs[gas_summary_ptr_at_def]
@@ -60,7 +60,7 @@ Proof
           first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                     `es_end`, `G`, `tn`, `r`] >>
-      simp[expr_exit_success_map] >> gen_tac >>
+      simp[expr_exit_success_map, halt_exit_success_map] >> gen_tac >>
       drule eval_expr_force_value >>
       disch_then (qspec_then `es with gas_obs :=
         gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
@@ -75,8 +75,9 @@ QED
    loaded word's taint needs: ptr_vv_ok's memory clause says nothing about
    a type that doesn't evaluate. *)
 Theorem expr_exit_exception_exists[local]:
-  (?exc. res = INR exc /\ expr_exit (INR exc : 'b + exception) r) <=>
-  expr_exit (res : 'a + exception) r
+  (?exc. res = INR exc /\ expr_exit (INR exc : 'b + exception) r /\
+     (exc = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)) <=>
+  expr_exit (res : 'a + exception) r /\ halt_exit cx ee res r
 Proof
   Cases_on `res` >- simp[] >> simp[] >>
   qspecl_then [`(\x:'a. ARB:'b)`, `INR y : 'a + exception`]

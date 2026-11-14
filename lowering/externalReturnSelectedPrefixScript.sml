@@ -50,7 +50,7 @@ Theorem return_selected_forced_prefix:
        (?ann fid args drv. e = Call ann (IntCall fid) args drv) \/
        (?ann fid args drv pvs. e = Call ann (IntCall fid) args drv /\
           ce.ce_func_info (nsid_to_string fid) = (0,0,pvs) /\ op = Lit 0w)))
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   Cases_on `?ann fid args drv. e = Call ann (IntCall fid) args drv`

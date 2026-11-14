@@ -199,8 +199,10 @@ Resume abi_decode_normal_callback[reject]:
            EVERY_NOT_EXISTS, combinTheory.o_DEF]) >>
       metis_tac[expr_body_pre_def]) >>
   disj1_tac >>
+  irule_at Any (Q.INST [`Q` |-> `Q'`]
+    gasSummaryComposePtrTheory.gas_summary_ptr_at_conseq) >>
   irule_at Any type_builtin_runtime_error_abort_summary >>
-  metis_tac[]
+  simp[] >> metis_tac[]
 QED
 Resume abi_decode_normal_callback[header]:
   `abi_static_size cenv.ce_struct_fields (TupleT tys) <=
@@ -242,7 +244,11 @@ Resume abi_decode_normal_callback[header]:
     INR (RuntimeError "abi_decode invalid")` by
     (irule abiWrappedDecodePropsTheory.evaluate_type_builtin_abi_decode_unwrapped_error >>
      simp[needs_external_call_wrap_def, evaluate_abi_decode_def]) >>
-  disj1_tac >> irule_at Any type_builtin_runtime_error_abort_summary >> metis_tac[]
+  disj1_tac >>
+  irule_at Any (Q.INST [`Q` |-> `Q'`]
+    gasSummaryComposePtrTheory.gas_summary_ptr_at_conseq) >>
+  irule_at Any type_builtin_runtime_error_abort_summary >>
+  simp[] >> metis_tac[]
 QED
 Finalise abi_decode_normal_callback
 
@@ -282,7 +288,18 @@ Proof
       simp[cs_appends_def] >> disch_then drule >> simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_assum `expr_type e = _`
-    (fn th => drule_all (REWRITE_RULE [th] abi_decode_normal_callback)) >> simp[]
+    (fn th => drule_all (REWRITE_RULE [th] abi_decode_normal_callback)) >>
+  disch_then (qspec_then `PG` (DISJ_CASES_THEN2
+    (qx_choose_then `marks` assume_tac) assume_tac))
+  >- (disj1_tac >> qexists_tac `marks` >>
+      irule bodyPtrHashBuiltinsUnaryTheory.hash_summary_ptr_halt_lift >>
+      conj_tac
+      >- (rpt gen_tac >> qmatch_goalsub_abbrev_tac `lift_sum result` >>
+          Cases_on `result` >>
+          simp[bind_def, lift_sum_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[]) >>
+      first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 Theorem abi_decode_unary_sim_ptr:

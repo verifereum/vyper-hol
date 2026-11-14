@@ -165,7 +165,7 @@ Theorem external_code_tail_outcome_ptr:
       ptr_vv_ok cx (expr_type e) tv
         (LocatedValue (expr_type e) (mk_ptr r LocMemory)) ee Gf tnf t /\
       ptr_buf_ok cenv e r Gf t)
-    (\res ee ghosts r. expr_exit res r)
+    (\res ee ghosts r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all slice_extcode_account >> strip_tac >>
   `LENGTH (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)))

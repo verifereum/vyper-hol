@@ -48,7 +48,8 @@ Theorem immutable_augassign_operator_mem[local]:
       stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry res
         (ff with gas_obs := []) u /\ alloca_history func u /\
       s_entry.vs_alloca_next <= u.vs_alloca_next) \/
-     (exit_result r /\ !tail. stmt_exit RetQ (ff with gas_obs := tail) res r))
+     (exit_result r /\ (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\
+      halt_exit cx ff res r))
 Proof
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
@@ -82,7 +83,8 @@ Proof
   >- gvs[exprSimDefsTheory.expr_exit_def] >>
   rename1 `_ = INR err` >>
   qexistsl_tac [`INR (Error err)`, `ee`, `r`] >>
-  simp[bind_def, lift_sum_def, return_def, raise_def] >>
+  simp[bind_def, lift_sum_def, return_def, raise_def,
+       exprSimDefsTheory.halt_exit_def] >>
   gen_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
     stmtSimPropsTheory.expr_exit_INR_type] >> gvs[]
@@ -142,7 +144,7 @@ Theorem immutable_augassign_rhs_mem:
     (\res ff u. res = INL () /\
       stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)
 Proof
   strip_tac >> irule aug_place_rhs_mem_continuation >>
   goal_assum (drule_at Any) >> simp[] >> conj_tac

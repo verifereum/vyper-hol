@@ -24,6 +24,34 @@ Proof
   simp[]
 QED
 
+(* A continuation that never ends in a halt meets halt_exit on its exit. *)
+Theorem hash_summary_ptr_halt_lift:
+  gas_summary_ptr_at D (ctx,func) PG marks source (es,s0,G0,tn0) Q
+    (\res ef gt r. expr_exit res r) /\
+  (!st res st'. source st = (res, st') ==> res <> INR HaltException) ==>
+  gas_summary_ptr_at D (ctx,func) PG marks source (es,s0,G0,tn0) Q
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
+Proof
+  rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
+  qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
+  `res <> INR HaltException` by
+    (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
+     first_x_assum drule >> simp[]) >>
+  fs[halt_exit_def]
+QED
+
+Theorem builtin_value_source_no_halt[local]:
+  !st res st'.
+    (\(es':evaluation_state). ((case builtin_result cx es'.accounts ann bt ts vs of
+               INL w => INL (Value w) | INR exc => INR exc), es')) st =
+      (res, st') ==>
+    res <> INR HaltException
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  Cases_on `builtin_result cx st.accounts ann bt ts vs` >> rw[] >>
+  strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]
+QED
+
 Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
@@ -107,7 +135,14 @@ Proof
   `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
-     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >> rpt strip_tac >>
+     gvs[exprSimWordArgsTheory.builtin_result_not_halt]) >>
   gvs[] >>
-  qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[]
+  qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
+  strip_tac >> qexists_tac `marks` >>
+  irule hash_summary_ptr_halt_lift >> conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC builtin_value_source_no_halt,
+         rpt gen_tac >> BETA_TAC >>
+         Cases_on `builtin_result cx st.accounts ann bt [BaseT bty] [v]` >> rw[] >>
+         strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]]
 QED

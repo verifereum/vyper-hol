@@ -142,7 +142,8 @@ Resume compile_assert_frag_ptr[exception]:
       simp[Once bind_def]) >>
   conj_tac >- simp[] >>
   disj2_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type])
+  conj_tac >- metis_tac[expr_exit_INR_type] >>
+  fs[halt_exit_def])
 QED
 
 Resume compile_assert_frag_ptr[true]:

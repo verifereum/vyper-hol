@@ -34,7 +34,7 @@ Theorem abi_args_no_read_outcome_success:
   (!tail. source (es with gas_obs := tail) =
     (INL v, ee with gas_obs := tail)) /\
   gas_outcome F tops (ctx,func) source (es,s0) Q
-    (\res fin r. expr_exit res r) ==>
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r) ==>
   ?t. Q (INL v) (ee with gas_obs := []) t /\
       t.vs_labels = s0.vs_labels
 Proof

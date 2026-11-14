@@ -68,7 +68,8 @@ Theorem immutable_compiled_loop_outcome_mem:
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+       (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+       halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_for_immutable_entry_code_normalized >> strip_tac >>

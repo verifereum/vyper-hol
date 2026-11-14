@@ -39,7 +39,7 @@ Theorem raw_log_dynamic_frag_ptr:
       (~is_word_type (expr_type (Call ann RawLog args dflt)) ==>
         ptr_buf_ok cenv (Call ann RawLog args dflt) (Lit 0w) G t) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\rr ee gt r. expr_exit rr r)
+    (\rr ee gt r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -127,8 +127,9 @@ QED
 
 Resume raw_log_dynamic_frag_ptr[topics_outcome]:
   `(\(rr:value list + exception) (ee:evaluation_state) (gt:(string |-> (num # num)) # taint) r.
-       ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
-   (\rr ee gt r. wb_args_exit rr r)` by
+       ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+         halt_exit cx ee (INR exc : value + exception) r) =
+   (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
     (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
   BETA_TAC >> asm_rewrite_tac[] >>
   drule_all raw_log_body_topics_sim_ptr >>

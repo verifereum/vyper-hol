@@ -17,7 +17,8 @@ Definition expr_map_res_ok_def:
   expr_map_res_ok (res : eval_result + exception) <=>
     (?tv. res = INL tv) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 (* expr_vv_sim for an expression naming a mapping: compile_expr's fragment
@@ -56,7 +57,7 @@ Definition expr_map_sim_def:
           (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 (* expr_body_pre for an expression naming a mapping, which

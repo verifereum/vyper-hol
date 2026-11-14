@@ -114,7 +114,8 @@ Theorem custom_error_store_args_sim_ptr_conditional:
         mem_bytes_at i 1 r.vs_memory = mem_bytes_at i 1 s0.vs_memory /\
         (i IN tf.t_mem ==> i IN tn.t_mem)))
     (\res ee gt exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)
 Proof
   disch_then (mk_asm "store") >> Induct_on `args`
   >- suspend "nil"
@@ -691,7 +692,8 @@ Resume custom_error_store_args_sim_ptr_conditional[tail_exempt]:
   pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >>
-  gvs[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc,
+  qpat_x_assum `gas_exempt_cert F _ _ _ _ right _ _` mp_tac >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc,
       vyperStateTheory.bind_return])
 QED
 

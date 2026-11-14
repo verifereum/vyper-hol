@@ -70,7 +70,8 @@ Proof
   rewrite_tac[bodyMemTbConvertComposeTheory.eval_expr_convert_action, bind_assoc] >>
   irule forced_vv_then_outcome >>
   conj_tac >- (rpt strip_tac >> BETA_TAC >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+    fs[exprSimDefsTheory.halt_exit_def]) >>
   qexists_tac `\tv ee u.
     vv_post ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type (Call a (IntCall fid) args drv))
@@ -131,7 +132,7 @@ Theorem call_bytestring_convert_outcome[local]:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `is_bytestring_type (expr_type (Call a (IntCall fid) args drv))` by
@@ -159,7 +160,8 @@ Proof
   rewrite_tac[bodyMemTbConvertComposeTheory.eval_expr_convert_action, bind_assoc] >>
   irule forced_vv_then_outcome >>
   conj_tac >- (rpt strip_tac >> BETA_TAC >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+    fs[exprSimDefsTheory.halt_exit_def]) >>
   qexists_tac `\tv ee u.
     vv_post ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type (Call a (IntCall fid) args drv))

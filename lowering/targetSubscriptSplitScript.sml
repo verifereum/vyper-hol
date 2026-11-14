@@ -122,7 +122,7 @@ Theorem target_index_outcome:
        expr_post ctx func cenv cx e es1 sm sn t ee v ix u /\
        u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
@@ -204,7 +204,8 @@ Proof
   once_rewrite_tac[evaluate_def] >>
   rewrite_tac[GSYM bind_assoc] >> simp[] >>
   disch_then (qspecl_then [`INR y`, `ee`] mp_tac) >>
-  gvs[bind_def, target_res_ok_def, expr_res_ok_def]
+  gvs[bind_def, target_res_ok_def, expr_res_ok_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 (* Internal-call defaults use the existing finally_set_scopes boundary
@@ -645,7 +646,7 @@ Theorem target_subscript_extend_summary_normal:
   gas_marked_path memory ctx func s 0 (OK u) /\
   Q (INL pv') (es' with gas_obs := []) u ==>
   gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-    (es,s) Q (\res ee r. expr_exit res r)
+    (es,s) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
   simp[gas_summary_at_def] >>
@@ -658,9 +659,12 @@ Theorem target_subscript_extend_summary_error:
   gas_marked_path memory ctx func s 0 r /\
   exit_result r /\ expr_exit (INR err) r ==>
   gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-    (es,s) Q (\res ee r. expr_exit res r)
+    (es,s) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
-  strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `err <> HaltException` by
+    (strip_tac >> gvs[] >> drule evalNoHaltTheory.extend_place_nh >> simp[]) >>
+  drule extend_place_state >> strip_tac >> gvs[] >>
   simp[gas_summary_at_def] >>
   qexistsl [`INR err`, `es`, `r`] >>
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs] >>
@@ -673,17 +677,17 @@ Theorem target_subscript_index_bind_outcome:
   gas_outcome memory (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (mid,t)
     (\res ee u. ?key. res = INL key /\ P key ee u)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!right key ee u.
     gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (mid,t) right (INL key) ee (OK u) /\
     P key (ee with gas_obs := []) u ==>
     gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-      (ee with gas_obs := [],u) Q (\res ee r. expr_exit res r)) ==>
+      (ee with gas_obs := [],u) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome memory (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
-    (mid,t) Q (\res ee r. expr_exit res r)
+    (mid,t) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
@@ -716,7 +720,7 @@ QED
 Theorem target_subscript_bind_outcome:
   gas_outcome memory (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
     (\res ee t. ?pv. res = INL pv /\ P pv ee t)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!left pv mid t.
     gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
       (es,s0) left (INL pv) mid (OK t) /\
@@ -725,10 +729,10 @@ Theorem target_subscript_bind_outcome:
       (bind (bind (eval_expr cx e) (read_result cx))
         (\key. extend_place cx pv (ValueSubscript key)))
       (mid with gas_obs := [],t) Q
-      (\res ee r. expr_exit res r)) ==>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome memory (cx_tops cx) (ctx,func)
     (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
-    Q (\res ee r. expr_exit res r)
+    Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
@@ -756,7 +760,10 @@ Proof
   >- (gvs[] >>
       `?exc. res = INR exc` by (Cases_on `res` >> gvs[expr_exit_def]) >>
       gvs[] >> qexists `left` >> disj1_tac >>
-      metis_tac[target_subscript_base_exception]) >>
+      qexistsl [`INR exc`, `es_end`, `r`] >>
+      conj_tac
+      >- (irule target_subscript_base_exception >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> rpt conj_tac >> fs[halt_exit_def]) >>
   qexists `left` >> disj2_tac >>
   metis_tac[target_subscript_base_exempt_cert]
 QED
@@ -989,7 +996,7 @@ Theorem target_subscript_typed_summary[local]:
       target_post ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res es' r. expr_exit res r)
+    (\res es' r. expr_exit res r /\ halt_exit cx es' res r)
 Proof
   strip_tac >>
   Cases_on `extend_place cx pv (ValueSubscript key) es` >>
@@ -1158,7 +1165,7 @@ Theorem target_subscript_continuation:
       target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := []) /\
@@ -1197,7 +1204,7 @@ Proof
       expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
       u.vs_current_bb = sn.cs_current_bb /\
       u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (irule target_index_outcome >> goal_assum (drule_at Any) >>
      gvs[ci_mono_def] >> first_assum ACCEPT_TAC) >>
   irule target_subscript_index_bind_outcome >>
@@ -1308,7 +1315,7 @@ Theorem target_subscript_local_live_continuation:
       target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation >>
@@ -1349,7 +1356,7 @@ Theorem target_subscript_local_pop_continuation:
       target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `!gs key ee.
@@ -1425,7 +1432,7 @@ Proof
       target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
      simp[target_case_def, target_sim_def] >>
      disch_then (qspecl_then [`env`, `es`] mp_tac) >>
@@ -1475,7 +1482,7 @@ Proof
       target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
      simp[target_case_def, target_sim_def] >>
      disch_then (qspecl_then [`env`, `es`] mp_tac) >>

@@ -31,7 +31,7 @@ Theorem target_index_outcome_mem:
        u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts /\
        alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` mp_tac >>

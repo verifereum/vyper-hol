@@ -17,7 +17,8 @@ Theorem custom_error_args_revert_outcome:
     (stmt_res_ok lctx) es /\
   gas_outcome memory (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0) Q
     (\res ee exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit) /\
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit) /\
   (!marks res mid r.
     gas_marked_exec memory (ctx,func) (eval_exprs cx args) (es,s0) marks res mid (OK r) /\
     Q res (mid with gas_obs := []) r ==>
@@ -25,7 +26,8 @@ Theorem custom_error_args_revert_outcome:
   gas_outcome memory (cx_tops cx) (ctx,func)
     (eval_stmt cx (Raise (RaiseCustomError (CustomError id positional kwargs))))
     (es,s0) (\res ee r. F)
-    (\res ee exit. stmt_res_ok lctx res /\ stmt_exit RetQ ee res exit)
+    (\res ee exit. stmt_res_ok lctx res /\ stmt_exit RetQ ee res exit /\
+      halt_exit cx ee res exit)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
@@ -55,7 +57,10 @@ Proof
           qpat_x_assum `!gs res es'. _` (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
           qpat_assum `!tail. eval_exprs _ _ _ = _` (mp_tac o Q.SPEC `[]`) >>
           pure_rewrite_tac [APPEND_NIL] >> disch_tac >> simp[bind_def]) >>
-      metis_tac[custom_error_argument_exception_exit]) >>
+      simp[stmt_exit_def] >>
+      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:eval_result``]
+        stmtSimPropsTheory.expr_exit_INR_type] >>
+      asm_rewrite_tac[]) >>
   qexists_tac `marks` >> disj2_tac >>
   drule_all raise_custom_error_args_exempt >>
   metis_tac[]

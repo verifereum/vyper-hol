@@ -217,7 +217,7 @@ Theorem sha256_expr_sim_mem_suffix:
   stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
        (INL v, ee) /\ ee.gas_obs = [] /\
@@ -352,7 +352,9 @@ Proof
   qexists `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl [`res`, `es2`, `r`] >>
-  simp[vyperASTTheory.expr_type_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  imp_res_tac exprSimHashTheory.sha256_result_not_halt >>
+  simp[vyperASTTheory.expr_type_def, halt_exit_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem compile_sha256_typed_vv_sim_mem:

@@ -92,7 +92,7 @@ Theorem raw_call_scalar_action_outcome:
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
       ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >>
   simp[] >> strip_tac >>
@@ -325,7 +325,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
         (!l. arg <> Label l) /\ op_taint tn arg = {})
         (if flags.rcf_is_static then [gas_op;addr;data_op;len_op]
          else [gas_op;addr;(case vo of NONE => Lit 0w | SOME v => v);data_op;len_op]))
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all rawCallPrefixPtrTheory.raw_call_prefix_sim_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
@@ -462,7 +462,7 @@ Theorem raw_call_zero_reverting_action_outcome:
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
       ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >> simp[] >> strip_tac >>
   `gas_admissible (eval_exprs cx (a::d::kws))
@@ -549,7 +549,7 @@ Theorem raw_call_bytes_action_outcome:
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
       ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >> simp[] >> strip_tac >>
   `gas_admissible (eval_exprs cx (a::d::kws))
@@ -633,7 +633,7 @@ Theorem raw_call_tuple_action_outcome:
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
       ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule rawCallShapePtrTheory.raw_call_pre_flags >> simp[] >> strip_tac >>
   `gas_admissible (eval_exprs cx (a::d::kws))

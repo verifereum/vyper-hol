@@ -100,6 +100,13 @@ Definition convert_result_def:
     | INR e => INR (Error e)
 End
 
+Theorem convert_result_not_halt[simp]:
+  convert_result cx src t v <> INR HaltException
+Proof
+  simp[convert_result_def] >>
+  Cases_on `evaluate_convert_from (get_tenv cx) src v t` >> simp[]
+QED
+
 Theorem eval_expr_convert_cases:
   !cx ann t e1 es res es'.
     (do result <- eval_expr cx (TypeBuiltin ann Convert t [e1]);
@@ -297,7 +304,7 @@ Theorem convert_continuation_summary:
         fin v op t' /\
       t'.vs_current_bb = sb.cs_current_bb /\
       t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
@@ -315,7 +322,7 @@ Proof
       qexistsl_tac [`s1`,`t0`,`v1`,`x`] >> simp[]) >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`convert_result cx (expr_type e1) t v1`,`ee`,`r`] >>
-  simp[gas_marked_exec_def]
+  simp[gas_marked_exec_def, halt_exit_def]
 QED
 
 (* expr_sim of a conversion from expr_sim of its argument and unop_frag

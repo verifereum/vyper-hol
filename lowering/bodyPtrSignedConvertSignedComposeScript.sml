@@ -596,7 +596,7 @@ Theorem signed_scalar_path_summary:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx fn cenv cx (ee with gas_obs := []) s` by
@@ -650,7 +650,7 @@ Theorem signed_loader_only_continuation:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env e es /\ valid_conversion (expr_type e) typ` by
@@ -708,7 +708,7 @@ Theorem signed_zero_capacity_continuation:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout (Lit 0w) K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env e es /\ valid_conversion (expr_type e) typ /\
@@ -1338,7 +1338,7 @@ Theorem signed_checked_success_continuation[local]:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule signed_loader_layout >> strip_tac >>
@@ -1429,7 +1429,7 @@ Theorem signed_clamped_success_continuation:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule signed_checked_success_continuation >> simp[] >>
@@ -1470,7 +1470,7 @@ Theorem signed_checked_abort_summary[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   (?m. ex = Error (RuntimeError m)) ==>
   gas_summary_ptr_at D (ctx,fn) PG [] (\vs. (INR ex,vs))
-    (ee with gas_obs := [],s,G,tn) Q (\res fin gt r. expr_exit res r)
+    (ee with gas_obs := [],s,G,tn) Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule signed_loader_layout >> strip_tac >>
@@ -1530,7 +1530,7 @@ Theorem signed_checked_abort_continuation[local]:
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
-    (ee with gas_obs := [],s,G,tn) Q (\res fin gt r. expr_exit res r)
+    (ee with gas_obs := [],s,G,tn) Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule signed_loader_layout >> strip_tac >>
@@ -1583,7 +1583,7 @@ Theorem signed_nonzero_continuation:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all signed_scalar_compile_cases >>
@@ -1638,7 +1638,7 @@ Theorem signed_convert_continuation:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
@@ -1692,7 +1692,7 @@ Theorem signed_convert_continuation_gas:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!K tk. ghost_kept cenv (es with gas_obs := gs) s0a G0 tn0 s0 K tk =
@@ -1737,7 +1737,7 @@ Theorem signed_loader_only_continuation_actual[local]:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all signed_child_entry_packet >>
@@ -1793,7 +1793,7 @@ Theorem signed_nonzero_continuation_actual[local]:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all signed_scalar_compile_cases >>
@@ -1847,7 +1847,7 @@ Theorem signed_convert_continuation_actual:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
@@ -1899,7 +1899,7 @@ Theorem signed_convert_continuation_gas_actual:
       ghost_inv d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!K tk. ghost_kept cenv (es with gas_obs := gs) s0a G0 tn0 s0 K tk =

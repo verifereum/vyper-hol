@@ -36,7 +36,8 @@ Theorem literal_flat_member_outcome_ptr_physical[local]:
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `dty = expr_type e`
@@ -115,7 +116,8 @@ Theorem literal_typed_member_outcome_ptr_physical[local]:
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `ci_mono si sm` by metis_tac[compile_expr_ci_mono, pairTheory.SND] >>
@@ -150,7 +152,7 @@ QED
 Resume literal_typed_member_outcome_ptr_physical[child]:
   drule gasSummaryComposePtrTheory.gas_outcome_ptr_conseq >> disch_then irule >>
   simp[] >> rpt strip_tac >>
-  Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def] >> metis_tac[]
+  Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >> metis_tac[]
 QED
 
 Resume literal_typed_member_outcome_ptr_physical[normal]:
@@ -232,7 +234,8 @@ Theorem literal_member_outcome_ptr_physical:
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `dty = expr_type e`

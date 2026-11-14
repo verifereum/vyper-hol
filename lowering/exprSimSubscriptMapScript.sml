@@ -442,8 +442,7 @@ Proof
   drule (cj 1 eval_expr_no_control) >>
   rename1 `INR exc` >> Cases_on `exc` >>
   gvs[no_control_exc_def, no_type_error_result_def]
-  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
-  metis_tac[eval_expr_calls_no_halt, expr_map_pre_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[])
 QED
 
 Theorem expr_map_pre_checked_type:
@@ -642,7 +641,7 @@ Theorem forced_then_outcome_exec:
   gas_outcome memory tops (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!marks v mid t.
     gas_marked_exec memory (ctx,func)
       (bind (eval_expr cx e) (read_result cx)) (es,s0)
@@ -653,7 +652,7 @@ Theorem forced_then_outcome_exec:
       gas_marked_path memory ctx func t 0 r /\
       ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
        (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-  (!ex ee r. expr_exit (INR ex : value + exception) r ==>
+  (!ex ee r. expr_exit (INR ex : value + exception) r /\ halt_exit cx ee (INR ex : value + exception) r ==>
              R (INR ex) ee r) ==>
   gas_outcome memory tops (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
@@ -743,7 +742,7 @@ Theorem compile_mapping_subscript_outcome:
           pure_frame cenv func es sa s0 t) /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac
@@ -867,7 +866,9 @@ Proof
   disch_then assume_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (start,t)` >>
   irule forced_then_outcome_exec >>
-  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[halt_exit_def] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `\kv ee u. expr_post ctx func cenv cx idx
     (mid with gas_obs := []) sm sn t ee kv key u /\
     u.vs_current_bb = sn.cs_current_bb /\

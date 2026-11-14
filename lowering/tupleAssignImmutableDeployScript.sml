@@ -51,7 +51,7 @@ Theorem tuple_immutable_unpack_outcome_open:
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame cenv ee su sv cenv ff t)
-    (\res ff r. expr_exit res r)
+    (\res ff r. expr_exit res r /\ halt_exit cx ff res r)
 Proof
   strip_tac >>
   drule_all tuple_place_compiler_flag_prefix_head >> strip_tac >>
@@ -87,7 +87,7 @@ Proof
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
          FLOOKUP q.vs_allocas aid = SOME entry) /\
        alloca_frame cenv ee ss t cenv ff q)
-     (\res ff r. expr_exit res r)` by
+     (\res ff r. expr_exit res r /\ halt_exit cx ff res r)` by
     (irule (SRULE [] (DISCH_ALL (Q.SPEC `0`
        (UNDISCH (SPEC_ALL tuple_mixed_suffix_from_steps))))) >>
      simp[] >>

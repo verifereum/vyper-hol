@@ -61,7 +61,8 @@ Proof
   drule forced_then_admissible >> strip_tac >>
   `~block_is_terminated sb` by metis_tac[append_storage_aggregate_suffix_open] >>
   irule forced_then_outcome >> conj_tac
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
     expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -149,8 +150,11 @@ Resume compile_append_storage_aggregate_stmt_frag_mem[suffix]:
   pop_assum strip_assume_tac >>
   qexistsl_tac [`res`, `ee'`, `r`] >>
   conj_tac >- metis_tac[append_storage_place_gas_obs] >>
-  simp[] >> disj2_tac >> gen_tac >>
-  drule_all append_storage_place_exit_transport >> simp[]
+  simp[] >> disj2_tac >> conj_tac
+  >- (gen_tac >> drule_all append_storage_place_exit_transport >> simp[]) >>
+  `res <> INR HaltException` by
+    (strip_tac >> fs[] >> metis_tac[evalNoHaltTheory.append_place_nh]) >>
+  gvs[halt_exit_def]
 QED
 
 Finalise compile_append_storage_aggregate_stmt_frag_mem

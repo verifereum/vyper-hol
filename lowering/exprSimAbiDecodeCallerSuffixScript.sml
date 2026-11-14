@@ -34,7 +34,7 @@ Theorem abi_decode_caller_suffix_summary:
       vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
         es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
-    (\res es1 r. expr_exit res r)
+    (\res es1 r. expr_exit res r /\ halt_exit cx es1 res r)
 Proof
   strip_tac >>
   `cs_extends sa start` by metis_tac[cj 2 compile_expr_grows] >>

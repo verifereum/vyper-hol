@@ -118,7 +118,7 @@ Theorem convert_bytestring_continuation_summary_mem:
       alloca_history func tt /\ s.vs_alloca_next <= tt.vs_alloca_next /\
       (?w. eval_operand op tt = SOME w /\
         w2n w + type_memory_bytes cenv (expr_type e) <= tt.vs_alloca_next))
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by simp[] >>

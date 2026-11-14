@@ -2907,7 +2907,8 @@ Proof
   `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[vyperStateTheory.bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
-     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >> rpt strip_tac >>
+     gvs[exprSimWordArgsTheory.builtin_result_not_halt]) >>
   qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -2915,8 +2916,9 @@ Proof
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
-  simp[expr_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  simp[expr_exit_success_map, halt_exit_success_map] >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[] >>
+  rpt strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]
 QED
 
 Theorem vv_post_prefix_frag:

@@ -47,7 +47,7 @@ Theorem widen_convert_modern_outcome_ptr:
       (~is_word_type (post_value_type cenv (TypeBuiltin target Convert target [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin target Convert target [e]) op H u) /\
       ghost_kept cenv es ca G0 tn0 s0 H th)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all widen_copy_actual_counted_certificate >>

@@ -317,7 +317,6 @@ Proof
   simp[handle_loop_exception_def, ignore_bind_def, bind_def, raise_def]
 QED
 
-
 Theorem stmt_state_rel_declare_word_alloca[local]:
   !func cenv cx es s id p sz w inst v tyv sc rest a ctx.
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -502,7 +501,6 @@ Proof
   metis_tac[]
 QED
 
-
 Theorem for_body_entry:
   !ctx func cenv bc cx esk cc id tyv p sz w ainst cv ev dv n1 n2 k
    cond_lbl exit_lbl body_lbl j1 j2 j3 bbb cap.
@@ -551,19 +549,6 @@ Proof
   strip_tac >> qexists_tac `s2` >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >>
   qexists_tac `fuel` >> simp[]
-QED
-(* Every non-Error result from a is one from b, and from b one from c:
-   then from a one from c. *)
-Theorem run_from_results_trans[local]:
-  !ctx func a b c.
-    (!fuel r. run_from fuel ctx func a = r /\ (!e. r <> Error e) ==>
-              ?fuel'. run_from fuel' ctx func b = r) /\
-    (!fuel r. run_from fuel ctx func b = r /\ (!e. r <> Error e) ==>
-              ?fuel'. run_from fuel' ctx func c = r) ==>
-    !fuel r. run_from fuel ctx func a = r /\ (!e. r <> Error e) ==>
-             ?fuel'. run_from fuel' ctx func c = r
-Proof
-  metis_tac[]
 QED
 
 (* The range loop's code, as compile_for_range_parts lays it out, and the
@@ -809,7 +794,7 @@ Theorem for_round_prepare[local]:
         (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>)
         s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> fs[for_code_def] >>
   `bc.ce_module_vars = cenv.ce_module_vars /\
@@ -992,7 +977,8 @@ Theorem for_iteration_alloca[local]:
             frame_start.cs_next_id <= sb0.cs_next_id ==>
             alloca_frame cenv esk frame_start cc cenv ee t))
       (\res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome F (cx_tops cx) (ctx,func) round (esk,cc) Q R` >>
@@ -1120,7 +1106,8 @@ Theorem for_iteration:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
@@ -1237,7 +1224,7 @@ Theorem for_loop_alloca:
          (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
             frame_start.cs_next_id <= sb0.cs_next_id ==>
             alloca_frame cenv esk frame_start cc cenv ee s))
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `Inv = \j ee t.
@@ -1262,7 +1249,7 @@ Proof
     (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
        frame_start.cs_next_id <= sb0.cs_next_id ==>
        alloca_frame cenv esk frame_start cc cenv ee t)` >>
-  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\ halt_exit cx ee (INR ex : unit + exception) r` >>
   `(!j es s.
       j < LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m) /\ Inv j es s /\
       gas_admissible (eval_for cx tyv id stmts
@@ -1284,7 +1271,7 @@ Proof
   (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
      simp[arithmeticTheory.ADD_COMM] >> rpt strip_tac >> irule alloca_frame_same >> simp[])) >>
   strip_tac >> drule gas_outcome_exec_conseq >> disch_then irule >>
-  simp[Abbr `Done`, Abbr `R`] >> metis_tac[]
+  simp[Abbr `Done`, Abbr `R`] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Resume for_loop_alloca[round]:
@@ -1310,7 +1297,7 @@ Resume for_loop_alloca[round]:
   qpat_x_assum `gas_admissible _ _ esk` kall_tac >>
   drule_all for_iteration_alloca >> strip_tac >>
   drule gas_outcome_exec_conseq >> disch_then irule >>
-  reverse conj_tac >- simp[Abbr `R`] >>
+  reverse conj_tac >- (simp[Abbr `R`] >> rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   `!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
      frame_start.cs_next_id <= sb0.cs_next_id ==>
@@ -1417,7 +1404,7 @@ Theorem for_loop:
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
                 FLOOKUP s.vs_allocas a = SOME b))
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>

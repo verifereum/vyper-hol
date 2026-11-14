@@ -84,7 +84,7 @@ Resume compile_assert_frag[exception]:
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> asm_simp_tac (srw_ss()) [eval_assert_bind] >>
       simp[Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type])
 QED
 

@@ -78,6 +78,19 @@ Proof
   simp[bind_assoc, bind_return]
 QED
 
+Theorem recovery_source_tail_not_halt[local]:
+  ec_source_tail cx ann ECRecover tys vs es <> (INR HaltException, es')
+Proof
+  simp[exprSimECArithTheory.ec_source_tail_def] >>
+  Cases_on `builtin_result cx es.accounts ann ECRecover tys vs` >> simp[] >>
+  rw[ignore_bind_def, bind_def, precompile_call_success_def] >>
+  Cases_on `es.outcomes` >> gvs[return_def] >>
+  rename1 `es.outcomes = SOME outs` >> Cases_on `outs` >>
+  gvs[check_def, assert_def, raise_def, return_def] >>
+  Cases_on `call_outcome_success h` >>
+  gvs[check_def, assert_def, raise_def, return_def]
+QED
+
 local
 fun recovery_start () = (
   strip_tac >> drule recovery_body_pre_shape >> strip_tac >> gvs[] >>
@@ -362,10 +375,15 @@ fun recovery_tail_outcome () = (
   `fin with gas_obs := [] = fin` by
     (drule ec_source_tail_gas_obs >> disch_then (qspec_then `[]` mp_tac) >>
      simp[] >> gvs[]) >>
+  `tail_res <> INR HaltException` by
+    (strip_tac >> pop_assum SUBST_ALL_TAC >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ ee''' = _` mp_tac >>
+     simp[recovery_source_tail_not_halt]) >>
   irule ec_source_tail_pointer_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >>
-  simp[vyperASTTheory.expr_type_def, as_ptr_val_def]);
+  simp[vyperASTTheory.expr_type_def, as_ptr_val_def,
+       exprSimDefsTheory.halt_exit_def]);
 
 fun recovery_entry_rebase () = (
   `wb_frame cenv es ee sa s0 t` by metis_tac[expr_post_frame] >>

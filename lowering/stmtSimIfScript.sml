@@ -63,7 +63,7 @@ Theorem cond_jump_frag:
                 lookup_var x s = SOME w) /\
          (!aid bnd. FLOOKUP s0.vs_allocas aid = SOME bnd ==>
                     FLOOKUP s.vs_allocas aid = SOME bnd))
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>

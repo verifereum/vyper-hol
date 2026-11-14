@@ -35,7 +35,9 @@ Theorem structlit_uniform_fields_loop_outcome_ptr:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         fields_in_memory (ZIP (MAP FST fields,vs)) (ZIP (MAP FST fields,tvs)) (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   `LIST_REL (\t (name,e). ALOOKUP (get_struct_fields ce.ce_struct_fields

@@ -80,7 +80,7 @@ Theorem assign_place_pure_continuation:
     (mid with gas_obs := [],t)
     (\res ee u. !tail. stmt_post ctx func cx lctx cenv cenv sa sb es s0
       res (ee with gas_obs := tail) u)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?v. read_result cx pv (mid with gas_obs := []) =
@@ -156,7 +156,8 @@ Proof
   goal_assum (drule_at Any) >>
   conj_tac
   >- (BETA_TAC >> Cases >- simp[exprSimDefsTheory.expr_exit_INL] >>
-      rpt gen_tac >> strip_tac >> qexists_tac `y` >>
+      rpt gen_tac >> strip_tac >> qexists_tac `y` >> simp[] >>
+      reverse conj_tac >- fs[exprSimDefsTheory.halt_exit_def] >>
       simp[stmt_exit_def] >> rpt gen_tac >> disj1_tac >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   reverse conj_tac >- (rpt gen_tac >> BETA_TAC >> metis_tac[]) >>

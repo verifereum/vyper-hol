@@ -148,7 +148,8 @@ Theorem immutable_assign_rhs_outcome:
             |+ (id,(dtv,v)))
           (case ALOOKUP ee.immutables cx.txn.target of NONE => [] | SOME m => m)) ::
         ADELKEY cx.txn.target ee.immutables) t) /\
-  (!ex ee r. expr_exit (INR ex : eval_result + exception) r ==>
+  (!ex ee r. expr_exit (INR ex : eval_result + exception) r /\
+             halt_exit cx ee (INR ex : eval_result + exception) r ==>
              R (INR ex) ee r) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e)

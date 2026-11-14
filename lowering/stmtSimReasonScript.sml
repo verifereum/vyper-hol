@@ -1117,10 +1117,11 @@ Theorem assert_reason_false_outcome_prefix[local]:
     (eval_stmt cx (Raise (RaiseReason r)))
     (mid with gas_obs := [],jump_to fl t)
     (stmt_post ctx func cx lctx cenv cenv entry last (mid with gas_obs := []) (jump_to fl t))
-    (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) ==>
+    (\res ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) /\ halt_exit cx ee res rr) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assert e (AssertReason r))) (es,s0) Q
-    (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr)
+    (\res ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) /\
+       halt_exit cx ee res rr)
 Proof
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -1209,7 +1210,7 @@ Resume compile_assert_reason_frag_general[exception]:
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> simp[eval_assert_reason_bind, Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 Resume compile_assert_reason_frag_general[normal]:
   `!tail. bind (eval_expr cx e) (read_result cx)

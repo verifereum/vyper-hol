@@ -39,7 +39,8 @@ Theorem literal_empty_tuple_loop_physical:
         es sa s G tn ee sb H' tm' z ([] ++ added) (0 + type_memory_size_list tvs) /\
       literal_prefix_ok ([] ++ added) tm' z /\
       (!m. mem_agree_outside tm'.t_mem z.vs_memory m ==> tuple_in_memory vs tvs (addr+0) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   strip_tac >> irule literal_tuple_members_outcome_ptr_physical >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
@@ -73,7 +74,8 @@ Theorem literal_allocated_tuple_outcome_physical:
         es sa s G tn ee sb H tm z cells (type_memory_size_list tvs) /\
       literal_prefix_ok cells tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> tuple_in_memory vs tvs addr m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
   `ci_mono sm sb` by
@@ -175,7 +177,8 @@ Theorem literal_empty_array_loop_physical:
       literal_prefix_ok (cells ++ added) tm' z /\
       (!m. mem_agree_outside tm'.t_mem z.vs_memory m ==>
         tuple_in_memory vs (REPLICATE (LENGTH args) tv) (addr+(if header then 32 else 0)) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   strip_tac >> irule literal_array_members_outcome_ptr_physical >>
   simp[] >>
@@ -217,7 +220,8 @@ Theorem literal_allocated_array_outcome_physical:
         ((if header then [(BaseTV (UintT 256),IntV (&(LENGTH args MOD dimword(:256))),addr,32)] else []) ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs (REPLICATE (LENGTH args) tv) (addr+(if header then 32 else 0)) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
   `ci_mono sm sb` by

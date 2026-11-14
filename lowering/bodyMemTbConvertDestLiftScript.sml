@@ -98,7 +98,7 @@ Theorem bytestring_read_convert_summary[local]:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
@@ -170,7 +170,7 @@ Theorem bytestring_vv_convert_summary[local]:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `post_value_type cenv e = expr_type e` by
@@ -225,7 +225,7 @@ Theorem bytestring_convert_capacity_outcome[local]:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `is_bytestring_type (expr_type e)` by metis_tac[valid_conversion_to_bytestring] >>
@@ -250,7 +250,8 @@ Proof
   rewrite_tac[eval_expr_convert_action, bind_assoc] >>
   irule stmtSimForcedTheory.forced_vv_then_outcome >>
   conj_tac >- (rpt strip_tac >> BETA_TAC >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+    fs[exprSimDefsTheory.halt_exit_def]) >>
   qexists_tac `\tv ee u.
     vv_post ctx func cenv cx e es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv u /\
@@ -325,7 +326,7 @@ Theorem bytestring_convert_stack_outcome:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out) ==>
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (eval_expr cx (TypeBuiltin ann Convert ann [e])) (es,s0)
     (\res fin ss. ?tv. res = INL tv /\
@@ -335,7 +336,7 @@ Theorem bytestring_convert_stack_outcome:
       ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   `!s tv s'. eval_expr cx (TypeBuiltin ann Convert ann [e]) s = (INL tv,s') ==>
        ?v. tv = Value v` by metis_tac[eval_expr_type_builtin_value] >>
@@ -349,7 +350,7 @@ Proof
           metis_tac[bytestring_convert_capacity_posts]) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                    `es_end`, `out`] >>
-      simp[expr_exit_success_map] >> gen_tac >>
+      Cases_on `res` >> fs[expr_exit_success_map, halt_exit_def] >> gen_tac >>
       drule exprSimStackTheory.eval_expr_force_value >>
       disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
       simp[] >> metis_tac[eval_expr_type_builtin_value]) >>

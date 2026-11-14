@@ -27,7 +27,7 @@ Theorem target_subscript_case_mem:
             t.vs_current_bb = sb.cs_current_bb /\
             t.vs_inst_idx = LENGTH sb.cs_current_insts /\
             alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-          (\res ee r. expr_exit res r)) /\
+          (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) /\
     ((?s pv s1. eval_base_place cx bt s = (INL pv,s1)) ==>
       (!env ty es. expr_body_pre cenv cx env e es /\
         (nocalls ==> int_calls_expr e = []) ==>
@@ -59,7 +59,7 @@ Theorem target_subscript_case_mem:
             t.vs_current_bb = sb.cs_current_bb /\
             t.vs_inst_idx = LENGTH sb.cs_current_insts /\
             alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-          (\res ee r. expr_exit res r)
+          (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   match_mp_tac target_subscript_case_mem_from_boundaries >>
   conj_tac

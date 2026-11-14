@@ -123,7 +123,7 @@ Proof
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> qpat_x_assum `expr_exit res r` mp_tac >>
-      Cases_on `res` >> simp[expr_exit_def]) >>
+      Cases_on `res` >> fs[expr_exit_def, halt_exit_def]) >>
   reverse conj_tac >- (rpt gen_tac >> strip_tac >> simp[]) >>
   suspend "base_normal"
 QED
@@ -160,8 +160,9 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[base_normal]:
   (impl_tac >- simp[]) >> strip_tac >>
   irule forced_then_outcome_exec >>
   (conj_tac >-
-    (rpt gen_tac >> Cases_on `ex` >> Cases_on `r` >> simp[expr_exit_def] >>
-     rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])) >>
+    (rpt gen_tac >> strip_tac >> BETA_TAC >> conj_tac
+     >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+     fs[halt_exit_def])) >>
   qexists_tac `\iv ee u.
     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm st2 t ee iv iop u /\
     expr_store_bound cx (expr_type idx) iv iop u /\
@@ -389,8 +390,13 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_summary]:
   qpat_x_assum `gas_summary_at T _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def, gas_marked_exec_def] >>
   rpt strip_tac >>
+  `res <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `!tail. select_result _ _ _ _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     metis_tac[evalNoHaltTheory.select_result_nh]) >>
   qexistsl_tac [`res`,`es_end`,`out`] >>
-  simp[vv_location_def, vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def,
+  simp[halt_exit_def, vv_location_def, vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def,
       Abbr `e0`, exprSimPropsTheory.vv_post_initial_gas] >>
   qpat_x_assum `vv_post _ _ _ _ (Subscript ann obj idx) _ _ _ _ _ child _ _` mp_tac >>
   simp[exprSimPropsTheory.vv_post_initial_gas]

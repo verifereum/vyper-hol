@@ -248,7 +248,8 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit) /\
+    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit) /\
   vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   ci_mono sa sm /\ ci_mono sa ss /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -306,7 +307,8 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
+    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
   `!name lo sz. local_region ce es1.scopes t1 name lo sz ==>
@@ -409,7 +411,8 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
                FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
                regions_disjoint p n c sz) ==>
             mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-      (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)) /\
+      (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+        halt_exit cx es' (INR exc : eval_result + exception) exit)) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   expr_body_pre ce cx env h es /\ body_exprs_mem_ok cx (h::args) /\
   compile_expr ce (expr_type h) h sa = (vv,sm) /\
@@ -472,7 +475,8 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
+    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `compile_expr _ _ _ _ = _`) aggregate_tuple_head_tail_mem >>
@@ -586,7 +590,8 @@ Theorem aggregate_make_tuple_body_sim_mem:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
+    (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >> gvs[compile_make_tuple_def, comp_return_def] >>
@@ -615,7 +620,9 @@ Proof
   conj_tac
   >- (irule aggregate_tuple_gas_outcome_mono >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> Cases_on `res` >>
-      qpat_x_assum `expr_exit _ _` mp_tac >> simp[exprSimDefsTheory.expr_exit_def]) >>
+      qpat_x_assum `expr_exit _ _` mp_tac >>
+      qpat_x_assum `halt_exit _ _ _ _` mp_tac >>
+      simp[exprSimDefsTheory.expr_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rename1 `gas_marked_exec T _ (eval_expr cx h) _ marks (INL tv) es1 (OK t1)` >>
   qpat_x_assum `arg_type_fits _ _ /\ _`

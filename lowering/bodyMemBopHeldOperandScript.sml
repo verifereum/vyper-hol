@@ -139,7 +139,7 @@ Theorem held_digest_operand_outcome:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ ~t.vs_halted /\
       s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> Cases_on `bytestring_literal_hash e`
   >- suspend "runtime" >>

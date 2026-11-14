@@ -184,7 +184,7 @@ Theorem uint2str_eval_continuation:
       (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
         ptr_buf_ok cenv (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) p.ptr_operand Gf u) /\
       ghost_kept cenv es sa G0 tn0 s0 Gf tnf)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `compile_uint2str op n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>

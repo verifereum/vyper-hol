@@ -56,7 +56,8 @@ Theorem array_code_loop_counted_ptr:
       (\res ee gf tf t. res = INL () /\
         for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+        (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r) /\
+        halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >> strip_tac >>
   qabbrev_tac `Inv = for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
@@ -68,7 +69,8 @@ Proof
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)` suffices_by metis_tac[] >>
+        (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r) /\
+        halt_exit cx ee (INR ex : unit + exception) r)` suffices_by metis_tac[] >>
   unabbrev_all_tac >>
   qhdtm_x_assum `for_array_inv_ptr` kall_tac >>
   ho_match_mp_tac eval_for_rounds_ptr >> conj_tac

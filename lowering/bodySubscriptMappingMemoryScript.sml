@@ -43,7 +43,7 @@ Theorem compile_mapping_subscript_outcome_mem:
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_tac >> match_mp_tac compile_mapping_subscript_outcome_mem_given_tail >>
   conj_tac

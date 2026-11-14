@@ -40,7 +40,7 @@ QED
 
 Theorem internal_return_summary_bind_mem[local]:
   gas_summary_at T (ctx,func) marks source (es,s0) P
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!res ee t. P res ee t ==> ?v. res = INL v) /\ 
   (!v ee r. RetQ v ee r ==> exit_result r) /\
   (!v ee gs r. RetQ v (ee with gas_obs := gs) r = RetQ v ee r) /\
@@ -51,7 +51,7 @@ Theorem internal_return_summary_bind_mem[local]:
      ?n r. gas_path_mem ctx func t n r /\ RetQ v (ee with scopes := []) r) ==>
   !Q. ?marks'. gas_summary_at T (ctx,func) marks'
     (bind source (\v. raise (ReturnException v))) (es,s0) Q
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>

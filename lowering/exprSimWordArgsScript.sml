@@ -57,6 +57,12 @@ Definition builtin_result_def:
     | INR err => INR (Error err)
 End
 
+Theorem builtin_result_not_halt[simp]:
+  builtin_result cx acc ty bt ts vs <> INR HaltException
+Proof
+  Cases_on `evaluate_builtin cx acc ty bt ts vs` >> simp[builtin_result_def]
+QED
+
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
@@ -509,7 +515,7 @@ Theorem expr_sim_apply:
         expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[expr_sim_def] >> rpt strip_tac >>
   first_x_assum irule >> asm_rewrite_tac[]
@@ -578,7 +584,7 @@ Theorem lower_word_args_nil_sim:
          pure_frame cenv func es sa s0 t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -712,7 +718,7 @@ Theorem lower_word_args_sim:
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -982,7 +988,11 @@ Resume compile_word_builtin_sim[normal]:
    >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                 |> REWRITE_RULE [APPEND_NIL]) >>
        qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _` (irule_at Any) >>
-       gvs[]) >> gvs[])
+       gvs[]) >> gvs[] >>
+   disj2_tac >> rewrite_tac[halt_exit_def] >> strip_tac >> gvs[] >>
+   qpat_x_assum `gas_marked_exec _ _ (\st. _) _ _ _ _ _`
+     (mp_tac o cj 1 o REWRITE_RULE [gas_marked_exec_def]) >>
+   disch_then (qspec_then `[]` mp_tac) >> simp[])
 QED
 Resume compile_word_builtin_sim[exit]:
   Cases_on `res` >- gvs[wb_args_exit_def] >>

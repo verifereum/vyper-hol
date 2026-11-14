@@ -7,11 +7,11 @@ Ancestors
 Theorem return_no_normal_vv_outcome_mem:
   gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee t. ?raw. res = INL raw /\ P raw ee t)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!raw ee t. ~P raw ee t) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (eval_stmt cx (Return (SOME e))) (es,s0) Q
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `eval_stmt cx (Return (SOME e)) =

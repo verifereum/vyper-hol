@@ -39,7 +39,7 @@ Theorem membership_mixed_outcome_ptr:
     es1.gas_obs = [] /\ ~s1.vs_halted /\
     es2.gas_obs = [] /\ ~s2.vs_halted ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-      (next v1 tv) (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r)) /\
+      (next v1 tv) (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func) (ignore_bind p1 (return ()))
       (es,s0) marks (err,ee) (leaf,fstate) ==>
@@ -74,7 +74,7 @@ Theorem membership_mixed_outcome_ptr:
         (es1,s1) (left ++ right) (err,ee) (leaf,fstate))) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (bind p1 (\v1. bind p2 (next v1))) (es,s0,G0,tn0)
-    Q (\res ee gt r. expr_exit res r)
+    Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> strip_tac >> gvs[] >>
   drule expr_body_pre_bop >> strip_tac >>

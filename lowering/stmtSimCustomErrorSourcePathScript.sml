@@ -45,11 +45,12 @@ Proof
 QED
 
 Theorem custom_error_argument_exception_exit:
-  expr_exit (INR ex : eval_result + exception) exit ==>
-  stmt_exit RetQ ee (INR ex) exit
+  expr_exit (INR ex : eval_result + exception) exit /\
+  halt_exit cx ee (INR ex : eval_result + exception) exit ==>
+  stmt_exit RetQ ee (INR ex) exit /\ halt_exit cx ee (INR ex) exit
 Proof
   Cases_on `exit` >> Cases_on `ex` >>
-  simp[expr_exit_def, stmt_exit_def] >>
+  simp[expr_exit_def, stmt_exit_def, halt_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 

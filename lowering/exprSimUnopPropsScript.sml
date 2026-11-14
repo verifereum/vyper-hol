@@ -28,6 +28,12 @@ Definition unop_result_def:
     | INR e => INR (Error e)
 End
 
+Theorem unop_result_halt_exit[simp]:
+  halt_exit cx' ee (unop_result cx ann bi tys v1 es) r
+Proof
+  simp[unop_result_def] >> BasicProvers.every_case_tac >> simp[]
+QED
+
 (* The builtin's fragment f, from the operand x holding the word w1 in a
    state related at es0, the source state after the operand: on a value it
    reaches its end with op holding the result as a value of type t,

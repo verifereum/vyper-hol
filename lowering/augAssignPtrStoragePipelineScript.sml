@@ -55,7 +55,7 @@ Theorem augassign_storage_place_pipeline_ptr:
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z u = SOME w) /\
       (!z. not_fresh_at sa z ==> FLOOKUP G z = FLOOKUP G0 z /\
         op_taint tn (Var z) = op_taint tn0 (Var z)))
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>

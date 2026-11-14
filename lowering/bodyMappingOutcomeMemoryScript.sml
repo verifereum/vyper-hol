@@ -89,7 +89,7 @@ Theorem compile_mapping_subscript_outcome_mem_given_tail:
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "tail")
     (CONJUNCTS_THEN2 assume_tac
@@ -155,7 +155,10 @@ Resume compile_mapping_subscript_outcome_mem_given_tail[index_bind]:
   (impl_tac >- simp[]) >> disch_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (start,t)` >>
   irule forced_then_outcome_exec >>
-  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >> BETA_TAC >> conj_tac
+     >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+     fs[exprSimDefsTheory.halt_exit_def]) >>
   qexists_tac `\kv ee u. expr_post ctx func cenv cx idx
     (mid with gas_obs := []) sm sn t ee kv key u /\
     expr_store_bound cx (expr_type idx) kv key u /\

@@ -31,7 +31,7 @@ Theorem return_intcall_stack_force:
         es sa sm s0 ee v (Lit 0w) s /\
       s.vs_current_bb = sm.cs_current_bb /\
       s.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule return_stack_lower_value >> strip_tac >>
   drule return_forced_admissible >> strip_tac >>

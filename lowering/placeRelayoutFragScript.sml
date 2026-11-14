@@ -79,7 +79,7 @@ Theorem relayout_store_gas_outcome:
    (exit_result r /\ stmt_exit RetQ ff res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (write_place cx p v) (ee,s2)
     (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!tail. write_place cx p v (ee with gas_obs := tail) =
@@ -94,7 +94,10 @@ Proof
       irule relayout_store_stmt_post >> simp[] >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  disj2_tac >> simp[] >> gen_tac >>
+  disj2_tac >> simp[] >>
+  `res <> INR HaltException` by
+    (strip_tac >> metis_tac[evalNoHaltTheory.places_nh]) >>
+  simp[exprSimDefsTheory.halt_exit_def] >> gen_tac >>
   `expr_exit res r` suffices_by simp[stmt_exit_def] >>
   Cases_on `res` >- fs[stmt_exit_def] >>
   drule vyperExprNoControlTheory.write_place_no_control >>
@@ -135,7 +138,7 @@ Theorem widened_target_store_gas_outcome:
   s2.vs_inst_idx = LENGTH st.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func) (write_place cx p v) (ee,s2)
     (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `post_value_type cenv e <> expr_type e /\

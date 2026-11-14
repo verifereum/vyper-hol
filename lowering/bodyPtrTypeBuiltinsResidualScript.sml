@@ -59,8 +59,9 @@ Resume signed_bytestring_convert_residual[lower]:
       qpat_x_assum `gas_exempt_cert _ _ _ _ _ _ _ _` (ACCEPT_TAC o BETA_RULE)) >>
   conj_tac
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-  `!res r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
-    expr_exit (res : value + exception) r` by
+  `!res r ee. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r /\
+                     halt_exit cx ee (INR exc : value + exception) r) <=>
+    expr_exit (res : value + exception) r /\ halt_exit cx ee res r` by
     (Cases >> simp[exprSimDefsTheory.expr_exit_def]) >>
   BETA_TAC >> pop_assum (fn th => pure_rewrite_tac[th]) >>
   irule gas_outcome_ptr_marked_conseq >>

@@ -34,10 +34,10 @@ Theorem code_array_after_base_ptr:
      ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni ==>
      gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
        (select_result cx (expr_type obj) captured (ValueSubscript v))
-       (raw with gas_obs := [],u,Gi,tni) Q (\res ee gt out. expr_exit res out)) ==>
+       (raw with gas_obs := [],u,Gi,tni) Q (\res ee gt out. expr_exit res out /\ halt_exit cx ee res out)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Subscript ann obj idx)) (es,s0,G0,tn0)
-    Q (\res ee gt out. expr_exit res out)
+    Q (\res ee gt out. expr_exit res out /\ halt_exit cx ee res out)
 Proof
   strip_tac >> strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
@@ -56,8 +56,10 @@ Proof
     ptr_val_ok cx (post_value_type cenv idx) v iop Gi tni u /\
     (~is_word_type (post_value_type cenv idx) ==> ptr_buf_ok cenv idx iop Gi u) /\
     ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni` >> simp[] >>
-  `(!res out. (?exc. res = (INR exc : value + exception) /\
-        expr_exit (INR exc : eval_result + exception) out) = expr_exit res out)` by
+  `(!res ee out. (?exc. res = (INR exc : value + exception) /\
+        expr_exit (INR exc : eval_result + exception) out /\
+        (exc = HaltException ==> ?s. out = Halt s /\ halt_rel cx ee s)) =
+      (expr_exit res out /\ halt_exit cx ee res out))` by
     (gen_tac >> Cases_on `res` >> simp[] >> rename1 `INR exc` >>
      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>

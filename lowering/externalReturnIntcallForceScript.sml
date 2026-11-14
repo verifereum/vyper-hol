@@ -30,7 +30,7 @@ Theorem return_intcall_located_force:
         es sa sb s0 ee v op s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule return_compile_intcall_output >> simp[] >> strip_tac >> gvs[] >>
@@ -58,7 +58,7 @@ Proof
          gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
          Cases_on `e` >> gvs[expr_exit_def, expr_res_ok_def]) >>
       qexistsl_tac [`INR exc`, `es_end`, `r`] >>
-      simp[GSYM expr_exit_exception_transport] >>
+      fs[GSYM expr_exit_exception_transport] >>
       irule gas_marked_exec_bind_exception >> goal_assum drule) >>
   disj2_tac >> metis_tac[force_exempt_cert]
 QED

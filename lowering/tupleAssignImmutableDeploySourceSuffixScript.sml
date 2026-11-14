@@ -41,7 +41,7 @@ Theorem tuple_mixed_suffix_from_steps:
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
         alloca_frame cenv es sp s0 cenv ff t)
-      (\res ff r. expr_exit res r)) ==>
+      (\res ff r. expr_exit res r /\ halt_exit cx ff res r)) ==>
   !i es sp sf s0.
     i <= LENGTH tys /\ expr_sim_inv cenv cx env es /\ ~block_is_terminated sp /\
     tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
@@ -57,7 +57,7 @@ Theorem tuple_mixed_suffix_from_steps:
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
         alloca_frame cenv es sp s0 cenv ff t)
-      (\res ff r. expr_exit res r)
+      (\res ff r. expr_exit res r /\ halt_exit cx ff res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`ctx`,`func`,`cenv`,`cx`,`env`,`gs`,`tys`,`ltys`,`ltvs`,
@@ -88,7 +88,7 @@ Proof
       (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
         FLOOKUP t.vs_allocas id = SOME entry) /\
       alloca_frame cenv ee cs s cenv ff t)
-    (\res ff r. expr_exit res r)` by
+    (\res ff r. expr_exit res r /\ halt_exit cx ff res r)` by
     (qunabbrev_tac `a` >>
      qpat_x_assum `!i es sp ca cb s0 bt r. _`
        (qspecl_then [`j`,`ee`,`cs`,`ca`,`cb`,`s`,`bt`,`r`] mp_tac) >>
@@ -119,7 +119,7 @@ Proof
                (DROP (SUC j) gs) (DROP (SUC j) vs)` irule >>
              qexists `ee with gas_obs := gas_explicit left s.vs_gas_readings` >> simp[]) >>
           `gas_outcome F (cx_tops cx) (ctx,func) next
-             (mid with gas_obs := [],t) Q (\res ee r. expr_exit res r)` by
+             (mid with gas_obs := [],t) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
             (qpat_x_assum `!ff t'. _ ==> gas_outcome _ _ _ next _ _ _`
                (qspecl_then [`mid`,`t`] mp_tac) >>
              simp[gas_outcome_def, gas_summary_at_def]) >>

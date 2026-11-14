@@ -347,7 +347,7 @@ Resume compile_for_range_frag[loop]:
        (!frame_start. frame_start.cs_next_id <= A.inst_id /\
           frame_start.cs_next_id <= sb0.cs_next_id ==>
           alloca_frame cenv es frame_start cc cenv ee s))
-     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+     (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)` by
     (qpat_x_assum `bc with <| ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _ |> = cenv` kall_tac >>
      qpat_x_assum `cc = _` kall_tac >>
      qpat_x_assum `Abbrev (cc = _)` kall_tac >>

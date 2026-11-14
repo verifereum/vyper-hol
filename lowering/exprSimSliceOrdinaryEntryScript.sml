@@ -50,7 +50,7 @@ Theorem slice_bytes_continue_entry:
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_bytes_continue |> Q.INST
@@ -108,7 +108,7 @@ Theorem slice_string_continue_entry:
         (Builtin (BaseT (StringT n)) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_string_continue |> Q.INST
@@ -323,7 +323,7 @@ Theorem slice_bytes_continue_entry_seq:
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_bytes_continue_seq |> Q.INST
@@ -385,7 +385,7 @@ Theorem slice_string_continue_entry_seq:
         (Builtin (BaseT (StringT n)) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_string_continue_seq |> Q.INST

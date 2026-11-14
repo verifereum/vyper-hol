@@ -31,7 +31,7 @@ Theorem word_round_expr_outcome:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> Cases_on `v` >> gvs[value_has_type_def] >>
   `op_prov G x = NONE /\ op_taint tn x = {}` by
@@ -42,7 +42,7 @@ Proof
   drule_all word_round_typed_outcome >>
   strip_tac >> fs[builtin_result_def] >> rewrite_tac[unop_result_def] >>
   irule gas_outcome_ptr_conseq >> first_assum (irule_at Any) >>
-  qexists_tac `\res fin gt r. expr_exit res r` >> simp[] >>
+  qexists_tac `\res fin gt r. expr_exit res r /\ halt_exit cx fin res r` >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>

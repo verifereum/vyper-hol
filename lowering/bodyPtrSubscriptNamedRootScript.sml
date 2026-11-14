@@ -77,7 +77,7 @@ Theorem named_root_execution:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all named_root_preparation >> strip_tac >>
   drule compile_name_value_ptr >>

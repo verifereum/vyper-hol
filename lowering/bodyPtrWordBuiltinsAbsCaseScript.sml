@@ -126,7 +126,7 @@ Theorem word_abs_normal_ptr_outcome:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> drule_all word_abs_typed_post >> strip_tac >>
   `op_taint tn x = {} /\ op_prov G x = NONE` by
@@ -171,7 +171,7 @@ Theorem word_abs_overflow_ptr_outcome:
   typed_val_to_w256 (BaseTV (IntT 256)) v = INT_MINw ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (\vs. (unop_result cx ann Abs tys v vs,vs)) (ee,t0,G,tn)
-    Q (\res fin gt r. expr_exit res r)
+    Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> drule word_abs_typed_source >>
   disch_then (qspecl_then [`tys`, `ee`, `cx`] mp_tac) >> simp[] >> strip_tac >>
@@ -211,7 +211,7 @@ Theorem word_abs_typed_ptr_outcome:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> Cases_on `typed_val_to_w256 (BaseTV (IntT 256)) v = INT_MINw`
   >- (drule_all word_abs_overflow_ptr_outcome >> simp[]) >>

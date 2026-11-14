@@ -32,7 +32,7 @@ Theorem membership_lower_typed_args_sim_inv:
         EVERY (\op. op_prov G op = NONE) xs /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee ghosts r. wb_args_exit rr r)
+      (\rr ee ghosts r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   rpt strip_tac >> irule membership_lower_typed_args >> simp[] >>
   qexistsl_tac [`expr_sim_inv cenv cx env`,`arg_ty`] >> simp[] >>

@@ -132,7 +132,7 @@ Theorem bop_scalar_parent_outcome:
     (\res ee G tn t. ?v. res = INL v /\
       bop_operand_post d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es ca cz op t0 G0 tn0 v ee t G tn)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule bop_pair_source_facts >>

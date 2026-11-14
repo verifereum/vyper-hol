@@ -137,20 +137,6 @@ Proof
   pure_once_rewrite_tac[bind_assoc] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
-(* A marked prefix supplies the frozen endpoint hypotheses at exactly the
-   canonical state used by bind composition, even for gas-sensitive H. *)
-Theorem marked_endpoint_normalized[local]:
-  !memory ctx func source es s0 marks v mid t H.
-  gas_marked_exec memory (ctx,func) source (es,s0) marks (INL v) mid (OK t) /\
-  (!gs v ee. source (es with gas_obs := gs) = (INL v,ee) ==> H v ee) ==>
-  H v (mid with gas_obs := [])
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!gs v ee. _` irule >>
-  qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
-  fs[gas_marked_exec_def] >>
-  first_x_assum (qspec_then `[]` mp_tac) >> simp[]
-QED
 
 Theorem forced_endpoint_tail_cert[local]:
   !memory tops ctx func cx e next es s0 left v mid t right err ee leaf finish.
@@ -190,7 +176,6 @@ Proof
   simp[FUN_EQ_THM, bind_def, ignore_bind_def, return_def, raise_def, assert_def] >>
   Cases_on `Num (n2 - n1) <= bound` >> simp[return_def, raise_def]
 QED
-
 
 (* What a range loop over [n1, n2) does after its ends, from es2: the
    range's runtime errors (start above end, more rounds than the bound), or
@@ -360,40 +345,6 @@ Theorem step_ASSIGN_op[local]:
     step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out v s)
 Proof
   rw[step_inst_base_def, venomInstTheory.mk_inst_def]
-QED
-
-Theorem run_from_prefix_abort[local]:
-  !ctx func s bb pre a t.
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    s.vs_inst_idx = 0 /\ isPREFIX pre bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
-    run_inst_seq pre s = Abort a t ==>
-    ?t'. run_from 0 ctx func s = Abort a t'
-Proof
-  rpt strip_tac >>
-  qspecl_then [`pre`, `s`, `0`, `ctx`, `bb`] mp_tac exec_block_run_inst_seq >>
-  simp[] >> strip_tac >> simp[run_from_def]
-QED
-
-Theorem run_from_prefix_ok[local]:
-  !ctx func s bb pre t.
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    s.vs_inst_idx = 0 /\ isPREFIX pre bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
-    run_inst_seq pre s = OK t ==>
-    t.vs_current_bb = s.vs_current_bb /\
-    !fuel. run_from fuel ctx func s =
-           run_from fuel ctx func (t with vs_inst_idx := LENGTH pre)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!fuel. t.vs_current_bb = s.vs_current_bb /\
-          exec_block fuel ctx bb s =
-          exec_block fuel ctx bb (t with vs_inst_idx := LENGTH pre)` by
-    (gen_tac >>
-     qspecl_then [`pre`, `s`, `fuel`, `ctx`, `bb`] mp_tac
-       exec_block_run_inst_seq >>
-     simp[]) >>
-  simp[run_from_def]
 QED
 
 (* The entry block of a range loop with nonliteral ends, from its start with
@@ -682,8 +633,6 @@ Proof
   qexists_tac `vs` >> simp[] >>
   drule gas_path_normal >> simp[]
 QED
-
-
 
 (* ===== The code ===== *)
 
@@ -1064,10 +1013,10 @@ Theorem forced_endpoint_bind_outcome[local]:
     gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
     gas_outcome F (cx_tops cx) (ctx,func) (next v)
       (mid with gas_obs := [],t) Post
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)) ==>
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s0) Post
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
@@ -1106,8 +1055,9 @@ Resume forced_endpoint_bind_outcome[exception]:
   qexistsl_tac [`INR ex`, `es_end`, `r`] >>
   conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >> gen_tac >>
-  irule expr_exit_stmt_exit >> qexists_tac `INR ex` >> simp[]
+  disj2_tac >> simp[] >> conj_tac
+  >- (gen_tac >> irule expr_exit_stmt_exit >> qexists_tac `INR ex` >> simp[]) >>
+  fs[halt_exit_def]
 QED
 
 Resume forced_endpoint_bind_outcome[bind_finish]:
@@ -1177,7 +1127,7 @@ Theorem for_range_checked_tail_outcome[local]:
           (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,t0)
     (stmt_post ctx func cx lctx cenv cenv st sf es t0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `cs_extends st st` by simp[cs_extends_refl] >>
@@ -1698,7 +1648,7 @@ Resume compile_for_range_checked_frag_active[tail_apply]:
   `gas_outcome F (cx_tops cx) (ctx,func) source
     (mid' with gas_obs := [],t')
     (stmt_post ctx func cx lctx cenv cenv s2 sb (mid' with gas_obs := []) t')
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)` by
     (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
      simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>
      simp[] >> suspend "tail_hyps") >>

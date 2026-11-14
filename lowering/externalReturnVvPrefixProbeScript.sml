@@ -28,7 +28,7 @@ Theorem return_vv_located_prefix:
       vv_post ctx func ce cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
@@ -63,7 +63,7 @@ Theorem return_intcall_vv_prefix:
         (LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule return_site_vv_admissible >> strip_tac >>
   drule_all return_vv_located_prefix >> simp[expr_type_def]

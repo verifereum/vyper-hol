@@ -298,7 +298,10 @@ Resume compile_len_singleton_call_sim_ptr[exception]:
   rewrite_tac[gas_summary_ptr_at_marked] >>
   qexistsl_tac [`INR y`, `es_end`, `G`, `tn`, `r'`] >> simp[] >>
   rewrite_tac[len_builtin_source] >>
-  irule gas_marked_exec_ptr_bind_exception >> simp[]
+  conj_tac >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+  qpat_x_assum `halt_exit _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_exit _ _` mp_tac >>
+  qpat_x_assum `exit_result _` mp_tac >> simp[]
 QED
 
 Finalise compile_len_singleton_call_sim_ptr

@@ -200,7 +200,8 @@ Theorem custom_error_store_args_sim_mem_using_head:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res ee exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)
 Proof
   disch_then (mk_asm "head") >>
   Induct_on `args`
@@ -251,7 +252,7 @@ Resume custom_error_store_args_sim_mem_using_head[step]:
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (asm_x "head" kall_tac >> fs[body_exprs_mem_ok_def] >>
      qpat_x_assum `body_expr_mem_ok cx h`
        (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_mem_ok_def]) >>
@@ -342,7 +343,8 @@ Resume custom_error_store_args_sim_mem_using_head[tail]:
   `gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args)
     (mid with gas_obs := [],q)
     (\res ee r. ?vs. res = INL vs /\ Post vs ee r)
-    (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
+    (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)` by
     (simp[Abbr `Post`] >>
      first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL) >>

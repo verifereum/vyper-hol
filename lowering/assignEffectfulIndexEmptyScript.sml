@@ -28,7 +28,7 @@ Theorem assign_effectful_empty_target_store:
     (mid,s)
     (\res ee u. !tail. stmt_post ctx func cx lctx cenv cenv sa sb es s0
        res (ee with gas_obs := tail) u)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `?w. eval_operand dst s = SOME w /\

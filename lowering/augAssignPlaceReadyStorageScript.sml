@@ -106,7 +106,7 @@ Theorem aug_place_ready_storage_endpoint:
       bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         ptv bop old rhs)) (write_place cx (StoragePlace tr slot tv)))))) (mid,t) Q
-    (\res ff rr. !tail. stmt_exit RetQ (ff with gas_obs := tail) res rr)
+    (\res ff rr. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res rr) /\ halt_exit cx ff res rr)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule aug_place_typing >> strip_tac >>

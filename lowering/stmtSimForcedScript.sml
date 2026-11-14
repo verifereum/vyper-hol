@@ -61,7 +61,7 @@ Theorem forced_then_summary:
     gas_summary_at memory (ctx, func) marks
       (a) (es, s0)
       (\res ee t. ?v. res = INL v /\ P v ee t)
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!v ee t.
        P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
        (?gs. a (es with gas_obs := gs) =
@@ -72,7 +72,7 @@ Theorem forced_then_summary:
          gas_marked_path memory ctx func t 0 r /\
          ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
           (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-    (!ex ee r. expr_exit (INR ex : 'a + exception) r ==>
+    (!ex ee r. expr_exit (INR ex : 'a + exception) r /\ halt_exit cx ee (INR ex : 'a + exception) r ==>
                R (INR ex) ee r) ==>
     gas_summary_at memory (ctx, func) marks
       (bind a k) (es, s0) Q R
@@ -103,7 +103,7 @@ Proof
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  first_x_assum irule >> first_assum ACCEPT_TAC
+  first_x_assum irule >> fs[]
 QED
 
 Theorem forced_then_outcome:
@@ -111,7 +111,7 @@ Theorem forced_then_outcome:
     gas_outcome memory tops (ctx, func)
       (bind (eval_expr cx e) (read_result cx)) (es, s0)
       (\res ee t. ?v. res = INL v /\ P v ee t)
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!v ee t.
        P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
        (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
@@ -122,7 +122,7 @@ Theorem forced_then_outcome:
          gas_marked_path memory ctx func t 0 r /\
          ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
           (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-    (!ex ee r. expr_exit (INR ex : value + exception) r ==>
+    (!ex ee r. expr_exit (INR ex : value + exception) r /\ halt_exit cx ee (INR ex : value + exception) r ==>
                R (INR ex) ee r) ==>
     gas_outcome memory tops (ctx, func)
       (bind (bind (eval_expr cx e) (read_result cx)) k) (es, s0) Q R
@@ -131,8 +131,8 @@ Proof
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   simp[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule forced_then_summary >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexists_tac `P` >> conj_tac >> first_assum ACCEPT_TAC) >>
+      irule forced_then_summary >> qexistsl_tac [`P`, `cx`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
@@ -169,7 +169,7 @@ Theorem forced_then_stmt_outcome:
     gas_outcome F (cx_tops cx) (ctx, func)
       (bind (eval_expr cx e) (read_result cx)) (es, s0)
       (\res ee t. ?v. res = INL v /\ P v ee t)
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!v ee t.
        P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
        (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
@@ -182,10 +182,11 @@ Theorem forced_then_stmt_outcome:
                 stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res
                   (ee' with gas_obs := []) t') \/
           (exit_result r /\
-           !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))) ==>
+           (!tail. stmt_exit RetQ (ee' with gas_obs := tail) res r) /\
+           halt_exit cx ee' res r))) ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_stmt cx s) (es, s0)
       (stmt_post ctx func cx lctx cenv cenv' sa sb es s0)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
@@ -203,7 +204,7 @@ Theorem forced_vv_then_outcome:
   !memory tops ctx func cx e k es s0 P Q R.
     gas_outcome memory tops (ctx, func) (eval_expr cx e) (es, s0)
       (\res ee t. ?tv. res = INL tv /\ P tv ee t)
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!tv ee t.
        P tv ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
        (?gs. eval_expr cx e (es with gas_obs := gs) =
@@ -214,7 +215,7 @@ Theorem forced_vv_then_outcome:
          gas_marked_path memory ctx func t 0 r /\
          ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
           (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-    (!ex ee r. expr_exit (INR ex : eval_result + exception) r ==>
+    (!ex ee r. expr_exit (INR ex : eval_result + exception) r /\ halt_exit cx ee (INR ex : eval_result + exception) r ==>
                R (INR ex) ee r) ==>
     gas_outcome memory tops (ctx, func) (bind (eval_expr cx e) k) (es, s0) Q R
 Proof
@@ -222,8 +223,8 @@ Proof
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   simp[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule forced_then_summary >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexists_tac `P` >> conj_tac >> first_assum ACCEPT_TAC) >>
+      irule forced_then_summary >> qexistsl_tac [`P`, `cx`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_result] >>
@@ -235,7 +236,7 @@ Theorem forced_vv_then_stmt_outcome:
     eval_stmt cx s = bind (eval_expr cx e) k /\
     gas_outcome F (cx_tops cx) (ctx, func) (eval_expr cx e) (es, s0)
       (\res ee t. ?tv. res = INL tv /\ P tv ee t)
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!tv ee t.
        P tv ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
        (?gs. eval_expr cx e (es with gas_obs := gs) =
@@ -248,10 +249,11 @@ Theorem forced_vv_then_stmt_outcome:
                 stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res
                   (ee' with gas_obs := []) t') \/
           (exit_result r /\
-           !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))) ==>
+           (!tail. stmt_exit RetQ (ee' with gas_obs := tail) res r) /\
+           halt_exit cx ee' res r))) ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_stmt cx s) (es, s0)
       (stmt_post ctx func cx lctx cenv cenv' sa sb es s0)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>

@@ -66,7 +66,7 @@ Resume pop_storage_pure_compose[summary]:
   Cases_on `tres` >> gvs[expr_exit_def] >>
   qexistsl [`INR y`, `tend`, `G1`, `tn1`, `tr0`] >>
   conj_tac >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
-  metis_tac[expr_exit_INR_type]
+  metis_tac[expr_exit_INR_type, cj 1 halt_exit_simps]
 QED
 
 Resume pop_storage_pure_compose[normal]:

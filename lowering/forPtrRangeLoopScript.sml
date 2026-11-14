@@ -60,7 +60,8 @@ Theorem for_range_loop_ptr:
       (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+        (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r) /\
+        halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >> ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
   >- (rpt gen_tac >> strip_tac >>

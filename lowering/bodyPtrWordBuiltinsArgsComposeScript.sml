@@ -39,7 +39,7 @@ Theorem word_args_compose_sim_ptr:
          u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
          ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v op G' tn' u /\
          ghost_kept cenv es sa G0 tn0 s0 G' tn')
-      (\res fin gt r. expr_exit res r)) ==>
+      (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)) ==>
   expr_sim_ptr d ctx PG func cenv cx ty (Builtin ann bt args) es
 Proof
   strip_tac >>
@@ -106,7 +106,7 @@ Resume word_args_compose_sim_ptr[bind]:
   qmatch_asmsub_abbrev_tac `gas_outcome_ptr _ _ _ _ _ _ Qfacts _` >>
   qexists_tac `\vs. Qfacts (INL vs)` >> reverse conj_tac
   >- (irule gas_outcome_ptr_conseq >>
-      qexistsl_tac [`Qfacts`, `\rr ee gt r. wb_args_exit rr r`] >>
+      qexistsl_tac [`Qfacts`, `\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r`] >>
       simp[Abbr `Qfacts`] >> rpt strip_tac >> gvs[] >>
       Cases_on `res` >> gvs[wb_args_exit_def, expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>

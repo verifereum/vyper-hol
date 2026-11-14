@@ -115,7 +115,7 @@ Definition stmt_frag_keep_def:
       gas_outcome F (cx_tops cx) (ctx, func) source (es, s0)
         (\res ee t. stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res ee t /\
                     Q t)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+        (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 End
 
 (* expr_vv_sim, whose post also has Qe of the compile states, the start
@@ -137,7 +137,7 @@ Definition expr_vv_sim_with_def:
           Qe sa sb s0 ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 (* Q survives any code that keeps the variables handed out before sb and
@@ -151,8 +151,6 @@ Definition keep_stable_def:
       Q s'
 End
 
-
-
 (* Source side for a place iterable: a body that writes nothing containing
    the place p (iterator_unmodified) keeps, at every scope, the root
    local's type and its sub-value at p's attribute path (the path up to
@@ -161,17 +159,6 @@ End
    subscript, which place_contains wouldn't see.
    typed_stmts_projection_frame is the case of an empty attribute path,
    where the whole root is kept. *)
-(* Typing an attribute extension requires typing its base. *)
-Theorem type_place_target_attribute_prefix[local]:
-  !attrs env tgt vt.
-    type_place_target env
-      (FOLDL (\t a. AttributeTarget t a) tgt attrs) = SOME vt ==>
-    ?base. type_place_target env tgt = SOME base
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >>
-  simp[Once well_typed_expr_def, AllCaseEqs()] >> metis_tac[]
-QED
 
 Theorem attribute_type_fold_none[local]:
   !xs D. FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) NONE xs = NONE

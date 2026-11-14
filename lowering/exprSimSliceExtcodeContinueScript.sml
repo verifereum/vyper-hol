@@ -163,10 +163,10 @@ Theorem slice_address_read_outcome:
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (finish_slice (BytesV bs) : evaluation_state -> eval_result evaluation_result)
-      (ee,t) Q (\res ee r. expr_exit res r)) ==>
+      (ee,t) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx addr) (read_result cx)) finish_slice) (es,s)
-    Q (\res ee r. expr_exit res r)
+    Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `expr_sim ctx func cenv cx ty addr es` by
@@ -214,7 +214,7 @@ Theorem slice_extcode_range_outcome:
         v <- lift_sum (evaluate_slice
           (BytesV (lookup_account (word_of_bytes_be bs) acc).code)
           (IntV (&i)) (IntV (&k)) n);
-        return (Value v) od) (es,s) Q (\res ee r. expr_exit res r)
+        return (Value v) od) (es,s) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -246,7 +246,7 @@ Theorem slice_extcode_success_outcome:
        vv_post ctx func cenv cx e es sbase sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -420,7 +420,7 @@ Theorem slice_extcode_tail_outcome:
        vv_post ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr r LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule_all slice_extcode_account >> strip_tac >>
@@ -568,7 +568,7 @@ Theorem slice_extcode_continue_entry_seq:
       vv_post ctx func cenv cx result es sa sc s ee tv
         (LocatedValue (expr_type result) (mk_ptr r LocMemory)) t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all slice_extcode_suffix_context >> strip_tac >>
   irule slice_address_read_outcome >>
@@ -590,7 +590,7 @@ Resume slice_extcode_continue_entry_seq[tail]:
     vv_post ctx func cenv cx result ee sb sc t ef tv
       (LocatedValue (expr_type result) (mk_ptr r LocMemory)) z /\
     z.vs_current_bb = sc.cs_current_bb /\ z.vs_inst_idx = LENGTH sc.cs_current_insts)` >>
-  qexists_tac `(\res ef r. expr_exit res r)` >>
+  qexists_tac `(\res ef r. expr_exit res r /\ halt_exit cx ef res r)` >>
   conj_tac >- simp[] >>
   conj_tac >- suspend "rebase" >>
   `accounts_well_typed ee.accounts` by

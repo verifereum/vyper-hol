@@ -44,7 +44,7 @@ Definition pop_target_frag_def:
             r t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 Theorem pop_target_frag_of_sim:
@@ -1173,7 +1173,13 @@ Resume pop_nested_storage_sim[normal]:
       qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
         (irule_at Any) >>
       asm_rewrite_tac[]) >>
-  gvs[]
+  `pres' <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `gas_marked_exec _ _ (pop_place _ _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     gvs[evalNoHaltTheory.pop_place_nh]) >>
+  gvs[halt_exit_def]
 QED
 
 Finalise pop_nested_storage_sim

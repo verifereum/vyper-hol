@@ -426,7 +426,7 @@ QED
 
 Theorem ifexp_raw_conditional_outcome_mem[local]:
   gas_outcome T tops (ctx,func) (eval_expr cx e) (es,s0) P
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!res ee s. P res ee s ==> ?raw. res = INL raw) /\
   (!marks raw ee s.
     gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
@@ -436,7 +436,7 @@ Theorem ifexp_raw_conditional_outcome_mem[local]:
       Q (INL tv) (ee with gas_obs := []) q) ==>
   gas_outcome T tops (ctx,func)
     (bind (eval_expr cx e) (conditional_result cx)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>

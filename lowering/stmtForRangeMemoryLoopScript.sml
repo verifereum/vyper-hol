@@ -34,7 +34,7 @@ Theorem for_body_outcome_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb1 t /\ alloca_history func t /\
       s2.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `bc.ce_return_pc = cenv.ce_return_pc /\ bc.ce_return_buf = cenv.ce_return_buf` by
@@ -282,7 +282,8 @@ Theorem for_iteration_mem:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   `bc.ce_module_vars = cenv.ce_module_vars /\ bc.ce_module = cenv.ce_module /\
@@ -316,7 +317,7 @@ Proof
   `!x. not_fresh_at st x ==> x <> dv` by metis_tac[] >>
   drule_all for_body_outcome_mem >> strip_tac >>
   irule for_outcome_zero_prefix_mem >> qexists_tac `s2` >> simp[] >>
-  irule for_round_outcome_mem >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule (SRULE [] for_round_outcome_mem) >> conj_tac >- first_assum ACCEPT_TAC >>
   qhdtm_x_assum `gas_outcome` (irule_at Any) >>
   rpt gen_tac >> strip_tac >> suspend "landing"
 QED
@@ -405,7 +406,7 @@ Theorem for_loop_mem:
          cc.vs_alloca_next <= s.vs_alloca_next /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >>
   map_every qid_spec_tac [`w`, `cc`, `esk`, `k`, `m`] >>
@@ -483,7 +484,7 @@ Resume for_loop_mem[step]:
   qmatch_asmsub_abbrev_tac `gas_outcome T tops cf round start Step StepExit` >>
   qabbrev_tac `Done = (\ee t. Final (INL ()) ee t)` >>
   qabbrev_tac `Next = (\ee t. Step (INL F) ee t)` >>
-  qabbrev_tac `R = (\ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)` >>
+  qabbrev_tac `R = (\ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\ halt_exit cx ee (INR ex : unit + exception) r)` >>
   `gas_outcome T tops cf source start
      (\res ee t. res = INL () /\ Done ee t)
      (\res ee r. ?ex. res = INR ex /\ R ex ee r)` suffices_by
@@ -554,7 +555,7 @@ Resume for_loop_mem[step]:
    >- (simp[Abbr `Exit`, Abbr `R`] >> rpt gen_tac >> strip_tac >>
        Cases_on `res`
        >- (Cases_on `x` >> metis_tac[stmt_exit_loop_ctl]) >>
-       metis_tac[])) >>
+       fs[exprSimDefsTheory.halt_exit_def])) >>
   simp[Abbr `Done`, Abbr `Final`] >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED

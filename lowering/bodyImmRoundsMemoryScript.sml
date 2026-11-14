@@ -227,7 +227,8 @@ Theorem immutable_prepared_one_round_mem:
       (~b ==> array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
         p dst sz ainst cond caller orig (SUC k) ee t))
     (\res ee rr. ?e. res = INR e /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr) /\
+      halt_exit cx ee (INR e : unit + exception) rr)
 Proof
   strip_tac >>
   `array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
@@ -249,14 +250,16 @@ Proof
     (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes, s_body)
     (array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body)
-    (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr)` by suspend "body_outcome" >>
+    (\r ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+               halt_exit cx ee r rr)` by suspend "body_outcome" >>
   irule array_round_outcome_prefix_mem >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ s _ _`)) >>
   irule array_round_outcome_prefix_mem >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ live _ _`)) >>
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
     [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body`,
-     `E` |-> `\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr`]) >>
+     `E` |-> `\r ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+                         halt_exit cx ee r rr`]) >>
   simp[] >> conj_tac >- suspend "scopes" >>
   conj_tac >- suspend "finish" >> suspend "exit"
 QED
@@ -291,7 +294,7 @@ Resume immutable_prepared_one_round_mem[exit]:
   rpt strip_tac >> qpat_x_assum `!gs r ee. _` drule >> strip_tac >>
   gvs[stmt_res_ok_def] >>
   gvs[stmt_exit_def, expr_exit_def, evaluation_state_fn_updates] >>
-  Cases_on `rr` >> gvs[expr_exit_def]
+  Cases_on `rr` >> gvs[expr_exit_def, halt_exit_def]
 QED
 Finalise immutable_prepared_one_round_mem
 
@@ -362,7 +365,8 @@ Theorem immutable_prepared_loop_outcome_mem:
       (\res ee t. res = INL () /\
         array_round_done d ctx func cenv cx caller orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit cx ee (INR ex : unit + exception) rr)
 Proof
   strip_tac >>
   ho_match_mp_tac stmtSimForRoundsTheory.eval_for_value_rounds >>

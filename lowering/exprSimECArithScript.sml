@@ -1474,6 +1474,17 @@ Proof
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
+Theorem ec_source_tail_not_halt:
+  (bt = ECAdd \/ bt = ECMul) ==>
+  ec_source_tail cx ann bt tys vs es <> (INR HaltException, es')
+Proof
+  strip_tac >> simp[ec_source_tail_def] >>
+  Cases_on `builtin_result cx es.accounts ann bt tys vs` >> simp[] >>
+  rw[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+     ec_source_outcome_step] >>
+  gvs[AllCaseEqs(), vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
 Theorem eval_expr_ec_cases[local]:
   (bt = ECAdd \/ bt = ECMul) /\ LENGTH args = 2 /\
   eval_expr cx (Builtin ann bt args) es = (res,es') ==>
@@ -1528,21 +1539,6 @@ Proof
   Cases_on `call_outcome_success h` >> simp[]
 QED
 
-Theorem ec_two_args_source[local]:
-  (bt = ECAdd \/ bt = ECMul) /\
-  eval_expr cx (Builtin ann bt [a;b]) es = (res,es') /\
-  (do r <- eval_expr cx a; read_result cx r od) es = (r1,es1) /\
-  (do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2) ==>
-  (!ex. r1 = INR ex ==> res = INR ex) /\
-  (!v ex. r1 = INL v /\ r2 = INR ex ==> res = INR ex) /\
-  (!v1 v2. r1 = INL v1 /\ r2 = INL v2 ==>
-    ec_source_tail cx ann bt [expr_type a;expr_type b] [v1;v2] es2 = (res,es'))
-Proof
-  strip_tac >> drule_at Any eval_expr_ec_cases >> simp[] >> strip_tac >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >> gvs[] >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >>
-  gvs[exprSimWordArgsTheory.eval_exprs_nil]
-QED
 
 Theorem ec_suffix_failure[local]:
   (do gas <- emit_op GAS [];
@@ -2149,8 +2145,8 @@ QED
 Theorem ec_outcome_then[local]:
   gas_outcome F tops (ctx,func)
     (m : evaluation_state -> value evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
+    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==>
      R (INR exc) ee r) /\
   (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
      P v ee t /\ ~t.vs_halted ==>
@@ -2235,13 +2231,6 @@ Proof
   simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
-Theorem ec_source_tail_scopes[local]:
-  (bt = ECAdd \/ bt = ECMul) /\
-  ec_source_tail cx ann bt tys vs es = (r,es') ==>
-  es'.scopes = es.scopes
-Proof
-  rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()]
-QED
 
 (* Both operands as counted outcomes, then the point suffix as an actual
    counted target path from every pair of operand endpoints. *)
@@ -2284,7 +2273,7 @@ Theorem ec_binary_call_gas[local]:
        vv_post ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -2320,10 +2309,13 @@ Proof
   qpat_assum `bt = ECAdd \/ bt = ECMul`
     (fn th => rewrite_tac[MATCH_MP ec_eval_bind th]) >>
   irule ec_outcome_then >>
-  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
-  qexists_tac `\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
+  qexistsl_tac [`\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
      t.vs_current_bb = s1.cs_current_bb /\
-     t.vs_inst_idx = LENGTH s1.cs_current_insts` >>
+     t.vs_inst_idx = LENGTH s1.cs_current_insts`, `cx`] >>
+  conj_tac
+  >- (BETA_TAC >> rpt strip_tac
+      >- metis_tac[ec_expr_exit_INR_cast] >>
+      fs[halt_exit_def]) >>
   BETA_TAC >> reverse conj_tac
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
@@ -2354,10 +2346,13 @@ Proof
             exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >>
      simp[]) >>
   irule ec_outcome_then >>
-  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
-  qexists_tac `\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
+  qexistsl_tac [`\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
      u.vs_current_bb = sm.cs_current_bb /\
-     u.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+     u.vs_inst_idx = LENGTH sm.cs_current_insts`, `cx`] >>
+  conj_tac
+  >- (BETA_TAC >> rpt strip_tac
+      >- metis_tac[ec_expr_exit_INR_cast] >>
+      fs[halt_exit_def]) >>
   BETA_TAC >> reverse conj_tac
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
@@ -2424,7 +2419,9 @@ Proof
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
-  FIRST [disj2_tac >> simp[] >> NO_TAC,
+  FIRST [disj2_tac >> simp[halt_exit_def] >> strip_tac >> gvs[] >>
+         qpat_x_assum `ec_source_tail _ _ _ _ _ _ = _` mp_tac >>
+         simp[ec_source_tail_not_halt] >> NO_TAC,
          disj1_tac >> simp[] >>
          irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
          first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>

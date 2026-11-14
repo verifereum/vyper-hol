@@ -35,7 +35,7 @@ Theorem membership_lower_typed_args:
         EVERY (\op. op_prov G op = NONE) xs /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee ghosts r. wb_args_exit rr r)
+      (\rr ee ghosts r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (rpt strip_tac >> gvs[lower_word_args_nil] >>
@@ -56,7 +56,7 @@ Proof
       qexistsl_tac [`Inv`,`h::args`] >> simp[] >> metis_tac[]) >>
   strip_tac >>
   drule_all (membership_args_head_outcome_facts |> SIMP_RULE (srw_ss()) [SF ETA_ss, MEM]) >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ (\res ee gt r. expr_exit res r)` kall_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)` kall_tac >>
   disch_tac >> rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_ptr_bind >> rpt conj_tac
   >- suspend "certificate_head"

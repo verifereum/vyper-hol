@@ -37,7 +37,7 @@ Theorem target_storage_array_summary_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all target_subscript_storage_compile >> strip_tac >> gvs[] >>
   `w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256)`
@@ -83,7 +83,7 @@ Theorem target_storage_array_typed_summary_mem:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `?w. place_ptr_rel cenv cx s (PlaceR (StoragePlace tr slot tv)) w (FST (SND rb)) (Type aty)` by

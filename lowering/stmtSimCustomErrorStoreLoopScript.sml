@@ -132,7 +132,8 @@ Theorem custom_error_store_args_sim_using_head:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res ee exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)
 Proof
   disch_then (mk_asm "head") >>
   Induct_on `args`
@@ -182,7 +183,7 @@ Resume custom_error_store_args_sim_using_head[step]:
       vv_post ctx func ce cx h es sa sm s0 ee tv vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (asm_x "head" kall_tac >> fs[exprs_case_def, expr_vv_case_def] >>
      first_x_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
      simp[expr_vv_sim_def] >> disch_then irule >> simp[] >>
@@ -193,9 +194,15 @@ Resume custom_error_store_args_sim_using_head[step]:
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac
   >- (asm_x "head" kall_tac >>
+      `(\res ee r. expr_exit (res : eval_result + exception) r /\
+                    halt_exit cx ee res r) =
+       (\res ee r. ?exc. res = INR exc /\
+          expr_exit (INR exc : eval_result + exception) r /\
+          halt_exit cx ee (INR exc : eval_result + exception) r)` by
+        (simp_tac (srw_ss()) [FUN_EQ_THM] >> Cases >>
+         simp_tac (srw_ss()) [halt_exit_def]) >>
       qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-      simp[gas_outcome_def, gas_summary_at_def] >>
-      metis_tac[expr_exit_INL, sumTheory.sum_CASES]) >>
+      BETA_TAC >> simp[halt_exit_def] >> asm_rewrite_tac[]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   `?ht tt. evaluate_type (get_tenv cx) (expr_type h) = SOME ht /\
     OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tt /\
@@ -275,7 +282,8 @@ Resume custom_error_store_args_sim_using_head[tail]:
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args)
     (mid with gas_obs := [],q)
     (\res ee r. ?vs. res = INL vs /\ Post vs ee r)
-    (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
+    (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)` by
     (simp[Abbr `Post`] >>
      first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL) >>

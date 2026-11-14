@@ -21,8 +21,8 @@ QED
 Theorem hash_value_outcome_ptr_suffix:
   gas_outcome_ptr D tops (ctx, func) PG source (es, s0, G0, tn0)
     (\res ee G tn t. ?v:value. res = INL v /\ P v ee G tn t)
-    (\res ee gt r. expr_exit res r) /\
-  (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) /\
+  (!exc ee gt r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==>
      R (INR exc) ee gt r) /\
   (!gs v ee G tn t.
      source (es with gas_obs := gs) = (INL v, ee) /\
@@ -47,7 +47,10 @@ Proof
       Cases_on `res` >> gvs[expr_exit_def] >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
       disj1_tac >> rewrite_tac[gas_summary_ptr_at_marked] >>
-      metis_tac[gas_marked_exec_ptr_bind_exception]) >>
+      qexistsl_tac [`INR y`, `es_end`, `G`, `tn`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+      disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `!exc ee gt r. _ ==> R _ _ _ _` irule >> fs[]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj2_tac >>
   simp[ignore_bind_def, bind_assoc] >>
   metis_tac[gas_exempt_cert_error_value]
@@ -67,7 +70,7 @@ Theorem hash_expr_sim_ptr_suffix:
   ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
+  (!exc ee gt r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==>
      R (INR exc) ee gt r) /\
   (!gs v ee G tn t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
@@ -91,14 +94,14 @@ Proof
   disch_then (qspecl_then [`sa`, `sm`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule hash_value_outcome_ptr_suffix >>
-  conj_tac >- metis_tac[] >>
-  qexists_tac `\v ee G tn t.
+  qexistsl_tac [`\v ee G tn t.
     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn` >>
+    ghost_kept cenv es sa G0 tn0 s0 G tn`, `cx`] >>
+  conj_tac >- metis_tac[] >>
   simp[] >> metis_tac[]
 QED

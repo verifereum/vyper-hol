@@ -155,7 +155,7 @@ Theorem raw_log_dynamic_frag:
         es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. expr_exit rr r)
+    (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -337,7 +337,7 @@ Theorem raw_log_fixed32_body_frag:
         es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. expr_exit rr r)
+    (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>

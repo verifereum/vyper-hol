@@ -121,7 +121,7 @@ Theorem lower_typed_args_nil_sim_mem:
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -149,7 +149,7 @@ Theorem lower_typed_args_sim_mem:
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>

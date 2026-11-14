@@ -21,7 +21,7 @@ Theorem raw_log_body_topics_sim:
        typed_args_post ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `typed_args_ready ctx func cenv cx expr_type

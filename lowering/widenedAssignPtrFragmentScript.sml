@@ -115,7 +115,8 @@ qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
       simp[gas_marked_exec_ptr_def] >> strip_tac >>
       qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
       simp[bind_def]) >>
-  disj2_tac >> simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_ptr_def,halt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
   )) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>

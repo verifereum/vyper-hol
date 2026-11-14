@@ -487,7 +487,8 @@ Theorem immutable_compiled_loop_outcome:
        stmt_state_rel ctx func cenv cx ee t /\ array_caller_frame st s t /\
        alloca_frame cenv es st s cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+       (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+       halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_for_immutable_entry_code_normalized >> strip_tac >>
@@ -687,8 +688,10 @@ Proof
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st1 u t /\ alloca_frame cenv es st1 u cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)` by
-    (irule (SRULE [array_loop_inv_next_id, ret_pc_ok_next_id]
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)` by
+    (irule (SRULE [array_loop_inv_next_id, ret_pc_ok_next_id,
+                   Excl "halt_exit_simps"]
        (Q.INST [`k` |-> `0`, `st` |-> `st with cs_next_id := st1.cs_next_id`]
          (SPEC_ALL immutable_for_loop_counted))) >>
      qpat_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 0 _ _` (irule_at Any) >>

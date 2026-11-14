@@ -72,14 +72,14 @@ Theorem supported_stmt_body_safe:
   supported_stmt tops bindings s ==> body_stmt_safe tops s
 Proof
   rw[body_stmt_safe_def] >>
-  drule (cj 1 supported_stmts_storage_syntax) >> simp[]
+  drule (cj 1 supported_stmts_storage_syntax) >> simp[no_halt_root_no_evm_run]
 QED
 
 Theorem supported_stmts_body_safe:
   supported_stmts tops bindings ss ==> body_stmts_safe tops ss
 Proof
   rw[body_stmts_safe_iff] >>
-  drule (cj 2 supported_stmts_storage_syntax) >> simp[]
+  drule (cj 2 supported_stmts_storage_syntax) >> simp[no_halt_root_no_evm_run]
 QED
 
 Theorem supported_expr_body_calls:

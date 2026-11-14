@@ -94,6 +94,10 @@ Resume intcall_convert_from_bytestring_sim[value]:
               gasSummaryComposeTheory.gas_marked_exec_bind_normal
               |> REWRITE_RULE [APPEND_NIL]) >>
        qexistsl_tac [`es_end`,`t'`,`v`] >> gvs[]) >>
-   gvs[])
+   gvs[] >>
+   qpat_x_assum `gas_marked_exec _ _ (\vs. _) _ _ _ _ _`
+     (strip_assume_tac o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+   first_x_assum (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
+   gvs[exprSimDefsTheory.halt_exit_def])
 QED
 Finalise intcall_convert_from_bytestring_sim

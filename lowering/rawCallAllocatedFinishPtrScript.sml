@@ -88,7 +88,7 @@ Theorem raw_call_allocated_scalar_outcome:
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
       ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
@@ -173,7 +173,7 @@ Theorem raw_call_allocated_zero_reverting_outcome:
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
       ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
@@ -263,7 +263,7 @@ Theorem raw_call_allocated_positive_reverting_outcome:
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
       ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
@@ -389,7 +389,7 @@ Theorem raw_call_allocated_positive_nonreverting_outcome:
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
       ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>

@@ -54,10 +54,10 @@ Theorem extract32_operands_ptr_prefix:
       (vyperState$bind
         (lift_sum (evaluate_type_builtin cx Extract32 typ
           [expr_type src;expr_type off] [BytesV bs;IntV i])) (\w. return (Value w)))
-      (fin with gas_obs := [],v,J,un) Q (\res ee gt r. expr_exit res r)) ==>
+      (fin with gas_obs := [],v,J,un) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (TypeBuiltin ann Extract32 typ [src;off]))
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all extract32_stage_cuts >> strip_tac >>
   `gas_admissible (vyperState$bind (eval_expr cx src) (read_result cx)) expr_res_ok es` by

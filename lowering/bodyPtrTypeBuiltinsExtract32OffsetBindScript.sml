@@ -63,7 +63,7 @@ Theorem extract32_offset_ptr_bind:
     (!n. 0 < LENGTH bs /\ n <= LENGTH bs ==> ptr_covers H th data t n) ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (next (IntV i)) (mid with gas_obs := [],t,H,th) Q
-      (\res ee gt r. expr_exit res r)) /\
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (vyperState$bind (eval_expr cx off) (read_result cx)) (return ()))
@@ -84,7 +84,7 @@ Theorem extract32_offset_ptr_bind:
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (vyperState$bind (vyperState$bind (eval_expr cx off) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`

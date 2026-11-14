@@ -56,7 +56,7 @@ Theorem code_array_suffix_ptr_summary:
       ptr_vv_ok cx (post_value_type cenv (Subscript et obj idx)) child
         (LocatedValue et (mk_ptr dst LocCode)) ee' Gf tnf q /\
       ghost_kept cenv es sa Ginit tninit s0 Gf tnf)
-    (\res ee' gt outcome. expr_exit res outcome)
+    (\res ee' gt outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `post_value_type cenv (Subscript (ArrayT et bd) obj idx) = ArrayT et bd` by

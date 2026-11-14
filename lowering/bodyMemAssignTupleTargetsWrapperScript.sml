@@ -131,7 +131,7 @@ Resume compile_assign_tuple_targets_stmt_frag_mem[exception]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (pure_rewrite_tac [tuple_targets_source_action] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 Resume compile_assign_tuple_targets_stmt_frag_mem[exempt]:

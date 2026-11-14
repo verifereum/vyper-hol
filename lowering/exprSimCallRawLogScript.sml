@@ -158,55 +158,6 @@ Proof
   simp[raise_def, return_def, bind_def, ignore_bind_def, read_result_def]
 QED
 
-Theorem raw_log_eval_cases[local]:
-  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-       data] dflt) es /\
-  (do r <- eval_expr cx
-        (Call ann RawLog
-          [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-           data] dflt);
-      read_result cx r od) es = (res, es') ==>
-  (?exc. eval_exprs cx topics es = (INR exc, es') /\ res = INR exc) \/
-  (?vs es1 exc.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INR exc, es') /\
-     res = INR exc) \/
-  (?vs es1 bs es2.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INL (BytesV bs), es2) /\
-     res = INL NoneV /\
-     es' = es2 with logs := es2.logs ++
-       [encode_raw_event_values cx.txn.target vs bs])
-Proof
-  strip_tac >>
-  `no_type_error_result res` by
-    (drule_all expr_sim_pre_eval >> simp[]) >>
-  qpat_x_assum `expr_sim_pre _ _ _ _ _` kall_tac >>
-  qpat_x_assum `bind _ _ es = _` mp_tac >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[raw_log_eval] >>
-  Cases_on `eval_exprs cx topics es` >>
-  rename1 `eval_exprs cx topics es = (tr, es1)` >> Cases_on `tr`
-  >- (rename1 `eval_exprs cx topics es = (INL vs, es1)` >>
-      `LENGTH vs <= 4` by (drule eval_exprs_length >> simp[]) >>
-      simp[bind_def] >> Cases_on `eval_expr cx data es1` >>
-      rename1 `eval_expr cx data es1 = (dr, es2)` >> Cases_on `dr` >> simp[]
-      >- (rename1 `read_result cx tv es2` >>
-          Cases_on `read_result cx tv es2` >>
-          rename1 `read_result cx tv es2 = (vr, es3)` >> Cases_on `vr` >> simp[]
-          >- (rename1 `dest_BytesV v` >> Cases_on `v` >>
-              simp[dest_BytesV_def, lift_option_type_def, lift_option_def,
-                   type_check_def, assert_def, raise_def, return_def,
-                   bind_def, ignore_bind_def, push_log_def] >>
-              strip_tac >> gvs[no_type_error_result_def] >> metis_tac[]) >>
-          metis_tac[]) >>
-      metis_tac[]) >>
-  simp[bind_def] >> metis_tac[]
-QED
 
 Theorem raw_log_eval_value[local]:
   eval_expr cx (Call ann RawLog args dflt) es = (INL tv, es') ==>
@@ -218,36 +169,6 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem raw_log_raw_eval_cases[local]:
-  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-       data] dflt) es /\
-  eval_expr cx
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-       data] dflt) es = (res, es') ==>
-  (?exc. eval_exprs cx topics es = (INR exc, es') /\ res = INR exc) \/
-  (?vs es1 exc.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INR exc, es') /\
-     res = INR exc) \/
-  (?vs es1 bs es2.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INL (BytesV bs), es2) /\
-     res = INL (Value NoneV) /\
-     es' = es2 with logs := es2.logs ++
-       [encode_raw_event_values cx.txn.target vs bs])
-Proof
-  strip_tac >> Cases_on `res` >>
-  imp_res_tac raw_log_eval_value >> gvs[] >>
-  drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_eval_cases >>
-  simp[bind_def, read_result_def, return_def] >>
-  metis_tac[]
-QED
 
 Theorem raw_log_topics_source[local]:
   expr_sim_pre cenv cx env
@@ -315,14 +236,6 @@ Proof
   simp[expr_ok_def, expr_sim_ok_def] >> metis_tac[]
 QED
 
-Theorem raw_log_post_vv[local]:
-  expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value NoneV)
-    (StackValue NoneT (Lit 0w)) s
-Proof
-  simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-       vv_own_def, read_result_def, return_def] >> metis_tac[]
-QED
 
 Theorem compile_multi_exprs_lower_word_args[local]:
   !topics. compile_multi_exprs compile_expr cenv topics =
@@ -371,7 +284,7 @@ Theorem raw_log_topics_sim[local]:
        typed_args_post ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all raw_log_topics_ready >> strip_tac >>
   irule lower_typed_args_sim >> simp[] >>
@@ -471,7 +384,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
     (\rr ee t. ?v. rr = INL v /\
       expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
+      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all raw_log_dynamic_data_view >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
@@ -549,7 +462,7 @@ Theorem raw_log_fixed_tail_summary[local]:
     (\rr ee t. ?v. rr = INL v /\
       expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
+      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule hash_fixed_post_view >> simp[] >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
@@ -713,8 +626,9 @@ Proof
        t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
-       (\rr ee r. wb_args_exit rr r)` by
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit cx ee (INR exc : value + exception) r) =
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
         (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
@@ -840,8 +754,9 @@ Proof
        t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
-       (\rr ee r. wb_args_exit rr r)` by
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit cx ee (INR exc : value + exception) r) =
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
         (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>

@@ -2574,7 +2574,8 @@ Proof
   `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
-     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >> rpt strip_tac >>
+     gvs[exprSimWordArgsTheory.builtin_result_not_halt]) >>
   qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>
@@ -2582,12 +2583,29 @@ Proof
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
-  simp[expr_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  simp[expr_exit_success_map, halt_exit_success_map] >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[] >>
+  rpt strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]
 QED
 
 (* The sha256 composition: the operand, then the digest's precompile call,
    whose outcome the source consumes. *)
+Theorem sha256_result_not_halt:
+  (case builtin_result cx acc ann bt ts vs of
+     INR exc => (INR exc, st)
+   | INL w => (do precompile_call_success bt; return (Value w) od) st) =
+    (res, st') ==>
+  res <> INR HaltException
+Proof
+  Cases_on `builtin_result cx acc ann bt ts vs` >>
+  rw[vyperStateTheory.ignore_bind_def, bind_def,
+     vyperInterpreterTheory.precompile_call_success_def,
+     vyperStateTheory.return_def, vyperStateTheory.check_def,
+     vyperStateTheory.assert_def] >>
+  gvs[AllCaseEqs(), exprSimWordArgsTheory.builtin_result_not_halt] >>
+  strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]
+QED
+
 Theorem compile_typed_sha256_unary_vv_sim:
   expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
@@ -2659,10 +2677,12 @@ Proof
      pop_assum SUBST1_TAC >>
      qpat_x_assum `_ = (res, es2)` SUBST1_TAC >>
      simp[] >> metis_tac[]) >>
+  `res <> INR HaltException` by
+    (drule sha256_result_not_halt >> simp[]) >>
   qexists_tac `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`res`, `es2`, `r`] >>
-  simp[] >> metis_tac[]
+  fs[exprSimDefsTheory.halt_exit_def] >> metis_tac[]
 QED
 
 Theorem hash_eval_operand_inst_idx[simp]:

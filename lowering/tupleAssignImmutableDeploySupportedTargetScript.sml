@@ -45,7 +45,7 @@ Theorem tuple_immutable_mutable_head_outcome:
       (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
         FLOOKUP t.vs_allocas id = SOME entry) /\
       alloca_frame cenv es sp s0 cenv ff t)
-    (\res ff r. expr_exit res r)
+    (\res ff r. expr_exit res r /\ halt_exit cx ff res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (supported_expr tops) (target_indices bt)` by
@@ -65,7 +65,7 @@ Proof
     (\res ee t. ?p. res = INL p /\
       target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (irule target_place_sim >> simp[] >>
      fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
   simp[Once evaluate_def] >>

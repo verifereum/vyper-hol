@@ -108,7 +108,7 @@ Theorem fixed_array_represented_summary_ptr:
       ptr_vv_ok cx et child (LocatedValue et (mk_ptr dst LocMemory)) ee' H tm z /\
       ptr_buf_ok cenv (Subscript et obj idx) dst H z /\
       ghost_kept cenv es sa G0 tn0 s0 H tm)
-    (\res ee' gt outcome. expr_exit res outcome)
+    (\res ee' gt outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env obj es` by

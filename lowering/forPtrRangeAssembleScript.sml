@@ -64,7 +64,8 @@ Theorem for_range_round_ptr:
     (\res ee gf tf t. ?broke. res = INL broke /\
       (broke ==> Done ee gf tf t) /\ (~broke ==> Inv (SUC k) ee gf tf t))
     (\res ee gt r. ?ex. res = INR ex /\
-      !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+      (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   qpat_x_assum `Inv k es G tn s` mp_tac >> asm_rewrite_tac[] >> strip_tac >>
@@ -126,10 +127,12 @@ Resume for_range_round_ptr[outcome]:
         simp[Abbr `Qround`] >> fs[] >> metis_tac[]) >>
     rpt gen_tac >> strip_tac >>
     drule for_body_exit_cleanup_ptr >> disch_then (qspec_then `TL ee.scopes` strip_assume_tac) >>
-    simp[Abbr `Rround`] >> gen_tac >>
-    `ee with <|scopes := TL ee.scopes; gas_obs := tail|> =
-     ee with <|gas_obs := tail; scopes := TL ee.scopes|>` by
-      (Cases_on `ee` >> simp[]) >> asm_rewrite_tac[])) >>
+    rename1 `res = INR ex` >>
+    `halt_exit cx (ee with scopes := TL ee.scopes) (INR ex : unit + exception) r` by
+      (rewrite_tac[cj 7 exprSimDefsTheory.halt_exit_simps] >>
+       qpat_assum `res = INR _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+    qunabbrev_tac `Rround` >> BETA_TAC >> qexists_tac `ex` >>
+    rpt conj_tac >- simp[] >> first_assum ACCEPT_TAC)) >>
   disch_tac >>
   `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
     (push_scope_with_var id tyv (EL k vs)) (es,s,G,tn) [] (INL ())

@@ -277,50 +277,6 @@ Proof
   imp_res_tac (cj 1 eval_expr_no_control) >> gvs[no_control_exc_def]
 QED
 
-Theorem annassign_word_store_post_run[local]:
-  !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv sc rest a.
-    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
-    is_word_type (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    store_lays_out etv tyv v /\
-    emit_void MSTORE [Var p; op] sb = ((), sf) /\ fn_has_code sb sf func /\
-    ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sb.cs_current_insts /\ fn_inst_ids_distinct func /\
-    es1.scopes = sc :: rest /\ lookup_scopes id es1.scopes = NONE /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    not_local_ptr cenv es1.scopes p /\ not_fresh_at sa p /\
-    lookup_var p s0 = SOME w /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz ==>
-    ?t. stmt_state_rel ctx func cenv cx
-          (es1 with scopes :=
-             (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
-        ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-        (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
-               lookup_var x t = SOME u) /\
-        (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
-                     FLOOKUP t.vs_allocas aid = SOME entry) /\
-        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-                 ?fuel'. run_from fuel' ctx func s = r
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def] >> strip_tac >>
-  `eval_operand op s = SOME (typed_val_to_w256 etv v)` by
-    (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  `lookup_var p s = SOME w` by metis_tac[] >>
-  `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz)` by metis_tac[] >>
-  `memory_value_rel tyv v (w2n w)
-     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
-    metis_tac[store_lays_out_memory_value_rel] >>
-  `val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
-  `type_memory_size tyv <= sz` by simp[] >>
-  drule_all annassign_word_store_run >>
-  disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
-QED
 
 Theorem annassign_word_code_parts[local]:
   !cenv lctx ty id vtyp e sa sf c func.
@@ -444,7 +400,7 @@ Proof
       expr_post ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
      simp[expr_sim_def] >> disch_then irule >> simp[]) >>
   `~block_is_terminated sb` by

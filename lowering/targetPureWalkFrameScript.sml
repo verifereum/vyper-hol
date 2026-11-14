@@ -47,7 +47,7 @@ Theorem target_walk_frame:
          machine_frame (es with logs := ee.logs) ee /\ ee.scopes = es.scopes /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
@@ -55,7 +55,7 @@ Proof
       target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     metis_tac[target_sim_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
@@ -78,7 +78,9 @@ Proof
            qexistsl_tac [`INL pv`, `es_end`, `OK t`] >>
            gvs[machine_frame_def]) >>
       rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-      simp[gasSummaryTheory.gas_summary_at_def] >> metis_tac[]) >>
+      simp[gasSummaryTheory.gas_summary_at_def] >>
+      qexistsl_tac [`res`, `es_end`, `r`] >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
   metis_tac[]
 QED

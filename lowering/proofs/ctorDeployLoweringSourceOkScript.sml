@@ -53,7 +53,7 @@ Theorem deploy_ctor_body_source_ok:
     deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
     eval_stmts (deploy_evaluation_context tops am tx) body
       (es0 with <| gas_obs := gs; outcomes := oc |>) = (res, ee) ==>
-    stmt_res_ok NoLoop res
+    stmt_res_ok NoLoop res /\ res <> INR HaltException
 Proof
   rpt gen_tac >> pure_rewrite_tac[deploy_source_ok_def, deploy_ctor_start_def] >>
   strip_tac >>
@@ -80,6 +80,7 @@ Proof
                (INR HaltException, st')` by
        (rpt gen_tac >> irule deploy_body_no_halt >> metis_tac[]) >>
      metis_tac[]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   Cases_on `res` >> simp[stmt_res_ok_def] >>
   rename1 `INR exc` >>
   `exc <> BreakException /\ exc <> ContinueException` by

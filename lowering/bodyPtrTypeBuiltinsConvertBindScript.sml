@@ -43,7 +43,7 @@ Theorem convert_bind_expr_sim_ptr:
         (~is_word_type (post_value_type cenv (TypeBuiltin ann Convert dst [e])) ==>
           ptr_buf_ok cenv (TypeBuiltin ann Convert dst [e]) out H u) /\
         ghost_kept cenv es ca G0 tn0 s0 H th)
-      (\res fin gt r. expr_exit res r)) ==>
+      (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)) ==>
   expr_sim_ptr d ctx PG fn cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
   strip_tac >> drule_all convert_operand_ptr_entry >>
@@ -60,8 +60,9 @@ Proof
   disch_then (qspecl_then [`sa`,`sa'`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule convert_operand_marked_bind >>
-  `!res r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
-     expr_exit (res : value + exception) r` by
+  `!res ee r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r /\
+       (exc = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)) <=>
+     expr_exit (res : value + exception) r /\ halt_exit cx ee res r` by
     (Cases >> simp[expr_exit_def]) >>
   simp[] >> qexists_tac `\v ee G tn t.
     expr_post ctx fn cenv cx e es sa sa' s0 ee v x t /\

@@ -36,7 +36,7 @@ Theorem scalar_convert_operand_continuation:
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out H u) /\
       ghost_kept cenv es ca G0 tn0 s0 H th)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> drule_all scalar_source_body_word_types >> strip_tac >>
   drule_all expr_body_pre_word_value >> strip_tac >>
@@ -103,8 +103,9 @@ Proof
   disch_then (qspecl_then [`sa`,`s1`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule convert_operand_marked_bind >>
-  `!res r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
-     expr_exit (res : value + exception) r` by
+  `!res r ee. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r /\
+                     (exc = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)) <=>
+     expr_exit (res : value + exception) r /\ halt_exit cx ee res r` by
     (Cases >> simp[expr_exit_def]) >>
   simp[] >> qexists_tac `\v ee G tn t.
     expr_post ctx fn cenv cx e es sa s1 s0 ee v x t /\

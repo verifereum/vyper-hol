@@ -924,7 +924,8 @@ Theorem concat_args_sim:
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r)
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -1055,7 +1056,7 @@ Resume concat_args_sim[head_exit]:
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   disj2_tac >>
-  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` (mp_tac o BETA_RULE) >>
+  qpat_x_assum `(\res ee r. _) _ _ _` (mp_tac o BETA_RULE) >>
   qpat_x_assum `exit_result r` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, exit_result_def] >>

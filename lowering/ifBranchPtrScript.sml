@@ -65,12 +65,12 @@ Theorem if_branch_outcome_cleanup_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_stmts cx ss)
     (es with scopes := FEMPTY :: es.scopes,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv' sa sb s0 G0 tn0)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv sa sb s0 G0 tn0)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >> strip_tac
   >- (drule gas_marked_exec_ptr_exec >> strip_tac >> drule if_branch_marked_scopes >>
@@ -156,7 +156,7 @@ Theorem if_branch_outcome_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_stmts cx ss)
     (es with scopes := FEMPTY :: es.scopes,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv' sa last s0 G0 tn0)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted /\ ~ctx_has_dalloca ctx /\
   (~block_is_terminated last ==>
     emit_inst JMP [Label xl] [] last = ((),after) /\
@@ -165,7 +165,7 @@ Theorem if_branch_outcome_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv sa sb s0 G0 tn0)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> irule if_branch_outcome_to_exit_ptr >> simp[] >>
   qexistsl_tac [`after`, `last`, `xl`] >> simp[] >>

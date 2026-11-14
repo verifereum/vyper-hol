@@ -698,7 +698,7 @@ Theorem send_tail_summary[local]:
        expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `(do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
@@ -720,7 +720,13 @@ Proof
               gas_explicit_replicate_false, APPEND] >>
   BETA_TAC >> pop_assum SUBST1_TAC >> conj_tac
   >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
-  gvs[] >> metis_tac[]
+  `res <> INR HaltException` by
+    (strip_tac >>
+     Cases_on `eval_send cx has_gas (to_v::amount_v::gas_vs) es1` >>
+     rename1 `eval_send _ _ _ _ = (rr, st1)` >>
+     Cases_on `rr` >> gvs[bind_def, evalNoHaltTheory.eval_send_nh] >>
+     drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]) >>
+  gvs[halt_exit_def] >> metis_tac[]
 QED
 
 (* ===== send ===== *)

@@ -150,7 +150,7 @@ Theorem target_mapping_typed_summary_mem:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `?w. place_ptr_rel cenv cx s (HashMapRef tr slot kt vty) w (FST (SND rb)) bvt` by

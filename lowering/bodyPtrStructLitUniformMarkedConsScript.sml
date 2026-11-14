@@ -37,7 +37,9 @@ Theorem structlit_uniform_marked_cons_outcome:
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `ee with gas_obs := [] = ee` by

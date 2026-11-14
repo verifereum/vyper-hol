@@ -66,7 +66,7 @@ Theorem target_attribute_memory:
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-      (\res ee r. expr_exit res r)) ==>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   !vt sa sb op s0.
     type_place_target env (AttributeTarget bt fld) = SOME vt /\
     compile_get_target_ptr compile_expr cenv (AttributeTarget bt fld) sa = (op,sb) /\
@@ -86,7 +86,7 @@ Theorem target_attribute_memory:
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>

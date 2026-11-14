@@ -91,7 +91,8 @@ Theorem dynarray_code_body_outcome_mem[local]:
     gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (ei,s_body)
       (array_body_post_mem d ctx func cx (InLoop exit incr) bc
         (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body)
-      (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+      (\r ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+                 halt_exit cx ee r rr) /\
     array_round_frame d func cenv caller orig s_body /\
     ret_pc_ok cenv caller s_body /\ ret_pc_ok bc sb0 s_body /\
     lookup_var idx s_body = SOME (n2w k) /\ lookup_var p s_body = SOME dst /\
@@ -295,7 +296,8 @@ Theorem dynarray_one_round_mem[local]:
       (~b ==> array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
         ainst cond caller orig (SUC k) ee t))
     (\res ee rr. ?e. res = INR e /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr) /\
+      halt_exit cx ee (INR e : unit + exception) rr)
 Proof
   strip_tac >>
   `!x. not_fresh_at caller x ==> x <> dv` by metis_tac[] >>
@@ -324,7 +326,8 @@ Proof
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
     [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc
        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body`,
-     `E` |-> `\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr`]) >>
+     `E` |-> `\r ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+                         halt_exit cx ee r rr`]) >>
   simp[] >> conj_tac >- suspend "nonhalt" >>
   conj_tac >- suspend "scopes" >>
   conj_tac >- suspend "body" >>
@@ -366,7 +369,8 @@ Resume dynarray_one_round_mem[exit]:
   gvs[stmt_res_ok_def] >>
   gvs[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
       evaluation_state_fn_updates] >>
-  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def]
+  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def,
+                       exprSimDefsTheory.halt_exit_def]
 QED
 
 Finalise dynarray_one_round_mem
@@ -414,7 +418,8 @@ Theorem dynarray_code_loop_outcome_mem:
       (\res ee t. res = INL () /\
         array_round_done d ctx func cenv cx caller orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit cx ee (INR ex : unit + exception) rr)
 Proof
   strip_tac >>
   ho_match_mp_tac (Q.SPECL [`T`, `cx_tops cx`, `ctx`, `func`, `cx`, `tv`, `id`,

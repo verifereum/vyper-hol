@@ -557,7 +557,7 @@ Theorem counted_array_round_from_body:
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
     (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
     stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
     ?sc rest. es2.scopes = sc :: rest /\
@@ -591,7 +591,8 @@ Theorem counted_array_round_from_body:
       (~broke ==> array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base
         p dst sz ainst cond_lbl st (SUC k) ee t))
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome F (cx_tops cx) (ctx,func) round (es,cc) Q R` >>
@@ -686,7 +687,7 @@ Theorem immutable_round_prepare:
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
     (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   (conj_tac >- (irule push_scope_with_var_zero_exec >> simp[])) >>
@@ -1662,7 +1663,8 @@ Theorem immutable_for_round_counted:
       (~broke ==> array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off))
         (n2w off) p dst sz ainst cond_lbl st (SUC k) ee t))
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >> drule_all immutable_round_prepare >> strip_tac >>
   irule counted_array_round_from_body >>
@@ -1751,7 +1753,8 @@ Theorem immutable_for_loop_counted:
       array_caller_frame caller old t /\
       alloca_frame cenv origin_es caller old cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   `!s. array_caller_frame caller old s ==>
@@ -1766,7 +1769,8 @@ Proof
     ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ei s /\
     array_caller_frame caller old s /\
     alloca_frame cenv origin_es caller old cenv ei s` >>
-  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+    halt_exit cx ee (INR ex : unit + exception) r` >>
   `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
       gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
       gas_outcome F (cx_tops cx) (ctx,func)
@@ -1858,7 +1862,8 @@ Resume immutable_for_loop_counted[round]:
     (simp[Abbr `entry`] >> metis_tac[]) >>
   drule_all immutable_for_round_counted >>
   disch_then (qspec_then `off` assume_tac) >>
-  simp[Abbr `R`] >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  simp[Abbr `R`, Excl "halt_exit_simps"] >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   simp[Abbr `Done`] >> rpt strip_tac >>
   `array_caller_frame caller old t` by

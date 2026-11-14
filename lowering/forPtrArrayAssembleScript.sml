@@ -322,7 +322,8 @@ Theorem for_array_round_ptr:
       (~broke ==> for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
         cond_lbl st s0 G0 tn0 d name snapshot (SUC k) ee gf tf t))
     (\res ee gt r. ?ex. res = INR ex /\
-      !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+      (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   `for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
@@ -369,11 +370,13 @@ Resume for_array_round_ptr[outcome]:
         fs[IgnAsm `vs = _`] >> qpat_x_assum `res = _` SUBST_ALL_TAC >>
         simp[Abbr `Qround`, IgnAsm `vs = _`] >> fs[IgnAsm `vs = _`] >> metis_tac[]) >>
     rpt gen_tac >> strip_tac >>
-    drule for_body_exit_cleanup_ptr >> disch_then (qspec_then `TL ee.scopes` strip_assume_tac) >>
-    simp[Abbr `Rround`, IgnAsm `vs = _`] >> gen_tac >>
-    `ee with <|scopes := TL ee.scopes; gas_obs := tail|> =
-     ee with <|gas_obs := tail; scopes := TL ee.scopes|>` by
-      (Cases_on `ee` >> simp[]) >> asm_rewrite_tac[])) >>
+    drule for_body_exit_cleanup_ptr >>
+    disch_then (qspec_then `TL ee.scopes` (qx_choose_then `ex` strip_assume_tac)) >>
+    qunabbrev_tac `Rround` >> BETA_TAC >> qexists_tac `ex` >> rpt conj_tac
+    >- simp[IgnAsm `vs = _`]
+    >- first_assum ACCEPT_TAC >>
+    rewrite_tac[cj 7 exprSimDefsTheory.halt_exit_simps] >>
+    qpat_x_assum `res = INR ex` SUBST_ALL_TAC >> first_assum ACCEPT_TAC)) >>
   disch_tac >>
   `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
     (push_scope_with_var id tv (EL k vs)) (es,s,G,tn) [] (INL ())

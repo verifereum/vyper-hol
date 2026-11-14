@@ -52,13 +52,13 @@ Theorem expr_stack_outcome:
       expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r) ==>
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee u. ?tv. res = INL tv /\
       vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rw[gas_outcome_def] >> qexists_tac `marks`
   >- (disj1_tac >>
@@ -71,7 +71,7 @@ Proof
               read_result_def, return_def, vv_own_def] >> first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                    `es_end`, `r`] >>
-      simp[expr_exit_success_map] >> gen_tac >>
+      simp[expr_exit_success_map, halt_exit_success_map] >> gen_tac >>
       drule eval_expr_force_value >> disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
   disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]

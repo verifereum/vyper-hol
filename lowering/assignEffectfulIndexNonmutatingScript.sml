@@ -58,7 +58,7 @@ Proof
       vv_post ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
       t.vs_current_bb = sv.cs_current_bb /\
       t.vs_inst_idx = LENGTH sv.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (`!ss pv ee. eval_expr cx e ss = (INL pv,ee) ==> ?v. pv = Value v` by
        metis_tac[placeRelayoutRawSourceTheory.strict_widened_rhs_delayed_read] >>
      `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
@@ -78,7 +78,8 @@ Proof
     `?ex. res = INR ex` by
       (qpat_x_assum `expr_exit _ _` mp_tac >>
        Cases_on `res` >> simp[expr_exit_def]) >>
-    qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
+    qexists_tac `ex` >> asm_rewrite_tac[] >>
+    reverse conj_tac >- fs[exprSimDefsTheory.halt_exit_def] >> gen_tac >>
     pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
     qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
     qpat_x_assum `expr_exit _ _` mp_tac >>
@@ -125,7 +126,8 @@ Proof
       `?ex. res = INR ex` by
         (qpat_x_assum `expr_exit _ _` mp_tac >>
          Cases_on `res` >> simp[expr_exit_def]) >>
-      qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
+      qexists_tac `ex` >> asm_rewrite_tac[] >>
+    reverse conj_tac >- fs[exprSimDefsTheory.halt_exit_def] >> gen_tac >>
       pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
       qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
       qpat_x_assum `expr_exit _ _` mp_tac >>

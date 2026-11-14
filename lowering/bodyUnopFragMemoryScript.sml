@@ -313,7 +313,7 @@ Theorem unop_continuation_summary_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\

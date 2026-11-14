@@ -29,7 +29,7 @@ Theorem word_pow_expr_outcome:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx ee t0 /\
@@ -37,7 +37,7 @@ Proof
    eval_operand b t0 = SOME (val_to_w256 v2)` by gvs[wb_args_post_def] >>
   drule_all word_pow_typed_outcome >> strip_tac >>
   irule gas_outcome_ptr_conseq >> first_assum (irule_at Any) >>
-  qexists_tac `\res fin gt r. expr_exit res r` >> simp[] >>
+  qexists_tac `\res fin gt r. expr_exit res r /\ halt_exit cx fin res r` >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
   `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -72,7 +72,7 @@ Theorem word_modular_expr_outcome:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx ee t0 /\
@@ -83,7 +83,7 @@ Proof
   >- (drule_all word_modular_typed_abort_outcome >> strip_tac >> first_assum irule) >>
   drule_all word_modular_typed_outcome >> strip_tac >>
   irule gas_outcome_ptr_conseq >> first_assum (irule_at Any) >>
-  qexists_tac `\res fin gt r. expr_exit res r` >> simp[] >>
+  qexists_tac `\res fin gt r. expr_exit res r /\ halt_exit cx fin res r` >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
   `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>

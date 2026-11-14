@@ -33,7 +33,7 @@ Theorem aug_place_target_ready_mem_continuation:
       (INL p, mid with gas_obs := tail)) /\
     gas_marked_path T ctx func s0 (LENGTH marks) (OK t) ==>
     gas_outcome T (cx_tops cx) (ctx,func) ((k p) : evaluation_state -> 'a evaluation_result) (mid,t) Q R) /\
-  (!res ee rr. expr_exit (res : eval_result + exception) rr ==> ?ex. res = INR ex /\ R (INR ex) ee rr) ==>
+  (!res ee rr. expr_exit (res : eval_result + exception) rr /\ halt_exit cx ee res rr ==> ?ex. res = INR ex /\ R (INR ex) ee rr) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_target_place cx bt) k) (es,s0) Q R
 Proof

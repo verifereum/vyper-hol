@@ -47,7 +47,8 @@ Theorem custom_error_store_args_sim_ptr:
         mem_bytes_at i 1 r.vs_memory = mem_bytes_at i 1 s0.vs_memory /\
         (i IN tf.t_mem ==> i IN tn.t_mem)))
     (\res ee gt exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)
 Proof
   match_mp_tac custom_error_store_args_sim_ptr_conditional >>
   rpt gen_tac >> strip_tac >>

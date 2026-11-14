@@ -36,7 +36,7 @@ Theorem mapping_leaf_summary_ptr:
       (!ty q. LocatedValue ann p = LocatedValue ty q /\ q.ptr_location = LocMemory ==>
         ptr_buf_ok cenv (Subscript ann obj idx) q.ptr_operand Gf t) /\
       ghost_kept cenv es sa G0 tn0 s0 Gf tnf)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   strip_tac >> drule_all mapping_leaf_ptr_post >> strip_tac >>
   rewrite_tac[gas_summary_ptr_at_marked] >>
@@ -146,7 +146,7 @@ Theorem mapping_selection_summary_ptr:
       (!ty q. LocatedValue ann p = LocatedValue ty q /\ q.ptr_location = LocMemory ==>
         ptr_buf_ok cenv (Subscript ann obj idx) q.ptr_operand Gf u) /\
       ghost_kept cenv es sa G0 tn0 s0 Gf tnf)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   strip_tac >> drule_all mapping_marked_source_leaf >> strip_tac >>
   `~it.vs_halted` by metis_tac[bodyPtrHashBuiltinsSuffixTheory.hash_marked_ptr_normal] >>
@@ -273,7 +273,7 @@ Theorem compile_mapping_subscript_outcome_ptr:
       (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
         ptr_buf_ok cenv (Subscript ann obj idx) p.ptr_operand G t) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `expr_map_pre cenv cx env obj es` by
@@ -336,12 +336,13 @@ Resume compile_mapping_subscript_outcome_ptr[base_success]:
   rewrite_tac[bodyPtrDefsTheory.expr_sim_ptr_def] >>
   disch_then (qspecl_then [`sm`, `sn`, `key`, `t`, `G`, `tn`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  `!(res : value + exception) r. expr_exit res r <=>
-     ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
+  `!(res : value + exception) ee r. expr_exit res r /\ halt_exit cx ee res r <=>
+     ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+           halt_exit cx ee (INR exc : eval_result + exception) r` by
     (Cases >> simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
   asm_rewrite_tac[] >>
   disch_then (mp_then Any mp_tac
-    (Q.INST [`R` |-> `\res ee gt r. expr_exit res r`]
+    (Q.INST [`R` |-> `\res ee gt r. expr_exit res r /\ halt_exit cx ee res r`]
       array_index_outcome_post_compose_ptr |> BETA_RULE)) >>
   disch_then ho_match_mp_tac >> goal_assum (drule_at Any) >>
   conj_tac >- (simp[] >> metis_tac[]) >>

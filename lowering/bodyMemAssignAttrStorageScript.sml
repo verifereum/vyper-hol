@@ -156,16 +156,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem vv_post_emit_cursor_mem_src[local]:
-  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
-  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\
-  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) ==>
-  vv_post ctx func ce cx e es sa sn s0 ee tv vv
-    (update_var x w s with vs_inst_idx := n)
-Proof
-  simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
-QED
 
 Theorem vv_store_bound_frame_mem_src:
   vv_store_bound cx ty lt es tv vv s /\
@@ -293,7 +283,7 @@ Theorem compile_expr_add_read_outcome_mem_src[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
       eval_operand dst u = SOME (kb + ko))
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
@@ -334,7 +324,7 @@ Proof
          gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
          Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
       qexistsl_tac [`INR exc`, `es_end`, `r`] >>
-      simp[GSYM expr_exit_exception_transport] >>
+      fs[GSYM expr_exit_exception_transport] >>
       irule gas_marked_exec_bind_exception >> goal_assum drule) >>
   disj2_tac >> metis_tac[force_exempt_cert]
 QED
@@ -402,7 +392,7 @@ Proof
      simp[ci_mono_def] >> strip_tac >>
      drule emitted_insts_emit_void >> strip_tac >> decide_tac) >>
   irule forced_then_outcome >> conj_tac
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
     expr_post ctx func cenv cx e es sa su s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\

@@ -76,19 +76,6 @@ Proof
   gvs[expr_val_rel_def] >> metis_tac[]
 QED
 
-(* The reason's code and the encoder only append. *)
-Theorem reason_expr_revert_extends_any[local]:
-  !cenv r sa vv sm rty msz sb.
-    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
-    compile_revert_with_reason cenv vv rty msz sm = ((), sb) ==>
-    cs_extends sa sb
-Proof
-  rpt strip_tac >> drule compile_expr_extends >> strip_tac >>
-  drule compile_revert_reason_split_certificate >> strip_tac >>
-  drule unwrap_value_extends >> strip_tac >>
-  metis_tac[cs_extends_trans]
-QED
-
 Theorem reason_expr_revert_extends:
   !cenv r sa vv sm rty msz sb.
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
@@ -148,31 +135,6 @@ Proof
   imp_res_tac read_result_no_control >>
   imp_res_tac (cj 1 eval_expr_no_control) >>
   gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
-QED
-
-Theorem expr_res_ok_revert[local]:
-  !ex t. expr_res_ok (INR ex : value + exception) ==>
-         expr_exit (INR ex : unit + exception) (Abort Revert_abort t)
-Proof
-  rw[expr_res_ok_def] >> simp[expr_exit_def]
-QED
-
-(* The exits of a raise with a reason, as the reason's outcome gives them. *)
-Theorem raise_reason_exits:
-  !r1 res RetQ es'.
-    expr_res_ok r1 /\
-    ((?str. r1 = INL (StringV str) /\
-            res = INR (AssertException str)) \/
-     (?ex. r1 = INR ex /\ res = INR ex)) ==>
-    (!rr. expr_exit r1 rr ==> stmt_exit RetQ es' res rr) /\
-    (!t. stmt_exit RetQ es' res (Abort Revert_abort t))
-Proof
-  rpt gen_tac >> strip_tac >> gvs[stmt_exit_def, expr_exit_def] >>
-  `expr_res_ok (INR ex : value + exception)` by simp[] >>
-  simp[expr_res_ok_revert] >> rpt strip_tac >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
-                      expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
 QED
 
 Theorem compile_raise_reason_parts[local]:

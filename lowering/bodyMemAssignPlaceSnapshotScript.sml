@@ -113,7 +113,7 @@ Resume body_assign_place_snapshot_mem[nonempty]:
   simp[Once vyperInterpreterTheory.evaluate_def] >>
   irule gas_outcome_bind_result_exec >>
   qexistsl_tac [
-    `\res ee rr. expr_exit res rr`,
+    `\res ee rr. expr_exit res rr /\ halt_exit cx ee res rr`,
     `\res ee u. ?pv. res = INL pv /\
        vv_post ctx func cenv cx e es sa sr s0 ee pv vv0 u /\
        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee pv vv0 u /\
@@ -123,7 +123,7 @@ Resume body_assign_place_snapshot_mem[nonempty]:
   conj_tac
   >- (BETA_TAC >> Cases >- simp[exprSimDefsTheory.expr_exit_INL] >>
       rpt gen_tac >> strip_tac >> qexists_tac `y` >>
-      simp[stmt_exit_def] >> rpt gen_tac >> disj1_tac >>
+      fs[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >> rpt gen_tac >> disj1_tac >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   conj_tac
   >- (qx_genl_tac [`marks`, `raw`, `mid`, `rs`] >>
@@ -263,7 +263,8 @@ Resume body_assign_place_snapshot_mem[target_prefix]:
   >- (rpt strip_tac >> Cases_on `res`
       >- fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) rr` >> qexists_tac `ex` >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])) >>
+      fs[stmt_exit_def,exprSimDefsTheory.halt_exit_def] >>
+      metis_tac[expr_exit_INR_type])) >>
   qexistsl_tac [`cenv`,`env`,`r`,`ss`,`st`,`dty`] >> simp[] >>
   reverse conj_tac
   >- (`~block_is_terminated sr` by

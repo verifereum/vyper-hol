@@ -252,7 +252,8 @@ Resume compile_raise_reason_path_frag_ptr[exception]:
   >- (gen_tac >> rewrite_tac[eval_raise_reason_bind] >> simp[Once bind_def]) >>
   conj_tac >- simp[] >>
   disj2_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type]
+  conj_tac >- metis_tac[expr_exit_INR_type] >>
+  qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[]
 QED
 
 Finalise compile_raise_reason_path_frag_ptr

@@ -14,7 +14,7 @@ Theorem raw_call_mem_value_bind:
   stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t.
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
     ee.gas_obs = [] /\ expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
@@ -106,7 +106,7 @@ Theorem raw_call_kwargs_sim_mem[local]:
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
   drule_all lower_typed_args_sim_mem >> strip_tac >>
@@ -124,7 +124,7 @@ Theorem raw_call_kwargs_mem_bind:
   stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. wb_args_exit (INR exc) r ==> R (INR exc) ee r) /\
+  (!exc ee r. wb_args_exit (INR exc) r /\ halt_exit cx ee (INR exc : value list + exception) r ==> R (INR exc) ee r) /\
   (!gs vs ee t xs.
     eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\
     typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\

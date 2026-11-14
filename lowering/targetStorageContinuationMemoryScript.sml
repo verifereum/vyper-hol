@@ -79,7 +79,7 @@ Theorem target_storage_typed_summary_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac
   >- (`?aty. bvt = Type aty` by
@@ -121,7 +121,7 @@ Theorem target_storage_index_summary_mem[local]:
       target_post ctx func cenv cx es sa sb s0 fin pv' vt op v /\
       v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `bind (eval_expr cx e) (read_result cx)
@@ -236,7 +236,7 @@ Theorem target_storage_index_bind_mem[local]:
       expr_store_bound cx (expr_type e) key ix u /\
       u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r) ==>
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
@@ -245,7 +245,7 @@ Theorem target_storage_index_bind_mem[local]:
       target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> (irule target_subscript_index_bind_outcome >>
   qexists `\key ee u.
@@ -310,7 +310,7 @@ Theorem target_subscript_storage_continuation_mem_core[local]:
       target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> (
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
@@ -386,7 +386,7 @@ Theorem target_subscript_storage_continuation_mem:
         storage_read_live cx tr (get_storage cx ee tr) slot tv) /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_outcome T (cx_tops cx) (ctx,func)
@@ -396,7 +396,7 @@ Proof
       target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     metis_tac[target_subscript_storage_continuation_mem_core] >>
   drule gas_outcome_link >>
   strip_tac >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>

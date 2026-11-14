@@ -71,7 +71,7 @@ Proof
       (PlaceR p) (Type dty) tr t /\
     t.vs_current_bb = st.cs_current_bb /\
     t.vs_inst_idx = LENGTH st.cs_current_insts`,
-    `\res ee r. expr_exit res r`] >>
+    `\res ee r. expr_exit res r /\ halt_exit cx ee res r`] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       `eval_target_place cx bt
@@ -149,7 +149,7 @@ Proof
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_INL, stmt_exit_def] >>
+      Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_INL, stmt_exit_def, exprSimDefsTheory.halt_exit_def] >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   irule target_place_sim >> simp[] >>
   qexists_tac `env` >> simp[] >>

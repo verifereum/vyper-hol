@@ -222,6 +222,7 @@ Proof
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def,
       listTheory.EVERY_APPEND, listTheory.EVERY_CONJ, DE_MORGAN_THM]) >>
+  imp_res_tac supportedStmtTraverseTheory.no_halt_root_no_evm_run >>
   `EVERY (\e. ~is_extcode e) (target_indices t)` by
     (irule alloc_limits_target_indices_not_extcode >>
      qexists_tac `cenv` >>

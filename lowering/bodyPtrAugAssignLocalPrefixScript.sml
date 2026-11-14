@@ -246,9 +246,10 @@ Resume body_augassign_local_place_from_suffix_ptr[rhs_continuations]:
   markerLib.RESUME_TAC >> conj_tac
   >- (rpt strip_tac >> Cases_on `res`
       >- gvs[expr_exit_def] >>
+      qpat_x_assum `halt_exit _ _ _ _` mp_tac >>
       qpat_x_assum `expr_exit _ _` mp_tac >>
       rpt (pop_assum kall_tac) >>
-      simp[stmt_exit_ptr_def] >>
+      simp[stmt_exit_ptr_def, halt_exit_def] >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   rpt strip_tac >> gvs[] >>
   `bind (eval_expr cx e) (read_result cx)
@@ -454,6 +455,29 @@ Resume body_augassign_local_place_from_suffix_ptr[rhs_continuations]:
      conj_tac >- (rpt strip_tac >> metis_tac[]) >>
      drule emitHelperPropsTheory.emitted_insts_emit_op >>
      fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_ptr _ _ _ _ suffix _ post _` >>
+  `!st ff. suffix st <> (INR HaltException,ff)` by
+    (simp[Abbr `suffix`, bind_def, lift_sum_def, return_def, raise_def] >>
+     Cases_on `evaluate_binop
+       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+       ptv bop v v''` >>
+     simp[return_def, raise_def, evalNoHaltTheory.places_nh]) >>
+  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+     suffix (ee,s,G',tn') post
+     (\res ff gt r. !tail. stmt_exit_ptr RetQ (ff with gas_obs := tail) res gt r)`
+    suffices_by
+    (qpat_x_assum `!st ff. suffix st <> _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     rewrite_tac[gas_outcome_ptr_def] >> strip_tac
+     >- (qexists_tac `marks` >> disj1_tac >>
+         fs[gas_summary_ptr_at_def] >>
+         qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
+         `res <> INR HaltException` by
+           (qpat_x_assum `!tail. suffix _ = _`
+              (qspec_then `[]` mp_tac) >> metis_tac[]) >>
+         fs[halt_exit_def]) >>
+     qexists_tac `marks` >> disj2_tac >> metis_tac[]) >>
+  map_every qunabbrev_tac [`suffix`, `post`] >>
   irule augassign_memory_binop_write_outcome_ptr >> simp[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (qexists_tac `lctx` >> simp[]) >>

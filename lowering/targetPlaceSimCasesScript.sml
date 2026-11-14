@@ -88,7 +88,8 @@ Definition target_place_res_ok_def:
   target_place_res_ok (res : place + exception) <=>
     (?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 (* eval_target_place reads the base's place. *)
@@ -116,7 +117,7 @@ Theorem target_place_sim:
         target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty) r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `gas_admissible _ _ _`

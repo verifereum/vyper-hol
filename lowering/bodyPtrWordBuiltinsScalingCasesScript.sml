@@ -69,7 +69,7 @@ Theorem word_scale_typed_abort_outcome:
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) ==>
   gas_outcome_ptr D tops (ctx,func) PG
     (\ee. (builtin_result cx ee.accounts ann (AsWeiValue dn) ts [IntV (&w2n w)],ee))
-    (es,s,G,tn) Q (\res fin gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `0 < denomination_multiplier dn /\ denomination_multiplier dn < dimword (:256)` by

@@ -70,7 +70,8 @@ Theorem aggregate_struct_fields_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   drule exprSimAggregateLayoutTheory.compile_struct_lit_as_tuple >>
@@ -85,6 +86,8 @@ Proof
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >> simp[] >>
   imp_res_tac listTheory.LIST_REL_LENGTH >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` (mp_tac o SIMP_RULE bool_ss [exprSimDefsTheory.halt_exit_simps]) >>
+  strip_tac >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>
   BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>
@@ -153,7 +156,8 @@ Theorem aggregate_make_array_elems_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`args`, `idx`] (Q.INST [`cfn` |-> `compile_expr`,
@@ -255,7 +259,8 @@ Theorem aggregate_make_array_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
   >- (gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def,
@@ -329,7 +334,12 @@ Proof
   strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
-      disj1_tac >> suspend "array_post_transport") >>
+      disj1_tac >> suspend "array_post_transport")
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      disj2_tac >>
+      qpat_x_assum `(\res es' exit. _) _ _ _` mp_tac >>
+      qunabbrev_tac `exitrel` >> simp[]) >>
   metis_tac[]
 QED
 

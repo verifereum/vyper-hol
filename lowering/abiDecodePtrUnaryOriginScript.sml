@@ -48,7 +48,7 @@ Theorem type_builtin_unary_vv_sim_ptr_origin:
         (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
           ptr_buf_ok cenv (TypeBuiltin ann tb typ [e]) p.ptr_operand G' t) /\
         ghost_kept cenv es sa G0 tn0 s0 G' tn')
-      (\res ef gt r. expr_exit res r)) \/
+      (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)) \/
     (?err. evaluate_type_builtin cx tb typ [expr_type e] [v] = INR err /\
       ?unwrap. tb = AbiDecode unwrap /\ err = RuntimeError "abi_decode invalid" /\
         ?target_ty. occurs_abi_decode_target target_ty (cx_tops cx) /\
@@ -96,6 +96,7 @@ Resume type_builtin_unary_vv_sim_ptr_origin[origin]:
   markerLib.RESUME_TAC >> qexists_tac `marks` >> disj2_tac >>
   irule_at Any gas_exempt_cert_origin >>
   rewrite_tac[gas_exempt_origin_def] >>
+  CONV_TAC (TOP_DEPTH_CONV EXISTS_OR_CONV) >> disj1_tac >>
   first_assum (irule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   simp[] >> qexistsl_tac [`v`, `target_ty`, `t`, `sm`, `x`, `es_end`, `cx`] >>
   gvs[gas_value_prefix_def] >>

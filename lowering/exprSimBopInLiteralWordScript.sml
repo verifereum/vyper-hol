@@ -886,7 +886,7 @@ Theorem literal_word_args_nil_sim:
          (~EXISTS expr_has_effect [] ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -915,7 +915,7 @@ Theorem literal_word_args_sim:
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -1133,7 +1133,7 @@ Theorem literal_typed_continuation_summary:
         (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
         es sa sb s0 fin w op s /\
       s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_typed_fragment_success >> strip_tac >>

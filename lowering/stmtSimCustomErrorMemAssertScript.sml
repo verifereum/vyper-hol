@@ -37,7 +37,7 @@ Theorem cond_jump_expr_post_frag_mem[local]:
         ~u.vs_halted /\
         expr_post ctx func cenv cx e es sa s1 s0 ee (BoolV b) op u /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
@@ -126,7 +126,8 @@ Resume compile_assert_custom_error_frag_general_mem[exception]:
   qexistsl_tac [`INR ex`, `es_end`, `rr`] >> conj_tac
   >- (rewrite_tac[eval_assert_custom_error_bind] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def, halt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_custom_error_frag_general_mem[cert]:

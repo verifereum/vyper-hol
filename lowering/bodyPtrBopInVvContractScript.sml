@@ -43,7 +43,7 @@ Theorem membership_vv_contract_ptr:
     membership_vv_post d ctx func cenv cx e es sa sb vv s0 G0 tn0 tv ee t H un /\
     P (INL tv) ee /\ ee.gas_obs = [] /\ ~t.vs_halted ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-      (next tv) (ee,t,H,un) Q (\res ee gt r. expr_exit res r)) /\
+      (next tv) (ee,t,H,un) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (eval_expr cx e) (return ()))
@@ -62,7 +62,7 @@ Theorem membership_vv_contract_ptr:
       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx e) next) (es,s0,G0,tn0)
-    Q (\res ee gt r. expr_exit res r)
+    Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[membership_vv_entry_def, membership_vv_post_def, GSYM CONJ_ASSOC] >>
   MATCH_ACCEPT_TAC membership_vv_operand_outcome_ptr

@@ -40,7 +40,8 @@ Theorem literal_tuple_members_outcome_ptr_physical:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs tvs (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >>
@@ -173,7 +174,8 @@ Theorem literal_array_members_outcome_ptr_physical:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs (REPLICATE (LENGTH args) tv) (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+      halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
   `LIST_REL (\t e. arg_type_fits (expr_type e) t)

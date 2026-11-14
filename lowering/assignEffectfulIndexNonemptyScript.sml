@@ -153,7 +153,7 @@ Proof
     metis_tac[ci_mono_def, fragExecTheory.fn_has_code_split, cs_extends_trans] >>
   irule assign_place_result_outcome >>
   qexistsl_tac [
-    `\res ee r. expr_exit res r`,
+    `\res ee r. expr_exit res r /\ halt_exit cx ee res r`,
     `\res ee t. ?tv. res = INL tv /\
        vv_post ctx func cenv cx e es sa sr s0 ee tv vv0 t /\
        t.vs_current_bb = sr.cs_current_bb /\
@@ -161,7 +161,7 @@ Proof
   conj_tac
   >- (BETA_TAC >> Cases >- simp[exprSimDefsTheory.expr_exit_INL] >>
       rpt gen_tac >> strip_tac >> qexists_tac `y` >>
-      simp[stmt_exit_def] >> rpt gen_tac >> disj1_tac >>
+      fs[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >> rpt gen_tac >> disj1_tac >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   conj_tac
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
@@ -265,7 +265,7 @@ Resume assign_place_mutating_nonempty_case_with_store[continuation]:
       qexists_tac `p` >> simp[] >> suspend "store") >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   Cases_on `res` >- gvs[exprSimDefsTheory.expr_exit_INL] >>
-  qexists_tac `y` >> simp[stmt_exit_def] >> rpt gen_tac >> disj1_tac >>
+  qexists_tac `y` >> fs[stmt_exit_def, exprSimDefsTheory.halt_exit_def] >> rpt gen_tac >> disj1_tac >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 

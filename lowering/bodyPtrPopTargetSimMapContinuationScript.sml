@@ -151,7 +151,7 @@ Theorem target_map_suffix_outcome_ptr:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee H tm t /\ target_ptr_ok cenv child rb H tm t /\
       ghost_kept cenv es sa G0 tn0 s0 H tm)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> irule target_extension_outcome_ptr >> conj_tac
   >- (rpt strip_tac >> drule target_map_extend_gas_tail_ptr >> simp[]) >>

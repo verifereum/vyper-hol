@@ -95,7 +95,8 @@ Theorem custom_error_allocate_store_ready:
               sa'.cs_next_id <= i.inst_id /\ FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
               regions_disjoint p n c sz) ==>
             mem_bytes_at p n r.vs_memory = mem_bytes_at p n t.vs_memory)))
-      (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
+      (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
   `type_memory_bytes ce (TupleT (MAP SND params)) < 2 ** 64 /\

@@ -68,7 +68,8 @@ Theorem aggregate_make_array_elems_body_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`args`, `idx`] (Q.INST [`cfn` |-> `compile_expr`,
@@ -324,7 +325,8 @@ Theorem aggregate_make_array_body_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
   >- (gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def,
@@ -365,7 +367,11 @@ Proof
   (impl_tac >-
     (simp[] >> rpt strip_tac >> first_x_assum drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
-  strip_tac >> conj_tac >- simp[] >>
+  strip_tac >>
+  (* Bring the exit relation to the simp normal form the goal's has. *)
+  qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _`
+    (assume_tac o CONV_RULE (RAND_CONV (SIMP_CONV (srw_ss()) []))) >>
+  conj_tac >- simp[] >>
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `sh` >> conj_tac >- fs[gas_marked_path_def] >>
   drule struct_gas_outcome_post >> disch_then irule >>

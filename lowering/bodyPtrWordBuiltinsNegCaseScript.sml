@@ -92,7 +92,7 @@ Theorem word_neg_normal_ptr_outcome:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `is_word_type ann` by
@@ -158,7 +158,7 @@ Theorem word_neg_overflow_ptr_outcome:
   ~(w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
-    Q (\res fin gt r. expr_exit res r)
+    Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> drule_all neg_typed_source >>
   disch_then (qspec_then `ee` mp_tac) >> simp[] >> strip_tac >>
@@ -200,7 +200,7 @@ Theorem word_neg_typed_ptr_outcome:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   Cases_on `w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v)`

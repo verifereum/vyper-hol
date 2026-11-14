@@ -56,7 +56,7 @@ Theorem target_walk_vv_frame:
          wb_frame cenv es ee sa s0 t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   `sm.cs_next_id <= sb.cs_next_id` by
@@ -90,7 +90,9 @@ QED
 
 Resume target_walk_vv_frame[exit]:
   simp[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-  simp[gas_summary_at_def] >> metis_tac[]
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es_end`, `r`] >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume target_walk_vv_frame[exempt]:

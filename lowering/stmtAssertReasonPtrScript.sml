@@ -17,11 +17,11 @@ Theorem assert_reason_false_outcome_prefix_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,fn) PG
     (eval_stmt cx (Raise (RaiseReason r)))
     (mid with gas_obs := [],jump_to fl t,G,tn) N
-    (\res ee gt rr. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt rr) /\
+    (\res ee gt rr. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt rr) /\ halt_exit cx ee res rr) /\
   (!res ee Gf tnf u. N res ee Gf tnf u ==> stmt_lands lctx last res u) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,fn) PG
     (eval_stmt cx (Assert e (AssertReason r))) (es,s0,G0,tn0) Q
-    (\res ee gt rr. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt rr)
+    (\res ee gt rr. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt rr) /\ halt_exit cx ee res rr)
 Proof
   strip_tac >>
   `gas_marked_exec_ptr D (ctx,fn) PG (bind (eval_expr cx e) (read_result cx))
@@ -109,7 +109,9 @@ Resume compile_assert_reason_frag_general_ptr[exception]:
   qexistsl [`INR y`,`es_end`,`G`,`tn`,`r'`] >>
   conj_tac >- (gen_tac >> simp[eval_assert_reason_bind, Once bind_def]) >>
   conj_tac >- simp[] >>
-  disj2_tac >> simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_ptr_def] >>
+  conj_tac >- metis_tac[expr_exit_INR_type] >>
+  qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[]
 QED
 
 Resume compile_assert_reason_frag_general_ptr[normal]:

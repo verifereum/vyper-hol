@@ -80,7 +80,7 @@ Theorem return_value_summary_mem[local]:
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!ee v t.
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
      expr_store_bound cx (expr_type e) v op t /\
@@ -93,7 +93,8 @@ Theorem return_value_summary_mem[local]:
               mem_safe_run fuel ctx func t) ==>
   !Q. ?marks'. gas_summary_at T (ctx,func) marks'
     (eval_stmt cx (Return (SOME e))) (es,s0) Q
-    (\res ee r. !tail. stmt_exit (\v es r. T) (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit (\v es r. T) (ee with gas_obs := tail) res r) /\
+                halt_exit cx ee res r)
 Proof
   strip_tac >> gen_tac >> pure_rewrite_tac[eval_return_value_bind] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
@@ -117,7 +118,7 @@ Proof
   `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >> gvs[] >>
   qexists_tac `marks` >> qexistsl_tac [`INR ex`, `es_end`, `r`] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Theorem return_value_counted_mem[local]:

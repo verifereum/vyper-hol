@@ -85,7 +85,7 @@ Theorem scalar_convert_suffix_outcome_ptr:
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (convert_result cx src dst v,st)) (es,s,G,tn) Q
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `(?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -198,7 +198,7 @@ Theorem scalar_convert_modern_outcome_ptr:
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out H u) /\
       ghost_kept cenv es ca G0 tn0 s0 H th)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `is_word_type dst` by (irule (cj 2 bodyPtrTypeBuiltinsScalarSemanticTheory.scalar_source_word_types) >>

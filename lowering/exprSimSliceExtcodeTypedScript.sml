@@ -222,7 +222,7 @@ Resume slice_extcode_typed_entry[finish]:
         (mid' with gas_obs := []) st2 r t' ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
-    `\res ee rr. expr_exit res rr`] >>
+    `\res ee rr. expr_exit res rr /\ halt_exit cx ee res rr`] >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
       irule (slice_two_operand_post_rebase |> SPEC_ALL |> Q.INST

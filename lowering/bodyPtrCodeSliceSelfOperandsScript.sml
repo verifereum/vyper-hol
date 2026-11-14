@@ -106,7 +106,7 @@ Theorem code_slice_uint_head_outcome_ptr:
       expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       eval_operand op t = SOME (n2w i) /\ op_taint tn op = {} /\ op_prov G op = NONE /\
       ee.gas_obs = [])
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule_all ptr_args_ready_head >> rewrite_tac[expr_sim_ptr_def] >>
@@ -193,7 +193,7 @@ Theorem code_slice_two_uint_outcome_ptr:
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (bind (bind (eval_expr cx len) (read_result cx)) (\w. ignore_bind (next v w) (return ())))
       (es1,t) (left ++ right) (err,ee) (leaf,fstate)) /\
-  (!res ee gt r. expr_exit (res : value + exception) r ==>
+  (!res ee gt r. expr_exit (res : value + exception) r /\ halt_exit cx ee res r ==>
      ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
   (!i k ee G tn t.
     i < dimword (:256) /\ k < dimword (:256) /\

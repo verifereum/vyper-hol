@@ -37,7 +37,7 @@ Theorem target_local_array_summary_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all target_subscript_memory_compile >> strip_tac >> gvs[] >>
   Cases_on `extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es` >>
@@ -77,7 +77,7 @@ Theorem target_local_typed_summary_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `?w. place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w (FST (SND rb)) bvt` by
@@ -124,7 +124,7 @@ Theorem target_local_index_summary_mem[local]:
       v.vs_current_bb = sb.cs_current_bb /\
       v.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `bind (eval_expr cx e) (read_result cx)
@@ -183,7 +183,7 @@ Theorem target_subscript_local_live_continuation_mem:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
@@ -258,7 +258,7 @@ Theorem target_subscript_local_nopop_continuation_mem:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `!gs key ee. bind (eval_expr cx e) (read_result cx)

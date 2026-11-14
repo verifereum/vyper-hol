@@ -41,7 +41,7 @@ Theorem ifexp_selected_word_outcome_ptr:
        ghost_kept cenv es sa G0 tn0 s0 G tn /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by

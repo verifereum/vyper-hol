@@ -438,7 +438,7 @@ Definition expr_sim_ptr_at_def:
           ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
           (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 Definition expr_sim_ptr_cx_dead:
@@ -473,7 +473,7 @@ Theorem expr_sim_ptr_def:
           ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
           (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   simp[expr_sim_ptr_cx_dead, expr_sim_ptr_at_def, dead_lo_ok_def, ghost_inv_cx_dead,
        ghost_kept_zero, gas_outcome_ptr_zero] >>
@@ -509,7 +509,7 @@ Definition expr_vv_sim_ptr_at_def:
           (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
                   ptr_buf_ok cenv e p.ptr_operand G t) /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 Definition expr_vv_sim_ptr_cx_dead:
@@ -547,7 +547,7 @@ Theorem expr_vv_sim_ptr_def:
           (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
                   ptr_buf_ok cenv e p.ptr_operand G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   simp[expr_vv_sim_ptr_cx_dead, expr_vv_sim_ptr_at_def, dead_lo_ok_def, ghost_inv_cx_dead,
        ghost_kept_zero, gas_outcome_ptr_zero] >>
@@ -592,7 +592,8 @@ Definition stmt_frag_ptr_at_def:
                FLOOKUP G x = FLOOKUP G0 x /\
                op_taint tn (Var x) = op_taint tn0 (Var x)))
         (\res ee gt r.
-          !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+          (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+          halt_exit cx ee res r)
 End
 
 Definition stmt_frag_ptr_cx_dead:
@@ -631,7 +632,8 @@ Theorem stmt_frag_ptr_def:
                FLOOKUP G x = FLOOKUP G0 x /\
                op_taint tn (Var x) = op_taint tn0 (Var x)))
         (\res ee gt r.
-          !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+          (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+          halt_exit cx ee res r)
 Proof
   simp[stmt_frag_ptr_cx_dead, stmt_frag_ptr_at_def, dead_lo_ok_def, ghost_inv_cx_dead,
        ghost_kept_zero, gas_outcome_ptr_zero] >>

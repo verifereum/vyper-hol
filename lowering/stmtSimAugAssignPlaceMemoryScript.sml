@@ -612,7 +612,7 @@ Theorem aug_place_binop_store_outcome:
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       ptv bop cur rhs)) (write_place cx (MemoryPlace id path))) (ee,s)
     (stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)
 Proof
   strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ k _ _ _` >>
@@ -691,6 +691,14 @@ Resume aug_place_binop_store_outcome[exit]:
     (Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs ee` >>
      gvs[expr_exit_def]) >>
   gvs[] >>
+  `ex <> HaltException` by
+    (strip_tac >> gvs[] >>
+     `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
+      case evaluate_binop
+        (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+        ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
+       (irule bop_result_augassign >> metis_tac[]) >>
+     gvs[AllCaseEqs()]) >>
   `!tail. k (ee with gas_obs := tail) = (INR ex,ee with gas_obs := tail)` by
     (unabbrev_all_tac >> drule aug_place_pure_suffix_gas_obs >> simp[]) >>
   simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
@@ -857,21 +865,6 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem aug_place_outcome_bind_value_exec[local]:
-  gas_outcome memory tops (ctx,func)
-    (a : evaluation_state -> value evaluation_result) (es,s0) P
-    (\res ee r. ?ex. res = INR ex /\ E (INR ex) ee r) /\
-  (!marks v raw t.
-    gas_marked_exec memory (ctx,func) a (es,s0) marks (INL v) raw (OK t) /\
-    P (INL v) (raw with gas_obs := []) t ==>
-    gas_outcome memory tops (ctx,func) (k v) (raw with gas_obs := [],t) Q E) /\
-  (!res mid t. P res mid t ==> ?v. res = INL v) ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q E
-Proof
-  strip_tac >> irule aug_place_outcome_bind_value >>
-  irule aug_place_outcome_exec_conseq >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
 
 Theorem aug_place_marked_bind_tail:
   gas_admissible (bind a k) A es /\
@@ -1079,29 +1072,6 @@ Proof
   goal_assum (drule_at Any) >> fs[ignore_bind_def]
 QED
 
-Theorem aug_place_memory_outer_outcome[local]:
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) marks (INL (PlaceR (MemoryPlace id path))) raw (OK t) /\
-  gas_marked_path F ctx func t 0 (OK u) /\
-  read_place cx (MemoryPlace id path) (raw with gas_obs := []) =
-    (INL cur,raw with gas_obs := []) /\
-  place_type_value cx (MemoryPlace id path) (raw with gas_obs := []) =
-    (INL ptv,raw with gas_obs := []) /\
-  gas_outcome F tops (ctx,func) (k cur ptv)
-    (raw with gas_obs := [],u) Q R ==>
-  gas_outcome F tops (ctx,func)
-    (bind (eval_target_place cx bt) (\p.
-      bind (read_place cx p) (\v. bind (place_type_value cx p) (k v))))
-    (es,s0) Q R
-Proof
-  strip_tac >> rewrite_tac[aug_place_target_bind_base] >>
-  irule aug_place_completed_result_prefix >>
-  goal_assum (drule_at Any) >>
-  simp[get_place_def, bind_return] >>
-  irule gas_outcome_zero_prefix >> goal_assum (drule_at Any) >>
-  irule aug_place_memory_reads_outcome >>
-  goal_assum (drule_at Any) >> simp[]
-QED
 
 Theorem aug_place_memory_outer_place_outcome[local]:
   gas_marked_exec F (ctx,func) (eval_base_place cx bt)
@@ -1206,7 +1176,7 @@ Resume compile_augassign_place_memory_case[base_exit]:
   (conj_tac
    >- (simp[Once evaluate_def, aug_place_target_bind_base] >>
        irule gas_marked_exec_bind_exception >> simp[])) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_augassign_place_memory_case[base_normal]:
@@ -1466,7 +1436,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
       ptv bop v v'')) (write_place cx (MemoryPlace id path)))
     (raw' with gas_obs := [],t')
     (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
      conj_tac >- (metis_tac[]) >>
@@ -1492,7 +1462,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
   ho_match_mp_tac (GEN_ALL aug_place_memory_outer_place_outcome) >>
@@ -1514,7 +1484,7 @@ Resume compile_augassign_place_memory_case[rhs_exit]:
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
   ho_match_mp_tac (GEN_ALL aug_place_memory_outer_place_outcome) >>
@@ -1529,7 +1499,7 @@ Resume compile_augassign_place_memory_case[rhs_exit]:
   qexistsl_tac [`INR ex`, `es_end`, `r'`] >>
   (conj_tac >- (rewrite_tac[GSYM bind_assoc] >>
     irule gas_marked_exec_bind_exception >> simp[])) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_augassign_place_memory_case[rhs_exempt]:
@@ -1537,7 +1507,7 @@ Resume compile_augassign_place_memory_case[rhs_exempt]:
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
   ho_match_mp_tac (GEN_ALL aug_place_memory_outer_place_outcome) >>

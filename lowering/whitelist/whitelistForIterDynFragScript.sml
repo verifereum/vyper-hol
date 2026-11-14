@@ -855,7 +855,8 @@ Theorem dynarray_code_loop_counted[local]:
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   `bc.ce_return_pc = cenv.ce_return_pc` by

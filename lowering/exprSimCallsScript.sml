@@ -3,9 +3,9 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the call targets
  * but internal calls.  Proved: send (compile_send_sim, by exprSimSend's
- * compile_send_case_sim, row 2 of #636's Calls table), and, vacuously,
- * the creates and selfdestruct (compile_create_sim,
- * compile_selfdestruct_sim: expr_sim_pre excludes them, below).
+ * compile_send_case_sim, row 2 of #636's Calls table), selfdestruct
+ * (compile_selfdestruct_sim, by exprSimSelfDestruct), and, vacuously, the
+ * creates (compile_create_sim: expr_sim_pre excludes them, below).
  * Each other lemma is its piece in a leaf theory exprSimCall*, by row of
  * that table:
  *   1 extcall/staticcall in SOME oracle mode, including reverts and
@@ -16,14 +16,6 @@
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
- *   - compile_selfdestruct_sim: Venom's SELFDESTRUCT predates EIP-6780.
- *     It never adds a pending deletion, zeroes the balance even when the
- *     beneficiary is the executing account, and keeps the return data,
- *     where the source follows EIP-6780 (#1142).  It also adds the
- *     balance unchecked, where the source's transfer_value fails when the
- *     beneficiary's balance plus the transferred one reaches 2 ** 256, and
- *     expr_sim_pre doesn't bound that sum; the simulation needs that bound
- *     as a premise local to the lowering proof.
  *   - compile_raw_call_calldata_sim, and the create lowerings: they allocate with DALLOCA, at vs_fmp, which
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
@@ -32,8 +24,7 @@
  * A call, staticcall or delegate raw_call takes its outcome from the
  * oracle, as the lowered CALL/STATICCALL/DELEGATECALL does.  expr_sim_pre
  * still excludes delegate raw_calls and the creates (~expr_has_evm_run e),
- * and selfdestruct, whose source halts (HaltException), which expr_exit
- * does not cover; so those cases hold vacuously.
+ * so those cases hold vacuously.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.
@@ -43,7 +34,7 @@ Theory exprSimCalls
 Ancestors
   list  exprSimHyps exprSimSend vyperAST
   exprSimCallExtcall exprSimCallRawCall exprSimCallRawCallCalldata
-  exprSimCallRawLog exprSimCallRawRevert
+  exprSimCallRawLog exprSimCallRawRevert exprSimSelfDestruct
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
@@ -98,10 +89,7 @@ Theorem compile_selfdestruct_sim:
     expr_sim_below cenv (expr_size (Call ann (SelfDestructTarget) args dflt)) ==>
     expr_vv_ok cenv (Call ann (SelfDestructTarget) args dflt)
 Proof
-  rw[exprSimHypsDefsTheory.expr_vv_ok_def,
-     exprSimHypsDefsTheory.expr_sim_pre_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm,
-     supportedExprTraverseTheory.expr_evm_run_root_def]
+  ACCEPT_TAC selfdestruct_expr_vv_ok
 QED
 
 Theorem compile_create_sim:

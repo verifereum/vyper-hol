@@ -112,7 +112,7 @@ Theorem dynamic_continuation_summary_mem:
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `post_value_type cenv e1 = expr_type e1` by
@@ -158,7 +158,8 @@ QED
 Resume dynamic_continuation_summary_mem[abort]:
   simp[gas_summary_at_def] >>
   qexistsl_tac [`convert_result cx (expr_type e1) ann v1`,`ee`,`out`] >>
-  simp[gas_marked_exec_def]
+  simp[gas_marked_exec_def] >> disj2_tac >>
+  simp[exprSimDefsTheory.halt_exit_def, exprSimConvertTheory.convert_result_not_halt]
 QED
 
 Finalise dynamic_continuation_summary_mem

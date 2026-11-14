@@ -153,7 +153,7 @@ Theorem empty_place_store_outcome_mem[local]:
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       alloca_history func t /\ s.vs_alloca_next = t.vs_alloca_next)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)
 Proof
   strip_tac >>
   `?w. eval_operand dst s = SOME w /\
@@ -271,7 +271,7 @@ Proof
   >- (rpt strip_tac >> Cases_on `res`
       >- fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) rr` >> qexists_tac `ex` >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])) >>
+      fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type])) >>
   qexistsl_tac [`ce`,`env`,`r`,`sa`,`st`,`ty`] >> simp[] >>
   suspend "target"
 QED
@@ -312,7 +312,7 @@ Resume compile_assign_place_empty_stmt_frag_mem[target]:
       ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ t.vs_alloca_next = u.vs_alloca_next)
-    (\res ff rr. !tail. stmt_exit RetQ (ff with gas_obs := tail) res rr)` by
+    (\res ff rr. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res rr) /\ halt_exit cx ff res rr)` by
     (drule_all empty_place_store_outcome_mem >> simp[]) >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
   simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>

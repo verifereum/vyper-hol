@@ -152,7 +152,7 @@ Theorem body_base_operand_outcome_ptr:
       gas_admissible (eval_exprs cx args)
         (\res. case res of INL vs => T | INR exc => expr_res_ok (INR exc)) ee /\
       ~t.vs_halted)
-    (\rr ee gt r. expr_exit rr r)
+    (\rr ee gt r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `expr_sim_ptr dep ctx PG func cenv cx ty e es` by
@@ -206,7 +206,9 @@ Theorem raw_call_addr_data_sim_ptr:
       ptr_val_ok cx (expr_type d) (BytesV bs) data G tn t /\
       ptr_buf_ok cenv d data G t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\rr ee gt r. ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r)
+    (\rr ee gt r. ?exc. rr = INR exc /\
+       expr_exit (INR exc : value + exception) r /\
+       halt_exit cx ee (INR exc : value + exception) r)
 Proof
   strip_tac >> drule raw_call_pre_operands >> strip_tac >> gvs[] >>
   `ci_mono sa s1 /\ ci_mono s1 s2` by
@@ -383,7 +385,9 @@ Theorem raw_call_addr_data_header_sim_ptr:
       mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
       (!v. addr = Var v \/ data = Var v \/ len_op = Var v \/ data_op = Var v ==>
         not_fresh_at sm v))
-    (\rr ee gt r. ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r)
+    (\rr ee gt r. ?exc. rr = INR exc /\
+       expr_exit (INR exc : value + exception) r /\
+       halt_exit cx ee (INR exc : value + exception) r)
 Proof
   strip_tac >>
   `eval_exprs cx [a;d] =

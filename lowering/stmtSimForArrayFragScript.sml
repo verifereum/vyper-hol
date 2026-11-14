@@ -701,7 +701,8 @@ Theorem array_code_loop_counted[local]:
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >> drule array_code_return_pc >> strip_tac >>
   drule_all array_return_pc_transport >> strip_tac >>
@@ -810,10 +811,11 @@ Theorem array_outcome_stmt_post:
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) ==>
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r) ==>
   gas_outcome F tops (ctx,func) source (es,s0)
     (stmt_post ctx func cx lctx cenv cenv st st' es s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> qhdtm_x_assum `gas_outcome` mp_tac >>
   rewrite_tac[gas_outcome_def] >>
@@ -913,7 +915,8 @@ Proof
   drule_all (SRULE [] (INST [``n:num`` |-> ``LENGTH (vs0:value list)``,
                               ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
                           array_for_source_prefix)) >> strip_tac >>
-  irule array_outcome_stmt_post >> simp[] >>
+  irule array_outcome_stmt_post >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >>
   qpat_x_assum `gas_outcome _ _ _ (eval_stmt _ _) _ _ _` mp_tac >>
   simp[alloca_frame_def]
 QED

@@ -61,7 +61,7 @@ Resume compile_assert_custom_error_frag_general_ptr[exception]:
   qexistsl_tac [`INR y`,`es_end`,`G`,`tn`,`r`] >> conj_tac
   >- (rewrite_tac[eval_assert_custom_error_bind] >>
       irule gas_marked_exec_ptr_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> simp[stmt_exit_ptr_def] >>
+  disj2_tac >> fs[stmt_exit_ptr_def, halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 

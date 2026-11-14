@@ -46,7 +46,7 @@ Theorem external_code_continue_outcome_ptr:
       ptr_vv_ok cx (expr_type result) tv
         (LocatedValue (expr_type result) (mk_ptr r LocMemory)) ee G tn t /\
       ptr_buf_ok cenv result r G t)
-    (\res ee gt rr. expr_exit res rr)
+    (\res ee gt rr. expr_exit res rr /\ halt_exit cx ee res rr)
 Proof
   strip_tac >> drule_all slice_extcode_suffix_context >> strip_tac >>
   irule external_code_address_continue_ptr >>

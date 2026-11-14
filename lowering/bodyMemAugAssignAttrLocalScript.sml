@@ -138,20 +138,6 @@ Proof
   simp[GSYM bind_assoc, bind_def]
 QED
 
-Theorem augassign_attr_rhs_normal_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  entry.type = StructTV fs /\ entry.value = StructV vals /\
-  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
-  bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
-  eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) es =
-  bind (lift_sum (evaluate_binop
-    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-    ftv bop fv v)) (write_place cx (MemoryPlace id [AttrSubscript fld])) ee
-Proof
-  strip_tac >> drule_all eval_augassign_attr_fields_mem_src >>
-  disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] mp_tac) >>
-  simp[GSYM bind_assoc, bind_def]
-QED
 
 Theorem gas_marked_exec_zero_prefix_mem_src[local]:
   gas_marked_path memory ctx func s0 0 (OK t) /\
@@ -1187,7 +1173,7 @@ Resume compile_augassign_attr_local_mem[operator_exit]:
       qexistsl_tac [`ee`, `entry`] >> simp[] >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
       irule augassign_attr_error_continuation_exec_mem_src >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 

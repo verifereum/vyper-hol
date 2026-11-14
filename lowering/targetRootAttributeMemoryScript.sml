@@ -33,7 +33,7 @@ Theorem target_name_memory:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rw[target_pre_def] >>
   qpat_x_assum `type_place_target _ _ = _` mp_tac >>
@@ -84,7 +84,7 @@ Theorem target_toplevel_memory:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rw[target_pre_def] >>
   PairCases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >>

@@ -71,7 +71,7 @@ Theorem for_array_callback_contract_ptr:
       op_taint tn (Var idx) = {}) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b))
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> ho_match_mp_tac gas_outcome_ptr_allocation_frame >>
   `fn_has_code sb0 sb1 func /\ local_ptrs_reserved bc sb0 /\

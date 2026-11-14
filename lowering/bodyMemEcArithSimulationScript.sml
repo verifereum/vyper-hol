@@ -77,7 +77,7 @@ Theorem ec_pointer_tail_mem_outcome[local]:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\r ee rr. expr_exit r rr)
+    (\r ee rr. expr_exit r rr /\ halt_exit cx ee r rr)
 Proof
   strip_tac >>
   `?rv. tv = Value rv` by
@@ -131,6 +131,10 @@ Proof
   Cases_on `ec_source_tail cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul
     [ArrayT (BaseT (UintT 256)) (Fixed 2);BaseT (UintT 256)] [v1;v2] es2` >>
   rename1 `ec_source_tail _ _ _ _ _ _ = (rr,ee)` >>
+  `rr <> INR HaltException` by
+    (strip_tac >> pop_assum SUBST_ALL_TAC >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ _ = _` mp_tac >>
+     simp[exprSimECArithTheory.ec_source_tail_not_halt]) >>
   drule_at (Pat `compile_ecmul_point _ _ _ = _`)
     (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`]
       ecmul_points_path_mem) >>
@@ -138,7 +142,7 @@ Proof
   disch_then drule_all >>
   disch_then (qspecl_then [`b`,`a`] strip_assume_tac)
   >- suspend "success"
-  >> (irule ec_tail_mem_outcome >> simp[] >> metis_tac[])
+  >> (irule ec_tail_mem_outcome >> simp[halt_exit_def] >> metis_tac[])
 QED
 
 Resume ecmul_vv_sim_mem[success]:
@@ -210,6 +214,10 @@ Resume ecadd_vv_sim_mem[typed]:
     [ArrayT (BaseT (UintT 256)) (Fixed 2);ArrayT (BaseT (UintT 256)) (Fixed 2)]
     [v1;v2] es2` >>
   rename1 `ec_source_tail _ _ _ _ _ _ = (rr,ee)` >>
+  `rr <> INR HaltException` by
+    (strip_tac >> pop_assum SUBST_ALL_TAC >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ _ = _` mp_tac >>
+     simp[exprSimECArithTheory.ec_source_tail_not_halt]) >>
   drule_at (Pat `compile_ecadd_points _ _ _ = _`)
     (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd [a;b]`]
       ecadd_points_path_mem) >>
@@ -217,7 +225,7 @@ Resume ecadd_vv_sim_mem[typed]:
   disch_then drule_all >>
   disch_then (qspecl_then [`b`,`a`] strip_assume_tac)
   >- suspend "success"
-  >> (irule ec_tail_mem_outcome >> simp[] >> metis_tac[])
+  >> (irule ec_tail_mem_outcome >> simp[halt_exit_def] >> metis_tac[])
 QED
 
 Resume ecadd_vv_sim_mem[success]:

@@ -146,7 +146,7 @@ Theorem calldata_slice_operand_source_outcome:
       ghost_inv d cenv cx ef H tm u /\ ghost_kept cenv ee sm G tn t H tm /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_slice_operand_endpoint >> strip_tac >> gvs[] >>
@@ -216,7 +216,7 @@ Theorem calldata_slice_eval_continuation:
       (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
         ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) p.ptr_operand H u) /\
       ghost_kept cenv es sa G0 tn0 s0 H tm)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `compile_slice_calldata op (Lit (n2w n))

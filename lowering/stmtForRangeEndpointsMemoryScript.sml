@@ -8,11 +8,11 @@ Theorem for_endpoint_bind_outcome_mem:
    (k : value -> evaluation_state -> unit evaluation_result) es s0 A Q R.
     gas_outcome T tops (ctx,func) a (es,s0)
       (\res ee t. ?v. res = INL v /\ A v ee t)
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!v ee t. A v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
        (!tail. ?gs. a (es with gas_obs := gs) = (INL v,ee with gas_obs := tail)) ==>
        gas_outcome T tops (ctx,func) (k v) (ee,t) Q R) /\
-    (!ex ee r. expr_exit (INR ex : value + exception) r ==>
+    (!ex ee r. expr_exit (INR ex : value + exception) r /\ halt_exit cx ee (INR ex : value + exception) r ==>
        R (INR ex) ee r) ==>
     gas_outcome T tops (ctx,func) (bind a k) (es,s0) Q R
 Proof
@@ -73,18 +73,19 @@ Theorem for_expr_endpoint_outcome_mem:
      (!tail. ?gs. bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gs) = (INL v,ee with gas_obs := tail)) ==>
      gas_outcome T (cx_tops cx) (ctx,func) (k v) (ee,t) Q R) /\
-  (!ex ee r. expr_exit (INR ex : value + exception) r ==> R (INR ex) ee r) ==>
+  (!ex ee r. expr_exit (INR ex : value + exception) r /\ halt_exit cx ee (INR ex : value + exception) r ==> R (INR ex) ee r) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx))
       (k : value -> evaluation_state -> unit evaluation_result)) (es,s0) Q R
 Proof
   strip_tac >> irule for_endpoint_bind_outcome_mem >>
-  conj_tac >- simp[] >> qexists_tac `\v ee t.
+  qexistsl_tac [`\v ee t.
     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`, `cx`] >>
+  conj_tac >- simp[] >>
   simp[] >>
   qhdtm_x_assum `expr_sim_mem` mp_tac >>
   simp[expr_sim_mem_def] >> disch_then irule >> simp[]

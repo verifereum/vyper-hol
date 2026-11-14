@@ -196,7 +196,7 @@ Theorem expr_sim_ptr_local_length_continuation:
             lookup_var q sf = lookup_var q t /\
             FLOOKUP Gf q = FLOOKUP G q /\
             op_taint tnf (Var q) = op_taint tn (Var q))))
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all expr_sim_ptr_local_refresh >> strip_tac >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>

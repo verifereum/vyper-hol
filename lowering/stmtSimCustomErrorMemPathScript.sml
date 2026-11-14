@@ -67,7 +67,7 @@ Proof
   qexists_tac `t` >> conj_tac
   >- fs[gas_marked_path_def] >>
   drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
-    (Q.INST [`RetQ` |-> `RetQ`] custom_error_args_revert_outcome) >>
+    (Q.INST [`RetQ` |-> `RetQ`] (SRULE [] custom_error_args_revert_outcome)) >>
   disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
   disch_then (drule_at (Pat `get_module_code _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_custom_error_args_in _ _ = _`)) >>

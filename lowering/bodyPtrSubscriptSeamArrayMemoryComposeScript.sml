@@ -60,7 +60,7 @@ Theorem fixed_array_element_summary_ptr:
       ptr_vv_ok cx et child (LocatedValue et (mk_ptr (Var out) LocMemory)) ee' H tm q /\
       ptr_buf_ok cenv (Subscript et obj idx) (Var out) H q /\
       ghost_kept cenv es sa G0 tn0 s0 H tm)
-    (\res ee' gt outcome. expr_exit res outcome)
+    (\res ee' gt outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?child. select_result cx (ArrayT et (Fixed n)) r (ValueSubscript (IntV i)) ee =
@@ -93,7 +93,7 @@ Theorem fixed_array_rejected_summary_ptr:
   (!q. idx = Var q ==> not_fresh_at sc q) /\ (!l. idx <> Label l) ==>
   gas_summary_ptr_at D (ctx,func) PG []
     (select_result cx (ArrayT et (Fixed n)) r (ValueSubscript (IntV i))) (ee,s,G,tn)
-    Q (\res ee' gt outcome. expr_exit res outcome)
+    Q (\res ee' gt outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `select_result cx (ArrayT et (Fixed n)) r (ValueSubscript (IntV i)) ee =

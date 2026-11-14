@@ -834,7 +834,7 @@ Theorem self_code_continue_outcome_ptr:
       ptr_vv_ok cx (expr_type e) tv
         (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) ee H tm z /\
       ptr_buf_ok cenv e (Var out) H z)
-    (\res ee ht r. expr_exit res r)
+    (\res ee ht r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `s.vs_code = cx.txn.code` by
