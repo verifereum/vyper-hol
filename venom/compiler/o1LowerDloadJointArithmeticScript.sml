@@ -129,7 +129,8 @@ Proof
   strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   fs[MEM] >>
-  (gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  ((gvs[step_inst_non_invoke] >>
+   gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]) >>
    strip_tac >> gvs[] >>
    rename1 `eval_operand op1 s = SOME x1` >>
    rename1 `eval_operand op2 s = SOME x2` >>

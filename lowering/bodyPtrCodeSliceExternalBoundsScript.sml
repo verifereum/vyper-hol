@@ -40,9 +40,8 @@ Proof
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
-     simp[exec_read1_def, update_var_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
+     simp[update_var_def]) >>
   `step_inst_base (mk_inst id EXTCODESIZE [addr] [dst]) s =
     OK (update_var dst (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s)` by
     (irule slice_extcodesize_step >> simp[]) >>

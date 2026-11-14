@@ -201,8 +201,8 @@ Proof
   qmatch_goalsub_abbrev_tac `OK (last with vs_inst_idx := _)` >>
   `run_inst_seq [inst] s0 = OK last` by
     (Cases_on `tr` >>
-     simp[Abbr `inst`, Abbr `last`, run_inst_seq_def, step_inst_base_def,
-          mk_inst_def, exec_read1_def, eval_operand_def]) >>
+     (simp[Abbr `inst`, Abbr `last`, mk_inst_def, run_inst_seq_def] >>
+     simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def])) >>
   qspecl_then [`[inst]`, `s0`, `last`] mp_tac tuple_run_inst_seq_gas_path >>
   Cases_on `tr` >>
   simp[gas_marked_path_def, Abbr `inst`, mk_inst_def, is_terminator_def] >>

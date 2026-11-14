@@ -691,7 +691,10 @@ Proof
      qpat_x_assum `codegen_ready_inst inst` mp_tac >>
      simp[codegen_ready_inst_def, is_pre_codegen_opcode_def,
           is_unlowered_fmp_opcode_def] >>
-     rpt strip_tac >> fs[is_raw_fmp_opcode_def]) >>
+     rpt strip_tac >>
+     qpat_x_assum `~is_raw_fmp_opcode _`
+       (mp_tac o PURE_REWRITE_RULE [is_raw_fmp_opcode_def]) >>
+     asm_rewrite_tac[] >> simp_tac bool_ss [is_raw_fmp_opcode_def]) >>
   `MEM inst (fn_insts (reachable_fn fn))` by
     (qspecl_then [`fn`, `bb`, `inst`] mp_tac reachable_fn_mem_inst >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>

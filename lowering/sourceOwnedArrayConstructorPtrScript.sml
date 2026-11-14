@@ -319,7 +319,7 @@ Resume source_array_init_owned_sequence[physical_run]:
   `d < dimword (:256) /\ (d+32 <= p \/ p+32 <= d)` by decide_tac >>
   mp_tac (Q.INST [`p` |-> `p`, `limit` |-> `limit`, `s` |-> `s`, `setup` |-> `(ip,cnt)`]
     calldata_array_loop_init_repeat_physical_sequence) >>
-  (impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[])) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
   strip_tac >>
   `((FLOOKUP s.vs_allocas index_st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
     (FLOOKUP s.vs_allocas index_st.cs_next_id = SOME (p,32) /\
@@ -533,7 +533,7 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
      metis_tac[vyperTypeABITheory.OPT_MMAP_LENGTH]) >>
   `abi_decode_load CALLDATALOAD (n2w cdsbase:bytes32) s = n2w (LENGTH xs)` by
     (qsuff_tac `abi_decode_load CALLDATALOAD (n2w cdsbase:bytes32) s = n2w (LENGTH avs)`
-     >- metis_tac[] >>
+     >- qpat_assum `LENGTH avs = LENGTH xs` (fn th => rewrite_tac[th]) >>
      irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
      simp_tac bool_ss [abi_decode_source_def] >>
      goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
@@ -569,7 +569,7 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
   drule_all source_array_init_owned_sequence >> strip_tac >>
   (* Attach ghosts to this exact successful physical trace. *)
   `not_fresh_at st root /\ (!x. src = Var x ==> not_fresh_at st x)` by
-    (conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
+    (conj_tac >- (irule (iffLR calldata_operand_live_not_fresh) >> first_assum ACCEPT_TAC) >>
      rpt strip_tac >> irule (iffLR calldata_operand_live_not_fresh) >> metis_tac[]) >>
   `d < dimword (:256)` by decide_tac >>
   drule actual_index_init_literal_site >> strip_tac >>
@@ -1304,10 +1304,10 @@ Resume source_owned_nonbulk_array_ptr[constructor_safety]:
        simp[get_instruction_def, EL_APPEND_EQN] >>
      `!fuel. ptr_safe_step D lower fuel ctx fn PG H u
         (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []) init` by
-       simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-         mk_inst_def, step_inst_non_invoke, step_inst_base_def, jump_to_def,
+       (simp[mk_inst_def, ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def] >>
+       simp[step_inst_non_invoke, step_inst_base_opcode_eqs, jump_to_def,
          codegenRelTheory.source_memory_write_ranges_def,
-         contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
+         contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def]) >>
      Cases_on `fuel`
      >- (simp[Once ptr_safe_run_def, Once ptr_safe_block_def,
               get_instruction_def, EL_APPEND_EQN] >>

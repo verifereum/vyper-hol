@@ -252,8 +252,8 @@ Theorem supported_decl_storage_exists[local]:
 Proof
   Induct >> simp[supported_variable_decl_def, supported_hashmap_decl_def] >>
   gen_tac >> Cases_on `h` >> rpt gen_tac >> Cases_on `src` >>
-  gvs[supported_variable_decl_def, supported_hashmap_decl_def,
-      find_var_decl_by_name_def] >>
+  gvs[supported_variable_decl_def, supported_hashmap_decl_def] >>
+  gvs[find_var_decl_by_name_def] >>
   rpt strip_tac >>
   first_x_assum (qspecl_then [`NONE`, `id`] mp_tac) >>
   simp[] >> Cases_on `s = id` >> gvs[] >>
