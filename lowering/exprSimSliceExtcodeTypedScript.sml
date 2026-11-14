@@ -25,7 +25,7 @@ val slice_frame_tac =
             slice_read_frame] >>
        rpt gen_tac);
 
-Theorem slice_two_reads_replay_success[local]:
+Theorem slice_two_reads_replay_success:
   (!tail. bind (eval_expr cx start) (read_result cx)
     (es with gas_obs := xs ++ tail) = (INL sv,mid with gas_obs := tail)) /\
   (!tail. bind (eval_expr cx len) (read_result cx)
