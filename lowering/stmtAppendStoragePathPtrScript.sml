@@ -10,11 +10,12 @@ Ancestors
 
 Theorem append_storage_word_suffix_no_gas:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sf)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   simp[emitted_insts_def] >>
@@ -25,7 +26,7 @@ QED
 
 Theorem append_storage_word_suffix_code:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sb sf func /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -82,7 +83,7 @@ QED
 
 Theorem append_storage_word_abort_path_ptr:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -98,7 +99,7 @@ Theorem append_storage_word_abort_path_ptr:
        op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all append_storage_word_suffix_code >> strip_tac >>
-  qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
     (mp_tac o REWRITE_RULE [compile_dynarray_append_word_parts]) >> strip_tac >>
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x ==> not_fresh_at sb x) /\
@@ -128,7 +129,7 @@ QED
 
 Theorem append_storage_word_success_path_ptr:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -155,7 +156,7 @@ Theorem append_storage_word_success_path_ptr:
     (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all append_storage_word_suffix_code >> strip_tac >>
-  qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
     (mp_tac o REWRITE_RULE [compile_dynarray_append_word_parts]) >> strip_tac >>
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x ==> not_fresh_at sb x) /\

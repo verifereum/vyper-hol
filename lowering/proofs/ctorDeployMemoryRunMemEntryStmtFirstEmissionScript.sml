@@ -282,31 +282,35 @@ Proof
 QED
 
 Theorem ctor_dynarray_append_first_emission:
-  !ce base v ws sz dt st cap prim loc sop a x b.
-    compile_dynarray_append ce base v ws sz dt st cap prim (load_opc_for loc) sop a = (x,b) ==>
+  !ce base v ws sz dt st cap prim loc a x b.
+    compile_dynarray_append ce base v ws sz dt st cap prim loc a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 11 gen_tac >> simp_tac bool_ss [compile_dynarray_append_def, LET_THM] >>
+  ntac 10 gen_tac >> simp_tac bool_ss [compile_dynarray_append_def, LET_THM] >>
   ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (Cases_on `loc` >> simp_tac bool_ss [load_opc_for_def] >>
-      rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[]) >>
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at Any entryReachBodyFirstEmissionSupportTheory.first_emission_ptr_load >>
+      simp[]) >>
   gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >> conj_tac
        >- simp[cs_appends_emit_helpers] >> rpt gen_tac) >>
   ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
-  >- (Cases_on `prim` >> simp[cs_appends_emit_helpers] >>
+  >- (IF_CASES_TAC
+      >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_ptr_store]) >>
       IF_CASES_TAC
       >- (ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >>
           simp[cs_appends_emit_helpers] >> irule ctor_ci_mono_appends >>
           simp[ci_mono_compile_store_memory, comp_return_def, ci_mono_def, cs_extends_refl]) >>
+      IF_CASES_TAC
+      >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_imm_store_words]) >>
       irule ctor_ci_mono_appends >> simp[ci_mono_compile_store_slots]) >>
-  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
+  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+  rpt gen_tac >> irule ctor_ci_mono_appends >> simp[ci_mono_compile_ptr_store]
 QED
 
 Theorem ctor_append_stmt_first_emission:
