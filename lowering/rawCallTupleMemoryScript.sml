@@ -139,13 +139,21 @@ Proof
   strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
   `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
-  drule_at (Pat `MEM _ (fn_insts _)`) raw_call_output_prefix_ready >>
+  qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+    (fn ssr => let
+       val horizon = hd (snd (strip_comb (concl ssr)));
+       val th = raw_call_output_prefix_ready;
+       val hv = valOf (List.find (fn v => fst (dest_var v) = "H")
+         (free_vars (concl th)));
+     in drule_at (Pat `MEM _ (fn_insts _)`)
+       (INST_TYPE (match_type (type_of hv) (type_of horizon)) th) end) >>
   simp[] >> disch_then drule >> simp[] >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[] >>
   fs[wordsTheory.dimword_def] >>
   `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
-  disch_then drule_all >> strip_tac >>
+  disch_then (qspecl_then [`H`,`ctx`,`cenv`,`cx`,`es`,`es0`,`sf`,`s0`,`s.vs_fmp`]
+    drule_all) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa s4) s = OK u` >>
   `u with vs_fmp := s.vs_fmp = u` by
     (qpat_assum `u.vs_fmp = _` (SUBST1_TAC o SYM) >> simp[]) >> fs[] >>
