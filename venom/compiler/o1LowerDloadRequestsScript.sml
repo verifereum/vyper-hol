@@ -29,6 +29,8 @@ Theorem lower_dload_stage_abort_rq_static:
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_abort_rq D C C' vs vs
 Proof
-  MATCH_MP_TAC lower_dload_stage_abort_rq_conditional_static >>
+  MATCH_MP_TAC (CONV_RULE
+    (RAND_CONV (REWRITE_CONV [GSYM CONJ_ASSOC]))
+    lower_dload_stage_abort_rq_conditional_static) >>
   rpt gen_tac >> MATCH_ACCEPT_TAC (cj 3 ld_request_runner_simulation_static)
 QED
