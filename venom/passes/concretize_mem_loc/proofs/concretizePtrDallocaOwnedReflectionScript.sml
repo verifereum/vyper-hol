@@ -110,10 +110,9 @@ Theorem ptr_dalloca_owned_demand_memory:
       PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
       rpolicy s out names w) \/ dyn_floor C vs <= b+k
 Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_owned_demand_memory_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
-    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
-  tautLib.TAUT_TAC
+  strip_tac >> gvs[o1_run_state_ok_def] >>
+  drule ptr_dalloca_owned_demand_memory_static >>
+  simp[] >> metis_tac[ptr_demand_interval_static_compat]
 QED
 
 (* The writer contract is conditional: the history join discharges it using
@@ -191,7 +190,7 @@ Proof
   rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_owned_demand_reflection_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
     concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
-  tautLib.TAUT_TAC
+  metis_tac[]
 QED
 
 Theorem ptr_dalloca_owned_demand_reflection:
