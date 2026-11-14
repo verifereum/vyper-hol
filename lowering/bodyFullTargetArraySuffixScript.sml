@@ -1029,3 +1029,84 @@ Proof
   simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
   rpt strip_tac >> gvs[same_blocks_def]
 QED
+
+Theorem array_tail_packet_finite:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  ?loc b iw nw t3 G3 tn3.
+    loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+    eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
+    (!H. valid_horizon cx st0 H mid2.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t2,G2,tn2) []
+        (if idx_in_range (is_signed_type (expr_type e)) iw nw
+         then OK t3 else Abort Revert_abort t3,G3,tn3)) /\
+    tn3.t_mem = tn2.t_mem /\ tn3.t_stor = tn2.t_stor /\
+    tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
+    (!x. not_fresh_at sn x ==>
+      FLOOKUP G3 x = FLOOKUP G2 x /\ FLOOKUP tn3.t_var x = FLOOKUP tn2.t_var x /\
+      FLOOKUP t3.vs_vars x = FLOOKUP t2.vs_vars x) /\
+    (t3 with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|>) =
+      (if idx_in_range (is_signed_type (expr_type e)) iw nw
+       then t2 else revert_state (set_returndata [] t2)) /\
+    (idx_in_range (is_signed_type (expr_type e)) iw nw ==>
+      ~t3.vs_halted /\ t3.vs_current_bb = sb.cs_current_bb /\
+      t3.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      eval_operand (FST r) t3 = SOME
+        ((if (case bd of Dynamic _ => T | _ => F) then b + n2w (word_scale loc) else b) +
+         iw * n2w (elem_size_in_location cenv loc et)) /\
+      op_prov G3 (FST r) = op_prov G2 (FST rb) /\ op_taint tn3 (FST r) = {})
+Proof
+  strip_tac >> drule array_tail_packet_initialized >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  `~ctx_has_dalloca ctx` by fs[array_tail_packet_def] >>
+  `same_blocks sl sc /\
+   sc.cs_current_insts = sl.cs_current_insts ++ emitted_insts sl sc /\
+   EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+     ~is_terminator ins.inst_opcode) (emitted_insts sl sc)` by
+    (qpat_x_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
+     simp[array_bounds_check_def, comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
+     qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
+     simp[array_bounds_valid_def, comp_bind_def] >>
+     Cases_on `is_signed_type (expr_type e)` >> simp[comp_return_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >> imp_res_tac emitHelperPropsTheory.emitted_insts_emit_void >>
+     imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+     rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _` kall_tac) >>
+     gvs[same_blocks_def] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  `same_blocks sc sb /\
+   sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+   EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+     ~is_terminator ins.inst_opcode) (emitted_insts sc sb)` by
+    (qpat_x_assum `sc.cs_current_insts = sl.cs_current_insts ++ _` kall_tac >>
+     qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+     simp[array_elem_ptr_def, comp_bind_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     Cases_on `bd` >> gvs[comp_return_def] >>
+     imp_res_tac emit_op_extends >> imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >>
+     rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _` kall_tac) >>
+     gvs[same_blocks_def] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  drule_all array_tail_scalar_uniform >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  `eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
+   op_prov G (FST rb) = op_prov G2 (FST rb)` by
+    metis_tac[array_tail_length_frame_operand] >>
+  qexistsl [`loc`, `b`, `iw`, `w`, `t'`, `H`, `tm`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >> fs[] >>
+      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND_NIL]) >>
+  fs[array_length_frame_def] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[lookup_var_def] >> metis_tac[not_fresh_at_mono]) >>
+  qpat_x_assum `t' with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+  qpat_x_assum `(t with vs_inst_idx := _) with vs_vars := _ = _` mp_tac >>
+  Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >>
+  simp[venom_state_component_equality, revert_state_def, set_returndata_def] >>
+  rpt strip_tac >> gvs[]
+QED
