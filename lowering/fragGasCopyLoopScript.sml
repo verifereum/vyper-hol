@@ -91,6 +91,67 @@ Proof
   gvs[]
 QED
 
+(* The abort cursor is fixed from the executed instruction prefix before
+   considering any dead set or pointer ghosts. *)
+Theorem run_inst_seq_origin_ptr_abort_lift:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
+  run_inst_seq_mem_ok code s /\ allocas_from lo s /\
+  run_inst_seq code s = Abort a t ==>
+  ?j. !D G tn G' tn'.
+    inst_seq_ptr D 0 ctx func PG G tn code s G' tn' ==>
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (Abort a (t with vs_inst_idx := j),G',tn')
+Proof
+  map_every qid_spec_tac [`bb`, `t`, `s`, `code`] >>
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
+  >- (rename1 `step_inst_base h s = OK u` >>
+      `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[venomInstProofsTheory.step_preserves_halted,
+                  venomInstProofsTheory.step_preserves_control_flow] >>
+      `allocas_from lo u` by
+        (gvs[allocas_from_def] >>
+         metis_tac[venomMemPropsTheory.step_inst_base_preserves_allocas]) >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+      first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+      disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+      disch_then (qspec_then `bb` mp_tac) >>
+      simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+      (impl_tac >- (gvs[allocas_from_def] >> metis_tac[])) >>
+      disch_then (qx_choose_then `j` assume_tac) >>
+      qexists_tac `j` >> rpt gen_tac >>
+      simp[inst_seq_ptr_def] >> strip_tac >>
+      `ptr_inst_ok D lo 0 ctx func G tn h s` by
+        (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+         qexists_tac `0` >> simp[]) >>
+      `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+         (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+          step_prov PG G h u, step_taint h s u tn)` by
+        (drule_all straight_line_origin_ptr_edge >> simp[]) >>
+      first_x_assum drule >> strip_tac >>
+      drule (cj 2 gas_origin_ptr_path_rules) >>
+      disch_then drule >> simp[]) >>
+  qexists_tac `t.vs_inst_idx` >> simp[] >> rpt gen_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
+  `ptr_inst_ok D lo 0 ctx func G tn h s` by
+    (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+     qexists_tac `0` >> simp[]) >>
+  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
+  simp[gas_origin_ptr_edge_def, gas_origin_edge_def, gas_path_ptr_edge_def] >>
+  conj_tac >> qexists_tac `0` >>
+  simp[step_inst_non_invoke, gas_events_step_def, gas_count_step_def,
+       mem_safe_step_non_invoke, ptr_safe_step_def, exit_result_def] >>
+  metis_tac[]
+QED
+
 (* A jump checked at the reserved bound 0 is a zero-mark joint edge at lo. *)
 Theorem copy_jump_origin_ptr:
   ~s.vs_halted /\ allocas_from lo s /\
