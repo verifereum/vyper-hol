@@ -10,6 +10,8 @@ Ancestors
 
 val ldExecClause = snd (dest_conj (fst (dest_imp
   (concl ld_runner_conditional_induction))));
+val ldExecClauseStatic = snd (dest_conj (fst (dest_imp
+  (concl ld_runner_conditional_induction_static))));
 val ldPacket = fst (strip_comb (fst (dest_imp
   (concl ld_runner_packet_terminates))));
 
@@ -21,8 +23,8 @@ Proof
   metis_tac[]
 QED
 
-Theorem ld_runner_exec_clause:
-  ^ldExecClause
+Theorem ld_runner_exec_clause_static:
+  ^ldExecClauseStatic
 Proof
   qabbrev_tac `RR = ^ldPacket` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
@@ -46,7 +48,7 @@ Proof
   simp[Once exec_block_def, terminates_def]
 QED
 
-Resume ld_runner_exec_clause[ok]:
+Resume ld_runner_exec_clause_static[ok]:
   `~v.vs_halted` by metis_tac[ld_step_ok_halted] >>
   Cases_on `is_terminator i.inst_opcode`
   >- (drule_all ld_runner_branch_endpoint >> strip_tac >>
@@ -65,7 +67,7 @@ Resume ld_runner_exec_clause[ok]:
     (spose_not_then assume_tac >>
      fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
      gvs[] >> fs[is_terminator_def]) >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue_static) >>
   strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
@@ -87,7 +89,7 @@ Resume ld_runner_exec_clause[ok]:
   gvs[] >> qexists_tac `m` >> simp[]
 QED
 
-Resume ld_runner_exec_clause[halt]:
+Resume ld_runner_exec_clause_static[halt]:
   rename1 `step_inst fuel C i s = Halt se` >>
   `exec_block fuel C bb s = Halt se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -102,7 +104,7 @@ Resume ld_runner_exec_clause[halt]:
   strip_tac >> qexists_tac `fuel` >> gvs[Abbr `RR`]
 QED
 
-Resume ld_runner_exec_clause[abort]:
+Resume ld_runner_exec_clause_static[abort]:
   rename1 `step_inst fuel C i s = Abort reason se` >>
   `exec_block fuel C bb s = Abort reason se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -116,7 +118,7 @@ Resume ld_runner_exec_clause[abort]:
   strip_tac >> qexists_tac `fuel` >> gvs[Abbr `RR`]
 QED
 
-Resume ld_runner_exec_clause[ret]:
+Resume ld_runner_exec_clause_static[ret]:
   rename1 `step_inst fuel C i s = IntRet ir se` >>
   `exec_block fuel C bb s = IntRet ir se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -137,7 +139,7 @@ Resume ld_runner_exec_clause[ret]:
   qexists_tac `fuel` >> fs[Abbr `RR`] >> metis_tac[]
 QED
 
-Resume ld_runner_exec_clause[call_ok]:
+Resume ld_runner_exec_clause_static[call_ok]:
   gvs[terminates_def] >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
@@ -175,17 +177,19 @@ Resume ld_runner_exec_clause[call_ok]:
     simp[Once exec_block_def] >>
   qexists_tac `MAX m m'` >> simp[]
 QED
-Finalise ld_runner_exec_clause
+Finalise ld_runner_exec_clause_static
 
-val _ = if null (hyp ld_runner_exec_clause) andalso
-               aconv (concl ld_runner_exec_clause) ldExecClause
+val _ = if null (hyp ld_runner_exec_clause_static) andalso
+               aconv (concl ld_runner_exec_clause_static) ldExecClauseStatic
         then () else raise Fail "exec clause audit failed";
 
 val ldExecClauseFuel = snd (dest_conj (fst (dest_imp
   (concl ld_runner_conditional_induction_fuel))));
+val ldExecClauseFuelStatic = snd (dest_conj (fst (dest_imp
+  (concl ld_runner_conditional_induction_static_fuel))));
 
-Theorem ld_runner_exec_clause_fuel:
-  ^ldExecClauseFuel
+Theorem ld_runner_exec_clause_static_fuel:
+  ^ldExecClauseFuelStatic
 Proof
   qabbrev_tac `RR = ^ldPacket` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
@@ -209,7 +213,7 @@ Proof
   simp[Once exec_block_def, terminates_def]
 QED
 
-Resume ld_runner_exec_clause_fuel[ok]:
+Resume ld_runner_exec_clause_static_fuel[ok]:
   `~v.vs_halted` by metis_tac[ld_step_ok_halted] >>
   Cases_on `is_terminator i.inst_opcode`
   >- (drule_all ld_runner_branch_endpoint >> strip_tac >>
@@ -227,7 +231,7 @@ Resume ld_runner_exec_clause_fuel[ok]:
     (spose_not_then assume_tac >>
      fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
      gvs[] >> fs[is_terminator_def]) >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue_static) >>
   strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
@@ -249,7 +253,7 @@ Resume ld_runner_exec_clause_fuel[ok]:
   gvs[] >> simp[]
 QED
 
-Resume ld_runner_exec_clause_fuel[halt]:
+Resume ld_runner_exec_clause_static_fuel[halt]:
   rename1 `step_inst fuel C i s = Halt se` >>
   `exec_block fuel C bb s = Halt se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -264,7 +268,7 @@ Resume ld_runner_exec_clause_fuel[halt]:
   strip_tac >> gvs[Abbr `RR`]
 QED
 
-Resume ld_runner_exec_clause_fuel[abort]:
+Resume ld_runner_exec_clause_static_fuel[abort]:
   rename1 `step_inst fuel C i s = Abort reason se` >>
   `exec_block fuel C bb s = Abort reason se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -278,7 +282,7 @@ Resume ld_runner_exec_clause_fuel[abort]:
   strip_tac >> gvs[Abbr `RR`]
 QED
 
-Resume ld_runner_exec_clause_fuel[ret]:
+Resume ld_runner_exec_clause_static_fuel[ret]:
   rename1 `step_inst fuel C i s = IntRet ir se` >>
   `exec_block fuel C bb s = IntRet ir se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -299,7 +303,7 @@ Resume ld_runner_exec_clause_fuel[ret]:
   fs[Abbr `RR`] >> metis_tac[]
 QED
 
-Resume ld_runner_exec_clause_fuel[call_ok]:
+Resume ld_runner_exec_clause_static_fuel[call_ok]:
   gvs[terminates_def] >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
@@ -326,8 +330,28 @@ Resume ld_runner_exec_clause_fuel[call_ok]:
     simp[Once exec_block_def] >>
   simp[]
 QED
-Finalise ld_runner_exec_clause_fuel
+Finalise ld_runner_exec_clause_static_fuel
 
-val _ = if null (hyp ld_runner_exec_clause_fuel) andalso
-               aconv (concl ld_runner_exec_clause_fuel) ldExecClauseFuel
+val _ = if null (hyp ld_runner_exec_clause_static_fuel) andalso
+               aconv (concl ld_runner_exec_clause_static_fuel) ldExecClauseFuelStatic
         then () else raise Fail "exact-fuel exec clause audit failed";
+
+Theorem ld_runner_exec_clause:
+  ^ldExecClause
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (qpat_assum `o1_run_state_ok vs`
+        (strip_assume_tac o REWRITE_RULE [o1_run_state_ok_def]) >>
+      mp_tac ld_runner_exec_clause_static >> asm_rewrite_tac [])
+  >> simp[]
+QED
+
+Theorem ld_runner_exec_clause_fuel:
+  ^ldExecClauseFuel
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (qpat_assum `o1_run_state_ok vs`
+        (strip_assume_tac o REWRITE_RULE [o1_run_state_ok_def]) >>
+      mp_tac ld_runner_exec_clause_static_fuel >> asm_rewrite_tac [])
+  >> simp[]
+QED
