@@ -43,25 +43,6 @@ Proof
     venomStateTheory.eval_operand_def]
 QED
 
-Theorem mm_local_payload_store_step[local]:
-  mode IN {CalldataMerge; DloadMerge} /\
-  i.inst_opcode = MSTORE /\ i.inst_operands = [Lit dst; Var v] /\
-  lookup_var v t = SOME (word_of_bytes T (0w:bytes32)
-    (TAKE 32 (DROP (w2n src) (if mode = CalldataMerge then t.vs_call_ctx.cc_calldata else t.vs_data_section) ++ REPLICATE 32 0w))) ==>
-  step_inst fuel ctx i t =
-    OK (write_memory_with_expansion (w2n dst)
-      (TAKE 32 (DROP (w2n src) (if mode = CalldataMerge then t.vs_call_ctx.cc_calldata else t.vs_data_section) ++ REPLICATE 32 0w)) t)
-Proof
-  strip_tac >>
-  simp[venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def,
-    venomExecSemanticsTheory.exec_write2_def,
-    venomStateTheory.eval_operand_def, venomStateTheory.mstore_def,
-    venomStateTheory.write_memory_with_expansion_def,
-    venomMemPropsTheory.word_bytes_roundtrip_256,
-    copyFwdEquivTheory.mcopy_data_length]
-QED
-
 Theorem mm_local_payload_word_steps[local]:
   mode IN {CalldataMerge; DloadMerge} /\
   dst < dimword (:256) /\ src < dimword (:256) /\
@@ -111,38 +92,6 @@ Definition mm_local_payload_capture_def:
       else NONE
     else NONE
 End
-
-Theorem mm_local_payload_capture_past[local]:
-  j < n /\ n <= m ==>
-  mm_local_payload_capture mode is H n j = mm_local_payload_capture mode is H m j
-Proof
-  simp[mm_local_payload_capture_def, mm_local_payload_opcodes, mm_local_write_capture_def]
-QED
-
-Theorem mm_local_payload_capture_future[local]:
-  n <= j ==> mm_local_payload_capture mode is H n j = NONE
-Proof
-  simp[mm_local_payload_capture_def, mm_local_payload_opcodes]
-QED
-
-Theorem mm_local_payload_capture_sound[local]:
-  mode IN {CalldataMerge; DloadMerge} /\
-  mm_local_history is H n /\
-  mm_local_payload_capture mode is H n j = SOME (d,bs) ==>
-  (H (SUC j)).vs_memory = (write_memory_with_expansion d bs (H j)).vs_memory
-Proof
-  Cases_on `mode` >> simp[mode_copy_opcode_def] >>
-  simp[mm_local_payload_capture_def, mode_copy_opcode_def] >>
-  rpt IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac
-  >- (`step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
-        metis_tac[mm_local_history_def] >>
-      gvs[venomExecSemanticsTheory.step_inst_base_def])
-  >- metis_tac[mm_local_write_capture_sound]
-  >- (`step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
-        metis_tac[mm_local_history_def] >>
-      gvs[venomExecSemanticsTheory.step_inst_base_def]) >>
-  metis_tac[mm_local_write_capture_sound]
-QED
 
 Theorem mm_local_payload_capture_actual_step[local]:
   mode IN {CalldataMerge; DloadMerge} /\
@@ -503,15 +452,6 @@ Proof
   Cases_on `j <= r` >- (simp[] >> metis_tac[]) >>
   simp[operand_var_def, venomStateTheory.lookup_var_def,
     venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem mm_local_payload_capture_history_cong[local]:
-  (!j. j < n ==> H' j = H j) ==>
-  mm_local_payload_capture mode is H' n = mm_local_payload_capture mode is H n
-Proof
-  strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `j` >>
-  Cases_on `j < n /\ j < LENGTH is` >>
-  simp[mm_local_payload_capture_def, mm_local_write_capture_def]
 QED
 
 Theorem mm_local_payload_final_extent[local]:
