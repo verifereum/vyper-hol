@@ -463,3 +463,175 @@ Resume return_default_prefix_joint[path]:
   simp[] >> disch_then irule >> gvs[]
 QED
 Finalise return_default_prefix_joint
+
+(* Resource transport is conditional on each entry horizon, on the supplied run. *)
+Theorem return_default_alloc_resources:
+  compile_alloc_buffer n a = (buf,b) /\
+  run_inst_seq (emitted_insts a b) s = OK r /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv a /\ n < dimword (:256) ==>
+  !H. stmt_state_rel H ctx func cenv cx ee s ==>
+    stmt_state_rel H ctx func cenv cx ee r /\
+    (?w. eval_operand buf.buf_operand r = SOME w /\
+      FLOOKUP r.vs_allocas a.cs_next_id = SOME (w2n w,n) /\
+      w2n w + n < dimword (:256) /\
+      (!aid off sz. aid < a.cs_next_id /\
+        FLOOKUP s.vs_allocas aid = SOME (off,sz) ==>
+        regions_disjoint (w2n w) n off sz) /\
+      (!name off sz. local_region cenv ee.scopes r name off sz ==>
+        regions_disjoint (w2n w) n off sz)) /\
+    r.vs_memory = s.vs_memory /\
+    (!x. not_fresh_at a x ==> lookup_var x r = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP r.vs_allocas aid = SOME entry)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  drule_all exprSimAllocTheory.literal_alloc_buffer_run >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem return_default_alloc_ghost_resources:
+  compile_alloc_buffer n a = (buf,b) /\
+  run_inst_seq (emitted_insts a b) s = OK r /\
+  fn_has_code a b func /\ local_ptrs_reserved cenv a /\
+  n < dimword (:256) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) ==>
+  !H D lo d. stmt_state_rel H ctx func cenv cx ee s /\
+    ghost_inv_at D lo d cenv cx ee G tn s ==>
+    ghost_inv_at D lo d cenv cx ee
+      (step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) r)
+      (step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) s r tn) r /\
+    ptr_covers
+      (step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) r)
+      (step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) s r tn)
+      (STRING #"%" (toString a.cs_next_var)) r n /\
+    ghost_kept_at lo cenv ee a G tn s
+      (step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) r)
+      (step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+        [STRING #"%" (toString a.cs_next_var)]) s r tn)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  drule_all return_default_alloc_run_step >> strip_tac >>
+  `~not_fresh_at a (STRING #"%" (toString a.cs_next_var))` by
+    simp[not_fresh_at_def] >>
+  conj_tac >- (irule return_default_alloc_ghost_inv_at >>
+    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac >- (drule_all alloca_step_ptr_covers >> simp[]) >>
+  irule return_default_alloc_ghost_kept_at >>
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[ghost_inv_at_def] >> metis_tac[]
+QED
+
+Theorem return_default_assert_reject_joint:
+  emit_void ASSERT [arg] a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand arg s = SOME 0w /\ op_taint tn arg = {} ==>
+  !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (Abort Revert_abort (revert_state (set_returndata [] s)),G,tn)
+Proof
+  strip_tac >> gen_tac >>
+  `emit_inst ASSERT [arg] [] a = ((),b)` by
+    gvs[emit_void_def, emit_inst_def] >>
+  drule emit_inst_extends >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `step_inst_base (mk_inst a.cs_next_id ASSERT [arg] []) s =
+    Abort Revert_abort (revert_state (set_returndata [] s))` by
+    simp[step_ASSERT_revert] >>
+  irule fragGasEmitCtrlTheory.exit_inst_origin_ptr >>
+  simp[exit_result_def] >>
+  qexists_tac `mk_inst a.cs_next_id ASSERT [arg] []` >>
+  simp[gasEventsTheory.gas_events_step_def,
+    gasCountTheory.gas_count_step_def, is_terminator_def,
+    step_inst_non_invoke, exit_result_def, mk_inst_def,
+    memSafeRunTheory.mem_safe_step_non_invoke,
+    unitTransformDefsTheory.inst_mem_below_frontier_def,
+    memSafeRunTheory.inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  conj_tac >- (first_x_assum (qspec_then `0` mp_tac) >> simp[mk_inst_def]) >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    GSYM op_taint_def] >>
+  rpt strip_tac >> gvs[GSYM mk_inst_def, step_inst_non_invoke]
+QED
+
+Theorem return_default_codesize_joint:
+  emit_op EXTCODESIZE [addr] a = (out,b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ op_taint tn addr = {} ==>
+  ?u G1 tn1.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G1,tn1)) /\
+    u = (update_var (STRING #"%" (toString a.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s)
+      with vs_inst_idx := LENGTH b.cs_current_insts /\
+    G1 = DRESTRICT G (COMPL {STRING #"%" (toString a.cs_next_var)}) /\
+    tn1 = tn with t_var := tn.t_var |+ (STRING #"%" (toString a.cs_next_var),{}) /\
+    eval_operand out u = SOME (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) /\
+    op_taint tn1 out = {}
+Proof
+  strip_tac >>
+  qabbrev_tac `x = STRING #"%" (toString a.cs_next_var)` >>
+  qabbrev_tac `cw:bytes32 = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)` >>
+  `out = Var x /\ b.cs_current_bb = a.cs_current_bb /\
+    b.cs_current_insts = a.cs_current_insts ++ [mk_inst a.cs_next_id EXTCODESIZE [addr] [x]]` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def, Abbr `x`] >>
+  `step_inst_base (mk_inst a.cs_next_id EXTCODESIZE [addr] [x]) s = OK (update_var x cw s)` by
+    (simp[Abbr `cw`] >> irule exprSimSliceExtcodeTheory.slice_extcodesize_step >> simp[]) >>
+  qexistsl_tac [`(update_var x cw s) with vs_inst_idx := LENGTH b.cs_current_insts`,
+    `DRESTRICT G (COMPL {x})`, `tn with t_var := tn.t_var |+ (x,{})`] >>
+  conj_tac >- suspend "path" >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE, op_taint_def]
+QED
+Resume return_default_codesize_joint[path]:
+  gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`[mk_inst a.cs_next_id EXTCODESIZE [addr] [x]]`, `a`] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  conj_tac >- (simp[run_inst_seq_mem_ok_def,
+    unitTransformDefsTheory.inst_mem_below_frontier_def,
+    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    run_inst_seq_def] >> simp[GSYM mk_inst_def]) >>
+  simp[run_inst_seq_def, GSYM mk_inst_def, inst_seq_ptr_def] >>
+  conj_tac >- suspend "ptr" >>
+  simp[step_prov_def, out_prov_def, set_prov_def,
+    step_taint_def, out_taint_def, set_var_taint_def, mem_taint_def,
+    new_site_bytes_def, step_writes_def, written_taint_def, adopt_reset_def,
+    store_taint_def, imm_taint_def, range_bytes_def, mk_inst_def,
+    finite_mapTheory.FLOOKUP_DEF] >>
+  conj_tac >- suspend "ptr_record" >>
+  simp[update_var_def, source_memory_write_ranges_def, pred_setTheory.EXTENSION] >>
+  `({i | ?aid b sz. aid NOTIN FDOM s.vs_allocas /\
+      (aid IN FDOM s.vs_allocas /\ s.vs_allocas ' aid = (b,sz)) /\
+      b <= i /\ i < b + sz}:num set) = {}` by
+    (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  simp[taint_component_equality]
+QED
+Resume return_default_codesize_joint[ptr_record]:
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    mk_inst_def, GSYM op_taint_def] >>
+  rpt strip_tac >> gvs[GSYM mk_inst_def, step_inst_non_invoke,
+    update_var_def, allocas_from_def]
+QED
+Resume return_default_codesize_joint[ptr]:
+  simp[run_inst_seq_mem_ok_def,
+    unitTransformDefsTheory.inst_mem_below_frontier_def,
+    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    run_inst_seq_def] >> simp[GSYM mk_inst_def]
+QED
+Finalise return_default_codesize_joint
