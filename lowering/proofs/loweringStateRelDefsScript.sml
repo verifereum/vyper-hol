@@ -745,10 +745,8 @@ QED
      section at runtime).
    - logs_rel: emitted logs.
    - call_ctx_rel: transaction, call and block context.
-   - the call context is not static: the entry relation (venom_env_rel)
-     assumes it and the lowered code never writes cc_static, so a CALL
-     asks a static request exactly when the source does.
-   - neither is the source frame (txn.is_static), so source writes succeed.
+   - source and target static flags agree through call_ctx_rel; writes
+     abort in both semantics, and outgoing calls inherit the flag.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation; a request's
      snapshot of the running contract's storage agrees up to dead bytes.
@@ -765,8 +763,6 @@ Definition state_rel_def:
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
-     ¬ss.vs_call_ctx.cc_static ∧
-     ¬cx.txn.is_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
      LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
