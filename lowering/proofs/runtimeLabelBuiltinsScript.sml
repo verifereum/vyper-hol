@@ -651,7 +651,7 @@ Proof
     (rpt strip_tac >> first_x_assum irule >>
      drule exprCallBoundsTheory.expr_list_member_bound >> simp[]) >>
   Cases_on `target`
-  >- (irule rb_compile_call_internal >> simp[]) 
+  >- (irule rb_compile_call_internal >> simp[])
   >- (PairCases_on `p` >> irule rb_compile_call_external >> simp[])
   >- (irule rb_compile_call_send >> simp[])
   >- (irule rb_compile_call_raw >> simp[])
