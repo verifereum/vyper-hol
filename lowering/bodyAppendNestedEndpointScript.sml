@@ -7,7 +7,10 @@ Ancestors
   vyperStorageLayoutSafety vyperStoragePlaceRegion vyperState vyperValue
   vyperInterpreter targetPlaceSimDefs targetPlaceSimCases
   stmtSimDefs stmtSimStoreCopyState loweringStateRelDefs
-  valueEncodingProps words targetSubscriptSplit
+  valueEncodingProps words targetSubscriptSplit bodyAppendResolvedPre
+  exprSimSource exprSimHyps bodyAppendStorageAdapter vyperTypeInvariants
+  vyperTyping valueEncodingTyping vyperTypeExprResult
+  vyperTypeExprSoundness exprSimProps
 
 Theorem body_append_nested_storage_endpoint:
   body_inv tops ctx cenv cx /\ target_pre cenv cx env bt es /\
@@ -79,4 +82,42 @@ Proof
   goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
   qpat_x_assum `slot = root + n2w delta` kall_tac >>
   simp[]
+QED
+
+Theorem body_append_nested_rhs_endpoint:
+  (!s p t. eval_target_place cx bt s = (INL p,t) ==> body_expr_ok cx e) /\
+  body_inv tops ctx cenv cx /\ target_pre cenv cx env bt es /\
+  expr_body_pre cenv cx env e es /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  type_memory_bytes cenv (expr_type e) = 32 * type_slot_size tv /\
+  eval_target_place cx bt (es with gas_obs := gs) = (INL p,et) ==>
+  expr_sim ctx func cenv cx (expr_type e) e et /\
+  (!hs v ee.
+    bind (eval_expr cx e) (read_result cx) (et with gas_obs := hs) = (INL v,ee) ==>
+    value_has_type tv v /\ val_wf tv v /\
+    val_footprint tv v <= type_memory_bytes cenv (expr_type e))
+Proof
+  strip_tac >>
+  `target_pre cenv cx env bt (es with gas_obs := gs)` by simp[target_pre_def] >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  `expr_body_pre cenv cx env e et` by
+    metis_tac[append_resolved_rhs_body_pre] >>
+  `body_expr_ok cx e` by metis_tac[] >>
+  conj_tac >- metis_tac[body_expr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e (et with gas_obs := hs)` by simp[] >>
+  qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ _ (es with gas_obs := gs)` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ _ et` kall_tac >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
+  `expr_sim_inv cenv cx env et` by fs[expr_body_pre_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `value_has_type tv v` by
+    gvs[expr_result_typed_def, expr_runtime_typed_def,
+        value_result_typed_def, value_runtime_typed_def] >>
+  `val_wf tv v` by metis_tac[cj 1 value_has_type_val_wf] >>
+  `type_memory_size tv = 32 * type_slot_size tv` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  metis_tac[val_footprint_le]
 QED
