@@ -23,6 +23,7 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  targetPlaceSim
   exprBopSimDefs exprBopSimProps
   exprSimSource gasContext gasExemptCert gasSummary gasSummaryCompose
   fragGasMode fragGasPath fragGasPathMem fragGasSeq gasCount
@@ -495,24 +496,6 @@ QED
 
 
 (* ===== The statement ===== *)
-
-(* A local the typing environment knows: it is held through a pointer
-   variable, it is in scope, and its entry's type is its type's. *)
-Theorem expr_sim_inv_local:
-  !cenv cx env es id ty.
-    expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
-    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    (?entry. lookup_scopes id es.scopes = SOME entry) /\
-    !entry. lookup_scopes id es.scopes = SOME entry ==>
-            evaluate_type (get_tenv cx) ty = SOME entry.type
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
-  qpat_x_assum `!id ty. _ ==> IS_SOME _` drule >>
-  qpat_x_assum `!id ty. _ ==> ?p sz. _` drule >>
-  simp[optionTheory.IS_SOME_EXISTS] >> rpt strip_tac >>
-  qpat_x_assum `!id ty entry. _ /\ _ ==> _` drule_all >> simp[]
-QED
 
 Theorem augassign_binop_admissible:
   lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
