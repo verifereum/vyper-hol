@@ -171,8 +171,8 @@ Theorem target_place_sim_mem:
 Proof
   rpt strip_tac >>
   qpat_x_assum `gas_admissible _ _ _`
-    (assume_tac o PURE_REWRITE_RULE [eval_target_place_bind]) >>
-  pure_rewrite_tac [eval_target_place_bind] >>
+    (assume_tac o PURE_REWRITE_RULE [eval_target_place_as_bind]) >>
+  pure_rewrite_tac [eval_target_place_as_bind] >>
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by
     (irule get_place_base_admissible >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `target_sim_mem _ _ _ _ _ _ _`
@@ -282,8 +282,8 @@ Theorem target_place_sim_mem_pure:
 Proof
   rpt strip_tac >>
   qpat_x_assum `gas_admissible _ _ _`
-    (assume_tac o PURE_REWRITE_RULE [eval_target_place_bind]) >>
-  pure_rewrite_tac [eval_target_place_bind] >>
+    (assume_tac o PURE_REWRITE_RULE [eval_target_place_as_bind]) >>
+  pure_rewrite_tac [eval_target_place_as_bind] >>
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by
     (irule get_place_base_admissible >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `target_sim_mem_pure _ _ _ _ _ _ _`
