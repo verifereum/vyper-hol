@@ -7,6 +7,7 @@
  *)
 Theory bodyFullExtCallRequest
 Ancestors
+  bodyFullExtCallRequestSnapshotFullLocated
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
   vyperInterpreter vyperAST list
