@@ -238,6 +238,7 @@ Resume tuple_place_equal_memory_forward[post]:
       conj_tac >- (qexists_tac `H0` >> asm_rewrite_tac[]) >>
       qexists_tac `s` >> fs[]) >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   map_every qx_gen_tac [`aid`, `ob`, `ol`, `oa`, `on`] >> strip_tac >>
   `mem_bytes_at oa on t.vs_memory = mem_bytes_at oa on u.vs_memory` by
     (irule typed_copy_effect_bytes >>
@@ -290,10 +291,12 @@ Theorem tuple_place_equal_memory_run_frame:
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
   strip_tac >> drule_all tuple_place_equal_memory_forward >> strip_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!H: (bool # 'b word # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff t` by
     (rpt strip_tac >>
-     qpat_assum `!H. stmt_state_rel H _ _ _ _ ee s ==> _` drule >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee r` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
      irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `(t with <|vs_vars := _; vs_memory := _;
