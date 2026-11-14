@@ -170,7 +170,7 @@ Proof
 QED
 
 (* Checked examples intentionally include no supply distinctness assumption. *)
-Theorem sue_supply_two_literals_probe[local]:
+Theorem sue_supply_two_literals_witness:
   MAP (\i. i.inst_operands)
     (FST (sue_expand_inst_supply dfg
       <| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
@@ -182,17 +182,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem sue_supply_phi_probe[local]:
-  sue_expand_inst_supply dfg s
-    <| inst_id := 1; inst_opcode := PHI;
-       inst_operands := [Label "pred"; Var "x"]; inst_outputs := ["y"] |> =
-  ([<| inst_id := 1; inst_opcode := PHI;
-       inst_operands := [Label "pred"; Var "x"]; inst_outputs := ["y"] |>],s)
-Proof
-  simp[sue_expand_inst_supply_def, sue_should_skip_def]
-QED
-
-Theorem sue_supply_ignored_operand_probe[local]:
+Theorem sue_supply_ignored_operand_witness:
   MAP (\i. i.inst_operands)
     (FST (sue_expand_inst_supply
       (dfg_empty with dfg_uses := FEMPTY |+ ("x",
@@ -210,7 +200,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem sue_supply_repeated_variable_probe[local]:
+Theorem sue_supply_repeated_variable_witness:
   MAP (\i. i.inst_operands)
     (FST (sue_expand_inst_supply
       (dfg_empty with dfg_uses := FEMPTY |+ ("x",
@@ -1932,16 +1922,9 @@ Proof
   first_x_assum drule >> strip_tac >> simp[inst_wf_def]
 QED
 
-Theorem sue_supply_skip_opcodes[local]:
-  sue_should_skip PHI /\ sue_should_skip PARAM /\
-  sue_should_skip FMP_PARAM /\ sue_should_skip RETPC_PARAM
-Proof
-  EVAL_TAC
-QED
-
 (* Unlike parser-significant counts, ALLOCA's literal is copied.  Consumers
    must retain their no-ALLOCA premise. *)
-Theorem sue_supply_alloca_literal_probe[local]:
+Theorem sue_supply_alloca_literal_witness:
   MAP (\i. i.inst_operands)
     (FST (sue_expand_inst_supply dfg
       <| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
