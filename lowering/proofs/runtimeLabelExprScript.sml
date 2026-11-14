@@ -603,3 +603,91 @@ Resume rb_compile_expr_body[ifexp]:
 QED
 
 Finalise rb_compile_expr_body
+
+Theorem rb_compile_expr_raw:
+  (!ce ty e st. rb_env_ok ce /\ rb_state_ok st ==>
+    rb_state_ok (SND (compile_expr ce ty e st)) /\
+    rb_value_ok (FST (compile_expr ce ty e st))) /\
+  (!ce rt ty bi args st. rb_env_ok ce /\ rb_state_ok st ==>
+    rb_state_ok (SND (compile_builtin_dispatch ce rt ty bi args st)) /\
+    rb_value_ok (FST (compile_builtin_dispatch ce rt ty bi args st))) /\
+  (!ce vt ty tb rt args st. rb_env_ok ce /\ rb_state_ok st ==>
+    rb_state_ok (SND (compile_type_builtin_dispatch ce vt ty tb rt args st)) /\
+    rb_value_ok (FST (compile_type_builtin_dispatch ce vt ty tb rt args st)))
+Proof
+  ho_match_mp_tac compile_expr_raw_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac
+  >- suspend "expr"
+  >- suspend "builtin"
+  >> suspend "type"
+QED
+
+Resume rb_compile_expr_raw[expr]:
+  `rb_expr_callback (expr_size e) compile_expr` by
+    (rw[rb_expr_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
+     first_x_assum drule >> disch_then drule_all >>
+     disch_then (qspec_then `ty` mp_tac) >> simp[]) >>
+  `rb_builtin_callback (expr_size e) compile_builtin_dispatch` by
+    (rw[rb_builtin_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
+     qpat_x_assum `!args ce rt ty bi st. _ ==> _ ==> rb_state_ok (SND (compile_builtin_dispatch ce rt ty bi args st)) /\ _` drule >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`ret_ty`, `ty`, `bi`] mp_tac) >> simp[]) >>
+  `rb_type_callback (expr_size e) compile_type_builtin_dispatch` by
+    (rw[rb_type_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
+     qpat_x_assum `!args ce vt ty tb rt st. _ ==> _ ==> rb_state_ok (SND (compile_type_builtin_dispatch ce vt ty tb rt args st)) /\ _` drule >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`vv_ty`, `ty`, `tb`, `ret_ty`] mp_tac) >> simp[]) >>
+  strip_tac >>
+  `rb_step rb_value_ok
+    (compile_expr_body (expr_child_callback (expr_size e) compile_expr)
+      (builtin_child_callback (expr_size e) compile_builtin_dispatch)
+      (type_child_callback (expr_size e) compile_type_builtin_dispatch) ce ty e)` by
+    (irule rb_compile_expr_body >> simp[rb_expr_child_callback,
+      rb_builtin_child_callback, rb_type_child_callback]) >>
+  ONCE_REWRITE_TAC[compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  gvs[rb_step_def] >> first_x_assum drule >>
+  pairarg_tac >> gvs[]
+QED
+
+Resume rb_compile_expr_raw[builtin]:
+  `rb_expr_callback (list_size expr_size args) compile_expr` by
+    (rw[rb_expr_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
+     first_x_assum drule >> disch_then drule_all >>
+     disch_then (qspec_then `ty` mp_tac) >> simp[]) >>
+  strip_tac >>
+  `rb_step rb_value_ok
+    (compile_builtin_dispatch_body
+      (expr_child_callback (list_size expr_size args) compile_expr)
+      ce rt ty bi args)` by
+    (irule rb_compile_builtin_dispatch_body >> simp[rb_expr_child_callback]) >>
+  ONCE_REWRITE_TAC[compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  gvs[rb_step_def] >> first_x_assum drule >> pairarg_tac >> gvs[]
+QED
+
+Resume rb_compile_expr_raw[type]:
+  `rb_expr_callback (list_size expr_size args) compile_expr` by
+    (rw[rb_expr_callback_def, rb_step_def] >> pairarg_tac >> gvs[] >>
+     first_x_assum drule >> disch_then drule_all >>
+     disch_then (qspec_then `ty'` mp_tac) >> simp[]) >>
+  strip_tac >>
+  `rb_step rb_value_ok
+    (compile_type_builtin_dispatch_body
+      (expr_child_callback (list_size expr_size args) compile_expr)
+      ce vt ty tb rt args)` by
+    (irule rb_compile_type_builtin_dispatch_body >> simp[rb_expr_child_callback]) >>
+  ONCE_REWRITE_TAC[compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  gvs[rb_step_def] >> first_x_assum drule >> pairarg_tac >> gvs[]
+QED
+
+Finalise rb_compile_expr_raw
+
+Theorem compile_expr_no_runtime_begin:
+  rb_expr_contract
+Proof
+  mp_tac rb_compile_expr_raw >>
+  simp[rb_expr_contract_def, rb_step_def] >>
+  rpt strip_tac >> pairarg_tac >> gvs[] >> metis_tac[pairTheory.FST, pairTheory.SND]
+QED
