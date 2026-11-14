@@ -36,7 +36,7 @@ Proof
   reverse conj_tac >- (mp_tac lower_dload_run_contract >> simp[o1_run_contract_def, o1_fn_passes_def]) >>
   `EL 1 o1_fn_passes = CFP_Simple VP_LowerDload` by simp[o1_fn_passes_def] >>
   simp[o1_inv_def] >> rpt strip_tac >>
-  metis_tac[lower_dload_stage_abort_rq]
+  fs[o1_run_state_ok_def] >> metis_tac[lower_dload_stage_abort_rq_static]
 QED
 
 Theorem concretize_run_rq:
