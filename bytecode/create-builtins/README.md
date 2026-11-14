@@ -3,8 +3,10 @@
 This corpus contains the 23 witnesses from `.agent-files/TASK.md`: all four
 creation builtins, salted forms, constructor arguments, storage bytecode,
 the forwarder alias, nested creation, and the raw-argument domain boundary.
-Two additional witnesses isolate runtime and folded-literal blueprint offsets
-without constructor arguments (`cb08` and `cb09`).
+Additional witnesses isolate runtime and folded-literal blueprint offsets
+without constructor arguments (`cb08` and `cb09`), a non-foldable flag
+conversion that preserves a literal IR operand (`cb10`), folded wei
+conversion (`cb11`), and runtime unsafe arithmetic on constants (`cb12`).
 
 The independent `oracle/` files were generated with the `VYPER_PIN` Vyper
 (`0.5.0b1+commit.577d2534`), Prague, experimental codegen, optimization

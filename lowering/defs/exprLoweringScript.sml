@@ -2803,10 +2803,16 @@ Definition compile_create_call_def:
                   od
               | CreateFromBlueprint raw_args =>
                   let suffix = if has_salt then TL rest else rest in
+                  let offset_e = pin_fold_expr (HD suffix) in
                   do salt <- compile_create_salt cfn cenv
                        (if has_salt then SOME (HD rest) else NONE);
-                     offset <- lower_value cfn cenv (expr_type (HD suffix)) (HD suffix);
-                     size <- compile_create_blueprint_check target offset;
+                     offset <-
+                       (case offset_e of
+                          Literal _ (IntL i) => return (Lit (i2w i))
+                        | _ => lower_value cfn cenv
+                                 (expr_type (HD suffix)) (HD suffix));
+                     size <- compile_create_blueprint_check
+                       (is_int_literal offset_e) target offset;
                      (ptr,len) <- compile_create_blueprint_args cfn cenv raw_args (TL suffix);
                      compile_create_blueprint_append target value salt offset
                        size ptr len rof

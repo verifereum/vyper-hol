@@ -12,3 +12,6 @@ cb04_blueprint_offset_salt_value
 cb03_blueprint_rawargs
 cb08_blueprint_runtime_offset
 cb09_blueprint_folded_offset
+cb10_blueprint_flag_offset
+cb11_blueprint_folded_wei_offset
+cb12_blueprint_unsafe_offset

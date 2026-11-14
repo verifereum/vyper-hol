@@ -1367,9 +1367,9 @@ QED
 Theorem bound_labels_create_blueprint_check:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_create_blueprint_check target offset s))))
+    (SND (compile_create_blueprint_check is_lit target offset s))))
 Proof
-  strip_tac >> Cases_on `offset` >> simp[compile_create_blueprint_check_def] >>
+  strip_tac >> Cases_on `is_lit` >> simp[compile_create_blueprint_check_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_check_create_result, bound_labels_alloc_buffer,
     bound_labels_alloc_dynamic, bound_labels_copy_memory_dynamic,
@@ -1398,7 +1398,7 @@ Theorem bound_labels_create_blueprint:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_create_blueprint target v salt offset args_info revert_fail s))))
+    (SND (compile_create_blueprint is_lit target v salt offset args_info revert_fail s))))
 Proof
   strip_tac >>
   `?p l. (case args_info of NONE => (Lit 0w,Lit 0w) | SOME info => info) =

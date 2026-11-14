@@ -5165,13 +5165,13 @@ Proof
 QED
 
 Theorem ctor_create_blueprint_check_first_emission_strong:
-  !target offset a x b. compile_create_blueprint_check target offset a = (x,b) ==>
+  !is_lit target offset a x b. compile_create_blueprint_check is_lit target offset a = (x,b) ==>
     cs_extends a b /\
     (!fn. fn_has_code a b fn ==> ?bb i.
       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  ntac 2 gen_tac >> Cases_on `offset` >>
+  ntac 3 gen_tac >> Cases_on `is_lit` >>
   (simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>

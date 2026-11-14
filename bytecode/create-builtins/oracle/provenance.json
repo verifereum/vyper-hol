@@ -42,7 +42,10 @@
     "rcr03_rawcreate_rof.vy": "275f3c770542904c10af7e6ac9f2f9967656b682e51c1e249426d877451184e2",
     "rcr04_rawcreate_storage.vy": "0c1eaa44fdf49ce634d75f5c90d03353adfa681f8c32e296b4bce6f56fc90338",
     "rcr05_rawcreate_args.vy": "f0d2f5a36380dd38250846616a5af0e3f57147ecf73d4bf3af62967a0f873b20",
-    "rcr06_rawcreate_salt.vy": "7d4c439b9c47e33c3ab53c62432b3db0163f655317979ab12d1d77e26c8bf52e"
+    "rcr06_rawcreate_salt.vy": "7d4c439b9c47e33c3ab53c62432b3db0163f655317979ab12d1d77e26c8bf52e",
+    "cb10_blueprint_flag_offset.vy": "b2a19a1d6aacc95158e9f4c584b8541d0dd9156997ff7b10451e670ae6443b21",
+    "cb11_blueprint_folded_wei_offset.vy": "13cf91b0970d2a01eb1e3b362fbcbdf5727f7e46d05263e098406b5783b33650",
+    "cb12_blueprint_unsafe_offset.vy": "c2e65274ceea5ddf04ebb30e6f1af2af9d581c8e34cf6e9147714f16723e08b5"
   },
   "outputs": {
     "cb01_blueprint.hex": "4a835dab8d9df010992c97345d2dfc24af7d2c47ad13225713475c60e775816d",
@@ -94,6 +97,12 @@
     "rcr05_rawcreate_args.hex": "05414cc236b93dea6e56ca9bd9ec2e702ee48a502178cd4b9bf2712d6ea837ff",
     "rcr05_rawcreate_args.json": "982326d3ec8545f63d9f040981323d790420bb45f6cdbaf0599d3af3e77c720c",
     "rcr06_rawcreate_salt.hex": "847c1305add686ff3234ffad869e048a30f150fec1f80a790da13d8767adbdf6",
-    "rcr06_rawcreate_salt.json": "64645ee3b693abe3872b6da89388917a52857b73c1b5e914cdd261246e67f0a0"
+    "rcr06_rawcreate_salt.json": "64645ee3b693abe3872b6da89388917a52857b73c1b5e914cdd261246e67f0a0",
+    "cb10_blueprint_flag_offset.hex": "3bb77129d5cf2db13aaa416ba4e6230e7dc47b768a8130ebb629d1e5fcbc4e87",
+    "cb10_blueprint_flag_offset.json": "fb66ce83d440c100dc81dbe12135fa6d10a0d4af7c97391ff5531c7c3f3ca370",
+    "cb11_blueprint_folded_wei_offset.hex": "299f52039f90573f4074008060dba3ad9722815ddae2c965c668cedc983704c1",
+    "cb11_blueprint_folded_wei_offset.json": "f5feb5a2274ce754b89a68b735f11e83af9a48b6838ae0c80ff8958dd0b6ea0e",
+    "cb12_blueprint_unsafe_offset.hex": "9520f8148d4ef818b218421f9d545dd13590a24018352b7e4d19f8d7c7f4a3f8",
+    "cb12_blueprint_unsafe_offset.json": "1072d810f39091ede17e2c75a203bc1bf89a4b288bb4bf3f7af181ea1a12a973"
   }
 }

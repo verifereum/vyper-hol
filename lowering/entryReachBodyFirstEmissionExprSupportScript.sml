@@ -1276,13 +1276,13 @@ Proof
 QED
 
 Theorem first_emission_create_blueprint_check[local]:
-  !target offset a x b. compile_create_blueprint_check target offset a = (x,b) ==>
+  !is_lit target offset a x b. compile_create_blueprint_check is_lit target offset a = (x,b) ==>
   cs_extends a b /\
   (!fn. fn_has_code a b fn ==> ?bb i.
     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  rpt gen_tac >> Cases_on `offset` >>
+  rpt gen_tac >> Cases_on `is_lit` >>
   (simp_tac (srw_ss()) [builtinCreateTheory.compile_create_blueprint_check_def] >>
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac

@@ -225,23 +225,20 @@ End
    code_offset_op: offset into blueprint code (usually 3 for ERC-5202).
      Can be literal or runtime value. *)
 Definition compile_create_blueprint_check_def:
-  compile_create_blueprint_check target_op code_offset_op =
-    do (* Get blueprint code size, skipping preamble *)
-       full_size <- emit_op EXTCODESIZE [target_op];
-       case code_offset_op of
-         Lit _ =>
-           do code_size <- emit_op SUB [full_size; code_offset_op];
-              has_code <- emit_op SGT [code_size; Lit 0w];
-              emit_void ASSERT [has_code];
-              return code_size
-           od
-       | _ =>
-           do (* Compare before subtracting: runtime offsets can wrap. *)
-              has_code <- emit_op GT [full_size; code_offset_op];
-              code_size <- emit_op SUB [full_size; code_offset_op];
-              emit_void ASSERT [has_code];
-              return code_size
-           od
+  compile_create_blueprint_check is_lit target_op code_offset_op =
+    do full_size <- emit_op EXTCODESIZE [target_op];
+       if is_lit then
+         do code_size <- emit_op SUB [full_size; code_offset_op];
+            has_code <- emit_op SGT [code_size; Lit 0w];
+            emit_void ASSERT [has_code];
+            return code_size
+         od
+       else
+         do has_code <- emit_op GT [full_size; code_offset_op];
+            code_size <- emit_op SUB [full_size; code_offset_op];
+            emit_void ASSERT [has_code];
+            return code_size
+         od
     od
 End
 
@@ -271,9 +268,9 @@ Definition compile_create_blueprint_append_def:
 End
 
 Definition compile_create_blueprint_def:
-  compile_create_blueprint target_op value_op salt_opt code_offset_op
+  compile_create_blueprint is_lit target_op value_op salt_opt code_offset_op
                            args_info revert_on_failure =
-    do code_size <- compile_create_blueprint_check target_op code_offset_op;
+    do code_size <- compile_create_blueprint_check is_lit target_op code_offset_op;
        let (args_ptr,args_len) =
          case args_info of NONE => (Lit 0w,Lit 0w) | SOME info => info in
        compile_create_blueprint_append target_op value_op salt_opt code_offset_op

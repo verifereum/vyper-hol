@@ -462,10 +462,10 @@ Proof
 QED
 
 Theorem fuel_ok_compile_create_blueprint_check:
-  !target_op code_offset_op Wv E.
-    fuel_ok Wv {} E (compile_create_blueprint_check target_op code_offset_op)
+  !is_lit target_op code_offset_op Wv E.
+    fuel_ok Wv {} E (compile_create_blueprint_check is_lit target_op code_offset_op)
 Proof
-  rpt gen_tac >> Cases_on `code_offset_op` >>
+  rpt gen_tac >> Cases_on `is_lit` >>
   simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any] >>
   simp[is_terminator_def]
@@ -489,9 +489,9 @@ Proof
 QED
 
 Theorem fuel_ok_compile_create_blueprint:
-  !target_op value_op salt_opt code_offset_op args_info revert_on_failure Wv E.
+  !is_lit target_op value_op salt_opt code_offset_op args_info revert_on_failure Wv E.
     fuel_ok Wv {} E
-      (compile_create_blueprint target_op value_op salt_opt code_offset_op
+      (compile_create_blueprint is_lit target_op value_op salt_opt code_offset_op
          args_info revert_on_failure)
 Proof
   Cases_on `args_info`
