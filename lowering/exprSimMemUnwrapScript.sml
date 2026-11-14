@@ -531,7 +531,7 @@ Proof
    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
   qpat_x_assum `u = _` kall_tac >>
-  qexistsl_tac [`u`, `w`] >> asm_rewrite_tac[]
+  qexistsl_tac [`u`, `w`] >> asm_rewrite_tac[] >> simp[]
 QED
 
 (* ----- storage and transient ----- *)
