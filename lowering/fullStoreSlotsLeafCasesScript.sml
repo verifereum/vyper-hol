@@ -7,6 +7,8 @@ Ancestors
   loweringStateRelDefs codegenRel ptrDiscipline bodyPtrDefs compileEnv unitTransformDefs
   venomState venomInst venomExecSemantics fragExec stateFrame
   finite_map pred_set list rich_list arithmetic words
+  vyperValue vyperTyping exprSimProps valueEncodingDefs vyperStorageCoverage
+  fullAssignCopyFacts valueEncoding valueEncodingProps
 
 Theorem store_slots_copy_prefix_fold:
   w2n (sw:bytes32)+32*n < dimword(:256) ==>
@@ -267,3 +269,134 @@ Resume store_slots_bytes_words[post]:
 QED
 
 Finalise store_slots_bytes_words
+
+Theorem store_slots_bytes_robust_header:
+  (tv = BaseTV (BytesT (Dynamic cap)) \/ tv = BaseTV (StringT cap)) /\
+  value_has_type tv v /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v off m) ==>
+  ?len. val_store_size tv v = 32 * (1 + word_size len) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      mem_word_at off m = n2w len)
+Proof
+  strip_tac >> Cases_on `v` >>
+  gvs[value_has_type_def, val_store_size_def, val_in_memory_def] >>
+  metis_tac[LEFT_ADD_DISTRIB, MULT_COMM, MULT_RIGHT_1]
+QED
+
+Theorem store_slots_leaf_origin_ptr:
+  ((~is_abi_dynamic cenv.ce_struct_fields ty /\ ~vyper_is_dynamic tenv ty) \/
+   (is_abi_dynamic cenv.ce_struct_fields ty /\ is_bytestring_type ty)) /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  compile_store_slots cenv (Var root) slot ty tr sa = ((),sb) /\
+  not_fresh_at sa root /\ (!x. slot=Var x ==> not_fresh_at sa x) /\
+  lookup_var root s=SOME sw /\ eval_operand slot s=SOME dw /\
+  op_prov G slot=NONE /\ op_taint tn slot={} /\
+  ptr_covers G tn root s (val_store_size tv v) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n sw) m) /\
+  w2n sw+type_memory_size tv<dimword(:256) /\
+  w2n dw+type_slot_size tv<=dimword(:256) /\
+  encode_value tv v=SOME writes /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb=sa.cs_current_bb /\
+  s.vs_inst_idx=LENGTH sa.cs_current_insts /\
+  ~s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  w2n sw+val_store_size tv v<=s.vs_alloca_next ==>
+  ?Gf tf u ks.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tf)) /\
+    store_copy_normalize s u =
+      FOLDL (\q k. (if tr then tstore else sstore) (dw+n2w k)
+        (mload (w2n sw+32*k) s) q) s ks /\
+    u.vs_memory=s.vs_memory /\ tf.t_mem=tn.t_mem /\ tf.t_imm=tn.t_imm /\
+    (if tr then tf.t_trans else tf.t_stor) =
+      FOLDL (\ta k. key_update ta (dw+n2w k)
+        (mem_word_taint tn.t_mem (w2n sw+32*k)))
+        (if tr then tn.t_trans else tn.t_stor) ks /\
+    (if tr then tf.t_stor else tf.t_trans)=(if tr then tn.t_stor else tn.t_trans) /\
+    (!k. MEM k ks <=> MEM k (MAP FST writes)) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u=lookup_var x s /\
+      FLOOKUP Gf x=FLOOKUP G x /\ op_taint tf (Var x)=op_taint tn (Var x)) /\
+    u.vs_allocas=s.vs_allocas /\ u.vs_alloca_next=s.vs_alloca_next /\
+    u.vs_labels=s.vs_labels /\ u.vs_call_ctx=s.vs_call_ctx /\
+    ~u.vs_halted /\ u.vs_current_bb=sb.cs_current_bb /\
+    u.vs_inst_idx=LENGTH sb.cs_current_insts
+Proof
+  strip_tac
+  >- suspend "dense"
+  >> suspend "bytes"
+QED
+
+Resume store_slots_leaf_origin_ptr[dense]:
+  `~is_bytestring_type ty` by
+    (Cases_on `ty` >> gvs[is_bytestring_type_def, is_abi_dynamic_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_bytestring_type_def, is_abi_dynamic_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[is_bytestring_type_def, is_abi_dynamic_def]) >>
+  `val_store_size tv v=type_memory_size tv` by
+    metis_tac[fullAssignCopyFactsTheory.topcopy_val_store_size] >>
+  `type_memory_size tv=32*type_slot_size tv` by simp[type_memory_size_slots] >>
+  `ptr_covers G tn root s (32*type_slot_size tv)` by metis_tac[] >>
+  drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`) store_slots_dense_words >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  (impl_tac >- (simp[] >> decide_tac)) >> strip_tac >>
+  qexistsl [`Gf`,`tf`,`u`,`GENLIST I (type_slot_size tv)`] >> simp[] >>
+  gen_tac >> eq_tac
+  >- (simp[MEM_GENLIST] >> strip_tac >>
+      irule encode_value_live_written >> metis_tac[]) >>
+  simp[MEM_GENLIST] >> strip_tac >>
+  drule (CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
+  simp[]
+QED
+
+Resume store_slots_leaf_origin_ptr[bytes]:
+  `?cap. tv=BaseTV (BytesT (Dynamic cap)) \/ tv=BaseTV (StringT cap)` by
+    (Cases_on `ty` >> gvs[is_bytestring_type_def, evaluate_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_bytestring_type_def, evaluate_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[is_bytestring_type_def, evaluate_type_def]) >>
+  drule_at (Pat `value_has_type _ _`) store_slots_bytes_robust_header >>
+  disch_then (qspecl_then [`tn`,`s`,`w2n sw`,`cap`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `val_in_memory tv v (w2n sw) s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  drule_at (Pat `val_in_memory _ _ _ _`) store_slots_bytes_footprint >>
+  disch_then (qspecl_then [`writes`,`cap`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `val_store_size tv v <= type_memory_size tv` by
+    (Cases_on `v` >>
+     gvs[value_has_type_def, val_store_size_def, type_memory_size_def] >>
+     qpat_x_assum `LENGTH _ <= cap` (mp_tac o MATCH_MP word_size_monotone) >>
+     decide_tac) >>
+  `len < dimword(:256)` by
+    (qspec_then `len` mp_tac le_word_size_mul >> decide_tac) >>
+  `mem_word_at (w2n sw) s.vs_memory = n2w len` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `L < dimword(:256)` by decide_tac >>
+  `len = L` by
+    (qpat_x_assum `mem_word_at _ _ = n2w L` mp_tac >>
+     simp[Once EQ_SYM_EQ, n2w_11]) >> gvs[] >>
+  drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`) store_slots_bytes_words >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (qspec_then `L` mp_tac) >>
+  (impl_tac >- (simp[] >> decide_tac)) >> strip_tac >>
+  qexistsl [`Gf`,`tf`,`u`,`GENLIST I (1+word_size L)`] >>
+  simp[MEM_GENLIST] >>
+  pure_once_rewrite_tac [ADD_COMM] >> simp[]
+QED
+
+Finalise store_slots_leaf_origin_ptr
