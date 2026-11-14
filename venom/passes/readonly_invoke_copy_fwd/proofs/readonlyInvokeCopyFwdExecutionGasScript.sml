@@ -100,7 +100,8 @@ Proof
      (step_taint inst s u tn) u (update_var out r (t with vs_gas_readings := rest))` by
     (gvs[] >> rpt conj_tac
      >- gvs[ircf_dead_def, update_var_def]
-     >- (irule ricf_opaque_live_stack_update_var >>
+     >- (PURE_REWRITE_TAC [GSYM gasOracleReplayTheory.gas_update_var] >>
+         irule ricf_opaque_live_stack_update_var >>
          irule ricf_opaque_live_stack_gas_tail >> simp[])
      >- (fs[ircf_cross_def, update_var_def] >> metis_tac[])
      >- (fs[ricf_cert_crosses_def, EVERY_MEM, ircf_cross_def, update_var_def] >>
@@ -108,5 +109,6 @@ Proof
      >> fs[ricf_support_agree_def, update_var_def] >> metis_tac[]) >>
   qexists_tac `update_var out r (t with vs_gas_readings := rest)` >>
   conj_tac >- simp[] >>
-  irule ricf_execution_next >> simp[is_terminator_def] >> metis_tac[]
+  irule ricf_execution_next >>
+  simp[is_terminator_def, Excl "gas_update_var"] >> metis_tac[]
 QED
