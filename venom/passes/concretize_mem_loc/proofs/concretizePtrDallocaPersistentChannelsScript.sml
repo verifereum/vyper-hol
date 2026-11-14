@@ -143,16 +143,23 @@ Proof
   rpt strip_tac >> drule_all ptr_dalloca_store_selector_equal >> simp[]
 QED
 
-Theorem ptr_dalloca_paired_call_adoption:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+Theorem ptr_dalloca_call_adoption:
+  fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn /\
+  MEM a.po_inst (fn_insts a.po_fn) /\ inst_wf a.po_inst /\
+  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn) /\
+  ptr_mixed_vars (births:(num # num, num # num) fmap)
+    (positions:(allocation, num # num) fmap) (TG:(string, num # num) fmap)
+    a.po_taint a.po_fn at.po_fn
+    a.po_state at.po_state /\
+  ptr_history_content a.po_taint a.po_state at.po_state /\
+  a.po_state.vs_labels = at.po_state.vs_labels /\
   a.po_inst.inst_opcode = CALL /\
   step_inst fuel C a.po_inst a.po_state = OK post /\
   step_inst fuelT C' a.po_inst at.po_state = OK postT ==>
   (ptr_call_adopted a.po_state post = ptr_call_adopted at.po_state postT)
 Proof
-  strip_tac >> drule_all ptr_dalloca_persistent_context >> strip_tac >>
+  strip_tac >>
   `?gasop addrop valop ao az ro rz.
     a.po_inst.inst_operands = [gasop;addrop;valop;ao;az;ro;rz]` by
     (qpat_x_assum `inst_wf _` mp_tac >>
@@ -164,7 +171,7 @@ Proof
        ptr_call_operand_transport)) >> simp[]) >>
   suspend "evaluate"
 QED
-Resume ptr_dalloca_paired_call_adoption[evaluate]:
+Resume ptr_dalloca_call_adoption[evaluate]:
   qpat_x_assum `step_inst fuel C _ _ = OK post` mp_tac >>
   qpat_x_assum `step_inst fuelT C' _ _ = OK postT` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, Once opcode_case_def] >>
@@ -177,7 +184,20 @@ Resume ptr_dalloca_paired_call_adoption[evaluate]:
         ptr_core_shared_def, ptr_shared_fields_def]) >>
   drule_all ptr_dalloca_ext_call_adoption >> simp[]
 QED
-Finalise ptr_dalloca_paired_call_adoption
+Finalise ptr_dalloca_call_adoption
+
+Theorem ptr_dalloca_paired_call_adoption:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  a.po_inst.inst_opcode = CALL /\
+  step_inst fuel C a.po_inst a.po_state = OK post /\
+  step_inst fuelT C' a.po_inst at.po_state = OK postT ==>
+  (ptr_call_adopted a.po_state post = ptr_call_adopted at.po_state postT)
+Proof
+  strip_tac >> drule_all ptr_dalloca_persistent_context >> strip_tac >>
+  drule_all ptr_dalloca_call_adoption >> simp[]
+QED
 
 (* Actual executions, rather than independent guessed poststates, determine
    the reset guard.  Incoming variable-mask inclusion supplies only store

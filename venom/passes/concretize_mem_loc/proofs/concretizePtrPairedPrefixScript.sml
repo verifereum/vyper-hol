@@ -37,6 +37,34 @@ Proof
   simp[ptr_sample_list_def]
 QED
 
+(* At a retained departure the new final sample is already recorded at q.
+   The strict order is needed to retain every earlier sample in h and H. *)
+Theorem ptr_sample_list_departure_cut:
+  ptr_sample_list P h ht done H /\ q < LENGTH done /\
+  (!i j. i < j /\ j < LENGTH done ==> EL i done < EL j done) ==>
+  ptr_sample_list P
+    (TAKE (SUC (EL q done)) h) (TAKE (SUC q) ht) (TAKE q done)
+    (TAKE (SUC (EL q done)) H)
+Proof
+  rewrite_tac[ptr_sample_list_def] >> strip_tac >>
+  `EL q done < LENGTH h /\ q < LENGTH ht` by fs[EVERY_EL] >>
+  `LENGTH (TAKE (SUC (EL q done)) h) = SUC (EL q done) /\
+   LENGTH (TAKE (SUC (EL q done)) H) = SUC (EL q done) /\
+   LENGTH (TAKE (SUC q) ht) = SUC q /\ LENGTH (TAKE q done) = q` by
+    simp[LENGTH_TAKE] >>
+  simp[] >> conj_tac
+  >- (simp[EVERY_EL] >> rpt strip_tac >> simp[EL_TAKE] >>
+      `EL n done < EL q done` by (first_x_assum irule >> simp[]) >> decide_tac) >>
+  rpt strip_tac >> Cases_on `j < q`
+  >- (`EL j done < EL q done` by (first_x_assum irule >> simp[]) >>
+      `EL j done < LENGTH h /\ EL j done < LENGTH H` by decide_tac >>
+      qpat_x_assum `!j. j < LENGTH ht ==> _` (qspec_then `j` mp_tac) >>
+      simp[EL_APPEND_EQN, EL_TAKE]) >>
+  `j = q` by decide_tac >>
+  qpat_x_assum `!j. j < LENGTH ht ==> _` (qspec_then `q` mp_tac) >>
+  simp[EL_APPEND_EQN, EL_TAKE]
+QED
+
 Theorem ptr_paired_samples_mixed:
   ptr_paired_samples positions h ht done H /\ j < LENGTH ht /\
   EL (EL j (done ++ [LENGTH h - 1])) H =
@@ -209,6 +237,41 @@ Definition ptr_paired_prefix_def:
     ptr_paired_callers h ht done H a at saved calls /\
     ptr_paired_writes lo positions C Ct h ht done H W
 End
+
+(* Memory reasoning does not need the saved-caller certificate. Keeping
+   this projection explicit lets historical cuts retain the recorded sample
+   and writes without inventing callers for a former activation stack. *)
+Definition ptr_paired_memory_prefix_def:
+  ptr_paired_memory_prefix R local_positions positions lo vs0 C Ct
+      h a ht at done tokens registry births PT TG saved entries H W <=>
+    ptr_structural_transcript R vs0 C Ct h a ht at done
+      tokens registry births PT TG saved entries H /\
+    ptr_stage_placements Ct positions /\
+    ptr_paired_samples positions h ht done H /\
+    ptr_paired_alignment R local_positions positions h ht done H /\
+    ptr_paired_writes lo positions C Ct h ht done H W
+End
+
+Theorem ptr_paired_prefix_memory_iff:
+  !W.
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls W <=>
+  ptr_paired_memory_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H W /\
+  ptr_paired_callers h ht done H a at saved calls
+Proof
+  gen_tac >> simp[ptr_paired_prefix_def, ptr_paired_memory_prefix_def] >> metis_tac[]
+QED
+
+Theorem ptr_paired_prefix_memory:
+  !W.
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls W ==>
+  ptr_paired_memory_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H W
+Proof
+  gen_tac >> simp[ptr_paired_prefix_memory_iff]
+QED
 
 Theorem ptr_paired_prefix_transcript:
   !W.

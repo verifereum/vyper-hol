@@ -110,21 +110,3 @@ Theorem ptr_dalloca_ghost_live_byte:
   y IN tnt.t_mem ==> x IN tn.t_mem
 Proof simp[ptr_dalloca_ghost_compare_def] >> metis_tac[]
 QED
-
-(* Interface stress test, not a counterexample to either stage theorem.
-   first_prov can change which operand supplies provenance after the
-   static operand loses its tag.  Thus unconditional provenance inclusion
-   is not preserved by ADD without an additional use-sensitive argument. *)
-Theorem ptr_dalloca_add_prov_switch:
-  ptr_dalloca_ghost_vars
-    (FEMPTY |+ ("p",(64,32)) |+ ("d",(256,32))) FEMPTY s
-    (FEMPTY |+ ("d",(256,32))) FEMPTY s /\
-  out_prov [] (FEMPTY |+ ("p",(64,32)) |+ ("d",(256,32)))
-    (mk_inst 3 ADD [Var "p"; Var "d"] ["q"]) s = SOME (64,32) /\
-  out_prov [] (FEMPTY |+ ("d",(256,32)))
-    (mk_inst 3 ADD [Var "p"; Var "d"] ["q"]) s = SOME (256,32)
-Proof
-  simp[ptr_dalloca_ghost_vars_def, entry_taint_def, op_taint_def,
-       out_prov_def, first_prov_def, op_prov_def, mk_inst_def,
-       FLOOKUP_UPDATE] >> rpt strip_tac >> gvs[]
-QED

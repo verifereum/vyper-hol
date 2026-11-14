@@ -1,6 +1,6 @@
 Theory concretizePtrPairedFields
 Ancestors
-  concretizePtrStructuralTranscript concretizePtrValueSelection
+  concretizePtrStructuralTranscript concretizePtrValueSelection concretizePtrEventEmbedding
   concretizePtrPrefixLedger concretizePtrStagePlacements concretizePtrBytes
   concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizeStepContract
@@ -309,4 +309,61 @@ Proof
   strip_tac >> fs[ptr_paired_callers_def] >>
   first_x_assum (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
   drule_all ptr_paired_call_mixed >> simp[]
+QED
+
+(* Only completed events before q survive. Their source and target
+   immediate successors both remain inside the two departure cuts. *)
+Theorem ptr_paired_write_departure_cut:
+  !rho.
+  ptr_paired_write lo positions C Ct h ht done H (n,j,rho) /\
+  ptr_event_embedding h ht (done ++ [LENGTH h - 1]) /\
+  LENGTH H = LENGTH h /\ j < q /\ q < LENGTH done ==>
+  ptr_paired_write lo positions C Ct
+    (TAKE (SUC (EL q done)) h) (TAKE (SUC q) ht) (TAKE q done)
+    (TAKE (SUC (EL q done)) H) (n,j,rho)
+Proof
+  gen_tac >> rewrite_tac[ptr_paired_write_def] >> strip_tac >>
+  `EL q done < LENGTH h /\ q < LENGTH ht` by
+    (fs[ptr_event_embedding_def, EVERY_EL] >>
+     qpat_x_assum `!n. n < LENGTH _ ==> _` (qspec_then `q` mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  `n < EL q done` by
+    (fs[ptr_event_embedding_def] >>
+     qpat_x_assum `!i j. _` (qspecl_then [`j`,`q`] mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  gvs[LENGTH_TAKE, EL_TAKE]
+QED
+
+Theorem ptr_paired_writes_departure_cut:
+  !ws.
+  ptr_paired_writes lo positions C Ct h ht done H ws /\
+  ptr_event_embedding h ht (done ++ [LENGTH h - 1]) /\
+  LENGTH H = LENGTH h /\ q < LENGTH done ==>
+  ptr_paired_writes lo positions C Ct
+    (TAKE (SUC (EL q done)) h) (TAKE (SUC q) ht) (TAKE q done)
+    (TAKE (SUC (EL q done)) H) (FILTER (\(n,j,rho). j < q) ws)
+Proof
+  gen_tac >> strip_tac >>
+  `EL q done < LENGTH h /\ q < LENGTH ht` by
+    (fs[ptr_event_embedding_def, EVERY_EL] >>
+     qpat_x_assum `!n. n < LENGTH _ ==> _` (qspec_then `q` mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  qpat_x_assum `ptr_paired_writes _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_paired_writes_def] >> strip_tac >> rpt conj_tac
+  >- (simp[EVERY_MEM, MEM_FILTER, FORALL_PROD] >> rpt strip_tac >>
+      irule ptr_paired_write_departure_cut >>
+      rpt (goal_assum (drule_at Any)) >> fs[EVERY_MEM])
+  >- (`MAP (\(n,j,rho). j) (FILTER (\(n,j,rho). j < q) ws) =
+       FILTER (\j. j < q) (MAP (\(n,j,rho). j) ws)` by
+        (rewrite_tac[FILTER_MAP] >> AP_TERM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+         simp[FUN_EQ_THM, FORALL_PROD]) >>
+      simp[FILTER_ALL_DISTINCT]) >>
+  simp[LENGTH_TAKE, EL_TAKE] >> rpt strip_tac >>
+  `EL j done < EL q done` by
+    (fs[ptr_event_embedding_def] >>
+     qpat_x_assum `!i j. _` (qspecl_then [`j`,`q`] mp_tac) >>
+     simp[EL_APPEND_EQN]) >>
+  `EL j done < LENGTH h /\ SUC (EL j done) < LENGTH h` by decide_tac >>
+  qpat_x_assum `!j. j < LENGTH done /\ _ ==> _` (qspec_then `j` mp_tac) >>
+  gvs[MEM_FILTER, EL_TAKE] >> metis_tac[]
 QED

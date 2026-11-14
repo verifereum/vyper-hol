@@ -8,7 +8,8 @@
  *)
 Theory concretizeStageFramePtr
 Ancestors
-  concretizeStageStatic
+  concretizeStageStatic concretizePtrDallocaHistoricalPersistent
+  concretizePtrDallocaHistoricalMemory
   o1PassContract ptrDiscipline unitMemInv stackPlanGen concretizeMemLocDefs
   venomPassDispatcher cfgWf
   concretizePtrStagePairedBridge concretizePtrHistoryCoverage
