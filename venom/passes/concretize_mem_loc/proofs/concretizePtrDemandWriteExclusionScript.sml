@@ -354,10 +354,14 @@ Theorem ptr_demand_interval_exists:
     rpolicy s out names w) \/
   dyn_floor C vs <= b+k
 Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_interval_exists_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
-    ptr_demand_interval_static_compat] >>
-  tautLib.TAUT_TAC
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `o1_run_state_ok vs` mp_tac >>
+  pure_rewrite_tac[o1_run_state_ok_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_demand_interval_exists_static >> strip_tac
+  >- (disj1_tac >> qexists `w` >>
+      simp[ptr_demand_interval_static_compat]) >>
+  simp[]
 QED
 
 Theorem ptr_demand_interval_owner_at[local]:
