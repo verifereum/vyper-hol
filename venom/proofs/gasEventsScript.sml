@@ -171,3 +171,43 @@ Proof
   first_x_assum irule >> simp[] >>
   fs[rich_listTheory.DROP_CONS_EL]
 QED
+
+Theorem gas_events_step_ok_readings:
+  step_inst fuel C inst s = OK v ==>
+  v.vs_gas_readings =
+    DROP (LENGTH (gas_events_step fuel C owner inst s)) s.vs_gas_readings
+Proof
+  strip_tac >> mp_tac (cj 1 gas_count_suffix) >>
+  disch_then (qspecl_then [`fuel`,`C`,`inst`,`s`] mp_tac) >>
+  simp[gas_count_suffix_def, gas_events_length]
+QED
+
+Theorem gas_events_block_ok_readings:
+  exec_block fuel C bb s = OK v ==>
+  v.vs_gas_readings =
+    DROP (LENGTH (gas_events_block fuel C owner bb s)) s.vs_gas_readings
+Proof
+  strip_tac >> mp_tac (cj 2 gas_count_suffix) >>
+  disch_then (qspecl_then [`fuel`,`C`,`bb`,`s`] mp_tac) >>
+  simp[gas_count_suffix_def, gas_events_length]
+QED
+
+Theorem gas_events_block_step_stop:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  (!v. step_inst fuel C inst s = OK v ==> is_terminator inst.inst_opcode) ==>
+  gas_events_block fuel C owner bb s = gas_events_step fuel C owner inst s
+Proof
+  strip_tac >>
+  qspecl_then [`fuel`, `C`, `owner`, `bb`, `s`, `inst`] mp_tac gas_events_block_at >>
+  simp[] >> Cases_on `step_inst fuel C inst s` >> simp[]
+QED
+
+Theorem gas_events_block_step_length:
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  LENGTH (gas_events_step fuel C owner inst s) <=
+  LENGTH (gas_events_block fuel C owner bb s)
+Proof
+  strip_tac >>
+  qspecl_then [`fuel`, `C`, `owner`, `bb`, `s`, `inst`] mp_tac gas_events_block_at >>
+  simp[] >> disch_then SUBST1_TAC >> simp[]
+QED

@@ -6231,49 +6231,6 @@ Proof
   simp[]
 QED
 
-Theorem supply_gas_events_assemble[local]:
-  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
-  run_block_entry k ctx bb u = OK v /\ ~v.vs_halted ==>
-  ?N extra.
-    gas_events_blocks N ctx fn u =
-      (case eval_phis u bb.bb_instructions of
-         OK p => gas_events_block k ctx fn.fn_name bb
-           (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-       | _ => []) ++ gas_events_blocks n ctx fn v ++ extra /\
-    (terminates (run_blocks n ctx fn v) ==>
-      extra = [] /\ run_blocks N ctx fn u = run_blocks n ctx fn v)
-Proof
-  strip_tac >>
-  qspec_then `u` (qspec_then `bb.bb_instructions` strip_assume_tac)
-    venomExecSemanticsTheory.eval_phis_ok_or_error_defs
-  >- (qmatch_asmsub_abbrev_tac `eval_phis u bb.bb_instructions = OK p` >>
-      `exec_block k ctx bb
-         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v` by
-        gvs[venomExecSemanticsTheory.run_block_entry_def] >>
-      `!err. exec_block k ctx bb
-         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) <> Error err` by simp[] >>
-      `k <= k + n` by simp[] >>
-      `exec_block (k + n) ctx bb
-         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v /\
-       gas_events_block (k + n) ctx fn.fn_name bb
-         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
-       gas_events_block k ctx fn.fn_name bb
-         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
-        metis_tac[cj 2 gas_events_fuel_extension] >>
-      qspecl_then [`n`, `ctx`, `fn`, `v`]
-        (qspec_then `k + n` mp_tac) (cj 3 gas_events_fuel_extension) >>
-      simp[] >> strip_tac >>
-      qexistsl_tac [`SUC (k + n)`, `extra`] >> conj_tac
-      >- simp[gas_events_blocks_unfold, venomExecSemanticsTheory.run_block_entry_def] >>
-      strip_tac >>
-      `!err. run_blocks n ctx fn v <> Error err` by
-        (Cases_on `run_blocks n ctx fn v` >>
-         gvs[passSimulationDefsTheory.terminates_def]) >>
-      gvs[] >> simp[Once venomExecSemanticsTheory.run_blocks_unfold,
-                    venomExecSemanticsTheory.run_block_entry_def]) >>
-  gvs[venomExecSemanticsTheory.run_block_entry_def]
-QED
-
 Theorem supply_run_blocks_gas_events_prefix:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
   EVERY label_positions_ok (fn_insts fn) /\
@@ -6303,7 +6260,7 @@ Resume supply_run_blocks_gas_events_prefix[pending]:
   first_x_assum (drule_then mp_tac) >> strip_tac >>
   drule_all supply_pending_split_lookup >> strip_tac >>
   `~m.vs_halted` by gvs[supply_ready_def] >>
-  drule_all (Q.INST [`k` |-> `0`, `n` |-> `m'`] supply_gas_events_assemble) >>
+  drule_all (Q.INST [`k` |-> `0`, `n` |-> `m'`] gas_events_blocks_assemble) >>
   strip_tac >>
   suspend "pending_assemble"
 QED
@@ -6356,7 +6313,7 @@ Resume supply_run_blocks_gas_events_prefix[continue]:
   qpat_x_assum `!m. m < SUC k ==> _`
     (qspec_then `k` mp_tac) >> simp[] >>
   disch_then (qspecl_then [`v'`, `v''`] mp_tac) >> simp[] >> strip_tac >>
-  drule_all supply_gas_events_assemble >>
+  drule_all gas_events_blocks_assemble >>
   disch_then (qspec_then `m` strip_assume_tac) >>
   qexistsl_tac [`N`, `extra ++ extra'`] >> conj_tac
   >- (simp[gas_events_blocks_unfold, supply_ready_def, listTheory.APPEND_ASSOC] >>

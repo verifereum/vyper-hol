@@ -272,7 +272,7 @@ Proof
   RULE_ASSUM_TAC (REWRITE_RULE [o1_fn_passes_el])
   >~ [`VP_MakeSSA`] >- make_ssa_tac
   >~ [`VP_LowerDload`]
-  >- (gvs[o1_inv_def] >> drule_all lower_dload_stage_sim_events >>
+  >- (gvs[o1_inv_def] >> drule_all lower_dload_stage_sim_events_fuel >>
       metis_tac[])
   >~ [`VP_ConcretizeMemLoc`]
   >- (gvs[o1_inv_def, o1_src_inv_def] >>

@@ -18,10 +18,10 @@ Proof
       metis_tac[gasCountTheory.step_inst_gas_le])
   >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >> irule gas_cut_readings_mono >>
       first_assum (irule_at Any) >>
-      drule enters_block_readings >> simp[] >> strip_tac >>
+      drule contextCodegenRelPropsTheory.enters_block_readings >> simp[] >> strip_tac >>
       metis_tac[gasCountTheory.step_inst_gas_le])
   >- (`gas_cut ncut vs0 s` by
-        (drule enters_block_readings >> drule gas_setup_callee_readings >>
+        (drule contextCodegenRelPropsTheory.enters_block_readings >> drule gas_setup_callee_readings >>
          rpt strip_tac >> gvs[gas_cut_def]) >>
       conj_tac >- metis_tac[ptr_discipline_upto_at] >>
       qpat_x_assum `_ ==> EVERY _ _` irule >> simp[]) >>

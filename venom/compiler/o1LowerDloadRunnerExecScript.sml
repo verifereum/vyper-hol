@@ -22,75 +22,26 @@ Proof
   metis_tac[]
 QED
 
-Theorem ld_silent_events_nil[local]:
-  !d s. jt = d + s.vs_inst_idx /\
-    (!k inst. s.vs_inst_idx <= k /\ k <= jt /\
-              get_instruction bb k = SOME inst ==>
-              inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE) /\
-    (!inst. get_instruction bb jt = SOME inst ==>
-            is_terminator inst.inst_opcode) ==>
-    gas_events_block fuel C owner bb s = []
-Proof
-  Induct
-  >- (rpt strip_tac >> gvs[] >>
-      CONV_TAC (LHS_CONV (REWR_CONV gas_events_block_def)) >>
-      Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
-      rename1 `get_instruction bb s.vs_inst_idx = SOME x` >>
-      `x.inst_opcode <> GAS /\ x.inst_opcode <> INVOKE /\
-       is_terminator x.inst_opcode` by
-        (first_x_assum (qspecl_then [`s.vs_inst_idx`, `x`] mp_tac) >> simp[]) >>
-      simp[gas_events_step_def] >>
-      Cases_on `step_inst fuel C x s` >> simp[]) >>
-  rpt strip_tac >>
-  CONV_TAC (LHS_CONV (REWR_CONV gas_events_block_def)) >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
-  rename1 `get_instruction bb s.vs_inst_idx = SOME x` >>
-  `x.inst_opcode <> GAS /\ x.inst_opcode <> INVOKE` by
-    (first_x_assum (qspecl_then [`s.vs_inst_idx`, `x`] mp_tac) >> simp[]) >>
-  simp[gas_events_step_def] >>
-  Cases_on `step_inst fuel C x s` >> simp[] >>
-  Cases_on `is_terminator x.inst_opcode` >> simp[] >>
-  first_x_assum irule >> simp[] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`k`, `inst`] mp_tac) >> simp[]
-QED
-
-Theorem ld_silent_to_terminator[local]:
-  s.vs_inst_idx <= jt /\
-  (!k inst. s.vs_inst_idx <= k /\ k <= jt /\
-            get_instruction bb k = SOME inst ==>
-            inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE) /\
-  (!inst. get_instruction bb jt = SOME inst ==>
-          is_terminator inst.inst_opcode) ==>
-  gas_events_block fuel C owner bb s = []
-Proof
-  strip_tac >>
-  qspecl_then [`jt - s.vs_inst_idx`, `s`] mp_tac ld_silent_events_nil >>
-  simp[] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]
-QED
-
 (* A revert forwarding runs RETURNDATACOPY, ASSIGNs and REVERT: no GAS and
    no INVOKE, so it reads no gas events. *)
 Theorem ld_revert_forward_events_nil[local]:
   in_revert_forward fn s /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
   gas_events_block fuel C owner bb s = []
 Proof
-  simp[in_revert_forward_def, revert_forward_at_def] >> rpt strip_tac >>
-  gvs[revert_forward_pair_def] >> irule ld_silent_to_terminator
-  >- (qexists_tac `j` >> simp[is_terminator_def] >> rpt strip_tac >>
-      Cases_on `k = s.vs_inst_idx` >> gvs[] >>
-      Cases_on `k = j` >> gvs[] >>
-      `inst.inst_opcode = ASSIGN` by
-        (first_x_assum irule >> qexists_tac `k` >> simp[]) >>
-      gvs[]) >>
-  qexists_tac `s.vs_inst_idx` >> simp[is_terminator_def] >> rpt strip_tac >>
-  `k = s.vs_inst_idx` by decide_tac >> gvs[]
+  simp[in_revert_forward_def, revert_forward_at_def] >> rpt strip_tac >> gvs[]
+  >- (irule o1LowerDloadForwardAbortTheory.ld_forward_interval_events >>
+      goal_assum (drule_at Any) >> simp[])
+  >> fs[revert_forward_pair_def] >>
+  rename1 `revert_inst.inst_opcode = REVERT` >>
+  simp[Once gas_events_block_def, gas_events_step_def, is_terminator_def] >>
+  Cases_on `step_inst fuel C revert_inst s` >> simp[]
 QED
 
 val ld_c2_stop_tac =
   strip_tac >>
   `LENGTH (gas_events_block fuel C fn.fn_name bb s) =
    LENGTH (gas_events_step fuel C fn.fn_name i s)` by
-    (AP_TERM_TAC >> irule ld_block_events_step_stop >> simp[]) >>
+    (AP_TERM_TAC >> irule gas_events_block_step_stop >> simp[]) >>
   `F` suffices_by simp[] >> decide_tac;
 
 Theorem ld_runner_exec_clause_events_fuel:
@@ -109,7 +60,7 @@ Proof
    fmp_free_ctx C` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   `LENGTH (gas_events_step fuel C fn.fn_name i s) <=
    LENGTH (gas_events_block fuel C fn.fn_name bb s)` by
-    (irule ld_block_events_step_length >> simp[]) >>
+    (irule gas_events_block_step_length >> simp[]) >>
   Cases_on `j <= LENGTH (gas_events_step fuel C fn.fn_name i s)`
   >- suspend "step_prefix" >>
   `LENGTH (gas_events_step fuel C fn.fn_name i s) < j` by decide_tac >>

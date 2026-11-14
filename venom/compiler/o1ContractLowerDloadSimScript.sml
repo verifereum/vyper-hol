@@ -456,33 +456,6 @@ Proof
   gvs[]
 QED
 
-Theorem ld_root_simulation:
-  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  callee_first names C.ctx_functions /\ o1_safe_upto D lo ncut C vs /\
-  0 < j /\ j <= ncut /\
-  C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME lbl /\ enters_block fn ^ldS0 s1 ==>
-  ?fn'. C'.ctx_entry = SOME name /\
-    lookup_function name C'.ctx_functions = SOME fn' /\
-    fn_entry_label fn' = SOME lbl /\
-    (!m. run_context m C' vs = run_blocks m C' fn' ^ldS0) /\
-    (terminates (run_blocks fuel C fn ^ldS0) /\
-     LENGTH (gas_events_blocks fuel C fn ^ldS0) < j ==>
-     ?m. gas_events_blocks m C' fn' ^ldS0 = gas_events_blocks fuel C fn ^ldS0 /\
-         terminates (run_blocks m C' fn' ^ldS0) /\
-         dead_result_rel D (run_blocks fuel C fn ^ldS0)
-           (run_blocks m C' fn' ^ldS0)) /\
-    (j <= LENGTH (gas_events_blocks fuel C fn ^ldS0) ==>
-     ?m. TAKE j (gas_events_blocks m C' fn' ^ldS0) =
-         TAKE j (gas_events_blocks fuel C fn ^ldS0))
-Proof
-  strip_tac >> drule_all ld_root_simulation_events_fuel >>
-  disch_then (qspec_then `fuel` strip_assume_tac) >>
-  qexists_tac `fn'` >> simp[] >> conj_tac >> strip_tac >>
-  qexists_tac `fuel` >> fs[]
-QED
-
 Theorem lower_dload_stage_sim_events_fuel:
   !rpolicy D view C C' vs names fuel.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -516,28 +489,6 @@ Proof
   qexistsl_tac [`name`, `fn`, `fn'`, `lbl`] >> gvs[]
 QED
 
-Theorem lower_dload_stage_sim_events:
-  !rpolicy D view C C' vs names fuel.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-    terminates (run_context fuel C vs) ==>
-    ?fuel' name fn fn' lbl.
-      C.ctx_entry = SOME name /\ C'.ctx_entry = SOME name /\
-      lookup_function name C.ctx_functions = SOME fn /\
-      lookup_function name C'.ctx_functions = SOME fn' /\
-      fn_entry_label fn = SOME lbl /\ fn_entry_label fn' = SOME lbl /\
-      dead_result_rel D (run_context fuel C vs) (run_context fuel' C' vs) /\
-      terminates (run_context fuel' C' vs) /\
-      gas_events_blocks fuel' C' fn'
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) =
-      gas_events_blocks fuel C fn
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-Proof
-  rpt strip_tac >> drule_all lower_dload_stage_sim_events_fuel >>
-  strip_tac >> qexistsl_tac [`fuel`, `name`, `fn`, `fn'`, `lbl`] >> simp[]
-QED
-
 Theorem lower_dload_stage_sim:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -546,8 +497,8 @@ Theorem lower_dload_stage_sim:
     ctx_sim D C C' vs vs
 Proof
   rpt strip_tac >> simp[ctx_sim_def] >> rpt strip_tac >>
-  drule_all lower_dload_stage_sim_events >> strip_tac >>
-  qexists_tac `fuel'` >> simp[]
+  drule_all lower_dload_stage_sim_events_fuel >> strip_tac >>
+  qexists_tac `fuel` >> simp[]
 QED
 
 (* Event matching also fixes the target interpreter budget. *)
@@ -594,9 +545,9 @@ Proof
   `gas_events_blocks fuel C fn ^ldS0 <> []` by (strip_tac >> gvs[]) >>
   `?s1. enters_block fn ^ldS0 s1` by metis_tac[ld_run_enters] >>
   `0 < n /\ n <= n` by decide_tac >>
-  drule_all ld_root_simulation >>
+  drule_all ld_root_simulation_events_fuel >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   first_x_assum drule >> strip_tac >>
-  qexistsl_tac [`m`, `fn'`] >> simp[] >>
+  qexistsl_tac [`fuel`, `fn'`] >> simp[] >>
   metis_tac[ld_take_length]
 QED

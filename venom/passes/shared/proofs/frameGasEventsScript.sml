@@ -54,11 +54,7 @@ Proof
   rpt strip_tac >>
   `finite_step C i s (step_inst k C i s)` by
     metis_tac[cj 1 finite_execution_complete] >>
-  `?n1. !m. n1 <= m ==> step_inst m C i s = r` by
-    metis_tac[cj 1 finite_execution_realizable] >>
-  `?n2. !m. n2 <= m ==> step_inst m C i s = step_inst k C i s` by
-    metis_tac[cj 1 finite_execution_realizable] >>
-  `n1 <= n1 + n2 /\ n2 <= n1 + n2` by decide_tac >> metis_tac[]
+  metis_tac[finite_step_deterministic]
 QED
 
 Theorem exec_block_finite_eq:
@@ -68,11 +64,7 @@ Proof
   rpt strip_tac >>
   `finite_block C bb s (exec_block k C bb s)` by
     metis_tac[cj 2 finite_execution_complete] >>
-  `?n1. !m. n1 <= m ==> exec_block m C bb s = r` by
-    metis_tac[cj 2 finite_execution_realizable] >>
-  `?n2. !m. n2 <= m ==> exec_block m C bb s = exec_block k C bb s` by
-    metis_tac[cj 2 finite_execution_realizable] >>
-  `n1 <= n1 + n2 /\ n2 <= n1 + n2` by decide_tac >> metis_tac[]
+  metis_tac[finite_block_deterministic]
 QED
 
 Theorem run_blocks_finite_eq:
@@ -82,11 +74,7 @@ Proof
   rpt strip_tac >>
   `finite_run C fn s (run_blocks k C fn s)` by
     metis_tac[cj 3 finite_execution_complete] >>
-  `?n1. !m. n1 <= m ==> run_blocks m C fn s = r` by
-    metis_tac[cj 3 finite_execution_realizable] >>
-  `?n2. !m. n2 <= m ==> run_blocks m C fn s = run_blocks k C fn s` by
-    metis_tac[cj 3 finite_execution_realizable] >>
-  `n1 <= n1 + n2 /\ n2 <= n1 + n2` by decide_tac >> metis_tac[]
+  metis_tac[finite_run_deterministic]
 QED
 
 (* One-step unfoldings at a known instruction or block. *)

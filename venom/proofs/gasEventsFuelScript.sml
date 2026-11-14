@@ -128,3 +128,46 @@ Proof
     venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
   simp[venomExecSemanticsTheory.run_block_entry_def]
 QED
+
+Theorem gas_events_blocks_assemble:
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+  run_block_entry k ctx bb u = OK v /\ ~v.vs_halted ==>
+  ?N extra.
+    gas_events_blocks N ctx fn u =
+      (case eval_phis u bb.bb_instructions of
+         OK p => gas_events_block k ctx fn.fn_name bb
+           (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+       | _ => []) ++ gas_events_blocks n ctx fn v ++ extra /\
+    (terminates (run_blocks n ctx fn v) ==>
+      extra = [] /\ run_blocks N ctx fn u = run_blocks n ctx fn v)
+Proof
+  strip_tac >>
+  qspec_then `u` (qspec_then `bb.bb_instructions` strip_assume_tac)
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs
+  >- (qmatch_asmsub_abbrev_tac `eval_phis u bb.bb_instructions = OK p` >>
+      `exec_block k ctx bb
+         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v` by
+        gvs[venomExecSemanticsTheory.run_block_entry_def] >>
+      `!err. exec_block k ctx bb
+         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) <> Error err` by simp[] >>
+      `k <= k + n` by simp[] >>
+      `exec_block (k + n) ctx bb
+         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v /\
+       gas_events_block (k + n) ctx fn.fn_name bb
+         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+       gas_events_block k ctx fn.fn_name bb
+         (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+        metis_tac[cj 2 gas_events_fuel_extension] >>
+      qspecl_then [`n`, `ctx`, `fn`, `v`]
+        (qspec_then `k + n` mp_tac) (cj 3 gas_events_fuel_extension) >>
+      simp[] >> strip_tac >>
+      qexistsl_tac [`SUC (k + n)`, `extra`] >> conj_tac
+      >- simp[gas_events_blocks_unfold, venomExecSemanticsTheory.run_block_entry_def] >>
+      strip_tac >>
+      `!err. run_blocks n ctx fn v <> Error err` by
+        (Cases_on `run_blocks n ctx fn v` >>
+         gvs[passSimulationDefsTheory.terminates_def]) >>
+      gvs[] >> simp[Once venomExecSemanticsTheory.run_blocks_unfold,
+                    venomExecSemanticsTheory.run_block_entry_def]) >>
+  gvs[venomExecSemanticsTheory.run_block_entry_def]
+QED

@@ -182,26 +182,6 @@ Proof
   rw[LENGTH_DROP] >> decide_tac
 QED
 
-Theorem ld_step_ok_readings:
-  step_inst fuel C inst s = OK v ==>
-  v.vs_gas_readings =
-    DROP (LENGTH (gas_events_step fuel C owner inst s)) s.vs_gas_readings
-Proof
-  strip_tac >> mp_tac (cj 1 gas_count_suffix) >>
-  disch_then (qspecl_then [`fuel`,`C`,`inst`,`s`] mp_tac) >>
-  simp[gas_count_suffix_def, gas_events_length]
-QED
-
-Theorem ld_block_ok_readings:
-  exec_block fuel C bb s = OK v ==>
-  v.vs_gas_readings =
-    DROP (LENGTH (gas_events_block fuel C owner bb s)) s.vs_gas_readings
-Proof
-  strip_tac >> mp_tac (cj 2 gas_count_suffix) >>
-  disch_then (qspecl_then [`fuel`,`C`,`bb`,`s`] mp_tac) >>
-  simp[gas_count_suffix_def, gas_events_length]
-QED
-
 Theorem ld_take_length:
   TAKE j b = TAKE j a /\ j <= LENGTH a ==> j <= LENGTH b
 Proof
@@ -228,24 +208,6 @@ QED
 
 
 
-Theorem ld_block_events_step_stop:
-  get_instruction bb s.vs_inst_idx = SOME inst /\
-  (!v. step_inst fuel C inst s = OK v ==> is_terminator inst.inst_opcode) ==>
-  gas_events_block fuel C owner bb s = gas_events_step fuel C owner inst s
-Proof
-  strip_tac >> CONV_TAC (LHS_CONV (REWR_CONV gas_events_block_def)) >>
-  Cases_on `step_inst fuel C inst s` >> simp[]
-QED
-
-Theorem ld_block_events_step_length:
-  get_instruction bb s.vs_inst_idx = SOME inst ==>
-  LENGTH (gas_events_step fuel C owner inst s) <=
-  LENGTH (gas_events_block fuel C owner bb s)
-Proof
-  strip_tac >> CONV_TAC (RAND_CONV (RAND_CONV (REWR_CONV gas_events_block_def))) >>
-  simp[]
-QED
-
 Theorem ld_step_budget:
   step_inst fuel C inst s = OK v /\
   j + LENGTH vs.vs_gas_readings <= ncut + LENGTH s.vs_gas_readings /\
@@ -254,7 +216,7 @@ Theorem ld_step_budget:
     ncut + LENGTH v.vs_gas_readings /\
   0 < j - LENGTH (gas_events_step fuel C owner inst s)
 Proof
-  strip_tac >> drule ld_step_ok_readings >>
+  strip_tac >> drule gas_events_step_ok_readings >>
   disch_then (qspec_then `owner` assume_tac) >>
   drule_all ld_budget_drop >> simp[]
 QED
@@ -267,7 +229,7 @@ Theorem ld_block_budget:
     ncut + LENGTH v.vs_gas_readings /\
   0 < j - LENGTH (gas_events_block fuel C owner bb s)
 Proof
-  strip_tac >> drule ld_block_ok_readings >>
+  strip_tac >> drule gas_events_block_ok_readings >>
   disch_then (qspec_then `owner` assume_tac) >>
   drule_all ld_budget_drop >> simp[]
 QED

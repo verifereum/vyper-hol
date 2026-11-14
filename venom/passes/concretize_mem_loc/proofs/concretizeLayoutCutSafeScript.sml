@@ -22,13 +22,6 @@ Ancestors
 (* ===== Gas readings only shrink ===== *)
 
 
-Theorem enters_block_readings:
-  enters_block fn s s1 ==> s1.vs_gas_readings = s.vs_gas_readings
-Proof
-  simp[enters_block_def] >> strip_tac >> gvs[] >>
-  drule gas_count_phis_ok >> simp[]
-QED
-
 Theorem return_readings_le:
   step_inst fuel ctx rinst s = IntRet ret s_end /\
   bind_outputs outs ret.iret_values
@@ -52,9 +45,9 @@ Proof
   simp[Once joint_transition_cases] >> rpt strip_tac >>
   gvs[joint_state_def]
   >- metis_tac[gasCountTheory.step_inst_gas_le]
-  >- (drule enters_block_readings >> simp[] >> strip_tac >>
+  >- (drule contextCodegenRelPropsTheory.enters_block_readings >> simp[] >> strip_tac >>
       metis_tac[gasCountTheory.step_inst_gas_le])
-  >- (drule enters_block_readings >> drule gas_setup_callee_readings >>
+  >- (drule contextCodegenRelPropsTheory.enters_block_readings >> drule gas_setup_callee_readings >>
       simp[])
   >> metis_tac[return_readings_le]
 QED

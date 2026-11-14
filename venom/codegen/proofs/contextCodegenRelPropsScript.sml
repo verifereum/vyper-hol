@@ -2,7 +2,7 @@
 
 Theory contextCodegenRelProps
 Ancestors
-  contextCodegenRel planSpillBounds codegenRel memLocDefs venomWf venomState words
+  contextCodegenRel venomExecProofs planSpillBounds codegenRel memLocDefs venomWf venomState words
   venomInst
 
 Theorem lookup_instruction_active:
@@ -57,6 +57,14 @@ Theorem fn_entry_inv_active:
   active_inst fn inst s1 ==> Inv ctx fn inst s1
 Proof
   simp[fn_entry_inv_def] >> metis_tac[]
+QED
+
+Theorem enters_block_readings:
+  enters_block fn s s1 ==> s1.vs_gas_readings = s.vs_gas_readings
+Proof
+  rw[enters_block_def] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem reachability_closed_next:
