@@ -122,7 +122,8 @@ Proof
   `?eb. entry_block f = SOME eb` by
     (Cases_on `f.fn_blocks` >>
      fs[wf_function_def, fn_has_entry_def, entry_block_def]) >>
-  drule_all make_ssa_lockstep_phi_context >> strip_tac >>
+  drule_all make_ssa_lockstep_phi_context >>
+  disch_then (qx_choosel_then [`renamed`,`A`,`H`,`events`] strip_assume_tac) >>
   BETA_TAC >> conj_tac
   >- gvs[] >>
   conj_tac
