@@ -24,6 +24,7 @@
 
 Theory exprSimRawCallCalldata
 Ancestors
+  calldataMemory
   exprSimHashBoundary
   exprSimSource exprSimHypsDefs exprSimDefs exprSimStack exprSimProps
   gasSummary gasSummaryCompose gasOutcome gasExemptCert
@@ -113,79 +114,6 @@ QED
    call_ctx_rel equates with cc_calldata, and context_well_typed bounds its
    length below 2 ** 256, so CALLDATASIZE/CALLDATACOPY give exactly those
    bytes at w2n data_ptr. *)
-
-(* The temporary allocation is deliberately described without fmp_room:
-   its bumped pointer can wrap, while the copy uses natural offsets. *)
-Theorem calldata_memory_insts[local]:
-  !sa ptr len sb. compile_msg_data_to_memory sa = ((ptr,len),sb) ==>
-  ptr = Var ("%" ++ toString (sa.cs_next_var + 1)) /\
-  len = Var ("%" ++ toString sa.cs_next_var) /\
-  emitted_insts sa sb =
-    [mk_inst sa.cs_next_id CALLDATASIZE [] ["%" ++ toString sa.cs_next_var];
-     mk_inst (sa.cs_next_id + 1) DALLOCA
-       [Var ("%" ++ toString sa.cs_next_var)]
-       ["%" ++ toString (sa.cs_next_var + 1)];
-     mk_inst (sa.cs_next_id + 2) CALLDATACOPY
-       [Var ("%" ++ toString (sa.cs_next_var + 1)); Lit 0w;
-        Var ("%" ++ toString sa.cs_next_var)] []]
-Proof
-  simp[compile_msg_data_to_memory_def, compile_alloc_dynamic_def,
-       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1]
-QED
-
-Theorem calldata_memory_run[local]:
-  !sa ptr len sb s.
-  compile_msg_data_to_memory sa = ((ptr,len),sb) /\
-  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand ptr t = SOME s.vs_fmp /\
-    eval_operand len t = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
-    t.vs_memory = (write_memory_with_expansion (w2n s.vs_fmp)
-      s.vs_call_ctx.cc_calldata s).vs_memory /\
-    t.vs_fmp = s.vs_fmp + n2w (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata)) /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    t = s with <| vs_vars := t.vs_vars; vs_memory := t.vs_memory;
-                  vs_fmp := t.vs_fmp |>
-Proof
-  rpt gen_tac >> strip_tac >> drule calldata_memory_insts >> strip_tac >>
-  gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       exec_read0_def, eval_operand_def, bind_outputs_def,
-       lookup_var_update_var] >>
-  simp[update_var_def, lookup_var_def, not_fresh_at_def,
-       wordsTheory.w2n_n2w, TAKE_APPEND1] >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.w2n_n2w,
-       TAKE_APPEND1, write_memory_with_expansion_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-Theorem calldata_memory_readback[local]:
-  !sa ptr len sb s.
-  compile_msg_data_to_memory sa = ((ptr,len),sb) /\
-  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand ptr t = SOME s.vs_fmp /\
-    eval_operand len t = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
-    read_memory (w2n s.vs_fmp) (LENGTH s.vs_call_ctx.cc_calldata) t =
-      s.vs_call_ctx.cc_calldata /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    t.vs_call_ctx = s.vs_call_ctx /\
-    (!off n. off + n <= w2n s.vs_fmp ==>
-      mem_bytes_at off n t.vs_memory = mem_bytes_at off n s.vs_memory)
-Proof
-  rpt strip_tac >> drule_all calldata_memory_run >> strip_tac >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_call_ctx = s.vs_call_ctx` by
-    (qpat_x_assum `t = s with <| vs_vars := _; vs_memory := _; vs_fmp := _ |>`
-       SUBST1_TAC >> simp[]) >>
-  qexists_tac `t` >> simp[] >>
-  conj_tac
-  >- simp[read_memory_def, GSYM mem_bytes_at_def, hash_write_memory_read_self] >>
-  rpt strip_tac >> irule hash_write_memory_disjoint >> simp[]
-QED
 
 Theorem calldata_memory_frontier[local]:
   !ctx func s.
