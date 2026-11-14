@@ -2209,7 +2209,8 @@ Theorem registration_aggregate_singleton_ptr_resources:
 Proof
   rpt strip_tac >> drule_all registration_aggregate_singleton_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> simp[]
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_aggregate_singleton_ptr_framed:
@@ -2437,7 +2438,8 @@ Theorem registration_singleton_ptr_resources:
 Proof
   rpt strip_tac >> drule_all registration_singleton_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> simp[]
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_singleton_ptr_framed:
@@ -2993,7 +2995,8 @@ Theorem registration_owned_suffix_invariant_resources:
 Proof
   rpt strip_tac >> drule_all registration_owned_suffix_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
-  qexistsl_tac [`t`, `H`, `u`] >> simp[]
+  qexistsl_tac [`t`, `H`, `u`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_owned_suffix_invariant_ptr:
@@ -3511,7 +3514,8 @@ Theorem registration_owned_locals_endpoint_resources:
 Proof
   rpt strip_tac >> drule_all registration_owned_locals_joint >>
   disch_then (qspecl_then [`tn1`,`site`,`G1`] strip_assume_tac) >>
-  qexistsl_tac [`tvs`, `s0`, `G0`, `tn0`] >> simp[]
+  qexistsl_tac [`tvs`, `s0`, `G0`, `tn0`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_owned_locals_endpoint:
@@ -3830,9 +3834,12 @@ Proof
   rw[fragGasPathTheory.gas_path_edge_def] >> gvs[fragExecTheory.exit_result_def]
   >- metis_tac[venomInstProofsTheory.step_preserves_code]
   >- (drule_all venomExecProofsTheory.step_inst_ok_terminator_jump >> strip_tac >>
-      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >> strip_tac >>
-      gvs[step_inst_non_invoke,step_inst_base_opcode_eqs,jump_to_def,AllCaseEqs()])
-  >> simp[jump_to_def]
+      gvs[step_inst_non_invoke,step_inst_base_opcode_eqs,jump_to_def,AllCaseEqs()] >>
+      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+      disch_then (mp_tac o Q.AP_TERM `\u. u.vs_code`) >> simp[])
+  >- simp[jump_to_def] >>
+  qpat_x_assum `OK _ = step_inst _ _ _ _`
+    (fn th => fs[GSYM th, fragExecTheory.exit_result_def])
 QED
 
 Theorem registration_path_edge_labels[local]:
@@ -3841,9 +3848,12 @@ Proof
   rw[fragGasPathTheory.gas_path_edge_def] >> gvs[fragExecTheory.exit_result_def]
   >- metis_tac[venomInstProofsTheory.step_preserves_labels]
   >- (drule_all venomExecProofsTheory.step_inst_ok_terminator_jump >> strip_tac >>
-      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >> strip_tac >>
-      gvs[step_inst_non_invoke,step_inst_base_opcode_eqs,jump_to_def,AllCaseEqs()])
-  >> simp[jump_to_def]
+      gvs[step_inst_non_invoke,step_inst_base_opcode_eqs,jump_to_def,AllCaseEqs()] >>
+      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+      disch_then (mp_tac o Q.AP_TERM `\u. u.vs_labels`) >> simp[])
+  >- simp[jump_to_def] >>
+  qpat_x_assum `OK _ = step_inst _ _ _ _`
+    (fn th => fs[GSYM th, fragExecTheory.exit_result_def])
 QED
 
 Theorem registration_path_code:
@@ -3906,10 +3916,8 @@ Proof
   drule_all registration_owned_locals_joint >>
   disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
   qexistsl_tac [`s0`, `G0`, `tn0`] >>
-  `!H. stmt_state_rel H unit.cu_context efn cenv
-     (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-   ghost_inv H NONE cenv
-     (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0` by
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
     (`!j. j < LENGTH args ==> ?aid q p n.
        FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
        FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
@@ -3929,7 +3937,8 @@ Proof
         simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
         drule fragGasPathMemTheory.gas_path_mem_exec >>
         metis_tac[registration_path_code]) >>
-     gen_tac >> drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
+     gen_tac >> drule_all registration_actual_endpoint_relations >>
+     disch_then (Q.ISPEC_THEN `H` ACCEPT_TAC)) >> simp[]
 QED
 
 (* Registration seam, proved at the shared owned endpoint:
@@ -3998,7 +4007,8 @@ Theorem registration_positional_args_ptr_no_dalloca:
 Proof
   rpt strip_tac >> drule_all registration_positional_args_joint >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
-  qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
+  qexistsl_tac [`s0`, `G0`, `tn0`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem register_positional_args_ptr:
