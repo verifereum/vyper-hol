@@ -1,7 +1,8 @@
 Theory exprSimAbiEncodeObliviousFacts
 Ancestors
   exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousLabels
-  exprSimAbiEncodeObliviousContext exprSimAbiGasBridge
+  exprSimAbiEncodeObliviousContext exprSimAbiEncodeObliviousSimulation
+  exprSimAbiGasBridge
   abiEncoder builtinAbi compileEnv emitHelper context venomInst list fragExec
 
 Definition enc_safe_opcode_def:
@@ -280,4 +281,29 @@ Proof
   >> drule (SIMP_RULE (srw_ss()) [GSYM enc_safe_opcode_def, ETA_THM] code_step_frag_facts)
   >> strip_tac
   >> simp[] >> metis_tac[label_step_current_excluded]
+QED
+
+Theorem abi_encode_raw_relabel_structure:
+  !dst src ei st out en.
+    compile_abi_encode_to_buf dst src ei st = (out,en) ==>
+    cs_extends st en /\ frag_ops_free st en /\
+    (st.cs_blocks <> en.cs_blocks ==>
+      ~MEM en.cs_current_bb
+        (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks st en)))) /\
+    (!L ids. LENGTH ids = LENGTH st.cs_current_insts ==>
+      compile_abi_encode_to_buf dst src ei (start_relabel L ids st) =
+        (out,start_swap st L ids en))
+Proof
+  rpt gen_tac >> strip_tac
+  >> `code_step enc_safe_opcode st en` by
+       metis_tac[code_action_def, code_action_encoder_mutual]
+  >> `label_step st en` by
+       metis_tac[label_action_def, label_action_encoder_mutual]
+  >> drule (SIMP_RULE (srw_ss()) [GSYM enc_safe_opcode_def, ETA_THM]
+              code_step_frag_facts)
+  >> strip_tac >> simp[]
+  >> conj_tac >- metis_tac[label_step_current_excluded]
+  >> mp_tac (cj 2 entry_action_encoder_mutual)
+  >> simp[entry_action_oblivious, frag_start_oblivious_def]
+  >> metis_tac[entry_action_oblivious, frag_start_oblivious_def]
 QED
