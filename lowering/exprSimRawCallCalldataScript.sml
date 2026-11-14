@@ -905,10 +905,10 @@ Theorem raw_call_finish_prefix:
 Proof
   rewrite_tac[compile_raw_call_finish_def] >>
   simp[Once comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
-  goal_assum (drule_at Any) >>
+  rename1 `emit_op CALL _ sa = (success,sc)` >>
   qmatch_asmsub_abbrev_tac `tail sc = (result,sb)` >>
   `ci_mono sc (SND (tail sc))` by
-    (simp[Abbr `tail`] >>
+    (qunabbrev_tac `tail` >> rpt (pop_assum kall_tac) >>
      rpt (FIRST [
        CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF,
          ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
@@ -931,7 +931,8 @@ Theorem raw_call_finish_static_abort:
 Proof
   strip_tac >> drule raw_call_finish_prefix >> strip_tac >>
   `cs_extends sa sc` by
-    (drule emit_op_extends >> simp[same_blocks_def] >> metis_tac[cs_extends_same_block]) >>
+    (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
+     irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
   irule frag_path_exit_prefix >> qexists_tac `sc` >> simp[] >>
   drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
@@ -4711,10 +4712,19 @@ Theorem calldata_raw_call_gas_obs:
     (SND (eval_raw_call cx flags target data amount gas st)).gas_obs = st.gas_obs
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `cx.txn.is_static` >>
-  simp[eval_raw_call_def, frame_call_value_def, update_pending_deletions_def, bind_def, ignore_bind_def,
+  Cases_on `flags.rcf_is_static /\ amount <> 0`
+  >- fs[eval_raw_call_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
+  Cases_on `cx.txn.is_static /\ amount <> 0`
+  >- (fs[] >> simp[raw_call_static_value_abort]) >>
+  `cx.txn.is_static ==> amount = 0` by fs[] >>
+  `flags.rcf_is_static ==> amount = 0` by fs[] >>
+  `!st. frame_call_value cx (if flags.rcf_is_static then NONE else SOME amount) st =
+    (INL (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount), st)` by
+    (Cases_on `cx.txn.is_static` >> Cases_on `flags.rcf_is_static` >>
+     gvs[frame_call_value_def, check_def, assert_def, ignore_bind_def,
+         bind_def, vyperStateTheory.return_def]) >>
+  simp[eval_raw_call_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
-  IF_CASES_TAC >> simp[raise_def] >>
   qmatch_goalsub_abbrev_tac `take_call_outcome target data vo` >>
   qspecl_then [`target`, `data`, `vo`, `st`, `g`] mp_tac
     calldata_take_call_outcome_gas_obs >>
