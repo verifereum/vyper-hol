@@ -1,7 +1,7 @@
 Theory dftGasFromListTraceLift
 Ancestors
   dftGasFromListOpenTrace dftGasFromListTraceDefs dftGasFromListTracePrefix dftGasFromListTraceNames
-  venomExecProofs venomInstProofs venomExecSemantics venomInst venomState list arithmetic
+  venomExecProofs venomInstProofs venomExecSemantics venomInst venomState list rich_list arithmetic
 
 Theorem trace_cofinal_factor:
   (!p d n ctx fn inst s. !q h g i t.
@@ -194,6 +194,49 @@ Proof
   simp[trace_context_def, trace_function_def] >>
   strip_tac >> drule (cj 3 trace_cofinal_factor) >>
   strip_tac >> qexists_tac `bb` >> simp[]
+QED
+
+Theorem trace_context_factor_cursor:
+  EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+               f.fn_blocks) ctx.ctx_functions /\
+  j < LENGTH (trace_context n ctx vs0) /\
+  EL j (trace_context n ctx vs0) = ((p,d,i.inst_id),fn,i,t) /\
+  n <= m /\ get_instruction bb t.vs_inst_idx = SOME i /\
+  trace_context m ctx vs0 = pre ++ open_trace p d fuel ctx fn bb t ++ post ==>
+  LENGTH pre = j /\ pre = TAKE j (trace_context n ctx vs0)
+Proof
+  strip_tac >>
+  `?suffix. trace_context m ctx vs0 = trace_context n ctx vs0 ++ suffix` by
+    (drule trace_context_prefix >>
+     disch_then (qspecl_then [`vs0`,`ctx`] strip_assume_tac) >> simp[]) >>
+  `j < LENGTH (trace_context m ctx vs0)` by simp[] >>
+  `EL j (trace_context m ctx vs0) = ((p,d,i.inst_id),fn,i,t)` by
+    metis_tac[trace_context_visit_preserved] >>
+  `?rest. trace_context m ctx vs0 = pre ++ ((p,d,i.inst_id),fn,i,t)::rest` by
+    (qpat_x_assum `trace_context m ctx vs0 =
+        pre ++ open_trace p d fuel ctx fn bb t ++ post` SUBST1_TAC >>
+     simp[open_trace_def, Once (cj 2 trace_defs), APPEND_ASSOC]) >>
+  `ALL_DISTINCT (MAP FST (trace_context m ctx vs0))` by
+    (irule trace_context_names_distinct >> simp[]) >>
+  `j = LENGTH pre` by
+    (qpat_x_assum `trace_context m ctx vs0 =
+        pre ++ open_trace p d fuel ctx fn bb t ++ post` kall_tac >>
+     qpat_x_assum `trace_context m ctx vs0 = trace_context n ctx vs0 ++ suffix` kall_tac >>
+     qspecl_then [`MAP FST (trace_context m ctx vs0)`,`MAP FST pre`,
+      `MAP FST rest`,`j`] mp_tac ALL_DISTINCT_EL_APPEND >>
+     fs[EL_MAP, MAP_APPEND]) >>
+  `TAKE j (trace_context m ctx vs0) = TAKE j (trace_context n ctx vs0)` by
+    (qpat_x_assum `trace_context m ctx vs0 =
+        pre ++ open_trace p d fuel ctx fn bb t ++ post` kall_tac >>
+     qpat_x_assum `trace_context m ctx vs0 = pre ++ _::_` kall_tac >>
+     simp[TAKE_APPEND1]) >>
+  `TAKE j (trace_context m ctx vs0) = pre` by
+    (qpat_x_assum `trace_context m ctx vs0 =
+        pre ++ open_trace p d fuel ctx fn bb t ++ post` kall_tac >>
+     qpat_x_assum `trace_context m ctx vs0 = trace_context n ctx vs0 ++ suffix` kall_tac >>
+     qpat_x_assum `TAKE j (trace_context m ctx vs0) = _` kall_tac >>
+     simp[TAKE_APPEND]) >>
+  metis_tac[]
 QED
 
 Theorem trace_cofinal:
