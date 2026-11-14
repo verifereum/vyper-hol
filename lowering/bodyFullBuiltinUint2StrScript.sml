@@ -5,6 +5,7 @@ Theory bodyFullBuiltinUint2Str
 Ancestors
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared
+  bodyFullBuiltinUint2StrRun
   exprSimUint2Str bodyMemBiUint2StrBlocks bodyPtrBytestringBuiltinsUintArithmetic
   gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtrLoop fragGasSeqPtr
   bodyPtrDefs exprSimHypsDefs exprSimSource exprLoweringProps exprLowering
