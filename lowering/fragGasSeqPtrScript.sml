@@ -75,8 +75,11 @@ Proof
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `ptr_safe_run D lo fuel ctx func PG (step_prov PG G h u)
      (step_taint h s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (first_x_assum irule >>
-     qexistsl_tac [`bb`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
+    (first_x_assum (qspecl_then
+       [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h u`,
+        `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`, `fuel`]
+       mp_tac) >>
      simp[run_inst_seq_inst_idx, exec_result_map_def, ADD1]) >>
   `ptr_safe_step D lo fuel ctx func PG G tn h s` by
     (simp[Once ptr_safe_step_def] >> metis_tac[ptr_inst_ok_fuel]) >>
