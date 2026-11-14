@@ -5,6 +5,11 @@ Ancestors
   bodyFullToplevelSlotLoopFrame bodyFullToplevelSlotLoopPost
   bodyMemBopRestWordPath fragGasOriginPtr fragGasPathPtr
   exprPtrUnwrapRuntimeFrame exprPtrUnwrapLoopInvariant createSourceCallback
+  exprPtrUnwrapEndpointFrames slotCopyExecution venomState valueEncodingDefs valueEncodingProps
+  exprPtrUnwrapStorageSource exprSimStorageCopy exprPtrUnwrapStoragePost
+  loweringPosts exprLoweringProps bodyPtrDefs vyperInterpreter vyperState
+  exprLowering vyperAST context words compileEnv freshWrites copyExecution
+  exprPtrUnwrapAllocSemantic exprSimProps exprPtrUnwrapStorage
 
 Theorem toplevel_slot_loop_path_history:
   compile_expr cenv ty (TopLevelName ann nsid) sa = (vv,sm) /\
@@ -83,4 +88,52 @@ Proof
     (qspecl_then [`D`, `explicit`] mp_tac) >>
   disch_then (mp_then Any (qspecl_then [`h`, `Gh`, `tnh`, `[]`] mp_tac) gas_origin_ptr_path_append) >>
   simp[] >> disch_then irule >> gvs[]
+QED
+
+Theorem toplevel_slot_loop_copy_projections:
+  compile_expr cenv ty (TopLevelName ann nsid) ca = (place,sa) /\
+  slot_copy_inv mid load a p d n [] n z /\
+  slot_copy_ghost_inv mid load p d root n G0 tn0 n Gf tnf z /\
+  slot_copy_runtime_frame mid d n a z /\
+  slot_copy_external mid (Var root) /\ lookup_var root a = SOME d /\
+  a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+  a.vs_call_ctx = s.vs_call_ctx /\
+  tn0.t_stor = tn.t_stor /\ tn0.t_trans = tn.t_trans /\ tn0.t_imm = tn.t_imm ==>
+  (!j. j < n ==> mem_word_at (w2n d+32*j) z.vs_memory = slot_copy_word load s (p+n2w j)) /\
+  eval_operand (Var root) z = SOME d /\ ptr_covers Gf tnf root z (32*n) /\
+  (!j b. j < n /\ b < 32 /\ w2n d+32*j+b IN tnf.t_mem ==>
+    b IN key_taint (if load=SLOAD then tn.t_stor else tn.t_trans) (p+n2w j)) /\
+  (!j. j < w2n d \/ w2n d+32*n <= j ==> (j IN tnf.t_mem <=> j IN tn0.t_mem)) /\
+  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+  (!x. slot_copy_external mid (Var x) ==>
+    FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x)) /\
+  z.vs_allocas = a.vs_allocas /\ z.vs_alloca_next = a.vs_alloca_next /\
+  copy_static z = copy_static a
+Proof
+  strip_tac >>
+  `slot_copy_prefix load a p (w2n d) n z` by fs[slot_copy_inv_def] >>
+  fs[slot_copy_inv_def, slot_copy_ghost_inv_def, slot_copy_runtime_frame_def] >>
+  rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `slot_copy_prefix _ _ _ _ _ _` mp_tac >>
+      simp[slot_copy_prefix_def] >> disch_then (qspec_then `j` mp_tac) >>
+      simp[] >> strip_tac >>
+      `32 <= LENGTH (DROP (w2n d+32*j) z.vs_memory)` by simp[] >>
+      simp[mem_word_at_def, listTheory.TAKE_APPEND1] >>
+      metis_tac[slot_copy_word_sources])
+  >- metis_tac[eval_operand_def] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem toplevel_located_compile_at:
+  compile_expr cenv ty (TopLevelName ann nsid) sa = (LocatedValue t p,sm) ==>
+  !sb. compile_expr cenv ty (TopLevelName ann nsid) sb = (LocatedValue t p,sb)
+Proof
+  simp[Once compile_expr_def, expr_type_def] >>
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid`
+  >- (pairarg_tac >> simp[]) >>
+  Cases_on `x` >> simp[Once compile_expr_def, expr_type_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `(\(_9,st'). _) _ = _` mp_tac >>
+  pairarg_tac >> simp[]
 QED
