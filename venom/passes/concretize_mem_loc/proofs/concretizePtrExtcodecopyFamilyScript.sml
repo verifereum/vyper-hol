@@ -18,6 +18,7 @@ Ancestors
   concretizeStepStructure o1PassContract unitShapeDefs venomWf cfgWf
   codegenRel contextCodegenRel unitLabelMapIdentity
   venomExecSemantics venomExecProofs venomState venomInst finite_map list words arithmetic
+  o1SafeUpto
 
 Theorem ptr_extcodecopy_account_code[local]:
   ptr_history_content tn s t ==>
@@ -162,10 +163,11 @@ Proof
        finite_mapTheory.DRESTRICT_UNIV]
 QED
 
-Theorem ptr_extcodecopy_prefix_execution[local]:
+Theorem ptr_extcodecopy_prefix_execution_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   ~ctx_has_dalloca C /\
   a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
@@ -238,9 +240,9 @@ Proof
   gvs[]
 QED
 
-Resume ptr_extcodecopy_prefix_execution[operands]:
+Resume ptr_extcodecopy_prefix_execution_upto[operands]:
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
@@ -250,17 +252,18 @@ Resume ptr_extcodecopy_prefix_execution[operands]:
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_extcodecopy_scalar_discipline >> simp[]
 QED
-Finalise ptr_extcodecopy_prefix_execution
+Finalise ptr_extcodecopy_prefix_execution_upto
 
-Theorem ptr_extcodecopy_transcript_successor[local]:
+Theorem ptr_extcodecopy_transcript_successor_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   ~ctx_has_dalloca C /\ a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
@@ -292,7 +295,7 @@ Theorem ptr_extcodecopy_transcript_successor[local]:
       read_byte (w2n dst+j) z.po_state.vs_memory =
       read_byte (w2n dt+j) zt.po_state.vs_memory)
 Proof
-  strip_tac >> drule_all ptr_extcodecopy_prefix_execution >> strip_tac >>
+  strip_tac >> drule_all ptr_extcodecopy_prefix_execution_upto >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_ownership >> strip_tac >>
@@ -340,14 +343,15 @@ Proof
   gvs[] >> qexistsl_tac [`dop`,`nop`] >> simp[]
 QED
 
-Theorem ptr_extcodecopy_write_certificate[local]:
+Theorem ptr_extcodecopy_write_certificate_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   a.po_inst.inst_opcode = EXTCODECOPY /\ at.po_inst = a.po_inst /\
   ptr_chrono_step C' at zt /\
   ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
@@ -385,7 +389,7 @@ Proof
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
   `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
    taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   `~in_revert_forward a.po_fn a.po_state /\
    ptr_nonopaque_operand a.po_fn dop` by suspend "shape" >>
   `ptr_lookup_transport births positions (op_prov TG dop) (op_taint a.po_taint dop)
@@ -435,7 +439,7 @@ Proof
   suspend "owned"
 QED
 
-Resume ptr_extcodecopy_write_certificate[shape]:
+Resume ptr_extcodecopy_write_certificate_upto[shape]:
   `ALL_DISTINCT (fn_labels a.po_fn) /\ opaque_use_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
   conj_tac
@@ -454,7 +458,7 @@ Resume ptr_extcodecopy_write_certificate[shape]:
   fs[mem_write_ops_def, AllCaseEqs(), EVERY_MEM] >> metis_tac[]
 QED
 
-Resume ptr_extcodecopy_write_certificate[fixed]:
+Resume ptr_extcodecopy_write_certificate_upto[fixed]:
   fs[Abbr `ops`] >>
   `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
   `dt = dst` by
@@ -471,7 +475,7 @@ Resume ptr_extcodecopy_write_certificate[fixed]:
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Resume ptr_extcodecopy_write_certificate[owned]:
+Resume ptr_extcodecopy_write_certificate_upto[owned]:
   fs[Abbr `ops`] >>
   `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
   `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
@@ -498,14 +502,15 @@ Resume ptr_extcodecopy_write_certificate[owned]:
   qpat_x_assum `!j. j < w2n sz ==> _` (qspec_then `x-w2n dst` mp_tac) >>
   simp[arithmeticTheory.ADD_COMM]
 QED
-Finalise ptr_extcodecopy_write_certificate
+Finalise ptr_extcodecopy_write_certificate_upto
 
-Theorem ptr_extcodecopy_prefix_step[local]:
+Theorem ptr_extcodecopy_prefix_step_upto[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY (\f. ALL_DISTINCT (fn_labels f) /\
     (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
@@ -523,8 +528,8 @@ Theorem ptr_extcodecopy_prefix_step[local]:
 Proof
   strip_tac >>
   `a.po_inst.inst_outputs = []` by
-    (drule_all ptr_extcodecopy_prefix_execution >> strip_tac >> simp[]) >>
-  drule_all ptr_extcodecopy_transcript_successor >> strip_tac >>
+    (drule_all ptr_extcodecopy_prefix_execution_upto >> strip_tac >> simp[]) >>
+  drule_all ptr_extcodecopy_transcript_successor_upto >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
   `ptr_chrono_step C a z` by
@@ -550,13 +555,13 @@ Proof
       drule ptr_paired_prefix_nonwrite_attach >> disch_then irule >> simp[] >>
       qpat_assum `z = ptr_ledger_next _ _ _` (fn th => once_rewrite_tac[th]) >>
       simp[ptr_ledger_next_def, ptr_observe_def]) >>
-  drule_all ptr_extcodecopy_write_certificate >> strip_tac >>
+  drule_all ptr_extcodecopy_write_certificate_upto >> strip_tac >>
   rename1 `ptr_paired_write _ _ _ _ _ _ _ _ (_,_,reloc)` >>
   qexistsl_tac [`z`,`[(LENGTH h - 1,LENGTH done,reloc)]`] >>
   suspend "retention"
 QED
 
-Resume ptr_extcodecopy_prefix_step[cursor]:
+Resume ptr_extcodecopy_prefix_step_upto[cursor]:
   `MEM a.po_fn C.ctx_functions` by
     (drule ptr_paired_prefix_transcript >> strip_tac >>
      drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -578,7 +583,7 @@ Resume ptr_extcodecopy_prefix_step[cursor]:
   fs[ptr_ledger_next_def, ptr_observe_def, write_memory_with_expansion_def]
 QED
 
-Resume ptr_extcodecopy_prefix_step[retention]:
+Resume ptr_extcodecopy_prefix_step_upto[retention]:
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
@@ -603,7 +608,66 @@ Resume ptr_extcodecopy_prefix_step[retention]:
                simp[ptr_ledger_next_def, ptr_observe_def]) >>
   irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
-Finalise ptr_extcodecopy_prefix_step
+Finalise ptr_extcodecopy_prefix_step_upto
+
+Theorem ptr_paired_extcodecopy_prefix_normalize_upto:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [EXTCODECOPY] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `a.po_inst.inst_opcode = EXTCODECOPY` by fs[] >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all ptr_extcodecopy_prefix_step_upto >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG,saved,entries)] ++ snapshots`, `calls`, `ws ++ extra`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+
 
 Theorem ptr_paired_extcodecopy_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -638,28 +702,9 @@ Theorem ptr_paired_extcodecopy_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `a.po_inst.inst_opcode = EXTCODECOPY` by fs[] >>
-  `EVERY (\f. ALL_DISTINCT (fn_labels f) /\
-    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
-      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
-  drule_all ptr_extcodecopy_prefix_step >> strip_tac >>
-  `fn_inst_wf z.po_fn` by
-    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
-     drule ptr_structural_transcript_erasure >> strip_tac >>
-     drule ptr_structural_trace_source >> strip_tac >>
-     drule ptr_chrono_history_reachable >> strip_tac >>
-     fs[ptr_observation_reachable_def] >>
-     drule ptr_frame_context_membership >> strip_tac >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
-  simp[] >> strip_tac >>
-  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
-    `tokens`, `registry`, `births`, `PT`, `TG`, `saved`, `entries`,
-    `[(tokens,registry,births,PT,TG,saved,entries)] ++ snapshots`, `calls`, `ws ++ extra`] >>
-  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  drule_all ptr_paired_extcodecopy_prefix_normalize_upto >> simp[]
 QED
-

@@ -2,6 +2,7 @@ Theory concretizePtrChronologicalHistory
 Ancestors
   concretizePtrHistoryDemand frameExecutionHistory ptrDiscipline venomExecSemantics venomInst list rich_list
   pred_set codegenRel memLocDefs opcodeClass concretizeMemLocDefs
+  concretizeLayoutCutSafe gasOracleReplay o1SafeUpto
 
 (* Full observations, including completed activations, never popped on return. *)
 Datatype:
@@ -283,3 +284,31 @@ QED
    separation. No production-demand or layout-safety conclusion is asserted.
    Four existing local list/taint interfaces in HistoryDemand are exported
    unchanged to avoid duplicate lemmas; no existing proof is refactored. *)
+
+Theorem ptr_chrono_step_gas_cut:
+  ptr_chrono_step C a b /\ gas_cut n vs b.po_state ==>
+  gas_cut n vs a.po_state
+Proof
+  strip_tac >> irule gas_cut_readings_mono >>
+  qexists `b.po_state` >> simp[] >>
+  qpat_x_assum `ptr_chrono_step _ _ _` mp_tac >>
+  simp[Once ptr_chrono_step_cases] >> rpt strip_tac >>
+  gvs[ptr_observe_def]
+  >- (irule step_inst_noninvoke_readings_le >> metis_tac[])
+  >- (drule enters_block_readings >> simp[] >> strip_tac >>
+      irule step_inst_noninvoke_readings_le >>
+      `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
+      metis_tac[])
+  >- (drule enters_block_readings >> drule gas_setup_callee_readings >> simp[]) >>
+  metis_tac[return_readings_le]
+QED
+
+Theorem ptr_chrono_history_gas_cut:
+  !vs C h a. ptr_chrono_history vs C h a ==>
+  !n u. gas_cut n vs a.po_state /\ MEM u h ==> gas_cut n vs u.po_state
+Proof
+  ho_match_mp_tac ptr_chrono_history_ind >> conj_tac
+  >- simp[] >>
+  rpt strip_tac >> gvs[MEM_APPEND] >>
+  metis_tac[ptr_chrono_step_gas_cut]
+QED

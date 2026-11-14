@@ -2,7 +2,7 @@
  * Paired-prefix extension for the N14 opcode family (SHA3; LOG).
  *)
 Theory concretizePtrHashLogFamily
-Ancestors venomInstProofs
+Ancestors o1SafeUpto venomInstProofs
   memoryReadRel
   concretizePtrStorageReadProducer concretizePtrMloadRecovery
   frameViewFacts opcodeClass codegenRel concretizePtrOrdinaryNext concretizePtrParamProducer
@@ -211,15 +211,15 @@ QED
 
 Finalise ptr_hash_log_read_transport
 
-Theorem ptr_paired_hash_log_payload[local]:
+Theorem ptr_paired_hash_log_payload_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -245,17 +245,18 @@ Proof
   `!j. j < n ==> w2n x+j NOTIN a.po_taint.t_mem` by
     (drule_all ptr_hash_log_read_untainted >> simp[]) >>
   `a.po_inst.inst_opcode <> ASSIGN` by fs[MEM] >>
-  drule ptr_paired_read_range_masked_bytes >>
+  drule ptr_paired_read_range_masked_bytes_upto >>
   simp[] >> strip_tac >>
   simp[venom_returndata_read_byte] >> irule GENLIST_CONG >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem ptr_paired_hash_log_endpoint[local]:
+Theorem ptr_paired_hash_log_endpoint_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\ ~ctx_has_dalloca C /\
   MEM a.po_inst.inst_opcode [SHA3; LOG] ==>
   active_inst a.po_fn a.po_inst a.po_state /\
   MEM a.po_inst (fn_insts a.po_fn) /\ inst_wf a.po_inst /\
@@ -287,7 +288,7 @@ Proof
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def,
         fn_insts_MEM, wf_function_def] >> metis_tac[]) >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   `~in_revert_forward a.po_fn a.po_state` by
     (drule_all ptr_hash_log_nonrevert >> simp[]) >>
   `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
@@ -298,8 +299,8 @@ Proof
     (fs[ptr_paired_sample_def] >>
      metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
   simp[] >>
-  qpat_assum `ptr_discipline _ _ _` mp_tac >>
-  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  qpat_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_upto_def] >> strip_tac >>
   `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
@@ -310,15 +311,15 @@ Proof
   metis_tac[optionTheory.NOT_NONE_SOME]
 QED
 
-Theorem ptr_paired_hash_log_read_inputs[local]:
+Theorem ptr_paired_hash_log_read_inputs_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -337,11 +338,11 @@ Theorem ptr_paired_hash_log_read_inputs[local]:
     TAKE n (DROP (w2n y) at.po_state.vs_memory ++ REPLICATE n 0w)
 Proof
   strip_tac >>
-  drule_all ptr_paired_hash_log_endpoint >> strip_tac >>
+  drule_all ptr_paired_hash_log_endpoint_upto >> strip_tac >>
   `opaque_use_ok a.po_fn` by fs[fn_shape_ok_def] >>
   drule_all ptr_hash_log_read_transport >> strip_tac >>
   qexistsl_tac [`ops`,`x`,`y`] >> simp[] >>
-  irule ptr_paired_hash_log_payload >>
+  irule ptr_paired_hash_log_payload_upto >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
@@ -484,15 +485,15 @@ Proof
      contract_transient_def] >> gvs[]
 QED
 
-Theorem ptr_paired_hash_log_execution[local]:
+Theorem ptr_paired_hash_log_execution_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -511,19 +512,19 @@ Theorem ptr_paired_hash_log_execution[local]:
     post.vs_params = a.po_state.vs_params /\
     postt.vs_params = at.po_state.vs_params
 Proof
-  strip_tac >> drule_all ptr_paired_hash_log_endpoint >> strip_tac >>
+  strip_tac >> drule_all ptr_paired_hash_log_endpoint_upto >> strip_tac >>
   `ptr_history_content a.po_taint a.po_state at.po_state` by
     (drule ptr_paired_prefix_endpoint >> simp[ptr_paired_sample_def]) >>
   `?off n. MEM (off,n) (source_memory_read_ranges a.po_inst at.po_state)` by
     (irule ptr_hash_log_successful_read >> metis_tac[]) >>
-  drule_all ptr_paired_hash_log_read_inputs >> strip_tac >>
+  drule_all ptr_paired_hash_log_read_inputs_upto >> strip_tac >>
   `opaque_use_ok a.po_fn` by fs[fn_shape_ok_def] >>
   Cases_on `a.po_inst.inst_opcode = SHA3`
   >- suspend "sha3"
   >> suspend "log"
 QED
 
-Resume ptr_paired_hash_log_execution[sha3]:
+Resume ptr_paired_hash_log_execution_upto[sha3]:
   `?addr szop out. a.po_inst.inst_operands = [addr;szop] /\
      a.po_inst.inst_outputs = [out]` by
     gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
@@ -548,7 +549,7 @@ Resume ptr_paired_hash_log_execution[sha3]:
     (irule ptr_sha3_successor_relations >> simp[] >> metis_tac[MEM]) >>
   qexists_tac `update_var out v a.po_state` >> gvs[] >> simp[update_var_def]
 QED
-Resume ptr_paired_hash_log_execution[log]:
+Resume ptr_paired_hash_log_execution_upto[log]:
   `a.po_inst.inst_opcode = LOG` by fs[MEM] >>
   `?tc rest. a.po_inst.inst_operands = Lit tc::rest /\
      LENGTH rest = w2n tc+2 /\ a.po_inst.inst_outputs = []` by
@@ -586,17 +587,17 @@ Resume ptr_paired_hash_log_execution[log]:
     (irule ptr_log_successor_relations >> simp[]) >>
   qexists_tac `a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]` >> simp[]
 QED
-Finalise ptr_paired_hash_log_execution
+Finalise ptr_paired_hash_log_execution_upto
 
-Theorem ptr_paired_prefix_hash_log[local]:
+Theorem ptr_paired_prefix_hash_log_upto[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -610,7 +611,7 @@ Theorem ptr_paired_prefix_hash_log[local]:
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
 Proof
   strip_tac >>
-  drule_all ptr_paired_hash_log_endpoint >> strip_tac >>
+  drule_all ptr_paired_hash_log_endpoint_upto >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `a.po_inst.inst_opcode <> ALLOCA /\ a.po_inst.inst_opcode <> NOP /\
    a.po_inst.inst_opcode <> INVOKE /\ ~is_terminator a.po_inst.inst_opcode` by
@@ -646,11 +647,11 @@ Proof
     post.vs_params = a.po_state.vs_params /\
     s'.vs_params = at.po_state.vs_params` by
     (`MEM a.po_inst.inst_opcode [SHA3; LOG]` by simp[] >>
-     drule_all ptr_paired_hash_log_execution >> strip_tac >>
+     drule_all ptr_paired_hash_log_execution_upto >> strip_tac >>
      qexists_tac `post` >> simp[]) >>
   suspend "attach"
 QED
-Resume ptr_paired_prefix_hash_log[cursor]:
+Resume ptr_paired_prefix_hash_log_upto[cursor]:
   qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
   simp[ptr_paired_cursor_def] >> strip_tac >>
   `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
@@ -663,7 +664,7 @@ Resume ptr_paired_prefix_hash_log[cursor]:
   first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[] >>
   strip_tac >> gvs[concretize_positions_unchanged]
 QED
-Resume ptr_paired_prefix_hash_log[attach]:
+Resume ptr_paired_prefix_hash_log_upto[attach]:
   markerLib.RESUME_TAC >>
   `EVERY bb_well_formed a.po_fn.fn_blocks` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
@@ -694,13 +695,67 @@ Resume ptr_paired_prefix_hash_log[attach]:
        source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
   qexistsl_tac [`0`, `post`] >> simp[]
 QED
-Resume ptr_paired_prefix_hash_log[sample]:
+Resume ptr_paired_prefix_hash_log_upto[sample]:
   markerLib.RESUME_TAC >>
   simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
   gvs[step_prov_def, out_prov_def] >>
   irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED
-Finalise ptr_paired_prefix_hash_log
+Finalise ptr_paired_prefix_hash_log_upto
+
+Theorem ptr_paired_hash_log_prefix_normalize_upto:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [SHA3; LOG] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_prefix_hash_log_upto >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+
 
 Theorem ptr_paired_hash_log_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -735,23 +790,9 @@ Theorem ptr_paired_hash_log_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_paired_prefix_hash_log >> strip_tac >>
-  `fn_inst_wf z.po_fn` by
-    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
-     drule ptr_structural_transcript_erasure >> strip_tac >>
-     drule ptr_structural_trace_source >> strip_tac >>
-     drule ptr_chrono_history_reachable >> strip_tac >>
-     fs[ptr_observation_reachable_def] >>
-     drule ptr_frame_context_membership >> strip_tac >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
-  simp[] >> strip_tac >>
-  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
-    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
-    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
-  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  drule_all ptr_paired_hash_log_prefix_normalize_upto >> simp[]
 QED
-

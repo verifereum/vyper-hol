@@ -5,20 +5,26 @@ Ancestors
   concretizeMemLocTransitionProofs concretizeMemLocDefs passSharedDefs stepWriteFootprintBase opcodeClass calleeTransport
   passSharedProps passSimulationDefs o1PassContract ptrDiscipline venomInst venomExecSemantics list
 
+Theorem ptr_fn_no_dret:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) ==> inst.inst_opcode <> DRET
+Proof
+  simp[fn_ptr_ok_def] >> metis_tac[]
+QED
+
 Theorem ptr_discipline_no_dret:
   ptr_discipline lo ctx vs /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) ==> inst.inst_opcode <> DRET
 Proof
-  simp[ptr_discipline_def, EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]
+  simp[ptr_discipline_def, EVERY_MEM] >> metis_tac[ptr_fn_no_dret]
 QED
 
-Theorem ptr_stage_no_dret:
+Theorem ptr_stage_no_dret_upto:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
-  ptr_discipline lo C vs ==>
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions ==>
   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DRET) (fn_insts fn))
     C'.ctx_functions
 Proof
-  simp[ctx_pass_stage_def, ptr_discipline_def] >> rpt strip_tac >>
+  simp[ctx_pass_stage_def] >> rpt strip_tac >>
   fs[LIST_REL_EL_EQN, EVERY_EL] >>
   qx_gen_tac `n` >> strip_tac >>
   `n < LENGTH C.ctx_functions` by simp[] >>
@@ -31,6 +37,17 @@ Proof
      qexistsl_tac [`EL n C.ctx_functions`, `observed`, `rpolicy`, `s`] >>
      simp[] >> fs[fn_ptr_ok_def, EVERY_EL] >> metis_tac[MEM_EL]) >>
   gvs[EVERY_MEM] >> metis_tac[MEM_EL]
+QED
+
+Theorem ptr_stage_no_dret:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  ptr_discipline lo C vs ==>
+  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DRET) (fn_insts fn))
+    C'.ctx_functions
+Proof
+  strip_tac >> irule ptr_stage_no_dret_upto >>
+  rpt (goal_assum (drule_at Any)) >>
+  gvs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem ptr_frame_context_membership:
@@ -77,15 +94,26 @@ Proof
   metis_tac[ptr_intret_no_dret_memory]
 QED
 
+Theorem ptr_stage_observation_no_dret_upto:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
+  (ptr_observation_reachable vs C a \/ ptr_observation_reachable vs C' a) ==>
+  a.po_inst.inst_opcode <> DRET
+Proof
+  strip_tac >> irule ptr_observation_no_dret
+  >- (qexistsl_tac [`C`,`vs`] >> simp[EVERY_MEM] >>
+      gvs[EVERY_MEM] >> metis_tac[ptr_fn_no_dret]) >>
+  qexistsl_tac [`C'`,`vs`] >> simp[] >>
+  metis_tac[ptr_stage_no_dret_upto]
+QED
+
 Theorem ptr_stage_observation_no_dret:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
   ptr_discipline lo C vs /\
   (ptr_observation_reachable vs C a \/ ptr_observation_reachable vs C' a) ==>
   a.po_inst.inst_opcode <> DRET
 Proof
-  strip_tac >> irule ptr_observation_no_dret
-  >- (qexistsl_tac [`C`,`vs`] >> simp[EVERY_MEM] >>
-      metis_tac[ptr_discipline_no_dret]) >>
-  qexistsl_tac [`C'`,`vs`] >> simp[] >>
-  metis_tac[ptr_stage_no_dret]
+  strip_tac >> irule ptr_stage_observation_no_dret_upto >>
+  rpt (goal_assum (drule_at Any)) >>
+  gvs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]
 QED

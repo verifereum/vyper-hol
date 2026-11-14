@@ -13,17 +13,17 @@ Ancestors concretizePtrHistoricalWriteExclusion concretizePtrStageReserved
   concretizePtrOpaqueRetpc concretizePtrOwnerSeeds concretizePtrSharedFields
   venomExecSemantics venomInst concretizeMemLocDefs memLocDefs words
   passSharedDefs codegenRel concretizePtrWriteClassification
-  ptrDiscipline list pred_set arithmetic finite_map
+  o1SafeUpto ptrDiscipline list pred_set arithmetic finite_map
 
-Theorem ptr_paired_fixed_actual_write_reflection:
+Theorem ptr_paired_fixed_actual_write_reflection_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs endpoint.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -40,7 +40,7 @@ Proof
   Cases_on `in_revert_forward (EL (EL q done) h).po_fn
     (EL (EL q done) h).po_state` >- simp[] >>
   simp[] >>
-  drule_all ptr_paired_historical_event >> strip_tac >>
+  drule_all ptr_paired_historical_event_upto >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_mixed_vars bj positions TGj aa.po_taint
     aa.po_fn (EL q ht).po_fn aa.po_state (EL q ht).po_state` >>
   `MEM aa.po_fn C.ctx_functions` by
@@ -55,7 +55,7 @@ Proof
     (fs[active_inst_def, fn_insts_def, MEM_fn_insts_blocks_iff, lookup_block_def] >>
      metis_tac[MEM_EL]) >>
   `aa.po_inst.inst_opcode <> DRET` by
-    (drule_all ptr_discipline_no_dret >> simp[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[ptr_fn_no_dret]) >>
   `aa.po_state.vs_labels = (EL q ht).po_state.vs_labels` by
     (drule concretizePtrRequestHistoryTheory.ptr_history_content_labels >> simp[]) >>
   `(EL (SUC (EL q done)) h).po_state.vs_returndata =
@@ -75,8 +75,8 @@ Proof
   `label_positions_ok aa.po_inst` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM,
         inst_shape_ok_def] >> metis_tac[]) >>
-  qpat_assum `ptr_discipline _ _ _` mp_tac >>
-  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  qpat_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_upto_def] >> strip_tac >>
   `EVERY (fn_ptr_ok P) C.ctx_functions` by (fs[EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (pure_once_rewrite_tac[EVERY_MEM] >> qx_gen_tac `f` >> strip_tac >>
@@ -125,4 +125,32 @@ Proof
     (irule ptr_stage_placements_reserved_prefix >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
   decide_tac
+QED
+
+Theorem ptr_paired_fixed_actual_write_reflection:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ x < lo /\ q < LENGTH done /\
+  x IN range_bytes (step_writes (EL q ht).po_inst
+    (EL q ht).po_state (EL (SUC q) ht).po_state) ==>
+  x IN range_bytes (step_writes (EL (EL q done) h).po_inst
+    (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) \/
+  in_revert_forward (EL (EL q done) h).po_fn
+    (EL (EL q done) h).po_state
+Proof
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs endpoint.po_state` by simp[] >>
+  drule_all ptr_paired_fixed_actual_write_reflection_upto >> simp[]
 QED

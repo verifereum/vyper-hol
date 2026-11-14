@@ -11,11 +11,12 @@ Ancestors passTransform
   concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizeStepContract
   contextCodegenRel unitLabelMapIdentity venomInst o1PassContract
-  ptrDiscipline venomExecSemantics venomExecProofs venomWf venomState list finite_map
+  o1SafeUpto ptrDiscipline venomExecSemantics venomExecProofs venomWf venomState list finite_map
 
-Theorem ptr_owned_invoke_restrictions:
+Theorem ptr_owned_invoke_restrictions_upto:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  ptr_discipline lo C vs0 /\ opaque_use_ok a.po_fn /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 a.po_state /\
+  opaque_use_ok a.po_fn /\
   a.po_inst.inst_opcode = INVOKE /\
   decode_invoke a.po_inst = SOME (nm,ops) ==>
   EVERY (ptr_nonopaque_operand a.po_fn) ops /\
@@ -32,7 +33,7 @@ Proof
     (fs[active_inst_def, fn_insts_MEM] >>
      metis_tac[lookup_block_MEM, MEM_EL]) >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   `a.po_inst.inst_operands = Label nm :: ops` by
     (gvs[decode_invoke_def, AllCaseEqs()]) >>
   conj_tac
@@ -46,10 +47,11 @@ Proof
   Induct_on `ops` >> simp[]
 QED
 
-Theorem ptr_paired_invoke_args:
+Theorem ptr_paired_invoke_args_upto:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs0 /\ opaque_use_ok a.po_fn /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 a.po_state /\
+  opaque_use_ok a.po_fn /\
   a.po_inst.inst_opcode = INVOKE /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   decode_invoke at.po_inst = SOME (nm,ops) /\
@@ -67,7 +69,7 @@ Proof
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_ownership >> strip_tac >>
-  drule_all ptr_owned_invoke_restrictions >> strip_tac >>
+  drule_all ptr_owned_invoke_restrictions_upto >> strip_tac >>
   simp[] >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `a.po_state.vs_labels = at.po_state.vs_labels` by
@@ -91,10 +93,11 @@ Proof
   simp[enters_block_def, eval_phis_no_phis, no_phis_phi_prefix_length_zero]
 QED
 
-Theorem ptr_paired_invoke_entry:
+Theorem ptr_paired_invoke_entry_upto:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs0 /\ opaque_use_ok a.po_fn /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 a.po_state /\
+  opaque_use_ok a.po_fn /\
   a.po_inst.inst_opcode = INVOKE /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   decode_invoke at.po_inst = SOME (nm,ops) /\
@@ -124,7 +127,7 @@ Theorem ptr_paired_invoke_entry:
       (a with <|po_fn := f; po_inst := i; po_state := cs'|>)
       (at with <|po_fn := g; po_inst := it; po_state := ct'|>)
 Proof
-  strip_tac >> drule_all ptr_paired_invoke_args >> strip_tac >>
+  strip_tac >> drule_all ptr_paired_invoke_args_upto >> strip_tac >>
   `?f. lookup_function nm C.ctx_functions = SOME f /\
     ptr_paired_code R lp positions f g` by
     (drule_all list_rel_lookup_function >> disch_then (qspec_then `nm` mp_tac) >>
@@ -183,4 +186,78 @@ Proof
        GEN_ALL) >>
      simp[] >> disch_then irule >> metis_tac[]) >>
   qexistsl_tac [`cs`,`i`] >> simp[]
+QED
+
+Theorem ptr_owned_invoke_restrictions:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\ opaque_use_ok a.po_fn /\
+  a.po_inst.inst_opcode = INVOKE /\
+  decode_invoke a.po_inst = SOME (nm,ops) ==>
+  EVERY (ptr_nonopaque_operand a.po_fn) ops /\
+  MAP (op_taint a.po_taint) ops = REPLICATE (LENGTH ops) {}
+Proof
+  strip_tac >>
+  irule (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    ptr_owned_invoke_restrictions_upto) >>
+  simp[] >> metis_tac[ptr_discipline_upto_whole]
+QED
+
+Theorem ptr_paired_invoke_args:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs0 /\ opaque_use_ok a.po_fn /\
+  a.po_inst.inst_opcode = INVOKE /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  decode_invoke at.po_inst = SOME (nm,ops) /\
+  eval_operands ops at.po_state = SOME argst ==>
+  decode_invoke a.po_inst = SOME (nm,ops) /\
+  EVERY (ptr_nonopaque_operand a.po_fn) ops /\
+  MAP (op_taint a.po_taint) ops = REPLICATE (LENGTH ops) {} /\
+  ?args. eval_operands ops a.po_state = SOME args /\
+    ptr_args_transport births positions (MAP (op_prov TG) ops)
+      (REPLICATE (LENGTH args) {}) args argst
+Proof
+  strip_tac >>
+  irule (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    ptr_paired_invoke_args_upto) >>
+  simp[] >> metis_tac[ptr_discipline_upto_whole]
+QED
+
+Theorem ptr_paired_invoke_entry:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs0 /\ opaque_use_ok a.po_fn /\
+  a.po_inst.inst_opcode = INVOKE /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  decode_invoke at.po_inst = SOME (nm,ops) /\
+  eval_operands ops at.po_state = SOME argst /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions Ct.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  EVERY (\f. first_block_no_phi f /\ fn_inst_wf f /\
+    EVERY bb_well_formed f.fn_blocks /\ ALL_DISTINCT (fn_labels f) /\
+    (!inst. MEM inst (fn_insts f) /\ inst.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation inst.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) Ct.ctx_functions /\
+  lookup_function nm Ct.ctx_functions = SOME g /\
+  setup_callee g argst at.po_state = SOME ct /\ enters_block g ct ct' /\
+  active_inst g it ct' ==>
+  ?f args cs cs' i.
+    lookup_function nm C.ctx_functions = SOME f /\
+    ptr_paired_code R lp positions f g /\
+    eval_operands ops a.po_state = SOME args /\
+    ptr_args_transport births positions (MAP (op_prov TG) ops)
+      (REPLICATE (LENGTH args) {}) args argst /\
+    setup_callee f args a.po_state = SOME cs /\ enters_block f cs cs' /\
+    active_inst f i cs' /\ ptr_history_content (a.po_taint with t_var := FEMPTY) cs' ct' /\
+    ptr_mixed_vars births positions FEMPTY entry_taint f g cs' ct' /\
+    ptr_args_transport births positions (MAP (op_prov TG) ops)
+      (REPLICATE (LENGTH args) {}) cs'.vs_params ct'.vs_params /\
+    ptr_paired_cursor lp
+      (a with <|po_fn := f; po_inst := i; po_state := cs'|>)
+      (at with <|po_fn := g; po_inst := it; po_state := ct'|>)
+Proof
+  strip_tac >>
+  irule (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    ptr_paired_invoke_entry_upto) >>
+  simp[] >> metis_tac[ptr_discipline_upto_whole]
 QED

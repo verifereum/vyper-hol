@@ -48,12 +48,13 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[ptr_concretize_zero_instruction]
 QED
 
-Theorem ptr_stage_live_zero_position:
+Theorem ptr_stage_live_zero_position_upto:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\ FLOOKUP TG v = SOME (token,aid) /\
   FLOOKUP a.po_prov v = SOME (b,0) ==>
@@ -76,7 +77,7 @@ Proof
        (simp[ptr_owner_view_def] >> irule EL_MEM >> decide_tac) >>
      fs[EVERY_MEM] >> metis_tac[ptr_frame_saved_allocation_size]) >>
   `?P. fn_ptr_ok P owner` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `?i. MEM i (fn_insts owner) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
     metis_tac[ptr_table_source_def] >>
   gvs[] >> drule_all ptr_stage_zero_instruction >> strip_tac >>
@@ -84,4 +85,20 @@ Proof
   pure_rewrite_tac[ptr_stage_placements_def] >>
   disch_then (qspecl_then [`Allocation i.inst_id`,`0`,`0`] mp_tac) >>
   simp[] >> metis_tac[lookup_function_MEM]
+QED
+
+Theorem ptr_stage_live_zero_position:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  ptr_stage_placements C' positions /\ FLOOKUP TG v = SOME (token,aid) /\
+  FLOOKUP a.po_prov v = SOME (b,0) ==>
+  FLOOKUP positions (Allocation aid) = SOME (0,0)
+Proof
+  strip_tac >> irule ptr_stage_live_zero_position_upto >>
+  rpt (goal_assum (drule_at Any)) >>
+  gvs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]
 QED

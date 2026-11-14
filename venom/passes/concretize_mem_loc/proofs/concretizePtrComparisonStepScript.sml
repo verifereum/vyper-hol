@@ -14,7 +14,8 @@ Theorem ptr_comparison_common_position[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   FLOOKUP TG u = SOME (tu,iu) /\ FLOOKUP TG v = SOME (tv,iv) /\
@@ -24,7 +25,7 @@ Theorem ptr_comparison_common_position[local]:
       FLOOKUP positions (Allocation iv) = SOME (p,sz)
 Proof
   strip_tac >> Cases_on `sz = 0`
-  >- (gvs[] >> metis_tac[ptr_stage_live_zero_position]) >>
+  >- (gvs[] >> metis_tac[ptr_stage_live_zero_position_upto]) >>
   `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
     (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `ptr_ledger_source_activations vs C h a tokens registry` by
@@ -55,7 +56,8 @@ Theorem ptr_comparison_lookup_values[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_value_transport births positions (FLOOKUP TG u) {} x x' /\
@@ -98,7 +100,8 @@ Theorem ptr_comparison_values[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_vars_transport births positions TG a.po_taint a.po_state t /\
@@ -137,12 +140,13 @@ Proof
   strip_tac >> simp[Once step_inst_def] >> simp[step_inst_base_def]
 QED
 
-Theorem ptr_comparison_transport:
+Theorem ptr_comparison_transport_core:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_vars_transport births positions TG a.po_taint a.po_state t /\
@@ -228,7 +232,8 @@ Theorem ptr_mixed_comparison_values[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_mixed_vars births positions TG a.po_taint a.po_fn g a.po_state t /\
@@ -274,12 +279,13 @@ Proof
   gvs[eval_operands_def]
 QED
 
-Theorem ptr_mixed_comparison_execution:
+Theorem ptr_mixed_comparison_execution_core:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_mixed_vars births positions TG a.po_taint a.po_fn g a.po_state t /\
@@ -323,4 +329,63 @@ Proof
        FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_refl] >>
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def] >>
   gvs[FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_comparison_transport:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  ptr_stage_placements C' positions /\
+  ptr_vars_transport births positions TG a.po_taint a.po_state t /\
+  access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+  a.po_inst.inst_operands = [Var u;Var v] /\ a.po_inst.inst_outputs = [out] /\
+  (a.po_inst.inst_opcode = EQ \/ a.po_inst.inst_opcode = LT \/ a.po_inst.inst_opcode = GT) /\
+  op_taint a.po_taint (Var u) = {} /\ op_taint a.po_taint (Var v) = {} /\
+  (!aid p sz. FLOOKUP positions (Allocation aid) = SOME (p,sz) ==> p + sz < dimword(:256)) /\
+  ((?s'. step_inst fuel C a.po_inst a.po_state = OK s') \/
+   (?t'. step_inst fuel C' a.po_inst t = OK t')) ==>
+  ?s' t'. step_inst fuel C a.po_inst a.po_state = OK s' /\
+    step_inst fuel C' a.po_inst t = OK t' /\
+    ptr_vars_transport births positions (step_prov PT TG a.po_inst s')
+      (step_taint a.po_inst a.po_state s' a.po_taint) s' t' /\
+    lookup_var out s' = lookup_var out t'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  drule_all ptr_comparison_transport_core >> simp[]
+QED
+
+Theorem ptr_mixed_comparison_execution:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  ptr_stage_placements C' positions /\
+  ptr_mixed_vars births positions TG a.po_taint a.po_fn g a.po_state t /\
+  a.po_state.vs_labels = t.vs_labels /\
+  fn_ptr_ok P a.po_fn /\ MEM a.po_inst (fn_insts a.po_fn) /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn) /\
+  EVERY (\op. ptr_nonopaque_operand a.po_fn op /\ op_taint a.po_taint op = {})
+    a.po_inst.inst_operands /\
+  access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+  a.po_inst.inst_outputs = [out] /\ ~retpc_var a.po_fn out /\
+  MEM a.po_inst.inst_opcode [EQ; LT; GT] /\
+  step_inst fuel Ct a.po_inst t = OK t' ==>
+  ?v. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
+    t' = update_var out v t /\
+    ptr_mixed_vars births positions
+      (step_prov PT TG a.po_inst (update_var out v a.po_state))
+      (step_taint a.po_inst a.po_state (update_var out v a.po_state) a.po_taint)
+      a.po_fn g (update_var out v a.po_state) t'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EVERY (\fn. ?P. fn_ptr_ok P fn) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  drule_all ptr_mixed_comparison_execution_core >> simp[]
 QED

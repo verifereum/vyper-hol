@@ -1,6 +1,6 @@
 Theory concretizePtrHistoricalWriteExclusion
 Ancestors
-  concretizePtrPairedPrefix concretizePtrHistoricalWriteClassification
+  o1SafeUpto concretizePtrPairedPrefix concretizePtrHistoricalWriteClassification
   concretizePtrDemandWriteExclusion concretizePtrWritePurity
   concretizePtrOpaqueRetpc concretizePtrChronologicalHistory concretizePtrRequestHistory
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
@@ -83,15 +83,15 @@ Proof
   gvs[]
 QED
 
-Theorem ptr_paired_historical_event:
+Theorem ptr_paired_historical_event_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs endpoint.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -156,11 +156,17 @@ Proof
      simp[EVERY_MEM] >> strip_tac >>
      first_x_assum irule >> simp[Abbr `aa`, MEM_EL] >>
      qexists_tac `EL q done` >> simp[]) >>
+  `gas_cut ncut vs aa.po_state` by
+    (drule ptr_structural_trace_source >>
+     disch_then (mp_tac o MATCH_MP ptr_chrono_history_gas_cut) >>
+     disch_then (qspecl_then [`ncut`,`aa`] mp_tac) >>
+     simp[Abbr `aa`] >>
+     strip_tac >> first_x_assum irule >>
+     simp[MEM_EL] >> qexists `EL q done` >> simp[] >> decide_tac) >>
   `access_ok lo aa.po_prov aa.po_fn aa.po_inst aa.po_state /\
    taint_ok aa.po_fn aa.po_taint aa.po_inst aa.po_state` by
-    (fs[ptr_observation_reachable_def, ptr_discipline_def] >>
-     qpat_x_assum `!stk PG G tn fn inst s. frame_reachable _ _ _ _ _ _ _ _ _ ==> _`
-       drule >> simp[]) >>
+    (fs[ptr_observation_reachable_def, ptr_discipline_upto_def] >>
+     metis_tac[]) >>
 
   `aa.po_inst.inst_id = (EL q ht).po_inst.inst_id` by
     (drule ptr_trace_departed_inst_ids >>
@@ -278,8 +284,9 @@ Proof
   fs[ptr_chrono_write_def, range_bytes_def] >> metis_tac[ADD_COMM]
 QED
 
-Theorem ptr_historical_ordinary_assembly[local]:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+Theorem ptr_historical_ordinary_assembly_upto[local]:
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs endpoint.po_state /\
+  ptr_demand_interval_view R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -308,7 +315,7 @@ Proof
    EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
    EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions`
-    by fs[ptr_demand_interval_def] >>
+    by fs[] >>
   `!u. u IN FDOM TGj ==> u IN fn_pv P (EL j h).po_fn` by
     (rpt strip_tac >> irule ptr_transcript_tagged_domain_support >> simp[] >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
@@ -326,27 +333,31 @@ Proof
    ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
    b+k NOTIN range_bytes (step_writes (EL j h).po_inst (EL j h).po_state
      (EL (SUC j) h).po_state)` by
-    (fs[ptr_demand_interval_def] >>
+    (fs[] >>
      metis_tac[rich_listTheory.EL_MEM, LESS_IMP_LESS_OR_EQ]) >>
   drule_all ptr_historical_write_classification >>
   disch_then assume_tac >>
   `MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
     LENGTH (EL (SUC j) h).po_state.vs_returndata = LENGTH postt.vs_returndata` by simp[] >>
-  drule_all ptr_demand_ordinary_write_exclusion >> simp[]
+  `pa+k NOTIN range_bytes (step_writes (EL j h).po_inst t postt)` suffices_by simp[] >>
+  match_mp_tac (ptr_demand_ordinary_write_exclusion_upto |> Q.INST
+    [`src` |-> `(EL j h).po_state`, `posts` |-> `(EL (SUC j) h).po_state`,
+     `ncut` |-> `ncut`, `j` |-> `j`]) >>
+  simp[]
 QED
 
-Theorem ptr_paired_historical_owned_write_exclusion:
+Theorem ptr_paired_historical_owned_write_exclusion_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  ptr_demand_interval_view R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs endpoint.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -367,17 +378,17 @@ Proof
      simp[ptr_event_embedding_def, EVERY_MEM] >> strip_tac >>
      `EL q done < LENGTH h` by
        (first_x_assum irule >> simp[MEM_EL] >> qexists `q` >> simp[]) >>
-     fs[ptr_demand_interval_def] >>
+     fs[] >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `EL q done` mp_tac) >> simp[]) >>
-  drule_all ptr_paired_historical_event >> strip_tac >>
+  drule_all ptr_paired_historical_event_upto >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_mixed_vars bj positions TGj aa.po_taint
     aa.po_fn tat.po_fn aa.po_state tat.po_state` >>
   `MEM aa.po_fn C.ctx_functions` by
     (fs[ptr_observation_reachable_def] >>
      drule ptr_frame_context_membership >> simp[]) >>
   `fn_ptr_ok P aa.po_fn` by
-    (fs[ptr_demand_interval_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `opaque_use_ok aa.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >>
      metis_tac[]) >>
@@ -389,7 +400,7 @@ Proof
     (fs[active_inst_def, fn_insts_def, MEM_fn_insts_blocks_iff, lookup_block_def] >>
      metis_tac[MEM_EL]) >>
   `aa.po_inst.inst_opcode <> DRET` by
-    (drule_all ptr_discipline_no_dret >> simp[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[ptr_fn_no_dret]) >>
   `aa.po_state.vs_labels = tat.po_state.vs_labels` by
     metis_tac[ptr_history_content_labels] >>
 
@@ -407,10 +418,10 @@ Proof
       fs[ptr_step_write_range, source_memory_write_ranges_def]) >>
   `tat.po_inst = aa.po_inst` by metis_tac[concretize_positions_unchanged] >>
   qpat_x_assum `tat.po_inst = concretize_inst_with_positions _ _` kall_tac >>
-  gvs[] >>
+  qpat_x_assum `tat.po_inst = aa.po_inst` SUBST_ALL_TAC >>
   `~is_terminator aa.po_inst.inst_opcode /\ aa.po_inst.inst_opcode <> INVOKE` by
     (drule ptr_step_write_opcode >> simp[] >> strip_tac >>
-     gvs[is_terminator_def]) >>
+     simp[is_terminator_def]) >>
   `ptr_chrono_step C aa (EL (SUC (EL q done)) h)` by
     (drule ptr_structural_transcript_erasure >> strip_tac >>
      drule ptr_structural_trace_source >>
@@ -427,9 +438,9 @@ Proof
   unabbrev_all_tac >>
   `pa+k NOTIN range_bytes (step_writes (EL (EL q done) h).po_inst
      (EL q ht).po_state (EL (SUC q) ht).po_state)` suffices_by simp[ADD_COMM] >>
-  irule ptr_historical_ordinary_assembly >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  metis_tac[]
+  match_mp_tac (ptr_historical_ordinary_assembly_upto |> Q.INST
+    [`j` |-> `EL q done`, `ft` |-> `(EL q ht).po_fn`]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem ptr_structural_trace_actual_writer_retained:
@@ -457,4 +468,84 @@ Proof
         (first_x_assum irule >> simp[] >> qexists `x` >> gvs[EL_APPEND_EQN]) >>
       qexists `q` >> simp[EL_APPEND_EQN]) >>
   qexists `LENGTH done` >> simp[EL_APPEND_EQN] >> fs[]
+QED
+
+Theorem ptr_paired_historical_event:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  ~in_revert_forward (EL (EL q done) h).po_fn (EL (EL q done) h).po_state /\
+  q < LENGTH done ==>
+  ?tsj rj bj PTj TGj sj ej next.
+    EL (EL q done) H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+    next = EL (SUC (EL q done)) H /\
+    SUC (EL q done) < LENGTH h /\ SUC q < LENGTH ht /\
+    ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+      births PT TG saved entries H /\ ptr_stage_placements C' positions /\
+    ptr_snapshot_step C (TAKE (SUC (EL q done)) h)
+      (EL (EL q done) h) (EL (SUC (EL q done)) h)
+      (tsj,rj,bj,PTj,TGj,sj,ej) next /\
+    ptr_mixed_vars bj positions TGj (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_fn (EL q ht).po_fn
+      (EL (EL q done) h).po_state (EL q ht).po_state /\
+    ptr_history_content (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_state (EL q ht).po_state /\
+    ptr_observation_reachable vs C (EL (EL q done) h) /\
+    access_ok lo (EL (EL q done) h).po_prov (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_inst (EL (EL q done) h).po_state /\
+    taint_ok (EL (EL q done) h).po_fn (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_inst (EL (EL q done) h).po_state /\
+    ~in_revert_forward (EL (EL q done) h).po_fn (EL (EL q done) h).po_state /\
+    (EL q ht).po_inst = concretize_inst_with_positions
+      (lp (EL (EL q done) h).po_fn) (EL (EL q done) h).po_inst
+Proof
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs endpoint.po_state` by simp[] >>
+  drule_all ptr_paired_historical_event_upto >> simp[]
+QED
+
+Theorem ptr_paired_historical_owned_write_exclusion:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  w < EL q done /\ q < LENGTH done ==>
+  pa+k NOTIN range_bytes
+    (step_writes (EL q ht).po_inst (EL q ht).po_state
+      (EL (SUC q) ht).po_state)
+Proof
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs endpoint.po_state` by simp[] >>
+  `ptr_demand_interval_view R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w` by fs[ptr_demand_interval_view_bridge] >>
+  match_mp_tac (ptr_paired_historical_owned_write_exclusion_upto |> Q.INST
+    [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]) >> simp[]
 QED

@@ -4,7 +4,7 @@ Ancestors
   concretizePtrPairedFields concretizePtrMixedPhi concretizePtrOpaqueRetpc
   concretizePtrSharedFields concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrChronologicalHistory
   concretizePtrTaggedSupport concretizePtrParamSupport concretizePtrRequestHistory
-  concretizePtrTaintContent
+  concretizePtrTaintContent o1SafeUpto
   concretizePtrDeletedGapHistory concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology frameCfgBoundary
   concretizeStepStructure concretizeStepShape
@@ -13,9 +13,9 @@ Ancestors
   pointerConfinedDefs memLocDefs
   unitLabelMapIdentity frameHistoryInstructions contextCodegenRel passSimulationDefs passSimulationProps venomExecProofs venomInst finite_map list
 
-Theorem ptr_owned_jnz_scalar:
+Theorem ptr_owned_jnz_scalar_upto:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  ptr_discipline lo C vs0 /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 a.po_state /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
@@ -37,7 +37,7 @@ Proof
      metis_tac[lookup_block_MEM, MEM_EL]) >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   (conj_tac
   >- (`~MEM a.po_inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET]` by fs[MEM] >>
       drule_all ptr_nonopaque_instruction_operands >> simp[EVERY_MEM]) >>
@@ -51,6 +51,23 @@ Proof
     (fs[fn_ptr_ok_def] >> metis_tac[]) >>
   fs[MEM] >> gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
       mem_write_ops_def, mem_read_ops_def] >> metis_tac[])
+QED
+
+Theorem ptr_owned_jnz_scalar:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  opaque_use_ok a.po_fn /\ MEM a.po_inst.inst_opcode [JNZ; DJMP] /\
+  MEM cond a.po_inst.inst_operands ==>
+  ptr_nonopaque_operand a.po_fn cond /\ op_prov TG cond = NONE /\
+  op_taint a.po_taint cond = {}
+Proof
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs0.vs_gas_readings)` assume_tac) >>
+  irule ptr_owned_jnz_scalar_upto >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
 Theorem ptr_history_mixed_eval_phis[local]:
@@ -361,10 +378,11 @@ Proof
   gvs[ptr_observe_def, ptr_activation_tokens_def]
 QED
 
-Theorem ptr_paired_djmp_entry:
+Theorem ptr_paired_djmp_entry_upto:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 a.po_state /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = DJMP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
@@ -410,7 +428,7 @@ Proof
   `ptr_nonopaque_operand a.po_fn cond /\ op_prov TG cond = NONE /\
     op_taint a.po_taint cond = {}` by
     (`MEM a.po_inst.inst_opcode [JNZ; DJMP] /\ MEM cond a.po_inst.inst_operands` by simp[] >>
-     drule_all ptr_owned_jnz_scalar >> simp[]) >>
+     drule_all ptr_owned_jnz_scalar_upto >> simp[]) >>
   `a.po_state.vs_labels = at.po_state.vs_labels` by
     (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
@@ -427,4 +445,45 @@ Proof
   `sj = jump_to (EL (w2n idx) labels) a.po_state` by simp[Abbr `sj`] >>
   drule_all ptr_paired_selected_jump_entry >> strip_tac >>
   qexists_tac `sj` >> metis_tac[]
+QED
+
+Theorem ptr_paired_djmp_entry:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+  opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = DJMP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  EVERY bb_well_formed a.po_fn.fn_blocks /\
+  ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
+  (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP (lp a.po_fn) (Allocation inst.inst_id))) /\
+  active_inst at.po_fn at.po_inst at.po_state /\
+  is_terminator at.po_inst.inst_opcode /\
+  step_inst fuel Ct at.po_inst at.po_state = OK t_jump /\
+  ~t_jump.vs_halted /\ enters_block at.po_fn t_jump t_entry /\
+  active_inst at.po_fn it t_entry /\
+  bt = ptr_observe at.po_stack at.po_params
+    (entry_prov at.po_fn t_jump at.po_prov)
+    (entry_taint_vars at.po_fn t_jump at.po_taint) at.po_fn it t_entry ==>
+  ?s_jump s_entry b bb.
+    step_inst fuel C a.po_inst a.po_state = OK s_jump /\
+    ~s_jump.vs_halted /\ enters_block a.po_fn s_jump s_entry /\
+    lookup_block s_jump.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
+    active_inst a.po_fn b.po_inst s_entry /\
+    b = ptr_observe a.po_stack a.po_params
+      (entry_prov a.po_fn s_jump a.po_prov)
+      (entry_taint_vars a.po_fn s_jump a.po_taint) a.po_fn b.po_inst s_entry /\
+    ptr_paired_cursor lp b bt /\
+    ptr_mixed_vars births positions (entry_prov a.po_fn s_jump TG)
+      b.po_taint a.po_fn at.po_fn s_entry t_entry /\
+    ptr_history_content b.po_taint s_entry t_entry
+Proof
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs0.vs_gas_readings)` assume_tac) >>
+  `gas_cut (SUC (LENGTH vs0.vs_gas_readings)) vs0 a.po_state` by simp[] >>
+  drule_all ptr_paired_djmp_entry_upto >> simp[]
 QED

@@ -5,7 +5,7 @@ Ancestors
   o1ContractMakeSsa o1ContractSimplifyCfg o1ContractSue
   o1ComposeSupport ctxSealAgree unitMemInv unitTransformDefs contextCodegenRel
   venomPassSchedule venomPassDispatcher unitShapeDefs venomWf
-  list arithmetic pair
+  list arithmetic pair o1PrewalkSafeUpto concretizeStageStatic concretizeStageShape
 
 Theorem o1_static_mem_before_dft_transport:
   (!k. k < LENGTH o1_fn_passes ==>
@@ -98,3 +98,36 @@ Resume o1_static_mem_before_dft_transport[sealed]:
 QED
 
 Finalise o1_static_mem_before_dft_transport
+
+(* This is the same raw safety producer used by the event-prefix walk.
+   Its pre-layout pointer facts stop at stage 2. *)
+Theorem o1_walk_before_dft_static_mem_upto:
+  (!k. k < LENGTH o1_fn_passes ==>
+    ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  (!k. k <= LENGTH o1_fn_passes ==> (stage k).ctx_entry = (stage 0).ctx_entry) /\
+  callee_first names (stage 0).ctx_functions /\
+  dead_wf D /\ o1_run_state_ok vs /\ o1_safe_upto D lo n (stage 0) vs /\
+  n <= LENGTH vs.vs_gas_readings /\ max_live_eom (stage 3) = SOME eom /\
+  (stage 0).ctx_entry = SOME nm /\
+  lookup_function nm (stage 0).ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl ==>
+  max_live_eom (stage 7) = SOME eom /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s) (stage 7) vs
+Proof
+  strip_tac >> drule_all o1_walk_before_layout_safe_upto >> strip_tac >>
+  `ctx_inst_ids_distinct (stage 2) /\
+   EVERY all_reachable (stage 2).ctx_functions /\
+   EVERY fn_defs_reach_uses (stage 2).ctx_functions` by
+    (fs[o1_ctx_shape_def, EVERY_MEM, make_ssa_input_ok_def] >> metis_tac[]) >>
+  `mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
+     (stage 3) vs` by
+    (drule_all concretize_stage_static_mem_upto >> simp[]) >>
+  `fmp_free_ctx (stage 3) /\ callee_first names (stage 3).ctx_functions` by
+    (`reserved_intervals_wf (stage 2).ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) (stage 2).ctx_functions /\
+      fmp_free_ctx (stage 2)` by fs[o1_ptr_safe_upto_def] >>
+     drule_all concretize_stage_shape >> strip_tac >> simp[]) >>
+  drule_all o1_static_mem_before_dft_transport >> simp[]
+QED

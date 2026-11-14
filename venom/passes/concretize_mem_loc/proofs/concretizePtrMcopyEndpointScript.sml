@@ -1,5 +1,5 @@
 Theory concretizePtrMcopyEndpoint
-Ancestors concretizePtrMloadEndpoint concretizePtrWritePurity concretizePtrTaggedSupport
+Ancestors o1SafeUpto concretizePtrMloadEndpoint concretizePtrWritePurity concretizePtrTaggedSupport
   concretizePtrMstoreProducer concretizePtrMloadIntegrationAudit
   concretizePtrOpaqueRetpc stackPlanGen stackPlanTypes
   concretizePtrPairedPrefix concretizePtrStructuralTranscript
@@ -14,15 +14,14 @@ Ancestors concretizePtrMloadEndpoint concretizePtrWritePurity concretizePtrTagge
   concretizePtrHistoricalPlacement concretizePtrPlacementBounds
   concretizePtrStagePlacements concretizePtrComparisonTransport
 
-Theorem ptr_paired_mcopy_endpoint_inputs:
+Theorem ptr_paired_mcopy_endpoint_inputs_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -72,7 +71,7 @@ Proof
   suspend "inputs"
 QED
 
-Resume ptr_paired_mcopy_endpoint_inputs[inputs]:
+Resume ptr_paired_mcopy_endpoint_inputs_upto[inputs]:
   `~in_revert_forward a.po_fn a.po_state` by suspend "nonrevert" >>
   `at.po_inst = a.po_inst` by
     (qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
@@ -89,7 +88,7 @@ Resume ptr_paired_mcopy_endpoint_inputs[inputs]:
   suspend "purity"
 QED
 
-Resume ptr_paired_mcopy_endpoint_inputs[nonrevert]:
+Resume ptr_paired_mcopy_endpoint_inputs_upto[nonrevert]:
   `ALL_DISTINCT (fn_labels a.po_fn)` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
   qpat_x_assum `active_inst a.po_fn a.po_inst a.po_state` mp_tac >>
@@ -102,9 +101,9 @@ Resume ptr_paired_mcopy_endpoint_inputs[nonrevert]:
   drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
 QED
 
-Resume ptr_paired_mcopy_endpoint_inputs[purity]:
+Resume ptr_paired_mcopy_endpoint_inputs_upto[purity]:
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
     (irule ptr_nonopaque_instruction_operands >> fs[fn_shape_ok_def]) >>
   `ptrDiscipline$op_taint a.po_taint dop = {} /\
@@ -113,7 +112,7 @@ Resume ptr_paired_mcopy_endpoint_inputs[purity]:
     (fs[taint_ok_def] >>
      qpat_x_assum `!op. MEM op _ /\ _ ==> _` mp_tac >> simp[] >> metis_tac[]) >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def, EVERY_MEM,
@@ -133,7 +132,7 @@ Resume ptr_paired_mcopy_endpoint_inputs[purity]:
   suspend "evaluations"
 QED
 
-Resume ptr_paired_mcopy_endpoint_inputs[evaluations]:
+Resume ptr_paired_mcopy_endpoint_inputs_upto[evaluations]:
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
   simp[ptr_observe_def, ptr_observation_component_equality] >>
@@ -143,7 +142,7 @@ Resume ptr_paired_mcopy_endpoint_inputs[evaluations]:
   strip_tac >> suspend "transport"
 QED
 
-Resume ptr_paired_mcopy_endpoint_inputs[transport]:
+Resume ptr_paired_mcopy_endpoint_inputs_upto[transport]:
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
     (fs[ptr_paired_sample_def] >> metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
@@ -171,4 +170,46 @@ Resume ptr_paired_mcopy_endpoint_inputs[transport]:
   metis_tac[]
 QED
 
-Finalise ptr_paired_mcopy_endpoint_inputs
+Finalise ptr_paired_mcopy_endpoint_inputs_upto
+
+Theorem ptr_paired_mcopy_endpoint_inputs:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
+  ?dop sop nop d r dt rt n.
+    a.po_inst.inst_operands = [dop;sop;nop] /\
+    a.po_inst.inst_outputs = [] /\ at.po_inst = a.po_inst /\
+    eval_operand dop a.po_state = SOME d /\
+    eval_operand sop a.po_state = SOME r /\
+    eval_operand nop a.po_state = SOME n /\
+    eval_operand dop at.po_state = SOME dt /\
+    eval_operand sop at.po_state = SOME rt /\
+    eval_operand nop at.po_state = SOME n /\
+    ptrDiscipline$op_taint a.po_taint dop = {} /\
+    ptrDiscipline$op_taint a.po_taint sop = {} /\
+    ptrDiscipline$op_taint a.po_taint nop = {} /\
+    op_prov TG nop = NONE /\
+    ptr_lookup_transport births positions (op_prov TG dop) {} (SOME d) (SOME dt) /\
+    ptr_lookup_transport births positions (op_prov TG sop) {} (SOME r) (SOME rt) /\
+    ~in_revert_forward a.po_fn a.po_state /\
+    MEM (w2n r,w2n n) (source_memory_read_ranges a.po_inst a.po_state) /\
+    (!fuel ctx. step_inst fuel ctx a.po_inst a.po_state =
+      OK (mcopy (w2n d) (w2n r) (w2n n) a.po_state))
+Proof
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  drule_all ptr_paired_mcopy_endpoint_inputs_upto >> simp[]
+QED

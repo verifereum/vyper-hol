@@ -1,5 +1,6 @@
 Theory concretizePtrCurrentObservation
 Ancestors
+  o1SafeUpto
   concretizePtrCurrentRangeTransport concretizePtrObservationInterface concretizePtrStageBounds
   concretizePtrForwardingTransport concretizePtrPairedPrefix
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
@@ -13,13 +14,13 @@ Ancestors
   contextCodegenRel codegenRel memLocDefs pointerConfinedDefs
   venomInst list finite_map pred_set words arithmetic
 
-Theorem ptr_paired_current_static_bound:
+Theorem ptr_paired_current_static_bound_upto:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C Ct /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
@@ -73,13 +74,13 @@ Proof
   suspend "range_supply"
 QED
 
-Resume ptr_paired_current_static_bound[range_supply]:
+Resume ptr_paired_current_static_bound_upto[range_supply]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
    access_ok lo a.po_prov a.po_fn a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
-  qpat_assum `ptr_discipline _ _ _` mp_tac >>
-  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
+  qpat_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_upto_def] >> strip_tac >>
   `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
@@ -107,7 +108,7 @@ Resume ptr_paired_current_static_bound[range_supply]:
   suspend "range_bound"
 QED
 
-Resume ptr_paired_current_static_bound[range_bound]:
+Resume ptr_paired_current_static_bound_upto[range_bound]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   drule_all ptr_current_range_transport >>
   disch_then (qx_choose_then `off_s` strip_assume_tac)
@@ -115,7 +116,7 @@ Resume ptr_paired_current_static_bound[range_bound]:
   suspend "descriptor_bound"
 QED
 
-Resume ptr_paired_current_static_bound[scalar_bound]:
+Resume ptr_paired_current_static_bound_upto[scalar_bound]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   Cases_on `len = 0` >- simp[] >>
   `off_s + len <= lo` by
@@ -131,7 +132,7 @@ Resume ptr_paired_current_static_bound[scalar_bound]:
   drule_all ptr_stage_fixed_region_bound >> simp[] >> decide_tac
 QED
 
-Resume ptr_paired_current_static_bound[descriptor_bound]:
+Resume ptr_paired_current_static_bound_upto[descriptor_bound]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   Q.SUBGOAL_THEN
     `((mem_read_ops a.po_inst = SOME ops /\
@@ -139,7 +140,39 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
       (mem_write_ops a.po_inst = SOME ops /\
        MEM (w2n x,len) (source_memory_write_ranges a.po_inst a.po_state)))`
     assume_tac >- metis_tac[] >>
-  drule_all ptr_paired_current_range_static_bound >> simp[]
+  drule_all ptr_paired_current_range_static_bound_upto >> simp[]
 QED
 
-Finalise ptr_paired_current_static_bound
+Finalise ptr_paired_current_static_bound_upto
+
+Theorem ptr_paired_current_static_bound:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions Ct.ctx_functions /\
+  ptr_stage_placements Ct positions /\
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst ==>
+  in_revert_forward at.po_fn at.po_state \/
+  (!off len.
+    MEM (off,len) (source_memory_read_ranges at.po_inst at.po_state ++
+                  source_memory_write_ranges at.po_inst at.po_state) ==>
+    len = 0 \/ off + len <= eom)
+Proof
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  irule ptr_paired_current_static_bound_upto >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED

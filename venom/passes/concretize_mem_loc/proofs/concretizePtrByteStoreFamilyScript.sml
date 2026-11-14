@@ -2,7 +2,7 @@
  * Paired-prefix extension for the N8 opcode family (MSTORE8; ISTORE).
  *)
 Theory concretizePtrByteStoreFamily
-Ancestors
+Ancestors o1SafeUpto
   concretizePtrStorageReadProducer ptrDiscipline concretizePtrRequestHistory
   concretizePtrTaintContent concretizePtrOpaqueRetpc concretizePtrSharedFields
   venomExecSemantics venomState finite_map concretizePtrStoreSteps
@@ -217,15 +217,13 @@ Proof
   metis_tac[word_agree_except_def]
 QED
 
-Theorem ptr_byte_store_transcript_successor:
+Theorem ptr_byte_store_transcript_successor_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -260,7 +258,7 @@ Proof
   >> simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()]
 QED
 
-Resume ptr_byte_store_transcript_successor[shape]:
+Resume ptr_byte_store_transcript_successor_upto[shape]:
   gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, wf_function_def] >>
   `MEM a.po_inst (fn_insts a.po_fn)` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -269,7 +267,7 @@ Resume ptr_byte_store_transcript_successor[shape]:
   fs[fn_inst_wf_def, EVERY_MEM, fn_insts_MEM] >> metis_tac[]
 QED
 
-Resume ptr_byte_store_transcript_successor[aligned]:
+Resume ptr_byte_store_transcript_successor_upto[aligned]:
   qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
   simp[ptr_paired_cursor_def] >> strip_tac >>
   `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
@@ -283,7 +281,7 @@ Resume ptr_byte_store_transcript_successor[aligned]:
   strip_tac >> gvs[concretize_inst_with_positions_def, listTheory.MEM]
 QED
 
-Resume ptr_byte_store_transcript_successor[operands]:
+Resume ptr_byte_store_transcript_successor_upto[operands]:
   markerLib.RESUME_TAC >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def,
@@ -316,7 +314,7 @@ Resume ptr_byte_store_transcript_successor[operands]:
   simp[ptr_activation_tokens_def, ptr_activation_registry_def]
 QED
 
-Resume ptr_byte_store_transcript_successor[source_cursor]:
+Resume ptr_byte_store_transcript_successor_upto[source_cursor]:
   markerLib.RESUME_TAC >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -335,7 +333,7 @@ Resume ptr_byte_store_transcript_successor[source_cursor]:
   qexists_tac `bb` >> simp[]
 QED
 
-Resume ptr_byte_store_transcript_successor[tagged_step]:
+Resume ptr_byte_store_transcript_successor_upto[tagged_step]:
   markerLib.RESUME_TAC >>
   `ptr_tagged_step (HD tokens) PT TG a.po_inst post = TG` by
     simp[ptr_tagged_step_def, step_prov_def, set_prov_def, DRESTRICT_UNIV] >>
@@ -351,17 +349,17 @@ Resume ptr_byte_store_transcript_successor[tagged_step]:
   fs[Abbr `z`, ptr_ledger_next_def] >> metis_tac[]
 QED
 
-Finalise ptr_byte_store_transcript_successor
+Finalise ptr_byte_store_transcript_successor_upto
 
-Theorem ptr_byte_store_write_producer:
+Theorem ptr_byte_store_write_producer_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -379,7 +377,7 @@ Theorem ptr_byte_store_write_producer:
       (LENGTH h - 1,LENGTH done,reloc)
 Proof
   strip_tac >>
-  drule_all ptr_byte_store_transcript_successor >> strip_tac >>
+  drule_all ptr_byte_store_transcript_successor_upto >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -396,7 +394,7 @@ Proof
     (gvs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
   `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
    taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   `opaque_use_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
   `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
@@ -404,10 +402,10 @@ Proof
   suspend "setup"
 QED
 
-Resume ptr_byte_store_write_producer[setup]:
+Resume ptr_byte_store_write_producer_upto[setup]:
   `at.po_inst = a.po_inst` by suspend "aligned" >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
@@ -438,7 +436,7 @@ Resume ptr_byte_store_write_producer[setup]:
   suspend "classify"
 QED
 
-Resume ptr_byte_store_write_producer[aligned]:
+Resume ptr_byte_store_write_producer_upto[aligned]:
   qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
   simp[ptr_paired_cursor_def] >> strip_tac >>
   `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
@@ -452,7 +450,7 @@ Resume ptr_byte_store_write_producer[aligned]:
   strip_tac >> gvs[concretize_inst_with_positions_def, listTheory.MEM]
 QED
 
-Resume ptr_byte_store_write_producer[classify]:
+Resume ptr_byte_store_write_producer_upto[classify]:
   markerLib.RESUME_TAC >> (
   rename1 `eval_operand op1 a.po_state = SOME addr` >>
   `~in_revert_forward a.po_fn a.po_state` by suspend "nonrevert" >>
@@ -488,7 +486,7 @@ Resume ptr_byte_store_write_producer[classify]:
   >- suspend "fixed" >> suspend "owned")
 QED
 
-Resume ptr_byte_store_write_producer[nonrevert]:
+Resume ptr_byte_store_write_producer_upto[nonrevert]:
   markerLib.RESUME_TAC >>
   `ALL_DISTINCT (fn_labels a.po_fn)` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
@@ -501,7 +499,7 @@ Resume ptr_byte_store_write_producer[nonrevert]:
   drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
 QED
 
-Resume ptr_byte_store_write_producer[fixed]:
+Resume ptr_byte_store_write_producer_upto[fixed]:
   markerLib.RESUME_TAC >> (
   fs[Abbr `ops`, Abbr `len`] >>
   qpat_x_assum `w2n addr + _ <= lo` mp_tac >> simp[] >> strip_tac >>
@@ -533,7 +531,7 @@ Resume ptr_byte_store_write_producer[fixed]:
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()])
 QED
 
-Resume ptr_byte_store_write_producer[fixed_bytes]:
+Resume ptr_byte_store_write_producer_upto[fixed_bytes]:
   markerLib.RESUME_TAC >> (
   `op_prov TG op2 = NONE` by
     (Cases_on `a.po_inst.inst_opcode = MSTORE8`
@@ -554,7 +552,7 @@ Resume ptr_byte_store_write_producer[fixed_bytes]:
   suspend "istore_fixed_bytes")
 QED
 
-Resume ptr_byte_store_write_producer[mstore8_fixed_bytes]:
+Resume ptr_byte_store_write_producer_upto[mstore8_fixed_bytes]:
   markerLib.RESUME_TAC >> fs[] >>
   `op_taint a.po_taint op2 = {}` by
     (metis_tac[ptr_byte_store_mstore8_operands_untainted, listTheory.MEM]) >>
@@ -570,7 +568,7 @@ Resume ptr_byte_store_write_producer[mstore8_fixed_bytes]:
   irule ptr_byte_store_mstore8_written_byte >> simp[]
 QED
 
-Resume ptr_byte_store_write_producer[istore_fixed_bytes]:
+Resume ptr_byte_store_write_producer_upto[istore_fixed_bytes]:
   markerLib.RESUME_TAC >> fs[] >>
   rename1 `eval_operand op1 a.po_state = SOME daddr` >>
   rename1 `eval_operand op2 a.po_state = SOME u` >>
@@ -588,7 +586,7 @@ Resume ptr_byte_store_write_producer[istore_fixed_bytes]:
   qexistsl_tac [`op1`,`a.po_inst`,`a.po_taint`,`op2`] >> simp[]
 QED
 
-Resume ptr_byte_store_write_producer[owned]:
+Resume ptr_byte_store_write_producer_upto[owned]:
   markerLib.RESUME_TAC >> (
   fs[Abbr `ops`, Abbr `len`] >>
   `a.po_inst.inst_opcode = MSTORE8` by
@@ -600,7 +598,7 @@ Resume ptr_byte_store_write_producer[owned]:
   fs[] >> suspend "mstore8_owned")
 QED
 
-Resume ptr_byte_store_write_producer[mstore8_owned]:
+Resume ptr_byte_store_write_producer_upto[mstore8_owned]:
   markerLib.RESUME_TAC >> fs[] >>
   qpat_x_assum `w2n addr + _ <= db + sb` mp_tac >> simp[] >> strip_tac >>
   `MEM token tokens` by
@@ -638,7 +636,7 @@ Resume ptr_byte_store_write_producer[mstore8_owned]:
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()]
 QED
 
-Resume ptr_byte_store_write_producer[mstore8_owned_bytes]:
+Resume ptr_byte_store_write_producer_upto[mstore8_owned_bytes]:
   markerLib.RESUME_TAC >>
   `op_prov TG op2 = NONE` by
     (irule ptr_byte_store_mstore8_value_no_provenance >> metis_tac[]) >>
@@ -669,16 +667,17 @@ Resume ptr_byte_store_write_producer[mstore8_owned_bytes]:
   asm_rewrite_tac[] >> irule ptr_byte_store_mstore8_written_byte >> simp[]
 QED
 
-Finalise ptr_byte_store_write_producer
+Finalise ptr_byte_store_write_producer_upto
 
-Theorem ptr_paired_prefix_byte_store:
+Theorem ptr_paired_prefix_byte_store_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -690,7 +689,7 @@ Theorem ptr_paired_prefix_byte_store:
     (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) calls
     (ws ++ [(LENGTH h - 1,LENGTH done,reloc)])
 Proof
-  strip_tac >> drule_all ptr_byte_store_write_producer >> strip_tac >>
+  strip_tac >> drule_all ptr_byte_store_write_producer_upto >> strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -742,7 +741,7 @@ Proof
   conj_tac >- suspend "callers" >> suspend "writes"
 QED
 
-Resume ptr_paired_prefix_byte_store[aligned]:
+Resume ptr_paired_prefix_byte_store_upto[aligned]:
   qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
   simp[ptr_paired_cursor_def] >> strip_tac >>
   `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
@@ -755,10 +754,10 @@ Resume ptr_paired_prefix_byte_store[aligned]:
   first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[] >>
   strip_tac >> gvs[concretize_inst_with_positions_def, listTheory.MEM]
 QED
-Resume ptr_paired_prefix_byte_store[sample]:
+Resume ptr_paired_prefix_byte_store_upto[sample]:
   irule ptr_paired_samples_pair >> simp[] >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
@@ -771,7 +770,7 @@ Resume ptr_paired_prefix_byte_store[sample]:
      drule ptr_structural_trace_ownership >> strip_tac >>
      drule_all ptr_source_tagged_var_support >> simp[]) >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def] >> metis_tac[]) >>
   `opaque_use_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
   `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
@@ -788,7 +787,7 @@ Resume ptr_paired_prefix_byte_store[sample]:
   qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()])
 QED
-Resume ptr_paired_prefix_byte_store[sample_target]:
+Resume ptr_paired_prefix_byte_store_upto[sample_target]:
   markerLib.RESUME_TAC >> (
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
@@ -800,7 +799,7 @@ Resume ptr_paired_prefix_byte_store[sample_target]:
   qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()])
 QED
-Resume ptr_paired_prefix_byte_store[sample_content]:
+Resume ptr_paired_prefix_byte_store_upto[sample_content]:
   markerLib.RESUME_TAC >> (
   fs[exec_write2_def, AllCaseEqs()] >> gs[] >>
   rename1 `a.po_inst.inst_operands = [op1;op2]` >>
@@ -808,7 +807,7 @@ Resume ptr_paired_prefix_byte_store[sample_content]:
   Cases_on `a.po_inst.inst_opcode = ISTORE`
   >- suspend "istore_sample" >> suspend "mstore8_sample")
 QED
-Resume ptr_paired_prefix_byte_store[istore_sample]:
+Resume ptr_paired_prefix_byte_store_upto[istore_sample]:
   markerLib.RESUME_TAC >> fs[] >>
   `exec_write2 (\a v s. istore (w2n a) v s) a.po_inst at.po_state = OK s''` by
     simp[exec_write2_def] >>
@@ -818,7 +817,7 @@ Resume ptr_paired_prefix_byte_store[istore_sample]:
   irule ptr_mixed_vars_fields >>
   qexistsl_tac [`s'`,`s''`,`step_taint a.po_inst a.po_state s' a.po_taint`] >> simp[]
 QED
-Resume ptr_paired_prefix_byte_store[mstore8_sample]:
+Resume ptr_paired_prefix_byte_store_upto[mstore8_sample]:
   markerLib.RESUME_TAC >> fs[] >>
   `exec_write2 (\a v s. mstore8 (w2n a) v s) a.po_inst at.po_state = OK s''` by
     simp[exec_write2_def] >>
@@ -827,7 +826,7 @@ Resume ptr_paired_prefix_byte_store[mstore8_sample]:
   irule ptr_mixed_vars_fields >>
   qexistsl_tac [`s'`,`s''`,`step_taint a.po_inst a.po_state s' a.po_taint`] >> simp[]
 QED
-Resume ptr_paired_prefix_byte_store[alignment]:
+Resume ptr_paired_prefix_byte_store_upto[alignment]:
   `ptr_chrono_step C a z` by fs[ptr_ledger_write_pair_def] >>
   qpat_x_assum `ptr_chrono_step C a z` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >> fs[listTheory.MEM] >> (
@@ -839,7 +838,7 @@ Resume ptr_paired_prefix_byte_store[alignment]:
   qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()])
 QED
-Resume ptr_paired_prefix_byte_store[alignment_target]:
+Resume ptr_paired_prefix_byte_store_upto[alignment_target]:
   markerLib.RESUME_TAC >> (
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
@@ -851,7 +850,7 @@ Resume ptr_paired_prefix_byte_store[alignment_target]:
   qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()])
 QED
-Resume ptr_paired_prefix_byte_store[alignment_finish]:
+Resume ptr_paired_prefix_byte_store_upto[alignment_finish]:
   markerLib.RESUME_TAC >> (
   irule ptr_paired_alignment_pair >> simp[] >>
   reverse conj_tac >- gvs[ptr_paired_params_def, istore_def, mstore_def, mstore8_def] >>
@@ -859,7 +858,7 @@ Resume ptr_paired_prefix_byte_store[alignment_finish]:
   simp[] >> qexistsl_tac [`a`,`at`] >>
   gvs[istore_def, mstore_def, mstore8_def])
 QED
-Resume ptr_paired_prefix_byte_store[callers]:
+Resume ptr_paired_prefix_byte_store_upto[callers]:
   `zt.po_stack = at.po_stack` by
     (qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
      once_rewrite_tac[ptr_chrono_step_cases] >> fs[listTheory.MEM] >>
@@ -871,7 +870,7 @@ Resume ptr_paired_prefix_byte_store[callers]:
   fs[ptr_event_embedding_def, EVERY_EL] >>
   qexistsl_tac [`a`,`at`] >> simp[]
 QED
-Resume ptr_paired_prefix_byte_store[writes]:
+Resume ptr_paired_prefix_byte_store_upto[writes]:
   `EVERY (\n. SUC n < LENGTH h) done` by
     (qpat_assum `ptr_event_embedding h ht (done ++ _)` mp_tac >>
      qpat_assum `SUC (LENGTH h - 1) = LENGTH h` mp_tac >>
@@ -883,7 +882,143 @@ Resume ptr_paired_prefix_byte_store[writes]:
   irule ptr_paired_writes_pair >>
   gvs[ptr_paired_samples_def, ptr_sample_list_def] >> metis_tac[]
 QED
-Finalise ptr_paired_prefix_byte_store
+Finalise ptr_paired_prefix_byte_store_upto
+
+Theorem ptr_paired_byte_store_prefix_normalize_upto:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs a.po_state /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [MSTORE8; ISTORE] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_prefix_byte_store_upto >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG,saved,entries)] ++ snapshots`, `calls`,
+    `ws ++ [(LENGTH h - 1,LENGTH done,reloc)]`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
+
+
+Theorem ptr_byte_store_transcript_successor:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  MEM a.po_inst.inst_opcode [MSTORE8; ISTORE] /\ ptr_chrono_step C' at zt ==>
+  ?z. ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) /\
+    ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
+    z.po_state.vs_allocas = a.po_state.vs_allocas /\ z.po_stack = a.po_stack
+Proof
+  strip_tac >> drule_all ptr_byte_store_transcript_successor_upto >> simp[]
+QED
+
+Theorem ptr_byte_store_write_producer:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  MEM a.po_inst.inst_opcode [MSTORE8; ISTORE] /\ ptr_chrono_step C' at zt ==>
+  ?z reloc.
+    ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
+      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) /\
+    ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
+    z.po_state.vs_allocas = a.po_state.vs_allocas /\ z.po_stack = a.po_stack /\
+    ptr_paired_write lo positions C C' (h ++ [z]) (ht ++ [zt])
+      (done ++ [LENGTH h - 1])
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
+      (LENGTH h - 1,LENGTH done,reloc)
+Proof
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  drule_all ptr_byte_store_write_producer_upto >> simp[]
+QED
+
+Theorem ptr_paired_prefix_byte_store:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  MEM a.po_inst.inst_opcode [MSTORE8; ISTORE] /\ ptr_chrono_step C' at zt ==>
+  ?z reloc. ptr_paired_prefix R lp positions lo vs C C'
+    (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+    tokens registry births PT TG saved entries
+    (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) calls
+    (ws ++ [(LENGTH h - 1,LENGTH done,reloc)])
+Proof
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  drule_all ptr_paired_prefix_byte_store_upto >> simp[]
+QED
 
 Theorem ptr_paired_byte_store_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -918,24 +1053,9 @@ Theorem ptr_paired_byte_store_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_paired_prefix_byte_store >> strip_tac >>
-  `fn_inst_wf z.po_fn` by
-    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
-     drule ptr_structural_transcript_erasure >> strip_tac >>
-     drule ptr_structural_trace_source >> strip_tac >>
-     drule ptr_chrono_history_reachable >> strip_tac >>
-     fs[ptr_observation_reachable_def] >>
-     drule ptr_frame_context_membership >> strip_tac >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
-  simp[] >> strip_tac >>
-  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
-    `tokens`, `registry`, `births`, `PT`, `TG`, `saved`, `entries`,
-    `[(tokens,registry,births,PT,TG,saved,entries)] ++ snapshots`, `calls`,
-    `ws ++ [(LENGTH h - 1,LENGTH done,reloc)]`] >>
-  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+  strip_tac >>
+  drule ptr_discipline_upto_whole >>
+  disch_then (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs a.po_state` by simp[] >>
+  drule_all ptr_paired_byte_store_prefix_normalize_upto >> simp[]
 QED
-

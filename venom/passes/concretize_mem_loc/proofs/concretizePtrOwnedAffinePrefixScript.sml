@@ -27,13 +27,12 @@ Proof
   Cases_on `FLOOKUP TG s'` >> gvs[] >> metis_tac[]
 QED
 
-Theorem ptr_owned_affine_conditions:
+Theorem ptr_owned_affine_conditions_at:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   ~ctx_has_dalloca C /\
-  (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
-    taint_ok fn tn inst s) /\
+  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
   a.po_inst.inst_operands = [x;y] /\
   (a.po_inst.inst_opcode = ADD \/ a.po_inst.inst_opcode = SUB) ==>
   op_taint a.po_taint x = {} /\ op_taint a.po_taint y = {} /\
@@ -65,6 +64,28 @@ Proof
   `MEM a.po_inst bb.bb_instructions` by metis_tac[EL_MEM] >>
   `affine_pointer_ops a.po_fn (ptr_roots P a.po_fn)` by gvs[fn_ptr_ok_def] >>
   metis_tac[ptr_tagged_affine_conditions]
+QED
+
+Theorem ptr_owned_affine_conditions:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  (!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
+    taint_ok fn tn inst s) /\
+  a.po_inst.inst_operands = [x;y] /\
+  (a.po_inst.inst_opcode = ADD \/ a.po_inst.inst_opcode = SUB) ==>
+  op_taint a.po_taint x = {} /\ op_taint a.po_taint y = {} /\
+  (a.po_inst.inst_opcode = ADD ==> op_prov TG x = NONE \/ op_prov TG y = NONE) /\
+  (a.po_inst.inst_opcode = SUB ==> op_prov TG y = NONE)
+Proof
+  strip_tac >>
+  `frame_reachable vs0 C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  irule ptr_owned_affine_conditions_at >> rpt (goal_assum (drule_at Any)) >>
+  metis_tac[]
 QED
 
 (* ptr_assign_target_segment is opcode-independent and is reused below. *)

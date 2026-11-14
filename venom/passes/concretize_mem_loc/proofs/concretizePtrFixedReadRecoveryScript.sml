@@ -10,7 +10,7 @@ Ancestors concretizePtrOwnerFloor concretizePtrFixedReadAudit concretizePtrFixed
   concretizePtrSourceOwnership concretizePtrActivationBirths
   concretizePtrActivationChronology concretizePtrOwnerPath
   concretizePtrHistoryObservation frameExecutionHistory
-  ptrDiscipline unitMemInv venomInst codegenRel
+  o1SafeUpto ptrDiscipline unitMemInv venomInst codegenRel
   list rich_list arithmetic pred_set finite_map
 
 Theorem ptr_retained_ordinary_write_ledger[local]:
@@ -35,15 +35,15 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_paired_fixed_read_recovery:
+Theorem ptr_paired_fixed_read_recovery_upto:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline_upto lo ncut C vs /\
+  gas_cut ncut vs endpoint.po_state /\
   EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
@@ -77,7 +77,7 @@ Proof
       (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) ==>
     x NOTIN range_bytes (step_writes (EL q ht).po_inst
       (EL q ht).po_state (EL (SUC q) ht).po_state)` by
-    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection >>
+    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection_upto >>
      metis_tac[]) >>
   drule_all ptr_chrono_last_actual_or_none >> strip_tac
   >- (`read_byte x endpoint.po_state.vs_memory = read_byte x vs.vs_memory` by
@@ -90,7 +90,7 @@ Proof
   suspend "writer"
 QED
 
-Resume ptr_paired_fixed_read_recovery[writer]:
+Resume ptr_paired_fixed_read_recovery_upto[writer]:
   drule ptr_structural_trace_actual_writer_retained >>
   disch_then (qspecl_then [`w`,`x`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -99,8 +99,9 @@ Resume ptr_paired_fixed_read_recovery[writer]:
        (mp_tac o MATCH_MP ptr_chrono_history_reachable) >>
      simp[EVERY_EL] >> strip_tac >> first_x_assum irule >> decide_tac) >>
   `(EL w h).po_inst.inst_opcode <> DRET` by
-    (irule ptr_stage_observation_no_dret >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+    (irule ptr_stage_observation_no_dret_upto >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `~is_terminator (EL w h).po_inst.inst_opcode /\
    (EL w h).po_inst.inst_opcode <> INVOKE` by
     (qpat_assum `(EL w h).po_inst.inst_opcode <> DRET` mp_tac >>
@@ -131,7 +132,12 @@ Resume ptr_paired_fixed_read_recovery[writer]:
        (qpat_assum `ptr_chrono_history vs C h endpoint`
           (mp_tac o MATCH_MP ptr_chrono_history_reachable) >>
         simp[EVERY_EL] >> strip_tac >> first_x_assum irule >> simp[]) >>
-     metis_tac[ptr_reachable_owner_allocas_from]) >>
+     `gas_cut ncut vs (EL (SUC w) h).po_state` by
+       (qpat_assum `ptr_chrono_history vs C h endpoint`
+          (mp_tac o MATCH_MP ptr_chrono_history_gas_cut) >>
+        disch_then (qspecl_then [`ncut`, `EL (SUC w) h`] mp_tac) >>
+        simp[EL_MEM]) >>
+     metis_tac[ptr_reachable_owner_allocas_from_upto]) >>
   `rho' x = x` by
     (drule_all ptr_paired_write_owner_fixed >> simp[]) >>
   `read_byte x (EL (SUC w) h).po_state.vs_memory =
@@ -143,7 +149,7 @@ Resume ptr_paired_fixed_read_recovery[writer]:
   suspend "frame"
 QED
 
-Resume ptr_paired_fixed_read_recovery[frame]:
+Resume ptr_paired_fixed_read_recovery_upto[frame]:
   `!j. q < j /\ j < LENGTH done ==> w < EL j done` by
     (qpat_x_assum `ptr_event_embedding _ _ _` mp_tac >>
      pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
@@ -182,4 +188,29 @@ Resume ptr_paired_fixed_read_recovery[frame]:
   metis_tac[]
 QED
 
-Finalise ptr_paired_fixed_read_recovery
+Finalise ptr_paired_fixed_read_recovery_upto
+
+Theorem ptr_paired_fixed_read_recovery:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  x < lo /\ x NOTIN endpoint.po_taint.t_mem /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN ==>
+  read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
+Proof
+  strip_tac >> irule ptr_paired_fixed_read_recovery_upto >>
+  rpt (goal_assum (drule_at Any)) >>
+  qexists_tac `SUC (LENGTH vs.vs_gas_readings)` >>
+  simp[] >> metis_tac[ptr_discipline_upto_whole]
+QED

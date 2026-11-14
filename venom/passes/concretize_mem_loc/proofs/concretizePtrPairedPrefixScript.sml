@@ -384,3 +384,17 @@ Proof
   simp[ptr_paired_alignment_def] >>
   disch_then (qspec_then `LENGTH done` mp_tac) >> simp[EL_APPEND_EQN]
 QED
+
+Theorem ptr_paired_prefix_gas_cut:
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  gas_cut n vs at.po_state ==> gas_cut n vs a.po_state
+Proof
+  strip_tac >> drule ptr_paired_prefix_endpoint >>
+  simp[ptr_paired_sample_def, ptr_history_content_def,
+       concretizePtrTaintContentTheory.ptr_taint_content_def,
+       concretizePtrTaintContentTheory.ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def,
+       o1SafeUptoTheory.gas_cut_def] >>
+  strip_tac >> gvs[o1SafeUptoTheory.gas_cut_def]
+QED

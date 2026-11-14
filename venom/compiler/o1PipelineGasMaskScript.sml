@@ -25,7 +25,7 @@ Ancestors
   passSimulationDefs makeSsaCurrentEvents venomPipelineRunner
   o1FnScheduleDecompHelpers o1PrewalkSafeUpto o1SafeUpto
   o1ContractLowerDloadStage o1LowerDloadRootEntry concretizeStageShape o1ContractMakeSsaSrc
-  option list
+  o1PreDftStaticMem option list
 
 (* ===== Runs at the entry ===== *)
 
@@ -646,6 +646,41 @@ Proof
       impl_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
       disch_then ACCEPT_TAC) >>
   disch_then ACCEPT_TAC
+QED
+
+(* The prefix's static safety and events share the fixed input and cut. *)
+Theorem o1_walk_before_dft_prefix_static_mem:
+  (!k. k < LENGTH o1_fn_passes ==>
+    ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  (!k. k <= LENGTH o1_fn_passes ==> (stage k).ctx_entry = (stage 0).ctx_entry) /\
+  callee_first names (stage 0).ctx_functions /\
+  dead_wf D /\ o1_run_state_ok vs /\ o1_safe_upto D lo n (stage 0) vs /\
+  n <= LENGTH vs.vs_gas_readings /\ max_live_eom (stage 3) = SOME eom /\
+  (stage 0).ctx_entry = SOME nm /\
+  lookup_function nm (stage 0).ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl /\
+  n <= LENGTH (gas_events_blocks fuel (stage 0) fn
+    (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)) ==>
+  max_live_eom (stage 7) = SOME eom /\
+  mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s) (stage 7) vs /\
+  ?fuel' fn' lbl'.
+    lookup_function nm (stage 7).ctx_functions = SOME fn' /\
+    fn_entry_label fn' = SOME lbl' /\
+    n <= LENGTH (gas_events_blocks fuel' (stage 7) fn'
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl'; vs_inst_idx := 0 |>)) /\
+    TAKE n (gas_events_blocks fuel' (stage 7) fn'
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl'; vs_inst_idx := 0 |>)) =
+    TAKE n (gas_events_blocks fuel (stage 0) fn
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>))
+Proof
+  strip_tac >> drule_all o1_walk_before_dft_static_mem_upto >> strip_tac >>
+  simp[] >>
+  mp_tac (Q.INST [`w` |-> `vs`] o1_walk_before_dft_prefix) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspec_then `7` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`nm`, `fn`, `lbl`, `fuel`] mp_tac) >> simp[]
 QED
 
 Theorem take_prefix_extend[local]:
