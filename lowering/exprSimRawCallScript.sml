@@ -23,7 +23,7 @@
 
 Theory exprSimRawCall
 Ancestors
-  exprSimSource exprSimHypsDefs exprSimDefs exprSimStack loweringPosts
+  ptrDiscipline exprSimSource exprSimHypsDefs exprSimDefs exprSimStack loweringPosts
   exprSimProps exprSimVVFrame exprSimAttributeFields
   gasOutcome gasSummary gasSummaryCompose gasExemptCert
   allocLimits freshWrites varsExt builtinSimple builtinProps
@@ -2740,7 +2740,7 @@ Theorem raw_call_oracle_stmt_frame[local]:
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
   t.vs_alloca_next = s.vs_alloca_next /\
   t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels /\
-  ((ctx_has_dalloca ctx \/
+  ((ptrDiscipline$ctx_has_dalloca ctx \/
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
     t.vs_initial_fmp = s.vs_initial_fmp /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>

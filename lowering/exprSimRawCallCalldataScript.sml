@@ -24,7 +24,7 @@
 
 Theory exprSimRawCallCalldata
 Ancestors
-  exprSimHashBoundary
+  ptrDiscipline exprSimHashBoundary
   exprSimSource exprSimHypsDefs exprSimDefs exprSimStack exprSimProps
   gasSummary gasSummaryCompose gasOutcome gasExemptCert
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort rawCallFragPath gasContext
@@ -2536,7 +2536,7 @@ Theorem raw_call_buffer_oracle_fields[local]:
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   t.vs_vars = s.vs_vars /\ t.vs_memory = s.vs_memory /\
   t.vs_labels = s.vs_labels /\
-  ((ctx_has_dalloca ctx \/
+  ((ptrDiscipline$ctx_has_dalloca ctx \/
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
     t.vs_initial_fmp = s.vs_initial_fmp) ==>
   raw_call_buffer_frame H ctx func cenv cx es0 es1 sf s0 saved ai w n t
