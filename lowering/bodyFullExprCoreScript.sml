@@ -15,6 +15,7 @@
 Theory bodyFullExprCore
 Ancestors
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord
+  bodyFullBopWordLayout bodyFullBopWordOperands bodyFullBopWordSuffix
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
   exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
@@ -159,7 +160,18 @@ Theorem bop_word_sim_full:
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  drule_all bop_word_full_layout >> strip_tac >>
+  irule (SRULE [LET_THM] bop_word_operands_full_cps) >>
+  asm_rewrite_tac [] >>
+  qexistsl_tac [`cenv`, `d`, `env`, `s1`, `s2`, `sa`, `shadow_func`,
+    `shadow_s1`, `shadow_s2`, `shadow_sa`, `tops`, `x`, `y`] >>
+  asm_rewrite_tac [] >>
+  rpt gen_tac >> strip_tac >> simp[] >>
+  mp_tac (SRULE [LET_THM] bop_word_suffix_full) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
 QED
 
 (* == and != on address and bytesN. *)
