@@ -1,6 +1,6 @@
 (* Supplied-success allocation endpoint with the same ghost continuation. *)
 Theory decoderBudgetAllocaCorePtr
-Ancestors wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr
+Ancestors decoderNavigationPtr fragGasOriginPtr instMemFrontier memSafeRun codegenRel contextCodegenRel wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv loweringStateRelDefs context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map
@@ -91,11 +91,18 @@ Proof
   gvs[]
 QED
 
-Theorem budget_alloca_endpoint_exact_ptr_core:
+Theorem budget_alloca_endpoint_exact_ptr_origin_core:
   emit_op ALLOCA [Lit 32w] sa = (ip,sb) /\
   abi_decoder_budget first last b cap s /\ sa.cs_next_id IN abi_decoder_ids first last /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
+  ?HG u q p. (!D lower explicit ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      ~s.vs_halted /\ lower <= s.vs_alloca_next /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    ip = Var q /\ lookup_var q t = SOME (n2w p) /\
     b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
     ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
     frag_exec_ptr H cx ctx PG sa sb
@@ -129,8 +136,20 @@ Proof
    tn.t_mem DIFF {a | p <= a /\ a < p + 32}` by
     (simp[Abbr `u`] >> irule budget_alloca_mem_difference >>
      metis_tac[]) >>
-  qexistsl_tac [`HG`,`u`,`p`] >> simp[] >>
-  conj_tac >- fs[ptr_covers_def, eval_op_inst_idx, eval_operand_def, lookup_var_def] >>
+  qexistsl_tac [`HG`,`u`,`p`] >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >>
+     simp_tac pure_ss [Abbr `HG`, Abbr `u`] >>
+     `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+     `LENGTH sa.cs_current_insts + 1 = SUC s.vs_inst_idx` by simp[ADD1] >>
+     pop_assum (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+     irule navigation_instruction_origin >>
+     simp[mk_inst_def, is_terminator_def, inst_dload_in_section_def] >>
+     conj_tac >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+     conj_tac >- (qexistsl_tac [`sa`,`sb`] >> simp[mk_inst_def]) >>
+     irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+     qexists_tac `0` >> simp[GSYM mk_inst_def, ptr_inst_ok_alloca]) >>
+  simp[] >>
   conj_tac
   >- (irule ptr_fragment_step >> simp[mk_inst_def, is_terminator_def] >>
       rpt strip_tac >> gvs[] >> qexists_tac `t` >> simp[] >>
@@ -146,4 +165,32 @@ Proof
   simp[Abbr `HG`, Abbr `u`, is_terminator_def] >>
   gen_tac >> irule ptr_inst_ok_lower_bound_transport >> simp[] >>
   qexists_tac `0` >> simp[ptr_inst_ok_alloca]
+QED
+
+Theorem budget_alloca_endpoint_exact_ptr_core:
+  emit_op ALLOCA [Lit 32w] sa = (ip,sb) /\
+  abi_decoder_budget first last b cap s /\ sa.cs_next_id IN abi_decoder_ids first last /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem DIFF {a | p <= a /\ a < p + 32} =
+      tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all budget_alloca_endpoint_exact_ptr_origin_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
