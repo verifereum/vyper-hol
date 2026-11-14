@@ -2,7 +2,7 @@ Theory bodyPtrPopTargetSimStorageHeader
 Ancestors
   bodyPtrDefs targetPlaceLive accountsRelProps exprLoweringProps
   compileEnv loweringStateRelDefs ptrDiscipline vyperStorageBackend venomState finite_map pred_set
-  bodyPtrBopInSlotLoad
+  bodyPtrBopInSlotLoad vyperStoragePlaceProvenance
 
 Theorem target_storage_header_clean_ptr:
   stmt_state_rel ctx func cenv cx es s /\ stor_taint_ok cx tn s /\
@@ -30,16 +30,16 @@ Proof
 QED
 
 Theorem target_pure_storage_header_clean_ptr:
-  EVERY pure_expr (target_indices bt) /\
+  storage_layout_safe cx /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),ee) /\
   stmt_state_rel ctx func cenv cx ee s /\ stor_taint_ok cx tn s /\
   0 < type_slot_size tv ==>
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}
 Proof
   strip_tac >>
-  `ee = es` by metis_tac[nested_pop_eval_base_pure_state] >> gvs[] >>
-  drule_all nested_pop_eval_base_live >>
-  simp[nested_pop_result_live_def, get_storage_backend_eq] >> strip_tac >>
+  drule eval_base_place_region >> simp[storage_result_region_def] >> strip_tac >>
+  `storage_read_live cx tr (get_storage cx ee tr) slot tv` by
+    (irule storage_place_region_read_live >> metis_tac[]) >>
   irule target_storage_header_clean_ptr >> metis_tac[]
 QED
 
@@ -63,7 +63,7 @@ Proof
 QED
 
 Theorem target_pure_storage_header_path_ptr:
-  EVERY pure_expr (target_indices bt) /\
+  storage_layout_safe cx /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),ee) /\
   stmt_state_rel ctx func cenv cx ee s /\ stor_taint_ok cx tn s /\
   0 < type_slot_size tv /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -79,11 +79,10 @@ Theorem target_pure_storage_header_path_ptr:
     (!x. x <> out ==> FLOOKUP H x = FLOOKUP G x)
 Proof
   strip_tac >>
-  `ee = es` by metis_tac[nested_pop_eval_base_pure_state] >> gvs[] >>
   drule_all target_pure_storage_header_clean_ptr >> strip_tac >>
   `storage_read_live cx tr (get_storage cx ee tr) slot tv` by
-    (drule_all nested_pop_eval_base_live >>
-     simp[nested_pop_result_live_def, get_storage_backend_eq]) >>
+    (drule eval_base_place_region >> simp[storage_result_region_def] >> strip_tac >>
+     irule storage_place_region_read_live >> metis_tac[]) >>
   drule_all target_storage_header_value >> strip_tac >>
   drule_all membership_positioned_slot_load_path >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

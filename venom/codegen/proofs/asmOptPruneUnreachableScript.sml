@@ -156,7 +156,7 @@ QED
 
 (* ===== The walk ===== *)
 
-Theorem prune_unreachable_walk_fst[local]:
+Theorem prune_unreachable_walk_fst:
   FST (prune_unreachable_walk d (inst :: rest)) =
   if d ∧ ¬asm_reachable_marker inst then FST (prune_unreachable_walk T rest)
   else inst :: FST (prune_unreachable_walk (asm_terminal_op inst) rest)

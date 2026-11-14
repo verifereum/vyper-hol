@@ -319,10 +319,12 @@ Proof
     (drule window_strong_result_effect >>
      simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >> metis_tac[]) >>
   `abi_encoder_registered_effect sites [] prepared actual` by
-    (drule abi_encode_body_finish_registered >>
+    (`32 <= outsz` by decide_tac >>
+     drule abi_encode_body_finish_registered >>
      disch_then drule >>
      disch_then (qspecl_then [`site`, `outsz`, `sites`, `B`] mp_tac) >>
-     simp[Abbr `sites`, Abbr `B`, SUBSET_DEF] >> decide_tac) >>
+     qunabbrevl_tac [`sites`, `B`] >>
+     asm_simp_tac bool_ss [SUBSET_DEF, IN_INSERT]) >>
   rpt gen_tac >> strip_tac >>
   `aid NOTIN sites` by
     (simp[Abbr `sites`, Abbr `B`, window_alloca_sites_def, frag_ids_def] >>

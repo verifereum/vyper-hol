@@ -41,7 +41,7 @@ Proof
   rpt strip_tac >>
   `!xs. body_exprs_ok cx xs ==> exprs_case F ctx func cenv cx xs` by
     (Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
-     gvs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
+     gvs[Once body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
      metis_tac[]) >>
   `exprs_case F ctx func cenv cx (MAP SND kes)` by metis_tac[] >>
   `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>

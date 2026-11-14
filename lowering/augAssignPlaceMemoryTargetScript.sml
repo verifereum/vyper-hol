@@ -105,7 +105,7 @@ Proof
        (typed_val_to_w256 tv cur) s)` by
     (Cases_on `tr` >>
      qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
-     simp[mk_inst_def, step_inst_base_def, exec_read1_def]) >>
+     simp[mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def]) >>
   drule_at (Pat `step_inst_base _ _ = _`) emit_op_word_path_frame_mem >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then drule >>

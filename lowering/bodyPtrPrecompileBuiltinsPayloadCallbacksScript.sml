@@ -506,7 +506,19 @@ Proof
     (simp[immutable_mstore_capacity] >> decide_tac) >>
   `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
     (irule scratch_memory_frame >> simp[] >>
-     conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
+     conj_tac
+     >- (qexistsl_tac [`w2n b`, `128`] >>
+         qpat_assum `t.vs_memory = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+         rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC >>
+         disch_tac >> map_every qx_gen_tac [`name`, `tv`, `iv`, `off`] >> strip_tac >>
+         qpat_assum `!sz inst b name tv iv off. _`
+           (qspecl_then [`128`, `inst`, `w2n b`, `name`, `tv`, `iv`, `off`] mp_tac) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then ACCEPT_TAC) >>
+     qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >> conj_tac
   >- (drule bodyPtrPrecompileBuiltinsPayloadFramesTheory.scratch_reset_allocations >> simp[]) >>
   irule EQ_TRANS >> goal_assum (drule_at Any) >>
