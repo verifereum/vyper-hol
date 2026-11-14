@@ -42,7 +42,7 @@
  * targetPlaceSimCases.
  *
  * Helpers: target_pre_sub,
- *   expr_sim_inv_local, target_post_refl, toplevel_decl_ce_vars, toplevel_target_decl
+ *   expr_sim_inv_local, toplevel_decl_ce_vars, toplevel_target_decl
  *)
 
 Theory targetPlaceSim
@@ -193,21 +193,6 @@ Proof
 QED
 
 (* ===== Leaves ===== *)
-
-(* No code, and the post at the start state. *)
-Theorem target_post_refl[local]:
-  !H ctx func cenv cx es sa s pv vt r.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
-    (?w. eval_operand (FST r) s = SOME w /\
-         place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
-    SND (SND r) = SOME (value_type_place vt) /\
-    (!x. FST r = Var x ==> not_fresh_at sa x) /\
-    place_readable cx es pv ==>
-    target_post H ctx func cenv cx es sa sa s es pv vt r s
-Proof
-  rw[target_post_def] >> metis_tac[]
-QED
 
 (* A local: its place MemoryPlace x [] at its pointer, no code. *)
 Theorem target_name_case:
