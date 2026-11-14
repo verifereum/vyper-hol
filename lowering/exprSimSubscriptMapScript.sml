@@ -638,7 +638,7 @@ Proof
   simp[vyperHashMapStorageTheory.select_result_hashmap_nested]
 QED
 
-Theorem forced_then_outcome_exec[local]:
+Theorem forced_then_outcome_exec:
   gas_outcome memory tops (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\ P v ee t)

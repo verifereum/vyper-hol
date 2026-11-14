@@ -1051,13 +1051,13 @@ Definition bounded_call_agree_fuel_def:
           frame_result_rel (run_blocks k A f s) (run_blocks (g k) B h s)
 End
 
-Theorem bounded_call_agree_fuel_mono:
+Theorem bounded_call_agree_fuel_mono[local]:
   bounded_call_agree_fuel g n A B /\ m <= n ==> bounded_call_agree_fuel g m A B
 Proof
   rw[bounded_call_agree_fuel_def] >> first_x_assum irule >> simp[]
 QED
 
-Theorem bounded_call_agree_fuel_step_inst:
+Theorem bounded_call_agree_fuel_step_inst[local]:
   bounded_call_agree_fuel g n A B /\ k < n /\ g k <= j /\ k <= j /\
   terminates (step_inst k A inst s) ==>
   step_result_rel (step_inst k A inst s) (step_inst j B inst s)
@@ -1097,7 +1097,7 @@ Proof
   gvs[passSimulationDefsTheory.terminates_def, step_result_rel_def, frame_result_rel_def]
 QED
 
-Theorem bounded_call_agree_fuel_exec_block:
+Theorem bounded_call_agree_fuel_exec_block[local]:
   bounded_call_agree_fuel g n A B /\ k < n /\ g k <= j /\ k <= j /\
   terminates (exec_block k A bb s) ==>
   step_result_rel (exec_block k A bb s) (exec_block j B bb s)
@@ -1146,7 +1146,7 @@ Finalise bounded_call_agree_fuel_exec_block
 
 (* With g strictly increasing, a frame's run in A on n needs any fuel above
    g of every call level below n in B. *)
-Theorem bounded_call_agree_fuel_run_blocks:
+Theorem bounded_call_agree_fuel_run_blocks[local]:
   !n f s j. bounded_call_agree_fuel g n A B /\
     (!i i'. i < i' ==> g i < g i') /\ n <= j /\ (!k. k < n ==> g k < j) /\
     terminates (run_blocks n A f s) ==>
@@ -1194,14 +1194,14 @@ QED
 
 Finalise bounded_call_agree_fuel_run_blocks
 
-Theorem lift_fuel_ge:
+Theorem lift_fuel_ge[local]:
   (!n. n <= f n) ==> !n. n <= lift_fuel f n
 Proof
   strip_tac >> Induct >> simp[lift_fuel_def] >>
   first_x_assum (qspec_then `SUC (lift_fuel f n)` mp_tac) >> simp[]
 QED
 
-Theorem lift_fuel_strict_mono:
+Theorem lift_fuel_strict_mono[local]:
   (!n. n <= f n) ==> !i j. i < j ==> lift_fuel f i < lift_fuel f j
 Proof
   strip_tac >> Induct_on `j` >> simp[] >> rpt strip_tac >>
@@ -1213,7 +1213,7 @@ Proof
   `i < j` by simp[] >> res_tac >> simp[]
 QED
 
-Theorem fn_bisim_fuel_bounded_call_agree:
+Theorem fn_bisim_fuel_bounded_call_agree[local]:
   LIST_REL (fn_bisim_fuel fm) A.ctx_functions B.ctx_functions /\
   (!n. n <= fm n) ==>
   !n. bounded_call_agree_fuel (lift_fuel fm) n A B
