@@ -465,11 +465,15 @@ Proof
   simp[supported_pure_expr_def] >>
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac
   >~ [`eval_expr cx (Name ty name) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (`pure_expr (Name ty name)` by simp[pure_expr_def] >>
+      drule_all eval_expr_preserves_state >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (Literal ty lit) s = (r,s')`]
   >- (gvs[evaluate_def, return_def])
   >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
+      drule_all eval_expr_preserves_state >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (IfExp ty e e' e'') s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
      imp_res_tac read_result_state >> imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
@@ -479,7 +483,9 @@ Proof
        (drule_then assume_tac) >>
      first_x_assum (drule_then assume_tac) >> simp[])
   >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
+      drule_all eval_expr_preserves_state >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (StructLit ty id fs) s = (r,s')`]
   >- (PairCases_on `id` >> gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
       metis_tac[])
@@ -490,11 +496,15 @@ Proof
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
         (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
+      first_x_assum (drule_then assume_tac) >> simp[] >>
+      qpat_assum `_ = _ with storage_trace := _`
+        (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
+      first_x_assum (drule_then assume_tac) >> simp[] >>
+      qpat_assum `_ = _ with storage_trace := _`
+        (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (Builtin ty blt es) s = (r,s')`]
   >- (`code_slice_source blt es = NONE` by
         (Cases_on `code_slice_source blt es` >> simp[] >>
@@ -547,9 +557,13 @@ Proof
         (drule_then assume_tac) >>
       first_x_assum (drule_then assume_tac) >> simp[])
   >~ [`eval_expr cx (Name ty name) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (`pure_expr (Name ty name)` by simp[pure_expr_def] >>
+      drule_all eval_expr_preserves_state >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
+      drule_all eval_expr_preserves_state >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
   >- (Cases_on `subscript_reads_base cx e e'` >>
       gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
@@ -557,11 +571,15 @@ Proof
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
         (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
+      first_x_assum (drule_then assume_tac) >> simp[] >>
+      qpat_assum `_ = _ with storage_trace := _`
+        (fn th => once_rewrite_tac [th]) >> simp[])
   >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
+      first_x_assum (drule_then assume_tac) >> simp[] >>
+      qpat_assum `_ = _ with storage_trace := _`
+        (fn th => once_rewrite_tac [th]) >> simp[])
   >> gvs[evaluate_def, return_def]
 QED
 
@@ -588,7 +606,8 @@ Proof
   rpt gen_tac
   >~ [`TopLevelNameTarget p`]
   >- (PairCases_on `p` >> simp[target_indices_def, Once evaluate_def] >>
-      rpt strip_tac >> metis_tac[vyperStatePreservationTheory.lookup_global_state]) >>
+      rpt strip_tac >> drule vyperStatePreservationTheory.lookup_global_state >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[]) >>
   simp[target_indices_def, Once evaluate_def] >>
   rpt strip_tac
   >- (gvs[bind_def, get_scopes_def, type_check_def, assert_def,
@@ -597,7 +616,8 @@ Proof
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac >>
   metis_tac[aug_place_pure_eval_storage, read_result_state,
-            vyperPlaceFramesTheory.extend_place_state, raise_def]
+            vyperPlaceFramesTheory.extend_place_state,
+            vyperStorageBackendTheory.get_storage_storage_trace, raise_def]
 QED
 
 Theorem aug_place_storage_load_ready:
@@ -722,7 +742,8 @@ Theorem aug_place_mapping_extend_range:
   slots_in_range (get_storage cx s' tr') (w2n child) leaf
 Proof
   Cases_on `sb` >> Cases_on `vt` >>
-  simp[extend_place_def, raise_def, bind_def, lift_option_type_def,
+  simp[extend_place_def, raise_def, bind_def, ignore_bind_def,
+       record_storage_event_def, lift_option_type_def,
        vyperMiscTheory.option_CASE_rator, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   drule vyperStoragePlaceProvenanceTheory.storage_mapping_region_step >>
@@ -734,9 +755,9 @@ Proof
   simp[vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def] >>
   strip_tac >>
   irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >>
-      goal_assum (drule_at Any) >>
-  simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
-  qexists_tac `s` >> simp[]
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  simp[vyperStorageBackendTheory.get_storage_backend_eq]
 QED
 
 Theorem aug_place_pure_base_storage_range:
@@ -755,6 +776,8 @@ Proof
       drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
       strip_tac >>
       drule vyperStatePreservationTheory.lookup_global_state >> strip_tac >> gvs[] >>
+      qpat_assum `_ = _ with storage_trace := _`
+        (fn th => once_rewrite_tac [th]) >> simp[] >>
       irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >>
       goal_assum (drule_at Any) >>
       simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
@@ -1303,7 +1326,10 @@ Resume aug_place_storage_binop_store_outcome[normal]:
   `res = INL ()` by
     (drule_all aug_place_storage_write_outcome >> metis_tac[]) >>
   qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
-  `eval_operand dst t = SOME slot` by metis_tac[aug_place_saved_operand] >>
+  `eval_operand dst t = SOME slot` by
+    (irule aug_place_saved_operand >>
+     goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
+     qexists_tac `s2` >> simp[]) >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
     simp[typed_val_to_w256_word_value] >>
   mp_tac (Q.INST [`sa` |-> `s3`, `sb` |-> `sf`, `s` |-> `t`]
@@ -1383,7 +1409,7 @@ Resume aug_place_storage_binop_store_outcome[exit]:
   qexistsl_tac [`INR ex`, `ee`, `r`] >>
   conj_tac >- simp[]
   >- (disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-      gen_tac >> strip_tac >> simp[stmt_exit_def] >> gen_tac >> disj1_tac >>
+      BETA_TAC >> gen_tac >> strip_tac >> simp[stmt_exit_def] >> gen_tac >> disj1_tac >>
       Cases_on `ex` >> Cases_on `r` >> gvs[expr_exit_def] >>
       rename1 `expr_exit (INR (Error err)) _` >> Cases_on `err` >>
       gvs[expr_exit_def])
@@ -1724,11 +1750,15 @@ Resume compile_augassign_place_storage_case[rhs_normal]:
     (qpat_assum `gas_marked_exec _ _ _ _ marks'' _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `eval_operand ld t' = SOME (val_to_w256 old)` by
-    metis_tac[aug_place_saved_operand] >>
+    (irule aug_place_saved_operand >>
+     goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
+     qexists_tac `s1` >> simp[]) >>
   `!z. FST r = Var z ==> not_fresh_at s1 z` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `eval_operand (FST r) t' = SOME slot` by
-    metis_tac[aug_place_saved_operand] >>
+    (irule aug_place_saved_operand >>
+     goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
+     qexists_tac `s1` >> simp[]) >>
   `gas_admissible
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
