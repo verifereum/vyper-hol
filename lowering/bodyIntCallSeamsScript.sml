@@ -19,7 +19,7 @@ Ancestors
   bodyIntCallEncoderCountedExport bodyIntCallLocalArrayProducer bodyIntCallMcopyFrame
   bodyIntCallMemoryView bodyIntCallPackageEntryInterface bodyIntCallPureLayout
   bodyIntCallScratchCreditProbe bodyIntCallStagingBuffer bodyIntCallStoreFrame
-  bodyIntCallTopLevelProducer bodyIntCallWordProducer
+  bodyIntCallTopLevelProducer bodyIntCallWordProducer bodyIntCallNrEntrySemantic
 Libs
   monadsyntax
 
