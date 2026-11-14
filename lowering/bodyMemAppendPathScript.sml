@@ -22,7 +22,7 @@ QED
 
 Theorem append_storage_word_run_mem[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ eval_operand vop s = SOME w /\
@@ -106,7 +106,7 @@ QED
 
 Theorem append_storage_word_success_path_mem:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
@@ -164,7 +164,7 @@ QED
 
 Theorem append_storage_word_abort_path_mem[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot s else sload slot s) /\
@@ -207,7 +207,7 @@ QED
 
 Theorem append_storage_word_value_path_mem:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\

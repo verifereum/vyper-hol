@@ -113,12 +113,14 @@ Proof
 QED
 
 Theorem ci_mono_compile_dynarray_append:
-  !cenv b v ws es dt st cap p lo so sa.
+  !cenv b v ws es dt st cap p loc sa.
     ci_mono sa
-      (SND (compile_dynarray_append cenv b v ws es dt st cap p lo so sa))
+      (SND (compile_dynarray_append cenv b v ws es dt st cap p loc sa))
 Proof
   rpt gen_tac >> simp[compile_dynarray_append_def, LET_THM] >>
-  ci_mono_chain_tac (ci_mono_compile_store_slots :: ci_mono_grows_rws)
+  ci_mono_chain_tac (ci_mono_compile_store_slots :: ci_mono_grows_rws @
+    [ci_mono_compile_ptr_load, ci_mono_compile_ptr_store,
+     ci_mono_compile_imm_store_words])
 QED
 
 Theorem ci_mono_comp_get:
