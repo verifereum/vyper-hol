@@ -86,6 +86,25 @@ Proof
   Cases_on `v` >> gvs[value_has_type_def, val_store_size_def]
 QED
 
+Theorem expr_val_at_bytestring_transport:
+  is_bytestring_type src /\ is_bytestring_type dst /\
+  evaluate_type (get_tenv cx) src = SOME stv /\
+  evaluate_type (get_tenv cx) dst = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\
+  expr_val_at cenv cx src sa sb ee v op s ==>
+  expr_val_at cenv cx dst sa sb ee v op s
+Proof
+  strip_tac >>
+  `val_footprint stv v = val_footprint dtv v` by
+    metis_tac[bytestring_val_footprint_eq] >>
+  `~is_word_type src /\ ~is_word_type dst` by
+    metis_tac[is_bytestring_word_type] >>
+  `(?bt. stv = BaseTV bt) /\ (?bt. dtv = BaseTV bt)` by
+    metis_tac[bytestring_type_value] >>
+  gvs[expr_val_at_def] >> simp[value_has_type_memory_wf] >>
+  metis_tac[local_val_at_base, value_has_type_memory_wf, arithmeticTheory.LESS_EQ_REFL]
+QED
+
 (* A payload typed at two dynamic bounds fits either buffer. *)
 Theorem bytestring_val_footprint_le:
   !tenv t1 t2 tv1 tv2 v.
