@@ -1,5 +1,5 @@
 (* Creation-frame completion after the initcode has returned its bytes.
-   TOP-LEVEL: deploy_frame_complete.
+   TOP-LEVEL: deploy_frame_complete, deploy_handle_step_out_of_gas.
    This hook does not establish reachability of that return state. *)
 Theory e2eDeployFrame
 Ancestors
@@ -17,7 +17,7 @@ Theorem deploy_exception_out_of_gas[local]:
   s.contexts = [(c,rb)] /\
   t.contexts = [(d,rb')] /\ t.txParams = s.txParams /\
   handle_exception (SOME OutOfGas) t = (r,u) ==>
-  frame_resource_starved s r u
+  creation_resource_starved s r u
 Proof
   strip_tac >>
   gvs[handle_exception_def, get_gas_left_def, bind_def,
@@ -27,7 +27,7 @@ Proof
             d.msgParams.gasLimit` >>
   gvs[set_return_data_def, bind_def, get_current_context_def,
       return_def, set_current_context_def, get_num_contexts_def,
-      reraise_def, frame_resource_starved_def, frame_outcome_def]
+      reraise_def, creation_resource_starved_def, frame_outcome_def]
 QED
 
 Theorem deploy_create[local]:
@@ -60,7 +60,7 @@ Proof
 QED
 
 (* Gas deposit and the runtime size limit can fail with OutOfGas, already
-   covered by frame_resource_starved. The prefix guard concerns all returned
+   covered by creation_resource_starved. The prefix guard concerns all returned
    bytes, including the immutable suffix. No gas or size bound is assumed. *)
 Theorem deploy_frame_complete:
   !es ctxt rb target.
@@ -69,7 +69,7 @@ Theorem deploy_frame_complete:
     (case ctxt.returnData of h::_ => h <> n2w 0xef | [] => T) ==>
     ?r es'.
       handle_step NONE es = (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        (frame_outcome es r es' NONE ctxt.returnData [] /\
         es'.rollback.accounts =
           update_account target
@@ -98,4 +98,36 @@ Proof
   disj1_tac >> irule deploy_exception_out_of_gas >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at Any) >> simp[Abbr `charged`]
+QED
+
+(* With gas for the largest allowed deposit, the creation frame's halt
+   handler ends in OutOfGas only on an oversized deposit. *)
+Theorem deploy_handle_step_out_of_gas:
+  !es c rb target.
+    es.contexts = [(c,rb)] /\ c.msgParams.outputTo = Code target /\
+    c.gasUsed + code_deposit_cost * max_code_size <= c.msgParams.gasLimit /\
+    FST (handle_step NONE es) = INR (SOME OutOfGas) ==>
+    max_code_size < LENGTH c.returnData
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[arithmeticTheory.NOT_LESS] >>
+  `code_deposit_cost * LENGTH c.returnData <=
+   code_deposit_cost * max_code_size` by simp[] >>
+  Cases_on `case c.returnData of h::_ => h <> n2w 0xef | [] => T`
+  >- (drule_all deploy_create >> simp[] >> strip_tac >>
+      gvs[handle_step_def, vfm_abort_def, handle_def] >>
+      gvs[deploy_exception_none]) >>
+  `handle_create NONE es =
+     ((INR (SOME InvalidContractPrefix) : unit + exception option), es)` by
+    (simp[handle_create_def, get_return_data_def, get_output_to_def,
+          bind_def, ignore_bind_def, get_current_context_def, return_def,
+          assert_def] >>
+     Cases_on `c.returnData` >> gvs[]) >>
+  `c.gasUsed <= c.msgParams.gasLimit` by decide_tac >>
+  qpat_x_assum `FST _ = _` mp_tac >>
+  simp[handle_step_def, vfm_abort_def, handle_def] >>
+  qpat_x_assum `handle_create _ _ = _` (fn th => simp[th]) >>
+  simp[handle_exception_def, get_gas_left_def, bind_def,
+       ignore_bind_def, get_current_context_def, return_def,
+       consume_gas_def, set_current_context_def, assert_def,
+       set_return_data_def, get_num_contexts_def, reraise_def]
 QED

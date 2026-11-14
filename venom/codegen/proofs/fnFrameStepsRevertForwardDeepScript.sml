@@ -70,9 +70,11 @@ Theorem revert_forward_frame_sim_deep:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
     !a vs'. exec_block fuel ctx bb vs = Abort a vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
         ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
-        venom_asm_terminal_rel vs' as'
+        venom_asm_terminal_rel vs' as' /\
+        create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
   drule rf_spills_separated_entry_marked >> strip_tac >>

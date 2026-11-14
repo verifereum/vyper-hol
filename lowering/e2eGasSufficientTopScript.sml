@@ -17,6 +17,8 @@ val _ = Parse.hide "tops";
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code, as for
    vyper_call_correct_asm_opt.  PLANNED ADMISSION. *)
+(* RESTATED ADMITTED THEOREM SEQ-4002: gas_source_exempt and frame_raises
+   state the gas contract; the finalizer proof remains open. *)
 Theorem vyper_call_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -31,13 +33,13 @@ Theorem vyper_call_gas_sufficient_asm_opt:
     ?g. !g'.
       g <= g' /\
       call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
+      (!obs. ~gas_source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   cheat
@@ -46,6 +48,8 @@ QED
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code, as for
    e2e_deploy_correctness_asm_opt.  PLANNED ADMISSION. *)
+(* RESTATED ADMITTED THEOREM SEQ-4002: deploy_gas_source_exempt states the
+   deployment gas contract; the finalizer proof remains open. *)
 Theorem e2e_deploy_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -63,7 +67,7 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
                     (initial_state (am with <|accounts := co.co_accounts;
                                               tStorage := co.co_tStorage|>) []))
         (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
+      (!obs. ~deploy_gas_source_exempt tops
          (load_contract NONE obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
@@ -96,10 +100,10 @@ Theorem vyper_call_gas_sufficient:
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (call_outcomes_storage_ok am tx
            (MAP SND (call_trace (add_frame_gas g' es))) /\
-         (!obs. ~source_exempt tops
+         (!obs. ~gas_source_exempt tops
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                obs am tx)) /\
-         (?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+         frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -107,13 +111,13 @@ Proof
      g <= g' /\
      call_outcomes_storage_ok am tx
        (MAP SND (call_trace (add_frame_gas g' es))) /\
-     (!obs. ~source_exempt tops
+     (!obs. ~gas_source_exempt tops
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
            obs am tx))
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\
-       ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+       (frame_raises (add_frame_gas g' es) OutOfGas ==>
         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)` by
     (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
@@ -155,7 +159,7 @@ Theorem e2e_deploy_gas_sufficient:
                        (initial_state (am with <|accounts := co.co_accounts;
                                                  tStorage := co.co_tStorage|>) []))
            (MAP SND (call_trace (add_frame_gas g' es))) /\
-         (!obs. ~deploy_source_exempt tops
+         (!obs. ~deploy_gas_source_exempt tops
             (load_contract NONE obs am tx [(NONE, tops)] [])) /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
@@ -171,7 +175,7 @@ Proof
                    (initial_state (am with <|accounts := co.co_accounts;
                                              tStorage := co.co_tStorage|>) []))
        (MAP SND (call_trace (add_frame_gas g' es))) /\
-     (!obs. ~deploy_source_exempt tops
+     (!obs. ~deploy_gas_source_exempt tops
         (load_contract NONE obs am tx [(NONE, tops)] []))
      ==>
      ?r es'.

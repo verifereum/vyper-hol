@@ -86,6 +86,7 @@ Theorem phi_prefix_frame_sim:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops)
     ==>
     ?phi_ops ps1 body_ops n as'.
+      n = LENGTH (execute_plan cp.cp_initial_fmp phi_ops) /\
       ops = phi_ops ++ body_ops /\
       generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
@@ -101,7 +102,8 @@ Theorem phi_prefix_frame_sim:
         (s_phi with vs_inst_idx := LENGTH phis) as' /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra s_phi) lo at =
-         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,
@@ -193,5 +195,6 @@ Theorem revert_forward_frame_sim:
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
   drule rf_spills_separated_entry >> strip_tac >>
-  drule_all rf_entry_forward_abort >> simp[]
+  drule_all rf_entry_forward_abort >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >> metis_tac[]
 QED
