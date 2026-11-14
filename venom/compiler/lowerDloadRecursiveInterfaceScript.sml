@@ -692,21 +692,6 @@ val ld_recursive_clause_goals =
     val (clauses, _) = dest_imp body
   in map (subst [p |-> ld_recursive_candidate]) (strip_conj clauses) end;
 
-Theorem ld_recursive_candidate_weaken[local]:
-  (^ld_entry_history_candidate) vs0 CT stk un gn j t ==>
-  (^ld_recursive_candidate) vs0 CT stk un gn j t
-Proof
-  BETA_TAC >>
-  rpt (FIRST [disch_then ACCEPT_TAC,
-              disch_then (ACCEPT_TAC o CONJUNCT2),
-              ho_match_mp_tac MONO_OR, ho_match_mp_tac MONO_AND,
-              ho_match_mp_tac MONO_EXISTS, ho_match_mp_tac MONO_ALL,
-              ho_match_mp_tac MONO_IMP, conj_tac, gen_tac]) >>
-  simp[]
-QED
-
-(* Only the operational binding is used below.  The historical entry clause
-   is consumed through ld_recursive_candidate_weaken, never rebound. *)
 (* Literal saved-clause interface, extracted only from the operational quote. *)
 val ld_recursive_saved =
   let
@@ -2099,15 +2084,6 @@ Proof
   BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
-Theorem ld_recursive_block_clause_anchor[local]:
-  ^ld_block_anchor_header
-Proof
-  rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
-  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_block_clause_anchor_static) >>
-  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
-  asm_simp_tac bool_ss []
-QED
-
 val ld_block_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
@@ -2433,15 +2409,6 @@ Proof
   BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
-Theorem ld_recursive_bytes_next_anchor[local]:
-  ^ld_bytes_anchor_header
-Proof
-  rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
-  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_bytes_next_anchor_static) >>
-  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
-  asm_simp_tac bool_ss []
-QED
-
 val ld_bytes_next_header = ``
   ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   mem_inv dload_offset_ok CS vs0 /\
@@ -2475,7 +2442,7 @@ QED
    No theorem, new definition, or additional invariant is asserted here.
 
    ENVIRONMENT / FIRST RESIDUAL:
-   ld_recursive_bytes_next_anchor assumes ptr_discipline, o1_ctx_shape,
+   ld_recursive_bytes_next_anchor_static assumes ptr_discipline, o1_ctx_shape,
    o1_run_state_ok, mem_inv dload_offset_ok, callee_first, and the fn_ptr_ok
    family. These are NOT the full resource premises of the existing load
    producer. The frozen theorem additionally supplies
@@ -4047,7 +4014,7 @@ val [ld_recursive_saved_entry_goal,ld_recursive_saved_next_goal,
    change. Its data producer ld_normal_ordinary_backward and configured source
    position reasoning remain reusable. S is identical; no transport needed.
    BLOCK: ld_recursive_block_anchor supplies singleton/phase-zero inversion;
-   ld_recursive_block_clause_anchor obtains source jump/entry data and packages
+   ld_recursive_block_clause_anchor_static obtains source jump/entry data and packages
    exactly the old E,astk,gstk,savedkeys. S is again identical (current phi
    provenance does not occur in it). Use data/control before old packaging.
 
@@ -4062,7 +4029,7 @@ val [ld_recursive_saved_entry_goal,ld_recursive_saved_next_goal,
    try to strengthen the existential ld_recursive_alloca_next conclusion.
 
    NEXT DLOADBYTES: ld_configured_bytes_next_backward (CoverageBytes) returns
-   data with E,astk,gstk unchanged; ld_recursive_bytes_next_anchor packages those
+   data with E,astk,gstk unchanged; ld_recursive_bytes_next_anchor_static packages those
    same witnesses and savedkeys. NEXT DLOAD: ld_configured_load_next_backward
    (CoverageLoad) and ld_recursive_geometry_load_next likewise keep these four
    witnesses; scratch execution only changes A/current provenance/taint.
