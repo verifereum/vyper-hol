@@ -5,6 +5,22 @@ Ancestors
   gasContext gasSummary gasExemptCert stmtSimProps vyperInterpreter vyperState
   gasStorage vyperStorageTrace
 
+Theorem eval_target_place_as_bind:
+  eval_target_place cx bt = bind (eval_base_place cx bt) get_place
+Proof
+  simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
+QED
+
+Theorem get_place_base_admissible:
+  gas_admissible (bind source get_place) target_place_res_ok es ==>
+  gas_admissible source target_res_ok es
+Proof
+  rewrite_tac[gas_admissible_def] >> rpt strip_tac >>
+  first_x_assum (qspec_then `gs` mp_tac) >>
+  Cases_on `res` >> simp[bind_def, target_res_ok_def] >>
+  simp[target_place_res_ok_def]
+QED
+
 Theorem gas_outcome_ptr_get_place:
   gas_admissible (bind source get_place) target_place_res_ok es /\
   gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0)
