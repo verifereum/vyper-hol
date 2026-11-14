@@ -577,13 +577,16 @@ Theorem extcall_request_positional_head_marked:
        (!H. valid_horizon cx st0 H ee.storage_trace ==>
           expr_post H ctx func ce cx e es sa sb s0 ee v op u)
      else sb = sm /\ u = s /\
-       (?tag p. vv = LocatedValue tag p /\
-          snap = LocatedValue (lowered_value_type ce e) p) /\
-       vv_holds ce cx (lowered_value_type ce e) raw snap ee u /\
-       vv_at ce cx (post_value_type ce e) sa sb ee raw snap u /\
-       val_footprint sv v = val_footprint dv v /\
        (!H. valid_horizon cx st0 H ee.storage_trace ==>
-          vv_post H ctx func ce cx e es sa sb s0 ee raw vv u))
+          vv_post H ctx func ce cx e es sa sb s0 ee raw vv u) /\
+       ((?tag p. vv = LocatedValue tag p /\
+           snap = LocatedValue (lowered_value_type ce e) p /\
+           vv_holds ce cx (lowered_value_type ce e) raw snap ee u /\
+           vv_at ce cx (post_value_type ce e) sa sb ee raw snap u /\
+           val_footprint sv v = val_footprint dv v) \/
+        (?tag op. vv = StackValue tag op /\ snap = StackValue tag op /\
+           (!H. valid_horizon cx st0 H ee.storage_trace ==>
+              expr_post H ctx func ce cx e es sa sb s0 ee v op u))))
 Proof
   strip_tac >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
@@ -617,7 +620,26 @@ Proof
    vv_at ce cx (post_value_type ce e) sa sm ee raw vv s` by
     metis_tac[vv_post_def] >>
   Cases_on `vv`
-  >- cheat >>
+  >- (rename1 `StackValue tag op` >>
+      gvs[ext_call_arg_value_def, vv_type_def,
+          compile_snapshot_vv_def, comp_return_def] >>
+      `gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s)
+          [] (INL v) ee (OK s)` by
+        (simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
+              fragGasPathTheory.gas_path_rules] >>
+         drule read_result_gas_obs >> simp[]) >>
+      `gas_marked_exec F (ctx,func)
+          (bind (eval_expr cx e) (read_result cx)) (es,s0)
+          marks (INL v) ee (OK s)` by
+        (once_rewrite_tac[GSYM APPEND_NIL] >>
+         irule gas_marked_exec_bind_normal >>
+         goal_assum (drule_at Any) >> simp[]) >>
+      conj_tac
+      >- (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
+          simp[gas_marked_exec_def] >> strip_tac >>
+          simp[exprSimWordArgsTheory.eval_exprs_cons_action, bind_def,
+               exprSimWordArgsTheory.eval_exprs_nil, return_def]) >>
+      metis_tac[abiEncodeMaterializeTheory.materialize_stack_vv_post_read]) >>
   rename1 `LocatedValue tag p` >>
   `~is_word_type (lowered_value_type ce e)` by
     gvs[ext_call_arg_value_def, vv_type_def] >>
