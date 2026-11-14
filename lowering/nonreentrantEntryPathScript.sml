@@ -140,12 +140,13 @@ Proof
   strip_tac >>
   `?u. run_inst_seq (transient_lock_code nkey iv sa) s = OK u` by
     (Cases_on `iv` >> simp[transient_lock_code_execution]) >>
-  mp_tac (Q.INST [`D` |-> `ARB:dead`, `PG` |-> `[]`]
+  mp_tac (Q.INST [`D` |-> `ARB:dead`, `PG` |-> `[]`,
+    `ss` |-> `s`, `st` |-> `sa`]
     (SPEC_ALL transient_lock_code_ptr_frame)) >> simp[] >> strip_tac >>
   `!D. inst_seq_ptr D 0 ctx func [] G tn
     (transient_lock_code nkey iv sa) s G' tn'` by
     (gen_tac >>
-     mp_tac (Q.INST [`PG` |-> `[]`]
+     mp_tac (Q.INST [`PG` |-> `[]`, `ss` |-> `s`, `st` |-> `sa`]
        (SPEC_ALL transient_lock_code_ptr_frame)) >> simp[] >> strip_tac >>
      metis_tac[inst_seq_ptr_ghost_unique]) >>
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -168,7 +169,8 @@ Proof
       `FILTER (\i. i.inst_opcode = GAS) (transient_lock_code nkey iv sa) = []` by
         (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def]) >>
       simp[]) >>
-  rpt strip_tac >> irule run_inst_seq_ptr_continuation >>
-  qexistsl_tac [`transient_lock_code nkey iv sa`, `u`, `G'`, `tn'`, `bb`] >>
-  simp[]
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
+    `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`, `fuel`]
+    run_inst_seq_ptr_continuation) >> simp[]
 QED
