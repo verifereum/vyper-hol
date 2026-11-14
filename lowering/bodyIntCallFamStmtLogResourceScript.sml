@@ -92,10 +92,17 @@ Theorem intcall_log_suffix_resource_run:
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
              (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce fp.jc_cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv fp.jc_cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   LIST_REL (\arg v. log_arg_rel ce fp.jc_cx sa sm es s arg v /\
     supported_scalar_type (SND arg) /\
     ?tv. evaluate_type (get_tenv fp.jc_cx) (SND arg) = SOME tv /\
-         value_has_type tv v) xs vs /\
+         value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\

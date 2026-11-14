@@ -18,7 +18,7 @@ Ancestors
 
 (* ===== Compatible scalar types ===== *)
 
-Theorem event_arg_compatible_scalar_cases[local]:
+Theorem event_arg_compatible_scalar_cases:
   (!fty aty. event_arg_compatible fty aty ==>
      aty = fty \/
      (?n m. fty = BaseT (StringT n) /\ aty = BaseT (StringT m) /\ m <= n) \/
@@ -30,7 +30,7 @@ Proof
   ho_match_mp_tac event_arg_compatible_ind >> rw[event_arg_compatible_def]
 QED
 
-Theorem compatible_scalar_type[local]:
+Theorem compatible_scalar_type:
   supported_scalar_type fty /\ event_arg_compatible fty aty ==>
   supported_scalar_type aty /\
   (is_bytestring_type aty <=> is_bytestring_type fty)
