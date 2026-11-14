@@ -210,6 +210,23 @@ Definition extcall_returned_def:
       default_opt t
 End
 
+Theorem extcall_request_frame_call_value_initial_domain:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  storage_trace_domain cx st0 ee.storage_trace ==>
+  frame_call_value cx value_opt ee = (INL value_opt, ee)
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+     ee.storage_trace` by fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace)
+     ctx func cenv cx ee t` by metis_tac[extcall_request_ready_def] >>
+  `~cx.txn.is_static` by fs[exprLoweringPropsTheory.stmt_state_rel_def,
+                          loweringStateRelDefsTheory.state_rel_def] >>
+  simp[frame_call_value_def, vyperStateTheory.return_def]
+QED
+
 Theorem extcall_request_oracle_core_initial_domain:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
