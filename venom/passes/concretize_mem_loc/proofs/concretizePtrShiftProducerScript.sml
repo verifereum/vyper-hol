@@ -15,7 +15,7 @@ Ancestors concretizePtrRequestHistory concretizePtrScalarCoreProducer concretize
   pointerConfinedDefs memLocDefs concretizePtrSourceOwnership
   concretizeStepRetpc unitShapeDefs venomInst venomState words finite_map list pred_set
 
-Theorem ptr_shift_operand_discipline[local]:
+Theorem ptr_shift_operand_discipline:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
   (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P fn) /\

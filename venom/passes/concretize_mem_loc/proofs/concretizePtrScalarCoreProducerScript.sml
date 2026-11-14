@@ -17,7 +17,7 @@ Ancestors concretizePtrReturnTransport concretizePtrRequestHistory concretizePtr
   frameRelocationGuardedValues
   memLocDefs venomState venomInst finite_map list pred_set
 
-Theorem ptr_scalar_core_operand_discipline[local]:
+Theorem ptr_scalar_core_operand_discipline:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
   (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P fn) /\

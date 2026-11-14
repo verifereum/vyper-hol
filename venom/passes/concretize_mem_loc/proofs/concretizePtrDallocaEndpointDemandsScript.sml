@@ -2,6 +2,8 @@ Theory concretizePtrDallocaEndpointDemands
 Ancestors
   concretizePtrDallocaRuntimeSteps concretizePtrDallocaDisciplineTransport
   concretizePtrValueTransport concretizePtrDallocaGhostInterface
+  concretizePtrScalarCoreProducer concretizePtrShiftProducer
+  concretizePtrReturnTransport
   concretizePtrPrefixLedger concretizePtrOpaqueRetpc o1FrameLockstep
   basePtrProofs blockPrefixEquiv ptrDiscipline venomExecSemantics venomState venomInst
   concretizeLayoutLocalShifts contextCodegenRel finite_map pred_set words list
@@ -146,4 +148,82 @@ Proof
       drule_all ptr_dalloca_runtime_next_values >> simp[]) >>
   simp[lookup_var_set_inst_idx] >> rpt strip_tac >>
   metis_tac[step_inst_preserves_lookup]
+QED
+
+Theorem ptr_dalloca_mul_clean_demands:
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst s /\
+  (!v tag. FLOOKUP (TG:(string,num # num) fmap) v = SOME tag ==> v IN fn_pv P fn) /\
+  ptr_mixed_vars births positions TG tn fn ft s t /\
+  s.vs_labels = t.vs_labels /\ inst.inst_opcode = MUL ==>
+  !op. MEM op inst.inst_operands /\ op_taint tn op = {} ==>
+    eval_operand op s = eval_operand op t
+Proof
+  strip_tac >>
+  `EVERY (\op. ptr_nonopaque_operand fn op /\ op_prov TG op = NONE /\
+     (inst.inst_opcode <> MUL ==> op_taint tn op = {})) inst.inst_operands` by
+    (irule ptr_scalar_core_operand_discipline >> simp[] >> metis_tac[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  `ptr_nonopaque_operand fn op /\ op_prov TG op = NONE` by metis_tac[] >>
+  drule_all ptr_mixed_vars_eval >>
+  Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
+  simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
+QED
+
+Theorem ptr_dalloca_shift_count_demands:
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst s /\
+  (!v tag. FLOOKUP (TG:(string,num # num) fmap) v = SOME tag ==> v IN fn_pv P fn) /\
+  ptr_mixed_vars births positions TG tn fn ft s t /\
+  s.vs_labels = t.vs_labels /\ MEM inst.inst_opcode [SHL; SHR; SAR] /\
+  inst.inst_operands = [n;a] ==>
+  eval_operand n s = eval_operand n t
+Proof
+  strip_tac >> drule_all ptr_shift_operand_discipline >> simp[] >>
+  strip_tac >>
+  qpat_x_assum `ptr_nonopaque_operand fn a` kall_tac >>
+  drule_all ptr_mixed_vars_eval >>
+  Cases_on `eval_operand n s` >> Cases_on `eval_operand n t` >>
+  simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
+QED
+
+(* Scalar equality is demanded only where the mask inspects a scalar value.
+   Clean ADD/SUB pointers may relocate and need not have equal values. *)
+Theorem ptr_dalloca_runtime_mask_demands:
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst s /\
+  (!v tag. FLOOKUP (TG:(string,num # num) fmap) v = SOME tag ==> v IN fn_pv P fn) /\
+  ptr_mixed_vars births positions TG tn fn ft s t /\ s.vs_labels = t.vs_labels /\
+  (!op. MEM op inst.inst_operands ==> op_taint tnt op SUBSET op_taint tn op) /\
+  (!a wt. inst.inst_operands = [a] /\ eval_operand a t = SOME wt ==>
+     ?w. eval_operand a s = SOME w /\
+       ((inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD) ==>
+         mem_word_taint tnt.t_mem (w2n wt) SUBSET mem_word_taint tn.t_mem (w2n w)) /\
+       (inst.inst_opcode = SLOAD ==>
+         key_taint tnt.t_stor wt SUBSET key_taint tn.t_stor w) /\
+       (inst.inst_opcode = TLOAD ==>
+         key_taint tnt.t_trans wt SUBSET key_taint tn.t_trans w)) ==>
+  out_taint tnt inst t SUBSET out_taint tn inst s
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = MUL`
+  >- (irule ptr_dalloca_output_mask_clean >> simp[] >>
+      reverse conj_tac >- metis_tac[] >>
+      metis_tac[ptr_dalloca_mul_clean_demands]) >>
+  `!a b. inst.inst_operands = [a;b] /\
+     (inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/ inst.inst_opcode = SAR) ==>
+     eval_operand a s = eval_operand a t` by
+    (rpt strip_tac >> irule ptr_dalloca_shift_count_demands >>
+     simp[] >> metis_tac[MEM]) >>
+  Cases_on `inst.inst_operands` >> gvs[out_taint_def] >>
+  rename1 `a::ops` >> Cases_on `ops`
+  >- (gvs[] >> Cases_on `eval_operand a t` >> simp[] >>
+      rename1 `eval_operand a t = SOME wt` >>
+      qpat_x_assum `!wt'. _` (qspec_then `wt` mp_tac) >>
+      simp[] >> strip_tac >> simp[] >> rpt IF_CASES_TAC >> gvs[]) >>
+  rename1 `a::b::rest` >> Cases_on `rest` >> gvs[] >>
+  Cases_on `inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/ inst.inst_opcode = SAR`
+  >- (fs[] >> Cases_on `eval_operand a t` >> gvs[] >>
+      irule shift_taint_mono >> simp[]) >>
+  Cases_on `eval_operand a t` >> simp[]
 QED
