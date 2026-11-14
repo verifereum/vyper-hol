@@ -10,7 +10,7 @@ Theorem store_slots_element_resources:
   (!m. mem_agree_outside tn.t_mem mem m ==> elems_in_memory vs addr tv m) /\
   addr + LENGTH vs * type_memory_size tv <= frontier /\
   addr + LENGTH vs * type_memory_size tv < dimword(:256) /\
-  slot + LENGTH vs * type_slot_size tv < dimword(:256) ==>
+  slot + LENGTH vs * type_slot_size tv <= dimword(:256) ==>
   value_has_type tv (EL j vs) /\
   j * type_memory_size tv + val_store_size tv (EL j vs) <=
     LENGTH vs * type_memory_size tv /\
@@ -18,7 +18,7 @@ Theorem store_slots_element_resources:
   addr + j * type_memory_size tv + val_store_size tv (EL j vs) < dimword(:256) /\
   (!m. mem_agree_outside tn.t_mem mem m ==>
     val_in_memory tv (EL j vs) (addr + j * type_memory_size tv) m) /\
-  slot + j * type_slot_size tv + type_slot_size tv < dimword(:256)
+  slot + j * type_slot_size tv + type_slot_size tv <= dimword(:256)
 Proof
   strip_tac >>
   `value_has_type tv (EL j vs)` by
@@ -53,7 +53,7 @@ Theorem store_slots_dynarray_resources:
   addr + val_store_size (ArrayTV tv (Dynamic cap))
     (ArrayV (DynArrayV vs)) <= frontier /\
   addr + type_memory_size (ArrayTV tv (Dynamic cap)) < dimword(:256) /\
-  slot + type_slot_size (ArrayTV tv (Dynamic cap)) < dimword(:256) ==>
+  slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword(:256) ==>
   all_have_type tv vs /\ LENGTH vs <= cap /\
   (!m. mem_agree_outside tn.t_mem mem m ==>
     mem_word_at addr m = n2w (LENGTH vs) /\
@@ -61,7 +61,7 @@ Theorem store_slots_dynarray_resources:
   (!i. addr <= i /\ i < addr+32 ==> i NOTIN tn.t_mem) /\
   addr + 32 + LENGTH vs * type_memory_size tv <= frontier /\
   addr + 32 + LENGTH vs * type_memory_size tv < dimword(:256) /\
-  slot + 1 + LENGTH vs * type_slot_size tv < dimword(:256)
+  slot + 1 + LENGTH vs * type_slot_size tv <= dimword(:256)
 Proof
   strip_tac >>
   `all_have_type tv vs /\ LENGTH vs <= cap` by
@@ -77,7 +77,7 @@ Proof
     (conj_tac >> irule LESS_MONO_MULT >> simp[]) >>
   qpat_x_assum `addr + val_store_size _ _ <= frontier` mp_tac >>
   qpat_x_assum `addr + type_memory_size _ < _` mp_tac >>
-  qpat_x_assum `slot + type_slot_size _ < _` mp_tac >>
+  qpat_x_assum `slot + type_slot_size _ <= _` mp_tac >>
   simp[val_store_size_def,type_memory_size_def,vyperValueTheory.type_slot_size_def] >>
   decide_tac
 QED
