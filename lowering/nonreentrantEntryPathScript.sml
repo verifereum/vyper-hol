@@ -491,13 +491,17 @@ Proof
   mp_tac (Q.INST [`D` |-> `ARB:dead`, `PG` |-> `[]`,
     `ss` |-> `s_reg`, `st` |-> `sa`, `iv` |-> `mut = View`,
     `G` |-> `G_reg`, `tn` |-> `tn_reg`]
-    (SPEC_ALL transient_lock_abort_ptr_ghost)) >> simp[] >> strip_tac >>
+    (SPEC_ALL transient_lock_abort_ptr_ghost)) >>
+  (impl_tac >- fs[]) >>
+  disch_then (qx_choose_then `G'` (qx_choose_then `tn'` assume_tac)) >>
   `!D. inst_seq_ptr D 0 ctx func [] G_reg tn_reg
     (transient_lock_code nkey (mut = View) sa) s_reg G' tn'` by
     (gen_tac >>
      mp_tac (Q.INST [`PG` |-> `[]`, `ss` |-> `s_reg`, `st` |-> `sa`,
        `iv` |-> `mut = View`, `G` |-> `G_reg`, `tn` |-> `tn_reg`]
-       (SPEC_ALL transient_lock_abort_ptr_ghost)) >> simp[] >> strip_tac >>
+       (SPEC_ALL transient_lock_abort_ptr_ghost)) >>
+     (impl_tac >- fs[]) >>
+     disch_then (qx_choose_then `G_D` (qx_choose_then `tn_D` assume_tac)) >>
      metis_tac[inst_seq_ptr_ghost_unique]) >>
   `?bb. lookup_block s_reg.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (transient_lock_code nkey (mut = View) sa)
@@ -517,7 +521,9 @@ Proof
     `explicit` |-> `{}`, `PG` |-> `[]`]
     (Q.SPECL [`transient_lock_code nkey (mut = View) sa`, `s_reg`, `t`,
        `a`, `G_reg`, `tn_reg`, `G'`, `tn'`, `ctx`, `func`, `bb`]
-       sha_zero_origin_abort)) >> simp[] >> strip_tac >>
+       sha_zero_origin_abort)) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `j` assume_tac) >>
   `!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
     (s_reg,G_reg,tn_reg) [] (Abort a (t with vs_inst_idx := j),G',tn')` by
     (rpt gen_tac >>
@@ -528,7 +534,7 @@ Proof
      disch_then (qx_choose_then `k` assume_tac) >>
      `(t with vs_inst_idx := k) = (t with vs_inst_idx := j)` by
        (irule sha_origin_abort_endpoint_unique >>
-        goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+        goal_assum (drule_at Any) >> metis_tac[]) >>
      metis_tac[]) >>
   `gas_origin_path T {} ctx func s_reg [] (Abort a (t with vs_inst_idx := j)) /\
    gas_path_ptr (ARB:dead) 0 ctx func [] G_reg tn_reg s_reg 0 G' tn'
