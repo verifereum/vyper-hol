@@ -6,8 +6,38 @@ Ancestors
   exprSimProps exprSimDefs loweringPosts freshWrites exprLoweringProps
   compileEnv loweringStateRelDefs venomState venomExecSemantics valueEncoding
   vyperState vyperValue words list finite_map
+  venomMemDefs valueEncodingDefs valueEncodingProofs
 
 
+
+Theorem expr_val_at_pure_frame_bytes:
+  expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand op s = SOME w /\
+  pure_frame cenv func es sb s t /\ alloca_inv t /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+     FLOOKUP t.vs_allocas aid = SOME entry) ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_val_at_def]) >>
+  disch_then (qspec_then `tv` mp_tac) >> simp[] >> strip_tac >> gvs[]
+  >- (qpat_x_assum `pure_frame _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [pure_frame_def]) >>
+      qpat_x_assum `!off len. _` irule >> rpt gen_tac >> strip_tac >>
+      rename1 `FLOOKUP t.vs_allocas inst.inst_id = SOME (newbase,newsize)` >>
+      `FLOOKUP t.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
+      `aid <> inst.inst_id` by decide_tac >>
+      `b + sz <= newbase \/ newbase + newsize <= b` by
+        (fs[alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
+  >- (`mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[pure_frame_def] >> metis_tac[]) >>
+      drule mem_bytes_at_agree_window >> simp[] >> metis_tac[]) >>
+  simp[mem_bytes_at_def]
+QED
 
 Theorem storage_holds_inst_idx[local]:
   storage_holds cx tr t tv w es (s with vs_inst_idx := n) <=>
