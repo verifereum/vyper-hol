@@ -15,11 +15,44 @@ Ancestors
   venomPassDispatcher venomFnScheduleRunner venomPassSchedule
   venomCompilerTypes venomState venomInst o1ComposeSupport fmpStepContract
   fmpStageRunner fmpStageCoverage list
+  o1RequestContract
 
 (* Why: the raw state is the real one with fmp in both free-memory pointer
    fields, a raw variant of it; the stage simulation and the lowered
    memory phase hold there, the static layout's end is the input's, which
    FmpLowering keeps, and row 4's function rows carry make_ssa_input_ok. *)
+Theorem o1_static_stage_fmp_lowering:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' ==>
+  ?vs. raw_variant fmp vs vs' /\
+    (o1_inv D 3 C vs /\ fmp_variant_room (SOME fmp) C' vs' ==>
+     ctx_sim_fuel I D C C' vs vs' /\ ctx_abort_rq D C C' vs vs' /\
+     o1_inv D (SUC 3) C' vs')
+Proof
+  strip_tac >>
+  qexists_tac `vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>` >>
+  conj_tac
+  >- simp[raw_variant_def, gas_variant_def,
+          venom_state_component_equality] >>
+  strip_tac >>
+  conj_tac >- metis_tac[fmp_lowering_stage_sim_static] >>
+  conj_tac >- metis_tac[fmp_lowering_stage_abort_rq_static] >>
+  `?eom. max_live_eom C = SOME eom` by
+    (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
+     simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
+  `mem_inv (lowered_mem_fact eom) C' vs'` by
+    metis_tac[fmp_lowering_stage_lowered_mem_static] >>
+  `max_live_eom C' = max_live_eom C` by
+    (irule ctx_pass_stage_max_live_eom >>
+     qexistsl [`CFP_Simple VP_FmpLowering`, `rpolicy`, `o1_walk_view rpolicy 3`] >>
+     simp[fn_pass_tag_def, fn_pass_static_layout_effect_def]) >>
+  simp[o1_inv_def, o1_lowered_inv_def] >>
+  fs[o1_pre_def, EVERY_MEM, o1_fn_row_def]
+QED
+
 Theorem fmp_lowering_run_contract_gas:
   o1_run_contract_gas rpolicy D fmp 3
 Proof
@@ -27,23 +60,9 @@ Proof
   simp[o1_run_contract_gas_def, o1_stage_contract_gas_def,
        fmp_variant_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  qexists_tac `vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>` >>
-  conj_tac
-  >- simp[raw_variant_def, gas_variant_def,
-          venom_state_component_equality] >>
-  strip_tac >>
-  conj_tac >- metis_tac[fmp_lowering_stage_sim] >>
-  `?eom. max_live_eom C = SOME eom` by
-    (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
-     simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
-  `mem_inv (lowered_mem_fact eom) C' vs'` by
-    metis_tac[fmp_lowering_stage_lowered_mem] >>
-  `max_live_eom C' = max_live_eom C` by
-    (irule ctx_pass_stage_max_live_eom >>
-     qexistsl [`CFP_Simple VP_FmpLowering`, `rpolicy`, `o1_walk_view rpolicy 3`] >>
-     simp[fn_pass_tag_def, fn_pass_static_layout_effect_def]) >>
-  simp[o1_inv_def, o1_lowered_inv_def] >>
-  fs[o1_pre_def, EVERY_MEM, o1_fn_row_def]
+  `o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+   code_layout_valid vs'` by fs[o1_run_state_ok_def] >>
+  drule_all o1_static_stage_fmp_lowering >> simp[] >> metis_tac[]
 QED
 
 Theorem o1_contract_fmp_lowering:
