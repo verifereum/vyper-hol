@@ -2,7 +2,7 @@
    The consumed prefix includes zero readings after oracle exhaustion. *)
 Theory gasOracleReplay
 Ancestors
-  stateEquiv venomExecSemantics venomState venomCallOracleDefs list rich_list arithmetic
+  stateFrame stateEquiv venomExecSemantics venomState venomCallOracleDefs list rich_list arithmetic
 
 Definition gas_prefix_def:
   gas_prefix n (gs : (256 word) list) = TAKE n (gs ++ REPLICATE n 0w)
@@ -1240,14 +1240,6 @@ Proof
 QED
 
 (* Equality of native return reconstruction is independent of caller registers. *)
-Theorem invoke_state_equality:
-  (s = t) <=>
-  (s with vs_vars := FEMPTY) = (t with vs_vars := FEMPTY) /\
-  (!k. lookup_var k s = lookup_var k t)
-Proof
-  simp[venom_state_component_equality, lookup_var_def,
-       finite_mapTheory.fmap_eq_flookup] >> metis_tac[]
-QED
 
 Theorem invoke_fold_compare:
   !outs xs ys a b c d.
@@ -1263,7 +1255,9 @@ Theorem invoke_fold_compare:
 Proof
   Induct
   >- (simp[] >> rpt strip_tac >>
-      pure_once_rewrite_tac[invoke_state_equality] >> metis_tac[]) >>
+      pure_once_rewrite_tac[GSYM stateFrameTheory.state_frame_eq] >>
+      pure_rewrite_tac[stateFrameTheory.state_frame_def,
+        finite_mapTheory.fmap_eq_flookup, GSYM lookup_var_def] >> metis_tac[]) >>
   Cases_on `xs` >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[update_var_def, lookup_var_def,
     finite_mapTheory.FLOOKUP_UPDATE] >>
