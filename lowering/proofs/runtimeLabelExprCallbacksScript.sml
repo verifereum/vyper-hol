@@ -634,14 +634,6 @@ QED
 Finalise rb_compile_get_target_ptr
 
 
-Theorem rb_step_let:
-  rb_step P m /\ (!x. P x ==> rb_step Q (k x)) ==>
-  rb_step Q (\st. let (x,st') = m st in k x st')
-Proof
-  pure_rewrite_tac[GSYM comp_bind_def, ETA_AX] >>
-  metis_tac[rb_step_bind]
-QED
-
 Theorem rb_compile_acc:
   rb_env_ok ce /\ rb_step rb_value_ok (cfn ce (BaseT AddressT) e) ==>
   rb_step rb_operand_ok (compile_acc cfn ce e acc)
@@ -650,8 +642,8 @@ Proof
   CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
   pure_rewrite_tac[compile_acc_def] >> simp[ETA_AX, rb_lower_value]
   >~ [`emit_inst INVALID [] [] _`]
-  >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
-        (Q.INST [`P` |-> `K T`] rb_step_let)) >> BETA_TAC >>
+  >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [comp_bind_def, LET_THM, SF ETA_ss]
+        (Q.INST [`P` |-> `K T`] rb_step_bind)) >> BETA_TAC >>
       conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
         irule rb_emit_inst >> simp[]) >>
       pure_rewrite_tac[GSYM comp_return_def] >>
@@ -660,14 +652,14 @@ Proof
   >~ [`rb_step _ (\x. lower_value _ _ _ _ x)`]
   >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
       irule rb_lower_value >> simp[]) >>
-  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
-      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [comp_bind_def, LET_THM, SF ETA_ss]
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_bind))) >> BETA_TAC >>
    conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
      irule rb_lower_value >> simp[]) >> gen_tac >> strip_tac >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    simp[rb_emit_op] >>
-   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [comp_bind_def, LET_THM, SF ETA_ss]
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_bind))) >> BETA_TAC >>
    simp[rb_emit_op] >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    irule rb_emit_op >> simp[])
