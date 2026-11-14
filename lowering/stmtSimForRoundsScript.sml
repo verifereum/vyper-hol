@@ -41,17 +41,6 @@ Proof
   rewrite_tac[eval_for_cons_round, read_result_def, bind_return] >> simp[]
 QED
 
-Theorem gas_admissible_bind_tail:
-  gas_admissible (bind a next) ok es /\
-  (!tail. a (es with gas_obs := xs ++ tail) =
-          (INL v, mid with gas_obs := tail)) ==>
-  gas_admissible (next v) ok (mid with gas_obs := [])
-Proof
-  simp[gas_admissible_def] >> rpt strip_tac >>
-  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
-  simp[bind_def] >> metis_tac[]
-QED
-
 Theorem gas_marked_exec_break:
   gas_marked_exec memory (ctx,func) a (es,s) marks (INL T) mid r ==>
   gas_marked_exec memory (ctx,func)
@@ -255,7 +244,7 @@ Proof
   asm_rewrite_tac[eval_for_cons_round] >> disch_tac >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[gas_marked_exec_def] >> strip_tac >>
-  drule_all gas_admissible_bind_tail >> simp[] >> strip_tac >>
+  drule_all gasContextTheory.gas_admissible_bind_tail >> simp[] >> strip_tac >>
   qpat_x_assum `!y. _` (qspec_then `SUC k` mp_tac) >>
   simp[]
 QED

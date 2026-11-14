@@ -87,7 +87,7 @@ QED
 Resume forced_endpoint_bind_outcome_ptr[normal]:
   gvs[] >>
   `gas_admissible (next v) (stmt_res_ok lctx) (es_end with gas_obs := [])` by
-    (irule gas_admissible_bind_tail >> goal_assum (drule_at Any) >>
+    (irule gasContextTheory.gas_admissible_bind_tail >> goal_assum (drule_at Any) >>
      qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
      fs[gas_marked_exec_ptr_def]) >>
   `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG

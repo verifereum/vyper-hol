@@ -599,7 +599,7 @@ Resume for_loop_mem[step]:
      rewrite_tac[eval_for_cons_value_round] >> disch_tac >>
      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def] >> strip_tac >>
-     drule_all gas_admissible_bind_tail >> simp[]) >>
+     drule_all gasContextTheory.gas_admissible_bind_tail >> simp[]) >>
   fs[Abbr `Next`, Abbr `Step`] >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `Hm` mp_tac) >>

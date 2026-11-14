@@ -28,6 +28,17 @@ Definition gas_admissible_def:
       source (es with gas_obs := gs) = (res, ee) ==> admissible res
 End
 
+Theorem gas_admissible_bind_tail:
+  gas_admissible (bind a next) ok es /\
+  (!tail. a (es with gas_obs := xs ++ tail) =
+          (INL v, mid with gas_obs := tail)) ==>
+  gas_admissible (next v) ok (mid with gas_obs := [])
+Proof
+  simp[gas_admissible_def] >> rpt strip_tac >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
+  simp[bind_def] >> metis_tac[]
+QED
+
 Theorem gas_admissible_gas_obs[simp]:
   gas_admissible source admissible (es with gas_obs := gs) <=>
   gas_admissible source admissible es

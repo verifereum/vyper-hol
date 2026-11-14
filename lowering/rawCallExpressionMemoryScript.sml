@@ -54,7 +54,7 @@ Resume raw_call_expr_vv_sim_mem[placement]:
 QED
 
 Resume raw_call_expr_vv_sim_mem[prefix]:
-  rewrite_tac[raw_call_eval_action] >>
+  rewrite_tac[exprSimRawCallTheory.raw_call_eval_action] >>
   irule (BETA_RULE (Q.ISPEC `\av dv kvs.
     do
       type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";

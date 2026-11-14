@@ -1135,7 +1135,7 @@ Resume forced_endpoint_bind_outcome[next]:
     (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> ?v'. _` drule >>
      simp[]) >>
   `gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := [])` by
-    (irule gas_admissible_bind_tail >> goal_assum (drule_at Any) >>
+    (irule gasContextTheory.gas_admissible_bind_tail >> goal_assum (drule_at Any) >>
      qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
      fs[gas_marked_exec_def]) >>
   qpat_x_assum `!marks v mid t. _ ==> gas_outcome _ _ _ _ _ _ _ _ _` irule >>

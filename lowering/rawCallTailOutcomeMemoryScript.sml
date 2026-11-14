@@ -111,7 +111,7 @@ Resume raw_call_tail_outcome_mem[ready]:
         disch_then (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]) >>
      drule adopt_call_outcome_frame >> simp[] >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `\s. s.scopes`) >> simp[]) >>
-  drule_all raw_call_source_continuation >>
+  drule_all exprSimRawCallTheory.raw_call_source_continuation >>
   disch_then (qspecl_then [`cx`,`bs`] SUBST1_TAC) >>
   map_every (fn q => qpat_x_assum q kall_tac)
     [`bind (eval_expr cx a) _ _ = _`, `bind (eval_expr cx d) _ _ = _`,
