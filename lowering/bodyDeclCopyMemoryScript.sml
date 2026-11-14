@@ -14,7 +14,7 @@ Ancestors
   venomInst venomState exprLowering stmtLowering context compileEnv vyperInterpreter
   gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs
   vyperState list rich_list finite_map
-Libs monadsyntax
+Libs monadsyntax horizonTypeLib
 
 Theorem declare_local_memory_types_mem:
   !cenv id vtyp sa c st.
@@ -189,13 +189,15 @@ Proof
     (rpt strip_tac >>
      Cases_on `loc = SOME LocMemory`
      >- (gvs[] >>
-         drule (INST_TYPE [alpha |-> ``:256``] annassign_memory_assign_body_path) >>
+         drule (horizonTypeLib.at_horizon_named "H"
+           (INST_TYPE [alpha |-> ``:256``] annassign_memory_assign_body_path)) >>
          disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
            `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
          simp[]) >>
      `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
        gvs[compile_assign_value_def] >>
-     drule (INST_TYPE [alpha |-> ``:256``] annassign_memory_store_body_path) >>
+     drule (horizonTypeLib.at_horizon_named "H"
+       (INST_TYPE [alpha |-> ``:256``] annassign_memory_store_body_path)) >>
      disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
        `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
      simp[]) >>
