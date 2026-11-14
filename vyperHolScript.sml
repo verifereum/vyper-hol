@@ -22,7 +22,7 @@ Ancestors
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
   staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
-  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticMemoryObservation
+  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticMemoryObservation dftStaticContextSim
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
