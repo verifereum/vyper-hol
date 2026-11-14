@@ -15,7 +15,7 @@ Ancestors
   e2eDefs sourceUnitExecution e2eComposition vyperLoweringCorrect gasSummary compileVyper
   loweringShapeProps supportedProgram callTrace frameOutcome vyperInterpreter
   venomExecSemantics unitTransformDefs ptrDiscipline unitMemInv lowerDloadDefs
-  e2eProducers e2eEntry o1PipelineCorrect o1PassContract codegenCorrectness
+  e2eProducers e2eEntry immutableCodeLayout o1PipelineCorrect o1PassContract codegenCorrectness
   vyperStorageFootprint ctorDeployMemoryFrontier fragGasPathMem fragExecMem
   fragGasOrigin fragGasMode fragExec memSafeRun venomExecProofs unitShapeDefs
   loweringShapeSource
@@ -118,7 +118,7 @@ Proof
   >- (qexists_tac `SUC fuel` >>
       simp[run_context_def, run_function_def] >>
       simp[fragExecTheory.run_blocks_run_from_no_phi]) >>
-  gen_tac >> Cases_on `fuel'` >- simp[Once mem_safe_blocks_def] >>
+  Cases >- simp[Once mem_safe_blocks_def] >>
   `eval_phis
     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
     bb.bb_instructions = OK
@@ -133,7 +133,7 @@ QED
 Theorem vyper_call_correct_at_marks:
   !policy tops deploy_bc runtime_bc am tx ret es rpolicy unit out prog cp vs marks.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
