@@ -7,8 +7,8 @@
  *     with the bounds-check abort, by two subcases:
  *     compile_subscript_array_framed_base_case for a base the index's frame
  *     keeps (a runtime immutable, or a static array of no dynamic array in
- *     memory), and compile_subscript_array_place_base_case, admitted, for
- *     the rest.
+ *     memory), compile_subscript_array_copied_base_case for an overlapping
+ *     index with a captured copy, and the admitted place-base case for the rest.
  *)
 
 Theory exprSimSubscriptArray
@@ -469,7 +469,7 @@ Proof
   cheat
 QED
 
-Theorem compile_builtin_body_stack_annotation[local]:
+Theorem compile_builtin_body_stack_annotation:
   compile_builtin_dispatch_body cfn ce ret_ty ty bi args sa =
     (StackValue vt op,sb) ==> vt = ret_ty
 Proof
@@ -499,30 +499,7 @@ Resume compile_builtin_body_stack_annotation[remaining]:
 QED
 Finalise compile_builtin_body_stack_annotation
 
-Theorem compile_expr_body_builtin_regular[local]:
-  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
-  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi args) sa =
-    bfn ce ann ty bi args sa
-Proof
-  strip_tac >> Cases_on `args`
-  >- simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >>
-  rename1 `h::rest` >> Cases_on `h`
-  >~ [`Name at a :: rest`] >-
-    (Cases_on `rest`
-     >- simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >>
-     rename1 `Name at a :: h :: rest` >> Cases_on `h`
-     >~ [`Name at a :: Name bt b :: rest`] >-
-       (Cases_on `rest`
-        >- (Cases_on `bi` >> gvs[compile_expr_body_def, vyperASTTheory.expr_type_def]) >>
-        rename1 `Name at a :: Name bt b :: h :: rest` >> Cases_on `h`
-        >~ [`Name at a :: Name bt b :: Name mt m :: rest`] >-
-          (Cases_on `rest` >> Cases_on `bi` >> gvs[compile_expr_body_def, vyperASTTheory.expr_type_def]) >>
-        simp[compile_expr_body_def, vyperASTTheory.expr_type_def]) >>
-     simp[compile_expr_body_def, vyperASTTheory.expr_type_def]) >>
-  simp[compile_expr_body_def, vyperASTTheory.expr_type_def]
-QED
-
-Theorem compile_array_vv_type[local]:
+Theorem compile_array_vv_type:
   compile_expr ce ty e sa = (vv,sb) /\
   expr_type e = ArrayT et bd /\ post_value_type ce e = expr_type e /\
   vv_post H ctx func ce cx e es sa sb s0 es' tv vv s ==>
@@ -543,7 +520,8 @@ Resume compile_array_vv_type[stack]:
   markerLib.RESUME_TAC >>
   rpt (pairarg_tac >> gvs[])
   >- (rename1 `compile_literal_vv _ lit _ = _` >> Cases_on `lit`
-      >- (Cases_on `b` >> gvs[compile_literal_vv_def, compileEnvTheory.comp_return_def]) >>
+      >- (rename1 `BoolL flag` >> Cases_on `flag` >>
+          gvs[compile_literal_vv_def, compileEnvTheory.comp_return_def]) >>
       gvs[compile_literal_vv_def, compileEnvTheory.comp_bind_def,
           compileEnvTheory.comp_return_def] >> rpt (pairarg_tac >> gvs[]))
   >- suspend "topname"
@@ -558,11 +536,13 @@ Resume compile_array_vv_type[topname]:
   gvs[AllCaseEqs()]
 QED
 Resume compile_array_vv_type[name]:
-  Cases_on `FLOOKUP ce.ce_vars s'`
+  rename1 `compile_name_vv ce _ local_name sa = _` >>
+  Cases_on `FLOOKUP ce.ce_vars local_name`
   >- (gvs[compile_name_vv_def, compileEnvTheory.comp_ignore_bind_def,
           compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
       rpt (pairarg_tac >> gvs[])) >>
-  Cases_on `x` >>
+  rename1 `FLOOKUP ce.ce_vars local_name = SOME binding` >>
+  Cases_on `binding` >>
   gvs[compile_name_vv_def, compileEnvTheory.comp_ignore_bind_def,
       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
@@ -577,7 +557,8 @@ Resume compile_array_vv_type[regular]:
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [CONV_RULE (DEPTH_CONV ETA_CONV)
     (CONJUNCT1 compile_expr_raw_def)] >>
-  simp[compile_expr_body_builtin_regular, Excl "builtin_child_callback_def"] >>
+  simp[exprWordOperandTheory.word_compile_expr_builtin_ordinary_eq,
+       Excl "builtin_child_callback_def"] >>
   rewrite_tac [exprCallBoundsTheory.builtin_child_callback_def] >>
   simp[] >>
   pure_once_rewrite_tac [CONV_RULE (DEPTH_CONV ETA_CONV)
@@ -635,10 +616,10 @@ Resume compile_array_vv_type[subscript]:
   gvs[compile_subscript_def, compileEnvTheory.comp_bind_def,
       compileEnvTheory.comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `place_type ce e'` >>
+  rename1 `place_type ce child` >> Cases_on `place_type ce child` >>
   gvs[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `t` >>
+  rename1 `ValPT child_type` >> Cases_on `child_type` >>
   gvs[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
@@ -646,10 +627,11 @@ Resume compile_array_vv_type[attribute]:
   gvs[compileEnvTheory.is_word_type_def]
 QED
 Resume compile_array_vv_type[ifexp]:
+  rename1 `compile_type_builtin_dispatch _ _ _ type_builtin _ _ _ = _` >>
   qpat_x_assum `compile_type_builtin_dispatch _ _ _ _ _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [CONV_RULE (DEPTH_CONV ETA_CONV)
     (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def))] >>
-  Cases_on `t0` >>
+  Cases_on `type_builtin` >>
   simp[compile_type_builtin_dispatch_body_def, oneline as_stack_val_def,
        oneline as_ptr_val_def] >>
   rpt (pairarg_tac >> gvs[]) >>
@@ -661,7 +643,8 @@ Resume compile_array_vv_type[type_output]:
   strip_tac >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[])
 QED
 Resume compile_array_vv_type[call]:
-  Cases_on `c` >>
+  rename1 `compile_call _ _ _ _ call_target _ _ _ = _` >>
+  Cases_on `call_target` >>
   gvs[compile_call_def, loweringPostsTheory.post_value_type_def,
       compileEnvTheory.is_word_type_def, compileEnvTheory.is_bytestring_type_def,
       lowered_value_type_def] >>
@@ -680,7 +663,7 @@ Resume compile_array_vv_type[call_output]:
 QED
 Finalise compile_array_vv_type
 
-Theorem eval_expr_subscript_copied_bind[local]:
+Theorem eval_expr_subscript_copied_bind:
   subscript_reads_base cx obj idx ==>
   eval_expr cx (Subscript ann obj idx) =
   vyperState$bind (eval_expr cx obj) (\r.
@@ -999,6 +982,8 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
   rename1 `compile_snapshot_vv cenv T bvv sm = (cvv, sc)` >>
+  rename1 `compile_array_subscript _ _ _ _ _ _ _ _ si = (elem_ptr,suffix_cs)` >>
+  qpat_x_assum `suffix_cs = sb` SUBST_ALL_TAC >>
   `cs_extends sa sm` by metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
   `cs_extends sm sc` by
     (mp_tac exprLoweringPropsTheory.ci_mono_compile_snapshot_vv >>
@@ -1112,6 +1097,8 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
     (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `H0` mp_tac) >> simp[] >>
      metis_tac[abi_args_vv_post_read]) >>
+  rename1 `read_result cx tv (es_end with gas_obs := []) =
+           (INL copied_base,es_end with gas_obs := [])` >>
   `eval_expr cx obj
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
       (INL tv,es_end with gas_obs := [])` by
@@ -1140,7 +1127,7 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
         qpat_x_assum `well_typed_expr env (TypeBuiltin _ _ _ _)` mp_tac >>
         simp[Once well_typed_expr_def, type_builtin_result_ok_def,
              vyperASTTheory.expr_type_def]) >>
-     Cases_on `c` >>
+     rename1 `Call _ call_target _ _` >> Cases_on `call_target` >>
      gvs[lowered_value_type_def, loweringPostsTheory.post_value_type_def,
          compileEnvTheory.is_word_type_def, compileEnvTheory.is_bytestring_type_def,
          vyperASTTheory.expr_type_def]) >>
@@ -1155,7 +1142,7 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
   `vyperState$bind (eval_expr cx obj) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-       (INL base',es_end with gas_obs := [])` by
+       (INL copied_base,es_end with gas_obs := [])` by
     simp[vyperStateTheory.bind_def] >>
   qpat_assum `vyperState$bind _ _ _ = _`
     (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] abiEncodeArgsCaseTheory.abi_args_success_ready)) >>
@@ -1183,12 +1170,12 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
     metis_tac[gasSummaryTheory.gas_marked_exec_def,
       fragGasModeTheory.gas_marked_path_exec, fragGasPathTheory.gas_path_normal] >>
   `fn_has_code sm sc func` by
-    (`fn_has_code sm cs'⁴' func` by
+    (`fn_has_code sm sb func` by
        (irule (cj 2 fragExecTheory.fn_has_code_split) >>
         simp[] >> qexists_tac `sa` >> simp[]) >>
-     `cs_extends sc cs'⁴'` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+     `cs_extends sc sb` by metis_tac[compileEnvTheory.cs_extends_trans] >>
      irule (cj 1 fragExecTheory.fn_has_code_split) >>
-     simp[] >> qexists_tac `cs'⁴'` >> simp[]) >>
+     simp[] >> qexists_tac `sb` >> simp[]) >>
   `!tvt. evaluate_type (get_tenv cx) (post_value_type cenv obj) = SOME tvt /\
           ~is_word_type (post_value_type cenv obj) ==>
        type_memory_bytes cenv (post_value_type cenv obj) = type_memory_size tvt /\
@@ -1215,7 +1202,7 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
      qexists_tac `sm` >> simp[] >>
      irule (cj 1 fragExecTheory.fn_has_code_split) >> simp[] >>
      conj_tac >- metis_tac[compileEnvTheory.cs_extends_trans] >>
-     qexists_tac `cs'⁴'` >> simp[] >>
+     qexists_tac `sb` >> simp[] >>
      irule (cj 2 fragExecTheory.fn_has_code_split) >> simp[] >>
      qexists_tac `sa` >> simp[]) >>
   `gas_admissible (vyperState$bind (eval_expr cx idx) (read_result cx))
@@ -1246,7 +1233,7 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
   `gas_marked_exec F (ctx,func)
      (vyperState$bind (vyperState$bind (eval_expr cx obj) (read_result cx))
        (\v. vyperState$return (Value v)))
-     (es,s0) marks (INL (Value base')) es_end (OK tc)` by
+     (es,s0) marks (INL (Value copied_base)) es_end (OK tc)` by
     (drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[] >> strip_tac >>
      fs[gasSummaryTheory.gas_marked_exec_def] >> conj_tac
      >- (gen_tac >> simp[vyperStateTheory.bind_def, vyperStateTheory.return_def]) >>
@@ -1335,8 +1322,8 @@ Resume compile_subscript_array_copied_base_case[copied_index_suffix]:
   `?etv. tv' = ArrayTV etv bd /\ evaluate_type (get_tenv cx) et = SOME etv` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_ArrayT_cases] >>
   gvs[] >>
-  `?av. base' = ArrayV av` by
-    (Cases_on `base'` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+  `?av. copied_base = ArrayV av` by
+    (Cases_on `copied_base` >> gvs[vyperTypingTheory.value_has_type_def]) >>
   gvs[] >>
   `!x. dst = Var x ==> not_fresh_at sc x` by
     metis_tac[exprOperandVarTheory.compiler_materialize_vv_var] >>
