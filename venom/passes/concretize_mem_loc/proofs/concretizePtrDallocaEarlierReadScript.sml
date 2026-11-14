@@ -1,5 +1,6 @@
 Theory concretizePtrDallocaEarlierRead
 Ancestors
+  concretizePtrPairedPrefix
   concretizePtrDallocaWriterGeometry concretizePtrDallocaWriterProbe
   concretizePtrHistoricalWriteExclusion concretizePtrObservationInterface
   concretizePtrOwnershipErasure concretizePtrSourceOwnership
@@ -84,9 +85,9 @@ Proof
   Cases_on `eval_operand dst s` >> gvs[]
 QED
 
-Theorem ptr_dalloca_earlier_copy_read:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+Theorem ptr_dalloca_earlier_copy_read_memory:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H ws /\
   ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
@@ -123,7 +124,7 @@ Proof
     (fs[ptr_demand_interval_def] >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `w` mp_tac) >> simp[] >> decide_tac) >>
-  drule_all ptr_paired_historical_event >> strip_tac >>
+  drule_all ptr_paired_historical_event_memory >> strip_tac >>
   `EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
@@ -148,6 +149,43 @@ Proof
     |> Q.INST [`ops` |-> `<|iao_ofst := cp_src; iao_size := SOME cp_n; iao_max_size := SOME cp_n|>`]
     |> SIMP_RULE (srw_ss()) []) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem ptr_dalloca_earlier_copy_read:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w /\
+  (EL w h).po_inst.inst_opcode = MCOPY /\
+  (EL w h).po_inst.inst_operands = [dst;src;n] /\
+  eval_operand src (EL w h).po_state = SOME x /\
+  eval_operand src (EL q ht).po_state = SOME y /\
+  eval_operand n (EL w h).po_state = SOME len /\ off < w2n len ==>
+  w < LENGTH h-1 /\
+  ((w2n y+off = w2n x+off /\ w2n x+off < lo) \/
+   (w2n y+off = w2n x+off /\ dyn_floor C vs <= w2n x+off) \/
+   (?u tok id base size pos ix ts rw bw PTw TGw sw ew.
+     EL w H = (ts,rw,bw,PTw,TGw,sw,ew) /\
+     src = Var u /\ FLOOKUP TGw u = SOME (tok,id) /\
+     FLOOKUP (EL w h).po_prov u = SOME (base,size) /\
+     FLOOKUP bw (tok,id) = SOME (base,size) /\
+     FLOOKUP positions (Allocation id) = SOME (pos,size) /\
+     ix < size /\ w2n x+off = base+ix /\ w2n y+off = pos+ix))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_dalloca_earlier_copy_read_memory >> simp[]
 QED
 
 (* The three incoming clauses are induction hypotheses at strictly earlier

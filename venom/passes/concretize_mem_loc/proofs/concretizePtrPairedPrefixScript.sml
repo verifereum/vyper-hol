@@ -273,6 +273,16 @@ Proof
   gen_tac >> simp[ptr_paired_prefix_memory_iff]
 QED
 
+Theorem ptr_paired_memory_transcript:
+  !W.
+  ptr_paired_memory_prefix R local_positions positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H W ==>
+  ptr_structural_transcript R vs0 C Ct h a ht at done
+    tokens registry births PT TG saved entries H
+Proof
+  simp[ptr_paired_memory_prefix_def]
+QED
+
 Theorem ptr_paired_prefix_transcript:
   !W.
   ptr_paired_prefix R local_positions positions lo vs0 C Ct
@@ -280,7 +290,17 @@ Theorem ptr_paired_prefix_transcript:
   ptr_structural_transcript R vs0 C Ct h a ht at done
     tokens registry births PT TG saved entries H
 Proof
-  simp[ptr_paired_prefix_def]
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_memory_transcript >> simp[]
+QED
+
+Theorem ptr_paired_memory_samples:
+  !W.
+  ptr_paired_memory_prefix R local_positions positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H W ==>
+  ptr_paired_samples positions h ht done H
+Proof
+  simp[ptr_paired_memory_prefix_def]
 QED
 
 Theorem ptr_paired_prefix_samples:
@@ -289,7 +309,17 @@ Theorem ptr_paired_prefix_samples:
     h a ht at done tokens registry births PT TG saved entries H calls W ==>
   ptr_paired_samples positions h ht done H
 Proof
-  simp[ptr_paired_prefix_def]
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_memory_samples >> simp[]
+QED
+
+Theorem ptr_paired_memory_placements:
+  !W.
+  ptr_paired_memory_prefix R local_positions positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H W ==>
+  ptr_stage_placements Ct positions
+Proof
+  simp[ptr_paired_memory_prefix_def]
 QED
 
 Theorem ptr_paired_prefix_placements:
@@ -298,7 +328,24 @@ Theorem ptr_paired_prefix_placements:
     h a ht at done tokens registry births PT TG saved entries H calls W ==>
   ptr_stage_placements Ct positions
 Proof
-  simp[ptr_paired_prefix_def]
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_memory_placements >> simp[]
+QED
+
+Theorem ptr_paired_memory_alignment:
+  !W.
+  ptr_paired_memory_prefix R local_positions positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H W /\
+  j < LENGTH ht ==>
+  ptr_paired_code R local_positions positions
+    (EL (EL j (done ++ [LENGTH h - 1])) h).po_fn (EL j ht).po_fn /\
+  ptr_paired_cursor local_positions
+    (EL (EL j (done ++ [LENGTH h - 1])) h) (EL j ht) /\
+  ptr_paired_params positions
+    (EL (EL j (done ++ [LENGTH h - 1])) h) (EL j ht)
+    (EL (EL j (done ++ [LENGTH h - 1])) H)
+Proof
+  simp[ptr_paired_memory_prefix_def, ptr_paired_alignment_def]
 QED
 
 Theorem ptr_paired_prefix_alignment:
@@ -314,7 +361,8 @@ Theorem ptr_paired_prefix_alignment:
     (EL (EL j (done ++ [LENGTH h - 1])) h) (EL j ht)
     (EL (EL j (done ++ [LENGTH h - 1])) H)
 Proof
-  simp[ptr_paired_prefix_def, ptr_paired_alignment_def]
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_memory_alignment >> simp[]
 QED
 
 Theorem ptr_paired_prefix_callers:
@@ -418,15 +466,15 @@ Proof
   irule ptr_paired_writes_gap >> gvs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
 
-Theorem ptr_paired_prefix_endpoint:
-  !W. ptr_paired_prefix R lp positions lo vs0 C Ct
-    h a ht at done tokens registry births PT TG saved entries H calls W ==>
+Theorem ptr_paired_memory_endpoint:
+  !W. ptr_paired_memory_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H W ==>
   ptr_paired_sample positions a at (tokens,registry,births,PT,TG,saved,entries) /\
   ptr_paired_code R lp positions a.po_fn at.po_fn /\
   ptr_paired_cursor lp a at /\
   ptr_paired_params positions a at (tokens,registry,births,PT,TG,saved,entries)
 Proof
-  gen_tac >> rewrite_tac[ptr_paired_prefix_def] >> strip_tac >>
+  gen_tac >> rewrite_tac[ptr_paired_memory_prefix_def] >> strip_tac >>
   drule ptr_structural_transcript_endpoint >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
@@ -446,4 +494,16 @@ Proof
   qpat_x_assum `ptr_paired_alignment _ _ _ _ _ _ _` mp_tac >>
   simp[ptr_paired_alignment_def] >>
   disch_then (qspec_then `LENGTH done` mp_tac) >> simp[EL_APPEND_EQN]
+QED
+
+Theorem ptr_paired_prefix_endpoint:
+  !W. ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls W ==>
+  ptr_paired_sample positions a at (tokens,registry,births,PT,TG,saved,entries) /\
+  ptr_paired_code R lp positions a.po_fn at.po_fn /\
+  ptr_paired_cursor lp a at /\
+  ptr_paired_params positions a at (tokens,registry,births,PT,TG,saved,entries)
+Proof
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_memory_endpoint >> simp[]
 QED
