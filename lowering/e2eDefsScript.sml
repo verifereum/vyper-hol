@@ -179,7 +179,7 @@ Definition call_state_rel_def:
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
-      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\ ~tx.is_static /\
+      ctxt.jumpDest = NONE /\ ctxt.msgParams.static = tx.is_static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
