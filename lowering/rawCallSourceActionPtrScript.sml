@@ -2,7 +2,6 @@
 Theory rawCallSourceActionPtr
 Ancestors vyperInterpreter vyperState vyperValue
   vyperCallOutcome vyperCallOutcomeProps extCallOracle
-  gasSummary gasContext exprSimDefs
 
 Theorem raw_call_source_oracle_action:
   ~flags.rcf_is_delegate /\ (~flags.rcf_is_static \/ amount = 0) /\
