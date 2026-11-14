@@ -1,6 +1,7 @@
 Theory abiEncodeMaterialize
 Ancestors
   abiEncodeMaterializeExec exprSimAggregateChildren exprSimUnwrap
+  exprPtrUnwrapStorageShape
   valueCopyBytes exprSimHyps exprSimLayoutTransport
   exprSimDefs exprSimProps loweringPosts context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
   exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
@@ -34,6 +35,26 @@ Proof
       gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def]) >>
   IF_CASES_TAC >> gvs[] >>
   metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]
+QED
+
+Theorem materialize_compiled_nonword_capture_layout:
+  !ce e ty sa sm tag p.
+    compile_expr ce ty e sa = (LocatedValue tag p,sm) /\
+    ~is_word_type (expr_type e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) ==>
+    post_value_type ce e = lowered_value_type ce e \/
+    p.ptr_location = LocMemory /\
+    is_bytestring_type (post_value_type ce e) /\
+    is_bytestring_type (lowered_value_type ce e)
+Proof
+  rpt strip_tac >>
+  Cases_on `post_value_type ce e = lowered_value_type ce e` >> simp[] >>
+  drule_all materialize_post_lowered_classify >> strip_tac >> gvs[] >>
+  spose_not_then assume_tac >>
+  `lowered_value_type ce e = expr_type e` by
+    (irule compile_nonmemory_lowered_value_type >>
+     goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[]) >>
+  metis_tac[post_value_type_lowered]
 QED
 
 (* A physical expression post can be read at the layout chosen for capture.
