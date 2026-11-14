@@ -16,6 +16,9 @@ Ancestors
   exprLoweringProps compileEnv words finite_map arithmetic
   exprSimAbiEncodeSourceRoom exprSimAbiEncodeChargeTransfer venomInstIdsProps
   exprSimAbiEncodeNoBlockFrame exprSimAbiGasBridge emitHelperProps
+  exprSimAbiEncodeConcreteBody exprSimAbiEncodeConcreteWrappers
+  exprSimAbiEncodeObliviousFacts
+  fragExec venomInst fragGasSeq fragGasMode
 
 Theorem abi_encode_framed_setup_window:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
@@ -537,4 +540,55 @@ Proof
   impl_tac
   >- (simp[] >> metis_tac[abi_encode_exec_frame_bridge_updates]) >>
   simp[CONJ_ASSOC]
+QED
+
+Theorem abi_encode_raw_counted_no_blocks:
+  !dst src ei st out en ctx func at av sb cap d s.
+    compile_abi_encode_to_buf dst src ei st = (out,en) /\
+    abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
+    st.cs_blocks = en.cs_blocks ==>
+    ?t. gas_marked_path F ctx func s 0 (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = en.cs_current_bb /\
+      t.vs_inst_idx = LENGTH en.cs_current_insts /\
+      mem_bytes_at d (LENGTH (enc at av)) t.vs_memory = enc at av /\
+      eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+      abi_encoder_registered_effect (frag_ids st en) [(d,LENGTH (enc at av))] s t /\
+      alloca_inv t /\
+      (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
+      window_alloca_growth s t /\
+      (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      t.vs_labels = s.vs_labels /\ abi_encode_exec_frame func s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  mp_tac (SPEC_ALL abi_encode_concrete_contract_all) >>
+  rewrite_tac[abi_encode_concrete_contract_def] >>
+  disch_then drule_all >> strip_tac >>
+  fs[abi_encode_concrete_result_def] >>
+  `cs_extends st en /\ frag_ops_free st en` by
+    metis_tac[abi_encode_raw_relabel_structure] >>
+  `en.cs_current_bb = st.cs_current_bb` by gvs[cs_extends_def] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st en) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en) = []` by
+    (drule_all abi_encode_no_block_opcodes >>
+     simp[EVERY_MEM, FILTER_EQ_NIL] >> strip_tac >>
+     conj_tac >> rpt strip_tac >> first_x_assum drule >>
+     strip_tac >> gvs[is_terminator_def]) >>
+  `abi_encode_exec_frame func s (r with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encode_no_block_body_frame_normalized >>
+     fs[abi_encoder_window_pre_def] >> metis_tac[]) >>
+  `gas_path ctx func s 0 (OK (r with vs_inst_idx := LENGTH en.cs_current_insts))` by
+    (fs[abi_encoder_window_pre_def, fn_has_code_def] >>
+     `isPREFIX (emitted_insts st en) (DROP s.vs_inst_idx bb.bb_instructions)` by
+       (fs[inst_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
+        qexists `l` >>
+        pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >> REFL_TAC) >>
+     `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+     drule_all tuple_run_inst_seq_gas_path >>
+     simp[] >>
+     fs[inst_extends_def]) >>
+  qexists `r with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  fs[gas_marked_path_def, window_strong_result_def, abi_encoder_window_result_def] >>
+  metis_tac[]
 QED
