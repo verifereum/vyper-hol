@@ -35,7 +35,7 @@ Proof
     (fs[EVERY_MEM, make_ssa_input_ok_def] >> metis_tac[]) >>
   `ctx_inst_ids_distinct C` by fs[o1_ctx_shape_def] >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_paired_bridge) >>
-  strip_tac >>
+  disch_then (qx_choosel_then [`R`,`lp`,`positions`] strip_assume_tac) >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_frame_retpc_shape) >>
   strip_tac >>
   `EVERY (\f. fn_inst_wf f /\ unitShapeDefs$retpc_shape_ok f /\ opaque_use_ok f /\

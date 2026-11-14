@@ -72,54 +72,6 @@ Proof
   Cases_on `segment` >> gvs[] >> metis_tac[rich_listTheory.MEM_FRONT, MEM]
 QED
 
-Theorem sue_segment_operand_eval[local]:
-  ir_supply_inst_ok si /\
-  sue_expand_inst_supply dfg si inst = (segment,sj) /\
-  P SUBSET set si.irs_used_vars /\
-  (!v. MEM (Var v) inst.inst_operands ==> v IN P) /\
-  sue_state_rel P u b /\ j < LENGTH segment /\
-  run_insts 0 ctx (TAKE j (BUTLAST segment)) b = OK (sue_idx0 t) /\
-  (EL j segment).inst_opcode <> ASSIGN ==>
-  EL j segment = LAST segment /\
-  (EL j segment).inst_opcode = inst.inst_opcode /\
-  LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
-    inst.inst_operands (EL j segment).inst_operands /\
-  sue_state_rel P u t
-Proof
-  strip_tac >> drule_all sue_expand_inst_supply_segment >> strip_tac >>
-  `sue_state_rel P u t` by
-    (irule sue_assign_prefix_normalized_rel >> goal_assum (drule_at Any) >>
-     simp[] >> fs[rich_listTheory.FRONT_APPEND_NOT_NIL,
-       EVERY_MEM, MEM_FLAT, MEM_MAP, pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
-  `j = LENGTH assigns` by
-    (Cases_on `j < LENGTH assigns` >>
-     gvs[EL_APPEND_EQN, EVERY_EL]) >>
-  gvs[rich_listTheory.FRONT_APPEND_NOT_NIL, EL_APPEND_EQN,
-      LAST_APPEND_CONS] >>
-  Cases_on `sue_should_skip inst.inst_opcode`
-  >- (drule sue_expand_inst_supply_skip >> strip_tac >>
-      `inst with inst_operands := new_ops = inst` by
-        (qpat_x_assum `sue_expand_inst_supply _ _ _ = _` mp_tac >>
-         simp[] >> strip_tac >>
-         pop_assum (mp_tac o AP_TERM ``LAST : instruction list -> instruction``) >>
-         simp[LAST_APPEND_CONS]) >>
-      qpat_x_assum `inst with inst_operands := new_ops = inst` mp_tac >>
-      simp[instruction_component_equality] >> strip_tac >>
-      simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
-      irule sue_state_rel_eval_operand >> qexists_tac `P` >>
-      simp[] >> metis_tac[MEM_EL]) >>
-  Cases_on `sue_expand_ops_supply dfg inst si inst.inst_operands 0` >>
-  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 =
-    (operand_prefix,operand_tail)` >>
-  PairCases_on `operand_tail` >>
-  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 =
-    (operand_prefix,expanded_ops,expanded_supply)` >> gvs[sue_expand_inst_supply_def] >>
-  `expanded_ops = new_ops` by
-    (qpat_x_assum `inst with inst_operands := _ = _` mp_tac >>
-     simp[instruction_component_equality]) >>
-  gvs[] >> drule_all sue_expand_ops_supply_normalized_eval >> simp[]
-QED
-
 Theorem sue_frame_codecopy_projection[local]:
   ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
   sue_expand_function_supply supply fn = (fn',supply') /\
@@ -148,7 +100,7 @@ Proof
    LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
      (EL u.vs_inst_idx bb.bb_instructions).inst_operands (EL j (EL u.vs_inst_idx segs)).inst_operands /\
    sue_state_rel (set (fn_ir_vars fn)) u t` by
-    (irule sue_segment_operand_eval >> gvs[] >> metis_tac[]) >>
+    (drule_all sue_segment_operand_eval >> strip_tac >> gvs[]) >>
   `MAP (\op. case op of Var x => project x | other => other)
     (LAST (EL u.vs_inst_idx segs)).inst_operands = (EL u.vs_inst_idx bb.bb_instructions).inst_operands` by
     (irule sue_segment_project_ready >>

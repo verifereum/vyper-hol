@@ -57,7 +57,8 @@ Proof
   `supply_frame_phase C f g s pred target split repls s0 j v` by
     (irule supply_frame_reach_phase >> metis_tac[]) >>
   gvs[supply_frame_phase_def]
-  >- (drule_all supply_frame_body_witness >> strip_tac >>
+  >- (drule_all supply_frame_body_witness >>
+      disch_then (qx_choosel_then [`bb`,`inst`,`a`] strip_assume_tac) >>
       `inst.inst_opcode = CODECOPY` by metis_tac[] >>
       `a.vs_inst_idx < LENGTH bb.bb_instructions` by
         (gvs[active_inst_def] >> metis_tac[same_label_same_block]) >>

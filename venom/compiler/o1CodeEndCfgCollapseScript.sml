@@ -1,7 +1,7 @@
 (* Collapse observations retain payload through each recursive transformation. *)
 Theory o1CodeEndCfgCollapse
 Ancestors
-  o1CodeEndCfgMerge o1CodeEndCfgBypass simplifyCfgCollapseSemantics
+  simplifyCfgMergeSemantics o1CodeEndCfgBypass simplifyCfgCollapseSemantics
   simplifyCfgBypassWrapper simplifyCfgBypassPrecondition simplifyCfgLabelProps
   simplifyCfgDefs cfgTransform list rich_list simplifyCfgControl o1PassLift
   simplifyCfgSimTools simplifyCfgMergeSemantics simplifyCfgMergeClosure
