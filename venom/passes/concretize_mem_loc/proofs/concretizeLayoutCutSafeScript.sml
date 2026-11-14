@@ -22,22 +22,6 @@ Ancestors
 (* ===== Gas readings only shrink ===== *)
 
 
-Theorem step_inst_noninvoke_readings_le:
-  inst.inst_opcode <> INVOKE /\
-  (step_inst fuel ctx inst s = OK t \/ step_inst fuel ctx inst s = IntRet v t) ==>
-  LENGTH t.vs_gas_readings <= LENGTH s.vs_gas_readings
-Proof
-  strip_tac >> gvs[step_inst_non_invoke] >> (
-  Cases_on `inst.inst_opcode = GAS`
-  >- gvs[step_inst_base_def, exec_gas_def, AllCaseEqs()] >>
-  `gas_replay_at 0 (step_inst_base inst) s` by simp[gas_base_non_gas] >>
-  `s with vs_gas_readings := s.vs_gas_readings = s` by
-    simp[venom_state_component_equality] >>
-  gvs[gas_replay_at_def] >>
-  first_x_assum (qspec_then `s.vs_gas_readings` mp_tac) >>
-  gvs[lift_result_def])
-QED
-
 Theorem enters_block_readings:
   enters_block fn s s1 ==> s1.vs_gas_readings = s.vs_gas_readings
 Proof
@@ -51,9 +35,9 @@ Theorem return_readings_le:
     (adopt_return_fmp ret (merge_callee_state caller s_end)) = SOME s' ==>
   LENGTH s'.vs_gas_readings <= LENGTH s.vs_gas_readings
 Proof
-  strip_tac >> drule step_inst_intret_not_invoke >> strip_tac >>
+  strip_tac >>
   drule gas_bind_outputs_readings >> simp[] >> strip_tac >>
-  irule step_inst_noninvoke_readings_le >> metis_tac[]
+  metis_tac[gasCountTheory.step_inst_int_ret_gas_le]
 QED
 
 Definition joint_state_def:
@@ -67,11 +51,9 @@ Theorem joint_transition_readings_le:
 Proof
   simp[Once joint_transition_cases] >> rpt strip_tac >>
   gvs[joint_state_def]
-  >- (irule step_inst_noninvoke_readings_le >> metis_tac[])
+  >- metis_tac[gasCountTheory.step_inst_gas_le]
   >- (drule enters_block_readings >> simp[] >> strip_tac >>
-      irule step_inst_noninvoke_readings_le >>
-      `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
-      metis_tac[])
+      metis_tac[gasCountTheory.step_inst_gas_le])
   >- (drule enters_block_readings >> drule gas_setup_callee_readings >>
       simp[])
   >> metis_tac[return_readings_le]

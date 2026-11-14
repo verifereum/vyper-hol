@@ -61,24 +61,6 @@ Proof
 QED
 
 
-Theorem step_inst_gas_le:
-  step_inst fuel ctx inst s = OK s' ==>
-  LENGTH s'.vs_gas_readings <= LENGTH s.vs_gas_readings
-Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`fuel`,`ctx`,`inst`,`s`] (cj 1 gasCountTheory.gas_count_suffix)) >>
-  gvs[gasCountTheory.gas_count_suffix_def]
-QED
-
-Theorem step_inst_int_ret_gas_le:
-  step_inst fuel ctx inst s = IntRet ret s_end ==>
-  LENGTH s_end.vs_gas_readings <= LENGTH s.vs_gas_readings
-Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`fuel`,`ctx`,`inst`,`s`] (cj 1 gasCountTheory.gas_count_suffix)) >>
-  gvs[gasCountTheory.gas_count_suffix_def]
-QED
-
 Theorem enters_block_gas_le:
   enters_block fn s s1 ==>
   LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings

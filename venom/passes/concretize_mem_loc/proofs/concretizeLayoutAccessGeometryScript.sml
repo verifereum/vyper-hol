@@ -15,13 +15,11 @@ Proof
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[]
   >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >> irule gas_cut_readings_mono >>
       first_assum (irule_at Any) >> simp[] >>
-      irule step_inst_noninvoke_readings_le >> metis_tac[])
+      metis_tac[gasCountTheory.step_inst_gas_le])
   >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >> irule gas_cut_readings_mono >>
       first_assum (irule_at Any) >>
       drule enters_block_readings >> simp[] >> strip_tac >>
-      irule step_inst_noninvoke_readings_le >>
-      `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
-      metis_tac[])
+      metis_tac[gasCountTheory.step_inst_gas_le])
   >- (`gas_cut ncut vs0 s` by
         (drule enters_block_readings >> drule gas_setup_callee_readings >>
          rpt strip_tac >> gvs[gas_cut_def]) >>

@@ -206,6 +206,24 @@ Resume gas_count_suffix[blocks]:
 QED
 Finalise gas_count_suffix
 
+Theorem step_inst_gas_le:
+  step_inst fuel ctx inst s = OK s' ==>
+  LENGTH s'.vs_gas_readings <= LENGTH s.vs_gas_readings
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`fuel`,`ctx`,`inst`,`s`] (cj 1 gas_count_suffix)) >>
+  gvs[gas_count_suffix_def]
+QED
+
+Theorem step_inst_int_ret_gas_le:
+  step_inst fuel ctx inst s = IntRet ret s_end ==>
+  LENGTH s_end.vs_gas_readings <= LENGTH s.vs_gas_readings
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`fuel`,`ctx`,`inst`,`s`] (cj 1 gas_count_suffix)) >>
+  gvs[gas_count_suffix_def]
+QED
+
 Theorem gas_count_fuel_mono:
   (!n m ctx inst s r.
      step_inst n ctx inst s = r /\ (!e. r <> Error e) /\ n <= m ==>

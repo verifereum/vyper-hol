@@ -31,7 +31,7 @@ Proof
   simp[gas_prefix_def]
 QED
 
-Theorem gas_take_pad[local]:
+Theorem gas_take_pad:
   !n (gs:'a list) a b x.
     n <= LENGTH gs + a /\ n <= LENGTH gs + b ==>
     TAKE n (gs ++ REPLICATE a x) = TAKE n (gs ++ REPLICATE b x)

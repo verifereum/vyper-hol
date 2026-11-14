@@ -19,15 +19,6 @@ Ancestors
 
 (* ===== Replays read the same prefix from padded readings ===== *)
 
-Theorem gas_prefix_take_pad[local]:
-  !n l N. n <= LENGTH l + N ==>
-    gas_prefix n l = TAKE n (l ++ REPLICATE N 0w)
-Proof
-  rw[gas_prefix_def, LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_APPEND,
-     LENGTH_REPLICATE] >>
-  rw[EL_TAKE, EL_APPEND_EQN, EL_REPLICATE, LENGTH_REPLICATE]
-QED
-
 Theorem gas_replay_at_zero_pad[local]:
   !n f s N.
     gas_replay_at n f s /\ n <= LENGTH s.vs_gas_readings + N ==>
@@ -50,8 +41,9 @@ Proof
   `gas_prefix n s.vs_gas_readings ++
    DROP n (s.vs_gas_readings ++ REPLICATE N 0w) =
    s.vs_gas_readings ++ REPLICATE N 0w` by
-    (qspecl_then [`n`, `s.vs_gas_readings`, `N`] mp_tac gas_prefix_take_pad >>
-     simp[]) >>
+    (simp[gas_prefix_def] >>
+     qspecl_then [`n`, `s.vs_gas_readings`, `n`, `N`, `0w`] mp_tac gas_take_pad >>
+     impl_tac >- simp[] >> disch_then SUBST1_TAC >> simp[]) >>
   simp[]
 QED
 
