@@ -728,6 +728,8 @@ Proof
   conj_tac
   >- (qpat_x_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _`
         (irule o MATCH_MP aggregate_tuple_gas_outcome_mono) >>
+      qpat_x_assum `!tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls. _`
+        kall_tac >>
       simp[] >> rpt strip_tac >>
       Cases_on `res` >> gvs[expr_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
