@@ -84,3 +84,58 @@ Proof
   conj_tac >- metis_tac[] >>
   pop_assum mp_tac >> simp[ELIM_UNCURRY]
 QED
+
+(* Conditional execution package: the concrete head proofs discharge the
+   callback; no execution assertion is hidden in the invariant. *)
+Theorem default_registration_concrete_fold:
+  (!ce st off name prim dyn sz info rest tv tvs s G tn owners ce1 st1 x.
+    4 <= off /\ ~s.vs_halted /\
+    default_registration_invariant tops cx ctx fn site k vs ce0 start
+      args all_tvs specs cef sa ce st off
+      ((name,prim,dyn,sz,info)::rest) (tv::tvs) s G tn owners /\
+    compile_register_positional_args ce [(name,prim,dyn,sz,info)] off st = (ce1,st1) /\
+    calldata_decode_args cd [tv] (off-4) = SOME [x] ==>
+    sz = tv_abi_size tv /\
+    ?t H1 u1 owner.
+      (\(x,dst,p,id). x) owner = x /\ ~t.vs_halted /\
+      default_registration_invariant tops cx ctx fn site k vs ce0 start
+        args all_tvs specs cef sa ce1 st1 (off+sz) rest tvs
+        t H1 u1 (owners++[owner]) /\
+      gas_path_mem ctx fn s 0 (OK t) /\
+      (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK t,H1,u1)) /\
+      (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H1 u1 t) ==>
+        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)) /\
+  default_registration_invariant tops cx ctx fn site k vs ce0 start
+    args all_tvs specs cef sa ce0 start 4 specs all_tvs s G tn [] /\
+  calldata_decode_args cd all_tvs 0 = SOME vals /\
+  initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
+  send_call_value mut cx
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  vals = tx.args /\ fn_inst_ids_distinct fn ==>
+  ?out H u owners.
+    ~out.vs_halted /\
+    default_registration_invariant tops cx ctx fn site k vs ce0 start
+      args all_tvs specs cef sa cef sa
+      (4 + SUM (MAP (\(_,_,_,sz,_). sz) specs)) [] [] out H u owners /\
+    MAP (\(x,dst,p,id). x) owners = vals /\
+    gas_path_mem ctx fn s 0 (OK out) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK out,H,u)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u out) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    alloca_history fn out /\ return_buf_frame NONE cef sa out /\
+    (!st0 horizon. valid_horizon cx st0 horizon es.storage_trace ==>
+      ghost_inv_at (cx_dead horizon cx) 0 NONE cef cx es H u out /\
+      stmt_state_rel horizon ctx fn cef cx es out)
+Proof
+  strip_tac >>
+  drule default_registration_fold_cursor >> strip_tac >>
+  `calldata_decode_args cd all_tvs (4-4) = SOME vals` by simp[] >>
+  drule default_registration_joint_fold >>
+  disch_then drule_all >> simp[] >> strip_tac >>
+  qexistsl [`out`,`H`,`u`,`newowners`] >> simp[] >>
+  drule_all default_registration_terminal_state >> simp[]
+QED
