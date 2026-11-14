@@ -256,6 +256,9 @@ Proof
     (irule ricf_frame_consume_call >> metis_tac[]) >> simp[] >>
   `r.vs_returndata = u.vs_returndata` by
     (fs[ricf_frame_agree_def] >> drule taint_agree_read_fields >> simp[]) >>
+  `r.vs_gas_readings = s.vs_gas_readings /\
+   u.vs_gas_readings = t.vs_gas_readings` by
+    metis_tac[gasOracleReplayTheory.gas_consume_outcome_readings, pairTheory.SND] >>
   qpat_assum `consume_call_outcome rq1 ro rs s = _`
     (mp_then Any strip_assume_tac ricf_consume_call_footprint) >>
   irule ricf_cert_reconstruct >> rpt conj_tac
