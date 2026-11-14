@@ -161,12 +161,3 @@ Proof
   disch_then irule >>
   simp[ld_read_memory_length] >> metis_tac[ADD_COMM]
 QED
-
-(* Checked padding/empty edge cases; the copy theorem above has no
-   non-overlap premise and the write theorem separates distinct sites. *)
-Theorem ld_read_memory_padding_probe[local]:
-  read_memory 1 4 (s with vs_memory := [7w;8w]) = [8w;0w;0w;0w] /\
-  read_memory 100 0 s = []
-Proof
-  simp[read_memory_def] >> EVAL_TAC
-QED

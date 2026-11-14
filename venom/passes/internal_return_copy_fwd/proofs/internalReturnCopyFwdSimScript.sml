@@ -210,7 +210,7 @@ Proof
                         (icf_build_ctx fn_meta fns rma fn) bb)) fn.fn_blocks`
     by (qspecl_then [`ircf_transform_block (icf_build_ctx fn_meta fns rma fn)`,
                      `fn.fn_blocks`, `F`, `[]`] mp_tac FOLDL_block_pass_SND >>
-        simp[Abbr `g`]) >>
+        fs[Abbr `g`, pairTheory.UNCURRY]) >>
   Cases_on `q` >> simp[clear_nops_function_def]
   >- (qexists_tac `T` >> simp[])
   >> qexists_tac `F` >> simp[]
