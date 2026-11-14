@@ -95,24 +95,12 @@ Theorem prefix_member_add_block:
    ptr_safe_block D lo fuel ctx fn PG G tn bb s)
 Proof
   strip_tac >>
-  `step_inst fuel ctx (mk_inst iid ADD [a;c] [x]) s =
-     OK (update_var x (u+v) s)` by
-    (simp[step_inst_non_invoke, mk_inst_def] >>
-     pure_rewrite_tac[GSYM mk_inst_def] >>
-     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
-  `~is_terminator (mk_inst iid ADD [a;c] [x]).inst_opcode` by simp[mk_inst_def, is_terminator_def] >>
-  drule_all ptr_safe_block_step >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid ADD [a;c] [x]) s` by
-    (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
-  `ghost_step fuel ctx PG G tn (mk_inst iid ADD [a;c] [x]) s =
-     (set_prov G [x] (first_prov G [a;c]),
-      tn with t_var := tn.t_var |+ (x,{}))` by
-    (`step_taint (mk_inst iid ADD [a;c] [x]) s (update_var x (u+v) s) tn =
-        tn with t_var := tn.t_var |+ (x,{})` by
-       (irule prefix_member_add_taint >> simp[]) >>
-     pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
-     irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
-  simp[]
+  mp_tac (Q.INST [`opc` |-> `ADD`, `b` |-> `c`, `f` |-> `fuel`]
+    prefix_bool_body_arith_certificate) >>
+  simp[LET_THM, prefix_member_add_taint] >> strip_tac >>
+  `~is_terminator (mk_inst iid ADD [a;c] [x]).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  drule_all ptr_safe_block_step >> simp[]
 QED
 
 Theorem prefix_member_dload_block:
@@ -182,10 +170,13 @@ Proof
      Cases_on `first_prov G [src;off]` >>
      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def,
          eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  `eval_operand (Lit vo) s1 = SOME vo /\ op_taint q1 (Lit vo) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst iid ADD [src;off] [x]) s = OK s1 /\
    step_inst_base (mk_inst (iid+1) ADD [Var dst;Lit vo] [y]) s1 = OK s2` by
-    (unabbrev_all_tac >> conj_tac >> irule slotCopyExecutionTheory.slot_copy_step_add >>
-     simp[eval_operand_def]) >>
+    (unabbrev_all_tac >> conj_tac >>
+     irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   `!D'. inst_seq_ptr D' lo ctx fn PG G tn
      [mk_inst iid ADD [src;off] [x];
@@ -196,46 +187,51 @@ Proof
        simp[Abbr `s1`, update_var_def, venom_state_component_equality] >>
      `allocas_from lo (s1 with vs_inst_idx := s.vs_inst_idx+1)` by
        (qpat_x_assum `allocas_from lo s1` mp_tac >> simp[allocas_from_def]) >>
-     `eval_operand (Lit vo) s1 = SOME vo /\ op_taint q1 (Lit vo) = {}` by
-       simp[eval_operand_def, op_taint_def] >>
-     (* first ADD at s *)
-     `step_inst 0 ctx (mk_inst iid ADD [src;off] [x]) s = OK s1` by
-       (qpat_x_assum `step_inst_base (mk_inst iid ADD _ _) s = _` mp_tac >>
-        simp[step_inst_non_invoke, mk_inst_def]) >>
-     `ptr_safe_step D' lo 0 ctx fn PG G tn (mk_inst iid ADD [src;off] [x]) s` by
-       (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
-     `ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;off] [x]) s = (G1,q1)` by
-       (`step_taint (mk_inst iid ADD [src;off] [x]) s (update_var x (a+ao) s) tn = q1` by
-          (simp[Abbr `q1`, Abbr `s1`] >> irule prefix_member_add_taint >> simp[]) >>
+     (* Both ADD transitions use the shared execution/pointer/ghost certificate. *)
+     `step_inst 0 ctx (mk_inst iid ADD [src;off] [x]) s = OK s1 /\
+      ptr_safe_step D' lo 0 ctx fn PG G tn (mk_inst iid ADD [src;off] [x]) s /\
+      ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;off] [x]) s = (G1,q1)` by
+       (conj_tac
+        >- (simp[Abbr `s1`] >>
+            irule (cj 2 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+        conj_tac
+        >- (irule (cj 3 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+        `step_taint (mk_inst iid ADD [src;off] [x]) s (update_var x (a+ao) s) tn = q1` by
+          (simp[Abbr `q1`, prefix_member_add_taint]) >>
         pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
         qunabbrev_tac `G1` >>
-        irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
-     (* second ADD at idx+1 *)
+        irule (cj 4 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
      `step_inst 0 ctx (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
         (s1 with vs_inst_idx := s.vs_inst_idx+1) =
-        OK (s2 with vs_inst_idx := s.vs_inst_idx+1)` by
-       (simp[step_inst_non_invoke, mk_inst_def, Abbr `s2`,
-             GSYM instIdxIndepTheory.update_var_idx] >>
-        pure_rewrite_tac[GSYM mk_inst_def] >>
-        irule slotCopyExecutionTheory.slot_copy_step_add >>
-        simp[instIdxIndepTheory.eval_op_inst_idx]) >>
-     `ptr_safe_step D' lo 0 ctx fn PG G1 q1 (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
-        (s1 with vs_inst_idx := s.vs_inst_idx+1)` by
-       (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
-     `ghost_step 0 ctx PG G1 q1 (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+        OK (s2 with vs_inst_idx := s.vs_inst_idx+1) /\
+      ptr_safe_step D' lo 0 ctx fn PG G1 q1 (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+        (s1 with vs_inst_idx := s.vs_inst_idx+1) /\
+      ghost_step 0 ctx PG G1 q1 (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
         (s1 with vs_inst_idx := s.vs_inst_idx+1) = (G2,q2)` by
-       (`step_taint (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
+       (conj_tac
+        >- (simp[Abbr `s2`, GSYM instIdxIndepTheory.update_var_idx] >>
+            irule (cj 2 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >>
+            simp[instIdxIndepTheory.eval_op_inst_idx, SF SFY_ss]) >>
+        conj_tac
+        >- (irule (cj 3 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+              prefix_bool_body_arith_certificate))) >>
+            simp[instIdxIndepTheory.eval_op_inst_idx, SF SFY_ss]) >>
+        `step_taint (mk_inst (iid+1) ADD [Var dst;Lit vo] [y])
            (s1 with vs_inst_idx := s.vs_inst_idx+1)
            (update_var y (d+vo) (s1 with vs_inst_idx := s.vs_inst_idx+1)) q1 = q2` by
-          (simp[Abbr `q2`, Abbr `s2`, instIdxIndepTheory.update_var_idx] >>
-           irule prefix_member_add_taint >> simp[]) >>
+          simp[Abbr `q2`, prefix_member_add_taint] >>
         `first_prov G1 [Var dst;Lit vo] = SOME (b,sz)` by
           simp[first_prov_def, op_prov_def] >>
         qunabbrev_tac `G2` >>
         qpat_x_assum `first_prov G1 _ = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
         qpat_x_assum `step_taint _ _ _ q1 = q2` (fn th => pure_once_rewrite_tac[GSYM th]) >>
-        irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >>
-        simp[instIdxIndepTheory.eval_op_inst_idx]) >>
+        irule (cj 4 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >>
+        simp[instIdxIndepTheory.eval_op_inst_idx, SF SFY_ss]) >>
      qabbrev_tac `xs = [mk_inst iid ADD [src;off] [x];
                         mk_inst (iid+1) ADD [Var dst;Lit vo] [y]]` >>
      qspecl_then [`xs`,`s`,`\j. EL j [s;s1;s2]`,`\j. EL j [G;G1;G2]`,
@@ -300,8 +296,12 @@ Proof
   qabbrev_tac `s2 = update_var y w s1` >>
   qabbrev_tac `G1 = set_prov G [x] (first_prov G [src;Lit ao])` >>
   qabbrev_tac `q1 = tn with t_var := tn.t_var |+ (x,{})` >>
+  `eval_operand (Lit ao) s = SOME ao /\ op_taint tn (Lit ao) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
-    (simp[Abbr `s1`] >> irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
+    (simp[Abbr `s1`] >>
+     irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
   `eval_operand (Var x) s1 = SOME (a+ao) /\
    op_taint q1 (Var x) = {} /\ allocas_from lo s1` by
     (simp[Abbr `s1`, Abbr `q1`, eval_operand_def, lookup_var_def, update_var_def,
@@ -327,20 +327,21 @@ Proof
      `s with vs_inst_idx := s.vs_inst_idx = s /\
       s1 with vs_inst_idx := s.vs_inst_idx = s1` by
        simp[Abbr `s1`, update_var_def, venom_state_component_equality] >>
-     `eval_operand (Lit ao) s = SOME ao /\ op_taint tn (Lit ao) = {}` by
-       simp[eval_operand_def, op_taint_def] >>
      (* ADD at s *)
      `step_inst 0 ctx (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
-       (qpat_x_assum `step_inst_base (mk_inst iid ADD _ _) s = _` mp_tac >>
-        simp[step_inst_non_invoke, mk_inst_def]) >>
+       (simp[Abbr `s1`] >>
+        irule (cj 2 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
      `ptr_safe_step D' lo 0 ctx fn PG G tn (mk_inst iid ADD [src;Lit ao] [x]) s` by
-       (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
+       (irule (cj 3 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
      `ghost_step 0 ctx PG G tn (mk_inst iid ADD [src;Lit ao] [x]) s = (G1,q1)` by
        (`step_taint (mk_inst iid ADD [src;Lit ao] [x]) s (update_var x (a+ao) s) tn = q1` by
           (simp[Abbr `q1`, Abbr `s1`] >> irule prefix_member_add_taint >> simp[]) >>
         pop_assum (fn th => pure_once_rewrite_tac[GSYM th]) >>
         qunabbrev_tac `G1` >>
-        irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
+        irule (cj 4 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+          prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
      (* DLOAD at idx+1 *)
      `step_inst 0 ctx (mk_inst (iid+1) DLOAD [Var x] [y])
         (s1 with vs_inst_idx := s.vs_inst_idx+1) =
