@@ -73,7 +73,9 @@ what the interpreter would run.
    bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
    endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
-   tuple indices, exponents and `method_id` (`fold_constant`). Blueprint
+   tuple indices and `method_id` (`fold_constant`). Exponents use
+   `pin_fold_expr`, and original Boolean operations fold before translation
+   to runtime conditional expressions. Blueprint
    `code_offset` retains its original AST here. Creation lowering uses the
    pin-specific folder, then selects `SUB`/`SGT` for a folded integer literal
    and unsigned `GT` before subtraction for a runtime expression. A literal
@@ -84,8 +86,9 @@ what the interpreter would run.
    `iter_bound_resolved`), and a call with such a keyword or slice length
    translates to an expression the type checker rejects (`kwargs_checked`,
    `rejected_expr`). Rejection is the cost of an evaluator smaller than the
-   compiler's folder: `True or False` as a flag, or a `range` count defined by
-   `uint256_addmod`, is accepted by the compiler and rejected here.
+   compiler's folder: a `range` count defined by `uint256_addmod` is accepted
+   by the compiler and rejected here. A flag such as `True or False` folds
+   and is accepted here.
 
 Annotation nodes carry no compiler types, and neither do the functions of an
 imported module that nothing calls. So in a count (an annotation bound, a
