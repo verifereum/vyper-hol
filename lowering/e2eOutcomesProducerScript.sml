@@ -18,7 +18,7 @@
  *)
 Theory e2eOutcomesProducer
 Ancestors
-  e2eOutcomesGuard e2eCallAtMarks guardSourceAlignment guardRequestAlignment
+  e2eOutcomesDefs e2eOutcomesGuard e2eCallAtMarks guardSourceAlignment guardRequestAlignment
   e2eDefs e2eComposition e2eProducers e2eEntry vyperInterpreter
   vyperStorageFootprint extCallOracle loweringDloadHeadroom vyperLoweringCorrect
   list

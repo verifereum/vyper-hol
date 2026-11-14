@@ -133,7 +133,7 @@ QED
 Theorem vyper_call_correct_at_marks:
   !policy tops deploy_bc runtime_bc am tx ret es rpolicy unit out prog cp vs marks.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
