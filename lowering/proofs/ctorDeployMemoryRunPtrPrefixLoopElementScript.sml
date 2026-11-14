@@ -880,22 +880,6 @@ QED
 
 (* Uniform continuations compose on the raw middle state.  Only their
    block-safety arguments, never the raw execution endpoints, move cursor. *)
-(* Uniform pointer checks compose at the raw middle state, the forward twin
-   of prefix_loop_element_uniform_append. *)
-Theorem prefix_loop_element_uniform_seq_append[local]:
-  !xs ys s m G tn H qt J rt.
-    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
-    run_inst_seq xs s = OK m /\
-    (!D k. inst_seq_ptr D lo ctx fn PG G tn xs (s with vs_inst_idx := k) H qt) /\
-    (!D k. inst_seq_ptr D lo ctx fn PG H qt ys (m with vs_inst_idx := k) J rt) ==>
-    !D k. inst_seq_ptr D lo ctx fn PG G tn (xs ++ ys) (s with vs_inst_idx := k) J rt
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.INST [`G1` |-> `H`, `tn1` |-> `qt`, `t` |-> `m`, `G2` |-> `J`,
-    `tn2` |-> `rt`] inst_seq_ptr_uniform_append) >>
-  simp[]
-QED
-
 Theorem prefix_loop_element_uniform_append:
   (!cursor fuel bb.
     (!k. k < LENGTH xs ==> get_instruction bb (cursor+k) = SOME (EL k xs)) ==>
@@ -1114,18 +1098,22 @@ Proof
      simp_tac std_ss [EVERY_APPEND] >> rpt strip_tac >> simp[]) >>
   `!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st c4)
      (s with vs_inst_idx := k) H4 q4` by
-    (qspecl_then [`emitted_insts c2 c3`,`emitted_insts c3 c4`,`s2`,`s3`,
+    (rpt gen_tac >>
+     qspecl_then [`emitted_insts c2 c3`,`emitted_insts c3 c4`,`s2`,`s3`,
         `H2`,`q2`,`H3`,`q3`,`H4`,`q4`] mp_tac
-        prefix_loop_element_uniform_seq_append >>
+        (Q.GENL [`xs`,`ys`,`s`,`t`,`G`,`tn`,`G1`,`tn1`,`G2`,`tn2`]
+          (Q.INST [`D` |-> `D'`] inst_seq_ptr_uniform_append)) >>
      (impl_tac >- simp[]) >> strip_tac >>
      qspecl_then [`emitted_insts c1 c2`,`emitted_insts c2 c3 ++ emitted_insts c3 c4`,
         `s1`,`s2`,`H1`,`q1`,`H2`,`q2`,`H4`,`q4`] mp_tac
-        prefix_loop_element_uniform_seq_append >>
+        (Q.GENL [`xs`,`ys`,`s`,`t`,`G`,`tn`,`G1`,`tn1`,`G2`,`tn2`]
+          (Q.INST [`D` |-> `D'`] inst_seq_ptr_uniform_append)) >>
      (impl_tac >- simp[]) >> strip_tac >>
      qspecl_then [`emitted_insts st c1`,
         `emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 c4)`,
         `s`,`s1`,`G`,`tn`,`H1`,`q1`,`H4`,`q4`] mp_tac
-        prefix_loop_element_uniform_seq_append >>
+        (Q.GENL [`xs`,`ys`,`s`,`t`,`G`,`tn`,`G1`,`tn1`,`G2`,`tn2`]
+          (Q.INST [`D` |-> `D'`] inst_seq_ptr_uniform_append)) >>
      (impl_tac >- simp[]) >>
      qpat_x_assum `emitted_insts st c4 = _` SUBST1_TAC >>
      simp_tac std_ss [APPEND_ASSOC]) >>
