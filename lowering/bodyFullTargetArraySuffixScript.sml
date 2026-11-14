@@ -6,6 +6,7 @@ Ancestors
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
   targetSubscriptContinuation exprLowering exprSimArrayIndex
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
+  fragFuelExprHelpers
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
   vyperValue compileEnv valueEncoding vyperTypeEnv vyperInterpreter vyperState
@@ -762,4 +763,179 @@ Proof
   Cases_on `op` >> simp[array_length_frame_def, eval_operand_def,
     op_taint_def, op_prov_def] >> strip_tac >>
   gvs[venom_state_component_equality]
+QED
+
+Theorem array_tail_packet_dynamic_length[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+    (case FST (SND rb) of SOME l => l | NONE => LocMemory)
+    (FST rb) sn = (len,sl) ==>
+  ?w t G' tn'.
+    array_length_loader_ok cenv.ce_is_ctor cenv.ce_imm_alloca
+      (case FST (SND rb) of SOME l => l | NONE => LocMemory)
+      (FST rb) w sn len sl lo ctx func PG t2 G2 tn2 t G' tn' /\
+    op_taint tn' len = {} /\ op_prov G' len = NONE
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+    fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  Cases_on `pv` >> fs[place_ptr_rel_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> fs[place_ptr_rel_def]
+  >~ [`MemoryPlace id path`]
+  >- (gvs[] >>
+      `?out. len = Var out` by
+        (gvs[contextTheory.compile_ptr_load_def, emitHelperTheory.emit_op_def, comp_bind_def, comp_ignore_bind_def,
+            fresh_var_def, fresh_id_def, comp_return_def, emit_def]) >>
+      gvs[] >>
+      `emit_op MLOAD [FST rb] sn = (Var out,sl)` by fs[contextTheory.compile_ptr_load_def] >>
+      drule array_tail_packet_memory_loader >> simp[] >>
+      disch_then (qspecl_then [`PG`, `storage_trace_horizon mid2.storage_trace`] mp_tac) >>
+      simp[] >> strip_tac >>
+      qexistsl_tac [`mload (w2n (b + n2w k)) t2`,
+        `update_var out (mload (w2n (b + n2w k)) t2) t2 with vs_inst_idx := LENGTH sl.cs_current_insts`,
+        `step_prov PG G2 (mk_inst sn.cs_next_id MLOAD [FST rb] [out]) (update_var out (mload (w2n (b + n2w k)) t2) t2)`,
+        `step_taint (mk_inst sn.cs_next_id MLOAD [FST rb] [out]) t2 (update_var out (mload (w2n (b + n2w k)) t2) t2) tn2`] >>
+      simp[array_length_loader_ok_def, contextTheory.compile_ptr_load_def] >> metis_tac[]) >>
+  rename1 `StoragePlace tr slot tv` >> gvs[] >>
+  `?out. len = Var out` by
+    (Cases_on `tr` >>
+     gvs[slot_loc_def, contextTheory.compile_ptr_load_def, emitHelperTheory.emit_op_def,
+         comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+         comp_return_def, emit_def]) >>
+  gvs[] >>
+  `emit_op (if tr then TLOAD else SLOAD) [FST rb] sn = (Var out,sl)` by
+    (Cases_on `tr` >> fs[slot_loc_def, contextTheory.compile_ptr_load_def]) >>
+  drule array_tail_packet_storage_loader >> simp[] >>
+  disch_then (qspecl_then [`PG`, `storage_trace_horizon mid2.storage_trace`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`if tr then tload slot t2 else sload slot t2`,
+    `update_var out (if tr then tload slot t2 else sload slot t2) t2 with vs_inst_idx := LENGTH sl.cs_current_insts`,
+    `step_prov PG G2 (mk_inst sn.cs_next_id (if tr then TLOAD else SLOAD) [FST rb] [out]) (update_var out (if tr then tload slot t2 else sload slot t2) t2)`,
+    `step_taint (mk_inst sn.cs_next_id (if tr then TLOAD else SLOAD) [FST rb] [out]) t2 (update_var out (if tr then tload slot t2 else sload slot t2) t2) tn2`] >>
+  Cases_on `tr` >> gvs[slot_loc_def, array_length_loader_ok_def,
+    contextTheory.compile_ptr_load_def] >> metis_tac[]
+QED
+
+Theorem array_tail_scalar_compiler_mono[local]:
+  (array_bounds_check idx len sgn sa = ((),sb) ==> ci_mono sa sb) /\
+  (array_elem_ptr bop idx dyn ws esz sa = (p,sb) ==> ci_mono sa sb)
+Proof
+  conj_tac
+  >- (Cases_on `sgn` >>
+      simp[array_bounds_check_def, array_bounds_valid_def, comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+      gvs[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+          comp_return_def, emit_def, ci_mono_def, cs_extends_def] >>
+      simp[GSYM APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]) >>
+  Cases_on `dyn` >>
+  simp[array_elem_ptr_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans]
+QED
+
+Theorem array_tail_length_loader_unique[local]:
+  array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG s G tn t1 G1 tn1 /\
+  array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG s G tn t2 G2 tn2 ==>
+  t1 = t2 /\ G1 = G2 /\ tn1 = tn2
+Proof
+  Cases_on `loc = LocCode /\ ctor /\ IS_SOME imm` >>
+  simp[array_length_loader_ok_def, LET_THM] >> rpt strip_tac >>
+  gvs[array_length_step_ok_def] >>
+  gvs[emitHelperTheory.emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+      fresh_id_def, comp_return_def, emit_def, venomInstTheory.mk_inst_def] >>
+  fs[FUN_EQ_THM] >>
+  rpt (qpat_x_assum `!x. _ = _` (qspec_then `sa` mp_tac)) >>
+  simp[comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_return_def, compile_state_component_equality,
+       venomInstTheory.instruction_component_equality]
+QED
+
+Theorem array_tail_packet_initialized:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  ?loc len sl sc p w t G tn b iw.
+    loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+    SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+    (if (case bd of Dynamic _ => T | _ => F)
+     then compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST rb)
+     else comp_return (Lit (n2w (case bd of Fixed n => n | _ => 0)))) sn = (len,sl) /\
+    array_bounds_check iop len (is_signed_type (expr_type e)) sl = ((),sc) /\
+    array_elem_ptr (FST rb) iop (case bd of Dynamic _ => T | _ => F)
+      (word_scale loc) (elem_size_in_location cenv loc et) sc = (p,sb) /\
+    r = (p,FST (SND rb),SOME (ValPT et)) /\
+    fn_has_code sn sl func /\ fn_has_code sl sc func /\ fn_has_code sc sb func /\
+    sn.cs_next_var <= sl.cs_next_var /\
+    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
+    (!x. iop = Var x ==> not_fresh_at sn x) /\
+    (!x. FST rb = Var x ==> not_fresh_at sl x) /\
+    (!x. iop = Var x ==> not_fresh_at sl x) /\
+    (!x. len = Var x ==> not_fresh_at sl x) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (t2,G2,tn2) [] (OK t,G,tn)) /\
+    array_length_frame sn t2 G2 tn2 t G tn /\
+    eval_operand (FST rb) t = SOME b /\ eval_operand iop t = SOME iw /\
+    eval_operand len t = SOME w /\
+    op_taint tn (FST rb) = {} /\ op_taint tn iop = {} /\
+    op_taint tn len = {} /\ op_prov G iop = NONE /\ op_prov G len = NONE /\
+    allocas_from lo t /\ ~t.vs_halted /\
+    t.vs_current_bb = sl.cs_current_bb /\ t.vs_inst_idx = LENGTH sl.cs_current_insts
+Proof
+  strip_tac >>
+  drule array_tail_packet_compile_parts >> strip_tac >>
+  drule array_tail_packet_operands_old >> strip_tac >>
+  drule array_tail_packet_scalar_inputs >> strip_tac >>
+  `ci_mono sn sl` by
+    (Cases_on `bd` >> gvs[comp_return_def] >>
+     metis_tac[ci_mono_compile_ptr_load, pairTheory.SND, ci_mono_refl]) >>
+  `ci_mono sl sc /\ ci_mono sc sb` by
+    metis_tac[array_tail_scalar_compiler_mono] >>
+  `fn_has_code sn sl func /\ fn_has_code sl sc func /\ fn_has_code sc sb func` by
+    (fs[array_tail_packet_def] >>
+     metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def, cs_extends_trans]) >>
+  `sn.cs_next_var <= sl.cs_next_var` by fs[ci_mono_def] >>
+  `(!x. FST rb = Var x ==> not_fresh_at sl x) /\
+   (!x. iop = Var x ==> not_fresh_at sl x)` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!x. len = Var x ==> not_fresh_at sl x` by
+    (Cases_on `bd` >> gvs[comp_return_def] >>
+     metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_var,
+       fragFuelTheory.var_below_def, loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  Cases_on `bd`
+  >- (gvs[comp_return_def] >>
+      qexistsl_tac [`n2w n`, `t2`, `G2`, `tn2`, `b`, `iw`] >>
+      simp[eval_operand_def, op_taint_def, op_prov_def, array_length_frame_def] >>
+      fs[array_tail_packet_def] >> rpt strip_tac >>
+      irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]) >>
+  gvs[] >>
+  drule_all array_tail_packet_dynamic_length >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `compile_ptr_load _ _ loc _ _` >>
+  `?tl Gl tnl.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (t2,G2,tn2) [] (OK tl,Gl,tnl)) /\
+    eval_operand len tl = SOME w /\ ~tl.vs_halted /\
+    tl.vs_current_bb = sl.cs_current_bb /\ tl.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    array_length_frame sn t2 G2 tn2 tl Gl tnl /\
+    array_length_loader_ok cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST rb)
+      w sn len sl lo ctx func PG t2 G2 tn2 tl Gl tnl` by
+    (irule (array_tail_length_uniform |> Q.INST [`dyn` |-> `T`] |> SRULE []) >>
+     fs[array_tail_packet_def] >> metis_tac[]) >>
+  `tl = t /\ Gl = G' /\ tnl = tn'` by
+    metis_tac[array_tail_length_loader_unique] >>
+  gvs[] >>
+  drule_all array_tail_length_frame_operand >> strip_tac >>
+  `eval_operand (FST rb) t = SOME b /\ op_taint tn' (FST rb) = {}` by
+    metis_tac[array_tail_length_frame_operand] >>
+  `eval_operand iop t = SOME iw /\ op_taint tn' iop = {} /\ op_prov G' iop = NONE` by
+    metis_tac[array_tail_length_frame_operand] >>
+  `allocas_from lo t` by
+    (gvs[array_length_frame_def, allocas_from_def, venom_state_component_equality] >>
+     metis_tac[]) >>
+  qexistsl_tac [`w`, `t`, `G'`, `tn'`, `b`, `iw`] >>
+  simp[]
 QED
