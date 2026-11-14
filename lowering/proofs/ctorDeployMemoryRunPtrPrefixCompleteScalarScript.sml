@@ -87,48 +87,32 @@ Theorem prefix_decoder_noclamp_inst_seq_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   drule prefix_decoder_noclamp_code >> strip_tac >>
-  qpat_assum `eval_operand src s = SOME w`
-    (mp_then Any (drule_all_then mp_tac) prefix_noclamp_steps) >>
-  disch_then (qspec_then `st.cs_next_id` mp_tac) >>
-  disch_then (qspecl_then [`D`,`0`,`fn`,`PG`] mp_tac) >>
-  pure_rewrite_tac[LET_THM] >> CONV_TAC (DEPTH_CONV BETA_CONV) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `update_var x v s` >>
-  qmatch_asmsub_abbrev_tac `step_inst_base i s = OK l` >>
-  qmatch_asmsub_abbrev_tac `step_inst_base j l = OK t` >>
-  qmatch_asmsub_abbrev_tac `ghost_step 0 ctx PG G tn i s = (G1,tn1)` >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
-  `emitted_insts st st' = [i;j]` by gvs[Abbr `i`, Abbr `j`] >>
-  qpat_x_assum `x = _` kall_tac >>
-  qabbrev_tac `l1 = l with vs_inst_idx := s.vs_inst_idx+1` >>
-  qabbrev_tac `t1 = t with vs_inst_idx := s.vs_inst_idx+1` >>
-  `i.inst_opcode = DLOAD /\ j.inst_opcode = MSTORE` by
-    simp[Abbr `i`, Abbr `j`, mk_inst_def] >>
-  `step_inst 0 ctx j l1 = OK t1` by
-    simp[Abbr `l1`, Abbr `t1`, step_inst_non_invoke,
-         step_inst_inst_idx_indep, exec_result_map_def, is_terminator_def] >>
-  `step_inst_base j l1 = OK t1` by gvs[step_inst_non_invoke] >>
-  `allocas_from lo l1` by
-    (gvs[allocas_from_def, Abbr `l1`] >> metis_tac[]) >>
-  `op_taint tn1 (Var x) = {}` by
-    simp[Abbr `tn1`, Abbr `i`, prefix_dload_output_taint] >>
-  `ptr_safe_step D lo 0 ctx fn PG G1 tn1 j l1` by
-    (simp[Abbr `j`] >> irule prefix_mstore_ptr_step >>
-     simp[Abbr `l1`, eval_op_inst_idx] >> metis_tac[]) >>
-  `ghost_step 0 ctx PG G1 tn1 j l1 = (G1,step_taint j l1 t1 tn1)` by
-    (simp[Abbr `j`] >> irule prefix_mstore_ghost_step >> simp[]) >>
-  `step_prov PG G i l = G1` by
-    (qspecl_then [`0`,`ctx`,`PG`,`G`,`tn`,`i`,`s`,`l`] mp_tac
-       ghost_step_non_invoke >>
-     simp[step_inst_non_invoke]) >>
-  `step_prov PG G1 j t1 = G1` by
-    (qspecl_then [`0`,`ctx`,`PG`,`G1`,`tn1`,`j`,`l1`,`t1`] mp_tac
-       ghost_step_non_invoke >>
-     simp[]) >>
-  `step_taint i s l tn = tn1` by simp[Abbr `tn1`] >>
-  `l with vs_inst_idx := SUC s.vs_inst_idx = l1 /\
-   l with vs_inst_idx := s.vs_inst_idx + 1 = l1` by simp[Abbr `l1`, ADD1] >>
-  imp_res_tac ptr_safe_step_inst_ok >>
-  simp[inst_seq_ptr_def]
+  qabbrev_tac `v = word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))` >>
+  qabbrev_tac `i = mk_inst st.cs_next_id DLOAD [src] [x]` >>
+  qabbrev_tac `j = mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] []` >>
+  qabbrev_tac `l = update_var x v s` >>
+  qabbrev_tac `t = mstore (w2n a) v l` >>
+  qabbrev_tac `H = DRESTRICT G (COMPL {x})` >>
+  qabbrev_tac `q = step_taint i s l tn` >>
+  qabbrev_tac `r = step_taint j (l with vs_inst_idx := s.vs_inst_idx+1)
+    (t with vs_inst_idx := s.vs_inst_idx+1) q` >>
+  mp_tac (Q.INST [`src` |-> `src`, `s` |-> `s`, `a` |-> `w`,
+    `dst` |-> `dst`, `p` |-> `a`, `x` |-> `x`, `b` |-> `b`, `sz` |-> `sz`,
+    `G` |-> `G`, `tn` |-> `tn`, `lo` |-> `lo`, `ctx` |-> `ctx`,
+    `fn` |-> `fn`, `PG` |-> `PG`, `D` |-> `D`, `iid` |-> `st.cs_next_id`]
+    prefix_canonical_noclamp_certificate) >>
+  simp[LET_THM] >> strip_tac >>
+  `emitted_insts st st' = [i;j]` by simp[Abbr `i`, Abbr `j`] >>
+  qpat_assum `emitted_insts st st' = [i;j]` (fn th => once_rewrite_tac[th]) >>
+  qspecl_then [`[i;j]`,`s`,`\n. if n=0 then s else if n=1 then l else t`,
+    `\n. if n=0 then G else H`, `\n. if n=0 then tn else if n=1 then q else r`]
+    (MATCH_MP_TAC o SRULE [] o Q.SPEC `[]` o Q.GEN `ys`)
+    prefix_trace_inst_seq_ptr >>
+  simp[Abbr `i`, Abbr `j`, mk_inst_def, inst_seq_ptr_def] >>
+  qx_gen_tac `k` >> strip_tac >>
+  qpat_x_assum `!fuel n. _` (qspecl_then [`0`,`k`] mp_tac) >>
+  simp[Abbr `l`, Abbr `t`, Abbr `q`, Abbr `r`, Abbr `H`, mk_inst_def]
 QED
 
 Theorem prefix_scalar_noclamp_ghost:
