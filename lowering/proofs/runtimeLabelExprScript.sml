@@ -492,3 +492,114 @@ Resume rb_compile_builtin_dispatch_body[hashing]:
   gen_tac >> strip_tac >> irule rb_as_stack_val >> simp[rb_emit_op]
 QED
 Finalise rb_compile_builtin_dispatch_body
+
+Theorem rb_compile_expr_body:
+  rb_env_ok ce /\
+  (!env ty e. rb_env_ok env ==> rb_step rb_value_ok (cfn env ty e)) /\
+  (!env ret_ty ty bi args. rb_env_ok env ==> rb_step rb_value_ok (bfn env ret_ty ty bi args)) /\
+  (!env vv_ty ty tb ret_ty args. rb_env_ok env ==> rb_step rb_value_ok (tfn env vv_ty ty tb ret_ty args)) ==>
+  rb_step rb_value_ok (compile_expr_body cfn bfn tfn ce ty e)
+Proof
+  strip_tac >> Cases_on `e` >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  pure_rewrite_tac[compile_expr_body_def, LET_THM] >> BETA_TAC >>
+  simp_tac (srw_ss()) []
+  >~ [`compile_literal_vv`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_literal_vv])
+  >~ [`compile_name_vv`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_name_vv])
+  >~ [`compile_subscript`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_subscript])
+  >~ [`compile_attribute`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_attribute])
+  >~ [`compile_call`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> irule rb_compile_call >> simp[rb_abi_encode, rb_abi_decode])
+  >~ [`rb_step rb_value_ok (\st. tfn _ _ _ _ _ _ st)`] >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[])
+  >~ [`compile_struct_lit`] >- suspend "struct"
+  >~ [`compile_dynarray_pop`] >- suspend "pop"
+  >~ [`lower_value`] >- suspend "ifexp"
+  >~ [`FLOOKUP ce.ce_module_vars`] >- suspend "top"
+  >~ [`ce.ce_flag_member_id`] >- simp[rb_step_def, rb_value_ok_def, rb_operand_ok_def]
+  >> suspend "builtin"
+QED
+Resume rb_compile_expr_body[builtin]:
+  Cases_on `b` >> simp[] >>
+  namedCases_on `l` ["", "a0 xs0"] >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[] >>
+  Cases_on `a0` >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[] >>
+  namedCases_on `xs0` ["", "a1 xs1"] >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[] >>
+  Cases_on `a1` >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[] >>
+  namedCases_on `xs1` ["", "a2 xs2"] >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_powmod256_names] >>
+  Cases_on `a2` >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[] >>
+  Cases_on `xs2` >> simp[] >>
+  CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+  simp[cj 1 rb_compile_mod_names, cj 2 rb_compile_mod_names]
+QED
+
+Resume rb_compile_expr_body[struct]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_buffer_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_alloc_buffer]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_struct_lit >> gvs[rb_buffer_ok_def]) >>
+  simp[rb_step_def, rb_value_ok_def, rb_base_ptr]
+QED
+Resume rb_compile_expr_body[pop]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok o FST` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> irule rb_compile_get_target_ptr >> simp[]) >>
+  gen_tac >> strip_tac >> pairarg_tac >> gvs[] >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_dynarray_pop >> gvs[rb_env_ok_def]) >>
+  simp[rb_step_def, rb_value_ok_def, rb_mk_ptr]
+QED
+
+Resume rb_compile_expr_body[top]:
+  rpt CASE_TAC >> simp[]
+  >>~- ([`rb_step rb_value_ok (\st. (LocatedValue _ _,st))`],
+    simp[rb_step_def, rb_value_ok_def, rb_mk_ptr, rb_operand_ok_def]) >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_inst])) >>
+  simp[rb_step_def, rb_value_ok_def, rb_operand_ok_def]
+QED
+Resume rb_compile_expr_body[ifexp]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_fresh_var]) >>
+  gen_tac >>
+  ntac 3 (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `(\l. rb_operand_ok (Label l))` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[SRULE [rb_operand_ok_def] rb_fresh_label])) >>
+    gen_tac >> strip_tac) >>
+  ntac 2 (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+      simp[rb_emit_inst, rb_new_block, rb_operand_ok_def])) >> gen_tac) >>
+  ntac 2 (
+    ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+      (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[])) >>
+    gen_tac >> strip_tac >>
+    ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+      (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+    (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_compile_ifexp_arm])) >>
+    gen_tac >> strip_tac >>
+    ntac 3 (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+      (Q.ISPEC `K T` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+      (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+        simp[rb_emit_inst, rb_new_block, rb_operand_ok_def])) >> gen_tac)) >>
+  Cases_on `is_word_type (expr_type (IfExp t e' e0 e1))` >>
+  simp[rb_step_def, rb_value_ok_def, rb_mk_ptr, rb_operand_ok_def]
+QED
+
+Finalise rb_compile_expr_body
