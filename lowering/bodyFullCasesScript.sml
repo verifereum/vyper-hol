@@ -12,7 +12,7 @@ Ancestors
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
-  bodyFullBuiltinWord bodyFullExprGeneric
+  bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
@@ -729,7 +729,7 @@ Proof
       supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
-(* Admitted: the joint twin of body_send_case_ptr_at (bodyPtrCallCases). *)
+(* The send operands and CALL/ASSERT suffix share the joint witness. *)
 Theorem body_send_case_full:
   !cx v12 has_gas es v13.
     (!s'' x t.
@@ -738,7 +738,7 @@ Theorem body_send_case_full:
        body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Call v12 (Send has_gas) es v13)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullSendTheory.body_send_case_full
 QED
 
 (* The joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
