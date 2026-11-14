@@ -14,7 +14,8 @@ are coverage gaps, counted separately from divergences. check_contract runs
 through `holbuild run` on bytecode/native/check_programs.sml,
 after the driver brings vyperCheckContractFrontendLib up to date with
 `holbuild build`. Every program that is not a PASS is kept in the output
-directory with its JSON, oracle, native bytes and verdict.
+directory with its JSON, oracle, native bytes and verdict. The exit status
+is non-zero if any program is a divergence or a runner error.
 
 Vyper's bytecode at the pin depends on PYTHONHASHSEED for some programs, so
 the oracle uses seed 0, and a mismatch counts as a divergence only if seeds
@@ -453,11 +454,8 @@ def main():
             vyper_errors[error[0][:100]] += 1
             source.unlink()
     exported = sorted(work.glob("*.hex"))
-    chunks = [[p.with_suffix(".json") for p in exported[i::args.jobs]] for i in range(args.jobs)]
-    with ThreadPoolExecutor(args.jobs) as pool:
-        unchecked = {}
-        for rejects in pool.map(checker_rejects, [c for c in chunks if c]):
-            unchecked.update(rejects)
+    # One checker process: concurrent `holbuild run`s contend for the project lock.
+    unchecked = checker_rejects([p.with_suffix(".json") for p in exported]) if exported else {}
     lines, status = run_native(work)
     with ThreadPoolExecutor(args.jobs) as pool:
         checked = list(pool.map(lambda l: checked_verdict(l, work), lines))
@@ -465,7 +463,7 @@ def main():
     for source in exported:  # programs after a runner crash
         verdicts.setdefault(source.stem, ("runner-error", f"no runner verdict (runner exit {status})"))
     for name, reason in unchecked.items():
-        if verdicts[name][0] != "frontend-gap":
+        if verdicts[name][0] not in ("frontend-gap", "runner-error"):
             verdicts[name] = ("checker-gap", f"{reason[:200]} (runner: {verdicts[name][1] or 'pass'})")
     counts.update(category for category, _ in verdicts.values())
     for name, (category, detail) in verdicts.items():
@@ -489,6 +487,8 @@ def main():
         details = Counter(d.split(" (")[0] for c, d in verdicts.values() if c == category)
         for detail, n in details.most_common(5):
             print(f"{category} x{n}: {detail[:160]}")
+    if counts["divergence"] or counts["runner-error"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
