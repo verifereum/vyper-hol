@@ -1,6 +1,8 @@
 (* Physical scalar conversion runs, independent of horizons and ghosts. *)
 Theory bodyFullConvertScalarRun
 Ancestors
+  bodyFullConvertIntegerRun bodyFullConvertDecimalRun bodyFullConvertAddressFlagRun
+  bodyFullConvertResultTyping
   exprSimConvert convertScalarBytesRun convertScalarEncoding convertScalarFlags
   convertScalarBytes convertScalarOutputs convertScalarDecimalFrag
   bodyPtrTypeBuiltinsIntegerSemantic bodyPtrTypeBuiltinsScalarArithmetic
@@ -251,3 +253,55 @@ Proof
   >- (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
   simp[lookup_var_def]
 QED
+
+Theorem scalar_convert_typed_run:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  evaluate_type (get_tenv cx) src = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tout /\ value_has_type tv v /\
+  (!name n. dst = FlagT name /\ FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) ==>
+    cenv.ce_flag_n_members (nsid_to_string name) = n) /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  eval_operand x s = SOME (typed_val_to_w256 tv v) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ fresh_vars_wrt sa s /\ ~s.vs_halted ==>
+  ((!vout. convert_result cx src dst v = INL vout ==>
+     ?dtv t. evaluate_type (get_tenv cx) dst = SOME dtv /\
+       value_has_type dtv vout /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand out t = SOME (typed_val_to_w256 dtv vout) /\
+       (t with vs_vars := s.vs_vars) = s /\
+       (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)) /\
+   (!exc. convert_result cx src dst v = INR exc ==>
+     (?msg. exc = Error (RuntimeError msg)) /\
+     ?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t))
+Proof
+  strip_tac >>
+  `case convert_result cx src dst v of
+     INL vout => ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand out t = SOME (typed_val_to_w256 tout vout)
+   | INR exc => (?msg. exc = Error (RuntimeError msg)) /\
+       ?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t` by
+    (suspend "dispatch") >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      drule_all scalar_convert_result_typed >> strip_tac >>
+      drule_all scalar_convert_physical_frame >> strip_tac >>
+      simp[]) >>
+  rpt strip_tac >> gvs[]
+QED
+Resume scalar_convert_typed_run[dispatch]:
+  `is_word_type src` by (irule (cj 1 scalar_source_word_types) >> simp[] >>
+    qexistsl [`dst`, `get_tenv cx`] >> simp[]) >>
+  Cases_on `src` >> gvs[is_word_type_def]
+  >- (Cases_on `b`
+      >- (irule scalar_integer_source_run >> simp[] >> metis_tac[])
+      >- (irule scalar_integer_source_run >> simp[] >> metis_tac[])
+      >- (irule scalar_decimal_bool_source_run >> simp[] >> metis_tac[])
+      >- (irule scalar_decimal_bool_source_run >> simp[] >> metis_tac[])
+      >- gvs[is_bytestring_type_def]
+      >- (Cases_on `b'` >> gvs[is_bytestring_type_def] >>
+          irule scalar_fixed_source_run >> simp[is_bytestring_type_def] >> metis_tac[]) >>
+      irule scalar_address_flag_source_run >> simp[] >> metis_tac[]) >>
+  irule scalar_address_flag_source_run >> simp[] >> metis_tac[]
+QED
+Finalise scalar_convert_typed_run
