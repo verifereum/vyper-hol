@@ -213,8 +213,9 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   rewrite_tac[eval_expr_convert_action, bind_assoc] >>
   irule forced_vv_then_outcome >>
-  conj_tac >- (rpt strip_tac >> BETA_TAC >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  conj_tac >- (rpt strip_tac >> BETA_TAC >> conj_tac
+    >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+    qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[]) >>
   qexists_tac `\tv ee u.
     vv_post ctx func cenv cx e es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv u /\

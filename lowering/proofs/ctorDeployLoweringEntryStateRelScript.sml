@@ -45,7 +45,8 @@ Proof
  rpt gen_tac >>
  simp[deploy_state_rel_def, gas_variant_def, deploy_entry_state_def,
       entry_venom_state_def, init_venom_state_def] >> strip_tac >>
- gvs[venom_state_component_equality, call_ctx_rel_def, tx_block_fields_rel_def] >>
+ gvs[venom_state_component_equality, call_ctx_rel_def, tx_block_fields_rel_def,
+     tx_env_ok_def] >>
  qpat_x_assum `_ = vs.vs_call_ctx` (assume_tac o GSYM) >>
  qpat_x_assum `_ = vs.vs_tx_ctx` (assume_tac o GSYM) >>
  qpat_x_assum `_ = vs.vs_block_ctx` (assume_tac o GSYM) >> simp[]

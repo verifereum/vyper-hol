@@ -67,7 +67,7 @@ Theorem ctor_source_entry_context:
   ~tx.is_static
 Proof
   simp[deploy_state_rel_def, deploy_entry_state_def, entry_venom_state_def,
-       call_ctx_rel_def, tx_block_fields_rel_def] >>
+       call_ctx_rel_def, tx_block_fields_rel_def, tx_env_ok_def] >>
   rpt strip_tac >> gvs[]
 QED
 
