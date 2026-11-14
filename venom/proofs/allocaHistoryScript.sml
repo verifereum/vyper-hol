@@ -183,7 +183,7 @@ Proof
   simp[alloca_history_def, update_var_def] >> metis_tac[]
 QED
 
-Theorem history_nonalloca_advance[local]:
+Theorem history_nonalloca_advance:
   !func s bb inst.
     alloca_history func s /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
