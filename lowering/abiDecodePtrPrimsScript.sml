@@ -6,6 +6,7 @@ Ancestors
   abiDecoderRange bodyPtrBopScalarCompile
   abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv freshWrites
   list rich_list pred_set venomInst arithmetic
+  abiDecoderComplexHead bodyPtrBopScalarSeq
 
 Theorem abi_decode_range_scalar:
   compile_abi_decode_range_check src e hi st = ((),st') /\
@@ -133,4 +134,21 @@ Proof
      drule inst_extends_emit_op >> simp[inst_extends_def]) >>
   qexists_tac `B` >> simp[] >> irule bop_scalar_seq_append >>
   qexists_tac `e INSERT A` >> simp[]
+QED
+
+Theorem abi_decode_complex_guard_scalar:
+  abi_decode_complex_head_guard pos hi n sa = ((),sb) /\
+  pos IN A /\ hi IN A /\ (!w. Lit w IN A) /\
+  (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?B. bop_scalar_seq R A (emitted_insts sa sb) B
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_complex_head_guard_def, comp_return_def] >>
+      rpt strip_tac >> gvs[emitted_insts_def, DROP_LENGTH_NIL] >>
+      qexists_tac `A` >> simp[]) >>
+  simp[abi_decode_complex_head_guard_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  qpat_assum `emit_op ADD _ _ = _`
+    (mp_then Any mp_tac abi_decode_complex_header_scalar) >>
+  disch_then drule >> simp[]
 QED

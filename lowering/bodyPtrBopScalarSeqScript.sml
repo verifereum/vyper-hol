@@ -1,6 +1,6 @@
 Theory bodyPtrBopScalarSeq
 Ancestors
-  bodyPtrBopScalarStep bodyPtrBopAssert fragGasSeqPtr exprLoweringProps
+  bodyPtrBopScalarStep bodyPtrBopAssert fragGasSeqPtr fragExecMem exprLoweringProps
   instIdxIndep ptrDiscipline venomExecSemantics venomInst venomState finite_map list pred_set
 
 (* A static availability certificate is needed in addition to inst_seq_ptr:
@@ -54,6 +54,24 @@ Theorem bop_scalar_seq_opcodes:
 Proof
   Induct >> simp[Once bop_scalar_seq_def] >> rpt strip_tac >>
   gvs[mk_inst_def, MEM, is_terminator_def] >> metis_tac[]
+QED
+
+Theorem bop_scalar_seq_memory_checks:
+  !code R A B. bop_scalar_seq R A code B ==>
+  EVERY (\i. i.inst_opcode <> ALLOCA /\
+    !s. inst_mem_below_frontier i s /\ inst_dload_in_section i s) code
+Proof
+  Induct >> simp[Once bop_scalar_seq_def] >> rpt strip_tac >>
+  gvs[mk_inst_def, MEM] >>
+  simp[instMemFrontierTheory.below_frontier_no_ranges,
+    memSafeRunTheory.inst_dload_in_section_other] >> metis_tac[]
+QED
+
+Theorem bop_scalar_seq_mem_ok:
+  bop_scalar_seq R A code B ==> run_inst_seq_mem_ok code s
+Proof
+  strip_tac >> irule run_inst_seq_mem_ok_every >>
+  drule bop_scalar_seq_memory_checks >> simp[EVERY_CONJ]
 QED
 
 Theorem bop_scalar_available_step:

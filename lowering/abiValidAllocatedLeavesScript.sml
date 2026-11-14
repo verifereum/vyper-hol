@@ -9,6 +9,7 @@ Ancestors
   abiDecoderTypedContract abiDecoderBytesTyped
   abiValidAllocatedResource abiValidBytesReentry abiDecoderBytesFrame
   abiDecoderSequenceReach abiDecoderLoop emitHelperProps instIdxIndep venomInst
+  fragExec venomExecSemantics
   abiDecoderTypedCompose abiMalformedSiteFrame
   abiDecoderPrimitiveMemory abiDecoderWordTyped abiDecoderCoherence abiDecoderReentryPointer abiDecoderClampedWord
   abiMalformedConstructorInduction abiValidStatic vyperABIValid contractABI
@@ -72,7 +73,7 @@ Proof
    qexists_tac `L` >> simp[] >> decide_tac)
 QED
 
-Theorem abi_valid_allocated_bytes_reach:
+Theorem abi_valid_allocated_bytes_run:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
   abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
@@ -80,7 +81,9 @@ Theorem abi_valid_allocated_bytes_reach:
       d (type_memory_bytes ce ty) s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op t = SOME w)
+      eval_operand op t = SOME w) /\
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_valid_allocated_bytes_input >> strip_tac >>
@@ -116,6 +119,12 @@ Proof
   `abi_valid_allocated_frame (abi_malformed_scratch_sites st en func)
       d (type_memory_bytes ce ty) s actual` by
     (irule abi_valid_allocated_frame_scratch_free >> simp[]) >>
+  `run_inst_seq (emitted_insts st en) s =
+     OK (actual with vs_inst_idx := s.vs_inst_idx)` by
+    (`EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st en)` by
+       fs[EVERY_MEM] >>
+     qspecl_then [`emitted_insts st en`, `s`, `s.vs_inst_idx`]
+       mp_tac run_inst_seq_inst_idx >> simp[exec_result_map_def]) >>
   qexists_tac `t` >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   qhdtm_assum `abi_malformed_resource_post`
@@ -127,6 +136,19 @@ Proof
     abi_valid_allocated_frame_def, abi_malformed_site_range_def] >>
   qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   conj_tac >- fs[fresh_vars_wrt_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_valid_allocated_bytes_reach:
+  (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
+    st en base_op hi src dst B L xs p d dstid live ceiling s ==>
+  ?t. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
+      d (type_memory_bytes ce ty) s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w)
+Proof
+  metis_tac[abi_valid_allocated_bytes_run]
 QED
 
 Theorem abi_valid_allocated_primitive_input:
@@ -167,7 +189,7 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem abi_valid_allocated_primitive_reach:
+Theorem abi_valid_allocated_primitive_run:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
@@ -175,7 +197,9 @@ Theorem abi_valid_allocated_primitive_reach:
       d (type_memory_bytes ce ty) s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op t = SOME w)
+      eval_operand op t = SOME w) /\
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_valid_allocated_primitive_input >> strip_tac >>
@@ -214,6 +238,13 @@ Proof
   `abi_valid_allocated_frame (abi_malformed_scratch_sites st en func)
       d (type_memory_bytes ce ty) s actual` by
     (irule abi_valid_allocated_frame_scratch_free >> simp[]) >>
+  `run_inst_seq (emitted_insts st en) s =
+     OK (actual with vs_inst_idx := s.vs_inst_idx)` by
+    (`EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st en)` by
+       fs[EVERY_MEM] >>
+     qspecl_then [`emitted_insts st en`, `s`, `s.vs_inst_idx`]
+      mp_tac run_inst_seq_inst_idx >>
+     simp[exec_result_map_def]) >>
   qexists_tac `t` >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   qhdtm_assum `abi_malformed_resource_post`
@@ -225,4 +256,17 @@ Proof
     abi_valid_allocated_frame_def, abi_malformed_site_range_def] >>
   qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   conj_tac >- fs[fresh_vars_wrt_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_valid_allocated_primitive_reach:
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
+    st en base_op hi src dst B L xs p d dstid live ceiling s ==>
+  ?t. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
+      d (type_memory_bytes ce ty) s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w)
+Proof
+  strip_tac >> drule_all abi_valid_allocated_primitive_run >> metis_tac[]
 QED

@@ -8,6 +8,33 @@ Ancestors
   venomExecSemantics venomInst words arithmetic finite_map emitHelper compileEnv fragGasPathPtr
   exprSimAccounts freshWrites fragExec stateFrame fragGasSeqPtr
   abiDecodePtrEmit assignTuplePtrCopyLen
+  fragExecMem instMemFrontier
+
+Theorem abi_decode_relative_load_mem_ok:
+  compile_abi_dec_addr (Var src) pos sa = (addr,sb) /\
+  emit_op MLOAD [addr] sb = (value,sc) /\
+  lookup_var src s = SOME b /\ eval_operand pos s = SOME (n2w p) /\
+  w2n b + p < dimword(:256) /\
+  w2n b + p + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sc) s
+Proof
+  strip_tac >>
+  `emit_op ADD [Var src;pos] sa = (addr,sb)` by
+    fs[compile_abi_dec_addr_def] >>
+  qpat_assum `emit_op ADD _ _ = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  qpat_assum `emit_op MLOAD _ _ = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc` by
+    (irule emitted_insts_append >> simp[]) >>
+  `w2n (b + n2w p) = w2n b + p` by
+    (irule w2n_add_n2w_lt >> simp[]) >>
+  gvs[] >>
+  simp[run_inst_seq_mem_ok_def, below_frontier_no_ranges,
+    memSafeRunTheory.inst_dload_in_section_other,
+    step_inst_base_def, mk_inst_def, exec_pure2_def, exec_read1_def, eval_operand_def,
+    below_frontier_MLOAD, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
 
 Theorem abi_decode_ptr_relative_window:
   abi_decode_ptr_window G tn s src b h /\

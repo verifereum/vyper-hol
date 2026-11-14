@@ -12,6 +12,7 @@ Ancestors
   words arithmetic rich_list exprSimAccounts abiDecodePtrNormalized venomInst instIdxIndep
   abiDecodePtrContinuation assignTuplePtrCopyLen calldataWordLive abiDecoderReentry
   exprPtrUnwrapEndpointFrames exprPtrUnwrapPostFrames abiDecodePtrWordRuntimeFrame
+  fragExecMem instMemFrontier stateFrame
 
 Theorem abi_decode_clamp_scalar:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\ value IN A /\
@@ -168,6 +169,55 @@ Resume abi_decode_word_phases[code]:
 QED
 
 Finalise abi_decode_word_phases
+
+Theorem abi_decode_word_mem_ok:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecPrimWord clamp) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ not_fresh_at sa dst /\
+  abi_decode_ptr_window G tn s src b h /\
+  lookup_var dst s = SOME d /\
+  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
+  p+32 <= h /\ w2n b+h < dimword(:256) /\
+  w2n b+h <= s.vs_alloca_next /\ w2n d+32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> drule abi_decode_word_phases >>
+  disch_then (qx_choose_then `addr` (qx_choose_then `value`
+    (qx_choose_then `c1` (qx_choose_then `c2` (qx_choose_then `c3`
+      (qx_choose_then `B` strip_assume_tac)))))) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all abi_decode_ptr_relative_load >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `run_inst_seq_mem_ok (emitted_insts sa c2) s` by
+    (irule abi_decode_relative_load_mem_ok >>
+     goal_assum (drule_at (Pat `compile_abi_dec_addr _ _ _ = _`)) >>
+     qexistsl_tac [`b`, `p`, `value`] >> simp[] >>
+     fs[abi_decode_ptr_window_def] >> decide_tac) >>
+  `lookup_var dst t = SOME d` by metis_tac[] >>
+  `t.vs_alloca_next = s.vs_alloca_next` by
+    fs[state_frame_def, venom_state_component_equality] >>
+  `not_fresh_at c2 dst` by metis_tac[not_fresh_at_mono] >>
+  qpat_x_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `u` >> strip_tac >>
+  `u = t with vs_inst_idx := s.vs_inst_idx` by metis_tac[exec_result_11] >>
+  pop_assum SUBST_ALL_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- (irule bop_scalar_seq_mem_ok >> goal_assum (drule_at Any)) >>
+  qx_gen_tac `v` >> strip_tac >>
+  drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
+  `lookup_var dst v = SOME d /\ v.vs_alloca_next = s.vs_alloca_next` by
+    (conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
+     qpat_assum `v = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_mem_ok_last, SRULE [mk_inst_def] below_frontier_MSTORE,
+    memSafeRunTheory.inst_dload_in_section_other, mk_inst_def,
+    eval_operand_def] >> metis_tac[]
+QED
 
 Theorem abi_decode_word_success_ptr:
   compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
