@@ -4,6 +4,7 @@ Theory msgGasFull
 Ancestors
   (* Checked builtin leaves pending body-case assembly. *)
   bodyFullBuiltinPrecompileRecoveryArgs bodyFullBuiltinPrecompileRecoveryBuffers
+  bodyFullBuiltinECRecover
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
