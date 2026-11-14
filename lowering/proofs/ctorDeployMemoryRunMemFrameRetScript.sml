@@ -14,6 +14,7 @@ Ancestors
   fragExecMem memSafeRun fragGasPathMem fragExec gasCount instIdxIndep
   list rich_list entrySinkExtraction compileEnv loweringStateRelDefs loweringHalt ctorReturnFrame bodySim unitTransformDefs stmtSimDefs stmtSimProps
   stmtLowering gasOutcome gasSummary fragGasMode loweringPosts vyperInterpreter
+  gasStorage vyperStorageFootprint
 
 Theorem constructor_mem_seq_split:
   !pre post s mid.
@@ -134,7 +135,9 @@ Theorem constructor_exit_zero_path_mem:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+          storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+          nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
   stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
@@ -197,15 +200,15 @@ Theorem constructor_return_none_frag_mem:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st_exit = ((), st_epilogue) /\
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
-  fn_has_code st_exit st_final func /\ rt + cap < dimword(:256) /\
-  (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+  fn_has_code st_exit st_final func /\ rt + cap < dimword(:256) /\ ~nr /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
-  stmt_frag_mem NONE ctx func cx lctx (\v es r. T) body_cenv
+  stmt_frag_mem NONE ctx func cx lctx (\H v es r. T) body_cenv
     (stmt_env body_cenv lctx NoneT (Return NONE))
     (eval_stmt cx (Return NONE)) es
 Proof
   strip_tac >>
+  `nr = F` by fs[] >> pop_assum SUBST_ALL_TAC >>
   `body_cenv.ce_is_ctor /\ body_cenv.ce_return_pc = NONE /\
    body_cenv.ce_ctor_exit_label = SOME exit_lbl` by
     gvs[same_frame_def, compile_env_component_equality] >>
@@ -218,19 +221,32 @@ Proof
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           emitHelperTheory.emit_inst_def, fresh_id_def, emit_def] >>
      strip_tac >> gvs[]) >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_bad_storage_at_def, Once evaluate_def,
+           vyperStateTheory.raise_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+     es.storage_trace` by fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func body_cenv
+     cx es (jump_to exit_lbl s0)` by
+    (simp[stmt_state_rel_jump_to] >> metis_tac[]) >>
   `gas_path_mem ctx func s0 0 (OK (jump_to exit_lbl s0))` by
     (irule emit_jump_zero_path_mem >> simp[] >>
      qexistsl_tac [`sa`, `sb`] >> simp[]) >>
-  `stmt_state_rel H ctx func body_cenv cx es (jump_to exit_lbl s0)` by
-    simp[stmt_state_rel_jump_to] >>
   `~(jump_to exit_lbl s0).vs_halted /\
    (jump_to exit_lbl s0).vs_current_bb = st_exit.cs_current_bb /\
    (jump_to exit_lbl s0).vs_inst_idx = 0` by simp[jump_to_def] >>
+  `F ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+     storage_locks_separated (FST (storage_trace_horizon es.storage_trace))
+       (SND (storage_trace_horizon es.storage_trace)) /\
+     MEM nkey (SND (storage_trace_horizon es.storage_trace)) /\
+     nkey < dimword (:256)` by simp[] >>
   `?final. gas_path_mem ctx func (jump_to exit_lbl s0) 0 (Halt final)` by
     (drule_all constructor_exit_zero_path_mem >> simp[]) >>
   `gas_path_mem ctx func s0 0 (Halt final)` by
     (drule_all gas_path_mem_then >> simp[]) >>
-  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `Halt final`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
@@ -248,13 +264,11 @@ Theorem constructor_frame_ret_ok_mem:
     compile_constructor_epilogue runtime_size immutables_len imm
       st_epilogue = ((), st_final) /\
     fn_has_code st_exit st_final func /\
-    runtime_size + immutables_len < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe cx /\
-            cx.nonreentrant_slot = SOME nkey) /\
+    runtime_size + immutables_len < dimword(:256) /\ ~nr /\
     (immutables_len <> 0 ==>
       cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
-    frame_ret_ok_mem NONE ctx func cx (\v es r. T) cenv NoneT
+    frame_ret_ok_mem NONE ctx func cx (\H v es r. T) cenv NoneT
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_mem_def] >> rpt gen_tac >> strip_tac >>

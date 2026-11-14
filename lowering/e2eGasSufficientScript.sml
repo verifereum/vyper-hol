@@ -41,7 +41,7 @@ Ancestors
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv
-  asmOptimizer callTrace
+  asmOptimizer callTrace sourceUnitExecution sourceUnitExitSafe exprSimHypsDefs
   e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployDead ctorDeployRunBounded ctorDeployImmBudget
@@ -93,13 +93,48 @@ Proof
   fs[add_frame_gas_wf_state, add_frame_gas_fields, add_frame_gas_bounded]
 QED
 
+(* ===== The gas theorems' exemptions ===== *)
+
+(* The correctness exemptions, plus a source run that stops on an oversized
+   CREATE initcode: the EVM answers that CREATE with OutOfGas at every gas
+   limit (EIP-3860), so no gas is enough. *)
+Definition gas_source_exempt_def:
+  gas_source_exempt tops
+    (src : (value + exception) # abstract_machine # call_request list) <=>
+    source_exempt tops src \/
+    FST src = INR (Error (RuntimeError "create initcode too large"))
+End
+
+Definition deploy_gas_source_exempt_def:
+  deploy_gas_source_exempt tops
+    (src : (abstract_machine # call_request list) + exception) <=>
+    deploy_source_exempt tops src \/
+    src = INR (Error (RuntimeError "create initcode too large"))
+End
+
 (* ===== The call cases ===== *)
+
+(* PLANNED ADMISSION: the runtime unit S7g runs reaches no oversized CREATE.
+   supported_program's body_stmt_safe excludes CreateTarget, so the lowering
+   emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
+   holds at every state. *)
+Theorem o1_runtime_unit_create_size_ok:
+  !tops rpolicy unit out vs.
+    supported_program tops /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out
+    ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
+Proof
+  cheat
+QED
 
 (* vyper_call_correct's hypotheses.  The two that range over the call
    trace, and so over what the callees do with the gas they get, are
-   stated at the new gas.  ~source_exempt is S3's: on the exempt inputs
-   (malformed data to a dynamic abi_decode) the compiled code may read at
-   any offset, so no gas is enough.  It is stated for every list of GAS
+   stated at the new gas.  ~gas_source_exempt is S3's ~source_exempt (on
+   the exempt inputs, malformed data to a dynamic abi_decode, the compiled
+   code may read at any offset, so no gas is enough) plus no oversized
+   CREATE initcode.  It is stated for every list of GAS
    observations, since the source run S4 relates the compiled run to may
    read other GAS values than the EVM run does. *)
 Theorem vyper_call_gas_sufficient_identity:
@@ -107,23 +142,26 @@ Theorem vyper_call_gas_sufficient_identity:
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?g. !g'.
       g <= g' /\
-      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
+      (!gs. source_storage_ok am tx
+              (MAP SND (call_trace (add_frame_gas g' es))) gs /\
+            call_outcomes_storage_ok am tx
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+      (!obs. ~gas_source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
+  PURE_REWRITE_TAC [frame_raises_inst_raises] >>
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
@@ -155,12 +193,20 @@ Proof
   qspecl_then [`rpolicy`, `out.po_unit`, `cplan`, `prog`, `fuel'`, `M`]
     mp_tac codegen_gas_sufficient >>
   impl_tac >- simp[] >> disch_then (qx_choose_then `g` assume_tac) >>
+  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+          out.po_unit.cu_context vs` by
+    metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
   (* the entry state at the new gas, as in vyper_call_correct *)
   `call_state_rel tops (assemble prog) am tx (add_frame_gas g' es)` by
     simp[call_state_rel_add_frame_gas] >>
-  `call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es)))` by
-    metis_tac[call_state_rel_call_outcomes_ok] >>
+  `outcomes_accounts_typed
+     (SOME (MAP SND (call_trace (add_frame_gas g' es))))` by
+    (`wf_state (add_frame_gas g' es) /\
+      balance_bounded (2 ** 256 - 1) (add_frame_gas g' es) /\
+      returndata_bounded (add_frame_gas g' es)` by fs[call_state_rel_def] >>
+     drule_all call_trace_outcomes_bounded >>
+     simp[outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
   `wf_state es` by fs[call_state_rel_def] >>
   qpat_x_assum `call_state_rel _ _ _ _ es` kall_tac >>
   qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
@@ -183,14 +229,17 @@ Proof
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >>
      gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
-  qabbrev_tac `D = external_call_dead tx
-                     (call_external (SOME vs.vs_outcomes) [] am tx)` >>
-  `dead_wf D` by simp[Abbr`D`, external_call_dead_wf] >>
-  (* every input state S4 may pick: a gas variant of vs *)
+  (* the all-dead set: S4 and S6b need only its well-formedness and the
+     taint within it *)
+  qabbrev_tac `Du = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+                       d_imm := K UNIV; d_ret := K UNIV |>` >>
+  `dead_wf Du` by simp[Abbr`Du`, dead_wf_def] >>
+  (* every gas variant of vs: S1's certificate at its own marks is on its
+     exit arm, which gives the runs S3's bridges take *)
   `!vi. gas_variant vi vs ==>
         raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline 0 unit.cu_context vi /\
-        taint_within D unit.cu_context vi /\
+        taint_within Du unit.cu_context vi /\
         mem_inv dload_offset_ok unit.cu_context vi /\
         mem_inv dload_headroom_ok unit.cu_context vi /\
         terminates (run_context fuel unit.cu_context vi)` by
@@ -203,30 +252,50 @@ Proof
      `vi.vs_call_ctx = vs.vs_call_ctx` by
        (irule gas_variant_call_ctx >> simp[]) >>
      `valid_vyper_call tops tx vi.vs_call_ctx.cc_calldata ret /\
-      call_outcomes_ok am tx vi.vs_outcomes /\
+      outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+      (!marks.
+         source_storage_ok am tx vi.vs_outcomes
+           (gas_explicit marks vi.vs_gas_readings) /\
+         call_outcomes_storage_ok am tx vi.vs_outcomes
+           (gas_explicit marks vi.vs_gas_readings)) /\
       !marks. ~source_exempt tops
         (call_external (SOME vi.vs_outcomes)
-           (gas_explicit marks vi.vs_gas_readings) am tx)` by simp[] >>
+           (gas_explicit marks vi.vs_gas_readings) am tx)` by
+       fs[gas_source_exempt_def] >>
      `code_layout_valid vi` by
        (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
         fs[o1_run_state_ok_def]) >>
-     drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
-     `mem_inv dload_offset_ok unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
-        qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> gvs[]) >>
-     `mem_inv dload_headroom_ok unit.cu_context vi` by
-       (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
-     gvs[Abbr`D`] >>
-     qpat_x_assum `!vs. _ ==> terminates (run_context fuel _ _)` irule >>
-     simp[]) >>
+     `terminates (run_context fuel unit.cu_context vi)` by
+       (qpat_x_assum `!vs. _ ==> terminates (run_context fuel _ _)` irule >>
+        simp[]) >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vi`] mp_tac
+       lower_vyper_runtime_unit_correct >>
+     impl_tac >- simp[] >>
+     simp[source_unit_execution_correct_def] >> strip_tac >>
+     drule source_unit_exit_safe_runs >>
+     disch_then (qspec_then `rpolicy` mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vi`, `func`,
+                  `"__entry"`,
+                  `cx_dead H (initial_evaluation_context am.sources
+                                am.layouts tx NONE)`] mp_tac
+       lower_vyper_runtime_unit_memory_ok >>
+     impl_tac >- simp[] >> strip_tac >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `vi`, `func`, `"__entry"`] mp_tac
+       lower_vyper_runtime_unit_dload_offset_ok >>
+     impl_tac >- simp[] >> strip_tac >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vi`] mp_tac
+       lower_vyper_runtime_unit_dload_headroom_ok >>
+     impl_tac >- simp[] >> strip_tac >>
+     simp[Abbr`Du`, taint_within_def]) >>
   `venom_run_bounded fuel' M out.po_unit.cu_context vs` by
     (qpat_x_assum `!D vs. _ ==> venom_run_bounded _ _ _ _` irule >>
-     simp[] >> metis_tac[]) >>
+     qexists_tac `Du` >> simp[] >> metis_tac[]) >>
   (* S4's input state, for the codegen obligations *)
-  qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`] mp_tac
+  qspecl_then [`Du`, `0`, `rpolicy`, `unit`, `out`, `vs`] mp_tac
     run_venom_pipeline_correct >>
   impl_tac >- simp[] >> strip_tac >>
-  `ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs /\
+  `ctx_sim Du unit.cu_context out.po_unit.cu_context vs_in vs /\
    o1_lowered_inv out.po_unit.cu_context vs` by
     (qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` irule >> metis_tac[]) >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
@@ -328,7 +397,7 @@ Theorem e2e_deploy_gas_sufficient_identity:
       g <= g' /\
       (!gs. deploy_storage_ok tops am tx
               (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~deploy_source_exempt tops
+      (!obs. ~deploy_gas_source_exempt tops
          (load_contract NONE obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
@@ -364,6 +433,10 @@ Proof
     deploy_frame_gas_sufficient >>
   impl_tac >- fs[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
+  `!obs. ~deploy_source_exempt tops
+     (load_contract NONE obs am tx [(NONE, tops)] [])`
+    by fs[deploy_gas_source_exempt_def] >>
+  qpat_x_assum `!obs. ~deploy_gas_source_exempt _ _` kall_tac >>
   (* the creation frame at the new gas *)
   `deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es)` by
     simp[deploy_state_rel_add_frame_gas] >>
