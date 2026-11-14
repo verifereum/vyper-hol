@@ -18,6 +18,7 @@ QED
 
 
 Theorem nonreentrant_entry_lock_source_correct:
+  (~(mut = View) ==> ~cx.txn.is_static) /\
   storage_locks_separated (FST H) (SND H) /\
   MEM global_nonreentrant_slot (SND H) /\
   global_nonreentrant_slot < dimword (:256) /\
@@ -71,6 +72,7 @@ QED
 
 (* The source uses this same action on fall-through and ReturnException. *)
 Theorem nonreentrant_entry_unlock_source_correct:
+  (~(mut = View) ==> ~cx.txn.is_static) /\
   layouts_agree tops am tx /\
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
@@ -98,6 +100,7 @@ QED
    buffers, so the simulation can continue into the guarded body. *)
 
 Theorem checked_nonreentrant_entry_lock:
+  (~(mut = View) ==> ~cx.txn.is_static) /\
   storage_locks_separated (FST H) (SND H) /\
   MEM global_nonreentrant_slot (SND H) /\
   global_nonreentrant_slot < dimword (:256) /\
@@ -122,7 +125,8 @@ Proof
   strip_tac >>
   `function_header_ok vis mut T rr name args dflts ret` by
     metis_tac[source_typing_function_header] >>
-  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
+  `~(mut = View) ==> ~ss.vs_call_ctx.cc_static` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   drule_all nonreentrant_entry_lock_source_correct >> strip_tac >>
   drule_all compile_nonreentrant_lock_transient_frame >> strip_tac >>
   gvs[] >> metis_tac[]
