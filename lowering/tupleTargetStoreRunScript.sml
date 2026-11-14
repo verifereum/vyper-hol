@@ -10,7 +10,7 @@ Ancestors
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
   emitHelper emitHelperProps compileEnv loweringStateRelDefs list finite_map
   tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingDefs valueEncodingProps vyperTyping stmtLoweringMono
-  vyperInterpreter freshWrites memoryValueEncoding
+  vyperInterpreter vyperStorageBackend freshWrites memoryValueEncoding
 
 Theorem tuple_store_word_step:
   !cenv ty tys bt gs op ops st sp sf dst loc vt.
@@ -53,7 +53,10 @@ Theorem tuple_storage_store_head_path:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~cx.txn.is_static` by
+    (Cases_on `cx.txn.is_static` >> gvs[write_storage_slot_eq]) >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   `gas_marked_path F ctx func s 0
     (OK ((if tr then tstore slot (typed_val_to_w256 tv v) s
@@ -702,8 +705,12 @@ Proof
   `value_has_type tv v /\ val_wf tv v` by
     (qpat_x_assum `ih :- _` kall_tac >>
      fs[value_has_type_def, val_wf_def]) >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
-  drule_all tuple_target_list_cons_success >> strip_tac >>
+  qpat_assum `assign_tuple_target_list _ (_::_) _ _ = _`
+    (strip_assume_tac o SRULE [assign_tuple_target_list_cons, AllCaseEqs()]) >>
+  rename1 `assign_tuple_targets cx h v es = (head_res,head_es)` >>
+  Cases_on `head_res` >> full_simp_tac bool_ss [sumTheory.sum_case_def] >>
+  rename1 `assign_tuple_targets cx h v es = (INL head_unit,head_es)` >>
+  Cases_on `head_unit` >>
   drule_all tuple_target_aligned_compiler >> strip_tac >>
   drule tuple_compiler_target_base >>
   disch_then (qx_choose_then `bt` SUBST_ALL_TAC) >>
