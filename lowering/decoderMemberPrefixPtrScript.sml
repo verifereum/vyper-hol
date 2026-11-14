@@ -3,7 +3,7 @@ Theory decoderMemberPrefixPtr
 Ancestors fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem memSafeRun unitTransformDefs codegenRel venomInstProps contextCodegenRel decoderNavigationPtr calldataOverwritePtr calldataClampPtr entryDispatchPtr
   decoderGhostFramePtr fragExecPtr ptrSafeRun ptrDiscipline bodyPtrDefs
   venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs emitHelper fragExec
-  words finite_map pred_set list arithmetic codegenRel instIdxIndep contextCodegenRel
+  words finite_map pred_set list arithmetic instIdxIndep
   emitHelperProps exprLoweringProps abiDecoderLoop ghostPcTransportPtr exprLowering abiEncoder decoderArraySetupPtr
   abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry
 

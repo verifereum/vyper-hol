@@ -16,6 +16,7 @@
  *
  * TOP-LEVEL:
  *   external_entry_joint
+ *   runtime_entry_function_no_phi, entry_path_endpoint_facts
  *)
 Theory externalEntryJoint
 Ancestors

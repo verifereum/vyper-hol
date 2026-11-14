@@ -1,7 +1,7 @@
 (* Source-exact initialized array loop with a synchronized owned child callback. *)
 Theory sourceOwnedArrayLoopPtr
 Ancestors
-  sourceArrayHeaderOriginPtr sourceArrayBackedgeOriginPtr sourceArraySetupOriginPtr
+  sourceArrayHeaderOriginPtr sourceArrayBackedgeOriginPtr
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr fragGasSeqMem fragGasOriginPtr
   calldataDynOwned sourceRecursiveComplexPtr sourceEncodingWindows sourceEncodingLayout
   actualAllocaReplayPtr actualAllocSitesCredit abiDecoderCoherence abiDecoderContract
@@ -503,8 +503,8 @@ Proof
       [`j < LENGTH xs`,`LENGTH xs < dimword (:256)`,
        `DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem`,`u.t_mem = tn.t_mem`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[DISJOINT_DEF, EXTENSION] >> metis_tac[LESS_TRANS]) >>
-  drule_all source_array_setup_origin_ptr >>
-  disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`,`ARB`] strip_assume_tac) >>
+  drule_all (Q.INST [`H` |-> `ARB`] calldata_array_element_setup_endpoint_ptr_origin_core) >>
+  disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`] strip_assume_tac) >>
   rename1 `SND (SND ops) = Var child` >>
   rename1 `op_taint u' (FST ops) = {}` >>
   rename1 `ptr_covers HG u' child _ _` >>

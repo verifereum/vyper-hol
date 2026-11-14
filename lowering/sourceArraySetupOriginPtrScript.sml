@@ -4,7 +4,7 @@ Ancestors decoderArraySetupPtr
 (* Compatibility boundary: preserve the constructive setup witnesses, including
    the joint path under the explicit runtime and memory-frontier premises. *)
 Theorem source_array_setup_origin_ptr:
-  !q src root di abi_sz mem_sz st ops ready initial slot j sb G tn d total t cx ctx PG R H0.
+  !q src root di abi_sz mem_sz st ops ready initial slot j sb G tn d total t cx ctx PG R.
   abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
   lookup_var q initial = SOME (n2w slot) /\ slot + 32 < dimword (:256) /\
   mload slot initial = n2w j /\ j < dimword (:256) /\
@@ -24,7 +24,7 @@ Theorem source_array_setup_origin_ptr:
       (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx) mem_sz /\
     op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
     op_taint u (FST (SND ops)) = {} /\ op_prov H (FST (SND ops)) = NONE /\
-    frag_exec_ptr H0 cx ctx PG st ready
+    frag_exec_ptr cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = initial)
       (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
     t.vs_memory = initial.vs_memory /\
