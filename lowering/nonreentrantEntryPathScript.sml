@@ -160,7 +160,7 @@ Proof
   `run_inst_seq_mem_ok (transient_lock_code nkey iv sa) s` by
     (irule transient_lock_code_memory_checks >> Cases_on `iv` >>
      simp[transient_lock_code_def, mk_inst_def]) >>
-  qexistsl_tac [`u`, `G'`, `tn'`] >> simp[] >> conj_tac
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
   >- (rpt gen_tac >>
       mp_tac (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
         `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`]
