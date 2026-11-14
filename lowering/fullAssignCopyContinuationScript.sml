@@ -1,7 +1,7 @@
 (* The concrete successful continuation of a top-level aggregate store. *)
 Theory fullAssignCopyContinuation
 Ancestors
-  fullAssignCopyStoreEntry fullAssignCopyWrite fullStoreCopyPost
+  fullAssignCopyStoreEntry fullAssignCopyWrite fullStoreCopyPost fullStoreCopyFoldTaint
   fullAssignCopyFacts exprSimSource exprSimHypsDefs bodyExprPreFacts
   vyperTypeSystem vyperTyping bodyPtrDefs loweringPosts loweringStateRelDefs
   vyperStorageTrace vyperStorageFootprint exprLoweringProps stmtLoweringMono fragExec
@@ -196,9 +196,8 @@ Resume topcopy_store_continuation[frames]:
 QED
 
 Resume topcopy_store_continuation[ghost]:
-  irule (INST_TYPE [``:'a`` |-> ``:256``] store_copy_joint_frame_post) >>
-  conj_tac
-  >- (qexists_tac `H` >> simp[] >> suspend "taint") >>
+  irule (INST_TYPE [``:'a`` |-> ``:256``] store_copy_joint_frame_post_at) >>
+  conj_tac >- suspend "taint" >>
   qexistsl_tac [`G1`, `ee`, `t`, `sa`, `tn1`] >>
   simp[IgnAsm `ef = _`] >>
   conj_tac
@@ -210,7 +209,33 @@ Resume topcopy_store_continuation[ghost]:
 QED
 
 Resume topcopy_store_continuation[taint]:
-  FAIL_TAC "live storage taint"
+  `ptr_val_ok cx (post_value_type cenv e) v (Var root) G1 tn1 t /\
+   ptr_buf_ok cenv e (Var root) G1 t /\
+   expr_store_bound cx (expr_type e) v (Var root) t` by metis_tac[] >>
+  drule_all fullAssignCopyComposeTheory.topcopy_store_entry_resources >>
+  disch_then (qspec_then `n2w slot` strip_assume_tac) >> gvs[] >>
+  irule store_copy_fold_stor_taint_ok_at >>
+  qexistsl_tac [`H`, `cenv`, `cx`, `n2w slot`, `ks`, `lo`, `src`, `id`,
+    `w2n sw`, `t`, `[]`, `tn1`, `tr`, `tvt`, `v`, `writes`] >>
+  pure_rewrite_tac[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  simp[] >>
+  `u.vs_call_ctx.cc_address = cx.txn.target` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee t` mp_tac >>
+     simp[NoAsms, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+     metis_tac[]) >>
+  `u.vs_immutables = t.vs_immutables` by
+    (qpat_assum `store_copy_normalize t u = _` mp_tac >>
+     simp[NoAsms, storageCopyBackendFoldTheory.storage_copy_backend_fold,
+       stmtSimStoreCopyTheory.store_copy_normalize_def,
+       venomStateTheory.venom_state_component_equality] >>
+     Cases_on `tr` >> simp[NoAsms] >> strip_tac >> simp[]) >>
+  simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+  `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
+  qpat_assum `!H'. valid_horizon cx st0 H' ee.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  disch_then (mp_tac o CONJUNCT2 o UNDISCH) >>
+  simp[NoAsms, ghost_inv_at_def] >> strip_tac >> simp[] >>
+  metis_tac[]
 QED
 
 Finalise topcopy_store_continuation
