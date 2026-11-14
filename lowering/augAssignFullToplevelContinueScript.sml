@@ -296,162 +296,6 @@ Proof
   simp[] >> fs[stmt_post_def] >> metis_tac[]
 QED
 
-(* Assembly sketch retained for C1.1.4.3.3.
-Theorem augassign_toplevel_continue_full:
-  get_module_code cx src = SOME ts /\
-  find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\
-  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-  evaluate_type (get_tenv cx) ty = SOME tvt /\
-  read_storage_slot cx tr (n2w slot) tvt es = (INL cur,es) /\
-  root_es = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
-  expr_body_pre cenv cx env e root_es /\
-  (!tail. bind (eval_expr cx e) (read_result cx)
-    (root_es with gas_obs := gs ++ tail) = (INL rhs,mid with gas_obs := tail)) /\
-  storage_trace_domain cx st0 mid.storage_trace /\
-  gas_admissible (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
-    (stmt_res_ok lctx) es /\
-  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-  (bop = Exp ==> nonneg_int_literal e) /\
-  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
-  is_word_type ty /\ type_bits ty MOD 8 = 0 /\ value_has_type tvt cur /\
-  word_value cur /\ type_slot_size tvt = 1 /\ well_formed_type_value tvt /\
-  emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
-  lower_value compile_expr cenv ty e s1 = (op,s2) /\
-  compile_binop bop (Var out) op ty NONE
-    (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op,s3) /\
-  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);res_op] s3 = ((),sb) /\
-  fn_has_code s2 s3 func /\ fn_has_code s3 sb func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
-  t = update_var out (if tr then tload (n2w slot) s0 else sload (n2w slot) s0)
-    (s0 with vs_inst_idx := LENGTH s1.cs_current_insts) /\
-  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0 /\
-    FLOOKUP Gload x = FLOOKUP G0 x /\
-    op_taint tnload (Var x) = op_taint tn0 (Var x)) /\
-  tnload.t_mem = tn0.t_mem /\ tnload.t_stor = tn0.t_stor /\
-  tnload.t_trans = tn0.t_trans /\ tnload.t_imm = tn0.t_imm /\
-  return_buf_frame d cenv s1 t /\ ret_pc_ok cenv s1 t /\
-  local_ptrs_reserved cenv s1 /\
-  (!H. valid_horizon cx st0 H root_es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx root_es t /\
-    storage_well_formed_on cx root_es (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx root_es Gload tnload t) /\
-  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-    (s0,G0,tn0) [] (OK t,Gload,tnload)) /\
-  eval_operand (Var out) t = SOME (typed_val_to_w256 tvt cur) /\
-  op_prov Gload (Var out) = NONE /\ op_taint tnload (Var out) = {} /\
-  ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
-  t.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func t /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s0) /\
-  local_ptrs_reserved cenv sa /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  (!H. valid_horizon cx st0 H mid.storage_trace ==>
-    ~u.vs_halted /\
-    expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
-    expr_store_bound cx (expr_type e) rhs op u /\
-    u.vs_current_bb = s2.cs_current_bb /\
-    u.vs_inst_idx = LENGTH s2.cs_current_insts /\
-    alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
-    ghost_inv_at (DF H) lo d cenv cx mid Gr tnr u /\
-    ptr_val_ok cx (post_value_type cenv e) rhs op Gr tnr u /\
-    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op Gr u) /\
-    ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
-    (bind (lift_sum (evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0) tvt bop cur rhs))
-      (write_place cx (StoragePlace tr (n2w slot) tvt)))
-    (mid,u,Gr,tnr)
-    (\H res ee G tn t. ?cenv''.
-      stmt_lands lctx sb res t /\ ~t.vs_halted /\
-      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
-      cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\
-      storage_well_formed_on cx ee (FST H) /\
-      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-        lookup_var x t = SOME w) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-        FLOOKUP t.vs_allocas aid = SOME b) /\
-      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-        op_taint tn (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. !tail.
-      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
-Proof
-  strip_tac >>
-  qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
-  `valid_horizon cx st0 H0 mid.storage_trace` by
-    fs[storage_trace_domain_def, Abbr `H0`] >>
-  `expr_post H0 ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
-   ghost_inv_at (DF H0) lo d cenv cx mid Gr tnr u /\
-   ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr /\
-   ptr_val_ok cx (post_value_type cenv e) rhs op Gr tnr u /\
-   alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
-   u.vs_current_bb = s2.cs_current_bb /\
-   u.vs_inst_idx = LENGTH s2.cs_current_insts` by metis_tac[] >>
-  `bind (eval_expr cx e) (read_result cx) (root_es with gas_obs := gs) =
-    (INL rhs,mid with gas_obs := [])` by
-    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     simp[NoAsms]) >>
-  drule_all augassign_toplevel_rhs_numeric_facts_full >> strip_tac >>
-  `is_word_type (expr_type e)` by
-    metis_tac[well_typed_binop_augassign_word, word_value_type_word] >>
-  `eval_operand (Var out) t = SOME (val_to_w256 cur)` by
-    metis_tac[typed_val_to_w256_word_value] >>
-  drule_all augassign_toplevel_rhs_operands_full >> strip_tac >>
-  `~u.vs_halted` by metis_tac[] >>
-  drule_all augassign_toplevel_operator_endpoint_full >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
-  >- suspend "success" >>
-  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gabort`, `mid`,
-    `Abort Revert_abort (abort_state with vs_inst_idx := abort_idx)`,
-    `INR (Error (RuntimeError msg))`, `tnabort`] >>
-  simp[lift_sum_def, bind_def, raise_def, exit_result_def, stmt_exit_ptr_def,
-    exprSimDefsTheory.expr_exit_def] >> fs[ghost_inv_at_def]
-QED
-
-Resume augassign_toplevel_continue_full[success]:
-  `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
-   s2.cs_next_var <= s3.cs_next_var` by
-    (drule emitted_insts_emit_op >>
-     `ci_mono s1 s2` by metis_tac[ci_mono_lower_value_compile_expr, pairTheory.SND] >>
-     `ci_mono s2 s3` by metis_tac[cj 3 stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND] >>
-     fs[ci_mono_def]) >>
-  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x` by
-    metis_tac[not_fresh_at_mono] >>
-  `!H. valid_horizon cx st0 H mid.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx mid operated /\
-    storage_well_formed_on cx mid (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx mid Gop tnop operated /\
-    return_buf_frame d cenv s3 operated /\ ret_pc_ok cenv s3 operated /\
-    local_ptrs_reserved cenv s3 /\
-    (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
-      op_taint tnop (Var x) = op_taint tn0 (Var x))` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ~u.vs_halted /\ _`
-       (drule_then strip_assume_tac) >>
-     `!x. not_fresh_at sa x ==> FLOOKUP Gload x = FLOOKUP G0 x /\
-       op_taint tnload (Var x) = op_taint tn0 (Var x)` by metis_tac[] >>
-     drule_all augassign_toplevel_rhs_operator_frame_full >> simp[]) >>
-  `stmt_state_rel H0 ctx func cenv cx mid operated` by metis_tac[] >>
-  `alloca_inv u /\ ~cx.txn.is_static /\ ~operated.vs_call_ctx.cc_static /\
-   operated.vs_call_ctx.cc_address = cx.txn.target` by
-    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  Cases_on `write_storage_slot cx tr (n2w slot) tvt result (mid with gas_obs := [])` >>
-  rename1 `write_storage_slot _ _ _ _ _ _ = (store_res,fin)` >>
-  `store_res = INL ()` by
-    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
-     simp[write_storage_slot_eq]) >>
-  pop_assum SUBST_ALL_TAC >>
-  FAIL_TAC "store prepared"
-QED
-
-Finalise augassign_toplevel_continue_full
-
-*)
 
 Theorem augassign_toplevel_success_frames_full:
   emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
@@ -661,3 +505,226 @@ Proof
   qpat_x_assum `!H. valid_horizon _ _ H fin.storage_trace ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >> simp[]
 QED
+
+(* Prepare the concrete and all-horizon frames of a successful scalar update. *)
+Theorem augassign_toplevel_success_prepare_full:
+  emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
+  lower_value compile_expr cenv ty e s1 = (op,s2) /\
+  compile_binop bop (Var out) op ty NONE
+    (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op,s3) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  return_buf_frame d cenv s1 t /\ ret_pc_ok cenv s1 t /\
+  local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0 /\
+    FLOOKUP Gload x = FLOOKUP G0 x /\ op_taint tnload (Var x) = op_taint tn0 (Var x)) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
+    t.vs_alloca_next <= u.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx mid Gr tnr u /\
+    ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr) /\
+  operated = (u with vs_inst_idx := LENGTH s3.cs_current_insts)
+    with vs_vars := operated.vs_vars /\
+  (!x. not_fresh_at s2 x ==> lookup_var x operated = lookup_var x u /\
+    FLOOKUP Gop x = FLOOKUP Gr x /\ op_taint tnop (Var x) = op_taint tnr (Var x)) /\
+  tnop.t_mem = tnr.t_mem /\ tnop.t_stor = tnr.t_stor /\
+  tnop.t_trans = tnr.t_trans /\ tnop.t_imm = tnr.t_imm /\
+  root_es = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
+  bind (eval_expr cx e) (read_result cx) (root_es with gas_obs := gs) =
+    (INL rhs,mid with gas_obs := []) /\ valid_horizon cx st0 H0 mid.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0) /\
+  (!H. valid_horizon cx st0 H root_es.storage_trace ==> stmt_state_rel H ctx func cenv cx root_es t) /\
+  t = update_var out (if tr then tload (n2w slot) s0 else sload (n2w slot) s0)
+    (s0 with vs_inst_idx := LENGTH s1.cs_current_insts) /\
+  alloca_history func u /\ u.vs_current_bb = s2.cs_current_bb /\
+  u.vs_inst_idx = LENGTH s2.cs_current_insts /\ fn_has_code s2 s3 func /\
+  fn_inst_ids_distinct func /\ run_inst_seq (emitted_insts s2 s3) u = OK oprun /\
+  operated = oprun with vs_inst_idx := LENGTH s3.cs_current_insts ==>
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid operated /\
+    storage_well_formed_on cx mid (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx mid Gop tnop operated /\
+    return_buf_frame d cenv s3 operated /\ ret_pc_ok cenv s3 operated /\
+    local_ptrs_reserved cenv s3 /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
+      op_taint tnop (Var x) = op_taint tn0 (Var x))) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    valid_horizon cx st0 H root_es.storage_trace /\ valid_horizon cx st0 H es.storage_trace) /\
+  alloca_frame cenv es sa s0 cenv mid operated /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x operated = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP operated.vs_allocas aid = SOME b) /\
+  s0.vs_alloca_next <= operated.vs_alloca_next /\ alloca_inv operated /\ alloca_history func operated /\
+  s3.cs_current_bb = s2.cs_current_bb /\
+  s3.cs_current_insts = s2.cs_current_insts ++ emitted_insts s2 s3
+Proof
+  strip_tac >>
+  `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+   s2.cs_next_var <= s3.cs_next_var` by
+    (drule emitted_insts_emit_op >>
+     `ci_mono s1 s2` by metis_tac[ci_mono_lower_value_compile_expr, pairTheory.SND] >>
+     `ci_mono s2 s3` by metis_tac[cj 3 stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND] >>
+     fs[ci_mono_def]) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at s1 x` by
+    metis_tac[not_fresh_at_mono] >>
+  `(!x. not_fresh_at sa x ==> FLOOKUP Gload x = FLOOKUP G0 x /\
+      op_taint tnload (Var x) = op_taint tn0 (Var x))` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid operated /\
+    storage_well_formed_on cx mid (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx mid Gop tnop operated /\
+    return_buf_frame d cenv s3 operated /\ ret_pc_ok cenv s3 operated /\
+    local_ptrs_reserved cenv s3 /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
+      op_taint tnop (Var x) = op_taint tn0 (Var x))` by
+    (gen_tac >> strip_tac >> drule_all augassign_toplevel_success_frames_full >> simp[]) >>
+  `straight_fresh (compile_binop bop (Var out) op ty NONE
+    (if bop = Exp then expr_int_literal e else NONE))` by
+    (irule augAssignPtrCompilerTheory.compile_binop_straight_fresh_ptr >>
+     qpat_assum `well_typed_binop _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `bop` >> simp[well_typed_binop_def]) >>
+  drule (iffLR straight_fresh_def) >> disch_then (drule_then strip_assume_tac) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s2 s3)` by
+    (drule fragGasFreshTheory.writes_fresh_path_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
+  `(!z. not_fresh_at s2 z ==> lookup_var z operated = lookup_var z u) /\
+   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0)` by metis_tac[] >>
+  `sa.cs_next_var <= s2.cs_next_var` by decide_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  drule_all augassign_toplevel_success_alloca_full >> strip_tac >> metis_tac[]
+QED
+
+Theorem augassign_toplevel_continue_full:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL cur,es) /\
+  root_es = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
+  expr_body_pre cenv cx env e root_es /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (root_es with gas_obs := gs ++ tail) = (INL rhs,mid with gas_obs := tail)) /\
+  storage_trace_domain cx st0 mid.storage_trace /\
+  gas_admissible (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    (stmt_res_ok lctx) es /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  is_word_type ty /\ type_bits ty MOD 8 = 0 /\ value_has_type tvt cur /\
+  word_value cur /\ type_slot_size tvt = 1 /\ well_formed_type_value tvt /\
+  emit_op (if tr then TLOAD else SLOAD) [Lit (n2w slot)] sa = (Var out,s1) /\
+  lower_value compile_expr cenv ty e s1 = (op,s2) /\
+  compile_binop bop (Var out) op ty NONE
+    (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op,s3) /\
+  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);res_op] s3 = ((),sb) /\
+  fn_has_code s2 s3 func /\ fn_has_code s3 sb func /\
+  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  t = update_var out (if tr then tload (n2w slot) s0 else sload (n2w slot) s0)
+    (s0 with vs_inst_idx := LENGTH s1.cs_current_insts) /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0 /\
+    FLOOKUP Gload x = FLOOKUP G0 x /\
+    op_taint tnload (Var x) = op_taint tn0 (Var x)) /\
+  tnload.t_mem = tn0.t_mem /\ tnload.t_stor = tn0.t_stor /\
+  tnload.t_trans = tn0.t_trans /\ tnload.t_imm = tn0.t_imm /\
+  return_buf_frame d cenv s1 t /\ ret_pc_ok cenv s1 t /\
+  local_ptrs_reserved cenv s1 /\
+  (!H. valid_horizon cx st0 H root_es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx root_es t /\
+    storage_well_formed_on cx root_es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx root_es Gload tnload t) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s0,G0,tn0) [] (OK t,Gload,tnload)) /\
+  eval_operand (Var out) t = SOME (typed_val_to_w256 tvt cur) /\
+  op_prov Gload (Var out) = NONE /\ op_taint tnload (Var out) = {} /\
+  ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
+  t.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func t /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0) /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    ~u.vs_halted /\
+    expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
+    expr_store_bound cx (expr_type e) rhs op u /\
+    u.vs_current_bb = s2.cs_current_bb /\
+    u.vs_inst_idx = LENGTH s2.cs_current_insts /\
+    alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx mid Gr tnr u /\
+    ptr_val_ok cx (post_value_type cenv e) rhs op Gr tnr u /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op Gr u) /\
+    ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (bind (lift_sum (evaluate_binop
+      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0) tvt bop cur rhs))
+      (write_place cx (StoragePlace tr (n2w slot) tvt)))
+    (mid,u,Gr,tnr)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+        lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
+        op_taint tn (Var x) = op_taint tn0 (Var x)))
+    (\H res ee gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+Proof
+  strip_tac >> qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H0 mid.storage_trace` by fs[storage_trace_domain_def, Abbr `H0`] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> ~u.vs_halted /\ _`
+    (drule_then strip_assume_tac) >>
+  `bind (eval_expr cx e) (read_result cx) (root_es with gas_obs := gs) =
+    (INL rhs,mid with gas_obs := [])` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[NoAsms]) >>
+  drule_all augassign_toplevel_rhs_numeric_facts_full >> strip_tac >>
+  `is_word_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_word, word_value_type_word] >>
+  `eval_operand (Var out) t = SOME (val_to_w256 cur)` by
+    metis_tac[typed_val_to_w256_word_value] >>
+  drule_all augassign_toplevel_rhs_operands_full >> strip_tac >>
+  drule_all augassign_toplevel_operator_endpoint_full >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
+  >- suspend "success" >>
+  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`Gabort`, `mid`,
+    `Abort Revert_abort (abort_state with vs_inst_idx := abort_idx)`,
+    `INR (Error (RuntimeError msg))`, `tnabort`] >>
+  simp[lift_sum_def, bind_def, raise_def, exit_result_def, stmt_exit_ptr_def,
+    exprSimDefsTheory.expr_exit_def] >> fs[ghost_inv_at_def]
+QED
+
+Resume augassign_toplevel_continue_full[success]:
+  `(!H. valid_horizon cx st0 H root_es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx root_es t) /\
+   (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      expr_post H ctx func cenv cx e root_es s1 s2 t mid rhs op u /\
+      t.vs_alloca_next <= u.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx mid Gr tnr u /\
+      ghost_kept_at lo cenv root_es s1 Gload tnload t Gr tnr)` by metis_tac[] >>
+  drule_all augassign_toplevel_success_prepare_full >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> stmt_state_rel _ _ _ _ _ _ operated /\ _`
+    (drule_then strip_assume_tac) >>
+  `~operated.vs_halted /\ operated.vs_current_bb = s3.cs_current_bb /\
+   operated.vs_inst_idx = LENGTH s3.cs_current_insts` by
+    (qpat_assum `operated = (u with vs_inst_idx := _) with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  `~cx.txn.is_static /\ ~operated.vs_call_ctx.cc_static /\
+   operated.vs_call_ctx.cc_address = cx.txn.target` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  irule augassign_toplevel_success_continue_full >> simp[] >>
+  qexistsl_tac [`Gop`, `es`, `operated`, `res_op`, `root_es`, `s3`, `tnop`] >> simp[] >>
+  gen_tac >> strip_tac >>
+  `allocas_from lo u /\ lo <= u.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  qpat_assum `!D lo. _ ==> gas_origin_ptr_path _ (u,Gr,tnr) _ _`
+    (qspecl_then [`DF H`, `lo`] mp_tac) >>
+  impl_tac >- simp[] >>
+  `oprun with vs_inst_idx := LENGTH s2.cs_current_insts + LENGTH (emitted_insts s2 s3) = operated` by
+    simp[LENGTH_APPEND] >>
+  metis_tac[]
+QED
+
+Finalise augassign_toplevel_continue_full
