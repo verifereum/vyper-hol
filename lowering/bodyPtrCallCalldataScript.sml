@@ -42,8 +42,20 @@ Proof
   rpt gen_tac >> strip_tac >>
   `args <> []` by (strip_tac >> gvs[well_typed_expr_def]) >>
   rw[expr_sim_ptr_def, expr_vv_sim_ptr_def] >>
-  `ctx_has_dalloca ctx` suffices_by simp[] >>
-  irule stmt_state_rel_dalloca >> first_assum (irule_at Any)
+  (reverse (Cases_on `?H0. valid_horizon cx st0 H0 es.storage_trace`)
+   >- (rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
+       qexists_tac `[]` >> disj1_tac >>
+       irule gasStorageTheory.gas_bad_storage_at_initial >>
+       simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+            vyperStorageTraceTheory.evaluate_storage_trace_frame,
+            vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+   pop_assum strip_assume_tac >>
+   qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+     (qspec_then `H0` mp_tac) >> simp[] >> strip_tac >>
+   `ctx_has_dalloca ctx` suffices_by simp[] >>
+   irule (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_dalloca) >>
+   qexistsl_tac [`H0`, `cenv`, `cx`, `func`, `s0`, `es`] >> simp[])
   >- (drule lower_value_compile_expr_split >> strip_tac >>
       `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
       drule_all compile_expr_raw_call_calldata_dalloca >> simp[]) >>
