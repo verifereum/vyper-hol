@@ -50,7 +50,7 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `w < LENGTH h-1` by
-    (drule_all ptr_dalloca_demand_writer_index >> simp[]) >>
+    (drule_all ptr_dalloca_demand_writer_index_static >> simp[]) >>
   `pa+k NOTIN at.po_taint.t_mem` suffices_by simp[] >>
   irule ptr_dalloca_protected_writer_demand_memory_static >>
   rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
