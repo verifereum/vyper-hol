@@ -503,7 +503,7 @@ Theorem concretize_cached_generator_liveat:
     (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst) ==>
   MEM (Allocation aid) (ml_lookup la p)
 Proof
-  mp_tac concretize_cached_generator_liveat_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_cached_generator_liveat_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -594,7 +594,7 @@ Theorem concretize_cached_read_liveat:
   (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
   MEM (Allocation aid) (ml_lookup la p)
 Proof
-  mp_tac concretize_cached_read_liveat_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_cached_read_liveat_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -688,7 +688,7 @@ Theorem concretize_untainted_local_read_liveat_at_location:
   (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
   MEM (Allocation aid) (ml_lookup la p)
 Proof
-  mp_tac concretize_untainted_local_read_liveat_at_location_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_untainted_local_read_liveat_at_location_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

@@ -160,7 +160,7 @@ Theorem concretize_read_demand_geometry:
       joint_relocation_demand lo (concretize_positions C') q0 es qs c
         (w2n off+i) (w2n offT+i))
 Proof
-  mp_tac concretize_read_demand_geometry_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_read_demand_geometry_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -268,7 +268,7 @@ Theorem concretize_sha3_demand_execution:
   ?v z. inst.inst_outputs = [v] /\ post = update_var v z s /\
     step_inst_base inst t = OK (update_var v z t)
 Proof
-  mp_tac concretize_sha3_demand_execution_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_sha3_demand_execution_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -391,7 +391,7 @@ Theorem concretize_sha3_local_complete:
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
-  mp_tac concretize_sha3_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_sha3_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

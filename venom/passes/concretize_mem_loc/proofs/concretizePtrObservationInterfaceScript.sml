@@ -227,7 +227,7 @@ Theorem ptr_paired_current_range_static_bound:
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
   n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
-  mp_tac ptr_paired_current_range_static_bound_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_static_bound_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

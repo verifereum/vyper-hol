@@ -194,7 +194,7 @@ Theorem concretize_istore_local_complete:
     concretize_supplement D (step_taint inst s post tn) post tpost /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
-  mp_tac concretize_istore_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_istore_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

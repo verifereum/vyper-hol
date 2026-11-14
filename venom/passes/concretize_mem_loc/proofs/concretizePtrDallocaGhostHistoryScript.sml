@@ -879,7 +879,7 @@ Theorem ptr_dalloca_ghost_history:
       pos+ix IN (EL q ht).po_taint.t_mem ==>
         base+ix IN (EL n h).po_taint.t_mem)
 Proof
-  mp_tac ptr_dalloca_ghost_history_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_ghost_history_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

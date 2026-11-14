@@ -137,7 +137,7 @@ Theorem concretize_istore_demand_geometry:
      joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
      ~(w2n dst <= z /\ z < w2n dst+32))
 Proof
-  mp_tac concretize_istore_demand_geometry_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_istore_demand_geometry_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -332,7 +332,7 @@ Theorem concretize_istore_demand_execution:
       (\a. read_byte a post.vs_memory)
       (\z. read_byte z (istore (w2n dst) valueT t).vs_memory)
 Proof
-  mp_tac concretize_istore_demand_execution_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_istore_demand_execution_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

@@ -88,7 +88,7 @@ Theorem concretize_production_kill_covers:
     !byte. b <= byte /\ byte < b + sz ==>
       byte IN range_bytes (step_writes inst s s')
 Proof
-  mp_tac concretize_production_kill_covers_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_production_kill_covers_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -141,7 +141,7 @@ Theorem concretize_protected_cached_byte_no_kill:
   byte NOTIN range_bytes (step_writes inst s s') ==>
   ~ptr_ml_can_kill (Allocation aid) bp sizes inst
 Proof
-  mp_tac concretize_protected_cached_byte_no_kill_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_protected_cached_byte_no_kill_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

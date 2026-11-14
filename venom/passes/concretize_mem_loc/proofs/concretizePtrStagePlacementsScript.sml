@@ -123,7 +123,7 @@ Theorem ptr_stage_placements_live_owner:
     MEM (Allocation aid,p,sz) output.fn_mems_used /\
     FLOOKUP positions (Allocation aid) = SOME (p,sz)
 Proof
-  mp_tac ptr_stage_placements_live_owner_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_placements_live_owner_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

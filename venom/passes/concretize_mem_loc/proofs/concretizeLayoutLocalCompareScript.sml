@@ -121,7 +121,7 @@ Theorem concretize_comparison_geometry:
     activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (token,aid) + sz < dimword (:256)
 Proof
-  mp_tac concretize_comparison_geometry_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_comparison_geometry_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -330,7 +330,7 @@ Theorem concretize_compare_local_complete:
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
-  mp_tac concretize_compare_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_compare_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

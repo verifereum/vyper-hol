@@ -121,7 +121,7 @@ Theorem layout_external_trace_step:
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
-  mp_tac layout_external_trace_step_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_external_trace_step_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

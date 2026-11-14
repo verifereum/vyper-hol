@@ -71,7 +71,7 @@ Theorem layout_request_simulation_contract:
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  mp_tac layout_request_simulation_contract_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_request_simulation_contract_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -146,7 +146,7 @@ Theorem layout_stage_request_selected_run:
     layout_request_OutR D lo vs0 C C' q0 es qs ass qend
       q n qe (n + LENGTH w) fn s fn' t r r'
 Proof
-  mp_tac layout_stage_request_selected_run_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_stage_request_selected_run_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

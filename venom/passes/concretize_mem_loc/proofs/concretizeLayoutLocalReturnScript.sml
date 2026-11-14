@@ -212,7 +212,7 @@ Theorem concretize_return_read_agreement:
       codegenRel$read_byte (w2n off+i) s.vs_memory =
       codegenRel$read_byte (w2n offT+i) t.vs_memory)
 Proof
-  mp_tac concretize_return_read_agreement_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_return_read_agreement_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

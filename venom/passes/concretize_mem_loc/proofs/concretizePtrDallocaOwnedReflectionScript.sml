@@ -110,7 +110,7 @@ Theorem ptr_dalloca_owned_demand_memory:
       PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
       rpolicy s out names w) \/ dyn_floor C vs <= b+k
 Proof
-  mp_tac ptr_dalloca_owned_demand_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_owned_demand_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -187,7 +187,7 @@ Theorem ptr_dalloca_owned_demand_reflection_memory:
       rpolicy s out names w ==> pa+k NOTIN at.po_taint.t_mem) ==>
   pa+k IN at.po_taint.t_mem ==> b+k IN endpoint.po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_owned_demand_reflection_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_owned_demand_reflection_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

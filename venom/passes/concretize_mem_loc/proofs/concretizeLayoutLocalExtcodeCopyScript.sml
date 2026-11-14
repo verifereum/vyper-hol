@@ -274,7 +274,7 @@ Theorem concretize_extcodecopy_local_complete:
     relocation_env post tpost /\ relocation_reader_context post tpost /\
     post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section
 Proof
-  mp_tac concretize_extcodecopy_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_extcodecopy_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

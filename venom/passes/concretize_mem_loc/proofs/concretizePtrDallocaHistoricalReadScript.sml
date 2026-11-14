@@ -122,7 +122,7 @@ Theorem ptr_dalloca_historical_demanded_reflection:
     pos+ix IN (EL r ht).po_taint.t_mem ==> base+ix IN (EL j h).po_taint.t_mem) ==>
   pa+k IN (EL q ht).po_taint.t_mem ==> b+k IN (EL i h).po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_historical_demanded_reflection_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_demanded_reflection_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -312,7 +312,7 @@ Theorem ptr_dalloca_frontier_demanded_reflection:
     pos+ix IN (EL r ht).po_taint.t_mem ==> base+ix IN (EL j h).po_taint.t_mem) ==>
   pa+k IN (EL q ht).po_taint.t_mem ==> b+k IN (EL i h).po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_frontier_demanded_reflection_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_frontier_demanded_reflection_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -457,7 +457,7 @@ Theorem ptr_dalloca_historical_mload_read_mask:
     mem_word_taint (EL q ht).po_taint.t_mem (w2n y) SUBSET
       mem_word_taint (EL i h).po_taint.t_mem (w2n x)
 Proof
-  mp_tac ptr_dalloca_historical_mload_read_mask_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_mload_read_mask_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -584,7 +584,7 @@ Theorem ptr_dalloca_historical_mcopy_read_mask:
     (!k. k < w2n n ==> w2n rt+k IN (EL q ht).po_taint.t_mem ==>
       w2n r+k IN (EL i h).po_taint.t_mem)
 Proof
-  mp_tac ptr_dalloca_historical_mcopy_read_mask_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_mcopy_read_mask_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

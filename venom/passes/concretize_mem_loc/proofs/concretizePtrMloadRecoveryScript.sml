@@ -129,7 +129,7 @@ Theorem ptr_paired_read_range_masked_bytes:
     read_byte (w2n x + j) a.po_state.vs_memory =
       read_byte (w2n y + j) at.po_state.vs_memory
 Proof
-  mp_tac ptr_paired_read_range_masked_bytes_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_read_range_masked_bytes_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -189,7 +189,7 @@ Theorem ptr_paired_mload_masked_bytes:
     read_byte (w2n x + j) a.po_state.vs_memory =
       read_byte (w2n y + j) at.po_state.vs_memory
 Proof
-  mp_tac ptr_paired_mload_masked_bytes_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_masked_bytes_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

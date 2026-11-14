@@ -256,7 +256,7 @@ Theorem ptr_endpoint_actual_protected_livesets:
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
   dyn_floor C vs <= x
 Proof
-  mp_tac ptr_endpoint_actual_protected_livesets_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_endpoint_actual_protected_livesets_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

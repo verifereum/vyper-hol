@@ -158,7 +158,7 @@ Theorem concretize_word_load_local_complete:
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un)
 Proof
-  mp_tac concretize_word_load_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_word_load_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

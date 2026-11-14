@@ -314,7 +314,7 @@ Theorem ptr_create_family_input_bytes[local]:
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
   read_memory (w2n x) n a.po_state = read_memory (w2n y) n at.po_state
 Proof
-  mp_tac ptr_create_family_input_bytes_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_input_bytes_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -535,7 +535,7 @@ Theorem ptr_create_family_delegate_endpoint_execution[local]:
     ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
       (step_taint a.po_inst a.po_state s' a.po_taint) a.po_fn at.po_fn s' t'
 Proof
-  mp_tac ptr_create_family_delegate_endpoint_execution_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_delegate_endpoint_execution_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -649,7 +649,7 @@ Theorem ptr_create_family_endpoint_execution[local]:
       (step_taint a.po_inst a.po_state s' a.po_taint)
       a.po_fn at.po_fn s' t'
 Proof
-  mp_tac ptr_create_family_endpoint_execution_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_endpoint_execution_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -810,7 +810,7 @@ Theorem ptr_paired_prefix_create_successor[local]:
       tokens registry births PT TG' saved entries
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
 Proof
-  mp_tac ptr_paired_prefix_create_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_create_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -1007,7 +1007,7 @@ Theorem ptr_create_family_delegate_structural_successor[local]:
     z.po_state.vs_returndata = zt.po_state.vs_returndata /\
     ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG' saved
 Proof
-  mp_tac ptr_create_family_delegate_structural_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_delegate_structural_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -1292,7 +1292,7 @@ Theorem ptr_create_family_delegate_write_certificate[local]:
     (H ++ [(tokens,registry,births,PT,TG',saved,entries)])
     (LENGTH h - 1,LENGTH ht - 1,rho)
 Proof
-  mp_tac ptr_create_family_delegate_write_certificate_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_delegate_write_certificate_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -1384,7 +1384,7 @@ Theorem ptr_paired_prefix_delegate_successor[local]:
       tokens registry births PT TG' saved entries
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws'
 Proof
-  mp_tac ptr_paired_prefix_delegate_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_delegate_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -1485,7 +1485,7 @@ Theorem ptr_paired_create_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  mp_tac ptr_paired_create_prefix_normalize_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_create_prefix_normalize_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

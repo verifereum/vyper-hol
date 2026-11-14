@@ -184,7 +184,7 @@ Theorem ptr_dalloca_earlier_copy_read_memory:
      FLOOKUP positions (Allocation id) = SOME (pos,size) /\
      ix < size /\ w2n x+off = base+ix /\ w2n y+off = pos+ix))
 Proof
-  mp_tac ptr_dalloca_earlier_copy_read_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_earlier_copy_read_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

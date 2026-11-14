@@ -139,7 +139,7 @@ Theorem ptr_dalloca_historical_output_mask:
   out_taint (EL q ht).po_taint (EL q ht).po_inst (EL q ht).po_state SUBSET
     out_taint (EL n0 h).po_taint (EL n0 h).po_inst (EL n0 h).po_state
 Proof
-  mp_tac ptr_dalloca_historical_output_mask_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_output_mask_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -514,7 +514,7 @@ Theorem ptr_dalloca_historical_runtime_next:
   (EL (SUC q) ht).po_state.vs_params = t.po_state.vs_params
 
 Proof
-  mp_tac ptr_dalloca_historical_runtime_next_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_runtime_next_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

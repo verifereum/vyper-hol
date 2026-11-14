@@ -77,7 +77,7 @@ Theorem ptr_dalloca_stage_history_coverage_safe:
         revert_forward_pair bb i j /\
         i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
 Proof
-  mp_tac ptr_dalloca_stage_history_coverage_safe_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_stage_history_coverage_safe_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -195,7 +195,7 @@ Theorem ptr_dalloca_stage_frame_coverage_safe:
       (?bb i j. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         revert_forward_pair bb i j /\ i < s.vs_inst_idx /\ s.vs_inst_idx <= j)
 Proof
-  mp_tac ptr_dalloca_stage_frame_coverage_safe_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_stage_frame_coverage_safe_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

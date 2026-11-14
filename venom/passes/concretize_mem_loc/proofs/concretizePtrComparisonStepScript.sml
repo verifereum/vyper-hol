@@ -63,7 +63,7 @@ Theorem ptr_comparison_common_position[local]:
   ?p. FLOOKUP positions (Allocation iu) = SOME (p,sz) /\
       FLOOKUP positions (Allocation iv) = SOME (p,sz)
 Proof
-  mp_tac ptr_comparison_common_position_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_comparison_common_position_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -175,7 +175,7 @@ Theorem ptr_comparison_lookup_values[local]:
   (w2n x' < w2n y' <=> w2n x < w2n y) /\
   (w2n x' > w2n y' <=> w2n x > w2n y)
 Proof
-  mp_tac ptr_comparison_lookup_values_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_comparison_lookup_values_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -384,7 +384,7 @@ Theorem ptr_mixed_comparison_values[local]:
   (w2n x' < w2n y' <=> w2n x < w2n y) /\
   (w2n x' > w2n y' <=> w2n x > w2n y)
 Proof
-  mp_tac ptr_mixed_comparison_values_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mixed_comparison_values_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -465,7 +465,7 @@ Theorem ptr_mixed_comparison_execution:
       (step_taint a.po_inst a.po_state (update_var out v a.po_state) a.po_taint)
       a.po_fn g (update_var out v a.po_state) t'
 Proof
-  mp_tac ptr_mixed_comparison_execution_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mixed_comparison_execution_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

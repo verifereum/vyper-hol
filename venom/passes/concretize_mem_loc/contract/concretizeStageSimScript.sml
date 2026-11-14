@@ -100,7 +100,7 @@ Theorem concretize_stage_sim_fuel:
   EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_sim_fuel I D C C' vs vs
 Proof
-  mp_tac concretize_stage_sim_fuel_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_sim_fuel_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

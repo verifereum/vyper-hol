@@ -133,7 +133,7 @@ Theorem layout_canonical_base_nonterm_success:
   ?tpost. step_inst_base j t = OK tpost /\
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F a post tpost
 Proof
-  mp_tac layout_canonical_base_nonterm_success_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_base_nonterm_success_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -199,7 +199,7 @@ Theorem layout_canonical_base_jump:
     layout_completed_jump D lo vs0 C C' q0 es qs qend g i j s t post tpost /\
     control_agree post tpost
 Proof
-  mp_tac layout_canonical_base_jump_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_base_jump_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -265,7 +265,7 @@ Theorem layout_canonical_base_exit:
   ?r'. step_inst_base j t = r' /\
     layout_canonical_result D lo vs0 C C' q0 es qs ass qend q n r r'
 Proof
-  mp_tac layout_canonical_base_exit_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_base_exit_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -353,7 +353,7 @@ Theorem layout_canonical_base_certificate:
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
-  mp_tac layout_canonical_base_certificate_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_base_certificate_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -422,7 +422,7 @@ Theorem layout_canonical_base_certificate_fuel:
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
-  mp_tac layout_canonical_base_certificate_fuel_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_base_certificate_fuel_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

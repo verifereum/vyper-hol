@@ -102,7 +102,7 @@ Theorem activation_cache_source_instruction:
   ?inst. MEM inst (fn_insts owner) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_id = aid
 Proof
-  mp_tac activation_cache_source_instruction_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL activation_cache_source_instruction_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -131,7 +131,7 @@ Theorem activation_cache_source_size:
   activation_cache q d owner aid (b,sz) ==>
   FLOOKUP (source_alloca_sizes owner) aid = SOME sz
 Proof
-  mp_tac activation_cache_source_size_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL activation_cache_source_size_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -156,7 +156,7 @@ Theorem activation_cache_static_item:
   static_alloca_items owner = SOME items ==>
   MEM (Allocation aid,sz) items
 Proof
-  mp_tac activation_cache_static_item_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL activation_cache_static_item_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -197,7 +197,7 @@ Theorem activation_cache_source_allocation:
   ?inst n. MEM inst (fn_insts owner) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_id = aid /\ inst.inst_operands = [Lit n] /\ w2n n = sz
 Proof
-  mp_tac activation_cache_source_allocation_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL activation_cache_source_allocation_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -224,7 +224,7 @@ Theorem activation_cache_source_static_item:
   ?items. static_alloca_items owner = SOME items /\
     MEM (Allocation aid,sz) items
 Proof
-  mp_tac activation_cache_source_static_item_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL activation_cache_source_static_item_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -288,7 +288,7 @@ Theorem joint_open_call_runtime_summary:
     lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  mp_tac joint_open_call_runtime_summary_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL joint_open_call_runtime_summary_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -349,7 +349,7 @@ Theorem joint_open_call_activation_summary:
     lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  mp_tac joint_open_call_activation_summary_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL joint_open_call_activation_summary_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

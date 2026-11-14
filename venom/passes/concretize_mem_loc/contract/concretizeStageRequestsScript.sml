@@ -119,7 +119,7 @@ Theorem layout_stage_request_finite_abort:
     fn_entry_label fn' = SOME lbl /\ finite_run C' fn' s (Abort b post') /\
     LIST_REL (request_agree_except D) post.vs_requests post'.vs_requests
 Proof
-  mp_tac layout_stage_request_finite_abort_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_stage_request_finite_abort_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -178,7 +178,7 @@ Theorem concretize_stage_abort_rq:
   EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_abort_rq D C C' vs vs
 Proof
-  mp_tac concretize_stage_abort_rq_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_abort_rq_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

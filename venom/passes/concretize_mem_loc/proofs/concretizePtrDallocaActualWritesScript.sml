@@ -155,7 +155,7 @@ Theorem ptr_dalloca_actual_event_context:
     (EL (SUC (EL q done)) h).po_state.vs_returndata =
       (EL (SUC q) ht).po_state.vs_returndata
 Proof
-  mp_tac ptr_dalloca_actual_event_context_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_actual_event_context_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -337,7 +337,7 @@ Theorem ptr_dalloca_actual_write_descriptor:
     (MEM a.po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
       LENGTH posts.vs_returndata = LENGTH postt.vs_returndata)
 Proof
-  mp_tac ptr_dalloca_actual_write_descriptor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_actual_write_descriptor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -390,7 +390,7 @@ Theorem ptr_dalloca_actual_write_coverage:
   (i IN range_bytes (step_writes a.po_inst a.po_state posts) <=>
    i IN range_bytes (step_writes t.po_inst t.po_state postt))
 Proof
-  mp_tac ptr_dalloca_actual_write_coverage_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_actual_write_coverage_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

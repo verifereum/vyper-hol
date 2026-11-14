@@ -40,7 +40,7 @@ Theorem ptr_stage_frame_retpc_shape:
   max_live_eom C' = SOME eom ==>
   EVERY unitShapeDefs$retpc_shape_ok C.ctx_functions
 Proof
-  mp_tac ptr_stage_frame_retpc_shape_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_frame_retpc_shape_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

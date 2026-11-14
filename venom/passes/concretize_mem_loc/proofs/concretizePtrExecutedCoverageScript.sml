@@ -176,7 +176,7 @@ Theorem ptr_frame_table_source:
   MEM fn ctx.ctx_functions /\ ptr_table_source fn s /\
   EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ ptr_table_source f.cf_fn f.cf_state) stk
 Proof
-  mp_tac ptr_frame_table_source_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_table_source_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -208,7 +208,7 @@ Theorem ptr_frame_current_mems:
   ?g p. lookup_function fn.fn_name C'.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  mp_tac ptr_frame_current_mems_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_current_mems_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -242,7 +242,7 @@ Theorem ptr_frame_saved_mems:
   ?g p. lookup_function f.cf_fn.fn_name C'.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  mp_tac ptr_frame_saved_mems_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_saved_mems_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

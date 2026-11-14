@@ -119,7 +119,7 @@ Theorem ptr_paired_prefix_alloca_inputs:
     (!base size. FLOOKUP a.po_state.vs_allocas a.po_inst.inst_id = SOME (base,size)
       ==> size = w2n sz)
 Proof
-  mp_tac ptr_paired_prefix_alloca_inputs_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_alloca_inputs_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -396,7 +396,7 @@ Theorem ptr_paired_prefix_alloca_success:
     ptr_mixed_vars B positions TG' b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state /\
     ptr_history_content b.po_taint b.po_state zt.po_state /\ ptr_paired_cursor lp b zt
 Proof
-  mp_tac ptr_paired_prefix_alloca_success_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_alloca_success_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -553,7 +553,7 @@ Theorem ptr_paired_prefix_alloca_immediate:
       tokens registry B PT TG' saved entries
       (H ++ [(tokens,registry,B,PT,TG',saved,entries)]) calls ws
 Proof
-  mp_tac ptr_paired_prefix_alloca_immediate_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_alloca_immediate_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

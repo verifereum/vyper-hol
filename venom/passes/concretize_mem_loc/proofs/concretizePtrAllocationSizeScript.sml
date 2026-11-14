@@ -99,7 +99,7 @@ Theorem ptr_frame_sizes:
   EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\
              alloca_sizes_match f.cf_fn f.cf_state) stk
 Proof
-  mp_tac ptr_frame_sizes_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_sizes_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -120,7 +120,7 @@ Theorem ptr_frame_current_allocation_size:
   FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
   get_alloca_size fn (Allocation aid) = sz
 Proof
-  mp_tac ptr_frame_current_allocation_size_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_current_allocation_size_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -141,7 +141,7 @@ Theorem ptr_frame_saved_allocation_size:
   MEM f stk /\ FLOOKUP f.cf_state.vs_allocas aid = SOME (b,sz) ==>
   get_alloca_size f.cf_fn (Allocation aid) = sz
 Proof
-  mp_tac ptr_frame_saved_allocation_size_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_saved_allocation_size_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -171,7 +171,7 @@ Theorem ptr_frame_context_allocation_size:
   ~MEM (Allocation aid) (MAP FST imports) ==>
   context_alloca_size fn imports (Allocation aid) = sz
 Proof
-  mp_tac ptr_frame_context_allocation_size_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_context_allocation_size_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

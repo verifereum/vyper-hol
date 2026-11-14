@@ -163,7 +163,7 @@ Theorem ptr_paired_iload_execution_back:
         (step_taint a.po_inst a.po_state s' a.po_taint)
         a.po_fn at.po_fn s' t'
 Proof
-  mp_tac ptr_paired_iload_execution_back_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_iload_execution_back_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

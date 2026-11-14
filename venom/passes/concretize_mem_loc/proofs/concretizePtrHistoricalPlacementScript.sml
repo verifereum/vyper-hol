@@ -134,7 +134,7 @@ Theorem ptr_transcript_historical_placement:
     FLOOKUP bj (token,aid) = SOME (b,sz) /\
     FLOOKUP rj token = SOME owner
 Proof
-  mp_tac ptr_transcript_historical_placement_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_transcript_historical_placement_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

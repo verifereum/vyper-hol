@@ -204,7 +204,7 @@ Theorem ptr_frame_descendant_mems:
     lookup_function nm C'.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  mp_tac ptr_frame_descendant_mems_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_descendant_mems_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -253,7 +253,7 @@ Theorem ptr_frame_descendant_demand:
     (\name. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context name)))
     (EL n stk).cf_inst
 Proof
-  mp_tac ptr_frame_descendant_demand_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_descendant_demand_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -294,7 +294,7 @@ Theorem ptr_frame_descendant_import:
   ?p. MEM (Allocation aid,p,sz)
     (imported_mems_used observed.cu_context (EL n stk).cf_fn)
 Proof
-  mp_tac ptr_frame_descendant_import_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_descendant_import_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

@@ -206,7 +206,7 @@ Theorem concretize_memory_access_geometry:
        w2n off+len <= b+sz /\
        w2n offT = concretize_positions C' owner aid + (w2n off-b)))
 Proof
-  mp_tac concretize_memory_access_geometry_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_memory_access_geometry_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

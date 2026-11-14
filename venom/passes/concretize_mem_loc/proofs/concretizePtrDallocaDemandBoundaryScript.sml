@@ -94,7 +94,7 @@ Theorem ptr_dalloca_copy_read_demand_memory:
      FLOOKUP positions (Allocation id) = SOME (pos,size) /\
      ix < size /\ w2n x+off = base+ix /\ w2n y+off = pos+ix))
 Proof
-  mp_tac ptr_dalloca_copy_read_demand_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_copy_read_demand_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -193,7 +193,7 @@ Theorem ptr_dalloca_copy_writer_clean_demand_memory:
     pos+ix IN (EL r ht).po_taint.t_mem ==> base+ix IN (EL j h).po_taint.t_mem) ==>
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_copy_writer_clean_demand_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_copy_writer_clean_demand_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -301,7 +301,7 @@ Theorem ptr_dalloca_protected_writer_demand_memory:
     pos+ix IN (EL r ht).po_taint.t_mem ==> base+ix IN (EL j h).po_taint.t_mem) ==>
   pa+k NOTIN at.po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_protected_writer_demand_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_protected_writer_demand_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

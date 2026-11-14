@@ -282,7 +282,7 @@ Theorem ptr_extcodecopy_prefix_execution[local]:
       read_byte (w2n dst+i) post.vs_memory =
       read_byte (w2n dt+i) zt.po_state.vs_memory)
 Proof
-  mp_tac ptr_extcodecopy_prefix_execution_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_extcodecopy_prefix_execution_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -405,7 +405,7 @@ Theorem ptr_extcodecopy_transcript_successor[local]:
       read_byte (w2n dst+j) z.po_state.vs_memory =
       read_byte (w2n dt+j) zt.po_state.vs_memory)
 Proof
-  mp_tac ptr_extcodecopy_transcript_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_extcodecopy_transcript_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -609,7 +609,7 @@ Theorem ptr_extcodecopy_write_certificate[local]:
     (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
     (LENGTH h - 1,LENGTH done,rho)
 Proof
-  mp_tac ptr_extcodecopy_write_certificate_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_extcodecopy_write_certificate_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -740,7 +740,7 @@ Theorem ptr_extcodecopy_prefix_step[local]:
     tokens registry births PT TG saved entries
     (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) calls (ws ++ extra)
 Proof
-  mp_tac ptr_extcodecopy_prefix_step_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_extcodecopy_prefix_step_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -836,7 +836,7 @@ Theorem ptr_paired_extcodecopy_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  mp_tac ptr_paired_extcodecopy_prefix_normalize_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_extcodecopy_prefix_normalize_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

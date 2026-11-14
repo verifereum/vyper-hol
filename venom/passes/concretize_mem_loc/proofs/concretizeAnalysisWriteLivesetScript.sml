@@ -141,7 +141,7 @@ Theorem concretize_write_owner_liveset:
     (bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner)
     (cfg_analyze owner)) (Allocation aid) = SOME addrs /\ MEM p addrs
 Proof
-  mp_tac concretize_write_owner_liveset_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_write_owner_liveset_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

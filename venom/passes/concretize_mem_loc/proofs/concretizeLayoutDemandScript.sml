@@ -117,7 +117,7 @@ Theorem concretize_common_call_activation_livesets:
     MEM (s0.vs_current_bb,s0.vs_inst_idx) addrsA /\
     MEM (s0.vs_current_bb,s0.vs_inst_idx) addrsB
 Proof
-  mp_tac concretize_common_call_activation_livesets_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_common_call_activation_livesets_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

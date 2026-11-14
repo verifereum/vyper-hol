@@ -111,7 +111,7 @@ Theorem ptr_mcopy_transcript_successor:
     ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
     z.po_state.vs_allocas = a.po_state.vs_allocas /\ z.po_stack = a.po_stack
 Proof
-  mp_tac ptr_mcopy_transcript_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mcopy_transcript_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -386,7 +386,7 @@ Theorem ptr_mcopy_write_producer:
         (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
         (LENGTH h - 1,LENGTH ht - 1,rho))
 Proof
-  mp_tac ptr_mcopy_write_producer_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mcopy_write_producer_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -555,7 +555,7 @@ Theorem ptr_paired_prefix_mcopy:
     (range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
       ?rho. extra = [(LENGTH h - 1,LENGTH done,rho)])
 Proof
-  mp_tac ptr_paired_prefix_mcopy_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_mcopy_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

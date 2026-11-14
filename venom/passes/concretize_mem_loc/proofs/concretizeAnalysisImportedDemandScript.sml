@@ -94,7 +94,7 @@ Theorem concretize_open_call_runtime_liveset:
     (cfg_analyze caller)) (Allocation aid) = SOME addrs /\
     MEM (s0.vs_current_bb,s0.vs_inst_idx) addrs
 Proof
-  mp_tac concretize_open_call_runtime_liveset_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_open_call_runtime_liveset_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -151,7 +151,7 @@ Theorem concretize_open_call_runtime_liveset_context:
     (cfg_analyze caller)) (Allocation aid) = SOME addrs /\
     MEM (s0.vs_current_bb,s0.vs_inst_idx) addrs
 Proof
-  mp_tac concretize_open_call_runtime_liveset_context_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_open_call_runtime_liveset_context_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -210,7 +210,7 @@ Theorem concretize_open_call_activation_liveset_context:
     (cfg_analyze caller)) (Allocation aid) = SOME addrs /\
     MEM (s0.vs_current_bb,s0.vs_inst_idx) addrs
 Proof
-  mp_tac concretize_open_call_activation_liveset_context_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_open_call_activation_liveset_context_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

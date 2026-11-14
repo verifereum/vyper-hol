@@ -165,7 +165,7 @@ Theorem ptr_stage_paired_bridge:
     EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
     (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name)
 Proof
-  mp_tac ptr_stage_paired_bridge_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_paired_bridge_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

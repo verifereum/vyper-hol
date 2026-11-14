@@ -106,7 +106,7 @@ Theorem concretize_write_demand_activation_disjoint:
   canonical_metadata C C' (Allocation aidB) pB szB ==>
   pA+szA <= pB \/ pB+szB <= pA
 Proof
-  mp_tac concretize_write_demand_activation_disjoint_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_write_demand_activation_disjoint_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

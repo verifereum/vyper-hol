@@ -377,7 +377,7 @@ Theorem ptr_paired_coverage_static_mem:
         i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)) ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof
-  mp_tac ptr_paired_coverage_static_mem_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_coverage_static_mem_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

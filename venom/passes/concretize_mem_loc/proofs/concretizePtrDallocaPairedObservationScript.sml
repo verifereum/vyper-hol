@@ -446,7 +446,7 @@ Theorem ptr_dalloca_paired_observation_taint:
       D.d_imm th.vs_immutables /\
     ret_taint at.po_taint at.po_inst at.po_state SUBSET D.d_ret th.vs_returndata)
 Proof
-  mp_tac ptr_dalloca_paired_observation_taint_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_paired_observation_taint_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

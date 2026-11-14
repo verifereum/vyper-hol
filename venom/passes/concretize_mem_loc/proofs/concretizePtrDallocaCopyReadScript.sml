@@ -124,7 +124,7 @@ Theorem ptr_dalloca_mcopy_read_mask_memory:
     (!k. k < w2n n ==> w2n rt+k IN at.po_taint.t_mem ==>
       w2n r+k IN endpoint.po_taint.t_mem)
 Proof
-  mp_tac ptr_dalloca_mcopy_read_mask_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_mcopy_read_mask_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

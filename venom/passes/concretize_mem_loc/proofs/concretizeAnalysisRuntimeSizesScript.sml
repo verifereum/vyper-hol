@@ -43,7 +43,7 @@ Theorem concretize_runtime_context_size:
   context_alloca_size fn (imported_mems_used observed.cu_context fn)
     (Allocation aid) = sz
 Proof
-  mp_tac concretize_runtime_context_size_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_runtime_context_size_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

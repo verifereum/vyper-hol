@@ -373,7 +373,7 @@ Theorem ptr_byte_store_transcript_successor:
     ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
     z.po_state.vs_allocas = a.po_state.vs_allocas /\ z.po_stack = a.po_stack
 Proof
-  mp_tac ptr_byte_store_transcript_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_byte_store_transcript_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -732,7 +732,7 @@ Theorem ptr_byte_store_write_producer:
       (H ++ [(tokens,registry,births,PT,TG,saved,entries)])
       (LENGTH h - 1,LENGTH done,reloc)
 Proof
-  mp_tac ptr_byte_store_write_producer_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_byte_store_write_producer_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -968,7 +968,7 @@ Theorem ptr_paired_prefix_byte_store:
     (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) calls
     (ws ++ [(LENGTH h - 1,LENGTH done,reloc)])
 Proof
-  mp_tac ptr_paired_prefix_byte_store_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_byte_store_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -1060,7 +1060,7 @@ Theorem ptr_paired_byte_store_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  mp_tac ptr_paired_byte_store_prefix_normalize_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_byte_store_prefix_normalize_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

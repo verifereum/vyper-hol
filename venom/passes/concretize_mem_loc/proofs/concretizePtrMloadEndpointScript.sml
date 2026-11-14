@@ -163,7 +163,7 @@ Theorem ptr_paired_mload_endpoint_inputs_memory:
       (SOME x) (SOME y) /\
     ~in_revert_forward a.po_fn a.po_state
 Proof
-  mp_tac ptr_paired_mload_endpoint_inputs_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_endpoint_inputs_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -225,7 +225,7 @@ Theorem ptr_paired_mload_endpoint_inputs:
       (SOME x) (SOME y) /\
     ~in_revert_forward a.po_fn a.po_state
 Proof
-  mp_tac ptr_paired_mload_endpoint_inputs_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_endpoint_inputs_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -341,7 +341,7 @@ Theorem ptr_paired_current_range_classification_memory:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  mp_tac ptr_paired_current_range_classification_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_classification_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -410,7 +410,7 @@ Theorem ptr_paired_current_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  mp_tac ptr_paired_current_range_classification_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_classification_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -477,7 +477,7 @@ Theorem ptr_paired_read_range_classification_memory:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  mp_tac ptr_paired_read_range_classification_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_read_range_classification_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -542,7 +542,7 @@ Theorem ptr_paired_read_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  mp_tac ptr_paired_read_range_classification_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_read_range_classification_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -614,7 +614,7 @@ Theorem ptr_paired_mload_address_classification_memory:
     b <= w2n x /\ w2n x + 32 <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  mp_tac ptr_paired_mload_address_classification_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_address_classification_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

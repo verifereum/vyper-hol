@@ -85,7 +85,7 @@ Theorem ptr_dalloca_store_writer_clean_memory:
   (!op. op_taint (EL q ht).po_taint op SUBSET op_taint (EL w h).po_taint op) ==>
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_store_writer_clean_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_store_writer_clean_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -223,7 +223,7 @@ Theorem ptr_dalloca_suffix_nonwrites_memory:
       (step_writes (EL r ht).po_inst (EL r ht).po_state
         (EL (SUC r) ht).po_state)
 Proof
-  mp_tac ptr_dalloca_suffix_nonwrites_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_suffix_nonwrites_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -336,7 +336,7 @@ Theorem ptr_dalloca_suffix_fresh_exclusion_memory:
   step_inst fuel C' (EL r ht).po_inst (EL r ht).po_state = OK post ==>
   pa+k NOTIN new_site_bytes (EL r ht).po_state post
 Proof
-  mp_tac ptr_dalloca_suffix_fresh_exclusion_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_suffix_fresh_exclusion_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -431,7 +431,7 @@ Theorem ptr_dalloca_protected_suffix_memory:
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem ==>
   pa+k NOTIN at.po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_protected_suffix_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_protected_suffix_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -507,7 +507,7 @@ Theorem ptr_dalloca_other_writer_observation_clean_memory:
   ~MEM (EL w h).po_inst.inst_opcode [MSTORE;ISTORE;MCOPY] ==>
   pa+k NOTIN (EL (SUC q) ht).po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_other_writer_observation_clean_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_other_writer_observation_clean_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

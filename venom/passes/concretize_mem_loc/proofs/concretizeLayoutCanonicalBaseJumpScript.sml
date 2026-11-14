@@ -97,7 +97,7 @@ Theorem layout_canonical_jump_success:
     layout_completed_jump D lo vs0 C C' q0 es qs qend g i j s t post tpost /\
     control_agree post tpost
 Proof
-  mp_tac layout_canonical_jump_success_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_jump_success_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

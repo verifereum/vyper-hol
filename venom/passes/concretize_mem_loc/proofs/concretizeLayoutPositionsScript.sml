@@ -73,7 +73,7 @@ Theorem concretize_positions_activation_cache:
   joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) ==>
   canonical_metadata C C' (Allocation aid) (concretize_positions C' owner aid) sz
 Proof
-  mp_tac concretize_positions_activation_cache_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_activation_cache_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -102,7 +102,7 @@ Theorem concretize_positions_activation_numeric:
   (0 < sz ==> EVERY (reserved_intervals_disjoint
     (concretize_positions C' owner aid,sz)) C.ctx_global_reserved)
 Proof
-  mp_tac concretize_positions_activation_numeric_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_activation_numeric_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -139,7 +139,7 @@ Theorem concretize_positions_activation_lower_bound:
   joint_config_reachable vs0 C q /\ activation_cache q d owner aid (b,sz) /\
   0 < sz ==> lo <= concretize_positions C' owner aid
 Proof
-  mp_tac concretize_positions_activation_lower_bound_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_activation_lower_bound_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -174,7 +174,7 @@ Theorem concretize_positions_trace_cache:
   canonical_metadata C C' (Allocation aid) (concretize_positions C' owner aid) sz /\
   (0 < sz ==> lo <= concretize_positions C' owner aid)
 Proof
-  mp_tac concretize_positions_trace_cache_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_trace_cache_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -209,7 +209,7 @@ Theorem concretize_positions_cache_room:
   activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
   concretize_positions C' owner aid + sz <= eom
 Proof
-  mp_tac concretize_positions_cache_room_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_cache_room_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

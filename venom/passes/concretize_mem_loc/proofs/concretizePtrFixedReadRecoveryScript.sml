@@ -218,7 +218,7 @@ Theorem ptr_paired_fixed_read_recovery:
   endpoint.po_inst.inst_opcode <> ASSIGN ==>
   read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
 Proof
-  mp_tac ptr_paired_fixed_read_recovery_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_fixed_read_recovery_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

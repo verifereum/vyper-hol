@@ -109,7 +109,7 @@ Theorem ptr_dalloca_actual_written_reflection:
   i IN written_taint target.po_taint target.po_inst target.po_state ==>
   i IN written_taint a.po_taint a.po_inst a.po_state
 Proof
-  mp_tac ptr_dalloca_actual_written_reflection_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_actual_written_reflection_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -217,7 +217,7 @@ Theorem ptr_dalloca_actual_memory_next:
   i IN (EL (SUC q) ht).po_taint.t_mem ==>
   i IN (EL (SUC (EL q done)) h).po_taint.t_mem
 Proof
-  mp_tac ptr_dalloca_actual_memory_next_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_actual_memory_next_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -363,7 +363,7 @@ Theorem ptr_dalloca_memory_steps_ordinary:
   (EL (SUC q) ht).po_taint.t_trans SUBSET (EL (SUC n0) h).po_taint.t_trans /\
   (EL (SUC q) ht).po_taint.t_imm SUBSET (EL (SUC n0) h).po_taint.t_imm
 Proof
-  mp_tac ptr_dalloca_memory_steps_ordinary_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_memory_steps_ordinary_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -492,7 +492,7 @@ Theorem ptr_dalloca_memory_steps:
   (EL (SUC q) ht).po_taint.t_trans SUBSET (EL (SUC n0) h).po_taint.t_trans /\
   (EL (SUC q) ht).po_taint.t_imm SUBSET (EL (SUC n0) h).po_taint.t_imm
 Proof
-  mp_tac ptr_dalloca_memory_steps_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_memory_steps_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

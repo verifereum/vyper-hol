@@ -206,7 +206,7 @@ Theorem ptr_paired_mcopy_endpoint_inputs_memory:
     (!fuel ctx. step_inst fuel ctx a.po_inst a.po_state =
       OK (mcopy (w2n d) (w2n r) (w2n n) a.po_state))
 Proof
-  mp_tac ptr_paired_mcopy_endpoint_inputs_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mcopy_endpoint_inputs_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -286,7 +286,7 @@ Theorem ptr_paired_mcopy_endpoint_inputs:
     (!fuel ctx. step_inst fuel ctx a.po_inst a.po_state =
       OK (mcopy (w2n d) (w2n r) (w2n n) a.po_state))
 Proof
-  mp_tac ptr_paired_mcopy_endpoint_inputs_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mcopy_endpoint_inputs_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

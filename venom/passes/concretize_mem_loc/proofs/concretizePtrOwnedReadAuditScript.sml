@@ -180,7 +180,7 @@ Theorem ptr_paired_owned_read_recovery:
     read_byte (pa+k) at.po_state.vs_memory \/
   dyn_floor C vs <= b+k
 Proof
-  mp_tac ptr_paired_owned_read_recovery_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_owned_read_recovery_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -444,7 +444,7 @@ Theorem ptr_paired_actual_protected_write_exclusion:
   pa+k NOTIN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
     (EL (SUC q) ht).po_state)
 Proof
-  mp_tac ptr_paired_actual_protected_write_exclusion_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_actual_protected_write_exclusion_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

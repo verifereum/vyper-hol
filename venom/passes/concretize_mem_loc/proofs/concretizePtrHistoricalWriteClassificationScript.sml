@@ -97,7 +97,7 @@ Theorem ptr_historical_write_classification:
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
     db <= w2n d /\ w2n d + len <= db+sb /\ pb+sb < dimword(:256))
 Proof
-  mp_tac ptr_historical_write_classification_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_historical_write_classification_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

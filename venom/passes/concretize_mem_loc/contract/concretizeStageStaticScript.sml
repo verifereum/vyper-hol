@@ -91,7 +91,7 @@ Theorem concretize_stage_static_mem:
   (ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs) ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof
-  mp_tac concretize_stage_static_mem_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_static_mem_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

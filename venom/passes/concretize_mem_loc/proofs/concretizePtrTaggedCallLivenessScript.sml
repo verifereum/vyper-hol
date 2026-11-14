@@ -157,7 +157,7 @@ Theorem ptr_output_tagged_ancestor_destination_separation:
   ?pb. MEM (Allocation bid,pb,sb) (imported_mems_used observed.cu_context fn) /\
     reserved_intervals_disjoint (pa,sa) (pb,sb)
 Proof
-  mp_tac ptr_output_tagged_ancestor_destination_separation_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_output_tagged_ancestor_destination_separation_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

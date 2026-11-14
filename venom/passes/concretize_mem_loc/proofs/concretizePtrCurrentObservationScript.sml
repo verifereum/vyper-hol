@@ -229,7 +229,7 @@ Theorem ptr_paired_current_static_bound:
     len = 0 \/ off + len <= eom \/
     (w2n at.po_state.vs_initial_fmp <= off /\ off + len <= w2n at.po_state.vs_fmp))
 Proof
-  mp_tac ptr_paired_current_static_bound_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_static_bound_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

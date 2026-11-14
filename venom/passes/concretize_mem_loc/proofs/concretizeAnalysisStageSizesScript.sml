@@ -12,7 +12,7 @@ QED
 Theorem o1_run_cache_sizes_ok:
   o1_run_state_ok vs0 ==> cache_sizes_ok M vs0
 Proof
-  mp_tac o1_run_cache_sizes_ok_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL o1_run_cache_sizes_ok_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -32,7 +32,7 @@ Theorem o1_frame_source_sizes_current:
   frame_reachable vs0 ctx stk PG G tn fn inst s ==>
   cache_sizes_ok (source_alloca_sizes fn) s
 Proof
-  mp_tac o1_frame_source_sizes_current_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL o1_frame_source_sizes_current_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -52,7 +52,7 @@ Theorem o1_frame_source_sizes_saved:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\ MEM f stk ==>
   cache_sizes_ok (source_alloca_sizes f.cf_fn) f.cf_state
 Proof
-  mp_tac o1_frame_source_sizes_saved_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL o1_frame_source_sizes_saved_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -74,7 +74,7 @@ Theorem o1_frame_source_sizes_lookup:
   FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
   FLOOKUP (source_alloca_sizes fn) aid = SOME sz
 Proof
-  mp_tac o1_frame_source_sizes_lookup_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL o1_frame_source_sizes_lookup_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

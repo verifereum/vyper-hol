@@ -68,7 +68,7 @@ Theorem layout_return_halt:
   ?post'. step_inst fuel' C' inst t = Halt post' /\
     dead_result_rel D (Halt post) (Halt post')
 Proof
-  mp_tac layout_return_halt_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_return_halt_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

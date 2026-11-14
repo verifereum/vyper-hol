@@ -118,7 +118,7 @@ Theorem concretize_word_load_execution_clean_lanes:
       joint_relocation_demand lo (concretize_positions C') q0 es qs c
         (w2n dst+i) (w2n dstT+i))
 Proof
-  mp_tac concretize_word_load_execution_clean_lanes_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_word_load_execution_clean_lanes_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -200,7 +200,7 @@ Theorem concretize_word_load_demand_execution:
     word_agree_except {i | i < 32 /\ w2n dst+i IN tn.t_mem}
       (mload (w2n dst) s) (mload (w2n dstT) t)
 Proof
-  mp_tac concretize_word_load_demand_execution_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_word_load_demand_execution_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

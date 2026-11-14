@@ -426,7 +426,7 @@ Theorem layout_returncopy_pending_adapter:
       (INL (k with lop_target_taint := step_taint inst t tpost g.lop_target_taint))
       (OK post) (OK tpost)
 Proof
-  mp_tac layout_returncopy_pending_adapter_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_returncopy_pending_adapter_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

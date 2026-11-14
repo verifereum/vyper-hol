@@ -306,7 +306,7 @@ Theorem ptr_dalloca_historical_runtime_call:
        cf_params := at.po_params; cf_prov := at.po_prov;
        cf_tvar := at.po_taint.t_var |> :: at.po_stack
 Proof
-  mp_tac ptr_dalloca_historical_runtime_call_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_runtime_call_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

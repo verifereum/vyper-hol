@@ -179,7 +179,7 @@ Theorem layout_request_base_certificate:
     (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
-  mp_tac layout_request_base_certificate_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_request_base_certificate_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

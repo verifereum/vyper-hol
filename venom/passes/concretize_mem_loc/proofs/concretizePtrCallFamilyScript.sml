@@ -151,7 +151,7 @@ Theorem ptr_paired_call_input_bytes:
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
   read_memory (w2n x) n a.po_state = read_memory (w2n y) n at.po_state
 Proof
-  mp_tac ptr_paired_call_input_bytes_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_call_input_bytes_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -486,7 +486,7 @@ Theorem ptr_paired_call_step:
       ptr_paired_params positions (ptr_ledger_next a i post) zt
         (tokens,registry,births,PT,TG',saved,entries))
 Proof
-  mp_tac ptr_paired_call_step_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_call_step_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -703,7 +703,7 @@ Theorem ptr_paired_call_prefix_step:
       tokens registry births PT TG' saved entries
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws'
 Proof
-  mp_tac ptr_paired_call_prefix_step_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_call_prefix_step_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -796,7 +796,7 @@ Theorem ptr_paired_call_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  mp_tac ptr_paired_call_prefix_normalize_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_call_prefix_normalize_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

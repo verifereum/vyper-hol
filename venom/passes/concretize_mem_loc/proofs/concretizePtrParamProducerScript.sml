@@ -215,7 +215,7 @@ Theorem ptr_paired_prefix_param:
       tokens registry births PT TG' saved entries
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
 Proof
-  mp_tac ptr_paired_prefix_param_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_param_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

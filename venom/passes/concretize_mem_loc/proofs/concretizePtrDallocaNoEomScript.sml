@@ -72,7 +72,7 @@ Theorem ptr_dalloca_no_eom_taint_within:
   max_live_eom C' = NONE ==>
   taint_within D C' vs
 Proof
-  mp_tac ptr_dalloca_no_eom_taint_within_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_no_eom_taint_within_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

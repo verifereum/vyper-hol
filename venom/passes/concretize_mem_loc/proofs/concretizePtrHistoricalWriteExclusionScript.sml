@@ -215,7 +215,7 @@ Theorem ptr_paired_historical_event_memory:
     (EL q ht).po_inst = concretize_inst_with_positions
       (lp (EL (EL q done) h).po_fn) (EL (EL q done) h).po_inst
 Proof
-  mp_tac ptr_paired_historical_event_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_historical_event_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -302,7 +302,7 @@ Theorem ptr_paired_historical_event:
     (EL q ht).po_inst = concretize_inst_with_positions
       (lp (EL (EL q done) h).po_fn) (EL (EL q done) h).po_inst
 Proof
-  mp_tac ptr_paired_historical_event_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_historical_event_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -587,7 +587,7 @@ Theorem ptr_paired_historical_owned_write_exclusion_memory:
     (step_writes (EL q ht).po_inst (EL q ht).po_state
       (EL (SUC q) ht).po_state)
 Proof
-  mp_tac ptr_paired_historical_owned_write_exclusion_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_historical_owned_write_exclusion_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -642,7 +642,7 @@ Theorem ptr_paired_historical_owned_write_exclusion:
     (step_writes (EL q ht).po_inst (EL q ht).po_state
       (EL (SUC q) ht).po_state)
 Proof
-  mp_tac ptr_paired_historical_owned_write_exclusion_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_historical_owned_write_exclusion_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

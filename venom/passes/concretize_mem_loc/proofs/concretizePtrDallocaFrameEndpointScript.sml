@@ -392,7 +392,7 @@ Theorem ptr_dalloca_paired_frame_ptr:
   access_ok eom at.po_prov at.po_fn at.po_inst at.po_state /\
   taint_ok at.po_fn at.po_taint at.po_inst at.po_state
 Proof
-  mp_tac ptr_dalloca_paired_frame_ptr_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_paired_frame_ptr_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

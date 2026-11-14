@@ -151,7 +151,7 @@ Theorem ptr_demand_protected_token_interval:
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
   dyn_floor C vs <= b+k
 Proof
-  mp_tac ptr_demand_protected_token_interval_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_protected_token_interval_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -288,7 +288,7 @@ Theorem ptr_demand_interval_exists:
     rpolicy s out names w) \/
   dyn_floor C vs <= b+k
 Proof
-  mp_tac ptr_demand_interval_exists_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_demand_interval_exists_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

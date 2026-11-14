@@ -263,7 +263,7 @@ Theorem ptr_paired_prefix_storage_read:
       tokens registry births PT TG' saved entries
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
 Proof
-  mp_tac ptr_paired_prefix_storage_read_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_storage_read_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -354,7 +354,7 @@ Theorem ptr_paired_storage_read_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  mp_tac ptr_paired_storage_read_prefix_normalize_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_storage_read_prefix_normalize_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

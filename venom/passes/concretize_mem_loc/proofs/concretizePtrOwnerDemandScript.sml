@@ -132,7 +132,7 @@ Theorem ptr_owner_interval_no_kill[local]:
          else SOME (context_alloca_size fn imports a))
     (ptr_owner_view d (EL k h)).cf_inst
 Proof
-  mp_tac ptr_owner_interval_no_kill_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_owner_interval_no_kill_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -214,7 +214,7 @@ Theorem ptr_stage_owner_interval_no_kill:
          else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a))
     (ptr_owner_view d (EL k h)).cf_inst
 Proof
-  mp_tac ptr_stage_owner_interval_no_kill_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_owner_interval_no_kill_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

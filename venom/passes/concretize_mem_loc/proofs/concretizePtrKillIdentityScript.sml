@@ -133,7 +133,7 @@ Theorem ptr_reachable_base_write_identity:
     (Var v) = [Allocation aid] /\ lookup_var v s = SOME w ==>
   ?site. FLOOKUP G v = SOME site /\ FLOOKUP s.vs_allocas aid = SOME site
 Proof
-  mp_tac ptr_reachable_base_write_identity_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_base_write_identity_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -190,7 +190,7 @@ Theorem ptr_reachable_successful_kill_identity:
     lookup_var v s = SOME w /\ FLOOKUP G v = SOME site /\
     FLOOKUP s.vs_allocas aid = SOME site
 Proof
-  mp_tac ptr_reachable_successful_kill_identity_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_successful_kill_identity_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

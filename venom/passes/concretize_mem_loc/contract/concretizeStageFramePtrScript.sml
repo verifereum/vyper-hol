@@ -189,7 +189,7 @@ Theorem concretize_stage_frame_ptr_ok:
     frame_reachable vs C' stk PG G tn fn inst s ==>
     access_ok eom G fn inst s /\ taint_ok fn tn inst s
 Proof
-  mp_tac concretize_stage_frame_ptr_ok_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_frame_ptr_ok_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

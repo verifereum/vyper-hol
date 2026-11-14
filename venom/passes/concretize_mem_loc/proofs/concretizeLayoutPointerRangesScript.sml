@@ -71,7 +71,7 @@ Theorem concretize_guarded_pointer_range:
     w2n y + len <= activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (token,aid) + sz
 Proof
-  mp_tac concretize_guarded_pointer_range_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_guarded_pointer_range_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

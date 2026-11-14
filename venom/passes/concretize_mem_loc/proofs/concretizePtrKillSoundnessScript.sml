@@ -64,7 +64,7 @@ Theorem ptr_reachable_protected_byte_no_kill:
     (\a. if context_alloca_size fn imports a = 0 then NONE
          else SOME (context_alloca_size fn imports a)) inst
 Proof
-  mp_tac ptr_reachable_protected_byte_no_kill_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_protected_byte_no_kill_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

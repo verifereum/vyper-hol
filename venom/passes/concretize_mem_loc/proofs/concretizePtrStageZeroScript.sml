@@ -97,7 +97,7 @@ Theorem ptr_stage_live_zero_position:
   FLOOKUP a.po_prov v = SOME (b,0) ==>
   FLOOKUP positions (Allocation aid) = SOME (0,0)
 Proof
-  mp_tac ptr_stage_live_zero_position_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_live_zero_position_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

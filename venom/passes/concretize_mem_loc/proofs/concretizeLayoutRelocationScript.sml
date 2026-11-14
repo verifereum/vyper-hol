@@ -219,7 +219,7 @@ Theorem concretize_relocation_write_demand_noncollision:
   relocation_pair lo positions (EL n (q0::qs)) byte w /\ a <> byte ==>
   z <> w
 Proof
-  mp_tac concretize_relocation_write_demand_noncollision_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_relocation_write_demand_noncollision_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -284,7 +284,7 @@ Theorem concretize_relocation_demand_write_complement:
   joint_relocation_demand lo positions q0 es qs n a z /\
   z NOTIN target_writes
 Proof
-  mp_tac concretize_relocation_demand_write_complement_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_relocation_demand_write_complement_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -376,7 +376,7 @@ Theorem concretize_positions_demand_write_complement:
   joint_relocation_demand lo (concretize_positions C') q0 es qs n a z /\
   z NOTIN target_writes
 Proof
-  mp_tac concretize_positions_demand_write_complement_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_positions_demand_write_complement_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

@@ -122,7 +122,7 @@ Theorem ptr_paired_ret_scalar_operands:
     EVERY (\op. ptr_nonopaque_operand a.po_fn op /\
       op_prov TG op = NONE /\ op_taint a.po_taint op = {}) ops
 Proof
-  mp_tac ptr_paired_ret_scalar_operands_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_ret_scalar_operands_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -261,7 +261,7 @@ Theorem ptr_paired_ret_execution_back:
     bind_outputs (HD at.po_stack).cf_inst.inst_outputs ret.iret_values
       (adopt_return_fmp ret (merge_callee_state (HD at.po_stack).cf_state at.po_state)) = SOME tr
 Proof
-  mp_tac ptr_paired_ret_execution_back_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_ret_execution_back_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -407,7 +407,7 @@ Theorem ptr_paired_ret_restored_vars:
       (tnc with t_var := DRESTRICT tnc.t_var (COMPL (set outs)))
       (HD a.po_stack).cf_fn (HD at.po_stack).cf_fn sr tr
 Proof
-  mp_tac ptr_paired_ret_restored_vars_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_ret_restored_vars_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -760,7 +760,7 @@ Theorem ptr_paired_ret_successor:
       (TL saved) entries
       (H ++ [(TL tokens,registry,B',PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])
 Proof
-  mp_tac ptr_paired_ret_successor_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_ret_successor_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -881,7 +881,7 @@ Theorem ptr_paired_ret_successor_births:
       (TL saved) entries
       (H ++ [(TL tokens,registry,B',PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])
 Proof
-  mp_tac ptr_paired_ret_successor_births_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_ret_successor_births_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

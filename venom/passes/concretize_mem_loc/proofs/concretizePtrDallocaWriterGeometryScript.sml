@@ -336,7 +336,7 @@ Theorem ptr_dalloca_writer_forward_memory:
     eval_operand sizeop (EL q ht).po_state = SOME z /\
     b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
 Proof
-  mp_tac ptr_dalloca_writer_forward_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_writer_forward_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -550,7 +550,7 @@ Theorem ptr_dalloca_writer_updates_memory:
       step_taint (EL q ht).po_inst (EL q ht).po_state postT (EL q ht).po_taint /\
     (EL (SUC q) ht).po_state = postT with vs_inst_idx := SUC (EL q ht).po_state.vs_inst_idx
 Proof
-  mp_tac ptr_dalloca_writer_updates_memory_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_writer_updates_memory_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

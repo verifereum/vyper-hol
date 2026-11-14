@@ -211,7 +211,7 @@ Theorem concretize_untainted_incoming_read_liveat:
         (cfg_analyze owner) owner FEMPTY FEMPTY = (la,us) ==>
       MEM (Allocation aid) (ml_lookup la p))
 Proof
-  mp_tac concretize_untainted_incoming_read_liveat_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_untainted_incoming_read_liveat_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

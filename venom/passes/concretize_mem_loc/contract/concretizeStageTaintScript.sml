@@ -132,7 +132,7 @@ Theorem concretize_stage_taint_within:
   (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) ==>
   taint_within D C' vs
 Proof
-  mp_tac concretize_stage_taint_within_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_taint_within_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

@@ -110,7 +110,7 @@ Theorem layout_canonical_external_success_requests:
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost /\
     LIST_REL (request_agree_except D) post.vs_requests tpost.vs_requests
 Proof
-  mp_tac layout_canonical_external_success_requests_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_external_success_requests_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -179,7 +179,7 @@ Theorem layout_canonical_external_success:
   ?tpost. step_inst_base j t = OK tpost /\
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
 Proof
-  mp_tac layout_canonical_external_success_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_canonical_external_success_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

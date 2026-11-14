@@ -89,7 +89,7 @@ Theorem ptr_paired_mcopy_postwrite_bytes:
       !j. j < w2n n /\ w2n d+j NOTIN mem_taint a.po_taint a.po_inst a.po_state post ==>
         read_byte (w2n d+j) post.vs_memory = read_byte (w2n dt+j) postt.vs_memory)
 Proof
-  mp_tac ptr_paired_mcopy_postwrite_bytes_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mcopy_postwrite_bytes_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

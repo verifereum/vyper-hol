@@ -281,7 +281,7 @@ Theorem ptr_paired_hash_log_payload[local]:
   TAKE n (DROP (w2n x) a.po_state.vs_memory ++ REPLICATE n 0w) =
   TAKE n (DROP (w2n y) at.po_state.vs_memory ++ REPLICATE n 0w)
 Proof
-  mp_tac ptr_paired_hash_log_payload_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_payload_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -360,7 +360,7 @@ Theorem ptr_paired_hash_log_endpoint[local]:
   ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
   ?P. fn_ptr_ok P a.po_fn /\ FDOM a.po_prov SUBSET fn_pv P a.po_fn
 Proof
-  mp_tac ptr_paired_hash_log_endpoint_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_endpoint_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -428,7 +428,7 @@ Theorem ptr_paired_hash_log_read_inputs[local]:
     TAKE n (DROP (w2n x) a.po_state.vs_memory ++ REPLICATE n 0w) =
     TAKE n (DROP (w2n y) at.po_state.vs_memory ++ REPLICATE n 0w)
 Proof
-  mp_tac ptr_paired_hash_log_read_inputs_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_read_inputs_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -705,7 +705,7 @@ Theorem ptr_paired_hash_log_execution[local]:
     post.vs_params = a.po_state.vs_params /\
     postt.vs_params = at.po_state.vs_params
 Proof
-  mp_tac ptr_paired_hash_log_execution_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_execution_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -847,7 +847,7 @@ Theorem ptr_paired_prefix_hash_log[local]:
       tokens registry births PT TG' saved entries
       (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
 Proof
-  mp_tac ptr_paired_prefix_hash_log_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_hash_log_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -940,7 +940,7 @@ Theorem ptr_paired_hash_log_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  mp_tac ptr_paired_hash_log_prefix_normalize_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_prefix_normalize_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

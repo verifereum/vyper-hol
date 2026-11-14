@@ -269,7 +269,7 @@ Theorem concretize_clean_write_geometry:
       joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
       ~(w2n dstT <= z /\ z < w2n dstT+len))
 Proof
-  mp_tac concretize_clean_write_geometry_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_clean_write_geometry_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -425,7 +425,7 @@ Theorem concretize_calldatacopy_execution_geometry:
       joint_relocation_demand lo (concretize_positions C') q0 es qs c a z /\
       ~(w2n dstT <= z /\ z < w2n dstT+w2n sz))
 Proof
-  mp_tac concretize_calldatacopy_execution_geometry_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_calldatacopy_execution_geometry_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -633,7 +633,7 @@ Theorem concretize_calldatacopy_local_complete:
     relocation_env post tpost /\ relocation_reader_context post tpost /\
     post.vs_code = tpost.vs_code /\ post.vs_data_section = tpost.vs_data_section
 Proof
-  mp_tac concretize_calldatacopy_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_calldatacopy_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

@@ -94,7 +94,7 @@ Theorem concretize_mstore_local_core:
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (\s t. T) post tpost
 Proof
-  mp_tac concretize_mstore_local_core_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_mstore_local_core_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -200,7 +200,7 @@ Theorem concretize_mstore_local_observed:
     (post with vs_memory := s.vs_memory) = s /\
     (tpost with vs_memory := t.vs_memory) = t
 Proof
-  mp_tac concretize_mstore_local_observed_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_mstore_local_observed_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -315,7 +315,7 @@ Theorem concretize_mstore_local_complete:
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un)
 Proof
-  mp_tac concretize_mstore_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_mstore_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

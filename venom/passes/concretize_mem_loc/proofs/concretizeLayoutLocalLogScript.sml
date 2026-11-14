@@ -227,7 +227,7 @@ Theorem concretize_log_demand_execution:
   ?entry. post = s with vs_logs := s.vs_logs ++ [entry] /\
     step_inst_base inst t = OK (t with vs_logs := t.vs_logs ++ [entry])
 Proof
-  mp_tac concretize_log_demand_execution_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_log_demand_execution_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -362,7 +362,7 @@ Theorem concretize_log_local_complete:
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
-  mp_tac concretize_log_local_complete_headroom_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_log_local_complete_headroom_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED

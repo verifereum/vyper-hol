@@ -171,7 +171,7 @@ Theorem frame_pure_local_total:
   MEM fn ctx.ctx_functions /\ pure_local_total P fn s G /\
   EVERY (pure_local_saved P ctx) stk
 Proof
-  mp_tac frame_pure_local_total_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL frame_pure_local_total_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
@@ -195,7 +195,7 @@ Theorem ptr_reachable_pure_local_totality:
                pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)) /\
         lookup_var v s = SOME w ==> ?site. FLOOKUP G v = SOME site
 Proof
-  mp_tac ptr_reachable_pure_local_totality_static >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_pure_local_totality_static) >>
   pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
   tautLib.TAUT_TAC
 QED
