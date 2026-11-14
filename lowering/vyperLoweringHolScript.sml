@@ -43,6 +43,7 @@ Ancestors
   allocaBudgetChecks
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
+  externalReturnNoneFullFrag
   loweringMemCorrect
   asmSymBridge
   asmDataEnv
