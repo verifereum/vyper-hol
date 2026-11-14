@@ -33,6 +33,7 @@
 
 Theory stmtSimAssignAttr
 Ancestors
+  targetPlaceSim
   exprSimFieldLayout exprSimProps
   exprSimSource exprSimMemorySource exprSimVVFrame
   stmtSimDeclPath stmtSimDeclCompose fragGasSeq fragGasMode gasSummary

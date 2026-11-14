@@ -49,8 +49,8 @@ Theorem layout_base_opcode_cases[local]:
    (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])
 Proof
   Cases_on `i.inst_opcode` >>
-  simp[is_terminator_def, context_read0_opcode_def, clean_value_shape_def,
-    scalar_binary_opcode_def, inst_wf_def]
+  simp[is_terminator_def, context_read0_opcode_def] >>
+  simp[clean_value_shape_def, scalar_binary_opcode_def, inst_wf_def]
 QED
 
 Theorem layout_canonical_base_nonterm_success:
