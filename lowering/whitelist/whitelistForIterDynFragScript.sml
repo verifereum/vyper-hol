@@ -834,7 +834,9 @@ Theorem dynarray_code_loop_counted[local]:
   (!x. saved_base = Var x ==> not_fresh_at sb0 x) /\
   (!l. saved_base <> Label l) /\ ret_pc_ok cenv st s0 /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
-  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
+  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s /\
+    array_caller_frame st s0 s /\
+    alloca_frame cenv es st s0 cenv ei s ==>
     ?addr. eval_operand saved_base s = SOME addr /\
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs) (w2n addr + 32 + k * stride) s.vs_memory)) /\
@@ -878,10 +880,17 @@ Proof
      isPREFIX sb0.cs_current_insts bb.bb_instructions` by
     (irule fn_has_code_start >> qexists_tac `sb1` >> fs[dynarray_for_code_def]) >>
   `!j ei s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-      ainst bod st j ei s /\ j < LENGTH vs ==>
+      ainst bod st j ei s /\
+      array_caller_frame st1 cc s /\
+      alloca_frame cenv es st cc cenv ei s /\ j < LENGTH vs ==>
       val_in_memory tv (EL j vs) (w2n arr_base + 32 + j * stride) s.vs_memory /\
       ret_pc_ok bc sb0 s` by
     (rpt gen_tac >> simp[array_loop_inv_def] >> strip_tac >>
+     `array_caller_frame st s0 s` by
+       (irule dynarray_frame_weaken >> metis_tac[]) >>
+     `alloca_frame cenv es st s0 cenv ei s` by
+       (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
+        simp[] >> fs[array_caller_frame_def]) >>
      qpat_assum `!ei s. P ei /\ _ ==> _` (qspecl_then [`ei`, `s`] mp_tac) >>
      simp[] >> strip_tac >>
      qpat_x_assum `!k. _ ==> val_in_memory _ _ _ _` (qspec_then `j` mp_tac) >>
@@ -1014,7 +1023,9 @@ Proof
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)` by
     (rpt strip_tac >> qpat_assum `!st0 bc sd ex inc ei k. _` drule_all >> simp[]) >>
   `!l. Var arr_ptr <> Label l` by simp[] >>
-  `!ei t. P ei /\ stmt_state_rel ctx func cenv cx ei t ==>
+  `!ei t. P ei /\ stmt_state_rel ctx func cenv cx ei t /\
+    array_caller_frame st s0 t /\
+    alloca_frame cenv (es with gas_obs := []) st s0 cenv ei t ==>
     ?addr. eval_operand (Var arr_ptr) t = SOME addr /\
       (!k. k < LENGTH vs ==>
         val_in_memory tv (EL k vs)

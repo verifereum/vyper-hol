@@ -736,6 +736,7 @@ QED
 
 Theorem array_invariant_layout[local]:
   (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s /\
+    array_caller_frame st old s /\
     alloca_frame cenv origin_es st old cenv ei s ==>
     ?addr. eval_operand saved_base s = SOME addr /\
       (!k. k < LENGTH vs ==>
@@ -744,6 +745,7 @@ Theorem array_invariant_layout[local]:
   (!s. ret_pc_ok cenv st s ==> ret_pc_ok bc sb0 s) /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
     ainst lbl st k es s /\
+  array_caller_frame st old s /\
   alloca_frame cenv origin_es st old cenv es s /\ k < LENGTH vs ==>
   val_in_memory tv (EL k vs) (w2n array_base + k * stride) s.vs_memory /\
   w2n array_base + k * stride < dimword (:256) /\ ret_pc_ok bc sb0 s
@@ -767,6 +769,7 @@ Theorem array_code_loop_counted:
   (!l. saved_base <> Label l) /\ ret_pc_ok cenv st s0 /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
   (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s /\
+    array_caller_frame st s0 s /\
     alloca_frame cenv es st s0 cenv ei s ==>
     ?addr. eval_operand saved_base s = SOME addr /\
       (!k. k < LENGTH vs ==>
@@ -805,6 +808,7 @@ Proof
   drule array_code_initialization_fields >> strip_tac >>
   `!j ei s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
       ainst bod st j ei s /\
+      array_caller_frame st s0 s /\
       alloca_frame cenv es st s0 cenv ei s /\ j < LENGTH vs ==>
       val_in_memory tv (EL j vs) (w2n arr_base + j * stride) s.vs_memory /\
       ret_pc_ok bc sb0 s` by
@@ -999,6 +1003,7 @@ Proof
     (rpt strip_tac >> qpat_assum `!st0 bc sd ex inc ei k. _` drule_all >> simp[]) >>
   `!l. Var arr_ptr <> Label l` by simp[] >>
   `!ei t. P ei /\ stmt_state_rel ctx func cenv cx ei t /\
+    array_caller_frame st s0 t /\
     alloca_frame cenv (es with gas_obs := []) st s0 cenv ei t ==>
     ?addr. eval_operand (Var arr_ptr) t = SOME addr /\
       (!k. k < LENGTH vs ==>
