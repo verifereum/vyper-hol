@@ -76,6 +76,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
       ghost_kept_at lo cenv ee sm G tn s Gu tnu) ==>
   (!buf data_op sm s1 ops sb alloc_sa data_sa func cenv ctx sa data ann es_call dflt
       cx st0 ee DF lo explicit PG es s0 bs s G tn G0 tn0 d word p w vals.
+    ~cx.txn.is_static /\
     emit_void MSTORE [buf.buf_operand;data_op] sm = ((),s1) /\
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
@@ -119,6 +120,42 @@ Theorem raw_log_fixed_data_full_from_endpoints:
       (~is_word_type (post_value_type cenv (Call ann RawLog es_call dflt)) ==>
         ptr_buf_ok cenv (Call ann RawLog es_call dflt) (Lit 0w) G2 u) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2) ==>
+  (!buf data_op sm s1 ops sb alloc_sa data_sa func cenv ctx sa data ann es_call dflt
+      cx st0 ee DF lo explicit PG es s0 bs s G tn G0 tn0 d word p w vals.
+    cx.txn.is_static /\
+    emit_void MSTORE [buf.buf_operand;data_op] sm = ((),s1) /\
+    emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
+    compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+    LENGTH ops < dimword (:256) /\ sa.cs_next_id <= alloc_sa.cs_next_id /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (buf.buf_operand::data_op::ops) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+    expr_type data = BaseT (BytesT (Fixed 32)) /\ post_value_type cenv data = expr_type data /\
+    expr_type (Call ann RawLog es_call dflt) = NoneT /\
+    post_value_type cenv (Call ann RawLog es_call dflt) = NoneT /\
+    expr_has_effect (Call ann RawLog es_call dflt) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_post H ctx func cenv cx data es sa sm s0 ee (BytesV bs) data_op s /\
+      expr_store_bound cx (expr_type data) (BytesV bs) data_op s /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+      ptr_val_ok cx (post_value_type cenv data) (BytesV bs) data_op G tn s /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\ alloca_history func s /\
+      s0.vs_alloca_next <= s.vs_alloca_next /\ LENGTH bs = 32 /\
+      eval_operand data_op s = SOME word /\ TAKE 32 (word_to_bytes_be word) = bs /\
+      buf.buf_operand = Var p /\ eval_operand buf.buf_operand s = SOME w /\ ptr_covers G tn p s 32 /\
+      FLOOKUP s.vs_allocas alloc_sa.cs_next_id = SOME (w2n w,32) /\ w2n w + 32 < dimword (:256) /\
+      (!name b n. local_region cenv ee.scopes s name b n ==> regions_disjoint (w2n w) 32 b n) /\
+      (!aid b n. aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (b,n) ==>
+        regions_disjoint (w2n w) 32 b n) /\
+      eval_operands ops s = SOME (MAP event_value_to_word vals) /\
+      EVERY (\op. op_taint tn op = {}) ops /\ ~s.vs_halted /\
+      s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
+    ?u G2 tn2. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (Abort ExHalt_abort u,G2,tn2)) ==>
   (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
       shadow_sd shadow_sm sa shadow_sa s0 G0 tn0 st0 vals ops ann es_call dflt
       buf s1 sb ret_ty ty topics call_sa vv call_sb env es0.
@@ -152,6 +189,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
       (bind (bind (eval_expr cx data) (read_result cx))
         (\v. do bs <- lift_option_type (dest_BytesV v) "raw_log data";
                 type_check (LENGTH vals <= 4) "raw_log too many topics";
+                check_not_static cx;
                 push_log (encode_raw_event_values cx.txn.target vals bs);
                 return NoneV od)) expr_res_ok es /\
     LENGTH vals <= 4 /\ LENGTH ops = LENGTH vals /\ LENGTH ops < dimword (:256) /\
@@ -176,6 +214,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
       (bind (bind (eval_expr cx data) (read_result cx))
         (\v. do bs <- lift_option_type (dest_BytesV v) "raw_log data";
                 type_check (LENGTH vals <= 4) "raw_log too many topics";
+                check_not_static cx;
                 push_log (encode_raw_event_values cx.txn.target vals bs);
                 return NoneV od)) (es,s0,G0,tn0)
       (\H res ee G tn t. ?v. res = INL v /\
@@ -193,6 +232,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
 Proof
   disch_then (mk_asm "alloc_endpoint") >>
   disch_then (mk_asm "tail_endpoint") >>
+  disch_then (mk_asm "static_tail_endpoint") >>
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
   conj_tac >- suspend "source_frame" >>
@@ -280,22 +320,36 @@ Resume raw_log_fixed_data_full_from_endpoints[source_frame]:
   gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_ignore_bind >>
   conj_tac >- simp[storage_trace_frame_checks] >>
   match_mp_tac storage_trace_frame_ignore_bind >>
+  conj_tac >- simp[storage_trace_frame_check_not_static] >>
+  match_mp_tac storage_trace_frame_ignore_bind >>
   simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 Resume raw_log_fixed_data_full_from_endpoints[prefix_frame]:
-  simp[storage_trace_frame_bind_all, storage_trace_frame_ignore_bind,
-    evaluate_storage_trace_frame, storage_trace_frame_read_result,
-    storage_trace_frame_lifts, storage_trace_frame_checks,
-    storage_trace_frame_state_updates, storage_trace_frame_return]
+  match_mp_tac storage_trace_frame_bind_all >> conj_tac
+  >- (match_mp_tac storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >>
+  conj_tac >- simp[storage_trace_frame_lifts] >>
+  gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_ignore_bind >>
+  conj_tac >- simp[storage_trace_frame_checks] >>
+  match_mp_tac storage_trace_frame_ignore_bind >>
+  conj_tac >- simp[storage_trace_frame_check_not_static] >>
+  match_mp_tac storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 Resume raw_log_fixed_data_full_from_endpoints[child_frame]:
-  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-    storage_trace_frame_read_result]
+  match_mp_tac storage_trace_frame_bind_all >>
+  simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]
 QED
 Resume raw_log_fixed_data_full_from_endpoints[next_frame]:
-  simp[storage_trace_frame_bind_all, storage_trace_frame_ignore_bind,
-    storage_trace_frame_lifts, storage_trace_frame_checks,
-    storage_trace_frame_state_updates, storage_trace_frame_return]
+  rpt gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >>
+  conj_tac >- simp[storage_trace_frame_lifts] >>
+  gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_ignore_bind >>
+  conj_tac >- simp[storage_trace_frame_checks] >>
+  match_mp_tac storage_trace_frame_ignore_bind >>
+  conj_tac >- simp[storage_trace_frame_check_not_static] >>
+  match_mp_tac storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 Resume raw_log_fixed_data_full_from_endpoints[left_cert]:
   rpt strip_tac >> irule gas_exempt_cert_error_value >>
@@ -382,11 +436,50 @@ Resume raw_log_fixed_data_full_from_endpoints[data_next]:
        (qspec_then `H` mp_tac) >>
      (impl_tac >- simp[]) >> strip_tac >>
      asm_x "tail_endpoint" kall_tac >>
+     asm_x "static_tail_endpoint" kall_tac >>
      irule raw_log_fixed_child_tail_input >> gvs[] >>
      rpt conj_tac >> metis_tac[]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?word. _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `cx.txn.is_static`
+  >- (asm_x "tail_endpoint" kall_tac >>
+    `?uf Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (t,G1,tn1) [] (Abort ExHalt_abort uf,Gf,tnf)` by
+    (asm "static_tail_endpoint" (fn th => match_mp_tac
+       (Q.SPECL [`buf`, `data_op`, `sm`, `s1`, `ops`, `sb`, `sa`, `sd`,
+         `func`, `cenv`, `ctx`, `sa`, `data`, `ann`, `es_call`, `dflt`,
+         `cx`, `st0`, `mid`, `DF`, `lo`, `gas_explicit_sites ctx shadow_ctx`,
+         `PG`, `es`, `s0`, `bs`, `t`, `G1`, `tn1`, `G0`, `tn0`, `d`,
+         `word`, `p`, `w`, `vals`] th)) >> simp[] >>
+     asm_x "static_tail_endpoint" kall_tac >>
+     `sd.cs_next_var <= sm.cs_next_var` by
+       (qpat_assum `lower_value compile_expr cenv (expr_type data) data sd = _` mp_tac >>
+        mp_tac (Q.SPECL [`cenv`, `expr_type data`, `data`, `sd`] ci_mono_lower_value_compile_expr) >>
+        simp[ci_mono_def]) >>
+     `sa.cs_next_var <= sm.cs_next_var` by decide_tac >>
+     `local_ptrs_reserved cenv sm` by
+       (irule local_ptrs_reserved_next_var >> qexists `sd` >> simp[]) >>
+     `!x. data_op = Var x ==> not_fresh_at sm x` by
+       metis_tac[compile_lower_value_var] >>
+     `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+       (rpt strip_tac >> irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]) >>
+     `not_fresh_at sm p` by
+       (irule not_fresh_at_mono >> qexists `sd` >> simp[]) >>
+     `EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) ops` by
+       (qpat_assum `EVERY (\op. (!x. op = Var x ==> not_fresh_at sa x) /\ _) ops` mp_tac >>
+        qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at sm x` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
+     gvs[emitHelperTheory.emit_void_def, emitHelperTheory.emit_inst_def, EVERY_MEM] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+    irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+    qexistsl [`Gf`, `mid`, `Abort ExHalt_abort uf`,
+      `INR (Error (RuntimeError "write in static context"))`, `tnf`] >>
+    simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
+         ignore_bind_def, type_check_def, assert_def, return_def,
+         fragExecTheory.exit_result_def, expr_exit_def]) >>
+  asm_x "static_tail_endpoint" kall_tac >>
   `?uf Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (t,G1,tn1) [] (OK uf,Gf,tnf) /\

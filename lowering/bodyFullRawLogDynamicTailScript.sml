@@ -8,6 +8,7 @@ Ancestors
   words list rich_list finite_map arithmetic
 
 Theorem raw_log_dynamic_tail_full:
+  ~cx.txn.is_static /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = ((),sb) /\

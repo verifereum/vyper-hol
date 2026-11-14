@@ -1,6 +1,7 @@
 (* Fixed bytes32 RawLog continuation, discharging the concrete endpoints. *)
 Theory bodyFullRawLogFixed
 Ancestors bodyFullRawLogFixedCompose bodyFullRawLogFixedAlloc bodyFullRawLogFixedTail
+  bodyFullRawLogFixedTailPath
 
 Theorem raw_log_fixed_data_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
@@ -36,6 +37,7 @@ Theorem raw_log_fixed_data_full:
       (bind (bind (eval_expr cx data) (read_result cx))
         (\v. do bs <- lift_option_type (dest_BytesV v) "raw_log data";
                 type_check (LENGTH vals <= 4) "raw_log too many topics";
+                check_not_static cx;
                 push_log (encode_raw_event_values cx.txn.target vals bs);
                 return NoneV od)) expr_res_ok es /\
     LENGTH vals <= 4 /\ LENGTH ops = LENGTH vals /\ LENGTH ops < dimword (:256) /\
@@ -60,6 +62,7 @@ Theorem raw_log_fixed_data_full:
       (bind (bind (eval_expr cx data) (read_result cx))
         (\v. do bs <- lift_option_type (dest_BytesV v) "raw_log data";
                 type_check (LENGTH vals <= 4) "raw_log too many topics";
+                check_not_static cx;
                 push_log (encode_raw_event_values cx.txn.target vals bs);
                 return NoneV od)) (es,s0,G0,tn0)
       (\H res ee G tn t. ?v. res = INL v /\
@@ -79,5 +82,7 @@ Proof
     raw_log_fixed_data_full_from_endpoints) >>
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC raw_log_fixed_alloc_full)) >>
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC raw_log_fixed_tail_full)) >>
+  (impl_tac >- (rpt gen_tac >>
+    MATCH_ACCEPT_TAC bodyFullRawLogFixedTailPathTheory.raw_log_fixed_static_tail_path)) >>
   disch_tac >> rpt gen_tac >> first_x_assum MATCH_ACCEPT_TAC
 QED

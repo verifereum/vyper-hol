@@ -1,5 +1,6 @@
 Theory bodyFullRawLogCompose
 Ancestors
+  exprSimCallRawLog
   bodyFullRawLogLayout bodyFullRawLogJoinPost bodyFullRawLogTopics
   bodyFullRawLogReadiness bodyFullRawLogFixed bodyFullRawLogDynamic
   bodyFullExprGeneric bodyFullPreds vyperTypeArgFits exprWordOperand
@@ -105,36 +106,15 @@ Proof
    disch_tac >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
-  `~cx.txn.is_static` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-       (qspec_then `H0` mp_tac) >> simp[stmt_state_rel_def, state_rel_def]) >>
   qmatch_goalsub_abbrev_tac `gas_outcome_full cfg ct cx st0 source initial Q R` >>
   `source = bind (eval_exprs cx topics)
      (\vs. bind (bind (eval_expr cx data) (read_result cx))
        (\dv. do bs <- lift_option_type (dest_BytesV dv) "raw_log data";
                 type_check (LENGTH vs <= 4) "raw_log too many topics";
+                check_not_static cx;
                 push_log (encode_raw_event_values cx.txn.target vs bs);
                 return NoneV od))` by
-    (simp[Abbr `source`, FUN_EQ_THM] >> gen_tac >>
-     simp[Once evaluate_def] >>
-     simp[Once evaluate_def] >>
-     simp[Once evaluate_def] >>
-     simp[Once evaluate_def] >>
-     simp[bind_def, ignore_bind_def, read_result_def,
-          return_def, type_check_def, assert_def, lift_option_type_def] >>
-     simp[Once evaluate_def, builtin_args_length_ok_def, compatible_bound_def,
-          get_accounts_def, evaluate_builtin_def, evaluate_type_def,
-          make_array_value_def, lift_sum_def, bind_def, return_def] >>
-     Cases_on `eval_exprs cx topics x` >> rename1 `_ = (rr, ee)` >>
-     Cases_on `rr` >> simp[read_result_def, return_def, dest_ArrayV_def] >>
-     Cases_on `eval_expr cx data ee` >> rename1 `_ = (dr, ds)` >>
-     Cases_on `dr` >> simp[] >>
-     rename1 `read_result cx tv ds` >>
-     Cases_on `read_result cx tv ds` >> rename1 `_ = (vr, ds')` >>
-     Cases_on `vr` >> simp[dest_ArrayV_def, return_def] >>
-     rename1 `dest_BytesV dv` >> Cases_on `dest_BytesV dv` >>
-     simp[return_def, raise_def, read_result_def] >>
-     Cases_on `LENGTH x' <= 4` >> simp[read_result_def, return_def]) >>
+    simp[Abbr `source`, raw_log_eval, compatible_bound_def, bind_assoc, SF ETA_ss] >>
   mp_tac raw_log_topics_full >>
   (impl_tac >- MATCH_ACCEPT_TAC raw_log_full_data_reached_ready) >>
   disch_then drule_all >>
@@ -160,6 +140,7 @@ Proof
       gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[storage_trace_frame_lifts] >> gen_tac >> BETA_TAC >>
       irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_check_not_static] >>
       irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
   qexists_tac `\H res ee G' tn' t. topicQ H res ee G' tn' t /\
@@ -213,6 +194,7 @@ Resume raw_log_expr_sim_full[continuation]:
      gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
      simp[storage_trace_frame_lifts] >> gen_tac >> BETA_TAC >>
      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+     irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_check_not_static] >>
      irule storage_trace_frame_ignore_bind >>
      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

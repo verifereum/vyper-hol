@@ -5,6 +5,7 @@ Ancestors bodyFullRawLogFixedTailPath bodyFullRawLogFixedTailFrame
 Theorem raw_log_fixed_tail_full:
   !buf data_op sm s1 ops sb alloc_sa data_sa func cenv ctx sa data ann es_call dflt
       cx st0 ee DF lo explicit PG es s0 bs s G tn G0 tn0 d word p w vals.
+    ~cx.txn.is_static /\
     emit_void MSTORE [buf.buf_operand;data_op] sm = ((),s1) /\
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\

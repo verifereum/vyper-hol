@@ -9,6 +9,7 @@ Ancestors
   sourceLogFrames vyperStorageBackend
 
 Theorem raw_log_dynamic_log_joint:
+  ~cx.txn.is_static /\
   LENGTH ops < dimword (:256) /\
   eval_operands ops t = SOME (MAP event_value_to_word vals) /\
   eval_operand ptr_op t = SOME (n2w p) /\

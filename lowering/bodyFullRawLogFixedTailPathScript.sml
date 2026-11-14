@@ -1,6 +1,7 @@
 (* Concrete pointer checks for RawLog's fixed-data continuation. *)
 Theory bodyFullRawLogFixedTailPath
 Ancestors
+  logEmitStep
   bodyFullRawLogFixedBoundary rawLogPtrInst bodyPtrDefs ptrDiscipline
   ptrSafeRun venomState venomInst venomExecSemantics words list
   rawLogCoreFrame fragGasSeqPtr wordLoadStorePtr exprPtrUnwrapCopyEdges
@@ -144,6 +145,7 @@ QED
 Theorem raw_log_fixed_tail_path:
   !buf data_op sm s1 ops sb alloc_sa data_sa func cenv ctx sa data ann es_call dflt
       cx st0 ee DF lo explicit PG es s0 bs s G tn G0 tn0 d word p w vals.
+    ~cx.txn.is_static /\
     emit_void MSTORE [buf.buf_operand;data_op] sm = ((),s1) /\
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
@@ -308,4 +310,150 @@ Proof
   simp[] >>
   goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
   qexists `sm` >> simp[lookup_var_def]
+QED
+
+(* The static LOG abort retains the concrete preparation and its pointer checks. *)
+Theorem raw_log_fixed_static_tail_path:
+  !buf data_op sm s1 ops sb alloc_sa data_sa func cenv ctx sa data ann es_call dflt
+      cx st0 ee DF lo explicit PG es s0 bs s G tn G0 tn0 d word p w vals.
+    cx.txn.is_static /\
+    emit_void MSTORE [buf.buf_operand;data_op] sm = ((),s1) /\
+    emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
+    compile_alloc_buffer 32 alloc_sa = (buf,data_sa) /\ fn_has_code alloc_sa data_sa func /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+    LENGTH ops < dimword (:256) /\ sa.cs_next_id <= alloc_sa.cs_next_id /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (buf.buf_operand::data_op::ops) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+    expr_type data = BaseT (BytesT (Fixed 32)) /\ post_value_type cenv data = expr_type data /\
+    expr_type (Call ann RawLog es_call dflt) = NoneT /\
+    post_value_type cenv (Call ann RawLog es_call dflt) = NoneT /\
+    expr_has_effect (Call ann RawLog es_call dflt) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_post H ctx func cenv cx data es sa sm s0 ee (BytesV bs) data_op s /\
+      expr_store_bound cx (expr_type data) (BytesV bs) data_op s /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+      ptr_val_ok cx (post_value_type cenv data) (BytesV bs) data_op G tn s /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\ alloca_history func s /\
+      s0.vs_alloca_next <= s.vs_alloca_next /\ LENGTH bs = 32 /\
+      eval_operand data_op s = SOME word /\ TAKE 32 (word_to_bytes_be word) = bs /\
+      buf.buf_operand = Var p /\ eval_operand buf.buf_operand s = SOME w /\ ptr_covers G tn p s 32 /\
+      FLOOKUP s.vs_allocas alloc_sa.cs_next_id = SOME (w2n w,32) /\ w2n w + 32 < dimword (:256) /\
+      (!name b n. local_region cenv ee.scopes s name b n ==> regions_disjoint (w2n w) 32 b n) /\
+      (!aid b n. aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (b,n) ==>
+        regions_disjoint (w2n w) 32 b n) /\
+      eval_operands ops s = SOME (MAP event_value_to_word vals) /\
+      EVERY (\op. op_taint tn op = {}) ops /\ ~s.vs_halted /\
+      s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
+    ?u G2 tn2. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (Abort ExHalt_abort u,G2,tn2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `i = mk_inst sm.cs_next_id MSTORE [buf.buf_operand;data_op] []` >>
+  qabbrev_tac `j = mk_inst s1.cs_next_id LOG
+    (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) []` >>
+  qabbrev_tac `t = mstore (w2n w) word s` >>
+  qabbrev_tac `t1 = t with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `tf = step_taint i s t tn` >>
+  qexistsl [`halt_state (set_returndata [] t1)`, `step_prov PG G i t`, `tf`] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> strip_tac >>
+  `op_taint tn data_op = {}` by gvs[ptr_val_ok_def] >>
+  `allocas_from lo s /\ stor_taint_ok_at (DF H) tn s` by
+    gvs[ghost_inv_at_def] >>
+  `step_inst_base i s = OK t /\ ptr_inst_ok (DF H) lo 0 ctx func G tn i s /\
+   step_prov PG G i t = G /\ ptr_covers G tf p t 32 /\
+   EVERY (\op. op_taint tf op = {}) ops /\
+   (!k. w2n w <= k /\ k < w2n w + 32 ==> k NOTIN tf.t_mem) /\
+   allocas_from lo t /\ stor_taint_ok_at (DF H) tf t` by
+    (gvs[] >> drule_all (SRULE [] raw_log_fixed_store_step) >>
+     simp[Abbr `i`, Abbr `t`, Abbr `tf`] >> metis_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx ee s` by gvs[expr_post_def] >>
+  `s.vs_call_ctx.cc_static` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+        loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  `eval_operands ops t1 = SOME (MAP event_value_to_word vals) /\
+   eval_operand buf.buf_operand t1 = SOME w` by
+    (`!xs. eval_operands xs t1 = eval_operands xs s` by
+       (Induct >> simp[eval_operands_def] >>
+        `!op. eval_operand op t1 = eval_operand op s` by
+          (Cases >> simp[Abbr `t1`, Abbr `t`, mstore_def,
+                         eval_operand_def, lookup_var_def]) >> simp[]) >>
+     simp[] >> Cases_on `buf.buf_operand` >>
+     gvs[Abbr `t1`, Abbr `t`, mstore_def, eval_operand_def, lookup_var_def]) >>
+  `step_inst_base j t1 = Abort ExHalt_abort (halt_state (set_returndata [] t1))` by
+    (irule log_emit_static_step >>
+     simp[Abbr `j`, mk_inst_def] >>
+     simp[eval_operand_def, Abbr `t1`, Abbr `t`, mstore_def] >>
+     gvs[eval_operand_def, lookup_var_def]) >>
+  `alloca_next_valid s` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, alloca_inv_def] >>
+  `w2n w + 32 <= s.vs_alloca_next` by
+    (irule alloca_region_below_frontier >> simp[] >>
+     qexistsl [`alloc_sa.cs_next_id`, `w2n w`, `32`] >> simp[]) >>
+  `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+   inst_mem_below_frontier j t1 /\ inst_dload_in_section j t1` by
+    (simp[Abbr `i`, Abbr `j`, below_frontier_MSTORE,
+          memSafeRunTheory.inst_dload_in_section_other] >>
+     simp[SRULE [] (Q.SPECL [`s1.cs_next_id`, `LENGTH ops`, `REVERSE ops`]
+                    below_frontier_LOG), eval_operand_def] >>
+     simp[Abbr `t1`, Abbr `t`, mstore_def, eval_operand_def, lookup_var_def] >>
+     gvs[eval_operand_def, lookup_var_def]) >>
+  `access_ok 0 G func j t1` by
+    (simp[Abbr `j`] >> irule (SRULE [] log_access_ok) >>
+     simp[eval_operand_def, dimword_def] >>
+     gvs[ptr_covers_def, Abbr `t1`, Abbr `t`, mstore_def,
+         eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  `access_ok lo G func j t1` by
+    (gvs[access_ok_def] >> rpt strip_tac >> metis_tac[arithmeticTheory.ADD_EQ_0]) >>
+  `taint_ok func tf j t1` by
+    (simp[Abbr `j`] >> irule (SRULE [] log_taint_ok) >>
+     simp[eval_operand_def, op_taint_def, dimword_def] >>
+     gvs[ptr_covers_def, op_taint_def, eval_operand_def] >> metis_tac[]) >>
+  `ptr_inst_ok (DF H) lo 0 ctx func G tf j t1` by
+    (simp[ptr_inst_ok_def, Abbr `j`, mk_inst_def, step_inst_non_invoke] >>
+     gvs[Abbr `t1`, allocas_from_def] >> metis_tac[]) >>
+  `sb.cs_current_bb = sm.cs_current_bb /\
+   sb.cs_current_insts = sm.cs_current_insts ++ [i;j]` by
+    (gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, emit_def, Abbr `i`, Abbr `j`]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX sb.cs_current_insts bb.bb_instructions` by
+    (gvs[fn_has_code_def] >> metis_tac[]) >>
+  `get_instruction bb s.vs_inst_idx = SOME i /\
+   get_instruction bb (SUC s.vs_inst_idx) = SOME j` by
+    (gvs[IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN] >> simp[]) >>
+  `~t1.vs_halted /\ t1.vs_current_bb = s.vs_current_bb /\
+   t1.vs_inst_idx = SUC s.vs_inst_idx` by
+    simp[Abbr `t1`, Abbr `t`, mstore_def] >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+    simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK t1,step_prov PG G i t,tf)` by
+    (simp[Abbr `t1`, Abbr `tf`] >>
+     drule_all straight_line_origin_ptr_edge >>
+     disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >>
+     simp[Abbr `i`, mk_inst_def] >> metis_tac[]) >>
+  `step_inst 0 ctx j t1 = Abort ExHalt_abort (halt_state (set_returndata [] t1))` by
+    simp[step_inst_non_invoke, Abbr `j`, mk_inst_def] >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (t1,G,tf) []
+    (Abort ExHalt_abort (halt_state (set_returndata [] t1)),G,tf)` by
+    (rewrite_tac[fragGasOriginPtrTheory.gas_origin_ptr_edge_def] >> conj_tac
+     >- (rewrite_tac[fragGasOriginTheory.gas_origin_edge_def] >> conj_tac >- simp[] >>
+         qexistsl [`0`, `bb`, `j`, `Abort ExHalt_abort (halt_state (set_returndata [] t1))`] >>
+         simp[gasEventsTheory.gas_events_step_def, memSafeRunTheory.mem_safe_step_non_invoke, exit_result_def,
+              Abbr `j`, mk_inst_def] >>
+         gvs[mk_inst_def]) >>
+     rewrite_tac[fragGasPathPtrTheory.gas_path_ptr_edge_def] >> simp[] >> qexists `0` >>
+     simp[gasCountTheory.gas_count_step_def, ptr_safe_step_def] >>
+     qexistsl [`bb`, `j`] >>
+     simp[Abbr `j`, mk_inst_def, exit_result_def] >> gvs[mk_inst_def]) >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
+    (SPEC_ALL (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)))) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  irule (cj 3 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
+  simp[exit_result_def]
 QED
