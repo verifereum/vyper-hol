@@ -9,6 +9,41 @@ Ancestors moduleLoweringProps rich_list venomInstProps decoderNavigationPtr frag
   abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderContract abiDecoderGuards
   abiDecoderReentry
 
+Theorem calldata_bulk_payload_endpoint_ptr_uniform_joint:
+  abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD (Lit 0w) sa = ((),sb) /\
+  lookup_var root s = SOME (n2w d) /\ eval_operand src s = SOME a /\
+  eval_operand cnt s = SOME (n2w n) /\
+  not_fresh_at sa root /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. cnt = Var x ==> not_fresh_at sa x) /\
+  ptr_covers G tn root s capacity /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  op_taint tn cnt = {} /\ op_prov G cnt = NONE /\
+  32 + n * mem_sz <= capacity /\ d + 32 < dimword (:256) /\
+  n * mem_sz < dimword (:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?H u.
+    ptr_covers H u root t capacity /\ u.t_mem SUBSET tn.t_mem /\
+    (!i. d+32 <= i /\ i < d+32+n*mem_sz ==> i NOTIN u.t_mem) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lower fuel ctx func PG G tn s) /\
+    (alloca_inv s /\ d + capacity <= s.vs_alloca_next /\ ~s.vs_halted ==>
+      alloca_inv t /\ !D explicit.
+        gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  strip_tac >> drule_all calldata_bulk_payload_endpoint_ptr_uniform_origin_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[]
+QED
+
 Theorem calldata_bulk_payload_endpoint_ptr_uniform:
   abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD (Lit 0w) sa = ((),sb) /\
   lookup_var root s = SOME (n2w d) /\ eval_operand src s = SOME a /\
