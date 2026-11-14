@@ -93,9 +93,10 @@ Proof
   qexists_tac `v1+v2` >> simp[ADD1]
 QED
 
-Theorem ld_sync_dloadbytes_effect:
+Theorem ld_sync_dloadbytes_effect_static:
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   ptr_discipline lo C vs0 /\ mem_inv dload_offset_ok C vs0 /\
   mem_inv dload_headroom_ok C vs0 /\ ~in_revert_forward fn s /\
   ir_supply_covers_fn f.lf_supply fn /\
@@ -115,7 +116,7 @@ Theorem ld_sync_dloadbytes_effect:
     ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
     u.vs_current_bb = t0.vs_current_bb /\ u.vs_prev_bb = t0.vs_prev_bb
 Proof
-  strip_tac >> drule_all ld_sync_dloadbytes_trace_evaluations >> strip_tac >>
+  strip_tac >> drule_all ld_sync_dloadbytes_trace_evaluations_static >> strip_tac >>
   drule ld_sync_active >> simp[] >> strip_tac >>
   drule ld_sync_memory >> strip_tac >>
   drule ld_sync_ghosts >> simp[] >> strip_tac >>
@@ -148,7 +149,7 @@ Proof
   simp[write_memory_with_expansion_def, update_var_def]
 QED
 
-Resume ld_sync_dloadbytes_effect[observations_vars]:
+Resume ld_sync_dloadbytes_effect_static[observations_vars]:
   `f with <|lf_src := ss; lf_tgt := u; lf_H := f.lf_H; lf_tv := tn.t_var|> =
    f with <|lf_src := ss; lf_tgt := u|>` by
     simp[ld_frame_component_equality] >>
@@ -159,7 +160,7 @@ Resume ld_sync_dloadbytes_effect[observations_vars]:
   simp[write_memory_with_expansion_def, update_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> Cases_on `z = v` >> gvs[]
 QED
-Resume ld_sync_dloadbytes_effect[memory]:
+Resume ld_sync_dloadbytes_effect_static[memory]:
   drule_all ld_sync_dloadbytes_destination_cases >>
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   `ld_memory lo A tn s t1` by
@@ -171,10 +172,37 @@ Resume ld_sync_dloadbytes_effect[memory]:
   qexistsl_tac [`w2n nw`,`tn`] >>
   simp[ADD_COMM] >> metis_tac[]
 QED
-Resume ld_sync_dloadbytes_effect[observations_nonghost]:
+Resume ld_sync_dloadbytes_effect_static[observations_nonghost]:
   gvs[write_memory_with_expansion_def, update_var_def, ld_nonghost_def]
 QED
-Finalise ld_sync_dloadbytes_effect
+Finalise ld_sync_dloadbytes_effect_static
+
+Theorem ld_sync_dloadbytes_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  ptr_discipline lo C vs0 /\ mem_inv dload_offset_ok C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ ~in_revert_forward fn s /\
+  ir_supply_covers_fn f.lf_supply fn /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
+  ld_prefix C' fn' X p 1 t0 t1 /\ step_inst fuel C' (EL 1 X) t1 = OK u ==>
+  ?ss H' G' tn'.
+    step_inst 0 C inst s = OK ss /\
+    tn' = step_taint inst s ss tn /\ G' = step_prov PG G inst ss /\
+    G' = ld_erase A o_f H' /\ (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := u;
+                         lf_H := H'; lf_tv := tn'.t_var|>) /\
+    ld_memory lo A tn' ss u /\ ld_nonghost tn' ss u /\
+    ss.vs_allocas = s.vs_allocas /\ u.vs_allocas = t0.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ u.vs_alloca_next = t0.vs_alloca_next /\
+    ss.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = p+1 /\
+    ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
+    u.vs_current_bb = t0.vs_current_bb /\ u.vs_prev_bb = t0.vs_prev_bb
+Proof
+  strip_tac >> irule ld_sync_dloadbytes_effect_static >>
+  simp[] >> rpt conj_tac >>
+  gvs[o1PassContractTheory.o1_run_state_ok_def] >> metis_tac[]
+QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "public effect has hypotheses")
