@@ -24,12 +24,6 @@ Proof
 QED
 
 (* The production specialization changes only Ambient, not Point/Terminal. *)
-Theorem ld_covered_package_induction_static:
-  ^ld_package_induction ^ld_covered_ambient_static ^ld_probe_point ^ld_probe_terminal
-Proof
-  MATCH_ACCEPT_TAC ld_return_package_induction
-QED
-
 Theorem ld_covered_package_induction:
   ^ld_package_induction ^ld_covered_ambient ^ld_probe_point ^ld_probe_terminal
 Proof

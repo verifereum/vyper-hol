@@ -134,14 +134,8 @@ val ldClausesFuel = strip_conj (fst (dest_imp ldIndFuel));
 val ldStaticSubst = [``o1_run_state_ok vs`` |->
   ``(o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs)``];
 val ldAStatic = Term.subst ldStaticSubst ldA;
-val ldPexecStatic = Term.subst ldStaticSubst ldPexec;
-val ldPrunStatic = Term.subst ldStaticSubst ldPrun;
-val ldPstepStatic = Term.subst ldStaticSubst ldPstep;
 val ldIndStatic = Term.subst ldStaticSubst ldInd;
 val ldClausesStatic = strip_conj (fst (dest_imp ldIndStatic));
-val ldPexecFuelStatic = Term.subst ldStaticSubst ldPexecFuel;
-val ldPrunFuelStatic = Term.subst ldStaticSubst ldPrunFuel;
-val ldPstepFuelStatic = Term.subst ldStaticSubst ldPstepFuel;
 val ldIndFuelStatic = Term.subst ldStaticSubst ldIndFuel;
 val ldClausesFuelStatic = strip_conj (fst (dest_imp ldIndFuelStatic));
 
