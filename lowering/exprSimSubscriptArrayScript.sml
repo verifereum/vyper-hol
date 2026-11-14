@@ -19,7 +19,7 @@ Ancestors words[qualified,ignore_grammar]
   exprSimSliceOrdinaryContinue
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
   exprSimSubscriptArrayLiveMemory exprSimSubscriptArrayLiveMemoryValue
-  exprSimSubscriptArrayLiveImmutable exprSimSubscriptArrayLiveStorageSuffix
+  exprSimSubscriptArrayLiveImmutable exprSimSubscriptArrayLiveStorageSuffix exprReasonOperand
 
 (* An element of an array whose index leaves the locals and the immutables
    as they were, and whose base the index's fragment keeps as it is: an
@@ -471,28 +471,52 @@ Proof
   drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _`
     (mp_tac o REWRITE_RULE [exprSimDefsTheory.expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+  >- suspend "base_bad"
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o PURE_ONCE_REWRITE_RULE [gasSummaryTheory.gas_summary_at_def])
       >- suspend "base_normal"
       >> suspend "base_exit") >>
   suspend "base_exempt"
 QED
-Resume compile_subscript_array_live_base_case[base_exit]:
-  Cases_on `res` >- fs[] >> rename1 `INR exc` >>
+Resume compile_subscript_array_live_base_case[base_bad]:
   qexists_tac `marks` >> disj1_tac >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result,
+       vyperStorageTraceTheory.storage_trace_frame_select]
+QED
+Resume compile_subscript_array_live_base_case[base_exit]:
+  qexists_tac `marks` >>
+  reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+  >- (disj1_tac >>
+      qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageTraceTheory.storage_trace_frame_select] >>
+      metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+  disj2_tac >> disj1_tac >>
+  Cases_on `res`
+  >- (gvs[] >> metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  rename1 `INR exc` >>
   simp[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
   qpat_assum `~subscript_reads_base _ _ _` (fn th =>
     pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   conj_tac
   >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
-      first_assum ACCEPT_TAC) >> fs[]
+      first_assum ACCEPT_TAC) >> fs[] >> disj2_tac >> first_assum ACCEPT_TAC
 QED
 Resume compile_subscript_array_live_base_case[base_exempt]:
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   qpat_assum `~subscript_reads_base _ _ _` (fn th =>
     pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
@@ -501,7 +525,26 @@ Resume compile_subscript_array_live_base_case[base_exempt]:
   first_assum ACCEPT_TAC
 QED
 Resume compile_subscript_array_live_base_case[base_normal]:
-  qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o BETA_RULE) >>
+  reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageTraceTheory.storage_trace_frame_select] >>
+      metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `?tv. res = INL tv` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `res = _` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    metis_tac[] >>
   gnvs[] >>
   qmatch_goalsub_abbrev_tac `mk_ptr dst loc` >>
   qpat_x_assum `expr_vv_case _ _ _ _ _ _` kall_tac >>
@@ -513,7 +556,14 @@ Resume compile_subscript_array_live_base_case[base_normal]:
   qpat_x_assum `~s0.vs_halted` kall_tac >>
   qpat_x_assum `s0.vs_current_bb = _` kall_tac >>
   qpat_x_assum `s0.vs_inst_idx = _` kall_tac >>
-  pure_rewrite_tac[GSYM gasOutcomeTheory.gas_outcome_def] >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx (Subscript ann obj idx)) (es,s0)
+     (\H res ee t'. ?tv. res = INL tv /\
+        vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee tv
+          (LocatedValue ann (mk_ptr dst loc)) t' /\
+        t'.vs_current_bb = sb.cs_current_bb /\
+        t'.vs_inst_idx = LENGTH sb.cs_current_insts)
+     (\H res ee out. expr_exit res out)` suffices_by
+    simp[gasOutcomeTheory.gas_outcome_def] >>
   qpat_assum `~subscript_reads_base _ _ _`
     (irule o MATCH_MP framed_array_after_base) >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >> simp[] >>
@@ -531,6 +581,11 @@ Resume compile_subscript_array_live_base_case[base_normal]:
      qexists_tac `ann` >> simp[]) >>
   `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
   conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `H` mp_tac) >>
+      simp[loweringPostsTheory.vv_post_def]) >>
+  conj_tac
   >- metis_tac[gasSummaryTheory.gas_marked_exec_def,
                fragGasModeTheory.gas_marked_path_exec, fragGasPathTheory.gas_path_normal] >>
   conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
@@ -539,13 +594,6 @@ Resume compile_subscript_array_live_base_case[base_normal]:
   >- (simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
       `expr_body_pre cenv cx env idx (es_end with gas_obs := gs)` by fs[] >>
       drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_res_ok) >> simp[]) >>
-  conj_tac
-  >- (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (mp_tac o CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
-      simp[exprLoweringPropsTheory.stmt_state_rel_def,
-           loweringStateRelDefsTheory.state_rel_gas_obs,
-           exprLoweringPropsTheory.immutable_alloca_sep_def] >>
-      metis_tac[]) >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ idx` mp_tac >>
   simp[expr_sim_case_def] >> disch_then irule >>
   conj_tac >- (strip_tac >> fs[int_calls_expr_def]) >>
@@ -575,17 +623,49 @@ Resume compile_subscript_array_live_base_case[base_suffix]:
      simp[gasSummaryTheory.gas_marked_exec_def] >>
      disch_then (qspec_then `gas_explicit imarks t.vs_gas_readings` mp_tac o CONJUNCT1) >>
      simp[]) >>
-  `subscript_base_live_after cenv cx obj et bd tv
-     (es_end with gas_obs := gas_explicit imarks t.vs_gas_readings)
-     (raw with gas_obs := [])` by
-    (qpat_x_assum `!s env tv t gs ir t'. _` irule >>
-     conj_tac >- (simp[] >> metis_tac[]) >>
-     goal_assum (drule_at (Pat `eval_expr cx obj _ = _`)) >>
-     qexists_tac `env` >> simp[]) >>
+  reverse (Cases_on `storage_trace_domain cx st0 raw.storage_trace`)
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_select]) >>
+  `?Hw. valid_horizon cx st0 Hw raw.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H raw.storage_trace ==>
+       valid_horizon cx st0 H es_end.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `vyperState$bind _ _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+          vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result,
+          vyperStorageTraceTheory.storage_trace_frame_select]) >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `eval_expr cx obj _ = (INL tv, _)`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+          vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result,
+          vyperStorageTraceTheory.storage_trace_frame_select]) >>
+  `!H. valid_horizon cx st0 H raw.storage_trace ==>
+     subscript_base_live_after H cenv cx obj et bd tv
+       (es_end with gas_obs := gas_explicit imarks t.vs_gas_readings)
+       (raw with gas_obs := [])` by
+    (rpt strip_tac >>
+     qpat_x_assum `!s env tv t gs ir t' st0 H. _` irule >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
+     qexists_tac `env` >>
+     goal_assum (drule_at (Pat `eval_expr cx obj _ = _`)) >> simp[]) >>
+  `subscript_base_live_after Hw cenv cx obj et bd tv
+       (es_end with gas_obs := gas_explicit imarks t.vs_gas_readings)
+       (raw with gas_obs := [])` by metis_tac[] >>
+  `vv_post Hw ctx func cenv cx obj es sa sm s0 (es_end with gas_obs := []) tv bvv t` by
+    metis_tac[] >>
   `~u.vs_halted` by
     metis_tac[gasSummaryTheory.gas_marked_exec_def,
               fragGasModeTheory.gas_marked_path_exec, fragGasPathTheory.gas_path_normal] >>
-  qpat_x_assum `!s env tv t gs ir t'. _` kall_tac >>
+  qpat_x_assum `!s env tv t gs ir t' st0 H. _` kall_tac >>
   qpat_x_assum `_ \/ _` kall_tac >>
   `?p. bvv = LocatedValue (ArrayT et bd) p /\ loc = p.ptr_location` by
     (Cases_on `bvv`
@@ -598,7 +678,7 @@ Resume compile_subscript_array_live_base_case[base_suffix]:
          fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
             vyperStateTheory.read_result_def, vyperStateTheory.raise_def]) >>
      qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_tac o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
+       (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
      simp[loweringPostsTheory.vv_holds_def, compileEnvTheory.is_bytestring_type_def] >>
      rpt strip_tac >> gvs[Abbr `loc`, contextTheory.vv_location_def]) >>
   qpat_x_assum `bvv = _` SUBST_ALL_TAC >>
@@ -624,10 +704,14 @@ Resume compile_subscript_array_live_base_case[base_suffix]:
   `expr_body_pre cenv cx env obj es` by
     metis_tac[exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base] >>
   `!l. p.ptr_operand <> Label l` by
-    (drule exprSimSubscriptArrayOriginTheory.compile_array_pointer_not_label >>
-     disch_then irule >> simp[] >>
-     qexists_tac `env` >>
-     fs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+    (`well_typed_expr env obj /\
+      (!id vt. FLOOKUP env.var_types id = SOME vt ==>
+        ?q sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz))` by
+       fs[expr_body_pre_def, expr_sim_inv_def] >>
+     drule_all exprReasonOperandTheory.compile_expr_reason_uniform >>
+     disch_then (qspec_then `ty` mp_tac) >>
+     simp[exprReasonOperandTheory.reason_uniform_shape_def] >> strip_tac >>
+     first_x_assum drule >> simp[exprReasonOperandTheory.reason_result_shape_def]) >>
   `is_word_type (expr_type idx)` by
     (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
@@ -647,6 +731,25 @@ Resume compile_subscript_array_live_base_case[base_suffix]:
      >- (conj_tac >- fs[expr_body_pre_def] >>
          metis_tac[expr_body_pre_var_types_well_formed]) >> simp[]) >>
   `fn_has_code st2 sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  `gas_summary_at F (ctx,func) []
+     (select_result cx (ArrayT et bd) tv (ValueSubscript v)) (raw with gas_obs := [],u)
+     (\res ee q. ?child. res = INL child /\ ee = (raw with gas_obs := []) /\
+       (!H. valid_horizon cx st0 H raw.storage_trace ==>
+         vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee child
+           (LocatedValue ann (mk_ptr dst p.ptr_location)) q) /\
+       q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts)
+     (\res ee out. expr_exit res out)` suffices_by
+    (strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+     qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+     qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[gasSummaryTheory.gas_summary_at_def] >> rpt strip_tac >>
+     qexistsl_tac [`res`,`es_end`,`out`] >> simp[] >>
+     disj1_tac >>
+     `es_end.storage_trace = raw.storage_trace` by
+       (qpat_x_assum `_ with gas_obs := [] = _`
+          (mp_tac o Q.AP_TERM `\s. s.storage_trace`) >> simp[]) >>
+     metis_tac[]) >>
   Cases_on `tv` >- suspend "value_suffix" >- suspend "place_suffix" >>
   qpat_assum `eval_expr cx obj _ = _`
     (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac exprSimSourceTheory.expr_body_pre_runtime_typed) >>
@@ -660,12 +763,13 @@ Resume compile_subscript_array_live_base_case[value_suffix]:
      simp[contextTheory.vv_location_def]) >>
   gvs[contextTheory.vv_operand_def, vv_post_final_gas, expr_post_initial_gas] >>
   qpat_assum `eval_expr cx obj _ = _`
-    (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac live_memory_value_array_suffix_summary) >>
+    (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac (BETA_RULE (live_memory_value_array_suffix_summary_family |>
+        Q.GEN `P` |> Q.ISPEC `(\H. valid_horizon cx st0 H raw.storage_trace)`))) >>
   simp[NoAsms, exprSimPropsTheory.vv_post_initial_gas, vv_post_final_gas,
        expr_post_initial_gas, contextTheory.vv_operand_def] >>
   disch_then irule >>
   simp[SF SFY_ss, vv_post_final_gas, expr_post_initial_gas] >>
-  conj_tac >- gvs[subscript_base_live_after_def] >>
+  conj_tac >- (gvs[subscript_base_live_after_def] >> metis_tac[]) >>
   qexistsl_tac [`iop`,`p`,`sm`,`st2`,`t`] >>
   simp[vv_post_final_gas, expr_post_initial_gas]
 QED
@@ -678,24 +782,30 @@ QED
 Resume compile_subscript_array_live_base_case[memory_suffix]:
   gvs[contextTheory.vv_operand_def, vv_post_final_gas, expr_post_initial_gas] >>
   qpat_assum `eval_expr cx obj _ = _`
-    (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac live_memory_array_suffix_summary) >>
+    (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac (BETA_RULE (live_memory_array_suffix_summary_family |>
+        Q.GEN `P` |> Q.ISPEC `(\H. valid_horizon cx st0 H raw.storage_trace)`))) >>
   simp[NoAsms, exprSimPropsTheory.vv_post_initial_gas, vv_post_final_gas,
        expr_post_initial_gas, contextTheory.vv_operand_def] >>
   disch_then irule >>
   simp[SF SFY_ss, vv_post_final_gas, expr_post_initial_gas, contextTheory.vv_operand_def] >>
-  conj_tac >- gvs[subscript_base_live_after_def] >>
+  conj_tac >-
+    (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> subscript_base_live_after _ _ _ _ _ _ _ _ _`
+       (qspec_then `Hw` mp_tac) >> simp[subscript_base_live_after_def]) >>
   qexistsl_tac [`iop`,`sm`,`st2`,`t`] >>
   simp[vv_post_final_gas, expr_post_initial_gas]
 QED
 Resume compile_subscript_array_live_base_case[immutable_suffix]:
   gvs[contextTheory.vv_operand_def, vv_post_final_gas, expr_post_initial_gas] >>
   qpat_assum `eval_expr cx obj _ = _`
-    (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac live_immutable_array_suffix_summary) >>
+    (mp_then (Pat `eval_expr _ _ _ = _`) mp_tac (BETA_RULE (live_immutable_array_suffix_summary_family |>
+        Q.GEN `P` |> Q.ISPEC `(\H. valid_horizon cx st0 H raw.storage_trace)`))) >>
   simp[NoAsms, exprSimPropsTheory.vv_post_initial_gas, vv_post_final_gas,
        expr_post_initial_gas, contextTheory.vv_operand_def] >>
   disch_then irule >>
   simp[SF SFY_ss, vv_post_final_gas, expr_post_initial_gas, contextTheory.vv_operand_def] >>
-  conj_tac >- gvs[subscript_base_live_after_def] >>
+  conj_tac >-
+    (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> subscript_base_live_after _ _ _ _ _ _ _ _ _`
+       (qspec_then `Hw` mp_tac) >> simp[subscript_base_live_after_def]) >>
   qexistsl_tac [`iop`,`sm`,`st2`,`t`] >>
   simp[vv_post_final_gas, expr_post_initial_gas]
 QED
@@ -716,6 +826,8 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
   simp[NoAsms] >> disch_then drule >> strip_tac >>
   `?itv. evaluate_type (get_tenv cx) (expr_type idx) = SOME itv /\
          value_has_type itv v` by metis_tac[] >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `Hw` mp_tac) >> (impl_tac >- simp[]) >> disch_then assume_tac >>
   drule_all exprSimSubscriptArraySuffixTheory.framed_array_index_post_view >> strip_tac >>
   `ann = et` by
     (fs[expr_body_pre_def] >>
@@ -730,7 +842,11 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
      strip_tac >>
      qpat_x_assum `ArrayT _ _ = _` (SUBST_ALL_TAC o SYM) >>
      fs[vyperTypeSystemTheory.subscript_vtype_def]) >>
-  `p.ptr_location = slot_loc tr` by fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_place_ptr_def] >>
+  `p.ptr_location = slot_loc tr` by
+    (qpat_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H0` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     simp[NoAsms, loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_place_ptr_def]) >>
   gvs[subscript_base_live_after_def, contextTheory.vv_operand_def,
       vv_post_final_gas, expr_post_initial_gas] >>
   `type_memory_bytes cenv ann = type_memory_size tv` by
@@ -740,10 +856,14 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
     (Cases_on `tr` >> simp[loweringPostsTheory.slot_loc_def, compileEnvTheory.elem_size_in_location_def,
        compileEnvTheory.word_scale_def, compileEnvTheory.is_slot_addressed_def,
        exprSimFieldLayoutTheory.slot_count_of_memory_size]) >>
-  irule live_storage_array_suffix_summary >>
+  irule (BETA_RULE (live_storage_array_suffix_summary_family |>
+    Q.GEN `P` |> Q.ISPEC `(\H. valid_horizon cx st0 H raw.storage_trace)`)) >>
   simp[SF SFY_ss, vyperValueTheory.evaluate_type_def] >>
   conj_tac
   >- (rpt strip_tac >> gvs[] >>
+      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> storage_read_live _ _ _ _ _ /\ _`
+        (qspec_then `Hw` mp_tac) >>
+      simp[] >> strip_tac >>
       drule exprSimPopStorageTheory.pop_array_length_bound >> simp[]) >>
   conj_tac >- fs[vyperTypingTheory.well_formed_type_value_def] >>
   qexistsl_tac [`env`,`iop`,`p`,`sm`,`st2`,`es_end`,`t`] >>
@@ -1856,7 +1976,7 @@ Proof
        subscript_base_live_after H cenv cx obj et bd tv t t')`
   >- (qspecl_then [`nocalls`,`ctx`,`func`,`cenv`,`cx`,`ann`,`obj`,`idx`,`et`,`bd`]
         match_mp_tac compile_subscript_array_live_base_case >>
-      asm_rewrite_tac[] >> reverse conj_tac >- fs[] >>
+      asm_rewrite_tac[] >> reverse conj_tac >- metis_tac[] >>
       rpt strip_tac >>
       qpat_x_assum `!s tv t s' tv' t'. _`
         (qspecl_then [`s`,`tv`,`t`,`t`,`tv`,`t`] mp_tac) >>
