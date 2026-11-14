@@ -459,7 +459,9 @@ Proof
   `~(w2n (n2w n:bytes32)+32 <= w2n (n2w (LENGTH bs):bytes32))` by
     simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   drule_all extract32_tail_bounds_abort_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `HG` (qx_choose_then `th`
+      (qx_choose_then `t` strip_assume_tac)))) >>
   qexistsl_tac [`HG`,`th`] >> simp[]
 QED
 
@@ -479,7 +481,8 @@ Resume extract32_tail_ready_certificate[inbounds]:
      i < w2n (n2w (p+32):bytes32)+w2n (n2w n:bytes32)+32 ==> i NOTIN tn.t_mem)` by
     simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   drule_all extract32_tail_bounds_normal_certificate >>
-  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`]
+    (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
   qexistsl_tac [`HG`,`th`] >> simp[]
 QED
 
