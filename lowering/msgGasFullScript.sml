@@ -2,6 +2,8 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  (* Temporary reach until the joint builtin dispatch imports this family. *)
+  bodyFullBuiltinEnv
   (* Checked builtin leaves pending body-case assembly. *)
   bodyFullBuiltinCalldataSlice
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
