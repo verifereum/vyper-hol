@@ -24,6 +24,7 @@ Ancestors
   abiEncodeSnapshotTest
   (* compiled creation code *)
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
+  ctorImmutableAppendTest
   (* tests of the bytecode evaluation library the native runner shares *)
   evalCompilerBytecodeLibTest
   (* the supported subset: per-construct contracts, membership matrix *)

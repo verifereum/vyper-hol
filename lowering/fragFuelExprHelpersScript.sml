@@ -311,16 +311,15 @@ Proof
   ft [fuel_ok_compile_ptr_load, fuel_ok_compile_ptr_store]
 QED
 
-(* The opcodes are arbitrary, so they must be ordinary non-terminators. *)
 Theorem fuel_ok_compile_dynarray_append:
-  !cenv base v ws es dt st cap prim lo so Wv E.
-    ~is_terminator lo /\ lo <> PHI /\ ~is_terminator so /\ so <> PHI ==>
+  !cenv base v ws es dt st cap prim loc Wv E.
     fuel_ok Wv {} E
-      (compile_dynarray_append cenv base v ws es dt st cap prim lo so)
+      (compile_dynarray_append cenv base v ws es dt st cap prim loc)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_dynarray_append_def, LET_THM] >>
-  ft [fuel_ok_compile_store_memory, CONJUNCT2 fuel_ok_compile_word_copy_loop,
-      fuel_ok_compile_store_slots]
+  ft [fuel_ok_compile_store_memory, fuel_ok_compile_store_slots,
+      fuel_ok_compile_ptr_load, fuel_ok_compile_ptr_store,
+      fuel_ok_compile_imm_store_words]
 QED
 
 (* The loop leaf needs the length operand allocated before it. *)
