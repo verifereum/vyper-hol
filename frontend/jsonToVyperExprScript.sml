@@ -1,6 +1,7 @@
 Theory jsonToVyperExpr
 Ancestors
   ASCIInumbers integer alist jsonAST vyperAST jsonToVyperType vyperConstEval
+  vyperPinFold
 Libs
   intLib
 
@@ -314,7 +315,7 @@ Definition fold_constant_def:
 End
 
 Definition exponent_operand_def:
-  exponent_operand op e = if op = JBop_Pow then fold_constant e else e
+  exponent_operand op e = if op = JBop_Pow then pin_fold_expr e else e
 End
 
 Definition make_builtin_call_def:
@@ -848,9 +849,22 @@ Definition translate_list_def:
 End
 
 
+Definition pin_bool_values_def:
+  pin_bool_values [] = SOME [] /\
+  pin_bool_values (Literal ty (BoolL b) :: es) =
+    OPTION_MAP (CONS b) (pin_bool_values es) /\
+  pin_bool_values _ = NONE
+End
+
 Definition translate_boolop_def:
-  (translate_boolop JBoolop_And es = boolop_and es) /\
-  (translate_boolop JBoolop_Or es = boolop_or es)
+  translate_boolop JBoolop_And es =
+    (case pin_bool_values (MAP pin_fold_expr es) of
+     | SOME bs => Literal (BaseT BoolT) (BoolL (EVERY I bs))
+     | NONE => boolop_and es) /\
+  translate_boolop JBoolop_Or es =
+    (case pin_bool_values (MAP pin_fold_expr es) of
+     | SOME bs => Literal (BaseT BoolT) (BoolL (EXISTS I bs))
+     | NONE => boolop_or es)
 End
 
 

@@ -1,6 +1,8 @@
 Theory vyperConstEvalWitness
 Ancestors
-  jsonToVyper jsonToVyperExpr vyperConstEval vyperConstEvalProps vyperAST vyperInterpreter
+  jsonToVyper jsonToVyperExpr vyperConstEval vyperConstEvalProps vyperPinFold
+  vyperPinFoldProps
+  vyperAST vyperInterpreter
   vyperState vyperValue
 Libs
   jsonASTLib vyperConstEvalLib vyperCheckContractFrontendLib
@@ -117,6 +119,52 @@ Proof
   EVAL_TAC
 QED
 
+Theorem pin_fold_wei_and_addmod:
+  pin_fold_expr
+    (Builtin (BaseT (UintT 256)) (AsWeiValue Gwei)
+      [Literal (BaseT DecimalT) (DecimalL 30)]) =
+      Literal (BaseT (UintT 256)) (IntL 3) /\
+  pin_fold_expr
+    (Builtin (BaseT (UintT 256)) AddMod
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2);
+       Literal (BaseT (UintT 256)) (IntL 5)]) =
+      Literal (BaseT (UintT 256)) (IntL 3)
+Proof
+  EVAL_TAC
+QED
+
+Theorem pin_fold_runtime_provenance:
+  ~is_int_literal (pin_fold_expr
+    (Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 0)])) /\
+  ~is_int_literal (pin_fold_expr
+    (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+      [Literal (BaseT (UintT 256)) (IntL 1)])) /\
+  ~is_int_literal (pin_fold_expr
+    (Builtin (BaseT (UintT 256)) (Bop Exp)
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+         [Literal (BaseT (UintT 256)) (IntL 1);
+          Literal (BaseT (UintT 256)) (IntL 0)]]))
+Proof
+  EVAL_TAC
+QED
+
+Theorem pin_fold_list_selection:
+  pin_fold_expr
+    (Subscript (BaseT (UintT 256))
+      (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2))
+        (MakeArray (SOME (BaseT (UintT 256))) (Fixed 2))
+        [Literal (BaseT (UintT 256)) (IntL 0);
+         Literal (BaseT (UintT 256)) (IntL 2)])
+      (Literal (BaseT (UintT 256)) (IntL 0))) =
+    Literal (BaseT (UintT 256)) (IntL 0)
+Proof
+  EVAL_TAC
+QED
+
 (* N = 1 + 2 sizes the array and is the exponent of x ** N. *)
 val bound = translate "constant_bound.json";
 val () = contains "array bound" ``ArrayT ^uint256 (Fixed 3)`` bound;
@@ -190,20 +238,14 @@ val () = if can (find_term (fn t =>
 Theorem constant_widened_translation = widened;
 Theorem constant_widened_contract_checked = checked "constant_widened.json";
 
-(* Positions whose value must be known at compile time but that the evaluator
-   leaves alone are rejected, not given a default: range(N) with
-   N = uint256_addmod(1, 2, 7), and is_static_call=True or False. *)
+(* General range-bound folding is still deferred; original BoolOp syntax is
+   folded before translation to the runtime IfExp representation. *)
 val unevaluated_range = translate "constant_unevaluated_range.json";
 val () = if optionSyntax.is_none (rhs (concl unevaluated_range)) then ()
   else raise Fail "unevaluated range bound accepted";
 Theorem constant_unevaluated_range_rejected = unevaluated_range;
-val unevaluated_flag = translate "constant_unevaluated_flag.json";
-val () = contains "rejected raw_call" ``rejected_expr``
-  (CONV_RULE (RAND_CONV (REWRITE_CONV [GSYM rejected_expr_def])) unevaluated_flag);
-val () = if (checked "constant_unevaluated_flag.json"; false)
-              handle Fail msg => msg = "check_contract returned NONE"
-  then () else raise Fail "unevaluated raw_call flag accepted";
-Theorem constant_unevaluated_flag_translation = unevaluated_flag;
+Theorem constant_unevaluated_flag_contract_checked =
+  checked "constant_unevaluated_flag.json";
 
 (* An annotation that is present but does not decode (here the bound
    len(b"abc"), whose untyped bytes literal the decoder does not accept) fails

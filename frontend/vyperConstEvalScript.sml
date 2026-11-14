@@ -1,6 +1,6 @@
 Theory vyperConstEval
 Ancestors
-  vyperInterpreter vyperContext vyperState vyperValue vyperAST
+  vyperContext vyperState vyperValue vyperAST
   vyperValueOperation
 Libs
   cv_transLib
