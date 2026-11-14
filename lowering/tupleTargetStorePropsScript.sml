@@ -656,3 +656,25 @@ Proof
   disch_then (qspec_then `tail` mp_tac) >>
   simp[Once evaluate_def]
 QED
+
+(* A static nonlocal destination evaluates its place and records its root
+   before the write faults.  No source write or later target is executed. *)
+Theorem tuple_target_static_assignment:
+  !cenv cx g ty tv v es.
+    cx.txn.is_static /\ tuple_target_aligned cenv cx g ty tv /\
+    (!id. g <> BaseTarget (NameTarget id)) ==>
+    ?es'. assign_tuple_targets cx g v es =
+      (INR (Error (RuntimeError "write in static context")),es') /\
+      es'.scopes = es.scopes /\ es'.accounts = es.accounts /\
+      es'.tStorage = es.tStorage /\ es'.gas_obs = es.gas_obs
+Proof
+  rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
+  >- (drule_all tuple_target_toplevel_place >>
+      disch_then (qspec_then `es` assume_tac) >>
+      simp[Once evaluate_def, bind_def, write_place_def,
+           vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  drule_all tuple_target_field_place >>
+  disch_then (qspec_then `es` assume_tac) >>
+  simp[Once evaluate_def, bind_def, write_place_def,
+       vyperStorageBackendTheory.write_storage_slot_eq]
+QED
