@@ -212,10 +212,13 @@ Proof
      disch_then (qspecl_then [`ity`, `tv`, `off`, `(mstore off 0w s0).vs_memory`] mp_tac) >>
      simp[mstore_mem_word_at_same]) >>
   `alloca_frame ce es sa s0 ce ee q` by
-    (irule immutable_assign_header_alloca_frame >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       immutable_assign_header_alloca_frame) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`H0`,`ctx`,`cx`,`func`,`id`,`off`,`tv`,`ity`] >> simp[]) >>
   `ee.storage_trace = es.storage_trace /\
-   (!rs. storage_well_formed_on cx (ee with gas_obs := []) rs <=>
+   (!rs:(bool # 256 word # type_value) list.
+         storage_well_formed_on cx (ee with gas_obs := []) rs <=>
          storage_well_formed_on cx es rs)` by
     (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
      gvs[] >> gen_tac >>
