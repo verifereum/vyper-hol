@@ -6625,6 +6625,35 @@ Proof
   asm_simp_tac bool_ss []
 QED
 
+Theorem ld_recursive_combined_coverage_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next ==>
+  !stk PG G un gn j t.
+    frame_reachable vs0 CT stk PG G un gn j t ==>
+    (^ld_recursive_combined_candidate) vs0 CT
+      (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) un gn j t
+Proof
+  disch_then (fn env =>
+    map_every (fn producer =>
+      assume_tac (CONV_RULE (REDEPTH_CONV BETA_CONV) (MATCH_MP (CONV_RULE (ONCE_DEPTH_CONV
+        (REWR_CONV (BETA_CONV ``^ld_static_run vs0``))) producer) env)))
+      [ld_recursive_member_entry_clause_static, ld_recursive_member_next_clause_static,
+       ld_recursive_member_block_clause_static, ld_recursive_member_call_clause_static,
+       ld_recursive_member_return_clause_static]) >>
+  qspec_then `\stk un gn j t.
+    (^ld_recursive_member_candidate) vs0 CT stk un gn j t`
+    mp_tac ld_frame_reachable_fixed_projected_ind >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn coverage =>
+    rpt gen_tac >>
+    disch_then (mp_tac o MATCH_MP (SPEC_ALL coverage))) >>
+  disch_then (ACCEPT_TAC o CONJUNCT2 o CONJUNCT2)
+QED
+
 Theorem ld_recursive_combined_coverage:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
@@ -6635,21 +6664,44 @@ Theorem ld_recursive_combined_coverage:
     (^ld_recursive_combined_candidate) vs0 CT
       (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) un gn j t
 Proof
-  disch_then (fn env =>
-    map_every (fn producer =>
-      assume_tac (CONV_RULE (REDEPTH_CONV BETA_CONV) (MATCH_MP producer env)))
-      [ld_recursive_member_entry_clause, ld_recursive_member_next_clause,
-       ld_recursive_member_block_clause, ld_recursive_member_call_clause,
-       ld_recursive_member_return_clause]) >>
-  qspec_then `\stk un gn j t.
-    (^ld_recursive_member_candidate) vs0 CT stk un gn j t`
-    mp_tac ld_frame_reachable_fixed_projected_ind >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (fn coverage =>
-    rpt gen_tac >>
-    disch_then (mp_tac o MATCH_MP (SPEC_ALL coverage))) >>
-  disch_then (ACCEPT_TAC o CONJUNCT2 o CONJUNCT2)
+  strip_tac >> match_mp_tac ld_recursive_combined_coverage_static >>
+  gvs[o1PassContractTheory.o1_run_state_ok_def]
+QED
+
+Theorem ld_reachable_request_observation_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
+  dead_wf D /\ o1_ctx_shape CS /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions ==>
+  !stk PG G un gn j t fuel t'.
+    frame_reachable vs0 CT stk PG G un gn j t /\ active_inst gn j t /\
+    j.inst_opcode <> INVOKE /\ step_inst fuel CT j t = OK t' /\
+    LENGTH t.vs_requests < LENGTH t'.vs_requests ==>
+    un.t_stor SUBSET D.d_stor t.vs_call_ctx.cc_address
+      (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+    un.t_trans SUBSET D.d_trans t.vs_call_ctx.cc_address
+      (t.vs_transient t.vs_call_ctx.cc_address)
+Proof
+  strip_tac >>
+  `ptr_discipline vs0.vs_alloca_next CS vs0` by
+    metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline_static] >>
+  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
+    (qpat_assum `ptr_discipline _ CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  `taint_within D CS vs0 /\ mem_inv dload_headroom_ok CS vs0` by
+    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`lo` |-> `vs0.vs_alloca_next`] ld_recursive_combined_coverage_static) >>
+  (impl_tac >- (rpt conj_tac >> simp[])) >>
+  disch_then (qspecl_then [`stk`, `PG`, `G`, `un`, `gn`, `j`, `t`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_tac >>
+  irule ld_recursive_combined_request_observation >>
+  rpt conj_tac >> goal_assum (drule_at Any) >>
+  qexistsl [`P`, `fuel`, `names`, `t'`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ld_reachable_request_observation:
@@ -6665,26 +6717,8 @@ Theorem ld_reachable_request_observation:
     un.t_trans SUBSET D.d_trans t.vs_call_ctx.cc_address
       (t.vs_transient t.vs_call_ctx.cc_address)
 Proof
-  strip_tac >>
-  `ptr_discipline vs0.vs_alloca_next CS vs0` by
-    metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline] >>
-  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
-    (qpat_assum `ptr_discipline _ CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
-     metis_tac[]) >>
-  `taint_within D CS vs0 /\ mem_inv dload_headroom_ok CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
-  rpt gen_tac >> strip_tac >>
-  mp_tac (Q.INST [`lo` |-> `vs0.vs_alloca_next`] ld_recursive_combined_coverage) >>
-  (impl_tac >- (rpt conj_tac >> simp[])) >>
-  disch_then (qspecl_then [`stk`, `PG`, `G`, `un`, `gn`, `j`, `t`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_tac >>
-  irule ld_recursive_combined_request_observation >>
-  rpt conj_tac >> goal_assum (drule_at Any) >>
-  qexistsl [`P`, `fuel`, `names`, `t'`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> match_mp_tac ld_reachable_request_observation_static >>
+  gvs[o1PassContractTheory.o1_run_state_ok_def]
 QED
 
 Theorem ld_macro_opcode_not_halt[local]:
