@@ -256,12 +256,13 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `s1`, `s2`, `y`, `s0`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  irule forced_then_outcome >>
-  qexists_tac `\H v ee t. expr_post H ctx func cenv cx e es s1 s2 s0 ee v y t /\
+  match_mp_tac (Q.INST [`P` |->
+    `\H v ee t. expr_post H ctx func cenv cx e es s1 s2 s0 ee v y t /\
     expr_store_bound cx (expr_type e) v y t /\
     t.vs_current_bb = s2.cs_current_bb /\
     t.vs_inst_idx = LENGTH s2.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
+      (SPEC_ALL forced_then_outcome)) >>
   BETA_TAC >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
