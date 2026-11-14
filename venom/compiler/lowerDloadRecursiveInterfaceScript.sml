@@ -6043,30 +6043,45 @@ val [ld_recursive_member_entry_goal,ld_recursive_member_next_goal,
 fun ld_head_beta_conv tm =
   (BETA_CONV ORELSEC RATOR_CONV ld_head_beta_conv) tm;
 
-Theorem ld_recursive_member_entry_clause[local]:
+val ld_member_entry_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_entry_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_entry_goal``;
+
+Theorem ld_recursive_member_entry_clause_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_member_entry_header)
 Proof
-  strip_tac >> mp_tac ld_recursive_combined_entry_clause >>
-  (impl_tac >- asm_rewrite_tac[]) >> disch_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >> rule_assum_tac BETA_RULE >> mp_tac ld_recursive_combined_entry_clause_static >>
+  (impl_tac >- simp[]) >> disch_tac >> rpt gen_tac >> strip_tac >>
   ntac 7 (CONV_TAC ld_head_beta_conv) >>
   conj_tac >- metis_tac[lookup_function_MEM] >>
   conj_tac >- simp[] >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+Theorem ld_recursive_member_entry_clause[local]:
+  ^ld_member_entry_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_member_entry_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
 val ld_member_beta_conv = EVERY_CONV (List.tabulate (7, K ld_head_beta_conv));
 
-Theorem ld_recursive_member_block_clause[local]:
+val ld_member_block_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_block_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_block_goal``;
+
+Theorem ld_recursive_member_block_clause_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_member_block_header)
 Proof
-  strip_tac >> mp_tac ld_recursive_combined_block_clause >>
-  (impl_tac >- asm_rewrite_tac[]) >> disch_tac >>
+  strip_tac >> rule_assum_tac BETA_RULE >> mp_tac ld_recursive_combined_block_clause_static >>
+  (impl_tac >- simp[]) >> disch_tac >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
     (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
@@ -6078,14 +6093,26 @@ Proof
   qexistsl [`fuel`, `inst`, `s`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem ld_recursive_member_call_clause[local]:
+Theorem ld_recursive_member_block_clause[local]:
+  ^ld_member_block_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_member_block_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
+QED
+
+val ld_member_call_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_call_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_call_goal``;
+
+Theorem ld_recursive_member_call_clause_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_member_call_header)
 Proof
-  strip_tac >> mp_tac ld_recursive_combined_call_clause >>
-  (impl_tac >- asm_rewrite_tac[]) >> disch_tac >>
+  strip_tac >> rule_assum_tac BETA_RULE >> mp_tac ld_recursive_combined_call_clause_static >>
+  (impl_tac >- simp[]) >> disch_tac >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
     (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
@@ -6100,6 +6127,15 @@ Proof
   disch_then irule >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl [`args`, `cs`, `nm`, `ops`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_recursive_member_call_clause[local]:
+  ^ld_member_call_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_member_call_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED
 
 Theorem ld_stage_member_distinct_labels[local]:
