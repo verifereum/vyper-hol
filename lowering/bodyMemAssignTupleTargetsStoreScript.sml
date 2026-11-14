@@ -11,7 +11,7 @@ Ancestors
   bodyMemAssignLocalWord tupleTargetStoreRun tupleTargetStoreProps
   instMemFrontier emitHelperProps memSafeRun venomInst freshWrites
   valueEncodingProps stmtSimDeclStore stmtSimAssignStore allocaFootprint
-  storageStoreFrame stmtSimAssignStorage emitHelper context stmtLowering
+  storageStoreFrame stmtSimAssignStorage stmtSimAssignStorageFacts emitHelper context stmtLowering
   bodyMemEmitOpFrame fragGasMode fragGasPathMem ASCIInumbers stmtLoweringMono fragExec stmtSimAssignAttrStorage
   vyperInterpreter vyperTyping vyperState tupleAssignParts tupleLocalStoreRun
 

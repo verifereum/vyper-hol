@@ -1,8 +1,4 @@
-(* Frame tools for memory-valued For-array iterables.
-   for_keep_temp preserves an owned snapshot; for_keep_place uses the typed
-   attribute-path frame. The unused keep-hook compilation bridge was removed:
-   its iterator-result provenance must come from the real caller's source
-   place classification, alongside the memory frame. *)
+(* Typed source-place frames and memory projection facts for array loops. *)
 Theory whitelistForIterMem
 Ancestors
   vyperTypeContract
@@ -15,7 +11,7 @@ Ancestors
 
 (* Moved from exprSimPopImmutableTarget, deleted on the combined head:
    a typed subscript path into a value in memory. *)
-Theorem imm_typed_step_memory[local]:
+Theorem imm_typed_step_memory:
   !tv v sub d ptv pv b mem.
     value_has_type tv v /\ well_formed_type_value tv /\
     mem_path_offset tv [sub] = SOME (d,ptv) /\
@@ -69,7 +65,7 @@ Proof
   simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
-Theorem imm_typed_path_memory[local]:
+Theorem imm_typed_path_memory:
   !path tv v k ptv pv b mem.
     value_has_type tv v /\ well_formed_type_value tv /\
     mem_path_offset tv path = SOME (k,ptv) /\
@@ -98,70 +94,6 @@ Proof
   rewrite_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
-(* A statement fragment as stmt_frag says, that also keeps Q: started in a
-   state where Q holds, it ends where Q holds.  stmt_frag_keep (K T) is
-   stmt_frag. *)
-Definition stmt_frag_keep_def:
-  stmt_frag_keep Q ctx func cx lctx RetQ cenv
-    (m : compile_env compiler) source es <=>
-    !sa sb s0 cenv'.
-      m sa = (cenv', sb) /\ fn_has_code sa sb func /\
-      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ret_pc_ok cenv sa s0 /\ ~block_is_terminated sa /\
-      gas_admissible source (stmt_res_ok lctx) es /\
-      stmt_state_rel ctx func cenv cx es s0 /\ Q s0 /\ ~s0.vs_halted /\
-      s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx, func) source (es, s0)
-        (\res ee t. stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res ee t /\
-                    Q t)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
-End
-
-(* expr_vv_sim, whose post also has Qe of the compile states, the start
-   state, and the source and Venom results.  expr_vv_sim_with (K ...) T is
-   expr_vv_sim. *)
-Definition expr_vv_sim_with_def:
-  expr_vv_sim_with Qe ctx func cenv cx ty e es <=>
-    !sa sb vv s0.
-      compile_expr cenv ty e sa = (vv, sb) /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\
-      gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-      s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx, func) (eval_expr cx e) (es, s0)
-        (\res ee t. ?tv. res = INL tv /\
-          vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
-          Qe sa sb s0 ee tv vv t /\
-          t.vs_current_bb = sb.cs_current_bb /\
-          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
-End
-
-(* Q survives any code that keeps the variables handed out before sb and
-   the bytes [b, b + z): the loop's own index, element copy and branches
-   write only fresh variables and the loop variable's allocation. *)
-Definition keep_stable_def:
-  keep_stable Q (sb : compile_state) b z <=>
-    !s s'. Q s /\
-      (!x. not_fresh_at sb x ==> lookup_var x s' = lookup_var x s) /\
-      mem_bytes_at b z s'.vs_memory = mem_bytes_at b z s.vs_memory ==>
-      Q s'
-End
-
-
-
-(* Source side for a place iterable: a body that writes nothing containing
-   the place p (iterator_unmodified) keeps, at every scope, the root
-   local's type and its sub-value at p's attribute path (the path up to
-   p's first subscript, place_access).  The iterable is an array, so a
-   well-typed target can't extend that path by another attribute before a
-   subscript, which place_contains wouldn't see.
-   typed_stmts_projection_frame is the case of an empty attribute path,
-   where the whole root is kept. *)
-(* Typing an attribute extension requires typing its base. *)
 Theorem type_place_target_attribute_prefix[local]:
   !attrs env tgt vt.
     type_place_target env
@@ -1642,40 +1574,9 @@ Proof
   simp[]
 QED
 
-(* Hook for a temporary buffer: a body that keeps the bytes of the
-   buffer's allocation keeps the iterable's value in it.  The hypothesis
-   is what stmt_post's frame on the memory of allocations made before the
-   fragment and holding no local (the S1 interface piece on stmt_post)
-   gives every body. *)
-Theorem for_keep_temp:
-  !ctx func cx lctx RetQ cenv m source es atv v w b z cs.
-    (!bs. stmt_frag_keep (\s. mem_bytes_at b z s.vs_memory = bs)
-            ctx func cx lctx RetQ cenv m source es) /\
-    val_wf atv v /\ b <= w /\ w + type_memory_size atv <= b + z ==>
-    stmt_frag_keep (\s. val_in_memory atv v w s.vs_memory)
-      ctx func cx lctx RetQ cenv m source es /\
-    keep_stable (\s. val_in_memory atv v w s.vs_memory) cs b z
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!m1 m2. mem_bytes_at b z m2 = mem_bytes_at b z m1 /\
-           val_in_memory atv v w m1 ==> val_in_memory atv v w m2` by
-    (rpt strip_tac >> irule val_in_memory_mem_agree >> simp[] >>
-     qexistsl_tac [`type_memory_size atv`, `m1`] >> simp[] >>
-     drule (cj 1 mem_bytes_at_agree_window) >> disch_then irule >> simp[]) >>
-  conj_tac >~ [`keep_stable`] >- (simp[keep_stable_def] >> metis_tac[]) >>
-  simp[stmt_frag_keep_def] >>
-  map_every qx_gen_tac [`sa`, `sb`, `s0`, `cenv'`] >> strip_tac >>
-  qpat_x_assum `!bs. stmt_frag_keep _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `mem_bytes_at b z s0.vs_memory` mp_tac) >>
-  simp[stmt_frag_keep_def] >>
-  disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >> simp[] >>
-  strip_tac >> irule gas_outcome_conseq >> first_assum (irule_at Any) >>
-  simp[] >> metis_tac[]
-QED
-
 (* A projection of one name's entries that two scope lists agree on
    gives the same projection of its lookup. *)
-Theorem scope_projection_lookup_map[local]:
+Theorem scope_projection_lookup_map:
   !a b n f.
     MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) a =
     MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) b ==>
@@ -1687,7 +1588,7 @@ Proof
 QED
 
 (* The same, for a name bound below the top scope. *)
-Theorem scope_projection_lookup_below[local]:
+Theorem scope_projection_lookup_below:
   !a sc0 rest0 n f e.
     MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) a =
     MAP (\sc. OPTION_MAP f (FLOOKUP sc n)) (sc0 :: rest0) /\
@@ -1703,7 +1604,7 @@ Proof
 QED
 
 (* A path read that succeeds reads its prefix. *)
-Theorem evaluate_subscripts_append_prefix[local]:
+Theorem evaluate_subscripts_append_prefix:
   !p tv a sfx r.
     evaluate_subscripts tv a (p ++ sfx) = INL r ==>
     ?x. evaluate_subscripts tv a p = INL x
@@ -1724,7 +1625,7 @@ Proof
   Cases >> simp[]
 QED
 
-Theorem evaluate_subscripts_prefix_agree[local]:
+Theorem evaluate_subscripts_prefix_agree:
   !p tv a b sfx x.
     evaluate_subscripts tv a p = INL x /\
     evaluate_subscripts tv b p = INL x ==>
@@ -1741,101 +1642,4 @@ Proof
   Cases_on `a` >> simp[evaluate_subscripts_def] >>
   Cases_on `b` >> simp[evaluate_subscripts_def, sum_case_id] >>
   rpt strip_tac >> BasicProvers.EVERY_CASE_TAC >> gvs[] >> metis_tac[]
-QED
-
-(* Hook for a place inside a local: the iterable's pointer is the place's,
-   the root local's pointer bw (in its variable q) plus the byte offset k
-   of the place's path in the root's type tv0 (the vv_place_ptr clause of
-   the S1 interface piece on vv_post), and the body writes nothing
-   containing the place.  Then the body keeps q and the value v the place
-   held at entry.
-
-   The root is bound below the body's top scope (the loop variable's), and
-   its value is well typed after every run of the body (the caller's
-   state_well_typed).
-
-   v is read from the root's value (evaluate_subscripts), not through
-   read_memory_path's fallback to popped history: memory keeps only a
-   local's value (local_ptrs_rel), so a body's stmt_frag says nothing of
-   a popped element's bytes.  The checker gives the premise: it rejects a
-   pop at any depth of a For iterable (expr_writes_ok (\_. F) in
-   well_typed_iterator, the checker piece), and with no pop the place
-   reads the value. *)
-Theorem for_keep_place:
-  !ctx func cx ex inc RetQ bc ty stmts ei tops bindings env ret_ty env' arr_e
-   et bd p root attrs rest sc0 rest0 entry v q z bw tv0 k atv.
-    stmt_frag ctx func cx (InLoop ex inc) RetQ bc
-      (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts) ei /\
-    supported_stmts tops bindings stmts /\
-    type_stmts env ret_ty stmts = SOME env' /\
-    well_typed_expr env arr_e /\ expr_type arr_e = ArrayT et bd /\
-    loop_iterator_place arr_e = SOME p /\ place_access p [] = (NameTarget root, attrs) /\
-    root IN FDOM env.var_types /\
-    stmts_writes_ok (\w. ~place_contains w p) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
-    ei.scopes = sc0 :: rest0 /\ root NOTIN FDOM sc0 /\
-    lookup_scopes root rest0 = SOME entry /\ entry.type = tv0 /\
-    well_formed_type_value tv0 /\
-    evaluate_subscripts tv0 entry.value (MAP AttrSubscript attrs ++ rest) =
-      INL v /\
-    FLOOKUP bc.ce_vars root = SOME (PtrVar (Var q) z) /\
-    mem_path_offset tv0 (MAP AttrSubscript attrs ++ rest) = SOME (k, atv) /\
-    (!gs res ee e.
-       eval_stmts cx stmts (ei with gas_obs := gs) = (res, ee) /\
-       lookup_scopes root ee.scopes = SOME e ==>
-       value_has_type e.type e.value) ==>
-    stmt_frag_keep
-      (\s. lookup_var q s = SOME bw /\
-           val_in_memory atv v (w2n bw + k) s.vs_memory)
-      ctx func cx (InLoop ex inc) RetQ bc
-      (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts) ei
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_keep_def] >>
-  map_every qx_gen_tac [`sa`, `sb`, `s0`, `cenv'`] >> strip_tac >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[stmt_frag_def, stmt_framed_frag_def] >>
-  disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >> simp[] >>
-  simp[gas_outcome_def, gas_summary_at_def, gas_marked_exec_def] >>
-  strip_tac >> qexists_tac `marks`
-  >| [
-      disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
-      qabbrev_tac `gs = gas_explicit marks s0.vs_gas_readings` >>
-      qabbrev_tac `ee = es_end with gas_obs := []` >>
-      `eval_stmts cx stmts (ei with gas_obs := gs) = (res,ee)` by
-        (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
-         simp[Abbr `ee`]) >>
-      qpat_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-      (strip_assume_tac o SIMP_RULE std_ss [stmt_post_def]) >>
-      `not_fresh_at sa q` by metis_tac[local_ptrs_reserved_def] >>
-      `lookup_var q t = SOME bw` by metis_tac[] >>
-      simp[] >>
-      mp_tac (Q.INST [`es` |-> `ei with gas_obs := gs`, `es'` |-> `ee`]
-      typed_stmts_place_frame) >>
-      impl_tac >- simp[] >> strip_tac >>
-      qmatch_asmsub_abbrev_tac `MAP (\sc. OPTION_MAP f (FLOOKUP sc root))` >>
-      `?sc rest' e'. ee.scopes = sc :: rest' /\ lookup_scopes root rest' = SOME e' /\
-      lookup_scopes root ee.scopes = SOME e' /\ f e' = f entry` by
-      (irule scope_projection_lookup_below >> gvs[] >> metis_tac[]) >>
-      fs[Abbr `f`] >>
-      `FLOOKUP cenv''.ce_vars root = SOME (PtrVar (Var q) z)` by
-      (qpat_x_assum `cenv_top_ext _ _ _` mp_tac >>
-      simp[cenv_top_ext_def] >> strip_tac >>
-      first_x_assum (qspec_then `root` mp_tac) >> CCONTR_TAC >> gvs[]) >>
-      `local_ptrs_rel func cenv'' ee.scopes t` by
-      gvs[stmt_state_rel_def, state_rel_def] >>
-      pop_assum mp_tac >> simp[local_ptrs_rel_def] >>
-      disch_then (qspecl_then [`root`, `e'`, `q`, `z`] mp_tac o CONJUNCT1) >>
-      simp[] >> strip_tac >> gvs[] >>
-      `value_has_type entry.type e'.value` by metis_tac[] >>
-      drule evaluate_subscripts_append_prefix >> strip_tac >>
-      `evaluate_subscripts entry.type e'.value (MAP AttrSubscript attrs ++ rest) =
-        INL v` by
-      metis_tac[evaluate_subscripts_prefix_agree] >>
-      disj1_tac >> once_rewrite_tac[ADD_COMM] >>
-      irule imm_typed_path_memory >>
-      qexistsl_tac [`MAP AttrSubscript attrs ++ rest`, `entry.type`, `e'.value`] >>
-      simp[] >> irule memoryValueEncodingTheory.memory_value_rel_val_in_memory >> simp[],
-      disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >> simp[],
-      disj2_tac >> metis_tac[]]
 QED

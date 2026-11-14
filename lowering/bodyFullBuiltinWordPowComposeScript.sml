@@ -473,8 +473,10 @@ Proof
                        first_assum ACCEPT_TAC) >>
                    qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `H`,
                      `mid`, `s1`, `s2`, `t`, `t'`, `v`, `v'`, `x`, `y`] >> simp[]) >>
-               fs[vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def] >>
-               decide_tac) >>
+               qpat_x_assum `~is_word_type (expr_type (Builtin _ PowMod256 _))`
+                 (mp_tac o SIMP_RULE (srw_ss())
+                   [vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def]) >>
+               simp[]) >>
   qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es. _ ==> expr_vv_sim_full _ _ _ _ _ _`
     match_mp_tac >>
   simp[vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def] >>
