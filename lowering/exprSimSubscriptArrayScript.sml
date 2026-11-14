@@ -939,7 +939,8 @@ Resume copied_array_memory_suffix_family[dynamic_path]:
      qexistsl_tac [`si`,`u`] >> simp[]) >>
   `stmt_state_rel H ctx func ce cx ee t` by simp[] >>
   drule_all targetSubscriptMemoryTheory.target_array_check_ptr_path_fields >> strip_tac >>
-  qexists_tac `t'` >> conj_tac
+  rename1 `gas_marked_path F ctx func t 0 (OK next_t)` >>
+  qexists_tac `next_t` >> conj_tac
   >- metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
@@ -1319,7 +1320,8 @@ Resume compile_subscript_array_copied_base_case[copied_index_suffix]:
   drule_all expr_body_pre_runtime_typed >> strip_tac >>
   `value_has_type tvt v` by metis_tac[] >>
   drule_all exprSimSubscriptArraySuffixTheory.framed_array_index_post_view >> strip_tac >>
-  `?etv. tv' = ArrayTV etv bd /\ evaluate_type (get_tenv cx) et = SOME etv` by
+  rename1 `evaluate_type (get_tenv cx) (ArrayT et bd) = SOME array_tvt` >>
+  `?etv. array_tvt = ArrayTV etv bd /\ evaluate_type (get_tenv cx) et = SOME etv` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_ArrayT_cases] >>
   gvs[] >>
   `?av. copied_base = ArrayV av` by
