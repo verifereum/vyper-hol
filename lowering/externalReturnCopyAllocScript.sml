@@ -53,7 +53,7 @@ Theorem return_alloc_normalize_copy:
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -66,7 +66,7 @@ Theorem return_alloc_normalize_copy:
        b <= w2n sw /\ w2n sw + val_footprint stv v <= b + len))) ==>
   ?u w.
     frag_exec ctx sa sm (\z. z = s) (\z. z = u) (\r. F) /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
     w2n w + type_memory_size dtv < dimword (:256) /\
@@ -124,7 +124,7 @@ QED
 
 Theorem return_copy_immutables_frame:
   return_copy_frame sa b sz s t /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t
@@ -145,12 +145,12 @@ QED
 
 Theorem return_copy_stmt_state_frame:
   return_copy_frame sa b sz s t /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   (!name lb len. local_region cenv es.scopes s name lb len ==>
     regions_disjoint b sz lb len) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -178,21 +178,21 @@ QED
 
 Theorem return_alloc_copy_post:
   return_copy_frame sm (w2n w) sz u t /\
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   local_ptrs_reserved cenv sm /\
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   eval_operand buf.buf_operand u = SOME w /\
   FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
   (!name lb len. local_region cenv es.scopes u name lb len ==>
     regions_disjoint (w2n w) sz lb len) ==>
-  stmt_state_rel ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\
   eval_operand buf.buf_operand t = SOME w /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x u)
 Proof
   strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule return_copy_stmt_state_frame >>
      qpat_assum `return_copy_frame _ _ _ _ _` (irule_at Any) >>
      qexists_tac `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -218,7 +218,7 @@ Theorem return_normalize_actual_frag:
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -230,7 +230,7 @@ Theorem return_normalize_actual_frag:
      (?name b len. local_region cenv es.scopes s name b len /\
        b <= w2n sw /\ w2n sw + val_footprint stv v <= b + len))) ==>
   frag_exec ctx sa sb (\z. z = s)
-    (\t. ?w. stmt_state_rel ctx func cenv cx es t /\
+    (\t. ?w. stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
       w2n w + type_memory_size dtv < dimword (:256) /\
@@ -261,7 +261,7 @@ QED
 Theorem return_expr_normalize_source:
   expr_val_at cenv cx sty se sa es v src s /\
   evaluate_type (get_tenv cx) sty = SOME stv /\ ~is_word_type sty /\
-  stmt_state_rel ctx func cenv cx es s /\ eval_operand src s = SOME sw ==>
+  stmt_state_rel H ctx func cenv cx es s /\ eval_operand src s = SOME sw ==>
   (0 < val_footprint stv v ==>
     w2n sw + val_footprint stv v < dimword (:256) /\
     ((?aid b len. aid < sa.cs_next_id /\
@@ -298,12 +298,12 @@ Theorem return_normalize_expr_frag:
   type_memory_bytes cenv dty = type_memory_size dtv /\
   type_memory_size dtv < dimword (:256) /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
   ~is_word_type sty /\ expr_val_at cenv cx sty se sa es v src s ==>
   frag_exec ctx sa sb (\z. z = s)
-    (\t. ?w. stmt_state_rel ctx func cenv cx es t /\
+    (\t. ?w. stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
       w2n w + type_memory_size dtv < dimword (:256) /\
