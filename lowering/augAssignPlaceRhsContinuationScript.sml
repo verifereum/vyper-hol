@@ -248,8 +248,7 @@ Theorem aug_place_rhs_operator_write_mem:
 Proof
   strip_tac >>
   `!z. y = Var z ==> not_fresh_at s2 z` by
-    (drule_all exprOperandVarTheory.compile_lower_value_var >> strip_tac >>
-     first_assum ACCEPT_TAC) >>
+    (drule_at (Pos hd) exprOperandVarTheory.compile_lower_value_var >> simp[]) >>
   `(!z. x = Var z ==> not_fresh_at s2 z) /\
    (!z. dst = Var z ==> not_fresh_at s2 z) /\
    (!z. not_fresh_at sa z ==> not_fresh_at s2 z)` by metis_tac[] >>
