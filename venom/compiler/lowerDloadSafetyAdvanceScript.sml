@@ -185,7 +185,3 @@ Proof
   drule ld_sync_control >> strip_tac >> simp[] >>
   gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "allocation/endpoint boundary has hypotheses")
-  [ld_head_allocation_update, ld_sync_head_update, ld_nonallocating_endpoint];

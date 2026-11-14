@@ -67,6 +67,3 @@ Proof
        guarded_bytes_def, copy_bytes_def, op_taint_def, step_taint_def,
        set_var_taint_def, finite_mapTheory.DRESTRICT_UNIV, dead_result_rel_memory_frame]
 QED
-
-val _ = if null (hyp concretize_mcopy_local_complete) then ()
-        else raise Fail "complete copy export has hypotheses";

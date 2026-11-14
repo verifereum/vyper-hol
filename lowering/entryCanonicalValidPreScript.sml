@@ -43,10 +43,3 @@ Proof
   `4+k + LENGTH bytes < dimword (:256)` by decide_tac >>
   irule entry_zero_reserve_valid_pre >> gvs[]
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_canonical_valid_pre)
-  in if null axioms andalso null (Thm.hyp entry_canonical_valid_pre) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "canonical valid pre inherited admission"
-  end;

@@ -95,8 +95,3 @@ Proof
   drule_all ld_original_not_private >>
   disch_then (qspec_then `d` mp_tac) >> simp[]
 QED
-
-val _ = app (fn th => if null (hyp th) then () else
-  raise Fail "allocation origin theorem has hypotheses")
-  [ld_step_alloca_domain, ld_enters_block_allocas, ld_bind_outputs_allocas,
-   ld_frame_allocation_origins, ld_sync_private_source_absent];

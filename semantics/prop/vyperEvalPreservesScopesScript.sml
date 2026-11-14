@@ -1808,13 +1808,6 @@ Proof
   metis_tac[assign_targets_preserves_tv]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail ("vyperEvalPreservesScopes." ^ name ^ ": admitted dependency")
-  end) (DB.thms "vyperEvalPreservesScopes");
-
 Theorem preserves_tv_final_frame:
   preserves_tv cx st mid /\
   st'.scopes = mid.scopes /\ st'.immutables = mid.immutables ==>

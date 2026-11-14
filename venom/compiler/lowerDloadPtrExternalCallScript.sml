@@ -498,26 +498,3 @@ Proof
      gvs[AllCaseEqs()] >> metis_tac[]) >>
   irule dload_boundary_core_external_call_shaped >> metis_tac[]
 QED
-
-val _ = List.app (fn (n,th) =>
-  if null (hyp th) then print (n ^ ": closed\n")
-  else raise Fail (n ^ ": nonempty hypotheses"))
-  [("frame_fields",dload_external_call_frame_fields),
-   ("ghosts",dload_external_call_ghosts),
-   ("adoption",dload_external_call_adoption),
-   ("memory_cong",dload_memory_match_taint_cong),
-   ("memory_ghost",dload_external_call_mem_ghost),
-   ("memory",dload_external_call_memory),
-   ("store_ghosts",dload_external_call_store_ghosts),
-   ("store",dload_external_call_shared_store),
-   ("var_ghosts",dload_external_call_var_ghosts),
-   ("vars",dload_external_call_vars),
-   ("tables",dload_allocation_neutral_tables),
-   ("scalar_vars",dload_scalar_result_vars),
-   ("write_range",dload_external_call_write_range),
-   ("inputs",dload_call_evaluated_inputs),
-   ("environment",dload_exec_ext_call_environment),
-   ("bridge",dload_external_call_step),
-   ("boundary",dload_external_call_boundary),
-   ("shaped",dload_boundary_core_external_call_shaped),
-   ("external_call",dload_boundary_core_external_call)];

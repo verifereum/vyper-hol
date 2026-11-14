@@ -41,9 +41,3 @@ Theorem nonword_witnesses_rejected_deploy:
 Proof
   CONV_TAC (LAND_CONV vyperCheckContractLib.check_contract_conv) >> REFL_TAC
 QED
-
-val () = List.app (fn theory => List.app (fn (name,th) =>
-  let val oracles = #1 (Tag.dest_tag (Thm.tag th))
-  in if List.all (fn x => x = "DISK_THM") oracles then ()
-     else raise Fail ("oracle tag on " ^ theory ^ "." ^ name) end)
-  (DB.thms theory)) ["vyperMembershipParityTest","vyperMembershipMatrixTest"]

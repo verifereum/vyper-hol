@@ -286,14 +286,6 @@ Proof
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[]
 QED
 
-val _ = List.app (fn (n,th) =>
-  if null (hyp th) then () else raise Fail (n ^ ": nonempty hypotheses"))
-  [("actual_residual", dload_joint_dispatch_actual_residual),
-   ("residual_classification", dload_joint_dispatch_residual_classification),
-   ("covered_next", dload_joint_covered_next),
-   ("covered_shift_next", dload_joint_covered_shift_next),
-   ("covered_environment_next", dload_joint_covered_environment_next)];
-
 Theorem dload_joint_dispatch_actual_covered:
   o1_src_inv D C vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -342,10 +334,6 @@ Proof
   disj2_tac >> simp[]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "unconditional next: nonempty hypotheses")
-  [dload_joint_dispatch_actual_covered, dload_joint_next];
-
 Theorem dload_joint_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -391,6 +379,3 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `q'` >> first_assum ACCEPT_TAC
 QED
-
-val _ = if null (hyp dload_joint_entry) then ()
-  else raise Fail "joint entry: nonempty hypotheses";

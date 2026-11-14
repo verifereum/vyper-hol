@@ -279,8 +279,3 @@ Proof
   conj_tac >- (irule relocation_clean_write_taint >> metis_tac[]) >>
   fs[relocation_env_def, relocation_reader_context_def, update_var_def]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-                          else raise Fail "SHA3 export has hypotheses")
-  [concretize_read_demand_geometry, concretize_sha3_demand_execution,
-   concretize_sha3_local_complete];

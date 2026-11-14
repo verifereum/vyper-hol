@@ -184,6 +184,7 @@ Theorem clean_stack_plan_frame_sim:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp clean_ops)
     ==>
     ?n as2.
+      n = LENGTH (execute_plan cp.cp_initial_fmp clean_ops) /\
       asm_steps lo o2pc prog n as = AsmOK as2 /\
       as2.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp clean_ops) /\
       fn_frame_inv ctx cp lo fn ra rest mem0 ps2 vs as2 /\
@@ -210,6 +211,7 @@ Proof
     simp[asm_state_component_equality] >>
   qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp clean_ops)`,
     `endpoint with as_stack := endpoint.as_stack ++ rest`] >>
+  conj_tac >- simp[] >>
   conj_tac >- gvs[] >>
   conj_tac >- gvs[] >>
   conj_tac

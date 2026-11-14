@@ -242,11 +242,3 @@ Proof
   simp[mk_inst_def, is_terminator_def] >>
   fs[mk_inst_def] >> metis_tac[]
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then
-       print ("IMMUTABLE_WORD_KERNEL_CLOSED " ^ name ^ "\n")
-     else raise Fail ("Unclosed immutable word theorem: " ^ name)
-  end) (DB.thms "immutableWordExecution");

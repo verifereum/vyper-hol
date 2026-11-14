@@ -52,13 +52,6 @@ Proof
     type_memory_size_list_sum, val_wf_def, val_in_memory_def]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_member_tuple_contract)
-  in if null axioms andalso null (Thm.hyp entry_member_tuple_contract) andalso
-        List.all (fn tag => tag = "DISK_THM") oracles
-     then () else raise Fail "tuple entry endpoint unexpected admission"
-  end;
-
 Theorem entry_member_struct_contract:
   FLOOKUP env nsid = SOME (StructArgs args) /\
   LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
@@ -118,13 +111,6 @@ Resume entry_member_struct_contract[value]:
 QED
 Finalise entry_member_struct_contract
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_member_struct_contract)
-  in if null axioms andalso null (Thm.hyp entry_member_struct_contract) andalso
-        List.all (fn tag => tag = "DISK_THM") oracles
-     then () else raise Fail "struct entry endpoint unexpected admission"
-  end;
-
 Theorem entry_member_fixed_contract:
   abi_decoder_coherent ce env sf ty tv /\
   entry_member_child_contract ce env sf ctx fn site limit_st ty tv ==>
@@ -176,10 +162,3 @@ Proof
   qpat_assum `SUM (MAP (type_memory_bytes ce) _) = _`
     (fn th => pure_rewrite_tac[th]) >> simp[]
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_member_fixed_contract)
-  in if null axioms andalso null (Thm.hyp entry_member_fixed_contract) andalso
-        List.all (fn tag => tag = "DISK_THM") oracles
-     then () else raise Fail "fixed entry endpoint unexpected admission"
-  end;

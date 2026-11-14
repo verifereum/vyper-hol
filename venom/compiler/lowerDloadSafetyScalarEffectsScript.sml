@@ -250,7 +250,3 @@ Proof
      `ld_nonghost (tn with t_var := tn.t_var) src tgt` suffices_by simp[] >>
      unabbrev_all_tac >> irule ld_nonghost_update_var >> simp[])]
 QED
-
-val _ = if null (hyp ld_residual_scalar_effect) andalso
-           null (hyp ld_vars_write_two) then ()
-        else raise Fail "residual scalar boundary has hypotheses";

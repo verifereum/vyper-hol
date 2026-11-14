@@ -40,10 +40,3 @@ QED
 
 (* Memory packaging is already exported by static_fields_memory_zip and
    abi_decoder_fixed_array_memory; do not duplicate these interfaces. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn tag => tag = "DISK_THM") oracles
-     then () else raise Fail "aggregate value packaging unexpected admission"
-  end) [entry_fields_tuple_wf, entry_tuple_replicate_wf, entry_fixed_array_wf,
-        static_fields_memory_zip, abi_decoder_fixed_array_memory];

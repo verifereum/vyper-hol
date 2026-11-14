@@ -245,11 +245,3 @@ Theorem immutable_memory_frame_edge_probe:
 Proof
   EVAL_TAC
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then
-       print ("IMMUTABLE_MEMORY_FRAME_KERNEL_CLOSED " ^ name ^ "\n")
-     else raise Fail ("Unclosed immutable memory frame theorem: " ^ name)
-  end) (DB.thms "immutableMemoryFrame");

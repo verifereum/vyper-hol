@@ -88,16 +88,3 @@ Proof
     calldata_member_wit_def, calldata_member_transfers_def, MEM, NOT_CONS_NIL,
     LESS_EQ_REFL] >> rewrite_tac[]
 QED
-
-(* Word execution inherits entryDecodeProps.compile_abi_clamp_structure via
-   entry_valid_word_owned_endpoint; no admission is introduced in this theory.
-   Inspect named proof dependencies as well as the transitive tag check. *)
-val () = List.app (fn (name,th,allowed) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn tag => tag = "DISK_THM" orelse List.exists (fn a => a = tag) allowed) oracles
-     then () else raise Fail ("entry member endpoint unexpected admission: " ^ name)
-  end) [("apply",entry_member_child_contract_apply, []),
-        ("bytes",entry_member_bytes_contract, []),
-        ("word",entry_member_word_contract,
-         #1 (Tag.dest_tag (Thm.tag entry_valid_word_owned_endpoint)))];

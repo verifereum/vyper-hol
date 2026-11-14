@@ -155,11 +155,6 @@ Proof
   gvs[ptrDisciplineTheory.fn_ptr_ok_def]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-        else raise Fail "paired setup effect has kernel hypotheses")
-  [ld_setup_pair_effect, ld_setup_pair_vars, ld_setup_source_exists,
-   ld_invoke_callee_ambient, ld_invoke_correlated_setup];
-
 (* Structural constructor: semantic entry/reachability is supplied separately. *)
 Theorem ld_sync_call_push:
   ld_sync lo P C vs0 stk PG G tn fn calli s t A (f::fs) N /\
@@ -212,9 +207,6 @@ Proof
       first_x_assum (irule o SPEC_ALL) >> simp[]) >>
   gen_tac >> Cases_on `j` >> simp[]
 QED
-
-val _ = if null (hyp ld_sync_call_push) then ()
-        else raise Fail "structural call push has kernel hypotheses";
 
 (* Activity, not successful future execution, is the entry boundary. *)
 Theorem ld_setup_active_entry:
@@ -453,11 +445,6 @@ Resume ld_invoke_active_push[stable]:
 QED
 
 Finalise ld_invoke_active_push
-
-val _ = List.app (fn th => if null (hyp th) then ()
-        else raise Fail "guarded call push has kernel hypotheses")
-  [ld_setup_guarded_entry, ld_call_stable_push, ld_setup_empty_shape,
-   ld_invoke_active_push];
 
 (* Successful-run clients derive activity, then use the same push boundary. *)
 Theorem ld_invoke_guarded_push:

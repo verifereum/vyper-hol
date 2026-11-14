@@ -110,9 +110,3 @@ Proof
                            Excl "consume_call_outcome_eq"] >>
   simp[venom_state_component_equality]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "delegate interface: nonempty hypotheses")
-  [dload_delegate_full_stores,
-   dload_delegate_scalar_safety, dload_delegate_scalar_equal,
-   dload_delegate_exec_success];

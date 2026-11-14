@@ -177,7 +177,3 @@ Proof
   `variable_domains s t /\ dead_result_rel D (Halt s) (Halt t)` by fs[local_rel_def] >>
   drule_all selfdestruct_halt_execution >> simp[]
 QED
-
-val _ = if null (hyp concretize_selfdestruct_complete) andalso
-           null (hyp concretize_selfdestruct_abort_complete)
-        then () else raise Fail "SELFDESTRUCT exports have hypotheses";

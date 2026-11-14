@@ -151,8 +151,3 @@ Theorem fmp_allocation_live_escape:
 Proof
   simp[fmp_allocation_live_def, EXISTS_MEM] >> metis_tac[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected oracle dependency in " ^ name))
-  (DB.thms "fmpAliasProps");

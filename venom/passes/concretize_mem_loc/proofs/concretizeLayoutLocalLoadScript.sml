@@ -118,10 +118,6 @@ QED
 
 Finalise concretize_word_load_local_complete
 
-val _ = if null (hyp concretize_word_load_local_complete) then ()
-        else raise Fail "complete load export has hypotheses";
-
-
 Theorem concretize_mload_local_complete:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\

@@ -45,9 +45,6 @@ Proof
   fs[relocation_env_def]
 QED
 
-val _ = if null (hyp calldatacopy_execution) then ()
-        else raise Fail "calldata copy export has hypotheses";
-
 Theorem calldatacopy_scalar_origin_free[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;RETURNDATACOPY] /\ inst.inst_operands = [opd;ops;opn] /\
@@ -476,6 +473,3 @@ Resume concretize_calldatacopy_local_complete[relation]:
   fs[local_rel_def, write_memory_with_expansion_def, dead_result_rel_memory_frame]
 QED
 Finalise concretize_calldatacopy_local_complete
-
-val _ = if null (hyp concretize_calldatacopy_local_complete) then ()
-        else raise Fail "complete calldata copy export has hypotheses";

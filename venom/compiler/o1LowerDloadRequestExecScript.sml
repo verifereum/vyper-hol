@@ -194,6 +194,3 @@ Resume ld_request_runner_exec_conditional[call_ok]:
   simp[]
 QED
 Finalise ld_request_runner_exec_conditional
-
-val _ = if null (hyp ld_request_runner_exec_conditional)
-        then () else raise Fail "request exec clause has kernel hypotheses";

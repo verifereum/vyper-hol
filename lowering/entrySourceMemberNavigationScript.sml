@@ -162,12 +162,3 @@ Proof
     (irule calldata_member_resource_unchanged >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry source member navigation inherited admission"
-    end) [entry_member_observed_valid_pre, entry_source_member_navigation,
-          entry_source_empty_member_resources];

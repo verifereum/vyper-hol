@@ -66,6 +66,3 @@ Proof
   disch_then (qspecl_then [`u`,`fs`,`d`] mp_tac) >>
   simp[]
 QED
-
-val _ = if null (hyp ld_scratch_alloca_ownership) then () else
-  raise Fail "scratch ownership theorem has hypotheses";

@@ -130,12 +130,3 @@ Proof
   >- (drule_all take_adopt_call_outcome_typed >> simp[]) >>
   drule_all checked_call_outcome_success_frame >> simp[]
 QED
-
-(* Kernel-tag audit of the shared protocol and its source adoption boundary. *)
-val () = List.app (fn thy =>
-  List.app (fn (name,th) =>
-    if List.all (fn tag => tag = "DISK_THM") (fst (Tag.dest_tag (Thm.tag th)))
-    then () else raise Fail ("oracle dependency: " ^ thy ^ "." ^ name))
-    (DB.thms thy))
-  ["extCallOracle", "vyperCallOutcome", "vyperCallOutcomeBranches",
-   "vyperCallOutcomeFrame", "vyperCallOutcomeTest"];

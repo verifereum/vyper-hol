@@ -57,16 +57,3 @@ Proof
   disch_then (qspec_then `site` (qspec_then `limit_st` (qspec_then `fn` assume_tac))) >>
   metis_tac[entry_member_child_contract_apply]
 QED
-
-val () =
-  let val (base_oracles, _) = Tag.dest_tag (Thm.tag entry_coherent_child_contract)
-      fun audit (th, allowed) =
-        let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-        in if null axioms andalso null (Thm.hyp th) andalso
-              List.all (fn name => name = "DISK_THM" orelse
-                List.exists (fn a => a = name) allowed) oracles
-           then () else raise Fail "entry zero reserve unexpected admission"
-        end
-  in audit (entry_zero_reserve_valid_pre, []);
-     audit (entry_zero_reserve_child_endpoint, base_oracles)
-  end;

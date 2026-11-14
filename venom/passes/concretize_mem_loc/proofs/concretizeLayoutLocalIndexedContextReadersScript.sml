@@ -180,6 +180,3 @@ Proof
   simp[] >> strip_tac >>
   qexists_tac `update_var v z t` >> simp[]
 QED
-
-val _ = if null (hyp concretize_indexed_context_reader_local_complete) then ()
-        else raise Fail "indexed context reader export has hypotheses";

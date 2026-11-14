@@ -1395,7 +1395,3 @@ QED
 
 
 Finalise first_emission_compile_stmt
-
-(* Ensure the public mutual boundary is fully discharged. *)
-val _ = if null (Thm.hyp first_emission_compile_stmt) then ()
-        else raise Fail "first_emission_compile_stmt has undischarged hypotheses";

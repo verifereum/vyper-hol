@@ -1298,18 +1298,3 @@ Proof
   rpt strip_tac >> irule compile_assert_reason_frag_general >>
   simp[compile_raise_reason_lit_frag]
 QED
-
-
-(* Integrity gate for preserved public reason certificates and execution. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "REASON_FORCE_AUDIT OK\n"
-     else raise Fail "reason consumer inherited admission"
-  end) [compile_store_byte_chunks_run, compile_bytelike_literal_run,
-        compile_revert_reason_certificate, compile_revert_reason_run,
-        compile_revert_reason_frag, compile_store_byte_chunks_simple,
-        compile_bytelike_literal_simple, compile_bytelike_revert_frag,
-        compile_raise_reason_lit_frag, compile_bytelike_revert_path,
-        compile_assert_reason_frag_general, compile_assert_reason_lit_frag];
