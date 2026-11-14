@@ -19,7 +19,7 @@ Ancestors
 
 (* A write to a variable no local pointer, return buffer or return pc
    uses keeps the ghost invariant. *)
-Theorem ghost_inv_at_fresh_write[local]:
+Theorem ghost_inv_at_fresh_write:
   ghost_inv_at D lo d cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\

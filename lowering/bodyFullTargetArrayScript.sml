@@ -6,6 +6,7 @@
      target_array_tail_full -- subscript_tail_full when the base is an array *)
 Theory bodyFullTargetArray
 Ancestors
+  bodyFullTargetArraySource bodyFullTargetArraySuffix
   bodyFullTargetSubscript bodyFullTargetDefs bodySimFull targetPlaceSim
   vyperTypeSystem vyperInterpreter vyperState
 
@@ -16,5 +17,7 @@ Theorem target_array_tail_full:
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt e es
 Proof
-  cheat
+  strip_tac >> simp[subscript_tail_full_def] >> rpt gen_tac >> strip_tac >>
+  irule target_array_suffix_full >>
+  simp[array_tail_packet_def] >> metis_tac[]
 QED
