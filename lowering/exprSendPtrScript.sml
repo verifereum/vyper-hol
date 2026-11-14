@@ -460,7 +460,8 @@ Theorem send_tail_none_post:
 Proof
   strip_tac >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_fmp = s.vs_fmp /\ t.vs_memory = s.vs_memory /\
+   t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_memory = s.vs_memory /\
    t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels` by
     (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `stmt_state_rel H ctx fn cenv cx es' (update_var out w t)` by
