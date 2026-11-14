@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalBaseCertificate
-Ancestors concretizeLayoutCanonicalBaseMemory concretizeLayoutCanonicalBaseExternal
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeMemLocDefs passSharedDefs concretizeLayoutCanonicalBaseMemory concretizeLayoutCanonicalBaseExternal
   concretizeLayoutCanonicalBaseCorridor concretizeLayoutCanonicalBaseJump
   concretizeLayoutCanonicalBaseTerminalExit concretizeLayoutCanonicalBaseAbortExit
   concretizeLayoutCanonicalBase concretizeLayoutCanonicalDeferred
@@ -19,6 +19,30 @@ Proof
   Cases_on `a` >>
   simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def] >>
   strip_tac >> gvs[concretize_positions_not_invoke] >>
+  gvs[layout_corridor_entry_def, ranked_terminal_entry_def,
+      ranked_terminal_corridor_def, layout_phase_normalize_def] >>
+  Cases_on `y.ltp_remaining` >> gvs[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem concretize_positions_gas:
+  ((concretize_inst_with_positions p i).inst_opcode = GAS <=>
+   i.inst_opcode = GAS) /\
+  (i.inst_opcode = GAS ==> concretize_inst_with_positions p i = i)
+Proof
+  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
+  gvs[mk_assign_inst_def, mk_nop_inst_def]
+QED
+
+(* The witnessed target instruction emits the same GAS events. *)
+Theorem layout_canonical_step_witness_gas:
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend q n i s j t a ==>
+  (j.inst_opcode = GAS <=> i.inst_opcode = GAS) /\
+  (i.inst_opcode = GAS ==> j = i)
+Proof
+  Cases_on `a` >>
+  simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def] >>
+  strip_tac >> gvs[concretize_positions_gas] >>
   gvs[layout_corridor_entry_def, ranked_terminal_entry_def,
       ranked_terminal_corridor_def, layout_phase_normalize_def] >>
   Cases_on `y.ltp_remaining` >> gvs[] >>
@@ -58,12 +82,11 @@ Theorem layout_canonical_base_nonterm_success:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -99,7 +122,7 @@ Proof
       CALLDATACOPY; CODECOPY; EXTCODECOPY; RETURNDATACOPY; DLOADBYTES; SHA3; LOG]`
   >- (drule_all layout_canonical_memory_success >> simp[]) >>
   Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
-  >- (drule_all layout_canonical_external_success >> simp[]) >>
+  >- (drule_all layout_canonical_external_success_requests >> metis_tac[]) >>
   drule_all layout_base_opcode_cases >> disch_tac >>
   drule_all layout_canonical_ordinary_nonterm_success >> simp[]
 QED
@@ -109,12 +132,11 @@ Theorem layout_canonical_base_jump:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -142,12 +164,11 @@ Theorem layout_canonical_base_exit:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -175,17 +196,16 @@ QED
 val on_path = REWRITE_RULE [] o
   Q.INST [`es` |-> `MAP FST path`, `qs` |-> `MAP SND path`];
 
-Theorem layout_canonical_base_certificate:
+Theorem layout_canonical_base_certificate_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -194,18 +214,22 @@ Theorem layout_canonical_base_certificate:
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   fixed_region_reserved lo C /\ activation_depth q0 = 0 ==>
-  selected_base_certificate C C' q0 path
+  selected_base_certificate_fuel C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
 Proof
   strip_tac >>
   qpat_x_assum `es = _` SUBST_ALL_TAC >> qpat_x_assum `qs = _` SUBST_ALL_TAC >>
-  rewrite_tac[selected_base_certificate_def, selected_step_match_def] >>
+  rewrite_tac[selected_base_certificate_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `layout_canonical_ES _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [layout_canonical_ES_def]) >>
   `j.inst_opcode <> INVOKE` by metis_tac[layout_canonical_step_witness_not_invoke] >>
-  simp[layout_deferred_noninvoke] >>
+  `!r r'. step_events_agree C C' i s j t r r'` by
+    (rpt gen_tac >> irule step_events_agree_plain >>
+     metis_tac[layout_canonical_step_witness_gas]) >>
+  simp[selected_step_match_fuel_noninvoke, selected_step_match_def,
+       events_OS_def, layout_deferred_noninvoke] >>
   Cases_on `?p. r = OK p`
   >- (qpat_x_assum `?p. _` strip_assume_tac >>
       qpat_x_assum `r = _` SUBST_ALL_TAC >> rename1 `OK post` >>
@@ -225,41 +249,4 @@ Proof
   qexists `r'` >> conj_tac
   >- (irule finite_step_base >> simp[] >> metis_tac[layout_canonical_result_not_error]) >>
   simp[layout_canonical_OS_def] >> Cases_on `r` >> fs[]
-QED
-
-Theorem layout_canonical_base_certificate_fuel:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
-  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
-  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
-  (!k. k < LENGTH path ==>
-    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
-      (EL (SUC k) (q0::MAP SND path))
-      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
-      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
-  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  fixed_region_reserved lo C /\ activation_depth q0 = 0 ==>
-  selected_base_certificate_fuel C C' q0 path
-    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-Proof
-  strip_tac >>
-  drule_all layout_canonical_base_certificate >>
-  rewrite_tac[selected_base_certificate_def, selected_step_match_def] >>
-  disch_tac >> rewrite_tac[selected_base_certificate_fuel_def,
-                          selected_step_match_fuel_def] >>
-  rpt gen_tac >> strip_tac >>
-  `j.inst_opcode <> INVOKE` by
-    (fs[layout_canonical_ES_def] >>
-     metis_tac[layout_canonical_step_witness_not_invoke]) >>
-  first_x_assum drule_all >> strip_tac >>
-  qexists `r'` >> simp[] >>
-  gvs[finite_step_iff, step_inst_def]
 QED
