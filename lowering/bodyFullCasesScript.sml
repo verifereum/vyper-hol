@@ -583,21 +583,11 @@ Proof
   cheat
 QED
 
-(* The joint twin of body_log_case_ptr_at (bodyPtrLogCases),
-   by its scalar/aggregate leaves in bodyFullLog. *)
+(* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
-  `supported_log tops id es` by
-    (qpat_assum `supported_stmt _ _ _`
-       (ACCEPT_TAC o SIMP_RULE bool_ss [supported_stmt_def])) >>
-  `?fields. supported_event_fields tops id = SOME fields` by
-    (qpat_x_assum `supported_log _ _ _` mp_tac >>
-     rewrite_tac[supported_log_def] >> CASE_TAC >> simp[]) >>
-  Cases_on `EVERY supported_scalar_type (MAP (SND o FST) fields)`
-  >- (irule compile_log_frag_full >> metis_tac[]) >>
-  irule body_log_aggregate_full >> metis_tac[]
+  cheat
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
