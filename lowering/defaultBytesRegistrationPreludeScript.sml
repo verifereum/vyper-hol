@@ -7,6 +7,7 @@ Ancestors calldataRegistrationExec moduleLowering compileEnv emitHelper finite_m
   exprLoweringProps fragExec context
   ctorDeployLoweringEntryRegisterRun ctorDeployMemoryRunMemEntryRegistration
   abiDecoderReentry freshWrites bodyPtrDefs localPtrsProps allocaFrontierBound
+  entryDispatchPtr abiDecoderGuard emitHelperProps
 
 Theorem default_bytes_registration_split:
   compile_register_positional_args ce
@@ -76,4 +77,41 @@ Proof
   simp[run_inst_seq_def, mk_inst_def, is_terminator_def,
     inst_mem_below_frontier_def, source_memory_read_ranges_def,
     source_memory_write_ranges_def]
+QED
+
+(* The guard executes even in the presence of unrelated pre-existing variables. *)
+Theorem default_bytes_guard_sequence:
+  compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) sa = ((),sb) /\
+  eval_operand src s = SOME w /\ 4 <= w2n w ==>
+  run_inst_seq (emitted_insts sa sb) s =
+    OK (update_var ("%" ++ toString (sa.cs_next_var + 1)) 1w
+      (update_var ("%" ++ toString sa.cs_next_var) 0w s))
+Proof
+  strip_tac >>
+  qabbrev_tac `v0 = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `v1 = "%" ++ toString (sa.cs_next_var + 1)` >>
+  `emitted_insts sa sb =
+    [mk_inst sa.cs_next_id LT [src; Lit 4w] [v0];
+     mk_inst (sa.cs_next_id + 1) ISZERO [Var v0] [v1];
+     mk_inst (sa.cs_next_id + 2) ASSERT [Var v1] []]` by
+    (qpat_x_assum `compile_abi_arg_ptr_guard _ _ _ _ = _` mp_tac >>
+     simp[compile_abi_arg_ptr_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
+       fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[emitted_insts_def, APPEND_ASSOC, DROP_PREFIX,
+       Abbr `v0`, Abbr `v1`]) >>
+  `step_inst_base (mk_inst sa.cs_next_id LT [src;Lit 4w] [v0]) s =
+    OK (update_var v0 0w s)` by
+    (qspecl_then [`src`,`Lit 4w`,`w`,`4w`] mp_tac step_LT >>
+     simp[eval_operand_def, bool_to_word_def, dimword_def]) >>
+  `step_inst_base (mk_inst (sa.cs_next_id+1) ISZERO [Var v0] [v1])
+    (update_var v0 0w s) = OK (update_var v1 1w (update_var v0 0w s))` by
+    (qspecl_then [`Var v0`,`0w`] mp_tac step_ISZERO >>
+     simp[eval_operand_def, lookup_var_update_var, bool_to_word_def]) >>
+  `step_inst_base (mk_inst (sa.cs_next_id+2) ASSERT [Var v1] [])
+    (update_var v1 1w (update_var v0 0w s)) =
+    OK (update_var v1 1w (update_var v0 0w s))` by
+    (irule step_ASSERT_ok >> qexists `1w` >>
+     simp[eval_operand_def, lookup_var_update_var]) >>
+  gvs[Abbr `v0`, Abbr `v1`] >> simp[run_inst_seq_def]
 QED
