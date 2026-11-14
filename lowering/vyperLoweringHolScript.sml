@@ -25,7 +25,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   externalEntryProps constructorGuardProps
-  nonreentrantEntryEquiv nonreentrantEntryPath internalReturnLockProps
+  nonreentrantEntryEquiv nonreentrantEntryPath nonreentrantExitPath internalReturnLockProps
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge

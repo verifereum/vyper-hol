@@ -41,7 +41,7 @@ Proof
 QED
 
 (* A clean literal store keeps the entire ghost, on success and static abort. *)
-Theorem literal_tstore_clean_inst_seq_ptr[local]:
+Theorem literal_tstore_clean_inst_seq_ptr:
   ~ctx_has_dalloca ctx /\ (!b. ~((key,b) IN tn.t_trans)) ==>
   inst_seq_ptr D 0 ctx func PG G tn
     [mk_inst id TSTORE [Lit key; Lit value] []] ss G tn
