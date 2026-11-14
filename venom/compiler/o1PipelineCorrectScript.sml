@@ -17,7 +17,7 @@ Ancestors
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
   gasEvents gasCount o1PipelineGasMask
-  venomRunBounded
+  venomRunBounded o1ComposeSupport
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -25,6 +25,24 @@ Definition o1_pipeline_def:
   o1_pipeline rpolicy unit =
     run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec unit
 End
+
+Theorem o1_pipeline_entry:
+  o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit ==>
+  out.po_unit.cu_context.ctx_entry = unit.cu_context.ctx_entry
+Proof
+  strip_tac >> fs[o1_pipeline_def] >>
+  drule o1_driver_runs >> strip_tac >>
+  `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
+  `ir_supply_inst_ok (init_ir_supply unit)` by
+    simp[irSupplyTheory.init_ir_supply_inst_ok] >>
+  drule_all o1_pre_walk_rows >> strip_tac >>
+  drule_all o1_pre_walk_sim >> strip_tac >>
+  drule_at (Pos (el 6)) o1_walk_sim_all_dead >> impl_tac
+  >- (gvs[] >> metis_tac[unit_labels_wf_namespace]) >>
+  strip_tac >> gvs[]
+QED
 
 (* ===== S4: semantic forward simulation ===== *)
 
