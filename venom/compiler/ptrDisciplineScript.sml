@@ -99,6 +99,28 @@ Definition ptr_use_ok_def:
               ops.iao_ofst = Var v
 End
 
+(* LOG stores scalar topics and size before its final address operand.
+   Uniqueness of pointer occurrences excludes pointers in all scalars. *)
+Theorem ptr_use_ok_log_scalar:
+  inst.inst_opcode = LOG /\
+  inst.inst_operands = Lit tc :: REVERSE (off :: len :: topics) /\
+  ptr_use_ok P pv inst /\ MEM (Var v) (len :: topics) ==>
+  v NOTIN pv
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+  simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+       mem_write_ops_def, mem_read_ops_def, REVERSE_APPEND] >>
+  qexists_tac `v` >> simp[MEM_REVERSE] >>
+  Cases_on `topics` >> gvs[] >>
+  strip_tac >> gvs[FILTER_APPEND_DISTRIB, FILTER_REVERSE,
+                    REVERSE_EQ_SING] >>
+  Cases_on `off = Var v` >>
+  gvs[FILTER_APPEND_DISTRIB, FILTER_REVERSE, FILTER_EQ_NIL, EVERY_MEM] >>
+  Cases_on `h = Var v` >> Cases_on `len = Var v` >>
+  gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]
+QED
+
 (* MEMTOP observes the memory size, which the static layout changes, and
    GETFMP/SETFMP/RETFMP the free memory pointer, which FmpLowering changes.
    FMP_PARAM reads a parameter like PARAM but is no pointer root, so a
@@ -621,6 +643,22 @@ Definition taint_ok_def:
      tn.t_stor = {} /\ tn.t_trans = {})
 End
 
+Theorem taint_ok_observation_operand:
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [SHA3; LOG; CREATE; CREATE2] /\
+  MEM op inst.inst_operands ==> op_taint tn op = {}
+Proof
+  strip_tac >> gvs[taint_ok_def] >> metis_tac[]
+QED
+
+Theorem taint_ok_observation_read:
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [SHA3; LOG; CREATE; CREATE2] /\
+  ~in_revert_forward fn s /\ MEM (off,len) (source_memory_read_ranges inst s) /\
+  q < len ==> off + q NOTIN tn.t_mem
+Proof
+  strip_tac >> gvs[taint_ok_def, about_to_revert_def] >>
+  `off <= off + q /\ off + q < len + off` by decide_tac >> metis_tac[]
+QED
+
 Definition ctx_has_dalloca_def:
   ctx_has_dalloca ctx <=>
     EXISTS (\fn. EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn))
@@ -920,3 +958,94 @@ Definition taint_within_def:
        R SUBSET D.d_ret s_h.vs_returndata)
 End
 
+
+(* Nonempty accesses through a known site expose its natural bounds. *)
+Theorem access_ok_read_site_bounds:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  FLOOKUP G v = SOME (b,sz) /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\ len <> 0 ==>
+  b <= off /\ off + len <= b + sz
+Proof
+  strip_tac >> gvs[access_ok_def] >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges _ _) /\ _ ==> _`
+    (qspecl_then [`off`,`len`] mp_tac) >>
+  simp[op_prov_def] >> metis_tac[]
+QED
+
+Theorem access_ok_write_site_bounds:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  FLOOKUP G v = SOME (b,sz) /\
+  MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 ==>
+  b <= off /\ off + len <= b + sz
+Proof
+  strip_tac >> gvs[access_ok_def] >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
+    (qspecl_then [`off`,`len`] mp_tac) >>
+  simp[op_prov_def] >> metis_tac[]
+QED
+
+Theorem access_ok_mcopy_site_bases:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  inst.inst_opcode = MCOPY /\
+  inst.inst_operands = [Var d; Var r; lenop] /\
+  eval_operand (Var d) s = SOME (n2w db) /\
+  eval_operand (Var r) s = SOME (n2w rb) /\
+  eval_operand lenop s = SOME len /\ w2n len <> 0 /\
+  FLOOKUP G d = SOME (db,dsz) /\ FLOOKUP G r = SOME (rb,rsz) ==>
+  w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb
+Proof
+  strip_tac >>
+  `db <= w2n (n2w db : bytes32)` by
+    (drule access_ok_write_site_bounds >>
+     simp[mem_write_ops_def, source_memory_write_ranges_def,
+          sized_source_write_range_def] >>
+     disch_then (qspecl_then [`w2n (n2w db : bytes32)`, `w2n len`] mp_tac) >>
+     simp[]) >>
+  `rb <= w2n (n2w rb : bytes32)` by
+    (drule access_ok_read_site_bounds >>
+     simp[mem_read_ops_def, source_memory_read_ranges_def] >>
+     disch_then (qspecl_then [`w2n (n2w rb : bytes32)`, `w2n len`] mp_tac) >>
+     simp[]) >>
+  metis_tac[wordsTheory.word_n2w_le2, arithmeticTheory.LESS_EQUAL_ANTISYM]
+QED
+
+Theorem taint_ok_invoke_operand:
+  taint_ok fn tn inst s /\ inst.inst_opcode = INVOKE /\
+  MEM op inst.inst_operands ==> op_taint tn op = {}
+Proof
+  simp[taint_ok_def] >> rpt strip_tac >>
+  spose_not_then assume_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem step_writes_source_subset:
+  range_bytes (step_writes inst s s') SUBSET
+  range_bytes (source_memory_write_ranges inst s)
+Proof
+  rw[step_writes_def] >>
+  rw[SUBSET_DEF, range_bytes_def, MEM_MAP] >>
+  PairCases_on `y` >> gvs[] >>
+  qexistsl_tac [`off`, `y1`] >> simp[] >>
+  gvs[arithmeticTheory.MIN_ALT] >> decide_tac
+QED
+
+Theorem step_taint_log_logs:
+  inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
+  step_taint inst s (s with vs_logs := logs) tn = tn
+Proof
+  strip_tac >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, DRESTRICT_UNIV,
+       DB.fetch "ptrDiscipline" "taint_component_equality"] >>
+  Cases_on `inst.inst_operands` >> simp[written_taint_def] >>
+  rename1 `inst.inst_operands = h::tl` >>
+  Cases_on `tl` >> simp[] >>
+  rename1 `inst.inst_operands = h::h2::tail` >>
+  Cases_on `tail` >> simp[] >>
+  rename1 `inst.inst_operands = h::h2::h3::rest` >>
+  Cases_on `rest` >> simp[]
+QED

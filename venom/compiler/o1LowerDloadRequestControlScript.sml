@@ -1,7 +1,7 @@
 (* Control clauses transport the abort-sensitive terminal observation unchanged. *)
 Theory o1LowerDloadRequestControl
 Ancestors
-  o1LowerDloadRunner o1LowerDloadRequestRunner o1ContractLowerDloadSim
+  o1LowerDloadRunner o1LowerDloadRequestRunner o1ContractLowerDloadSim reachableFnSim
   o1LowerDloadEndpointConsumer o1LowerDloadJointRelation
   o1LowerDloadOccurrence o1LowerDloadRunnerBoundary o1PassLift
   venomExecProofs venomExecSemantics venomWf venomInst contextCodegenRel

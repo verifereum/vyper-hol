@@ -12,7 +12,7 @@
 Theory o1ContractLowerDloadSim
 Ancestors
   o1SafeUpto
-  o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
+  o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv reachableFnSim
   lowerDloadDefs venomPassSchedule list venomFnScheduleRunner
   venomCompilerTypes irSupply venomPassDispatcher venomInst
   o1LowerDloadPairedAllocation o1LowerDloadAddressArithmetic
@@ -119,39 +119,6 @@ Proof
      rpt strip_tac >> Cases_on `h.fn_name = nm` >>
      gvs[lookup_function_def]) >>
   qexistsl_tac [`g`, `args'`, `ct`, `sn`, `t1`, `inst`] >> simp[]
-QED
-
-Theorem ld_terminating_invoke_inversion:
-  i.inst_opcode = INVOKE /\ step_inst k C i s = r /\ terminates r ==>
-  ?nm ops fn args cs cr.
-    decode_invoke i = SOME (nm,ops) /\
-    lookup_function nm C.ctx_functions = SOME fn /\
-    eval_operands ops s = SOME args /\ setup_callee fn args s = SOME cs /\
-    run_blocks k C fn cs = cr /\ terminates cr /\
-    ((?ir se s1. cr = IntRet ir se /\
-       bind_outputs i.inst_outputs ir.iret_values
-         (adopt_return_fmp ir (merge_callee_state s se)) = SOME s1 /\ r = OK s1) \/
-     (?se. cr = Halt se /\ r = Halt se) \/
-     (?ab se. cr = Abort ab se /\ r = Abort ab se))
-Proof
-  strip_tac >>
-  qpat_x_assum `step_inst k C i s = r` mp_tac >>
-  simp[Once step_inst_def] >>
-  Cases_on `decode_invoke i`
-  >- (strip_tac >> gvs[terminates_def]) >> simp[] >>
-  rename1 `decode_invoke i = SOME dec` >> PairCases_on `dec` >>
-  Cases_on `lookup_function dec0 C.ctx_functions`
-  >- (strip_tac >> gvs[terminates_def]) >> simp[] >>
-  Cases_on `eval_operands dec1 s`
-  >- (strip_tac >> gvs[terminates_def]) >> simp[] >>
-  rename1 `lookup_function dec0 C.ctx_functions = SOME fn` >>
-  rename1 `eval_operands dec1 s = SOME args` >>
-  Cases_on `setup_callee fn args s`
-  >- (strip_tac >> gvs[terminates_def]) >> simp[] >>
-  rename1 `setup_callee fn args s = SOME cs` >>
-  Cases_on `run_blocks k C fn cs` >> simp[] >>
-  rpt strip_tac >> gvs[terminates_def, AllCaseEqs()] >>
-  qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o SYM) >> gvs[]
 QED
 
 (* A nonempty event list of an INVOKE is its callee's run events. *)
@@ -337,41 +304,6 @@ Proof
 QED
 
 
-Theorem lower_dload_translate_add:
-  !x z b c. ((x:bytes32) + n2w c - n2w b) + z =
-             (x + z) + n2w c - n2w b
-Proof
-  wordsLib.WORD_DECIDE_TAC
-QED
-
-Theorem lower_dload_translate_sub:
-  !x z b c. ((x:bytes32) + n2w c - n2w b) - z =
-             (x - z) + n2w c - n2w b
-Proof
-  wordsLib.WORD_DECIDE_TAC
-QED
-
-Theorem lower_dload_translate_comparisons:
-  !x y b c sz.
-    b <= w2n (x:bytes32) /\ w2n x <= b+sz /\
-    b <= w2n (y:bytes32) /\ w2n y <= b+sz /\
-    b+sz < dimword (:256) /\ c+sz < dimword (:256) ==>
-    ((x = y) <=> (x + n2w c - n2w b = y + n2w c - n2w b)) /\
-    ((w2n x < w2n y) <=>
-      (w2n (x + n2w c - n2w b) < w2n (y + n2w c - n2w b))) /\
-    ((w2n y < w2n x) <=>
-      (w2n (y + n2w c - n2w b) < w2n (x + n2w c - n2w b)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `w2n (x + n2w c - n2w b) = c + (w2n x - b)` by
-    (irule lower_dload_translate_endpoint >> asm_rewrite_tac[] >>
-     qexists_tac `sz` >> asm_rewrite_tac[]) >>
-  `w2n (y + n2w c - n2w b) = c + (w2n y - b)` by
-    (irule lower_dload_translate_endpoint >> asm_rewrite_tac[] >>
-     qexists_tac `sz` >> asm_rewrite_tac[]) >>
-  pure_rewrite_tac[GSYM wordsTheory.w2n_11] >>
-  asm_rewrite_tac[] >> decide_tac
-QED
 
 
 (* The simulation: every run of C that stays inside the gas cut is matched

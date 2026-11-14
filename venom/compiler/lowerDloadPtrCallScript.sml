@@ -221,15 +221,6 @@ Proof
   simp[setup_callee_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem dload_invoke_operand_untainted:
-  taint_ok fn tn inst s /\ inst.inst_opcode = INVOKE /\
-  MEM op inst.inst_operands ==> op_taint tn op = {}
-Proof
-  simp[taint_ok_def] >> rpt strip_tac >>
-  spose_not_then assume_tac >>
-  first_x_assum drule_all >> simp[]
-QED
-
 (* Neither run's absolute request history is an environment observation. *)
 Theorem dload_equal_environment_requests:
   dload_equal_environment (s with vs_requests := xs) (t with vs_requests := ys) <=>

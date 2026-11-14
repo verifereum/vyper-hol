@@ -28,7 +28,7 @@
 
 Theory codegenRel
 Ancestors
-  asmWf asmSem stackPlanGen
+  asmWf asmSem stackPlanGen memLocDefs
 
 (* ===== Operand Evaluation in Venom State ===== *)
 
@@ -223,6 +223,28 @@ Definition source_memory_write_ranges_def:
                        dret_source_write_ranges s.vs_call_entry_fmp pairs)))
     | _ => []
 End
+Theorem source_memory_write_ranges_nonwriter:
+  inst.inst_opcode <> DRET /\ mem_write_ops inst = NONE /\
+  LENGTH ops = LENGTH inst.inst_operands ==>
+  source_memory_write_ranges (inst with inst_operands := ops) t = []
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[source_memory_write_ranges_def] >>
+  namedCases_on `ops` ["", "o1 os1"] >> gvs[] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[] >>
+  namedCases_on `os2` ["", "o3 os3"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os3` ["", "o4 os4"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os4` ["", "o5 os5"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os5` ["", "o6 os6"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os6` ["", "o7 os7"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  Cases_on `os7` >> gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def]
+QED
+
 (* Every nonempty source-write interval is disjoint from the compiler-owned
    half-open spill interval [sa_spill_base,sa_next_offset). *)
 Definition source_memory_writes_disjoint_def:

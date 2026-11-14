@@ -4,16 +4,6 @@ Ancestors
   frameJointDemand frameJointTransition ptrDiscipline memLocDefs
   finite_map list pred_set arithmetic
 
-Theorem step_writes_source_subset:
-  range_bytes (step_writes inst s post) SUBSET
-    range_bytes (source_memory_write_ranges inst s)
-Proof
-  rw[step_writes_def] >>
-  simp[SUBSET_DEF, range_bytes_def, MEM_MAP, pairTheory.EXISTS_PROD] >>
-  rpt strip_tac >> gvs[] >>
-  qexistsl_tac [`off`,`p_2`] >> simp[] >> gvs[MIN_DEF] >> decide_tac
-QED
-
 Theorem access_ok_write_site:
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\ lo <= byte /\
   byte IN range_bytes (source_memory_write_ranges inst s) ==>
