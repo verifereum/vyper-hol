@@ -1826,8 +1826,9 @@ Theorem sym_dup_frame_ready[local]:
     EL 15 b = EL dist (REVERSE ps.ps_stack)
 Proof
   strip_tac >> drule_all_then strip_assume_tac deep_dup_residual_shape >>
-  metis_tac[sym_kinds_ok_scratch_split, LENGTH_APPEND, LENGTH_REVERSE,
-    arithmeticTheory.LESS_EQ_ADD]
+  `k <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all sym_kinds_ok_scratch_split >>
+  asm_rewrite_tac[]
 QED
 
 Theorem sym_dup_shape_witnesses[local]:

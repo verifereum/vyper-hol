@@ -225,7 +225,7 @@ Resume aggregate_make_tuple_flat_sim_mem[assembly]:
   qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _` kall_tac >>
   conj_tac >- (rpt strip_tac >> gvs[]) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >> fs[] >> gvs[] >>
   simp[] >> suspend "post"
 QED
 

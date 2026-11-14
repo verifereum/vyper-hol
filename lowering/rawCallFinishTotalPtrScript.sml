@@ -291,8 +291,9 @@ Proof
      `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
      `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
-    strip_tac >> gvs[venomStateTheory.eval_operand_def,
-      venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
+    strip_tac >> fs[venomStateTheory.eval_operand_def] >>
+    gvs[venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >>
+    rpt conj_tac >> metis_tac[]) >> strip_tac >>
   `local_ptrs_reserved cenv sj /\
    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
@@ -400,8 +401,9 @@ Proof
      `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
      `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
-    strip_tac >> gvs[venomStateTheory.eval_operand_def,
-      venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
+    strip_tac >> fs[venomStateTheory.eval_operand_def] >>
+    gvs[venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >>
+    rpt conj_tac >> metis_tac[]) >> strip_tac >>
   mp_tac (raw_call_nonrevert_suffix |> Q.INST
     [`s` |-> `u`, `sa` |-> `sc`, `success` |-> `out`, `ncopy` |-> `capacity`,
      `aw` |-> `n2w ob`, `off` |-> `ob`, `len` |-> `capacity`,

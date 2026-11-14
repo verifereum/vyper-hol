@@ -533,7 +533,9 @@ Proof
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ q.vs_memory`)) >>
   disch_then (drule_at (Pat `inst.inst_outputs = _`)) >>
-  (impl_tac >- (simp[] >> asm_rewrite_tac[] >> fs[loweringPostsTheory.vv_post_def] >> metis_tac[])) >> simp[]
+  (impl_tac >-
+    (simp_tac (srw_ss()) [] >> asm_rewrite_tac[] >>
+     fs[loweringPostsTheory.vv_post_def] >> metis_tac[])) >> simp[]
 QED
 
 Theorem aggregate_make_tuple_body_sim_mem:
