@@ -28,6 +28,8 @@ roots = [
   "lowering/extcallReturnDefaultTypesScript.sml",
   "lowering/extcallReturnFrameBridgeScript.sml",
   "lowering/abiEncoderWindowJointPhasesScript.sml",
+  "lowering/externalReturnLiveWindowResourcesScript.sml",
+  "lowering/logTopicsRunPtrScript.sml",
   # hand-written tests of the semantics, frontend and test runner
   "tests/vyperTestsHolScript.sml",
   # concrete checks of the lowering and compiler
