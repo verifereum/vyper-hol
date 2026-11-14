@@ -9,16 +9,16 @@ Ancestors
   fragGasOrigin gasEvents memSafeRun fragGasSeqAbort venomInstProofs instIdxIndep fragGasPathPtr gasCount ptrSafeRun
   augAssignPtrScalarRun augAssignPtrScalarCertificate augAssignPtrScalarSafety
   augAssignPtrScalarExec ptrDiscipline emitHelper pred_set finite_map
-  unitTransformDefs freshWrites contextCodegenRel codegenRel
+  unitTransformDefs freshWrites contextCodegenRel codegenRel loweringStateRelDefs
 
-Theorem array_assert_abort_frame_diagnostic[local]:
-  ~s.vs_halted ==>
-  let t = revert_state (set_returndata [] s) in
-    t with vs_vars := s.vs_vars <> s
+Theorem array_scalar_step_abort_frame[local]:
+  scalar_shape ins /\ step_inst_base ins s = Abort Revert_abort t ==>
+  t = revert_state (set_returndata [] s)
 Proof
-  simp[revert_state_def, set_returndata_def] >>
-  strip_tac >> strip_tac >>
-  pop_assum (mp_tac o AP_TERM ``\s:venom_state. s.vs_halted``) >> simp[]
+  simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
+       LENGTH_EQ_NUM_compute] >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs, exec_pure1_def, exec_pure2_def,
+      AllCaseEqs()]
 QED
 
 Theorem array_bounds_check_scalar_code[local]:
@@ -146,6 +146,61 @@ Proof
   qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
+Theorem array_bounds_check_shape[local]:
+  array_bounds_check idx len sgn sa = ((),sb) ==>
+  EVERY scalar_shape (emitted_insts sa sb)
+Proof
+  Cases_on `sgn` >>
+  simp[array_bounds_check_def, array_bounds_valid_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, scalar_shape_def, scalar_binary_def, scalar_unary_def]
+QED
+
+Theorem array_scalar_seq_abort_frame[local]:
+  !code s t.
+  EVERY scalar_shape code /\ writes_fresh sa code /\
+  run_inst_seq code s = Abort Revert_abort t ==>
+  (t with vs_vars := s.vs_vars) = revert_state (set_returndata [] s) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> simp[run_inst_seq_def, writes_fresh_def] >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[]
+  >~ [`step_inst_base h s = OK u`]
+  >- (drule_all step_fresh_write_op >> strip_tac >>
+      first_x_assum (qspecl_then [`u`, `t`] mp_tac) >>
+      simp[writes_fresh_def] >> strip_tac >>
+      conj_tac
+      >- (qpat_x_assum `u = _` SUBST_ALL_TAC >>
+          gvs[revert_state_def, set_returndata_def, venom_state_component_equality]) >>
+      gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all array_scalar_step_abort_frame >> strip_tac >>
+  gvs[revert_state_def, set_returndata_def, venom_state_component_equality]
+QED
+
+Theorem array_bounds_check_metadata[local]:
+  array_bounds_check idx len sgn sa = ((),sb) /\
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H tm ==>
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP H x = FLOOKUP G x /\
+    FLOOKUP tm.t_var x = FLOOKUP tn.t_var x) /\
+  tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+  tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule array_bounds_check_shape >> strip_tac >>
+  drule_all scalar_shape_seq_metadata_frame >> strip_tac >>
+  drule array_bounds_check_writes_fresh >>
+  simp[writes_fresh_def, EVERY_MEM] >> strip_tac >>
+  rpt strip_tac >>
+  `~MEM x (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb)))` by
+    (simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem array_bounds_check_joint_ok:
   array_bounds_check idx len sgn sa = ((),sb) /\
   eval_operand idx s = SOME i /\ eval_operand len s = SOME n /\
@@ -269,4 +324,36 @@ Proof
      gvs[IS_PREFIX_APPEND, DROP_APPEND, DROP_LENGTH_NIL,
          APPEND_ASSOC]) >>
   metis_tac[]
+QED
+
+Theorem array_bounds_check_certified:
+  array_bounds_check idx len sgn sa = ((),sb) /\
+  eval_operand idx s = SOME i /\ eval_operand len s = SOME n /\
+  fresh_vars_wrt sa s /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  op_taint tn idx = {} /\ op_taint tn len = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  ?G' tn'. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+    (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
+      (t with vs_vars := s.vs_vars) = s /\
+      (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)) /\
+    (!t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t ==>
+      (t with vs_vars := s.vs_vars) = revert_state (set_returndata [] s) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x))
+Proof
+  strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    metis_tac[array_bounds_check_mem_ok] >> simp[] >>
+  `?G' tn'. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'`
+    by (irule array_bounds_check_ptr_exists >> metis_tac[]) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+  drule_all array_bounds_check_metadata >> strip_tac >> simp[] >>
+  conj_tac >- metis_tac[array_bounds_check_ok_frame] >>
+  metis_tac[array_scalar_seq_abort_frame, array_bounds_check_shape,
+            array_bounds_check_writes_fresh]
 QED

@@ -113,6 +113,37 @@ Proof
        FLOOKUP_DRESTRICT] >> rpt strip_tac >> gvs[]
 QED
 
+Theorem scalar_shape_step_prov_frame[local]:
+  scalar_shape i /\ ~MEM v i.inst_outputs ==>
+  FLOOKUP (step_prov PG G i u) v = FLOOKUP G v
+Proof
+  simp[scalar_shape_def, LENGTH_EQ_NUM_compute] >> strip_tac >> gvs[] >>
+  Cases_on `out_prov PG G i u` >>
+  simp[step_prov_def, set_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
+Theorem scalar_shape_seq_metadata_frame:
+  !code G tn s H tm.
+    EVERY scalar_shape code /\
+    inst_seq_ptr D lo ctx fn PG G tn code s H tm ==>
+    (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
+       FLOOKUP H v = FLOOKUP G v /\
+       FLOOKUP tm.t_var v = FLOOKUP tn.t_var v /\
+       op_taint tm (Var v) = op_taint tn (Var v)) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  Induct >- simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> simp[inst_seq_ptr_def] >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  drule_all scalar_ambient_taint >> strip_tac >>
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >>
+  drule_all scalar_step_var_lookup_frame >> strip_tac >>
+  simp[scalar_shape_step_prov_frame, op_taint_def]
+QED
+
 Theorem scalar_seq_metadata_frame_lo:
   !code A G tn s H tm.
     scalar_code A code /\
@@ -125,22 +156,12 @@ Theorem scalar_seq_metadata_frame_lo:
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
-  Induct >- simp[inst_seq_ptr_def] >>
-  rpt gen_tac >> simp[scalar_code_def, inst_seq_ptr_def] >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  `EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) h.inst_operands`
-    by (gvs[EVERY_MEM] >> metis_tac[scalar_available_clean]) >>
-  `!w. w IN A UNION set h.inst_outputs ==>
-    op_prov (step_prov PG G h v) (Var w) = NONE /\
-    op_taint (step_taint h s v tn) (Var w) = {}`
-    by (ho_match_mp_tac scalar_step_clean >> simp[]) >>
-  first_x_assum drule >> disch_then drule >> simp[] >>
-  disch_then drule >> strip_tac >>
-  drule_all scalar_ambient_taint >> strip_tac >>
-  drule_all scalar_step_prov >> strip_tac >>
-  drule_all scalar_step_var_taint >> strip_tac >>
-  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  metis_tac[scalar_step_var_lookup_frame]
+  rpt gen_tac >> strip_tac >>
+  `!A. scalar_code A code ==> EVERY scalar_shape code` by
+    (POP_ASSUM_LIST (K ALL_TAC) >>
+     Induct_on `code` >> simp[scalar_code_def] >> metis_tac[]) >>
+  `EVERY scalar_shape code` by metis_tac[] >>
+  drule_all scalar_shape_seq_metadata_frame >> simp[]
 QED
 
 Theorem scalar_seq_metadata_frame:
