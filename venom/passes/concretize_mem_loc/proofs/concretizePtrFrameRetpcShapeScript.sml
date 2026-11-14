@@ -7,15 +7,6 @@ Ancestors
   o1PassContract ptrDiscipline unitMemInv stackPlanGen concretizeMemLocDefs
   venomPassDispatcher cfgWf unitShapeDefs venomWf venomInst list
 
-Theorem ptr_stage_frame_retpc_shape_upto:
-  o1_ctx_shape C ==>
-  EVERY unitShapeDefs$retpc_shape_ok C.ctx_functions
-Proof
-  strip_tac >>
-  fs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
-  fs[o1_fn_shape_def, fn_shape_ok_def] >> metis_tac[]
-QED
-
 Theorem ptr_stage_frame_retpc_shape:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -30,5 +21,7 @@ Theorem ptr_stage_frame_retpc_shape:
   max_live_eom C' = SOME eom ==>
   EVERY unitShapeDefs$retpc_shape_ok C.ctx_functions
 Proof
-  metis_tac[ptr_stage_frame_retpc_shape_upto]
+  strip_tac >>
+  fs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+  fs[o1_fn_shape_def, fn_shape_ok_def] >> metis_tac[]
 QED

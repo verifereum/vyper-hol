@@ -11,7 +11,6 @@ Ancestors
   venomPassDispatcher cfgWf
   concretizePtrStagePairedBridge concretizePtrHistoryCoverage
   concretizePtrUniversalExtension concretizePtrCoverageStaticMem
-  concretizePtrFrameRetpcShape
   concretizePtrPairedPrefix concretizePtrCurrentObservation
   o1SafeUpto
 
