@@ -1556,3 +1556,67 @@ Theorem rb_compile_tuple_subscript:
 Proof
   simp[compile_tuple_subscript_def, rb_emit_op]
 QED
+
+Theorem rb_compile_store_byte_chunks:
+  !p bs off. rb_operand_ok p ==>
+  rb_step (K T) (compile_store_byte_chunks p bs off)
+Proof
+  recInduct compile_store_byte_chunks_ind >> rpt strip_tac >>
+  simp[Once compile_store_byte_chunks_def, rb_step_return] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void] >>
+  gvs[]
+QED
+
+Theorem rb_compile_bytelike_literal:
+  rb_step rb_buffer_ok (compile_bytelike_literal bs maxlen)
+Proof
+  pure_rewrite_tac[compile_bytelike_literal_def, LET_THM] >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_ignore >> simp[rb_compile_store_byte_chunks, rb_step_return,
+                          rb_buffer_ok_def]
+QED
+
+Theorem rb_compile_literal_vv:
+  !ty lit. rb_step rb_value_ok (compile_literal_vv ty lit)
+Proof
+  gen_tac >> Cases >> simp[compile_literal_vv_def, rb_step_return, rb_value_ok_def]
+  >- (rename1 `BoolL b` >> Cases_on `b` >>
+      simp[compile_literal_vv_def, rb_step_return, rb_value_ok_def])
+  >- (Cases_on `ty` >> simp[compile_literal_vv_def] >>
+      irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+      simp[rb_compile_bytelike_literal, rb_step_return, rb_buffer_ok_def,
+           base_ptr_def, rb_value_ok_def, rb_ptr_ok_def]) >>
+  Cases_on `ty` >> simp[compile_literal_vv_def, rb_step_return, rb_value_ok_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[compile_literal_vv_def, rb_step_return, rb_value_ok_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[compile_literal_vv_def, rb_step_return, rb_value_ok_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  simp[rb_compile_bytelike_literal, rb_step_return, rb_buffer_ok_def,
+       base_ptr_def, rb_value_ok_def, rb_ptr_ok_def]
+QED
+
+Theorem rb_compile_name_vv:
+  rb_env_ok ce ==> rb_step rb_value_ok (compile_name_vv ce ty id)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_name_vv_def] >>
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[]
+  >- (irule rb_ignore >> simp[rb_emit_inst, rb_step_return, rb_value_ok_def]) >>
+  rename1 `SOME loc` >>
+  `rb_location_ok loc` by (gvs[rb_env_ok_def] >> metis_tac[]) >>
+  Cases_on `loc` >>
+  gvs[rb_location_ok_def, rb_step_return, rb_value_ok_def, rb_mk_ptr] >>
+  irule rb_ignore >> simp[rb_emit_inst, rb_step_return, rb_value_ok_def]
+QED
+
+Theorem rb_compile_env_var:
+  !ev. rb_step rb_operand_ok (compile_env_var ev)
+Proof
+  Cases >> simp[compile_env_var_def, rb_emit_op] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
+QED
