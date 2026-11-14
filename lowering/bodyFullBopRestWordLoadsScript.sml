@@ -12,14 +12,14 @@ Ancestors
 (* The final slot-read instruction of the compiled membership body.  The
    address prefix is handled separately; the concrete endpoint here is shared
    by the whole guarded horizon family. *)
-Theorem rest_word_membership_slot_read_joint:
+Theorem rest_word_membership_slot_read_joint_indexed:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   delta = (if 0 < skip then 1 else 0) /\
   src = "%" ++ toString (sa.cs_next_var+4+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
-  (!H:num. guard H ==>
+  (!H:'h. guard H ==>
     ~s.vs_halted /\ allocas_from lo s /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
     membership_loop_registers sa i r (Gs H) (Ts H) s /\
@@ -27,7 +27,7 @@ Theorem rest_word_membership_slot_read_joint:
     s.vs_inst_idx = 2+delta /\
     lookup_var src s = SOME w /\ op_taint (Ts H) (Var src) = {} /\
     key_taint (if tr then (Ts H).t_trans else (Ts H).t_stor) w = {}) ==>
-  ?t Gt Tt. !H:num. guard H ==>
+  ?t Gt Tt. !H:'h. guard H ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
@@ -439,7 +439,7 @@ Proof
 QED
 
 (* Runtime code read at the compiler's exact membership element cursor. *)
-Theorem rest_word_membership_code_read_joint:
+Theorem rest_word_membership_code_read_joint_indexed:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
@@ -449,14 +449,14 @@ Theorem rest_word_membership_code_read_joint:
   value = word_of_bytes T (0w:bytes32)
     (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)) /\
   w2n w <= LENGTH s.vs_data_section /\
-  (!H:num. guard H ==>
+  (!H:'h. guard H ==>
     ~s.vs_halted /\ allocas_from lo s /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
     membership_loop_registers sa i r (Gs H) (Ts H) s /\
     s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
     s.vs_inst_idx = 2+delta /\
     lookup_var src s = SOME w /\ op_taint (Ts H) (Var src) = {}) ==>
-  ?t Gt Tt. !H:num. guard H ==>
+  ?t Gt Tt. !H:'h. guard H ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
@@ -527,7 +527,7 @@ Proof
   qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]
 QED
 
-Theorem rest_word_membership_memory_read_joint:
+Theorem rest_word_membership_memory_read_joint_indexed:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
@@ -535,7 +535,7 @@ Theorem rest_word_membership_memory_read_joint:
   src = "%" ++ toString (sa.cs_next_var+4+delta) /\
   dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
   w2n w + 32 <= s.vs_alloca_next /\
-  (!H:num. guard H ==>
+  (!H:'h. guard H ==>
     ~s.vs_halted /\ allocas_from lo s /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
     membership_loop_registers sa i r (Gs H) (Ts H) s /\
@@ -543,7 +543,7 @@ Theorem rest_word_membership_memory_read_joint:
     s.vs_inst_idx = 2+delta /\
     lookup_var src s = SOME w /\ ptr_covers (Gs H) (Ts H) src s 32 /\
     mem_word_taint (Ts H).t_mem (w2n w) = {}) ==>
-  ?t Gt Tt. !H:num. guard H ==>
+  ?t Gt Tt. !H:'h. guard H ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
@@ -611,7 +611,7 @@ Proof
   qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]
 QED
 
-Theorem rest_word_membership_runtime_address_preserving_joint:
+Theorem rest_word_membership_runtime_address_preserving_joint_indexed:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
@@ -628,14 +628,14 @@ Theorem rest_word_membership_runtime_address_preserving_joint:
     (case arr of Var x => {x} | _ => {}) /\
   (!x. arr = Var x ==> not_fresh_at sa x) /\
   ((?w. arr = Lit w) \/ (?x. arr = Var x)) /\
-  (!H:num. guard H ==>
+  (!H:'h. guard H ==>
     ~s.vs_halted /\ allocas_from lo s /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
     membership_loop_registers sa i r (Gs H) (Ts H) s /\
     s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
     s.vs_inst_idx = 0 /\ eval_operand arr s0 = SOME bw /\
     op_taint (T0 H) arr = {}) ==>
-  ?t Gt Tt. !H:num. guard H ==>
+  ?t Gt Tt. !H:'h. guard H ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
     membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
@@ -1411,3 +1411,127 @@ Resume rest_word_membership_header_joint[post]:
 QED
 
 Finalise rest_word_membership_header_joint
+
+Theorem rest_word_membership_slot_read_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  delta = (if 0 < skip then 1 else 0) /\
+  src = "%" ++ toString (sa.cs_next_var+4+delta) /\
+  dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
+  (!H:num. guard H ==>
+    ~s.vs_halted /\ allocas_from lo s /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+    membership_loop_registers sa i r (Gs H) (Ts H) s /\
+    s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    s.vs_inst_idx = 2+delta /\
+    lookup_var src s = SOME w /\ op_taint (Ts H) (Var src) = {} /\
+    key_taint (if tr then (Ts H).t_trans else (Ts H).t_stor) w = {}) ==>
+  ?t Gt Tt. !H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+    membership_loop_registers sa i r (Gt H) (Tt H) t /\
+    ~t.vs_halted /\ allocas_from lo t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 3+delta /\
+    lookup_var dst t = SOME (if tr then tload w s else sload w s) /\
+    FLOOKUP (Gt H) dst = NONE /\ op_taint (Tt H) (Var dst) = {}
+Proof
+  MATCH_ACCEPT_TAC rest_word_membership_slot_read_joint_indexed
+QED
+
+Theorem rest_word_membership_code_read_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  delta = (if 0 < skip then 1 else 0) /\
+  src = "%" ++ toString (sa.cs_next_var+4+delta) /\
+  dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
+  value = word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)) /\
+  w2n w <= LENGTH s.vs_data_section /\
+  (!H:num. guard H ==>
+    ~s.vs_halted /\ allocas_from lo s /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+    membership_loop_registers sa i r (Gs H) (Ts H) s /\
+    s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    s.vs_inst_idx = 2+delta /\
+    lookup_var src s = SOME w /\ op_taint (Ts H) (Var src) = {}) ==>
+  ?t Gt Tt. !H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+    membership_loop_registers sa i r (Gt H) (Tt H) t /\
+    ~t.vs_halted /\ allocas_from lo t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 3+delta /\
+    lookup_var dst t = SOME value /\
+    FLOOKUP (Gt H) dst = NONE /\ op_taint (Tt H) (Var dst) = {}
+Proof
+  MATCH_ACCEPT_TAC rest_word_membership_code_read_joint_indexed
+QED
+
+Theorem rest_word_membership_memory_read_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  delta = (if 0 < skip then 1 else 0) /\
+  src = "%" ++ toString (sa.cs_next_var+4+delta) /\
+  dst = "%" ++ toString (sa.cs_next_var+5+delta) /\
+  w2n w + 32 <= s.vs_alloca_next /\
+  (!H:num. guard H ==>
+    ~s.vs_halted /\ allocas_from lo s /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+    membership_loop_registers sa i r (Gs H) (Ts H) s /\
+    s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    s.vs_inst_idx = 2+delta /\
+    lookup_var src s = SOME w /\ ptr_covers (Gs H) (Ts H) src s 32 /\
+    mem_word_taint (Ts H).t_mem (w2n w) = {}) ==>
+  ?t Gt Tt. !H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+    membership_loop_registers sa i r (Gt H) (Tt H) t /\
+    ~t.vs_halted /\ allocas_from lo t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 3+delta /\
+    lookup_var dst t = SOME (mload (w2n w) s) /\
+    FLOOKUP (Gt H) dst = NONE /\ op_taint (Tt H) (Var dst) = {}
+Proof
+  MATCH_ACCEPT_TAC rest_word_membership_memory_read_joint_indexed
+QED
+
+Theorem rest_word_membership_runtime_address_preserving_joint:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  product = "%" ++ toString (sa.cs_next_var+3) /\
+  delta = (if 0 < skip then 1 else 0) /\
+  offset = "%" ++ toString (sa.cs_next_var+3+delta) /\
+  dst = "%" ++ toString (sa.cs_next_var+4+delta) /\
+  code = [mk_inst (sa.cs_next_id+6) MUL
+      [Var ("%" ++ toString (sa.cs_next_var+1));Lit (n2w stride)] [product]] ++
+    (if 0 < skip then [mk_inst (sa.cs_next_id+7) ADD
+      [Lit (n2w skip);Var product] [offset]] else []) ++
+    [mk_inst (sa.cs_next_id+7+delta) ADD [arr;Var offset] [dst]] /\
+  A = {"%" ++ toString (sa.cs_next_var+1)} UNION
+    (case arr of Var x => {x} | _ => {}) /\
+  (!x. arr = Var x ==> not_fresh_at sa x) /\
+  ((?w. arr = Lit w) \/ (?x. arr = Var x)) /\
+  (!H:num. guard H ==>
+    ~s.vs_halted /\ allocas_from lo s /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
+    membership_loop_registers sa i r (Gs H) (Ts H) s /\
+    s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    s.vs_inst_idx = 0 /\ eval_operand arr s0 = SOME bw /\
+    op_taint (T0 H) arr = {}) ==>
+  ?t Gt Tt. !H:num. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
+    membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
+    membership_loop_registers sa i r (Gt H) (Tt H) t /\
+    ~t.vs_halted /\ allocas_from lo t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 2+delta /\
+    lookup_var dst t = SOME (bw+n2w (skip+stride*i)) /\
+    FLOOKUP (Gt H) dst = op_prov (G0 H) arr /\ op_taint (Tt H) (Var dst) = {}
+Proof
+  MATCH_ACCEPT_TAC rest_word_membership_runtime_address_preserving_joint_indexed
+QED
