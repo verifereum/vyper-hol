@@ -294,7 +294,7 @@ val OUTCOMES_FRAME_TAC =
     first_assum MATCH_MP_TAC, conj_tac, CASE_TAC]) g);
 
 Theorem outcomes_frame_check_create_blueprint[simp]:
-  outcomes_frame (check_create_blueprint has_salt vs)
+  outcomes_frame (check_create_blueprint has_salt literal_offset vs)
 Proof
   simp[outcomes_frame_def, check_create_blueprint_state]
 QED

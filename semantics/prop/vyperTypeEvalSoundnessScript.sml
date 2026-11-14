@@ -7571,16 +7571,16 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
       >- (
         rename1 `exprs_runtime_typed env
                    (TAKE (if has_salt then 4 else 3) es) prefix` >>
-        Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
-        rename1 `check_create_blueprint has_salt prefix prefix_st =
+        Cases_on `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st` >>
+        rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st =
                    (gate_res,gate_st)` >>
         `gate_st = prefix_st` by (
-          qpat_x_assum `check_create_blueprint has_salt prefix prefix_st = _`
+          qpat_x_assum `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = _`
             (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
         gvs[] >>
         Cases_on `gate_res` >> gvs[]
         >- (
-          rename1 `check_create_blueprint has_salt prefix prefix_st =
+          rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st =
                      (INL code_size,prefix_st)` >>
           Cases_on `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
           rename1 `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st =
@@ -9365,8 +9365,8 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   Cases_on `prefix_res` >> simp[] >> rpt BasicProvers.VAR_EQ_TAC
   >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
         (INL prefix,prefix_st)` >>
-      Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
-      rename1 `check_create_blueprint has_salt prefix prefix_st = (gate_res,gate_st)` >>
+      Cases_on `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st` >>
+      rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = (gate_res,gate_st)` >>
       `gate_st = prefix_st` by metis_tac[check_create_blueprint_result_state] >>
       gvs[] >> Cases_on `gate_res` >> gvs[]
       >- suspend "TraceBlueprintSuffix" >>
@@ -9376,7 +9376,7 @@ QED
 
 Resume eval_scc_type_sound_results_mutual[TraceBlueprintSuffix]:
   RESUME_TAC >>
-  rename1 `check_create_blueprint has_salt prefix prefix_st = (INL code_size,prefix_st)` >>
+  rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = (INL code_size,prefix_st)` >>
   qpat_x_assum `!a b c d e f. _ ==> _` drule_all >> strip_tac >>
   Cases_on `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
   rename1 `eval_expr_results cx (DROP (if has_salt then 4 else 3) es) prefix_st =

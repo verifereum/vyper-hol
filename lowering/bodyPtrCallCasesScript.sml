@@ -130,7 +130,7 @@ Theorem body_create_case_ptr:
        kind = CreateFromBlueprint raw_args /\
        eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' =
        (INL prefix,t) /\
-       check_create_blueprint has_salt prefix s'3' = (INL code_size,t') ==>
+       check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix s'3' = (INL code_size,t') ==>
        body_results_ptr_ok cx (DROP (if has_salt then 4 else 3) es)) /\
     (!raw_args.
        kind = CreateFromBlueprint raw_args ==>

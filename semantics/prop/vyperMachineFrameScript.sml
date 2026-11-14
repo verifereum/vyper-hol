@@ -249,7 +249,7 @@ QED
 Theorem machine_frame_unchanged_reads:
   state_rel_frame machine_frame (conditional_result cx r) /\
   state_rel_frame machine_frame (check_not_static cx) /\
-  state_rel_frame machine_frame (check_create_blueprint has_salt vs)
+  state_rel_frame machine_frame (check_create_blueprint has_salt literal_offset vs)
 Proof
   simp[state_rel_frame_result] >>
   metis_tac[conditional_result_state, vyperCreateTheory.check_create_blueprint_state,

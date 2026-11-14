@@ -1,9 +1,10 @@
 Theory vyperCreateSelfdestruct
 Ancestors
   vyperCreate vyperInterpreter vyperSmallStep[ignore_grammar]
-  vyperContext vfmExecution vfmState finite_set finite_map
+  vyperAST vyperContext vyperState vyperValue vyperValueOperation vyperEvalPureExpr
+  constSubst vyperPinFold vyperPinFoldProps list vfmExecution vfmState finite_set finite_map
 Libs
-  wordsLib cv_transLib
+  wordsLib cv_transLib vyperConstEvalLib
 
 (* Constructor SELFDESTRUCT must see an empty original account even though the
    live account has already received its nonce-one creation prelude. *)
@@ -169,6 +170,311 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Definition blueprint_test_offset_expr_def:
+  blueprint_test_offset_expr offset =
+    Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint F) F T [])
+      [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); offset] NONE
+End
+val () = cv_auto_trans blueprint_test_offset_expr_def;
+
+Theorem blueprint_prefix_rejected[local]:
+  eval_pure_exprs cx st
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); off] =
+      SOME vs /\
+  ~blueprint_literal_offset cx F
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); off] /\
+  blueprint_prefix_size F F vs st.accounts = NONE ==>
+  eval_expr cx (blueprint_test_offset_expr off) st =
+    (INR (Error (RuntimeError "create source has no deployable code")), st)
+Proof
+  strip_tac >> drule (CONJUNCT2 eval_pure_to_eval_mutual) >> strip_tac >>
+  simp[blueprint_test_offset_expr_def, Once evaluate_def] >>
+  simp[vyperStateTheory.bind_def, check_create_blueprint_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Definition blueprint_runtime_state_def:
+  blueprint_runtime_state offset =
+    (blueprint_test_state [0w]) with scopes :=
+      [FEMPTY |+ ("offset", <|assignable := F; type := BaseTV (UintT 256);
+                            value := IntV (&offset); popped := []|>)]
+End
+
+Definition blueprint_runtime_offset_rejected_def:
+  blueprint_runtime_offset_rejected offset =
+    let st = blueprint_runtime_state offset in
+    let e = blueprint_test_offset_expr (Name (BaseT (UintT 256)) "offset") in
+    let expected =
+      (INR (Error (RuntimeError "create source has no deployable code")), st) in
+    eval_expr blueprint_test_context e st = expected
+End
+
+Theorem blueprint_address_bytes_decode[local]:
+  dest_AddressV (BytesV (REPLICATE 19 0w ++ [42w])) = SOME 42w
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_source_code_projection[local]:
+  (lookup_account 42w (blueprint_test_state [0w]).accounts).code = [0w]
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_runtime_pure_prefix[local]:
+  eval_pure_exprs blueprint_test_context (blueprint_runtime_state offset)
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+     Name (BaseT (UintT 256)) "offset"] =
+    SOME [BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)]
+Proof
+  simp[eval_pure_expr_def, blueprint_test_address_def, evaluate_literal_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+       vyperStateTheory.read_place_def, vyperStateTheory.bind_def,
+       vyperStateTheory.get_scopes_def, vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.lift_sum_def, vyperStateTheory.read_memory_path_def,
+       vyperStateTheory.evaluate_subscripts_def, vyperStateTheory.lookup_scopes_def,
+       blueprint_runtime_state_def, FLOOKUP_UPDATE]
+QED
+
+Theorem blueprint_runtime_prefix_guard[local]:
+  0 < offset ==>
+  blueprint_prefix_size F F
+    [BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)]
+    (blueprint_test_state [0w]).accounts = NONE
+Proof
+  rw[blueprint_prefix_size_def, dest_create_args_def, make_create_operands_def,
+     blueprint_address_bytes_decode, dest_optional_num_def,
+     dest_optional_salt_def, dest_NumV_def, blueprint_source_code_projection] >>
+  decide_tac
+QED
+
+Theorem blueprint_runtime_positive_offset_rejected[local]:
+  0 < offset ==> blueprint_runtime_offset_rejected offset
+Proof
+  strip_tac >> simp_tac bool_ss [blueprint_runtime_offset_rejected_def, LET_THM] >>
+  irule blueprint_prefix_rejected >>
+  simp[blueprint_literal_offset_def, subst_consts_expr_def,
+       pin_fold_expr_def, is_int_literal_def] >>
+  qexists_tac `[BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)]` >>
+  simp[blueprint_runtime_pure_prefix, blueprint_runtime_state_def,
+       blueprint_runtime_prefix_guard]
+QED
+
+(* A local input remains a runtime operand even when its value is max_uint. *)
+Theorem blueprint_runtime_wrapped_offset_rejected:
+  EVERY blueprint_runtime_offset_rejected
+    [1; 2; 2 ** 255; 2 ** 256 - 1; 2 ** 256 - 2]
+Proof
+  rewrite_tac[listTheory.EVERY_DEF] >> rpt conj_tac >>
+  irule blueprint_runtime_positive_offset_rejected >> CONV_TAC cv_eval
+QED
+
+Theorem blueprint_folded_and_runtime_offset_values:
+  blueprint_test_observe [0w;0w]
+    (blueprint_test_offset_expr
+      (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+        [Literal (BaseT (IntT 128)) (IntL 1)]))
+    (INL (Value (AddressV (vfmContext$address_for_create 41w 2))))
+    3 (vfmContext$address_for_create 41w 2) 1 [] /\
+  blueprint_test_observe [0w]
+    (blueprint_test_offset_expr
+      (Builtin (BaseT (UintT 256)) (AsWeiValue Wei)
+        [Literal (BaseT (UintT 256)) (IntL (&(2 ** 256 - 1)))]))
+    (INL (Value (AddressV (vfmContext$address_for_create 41w 2))))
+    3 (vfmContext$address_for_create 41w 2) 1 []
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition blueprint_literal_test_context_def:
+  blueprint_literal_test_context = blueprint_test_context with sources :=
+    [(41w, [(NONE,
+      [VariableDecl Private
+        (Constant (Literal (BaseT (UintT 256)) (IntL (&(2 ** 256 - 1)))))
+        "OFFSET" (BaseT (UintT 256)) NONE;
+       VariableDecl Private
+        (Constant (Literal (BaseT (StringT 4)) (StringL "f()")))
+        "SIG" (BaseT (StringT 4)) NONE;
+       VariableDecl Private
+        (Constant (Builtin (BaseT (BytesT (Fixed 4))) MethodId
+          [TopLevelName (BaseT (StringT 4)) (NONE,"SIG")]))
+        "SELECTOR" (BaseT (BytesT (Fixed 4))) NONE])])]
+End
+val () = cv_auto_trans blueprint_literal_test_context_def;
+
+Theorem blueprint_module_constant_literal_modes:
+  blueprint_literal_offset blueprint_literal_test_context F
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+     TopLevelName (BaseT (UintT 256)) (NONE,"OFFSET")] /\
+  ~blueprint_literal_offset blueprint_literal_test_context F
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+     Name (BaseT (UintT 256)) "OFFSET"]
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The full module environment expands earlier constants inside a later one. *)
+Theorem blueprint_module_constant_signature_expansion:
+  subst_consts_expr
+    (module_consts_env
+      (THE (get_module_code blueprint_literal_test_context NONE)) [])
+    (TopLevelName (BaseT (BytesT (Fixed 4))) (NONE,"SELECTOR")) =
+  Builtin (BaseT (BytesT (Fixed 4))) MethodId
+    [Literal (BaseT (StringT 4)) (StringL "f()")]
+Proof
+  EVAL_TAC
+QED
+
+Definition blueprint_flag_test_context_def:
+  blueprint_flag_test_context = blueprint_test_context with sources :=
+    [(41w, [(NONE,
+      [FlagDecl "Flags" (GENLIST (\n. REPLICATE (SUC n) #"F") 256)])])]
+End
+val () = cv_auto_trans blueprint_flag_test_context_def;
+
+Definition blueprint_flag_offset_def:
+  blueprint_flag_offset =
+    TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+      [TypeBuiltin (FlagT (NONE,"Flags")) Convert (FlagT (NONE,"Flags"))
+        [TypeBuiltin (BaseT (UintT 256)) MaxValue (BaseT (UintT 256)) []]]
+End
+val () = cv_auto_trans blueprint_flag_offset_def;
+
+Theorem blueprint_flag_type_environment[local]:
+  get_tenv blueprint_flag_test_context =
+    FEMPTY |+ ((NONE,"Flags"), FlagArgs 256)
+Proof
+  simp_tac bool_ss [blueprint_flag_test_context_def] >>
+  qabbrev_tac `members = GENLIST (\n. REPLICATE (SUC n) #"F") 256` >>
+  `LENGTH members = 256` by
+    (qunabbrev_tac `members` >> rewrite_tac[LENGTH_GENLIST]) >>
+  simp[get_tenv_def, blueprint_test_context_def,
+       type_env_all_modules_def, type_env_for_module_def]
+QED
+
+Theorem blueprint_flag_conversion_values[local]:
+  evaluate_max_value (BaseT (UintT 256)) =
+    INL (IntV (&(2 ** 256 - 1))) /\
+  evaluate_convert_from (FEMPTY |+ ((NONE,"Flags"), FlagArgs 256))
+    (BaseT (UintT 256)) (IntV (&(2 ** 256 - 1))) (FlagT (NONE,"Flags")) =
+    INL (FlagV (2 ** 256 - 1)) /\
+  evaluate_convert_from (FEMPTY |+ ((NONE,"Flags"), FlagArgs 256))
+    (FlagT (NONE,"Flags")) (FlagV (2 ** 256 - 1)) (BaseT (UintT 256)) =
+    INL (IntV (&(2 ** 256 - 1)))
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_flag_runtime_mode[local]:
+  ~blueprint_literal_offset blueprint_flag_test_context F
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+     blueprint_flag_offset]
+Proof
+  simp[blueprint_literal_offset_def, blueprint_flag_offset_def,
+       subst_consts_expr_def, pin_fold_expr_def, is_int_literal_def]
+QED
+
+Definition blueprint_flag_runtime_rejected_def:
+  blueprint_flag_runtime_rejected =
+    let st = blueprint_test_state [0w] in
+    let e = blueprint_test_offset_expr blueprint_flag_offset in
+    ~blueprint_literal_offset blueprint_flag_test_context F
+      [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+       blueprint_flag_offset] /\
+    eval_expr blueprint_flag_test_context e st =
+    (INR (Error (RuntimeError "create source has no deployable code")), st)
+End
+
+(* Both conversions preserve max_uint at runtime, but Python does not fold them. *)
+Theorem blueprint_full_flag_offset_uses_runtime_guard:
+  blueprint_flag_runtime_rejected
+Proof
+  simp_tac bool_ss [blueprint_flag_runtime_rejected_def, LET_THM,
+                    blueprint_flag_runtime_mode] >>
+  irule blueprint_prefix_rejected >>
+  simp[blueprint_flag_runtime_mode] >>
+  qexists_tac `[BytesV (REPLICATE 19 0w ++ [42w]); IntV 0;
+               IntV (&(2 ** 256 - 1))]` >>
+  simp[blueprint_flag_runtime_mode, eval_pure_expr_def,
+       blueprint_flag_offset_def, blueprint_test_address_def, evaluate_literal_def,
+       type_builtin_args_length_ok_def, evaluate_type_builtin_def,
+       blueprint_flag_type_environment, SRULE [] blueprint_flag_conversion_values,
+       expr_type_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.return_def] >>
+  irule blueprint_runtime_prefix_guard >> CONV_TAC cv_eval
+QED
+
+Definition blueprint_high_wei_offset_def:
+  blueprint_high_wei_offset =
+    Builtin (BaseT (UintT 256)) (AsWeiValue Gwei)
+      [Literal (BaseT (UintT 256)) (IntL (&((2 ** 256 - 1) DIV 10 ** 9)))]
+End
+val () = cv_auto_trans blueprint_high_wei_offset_def;
+
+Theorem blueprint_high_wei_normal_form[local]:
+  pin_fold_expr blueprint_high_wei_offset =
+    Literal (BaseT (UintT 256))
+      (IntL (&(((2 ** 256 - 1) DIV 10 ** 9) * 10 ** 9)))
+Proof
+  CONV_TAC cv_eval
+QED
+
+Definition blueprint_high_wei_prefix_def:
+  blueprint_high_wei_prefix =
+    let st = blueprint_test_state [0w] in
+    let n = ((2 ** 256 - 1) DIV 10 ** 9) * 10 ** 9 in
+    blueprint_literal_offset blueprint_test_context F
+      [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+       blueprint_high_wei_offset] /\
+    eval_expr blueprint_test_context blueprint_high_wei_offset st =
+      (INL (Value (IntV (&n))), st) /\
+    check_create_blueprint F T
+      [BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&n)] st =
+      (INL 129639937, st)
+End
+
+Theorem blueprint_high_wei_literal_mode[local]:
+  blueprint_literal_offset blueprint_test_context F
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
+     blueprint_high_wei_offset]
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem blueprint_high_wei_prefix_size[local]:
+  blueprint_prefix_size F T
+    [BytesV (REPLICATE 19 0w ++ [42w]); IntV 0;
+     IntV (&(((2 ** 256 - 1) DIV 10 ** 9) * 10 ** 9))]
+    (blueprint_test_state [0w]).accounts = SOME 129639937
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The folded high value passes the signed wrapped-size guard before the
+   separate initcode-size limit; this test does not allocate that initcode. *)
+Theorem blueprint_folded_high_wei_uses_literal_guard:
+  blueprint_high_wei_prefix
+Proof
+  simp_tac bool_ss [blueprint_high_wei_prefix_def, LET_THM,
+                    blueprint_high_wei_literal_mode] >>
+  conj_tac
+  >- (irule (MATCH_MP pin_fold_expr_literal_sound blueprint_high_wei_normal_form
+              |> REWRITE_RULE [evaluate_literal_def])) >>
+  simp[check_create_blueprint_def, vyperStateTheory.bind_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.return_def, SRULE [] blueprint_high_wei_prefix_size]
+QED
+
+Theorem blueprint_folded_high_wei_create_reaches_size_guard:
+  blueprint_test_observe [0w]
+    (blueprint_test_offset_expr blueprint_high_wei_offset)
+    (INR (Error (RuntimeError "create initcode too large")))
+    2 (vfmContext$address_for_create 41w 2) 0 []
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* Equal length gives zero, length+one gives -one, and the sign-bit boundary
    gives -2^255.  These hard source failures do not become soft zero returns. *)
 Theorem blueprint_zero_and_signed_negative_source_sizes:
@@ -263,12 +569,12 @@ Proof
 QED
 
 Theorem blueprint_test_nested_source_check:
-  check_create_blueprint T
+  check_create_blueprint T T
     [AddressV (vfmContext$address_for_create 41w 2); IntV 0;
      BytesV (REPLICATE 32 0w); IntV 0] blueprint_test_nested_post =
     (INR (Error (RuntimeError "create source has no deployable code")),
      blueprint_test_nested_post) /\
-  check_create_blueprint F
+  check_create_blueprint F T
     [AddressV (vfmContext$address_for_create 41w 2); IntV 0; IntV 0]
     blueprint_test_nested_post =
     (INR (Error (RuntimeError "create source has no deployable code")),
@@ -294,7 +600,8 @@ Proof
   ntac 8 (simp[Once evaluate_def, vyperStateTheory.bind_def,
     vyperStateTheory.read_result_def, vyperStateTheory.return_def,
     vyperValueOperationTheory.evaluate_literal_def]) >>
-  simp[blueprint_test_nested_source_check]
+  simp[blueprint_test_nested_source_check, blueprint_literal_offset_def,
+       subst_consts_expr_def, pin_fold_expr_def, is_int_literal_def]
 QED
 
 (* The prefix deploys an empty-runtime target, then fails its source check.
@@ -327,7 +634,7 @@ Theorem blueprint_empty_source_check[local]:
          (update_account 42w
            (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
            empty_accounts)) in
-  check_create_blueprint salted
+  check_create_blueprint salted T
     ([AddressV (vfmContext$address_for_create 41w 2); IntV 0] ++
      (if salted then [BytesV (REPLICATE 32 0w)] else []) ++ [IntV 0]) st =
   (INR (Error (RuntimeError "create source has no deployable code")),st)
@@ -351,6 +658,8 @@ Theorem blueprint_invalid_source_result:
 Proof
   Cases_on `salted` >>
   simp[blueprint_test_expr_def, evaluate_def, blueprint_nested_deployment,
+       blueprint_literal_offset_def, subst_consts_expr_def,
+       pin_fold_expr_def, is_int_literal_def,
        SRULE [LET_THM] (Q.INST [`salted` |-> `F`] blueprint_empty_source_check),
        SRULE [LET_THM] (Q.INST [`salted` |-> `T`] blueprint_empty_source_check),
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,

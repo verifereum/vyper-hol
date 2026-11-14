@@ -2600,11 +2600,11 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_CreateTarget]:
       >- (
         rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
                    (INL prefix,prefix_st)` >>
-        Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
-        rename1 `check_create_blueprint has_salt prefix prefix_st =
+        Cases_on `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st` >>
+        rename1 `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st =
                    (gate_res,gate_st)` >>
         `gate_st = prefix_st` by (
-          qpat_x_assum `check_create_blueprint has_salt prefix prefix_st = _`
+          qpat_x_assum `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) prefix prefix_st = _`
             (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
         gvs[] >>
         rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
