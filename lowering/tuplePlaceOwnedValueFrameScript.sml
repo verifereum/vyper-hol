@@ -5,6 +5,8 @@ Ancestors
   stmtLowering exprLowering compileEnv loweringPosts stmtSimDefs venomState
   vyperInterpreter vyperState vyperValue vyperTypeSystem exprSimHypsDefs
 
+Libs horizonTypeLib
+
 Theorem tuple_place_owned_value_run_frame:
   !H0 ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
@@ -63,8 +65,13 @@ Theorem tuple_place_owned_value_run_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `loc = LocMemory`
-  >- (drule_all tuple_place_owned_memory_run_frame >> strip_tac >>
-      qexists_tac `t` >> simp[]) >>
+  >- (`storage_place_region cx p` by
+        (Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def,
+           vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+         Cases_on `b` >> gvs[slot_loc_def]) >>
+      drule_all (at_horizon_named "H"
+        (at_horizon_named "H0" tuple_place_owned_memory_run_frame)) >> strip_tac >>
+      qexists_tac `t` >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   Q.SUBGOAL_THEN `loc = LocStorage \/ loc = LocTransient` assume_tac
   >- (Cases_on `p` >> gvs[place_ptr_rel_def] >>
       rename1 `slot_loc tr` >> Cases_on `tr` >> gvs[slot_loc_def]) >>

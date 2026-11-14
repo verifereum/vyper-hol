@@ -4,6 +4,8 @@ Ancestors
   placeRelayoutStorageRun placeRelayoutCode exprSimProps loweringPosts
   stmtSimDefs compileEnv loweringStateRelDefs exprLoweringProps exprSimHypsDefs
   placeMemoryLiveRegion bodySimAugPlaceLoad annassignRelayoutSource
+  vyperStorageFootprint vyperStoragePlaceObserved
+Libs horizonTypeLib
 
 (* Ownership is separated from the target's input locals.  The target frame
    carries the destination's live local region back to precisely those locals. *)
@@ -87,11 +89,14 @@ Theorem owned_target_relayout_store_run:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
     (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
-  target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
-    (dst,SOME loc,SOME (ValPT dty)) s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
+      (dst,SOME loc,SOME (ValPT dty)) s /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ storage_place_observed H p) /\
   expr_val_own cenv cx sty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
@@ -108,13 +113,14 @@ Theorem owned_target_relayout_store_run:
   expr_sim_inv cenv cx env ee /\ acyclic_struct_metadata cenv.ce_struct_fields /\
   assign_alloc_ok cenv bt e /\ lowered_value_type cenv e = sty /\
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-  cenv.ce_target CapMcopy /\ storage_place_region cx p /\
+  cenv.ce_target CapMcopy /\
   write_place cx p v ee = (INL (),ff) /\ local_ptrs_reserved cenv sb /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx ff t /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx ff t) /\
       (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
@@ -122,12 +128,21 @@ Theorem owned_target_relayout_store_run:
       alloca_frame cenv ee sb s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
   `!x. op = Var x ==> not_fresh_at sa x` by simp[] >>
   `!x. op = Var x ==> not_fresh_at sb x` by simp[] >>
   `val_footprint stv v = type_memory_size stv` by
     metis_tac[nonbytes_evaluated_val_footprint] >>
   drule_all target_post_owned_source_registered >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx ee s` by fs[target_post_def] >>
+  `!HH. valid_horizon cx st0 HH ee.storage_trace ==>
+    stmt_state_rel HH ctx func cenv cx ee s` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `HH` (drule_then strip_assume_tac)) >> fs[target_post_def]) >>
   `?dw. eval_operand dst s = SOME dw /\
         place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type dty)` by
     fs[target_post_def] >>
@@ -143,14 +158,15 @@ Proof
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_get_target_ptr _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+  simp[valid_horizon_def] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Resume owned_target_relayout_store_run[memory]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   `w2n sw + type_memory_size stv <= w2n dw \/
    w2n dw + type_memory_size dtv <= w2n sw` by
-    (irule target_post_owned_memory_destination_disjoint >> metis_tac[]) >>
+    (irule (horizonTypeLib.at_horizon_named "H"
+      target_post_owned_memory_destination_disjoint) >> metis_tac[]) >>
   `w2n sw + type_memory_size stv < dimword (:256)` by
     (drule stmt_state_rel_region_lt >> strip_tac >>
      first_x_assum drule >> decide_tac) >>

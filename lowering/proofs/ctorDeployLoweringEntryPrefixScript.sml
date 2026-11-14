@@ -639,7 +639,7 @@ Proof
  drule_all deploy_ctor_prefix_entry >>
  disch_then (map_every assume_tac o CONJUNCTS) >>
  qpat_x_assum `?e. _` (qx_choose_then `e` (map_every assume_tac o CONJUNCTS)) >>
- `supported_program tops` by fs[deploy_source_ok_def] >>
+ `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
  drule_all deploy_ctor_original_entry_shape >> strip_tac >>
  drule deploy_ctor_entry_initial_fields >> strip_tac >>
  qabbrev_tac `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>` >>

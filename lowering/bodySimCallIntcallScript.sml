@@ -9,6 +9,7 @@ Ancestors
   exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
   venomState compileEnv exprSimUnwrapProps
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 (* The IHs at a supported callee (body_intcall_source_selection): no
    defaults, as many arguments as parameters. *)

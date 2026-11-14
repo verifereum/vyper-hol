@@ -5,7 +5,7 @@ Ancestors
  abiDecoderArrayBackedge abiDecoderPrimitiveLoopEntry abiDecoderLoop abiDecoderLoopRegisters abiDecoderLoopSetup abiDecoderExecution
  abiDecoderContract abiDecoderReentry abiDecoderTypedContract
  abiEncoderRegisteredEffect ctorAbiActualSites ctorDeployMemoryFrontier
- compileEnv venomState venomExecSemantics venomMemDefs valueEncoding
+ compileEnv loweringStateRelDefs venomState venomExecSemantics venomMemDefs valueEncoding
  ASCIInumbers words list finite_map arithmetic fragGasPath
  abiDecoderRecursiveLoopContext abiDecoderRecursiveLoopLayout abiCanonicalHeadSize abiDecoderHeaderGasPath
 
@@ -43,7 +43,7 @@ Proof
   disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
   drule_all abi_decoder_loop_entry_sim >>
   disch_then (qspec_then `ctx` assume_tac) >>
-  qexists `jump_to hdr s` >> simp[jump_to_def]
+  qexists `jump_to hdr s` >> fs[jump_to_def, fresh_vars_wrt_def, lookup_var_def]
 QED
 
 Theorem deploy_ctor_array_header_complete_run:
@@ -338,7 +338,7 @@ Proof
   drule_all gas_path_jump >> disch_then (qspec_then `ctx` assume_tac) >>
   `abi_decode_sim ctx func s (jump_to hdr s)` by
     metis_tac[gas_path_normal, abi_decode_sim_def] >>
-  qexists `jump_to hdr s` >> simp[jump_to_def]
+  qexists `jump_to hdr s` >> fs[jump_to_def, fresh_vars_wrt_def, lookup_var_def]
 QED
 
 Theorem deploy_ctor_array_header_complete_gas_run:
@@ -416,6 +416,16 @@ Proof
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb : bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid ip src DLOAD
+    (STRING #"%" (toString header_var))
+    (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2)))
+    (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_insts_def,
+       abi_decode_position_header_delta_def, abi_decode_loop_cfg_def,
+       abi_decode_header_insts_def] >>
+  `header_var + 4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all deploy_ctor_array_header_complete_gas_run >> simp[]
 QED
 
