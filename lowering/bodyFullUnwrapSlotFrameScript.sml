@@ -3,25 +3,6 @@ Theory bodyFullUnwrapSlotFrame
 Ancestors
   bodyFullUnwrapSlotPost bodyPtrDefs ptrDiscipline pred_set arithmetic
 
-Theorem ghost_inv_at_mem_decrease:
-  ghost_inv_at D lo d cenv cx es G tn s /\ m SUBSET tn.t_mem ==>
-  ghost_inv_at D lo d cenv cx es G (tn with t_mem := m) s
-Proof
-  strip_tac >>
-  `!mem. mem_agree_outside m s.vs_memory mem ==>
-     mem_agree_outside tn.t_mem s.vs_memory mem` by
-    (gvs[mem_agree_outside_def, SUBSET_DEF] >> metis_tac[]) >>
-  `!p sz. ptr_covers G (tn with t_mem := m) p s sz <=> ptr_covers G tn p s sz` by
-    simp[ptr_covers_def, op_taint_def] >>
-  `return_buf_ptr d cenv G (tn with t_mem := m) s <=> return_buf_ptr d cenv G tn s` by
-    (Cases_on `d` >- simp[return_buf_ptr_def] >>
-     rename1 `return_buf_ptr (SOME pair) _ _ _ _` >> PairCases_on `pair` >>
-     simp[return_buf_ptr_def]) >>
-  gvs[ghost_inv_at_def, op_taint_def, stor_taint_ok_at_def] >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> metis_tac[]) >>
-  gvs[SUBSET_DEF] >> metis_tac[]
-QED
 
 Theorem unwrap_slot_copy_ghost_inv_at_mono:
   ghost_inv_at D lo d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
