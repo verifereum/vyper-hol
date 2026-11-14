@@ -1,7 +1,7 @@
 (* Same-run copy boundaries for memory defaults. *)
 Theory extcallReturnDefaultMemoryJoint
 Ancestors
-  extcallReturnDefaultWordJoint extcallReturnDefaultLengthJoint
+  extcallReturnDefaultLengthJoint
   extcallReturnDefaultMemoryFrame assignTuplePtrLocalCompat
   bodyFullUnwrapRun bodyFullUnwrapSlotPost fragGasCopyLoop allocaFootprint
   exprSimBufferStore fragExecPtr fragGasSeqPtr typedCopyPtr robustCopyTransportPtr

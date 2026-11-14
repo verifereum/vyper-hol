@@ -1,7 +1,7 @@
 (* Resource transport for supplied default-copy endpoints. *)
 Theory extcallReturnDefaultMemoryFrame
 Ancestors
-  bodyFullUnwrapSlotPost extcallReturnDefaultWordJoint exprSimBufferStore
+  bodyFullUnwrapSlotPost exprSimBufferStore
   ptrDiscipline bodyPtrDefs loweringPosts exprSimProps venomState finite_map list pred_set
 
 Theorem return_default_memory_ghost_frame:

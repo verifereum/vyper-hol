@@ -2,7 +2,7 @@
 Theory bodyFullExtCallReturnDefaultValue
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
-  extcallReturnDefaultControlJoint extcallReturnDefaultMemoryJoint
+  bufferAllocationJoint extcallReturnDefaultControlJoint extcallReturnDefaultMemoryJoint
   extcallReturnDefaultTypes extcallReturnDefaultOwnership
   extcallReturnDefaultIntervals extcallReturnDefaultStore
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
