@@ -366,3 +366,407 @@ Proof
   irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_tuple_load_all, rb_compile_tuple_store_all]
 QED
+
+Theorem rb_emit_jmp_if_not_terminated:
+  rb_operand_ok (Label l) ==> rb_step (K T) (emit_jmp_if_not_terminated l)
+Proof
+  strip_tac >> rewrite_tac[emit_jmp_if_not_terminated_def] >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_step_def, comp_get_def] >>
+  gen_tac >> strip_tac >> IF_CASES_TAC >> simp[rb_step_return, rb_emit_inst]
+QED
+
+Theorem compile_stmts_no_runtime_begin:
+  rb_expr_contract ==> rb_stmt_contract
+Proof
+  strip_tac >> rewrite_tac[rb_stmt_contract_def] >>
+  ho_match_mp_tac compile_stmt_ind >> rpt strip_tac >>
+  simp[Once compile_stmt_def, rb_step_return, rb_emit_inst,
+       rb_loop_ok_def]
+  >- suspend "expr"
+  >- suspend "annassign"
+  >- suspend "assign"
+  >- suspend "augassign"
+  >- suspend "assert_bare"
+  >- suspend "assert_unreachable"
+  >- suspend "assert_reason"
+  >- suspend "assert_custom"
+  >- suspend "log"
+  >- suspend "raise_reason"
+  >- suspend "raise_custom"
+  >- suspend "return_none"
+  >- suspend "return_some"
+  >- suspend "append"
+  >- suspend "tuple"
+  >- suspend "if"
+  >- suspend "range"
+  >- suspend "iter"
+  >- suspend "break"
+  >- suspend "continue"
+  >- suspend "catchall1"
+  >- suspend "catchall2"
+  >> suspend "stmts"
+QED
+Resume compile_stmts_no_runtime_begin[expr]:
+  irule rb_ignore >> conj_tac
+  >- (irule rb_step_weaken >> qexists_tac `rb_value_ok` >>
+      gvs[rb_expr_contract_def]) >> simp[rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[annassign]:
+  irule rb_ignore >> conj_tac >- simp[rb_emit_local_alloca] >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- gvs[rb_expr_contract_def] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return, rb_unwrap_value]) >>
+  gen_tac >> strip_tac >> irule rb_bind_return >> BETA_TAC >>
+  Cases_on `FLOOKUP env.ce_vars id` >> simp[rb_emit_void] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >>
+  `rb_location_ok loc` by metis_tac[rb_env_ok_def] >>
+  Cases_on `loc` >> gvs[rb_location_ok_def, rb_emit_void] >>
+  IF_CASES_TAC >> simp[rb_emit_void, rb_compile_assign_value]
+QED
+
+
+Resume compile_stmts_no_runtime_begin[assign]:
+  IF_CASES_TAC
+  >- (irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+      reverse conj_tac
+      >- (irule rb_compile_get_target_ptr >> gvs[rb_expr_contract_def]) >>
+      gen_tac >> strip_tac >> irule rb_compile_store_at_loc >>
+      gvs[rb_env_ok_def]) >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- gvs[rb_expr_contract_def] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_snapshot_vv, rb_vv_with_type, rb_step_return]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  reverse conj_tac
+  >- (irule rb_compile_get_target_ptr >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >> rpt (irule rb_bind_return >> BETA_TAC) >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  rename1 `(rb_operand_ok o FST) result` >>
+  Cases_on `FST (SND result)` >> gvs[rb_emit_void, rb_compile_assign_value]
+QED
+Resume compile_stmts_no_runtime_begin[augassign]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  reverse conj_tac
+  >- (irule rb_compile_get_target_ptr >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >> rpt (irule rb_bind_return >> BETA_TAC) >>
+  gvs[] >> Cases_on `FST (SND x)` >> simp[rb_emit_void] >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_binop] >>
+  simp[rb_emit_void]
+QED
+
+Resume compile_stmts_no_runtime_begin[assert_bare]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[assert_unreachable]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[assert_reason]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_reason_message] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_revert_with_reason] >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[assert_custom]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_revert_with_custom_error] >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[raise_reason]:
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_reason_message] >>
+  simp[rb_compile_revert_with_reason]
+QED
+Resume compile_stmts_no_runtime_begin[raise_custom]:
+  simp[rb_compile_revert_with_custom_error]
+QED
+
+Resume compile_stmts_no_runtime_begin[tuple]:
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- gvs[rb_expr_contract_def] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_unwrap_value] >> simp[rb_compile_tuple_unpack]
+QED
+Resume compile_stmts_no_runtime_begin[append]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok o FST` >> BETA_TAC >>
+  reverse conj_tac
+  >- (irule rb_compile_get_target_ptr >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >> simp[] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+      gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+      irule rb_ignore >> simp[rb_compile_store_memory, rb_step_return]) >>
+  gen_tac >> strip_tac >> irule rb_bind_return >> BETA_TAC >>
+  irule rb_compile_dynarray_append >> gvs[]
+QED
+Resume compile_stmts_no_runtime_begin[break]:
+  gvs[rb_loop_ok_def, rb_emit_inst, rb_operand_ok_def]
+QED
+Resume compile_stmts_no_runtime_begin[continue]:
+  gvs[rb_loop_ok_def, rb_emit_inst, rb_operand_ok_def]
+QED
+Resume compile_stmts_no_runtime_begin[catchall1]:
+  irule rb_ignore >> simp[rb_emit_inst, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[catchall2]:
+  irule rb_ignore >> simp[rb_emit_inst, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[stmts]:
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_step_def, comp_get_def] >>
+  gen_tac >> strip_tac >> IF_CASES_TAC >- simp[rb_step_return] >>
+  irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_declare_stmt_local] >>
+  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Resume compile_stmts_no_runtime_begin[if]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  ntac 3 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[] >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_step_def, comp_get_def] >> gen_tac >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[] >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_step_def, comp_get_def] >> gen_tac >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  IF_CASES_TAC >> simp[rb_step_return] >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+Resume compile_stmts_no_runtime_begin[return_none]:
+  `rb_step (K T)
+    (case env.ce_ctor_exit_label of
+       SOME l => emit_inst JMP [Label l] []
+     | NONE => (\(nr,k,tr,vw). comp_ignore_bind
+         (if nr then compile_nonreentrant_unlock k tr vw else comp_return ())
+         (emit_inst STOP [] [])) env.ce_nonreentrant)` by
+    (Cases_on `env.ce_ctor_exit_label` >> simp[]
+     >- (pairarg_tac >> simp[] >>
+         irule rb_ignore >> simp[rb_emit_inst] >>
+         IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
+     gvs[rb_env_ok_def, rb_operand_ok_def, rb_emit_inst]) >>
+  Cases_on `env.ce_return_pc` >> simp[] >> rename1 `_ = SOME loc` >>
+  `rb_location_ok loc` by gvs[rb_env_ok_def] >>
+  Cases_on `loc` >> gvs[rb_location_ok_def] >>
+  (irule rb_ignore >> conj_tac >- simp[rb_compile_return_unlock])
+  >- (irule rb_bind_emit_op >> simp[rb_emit_inst]) >> simp[rb_emit_inst]
+QED
+
+Resume compile_stmts_no_runtime_begin[log]:
+  Cases_on `env.ce_event_info (nsid_to_string event_id)` >> simp[rb_emit_inst] >>
+  rename1 `_ = SOME info` >> PairCases_on `info` >> simp[] >>
+  irule rb_step_bind >> qexists_tac `EVERY (rb_operand_ok o FST)` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_log_eval_all] >> gen_tac >> strip_tac >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  drule rb_split_log_ops >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_log_topic_ops] >> gen_tac >> strip_tac >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  IF_CASES_TAC >- simp[rb_emit_inst, rich_listTheory.EVERY_REVERSE] >>
+  simp[] >> irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_log_store_data] >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[cj 2 rb_abi_encode] >>
+  simp[rb_emit_inst, rich_listTheory.EVERY_REVERSE]
+QED
+
+Resume compile_stmts_no_runtime_begin[return_some]:
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >>
+  Cases_on `env.ce_return_pc` >> simp[]
+  >- suspend "return_external" >>
+  rename1 `_ = SOME loc` >>
+  `rb_location_ok loc` by gvs[rb_env_ok_def] >>
+  Cases_on `loc` >> gvs[rb_location_ok_def]
+  >- (irule rb_bind_emit_op >> simp[rb_compile_internal_return_from_env])
+  >- suspend "return_external"
+  >- suspend "return_external"
+  >- suspend "return_external" >>
+  simp[rb_compile_internal_return_from_env]
+QED
+Resume compile_stmts_no_runtime_begin[return_external]:
+  markerLib.RESUME_TAC >> (simp[] >>
+   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+   reverse conj_tac
+   >- (IF_CASES_TAC >> simp[rb_step_return] >>
+       irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+       irule rb_bind_return >> BETA_TAC >>
+       irule rb_ignore >> simp[cj 1 rb_typed_memory, rb_step_return]) >>
+   gen_tac >> strip_tac >> IF_CASES_TAC
+   >- (simp[] >> irule rb_ignore >> conj_tac
+       >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
+       irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+       irule rb_ignore >> simp[cj 1 rb_typed_memory, rb_compile_external_return]) >>
+   simp[rb_compile_external_return])
+QED
+
+Resume compile_stmts_no_runtime_begin[range]:
+  ntac 2 (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+    (reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def])) >>
+    gen_tac >> strip_tac) >>
+  irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_declare_local] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_local_alloca] >>
+  ntac 5 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (Cases_on `start_e` >> simp[rb_emit_op, rb_step_return] >>
+      Cases_on `end_e` >> simp[rb_emit_op, rb_step_return] >>
+      CASE_TAC >> simp[rb_emit_op, rb_step_return] >>
+      CASE_TAC >> simp[rb_emit_op, rb_step_return]) >>
+  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+  >- (Cases_on `start_e` >> simp[rb_compile_range_bound_checks, rb_step_return] >>
+      Cases_on `end_e` >> simp[rb_compile_range_bound_checks, rb_step_return] >>
+      CASE_TAC >> simp[rb_compile_range_bound_checks, rb_step_return] >>
+      CASE_TAC >> simp[rb_compile_range_bound_checks, rb_step_return]) >>
+  suspend "range_tail"
+QED
+
+Resume compile_stmts_no_runtime_begin[range_tail]:
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac
+  >- (rename1 `rb_env_ok bce` >>
+      Cases_on `FLOOKUP bce.ce_vars id` >> simp[rb_emit_void] >>
+      rename1 `_ = SOME loc` >>
+      `rb_location_ok loc` by metis_tac[rb_env_ok_def] >>
+      Cases_on `loc` >> gvs[rb_location_ok_def, rb_emit_void]) >>
+  irule rb_ignore >> conj_tac
+  >- (first_x_assum irule >> simp[rb_loop_ok_def, rb_operand_ok_def]) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+
+Resume compile_stmts_no_runtime_begin[iter]:
+  irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
+  reverse conj_tac >- gvs[rb_expr_contract_def] >> gen_tac >> strip_tac >>
+  rpt (irule rb_bind_return >> BETA_TAC) >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      irule rb_compile_ptr_load >>
+      gvs[rb_env_ok_def, AllCaseEqs()] >>
+      irule rb_value_operand >> first_assum MATCH_ACCEPT_TAC) >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_declare_local] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_local_alloca] >>
+  ntac 5 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> simp[rb_emit_void]) >>
+  suspend "iter_tail"
+QED
+Resume compile_stmts_no_runtime_begin[iter_tail]:
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (IF_CASES_TAC >> simp[rb_emit_op, rb_step_return]) >>
+  gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >>
+  reverse conj_tac >- (simp[] >> irule rb_value_operand >> first_assum MATCH_ACCEPT_TAC) >>
+  gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac
+  >- (rename1 `rb_env_ok bce` >>
+      Cases_on `FLOOKUP bce.ce_vars id` >> simp[rb_emit_void] >>
+      rename1 `_ = SOME loc` >>
+      `rb_location_ok loc` by metis_tac[rb_env_ok_def] >>
+      Cases_on `loc` >> gvs[rb_location_ok_def, rb_emit_void,
+        rb_compile_iter_elem_copy]) >>
+  irule rb_ignore >> conj_tac
+  >- (first_x_assum irule >> simp[rb_loop_ok_def, rb_operand_ok_def]) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+
+Finalise compile_stmts_no_runtime_begin
