@@ -911,3 +911,22 @@ Proof
   >- metis_tac[eval_expr_send_value] >>
   irule send_expr_sim_ptr >> qexists_tac `env` >> simp[]
 QED
+
+(* Zero-region send checks at the frame's reserved allocation bound. *)
+Theorem ptr_inst_ok_send_call_at:
+  inst.inst_opcode = CALL /\
+  inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
+  eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
+  eval_operand value s = SOME vw /\
+  op_taint tn gas = {} /\ op_taint tn addr = {} /\
+  op_taint tn value = {} /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ stor_taint_ok_at D tn s ==>
+  ptr_inst_ok D lo fuel ctx fn G tn inst s
+Proof
+  strip_tac >> irule ptr_inst_ok_call >> simp[] >>
+  gvs[stor_taint_ok_at_def] >> conj_tac
+  >- (irule taint_ok_call >>
+      gvs[op_taint_def, source_memory_read_ranges_def,
+          mem_read_ops_def, memory_range_of_operands_def, eval_operand_def]) >>
+  irule access_ok_call >> simp[eval_operand_def]
+QED
