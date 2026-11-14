@@ -5,6 +5,7 @@
  * TOP-LEVEL:
  *   send_expr_sim_full    -- the value judgment of a send call
  *   send_expr_vv_sim_full -- its vv judgment
+ *   body_send_case_full  -- the body induction case
  *)
 Theory bodyFullSend
 Ancestors
@@ -771,4 +772,25 @@ Proof
   >- metis_tac[eval_expr_send_value] >>
   simp[loweringPostsTheory.post_value_type_def, expr_type_def, lowered_value_type_def,
        vyperValueTheory.evaluate_type_def, valueEncodingTheory.type_memory_size_def]
+QED
+
+(* The send operands and CALL/ASSERT suffix share the joint witness. *)
+Theorem body_send_case_full:
+  !cx v12 has_gas es v13.
+    (!s'' x t.
+       type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' =
+       (INL x,t) ==>
+       body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Call v12 (Send has_gas) es v13)
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_full_ok_def] >>
+  reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+  drule send_pre_types >> strip_tac >>
+  `body_exprs_full_ok cx es` by
+    (first_x_assum irule >>
+     simp[vyperStateTheory.type_check_def,vyperStateTheory.check_def,
+          vyperStateTheory.assert_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule send_expr_sim_full >> metis_tac[]) >>
+  irule send_expr_vv_sim_full >> metis_tac[]
 QED

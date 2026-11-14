@@ -7,7 +7,7 @@ Ancestors
   loweringStateRelDefs localPtrsProps compileEnv venomMemProofs ghostPcTransportPtr
   venomExecProofs venomExecSemantics venomState venomInst list
 
-Theorem send_tail_path_full:
+Theorem send_tail_path_full[local]:
   expr_has_effect e /\
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success,s3) /\
   emit_void ASSERT [success] s3 = (void,sb) /\ fn_has_code sm sb fn /\
@@ -138,7 +138,7 @@ Resume send_tail_path_full[history]:
   simp[mk_inst_def,is_terminator_def]
 QED
 
-Finalise send_tail_path_full
+Finalise send_tail_path_full[local]
 
 Theorem send_tail_outcome_full:
   expr_has_effect e /\

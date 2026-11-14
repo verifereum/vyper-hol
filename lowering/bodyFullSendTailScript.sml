@@ -81,7 +81,7 @@ Proof
   simp[] >> disch_then irule >> simp[]
 QED
 
-Theorem send_read_checked_tail_full:
+Theorem send_read_checked_tail_full[local]:
   stmt_state_rel H ctx fn cenv cx es s /\ stor_taint_ok_at D tn s /\
   allocas_from lo s /\
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
