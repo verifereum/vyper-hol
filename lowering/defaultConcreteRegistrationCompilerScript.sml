@@ -125,3 +125,68 @@ Proof
   irule default_registration_slots_vars >> simp[]
 QED
 
+
+Theorem default_registration_compiler_advance:
+  default_registration_invariant tops cx ctx fn site k initial ce0 start
+    args all_tvs specs cef sa ce st off
+    ((name,prim,dyn,sz,info)::rest) (tv::tvs) s G tn owners /\
+  DROP (LENGTH owners) args = (name,ty)::tail /\
+  compile_register_positional_args ce [(name,prim,dyn,sz,info)] off st = (ce1,st1) ==>
+  ?p.
+    ce1 = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar (Var p) (type_memory_size tv))) /\
+    ~not_fresh_at st p /\ not_fresh_at st1 p /\
+    cs_extends st st1 /\ cs_extends st1 sa /\
+    default_registration_ptr_reservation ce1 st1 /\
+    compile_register_positional_args ce0 (TAKE (SUC (LENGTH owners)) specs)
+      4 start = (ce1,st1) /\
+    compile_register_positional_args ce1 rest (off+sz) st1 = (cef,sa) /\
+    LIST_REL (default_registration_slot tops ce1) (ZIP (tail,tvs)) rest /\
+    FDOM ce1.ce_vars = set (MAP FST args) /\
+    (!n. n <> name ==> FLOOKUP ce1.ce_vars n = FLOOKUP ce.ce_vars n) /\
+    FLOOKUP ce1.ce_vars name = SOME (PtrVar (Var p) (type_memory_size tv)) /\
+    (!n. MEM n (MAP FST (TAKE (LENGTH owners) args)) ==>
+      FLOOKUP ce1.ce_vars n = FLOOKUP ce.ce_vars n) /\
+    ce1.ce_module = ce.ce_module /\ ce1.ce_is_ctor = ce.ce_is_ctor /\
+    ce1.ce_imm_alloca = ce.ce_imm_alloca /\
+    ce1.ce_return_pc = ce.ce_return_pc /\ ce1.ce_return_buf = ce.ce_return_buf /\
+    ce1.ce_struct_fields = ce.ce_struct_fields
+Proof
+  strip_tac >>
+  `off = 4 + SUM (MAP (\(name,prim,dyn,sz,info). sz)
+    (TAKE (LENGTH owners) specs))` by
+      (irule default_registration_invariant_prefix_size >> goal_assum drule) >>
+  `compile_register_positional_args ce0 (TAKE (SUC (LENGTH owners)) specs)
+    4 start = (ce1,st1)` by
+    (irule default_registration_prefix_advance >>
+     fs[default_registration_invariant_def] >> metis_tac[]) >>
+  `compile_register_positional_args ce1 rest (off+sz) st1 = (cef,sa) /\
+   cs_extends st st1 /\ cs_extends st1 sa` by
+    (fs[default_registration_invariant_def] >>
+     qpat_assum `compile_register_positional_args ce (_::rest) _ st = (cef,sa)`
+       (mp_then Any mp_tac default_registration_singleton_suffix) >>
+     disch_then (qspecl_then [`st1`,`ce1`] mp_tac) >> simp[]) >>
+  fs[default_registration_invariant_def] >>
+  `?old. FLOOKUP ce.ce_vars name = SOME (MemLoc old (type_memory_size tv))` by
+    fs[default_registration_slot_def] >>
+  `LENGTH tail = LENGTH tvs` by
+    (qpat_assum `DROP (LENGTH owners) args = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     qpat_assum `tv::tvs = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  `ALL_DISTINCT (name::MAP FST tail)` by
+    (qpat_assum `ALL_DISTINCT (MAP FST args)`
+       (mp_then Any mp_tac ALL_DISTINCT_DROP) >>
+     disch_then (qspec_then `LENGTH owners` mp_tac) >>
+     simp[GSYM MAP_DROP]) >>
+  `~MEM name (MAP FST (TAKE (LENGTH owners) args))` by
+    (qspec_then `MAP FST args` mp_tac rich_listTheory.ALL_DISTINCT_TAKE_DROP >>
+     simp[] >> disch_then (qspecl_then [`LENGTH owners`,`name`] mp_tac) >>
+     simp[GSYM MAP_TAKE, GSYM MAP_DROP]) >>
+  drule_all default_registration_singleton_update >> strip_tac >>
+  qexists `p` >> simp[] >>
+  gvs[default_registration_vars_update] >>
+  simp[FLOOKUP_UPDATE] >>
+  conj_tac >- (irule default_registration_slots_vars >> simp[]) >>
+  conj_tac
+  >- gvs[pred_setTheory.ABSORPTION, FLOOKUP_DEF] >>
+  metis_tac[]
+QED
