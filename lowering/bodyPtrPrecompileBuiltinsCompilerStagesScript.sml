@@ -2,26 +2,6 @@ Theory bodyPtrPrecompileBuiltinsCompilerStages
 Ancestors builtinMisc context compileEnv loweringStateRelDefs emitHelper exprSimPrecompiles
           exprLoweringProps loweringHalt rich_list
 
-
-Theorem recovery_payload_group:
-  emit_void MSTORE [buf; h] sa = ((),s0) /\
-  (do dst <- emit_op ADD [buf; Lit 32w];
-      emit_void MSTORE [dst; v] od) s0 = ((),s1) /\
-  (do dst <- emit_op ADD [buf; Lit 64w];
-      emit_void MSTORE [dst; r] od) s1 = ((),s2) /\
-  (do dst <- emit_op ADD [buf; Lit 96w];
-      emit_void MSTORE [dst; q] od) s2 = ((),sp) ==>
-  (do emit_void MSTORE [buf; h];
-      p1 <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [p1; v];
-      p2 <- emit_op ADD [buf; Lit 64w]; emit_void MSTORE [p2; r];
-      p3 <- emit_op ADD [buf; Lit 96w]; emit_void MSTORE [p3; q] od)
-    sa = ((),sp)
-Proof
-  simp[emit_void_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem compiler_append_trans:
   s1.cs_current_insts = s0.cs_current_insts ++ emitted_insts s0 s1 /\
   s2.cs_current_insts = s1.cs_current_insts ++ emitted_insts s1 s2 ==>

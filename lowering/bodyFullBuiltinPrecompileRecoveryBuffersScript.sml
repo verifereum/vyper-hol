@@ -118,7 +118,10 @@ Proof
        emit_void MSTORE [p2; r];
        p3 <- emit_op ADD [ib.buf_operand; Lit 96w];
        emit_void MSTORE [p3; sig] od) sa = ((),sp)` by
-    (irule recovery_payload_group >> simp[]) >>
+    (Cases_on `emit_op ADD [ib.buf_operand; Lit 32w] sb` >>
+     Cases_on `emit_op ADD [ib.buf_operand; Lit 64w] sc` >>
+     Cases_on `emit_op ADD [ib.buf_operand; Lit 96w] sd` >>
+     fs[comp_ignore_bind_def,comp_bind_def]) >>
   drule_all ecrecover_input_stores_shape >> strip_tac >>
   `ci_mono sf sa /\ ci_mono sp sm /\ ci_mono sm sz` by
     (mp_tac (Q.SPECL [`128`,`sf`] ci_mono_compile_alloc_buffer) >>

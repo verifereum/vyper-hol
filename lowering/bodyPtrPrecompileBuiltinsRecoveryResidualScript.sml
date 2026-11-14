@@ -34,7 +34,24 @@ Proof
   metis_tac[mstore_mem_bytes_at_disjoint]
 QED
 
-
+Theorem recovery_payload_group:
+  emit_void MSTORE [buf; h] sa = ((),s0) /\
+  (do dst <- emit_op ADD [buf; Lit 32w];
+      emit_void MSTORE [dst; v] od) s0 = ((),s1) /\
+  (do dst <- emit_op ADD [buf; Lit 64w];
+      emit_void MSTORE [dst; r] od) s1 = ((),s2) /\
+  (do dst <- emit_op ADD [buf; Lit 96w];
+      emit_void MSTORE [dst; q] od) s2 = ((),sp) ==>
+  (do emit_void MSTORE [buf; h];
+      p1 <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [p1; v];
+      p2 <- emit_op ADD [buf; Lit 64w]; emit_void MSTORE [p2; r];
+      p3 <- emit_op ADD [buf; Lit 96w]; emit_void MSTORE [p3; q] od)
+    sa = ((),sp)
+Proof
+  simp[emit_void_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
 
 (* The input site's registration, not an allocation-growth bound, separates
    it from the output even when the allocator reuses a site. *)
@@ -131,7 +148,7 @@ Proof
   strip_tac >> drule recovery_compiler_stages >> strip_tac >>
   `sa.cs_next_var <= sp.cs_next_var` by simp[] >>
   drule_all allocated_stage_frame >> strip_tac >>
-  drule_all bodyPtrPrecompileBuiltinsCompilerStagesTheory.recovery_payload_group >> strip_tac >>
+  drule_all recovery_payload_group >> strip_tac >>
   `!x. MEM (Var x) [h;v;r;q] ==> not_fresh_at sf x` by
     (gvs[listTheory.EVERY_DEF, listTheory.MEM] >> metis_tac[]) >>
   drule_all recovery_prefix_runtime >> strip_tac >>
