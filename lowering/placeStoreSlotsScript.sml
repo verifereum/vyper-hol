@@ -2504,7 +2504,7 @@ Proof
   irule place_store_static_batch_unwritten_dead >> simp[] >> metis_tac[]
 QED
 
-Theorem place_store_encoding_unwritten_dead[local]:
+Theorem place_store_encoding_unwritten_dead:
   !tv v writes base st j b.
     encode_value tv v = SOME writes /\ value_has_type tv v /\
     base + type_slot_size tv <= dimword (:256) /\
