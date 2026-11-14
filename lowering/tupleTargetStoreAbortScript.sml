@@ -46,6 +46,53 @@ Proof
   drule_all tuple_source_target_safe >> strip_tac >> simp[]
 QED
 
+Theorem tuple_source_list_outcome:
+  !gs tys tvs vs cenv cx es.
+    LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
+    LENGTH tvs = LENGTH vs /\ values_have_types tvs vs /\
+    (!i. i < LENGTH gs ==>
+      tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+      tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) ==>
+    ?res es'. !tail.
+      assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+        (res,es' with gas_obs := tail)
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      qexistsl [`INL ()`, `es`] >> simp[Once evaluate_def, return_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tys` >- fs[] >> Cases_on `tvs` >- fs[] >>
+  Cases_on `vs` >- fs[] >>
+  rename1 `values_have_types (tv::tvs1) (v::vs1)` >>
+  rename1 `LENGTH (ty::tys1) = LENGTH (tv::tvs1)` >>
+  qpat_assum `!i. i < LENGTH (h::gs) ==> _`
+    (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >> strip_tac >>
+  `value_has_type tv v` by fs[value_has_type_def] >>
+  drule_all tuple_target_source_outcome >>
+  disch_then (qx_choosel_then [`head_res`, `head_es`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  Cases_on `head_res = INL ()`
+  >- (gvs[] >>
+      `assign_tuple_targets cx h v (es with gas_obs := []) =
+        (INL (),head_es with gas_obs := [])` by simp[] >>
+      `tuple_target_layout (es with gas_obs := []).scopes h ty tv v` by simp[] >>
+      drule_all tuple_target_assignment_scope_frame >> simp[] >> strip_tac >>
+      qpat_x_assum `!tys tvs vs cenv cx es. _`
+        (qspecl_then [`tys1`, `tvs1`, `vs1`, `cenv`, `cx`, `head_es`] mp_tac) >>
+      (impl_tac
+       >- (fs[value_has_type_def] >> rpt strip_tac >>
+           drule tuple_target_layout_transport >> disch_tac >>
+           qpat_x_assum `!i. _ ==> tuple_target_aligned _ _ _ _ _ /\ _`
+             (qspec_then `SUC i` mp_tac) >> simp[])) >>
+      disch_then (qx_choosel_then [`res`, `es'`] assume_tac) >>
+      qexistsl [`res`, `es'`] >> simp[assign_tuple_target_list_cons] >>
+      metis_tac[]) >>
+  qpat_x_assum `head_res = INL () \/ _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >> gvs[] >>
+  qexistsl [`INR (Error (RuntimeError "write in static context"))`, `head_es`] >>
+  simp[assign_tuple_target_list_cons] >> metis_tac[]
+QED
+
 Theorem tuple_target_static_head_exit:
   !ctx func cenv cx es s g ty tv v op st sf RetQ ee.
     compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
