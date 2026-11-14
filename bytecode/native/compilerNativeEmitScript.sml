@@ -339,14 +339,14 @@ val native_names = [
   ("words", ["n2w_itself", "w2n", "w2w_itself", "sw2sw_itself", "word_concat_itself",
              "word_extract_itself", "word_eq", "word_add", "word_sub", "word_mul",
              "word_2comp", "word_1comp", "word_and", "word_or", "word_xor", "word_lsl",
-             "word_lsr", "word_asr", "word_ror", "word_rol", "word_msb", "word_lsb",
+             "word_lsr", "word_ror", "word_rol", "word_msb", "word_lsb",
              "word_lo", "word_ls", "word_hi", "word_hs", "word_lt", "word_le", "word_gt",
-             "word_ge", "word_div", "word_mod", "word_sdiv", "word_bits", "word_slice",
+             "word_ge", "word_sdiv", "word_bits", "word_slice",
              "word_bit", "word_index", "dimword", "INT_MIN", "INT_MAX", "UINT_MAX",
              "concat_word_list", "word_log2", "w2i", "n2w", "w2w", "sw2sw"]),
   ("integer", ["int_of_num", "int_neg", "Num", "int_lt", "int_le", "int_gt", "int_ge",
                "int_add", "int_sub", "int_mul", "int_div", "int_mod", "int_quot",
-               "int_rem", "ABS", "int_exp"]),
+               "int_rem", "ABS"]),
   ("integer_word", ["i2w", "w2i"]),
   ("string", ["CHR", "ORD"]),
   ("finite_map", ["FEMPTY", "FUPDATE", "FLOOKUP", "FAPPLY", "FDOM", "FUNION", "DRESTRICT",
@@ -467,7 +467,14 @@ val code_rewrites = [
     val eta = QCONV (DEPTH_CONV ETA_CONV) (lhs (concl abstracted))
   in [th, TRANS (GSYM eta) abstracted] end)
     [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
-     wordsTheory.word_from_bin_list_def,
+     wordsTheory.word_from_bin_list_def, wordsTheory.word_div_def,
+     wordsTheory.word_mod_def, wordsTheory.word_asr_n2w,
+     prove (``(i : int) ** (n : num) =
+                if i < 0 /\ ODD n then ~&(Num i EXP n) else &(Num i EXP n)``,
+       Cases_on `i` >> simp[integerTheory.INT_EXP, integerTheory.NUM_OF_INT] >>
+       Cases_on `EVEN n` >>
+       full_simp_tac std_ss
+         [GSYM arithmeticTheory.ODD_EVEN, integerTheory.INT_EXP_NEG]),
      prove (``word_exp (b : 'a word) e =
                 n2w (vfmExecution$modexp (w2n b) (w2n e) (dimword (:'a)) 1)``,
        simp[wordsTheory.word_exp_def, vfmExecutionTheory.modexp_exp,
