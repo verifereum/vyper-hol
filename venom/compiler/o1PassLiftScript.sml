@@ -40,7 +40,7 @@ Ancestors
   o1PassContract unitMemInv contextRawReachable contextCodegenRel
   unitTransformDefs passSimulationDefs stateEquiv stateFrame
   venomExecSemantics venomExecProps venomInst venomMemDefs venomState list finite_map
-  venomExecProofs venomStepProps
+  venomExecProofs venomStepProps contextPlanLayoutProps
 
 (* ===== Run correspondence ===== *)
 
@@ -1005,6 +1005,26 @@ Theorem mem_corr_closed_rf_static_mem_ok:
   mem_corr_closed_rf (static_mem_ok eom)
 Proof
   rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[]
+QED
+
+(* A selected safe occurrence supplies codegen's local memory ranges
+   without a whole-run memory invariant. *)
+Theorem mem_corr_static_codegen_ranges:
+  generate_context_plan ctx9 = SOME cpl /\
+  static_mem_ok cpl.cp_max_static_eom ctx7 fn7 inst7 s7 /\
+  ~in_revert_forward fn7 s7 /\
+  mem_corr inst7 s7 inst9 s9 /\
+  ~in_revert_forward fn9 s9 ==>
+  source_memory_reads_disjoint cpl inst9 s9 /\
+  context_source_memory_writes_disjoint cpl inst9 s9
+Proof
+  rpt strip_tac >>
+  `static_mem_ok cpl.cp_max_static_eom ctx9 fn9 inst9 s9` by
+    metis_tac[mem_corr_closed_rf_static_mem_ok, mem_corr_closed_rf_def] >>
+  `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
+     ctx9 fn9 inst9 s9` by metis_tac[static_mem_ok_lowered] >>
+  drule generate_context_plan_spill_gap >> strip_tac >>
+  metis_tac[lowered_reads_disjoint, lowered_writes_disjoint]
 QED
 
 
