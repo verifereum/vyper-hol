@@ -8,6 +8,7 @@
  *)
 Theory concretizeStageFramePtr
 Ancestors
+  concretizePtrForwardingTaintHistory
   concretizePtrDallocaRuntimeHistory concretizePtrDallocaGhostHistory
   concretizeStageStatic concretizePtrDallocaHistoricalPersistent
   concretizePtrDallocaHistoricalMemory concretizePtrDallocaHistoricalRead
