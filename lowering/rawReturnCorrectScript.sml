@@ -37,7 +37,9 @@ Proof
         (abstract_machine_from_state srcs exps layouts es')).logs ss.vs_logs /\
    LIST_REL (request_agree H tx.target)
      es'.requests ss.vs_requests` by
-    metis_tac[external_halt_success_unlock] >>
+    (qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`,
+                  `nkey`, `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+       external_halt_success_unlock >> simp[]) >>
   gvs[external_call_result_rel_def, tx_return_bytes_def,
       vyperInterpreterTheory.abstract_machine_from_state_def]
 QED
@@ -51,7 +53,9 @@ Theorem external_return_raw_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) prim T ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
@@ -68,8 +72,9 @@ Theorem external_return_raw_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
-    simp[loweringStateRelDefsTheory.state_rel_def] >>
+  `(nr /\ ~iv ==> !s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static)` by
+    gvs[loweringStateRelDefsTheory.state_rel_def,
+        loweringStateRelDefsTheory.call_ctx_rel_def] >>
   `v = v0` by metis_tac[safe_cast_some_eq] >>
   `value_has_type tv v0` by metis_tac[safe_cast_result_well_typed] >>
   irule frag_exec_pointwise >>
