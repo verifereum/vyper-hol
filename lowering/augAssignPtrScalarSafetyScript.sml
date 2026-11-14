@@ -3,10 +3,10 @@ Ancestors augAssignPtrScalarExec augAssignPtrScalarCertificate codegenRel contex
   ptrDiscipline ptrSafeRun
   venomExecSemantics venomInst venomState finite_map pred_set list
 
-Theorem scalar_access_taint_ok:
+Theorem scalar_access_taint_ok_lo:
   scalar_shape i /\
   EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) i.inst_operands ==>
-  access_ok 0 G fn i s /\ taint_ok fn tn i s
+  access_ok lo G fn i s /\ taint_ok fn tn i s
 Proof
   simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
        LENGTH_EQ_NUM_compute] >> strip_tac >> gvs[] >>
@@ -15,17 +15,34 @@ Proof
   rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
 QED
 
+Theorem scalar_ptr_inst_ok_lo:
+  scalar_shape i /\
+  EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) i.inst_operands /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ptr_inst_ok D lo fuel ctx fn G tn i s
+Proof
+  strip_tac >> drule_all scalar_access_taint_ok_lo >> strip_tac >>
+  drule scalar_shape_control >> strip_tac >>
+  drule scalar_step_shape >> strip_tac >>
+  simp[ptr_inst_ok_def, step_inst_non_invoke] >>
+  rpt strip_tac >> drule_all (cj 1 scalar_exec_result) >>
+  strip_tac >> gvs[update_var_def]
+QED
+
+Theorem scalar_access_taint_ok:
+  scalar_shape i /\
+  EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) i.inst_operands ==>
+  access_ok 0 G fn i s /\ taint_ok fn tn i s
+Proof
+  metis_tac[scalar_access_taint_ok_lo]
+QED
+
 Theorem scalar_ptr_inst_ok:
   scalar_shape i /\
   EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) i.inst_operands /\
   ~ctx_has_dalloca ctx ==> ptr_inst_ok D 0 fuel ctx fn G tn i s
 Proof
-  strip_tac >> drule_all scalar_access_taint_ok >> strip_tac >>
-  drule scalar_shape_control >> strip_tac >>
-  drule scalar_step_shape >> strip_tac >>
-  simp[ptr_inst_ok_def, allocas_from_def, step_inst_non_invoke] >>
-  rpt strip_tac >> drule_all (cj 1 scalar_exec_result) >>
-  strip_tac >> gvs[update_var_def]
+  strip_tac >> irule scalar_ptr_inst_ok_lo >> simp[allocas_from_def]
 QED
 
 Theorem scalar_ambient_taint:

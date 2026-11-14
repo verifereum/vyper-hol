@@ -1,5 +1,5 @@
 Theory augAssignPtrScalarRun
-Ancestors augAssignPtrScalarSafety augAssignPtrScalarCertificate augAssignPtrScalarProbe
+Ancestors augAssignPtrScalarSafety augAssignPtrScalarExec augAssignPtrScalarCertificate augAssignPtrScalarProbe
   augAssignPtrScalarJoin augAssignPtrInterfaces fragGasSeqPtr
   ptrDiscipline ptrSafeRun venomInst venomState venomExecSemantics
   finite_map pred_set list fragExec exprLoweringProps venomInstProofs instIdxIndep
@@ -69,6 +69,30 @@ Proof
   gvs[op_prov_def] >> metis_tac[]
 QED
 
+Theorem scalar_code_inst_seq_ptr_lo:
+  !code A G tn s.
+    scalar_code A code /\
+    (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+    ?H tm. inst_seq_ptr D lo ctx fn PG G tn code s H tm
+Proof
+  Induct >- simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> simp[scalar_code_def] >> strip_tac >>
+  `EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) h.inst_operands`
+    by (gvs[EVERY_MEM] >> metis_tac[scalar_available_clean]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn h s` by metis_tac[scalar_ptr_inst_ok_lo] >>
+  Cases_on `step_inst_base h s` >> simp[inst_seq_ptr_def] >>
+  first_x_assum irule >>
+  `allocas_from lo (v with vs_inst_idx := SUC s.vs_inst_idx) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp (v with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_all (cj 1 scalar_exec_result) >> strip_tac >>
+     gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >>
+     metis_tac[]) >>
+  simp[] >> qexists `A UNION set h.inst_outputs` >>
+  reverse conj_tac >- simp[] >>
+  ho_match_mp_tac scalar_step_clean >> simp[]
+QED
+
 Theorem scalar_code_inst_seq_ptr:
   !code A G tn s.
     scalar_code A code /\
@@ -76,24 +100,27 @@ Theorem scalar_code_inst_seq_ptr:
     ~ctx_has_dalloca ctx ==>
     ?H tm. inst_seq_ptr D 0 ctx fn PG G tn code s H tm
 Proof
-  Induct >- simp[inst_seq_ptr_def] >>
-  rpt gen_tac >> simp[scalar_code_def] >> strip_tac >>
-  `EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) h.inst_operands`
-    by (gvs[EVERY_MEM] >> metis_tac[scalar_available_clean]) >>
-  `ptr_inst_ok D 0 0 ctx fn G tn h s` by metis_tac[scalar_ptr_inst_ok] >>
-  Cases_on `step_inst_base h s` >> simp[inst_seq_ptr_def] >>
-  first_x_assum irule >> simp[] >> qexists `A UNION set h.inst_outputs` >>
-  reverse conj_tac >- simp[] >>
-  ho_match_mp_tac scalar_step_clean >> simp[]
+  rpt strip_tac >> irule scalar_code_inst_seq_ptr_lo >>
+  simp[allocas_from_def] >> qexists `A` >> simp[]
 QED
 
-Theorem scalar_seq_metadata_frame:
+Theorem scalar_step_var_lookup_frame[local]:
+  scalar_shape i /\ ~MEM v i.inst_outputs ==>
+  FLOOKUP (step_taint i s u tn).t_var v = FLOOKUP tn.t_var v
+Proof
+  simp[scalar_shape_def, LENGTH_EQ_NUM_compute] >> strip_tac >> gvs[] >>
+  simp[step_taint_def, set_var_taint_def, FLOOKUP_UPDATE,
+       FLOOKUP_DRESTRICT] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem scalar_seq_metadata_frame_lo:
   !code A G tn s H tm.
     scalar_code A code /\
     (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-    inst_seq_ptr D 0 ctx fn PG G tn code s H tm ==>
+    inst_seq_ptr D lo ctx fn PG G tn code s H tm ==>
     (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
        FLOOKUP H v = FLOOKUP G v /\
+       FLOOKUP tm.t_var v = FLOOKUP tn.t_var v /\
        op_taint tm (Var v) = op_taint tn (Var v)) /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
@@ -112,7 +139,22 @@ Proof
   drule_all scalar_ambient_taint >> strip_tac >>
   drule_all scalar_step_prov >> strip_tac >>
   drule_all scalar_step_var_taint >> strip_tac >>
-  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[scalar_step_var_lookup_frame]
+QED
+
+Theorem scalar_seq_metadata_frame:
+  !code A G tn s H tm.
+    scalar_code A code /\
+    (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
+    inst_seq_ptr D 0 ctx fn PG G tn code s H tm ==>
+    (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
+       FLOOKUP H v = FLOOKUP G v /\
+       op_taint tm (Var v) = op_taint tn (Var v)) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  metis_tac[scalar_seq_metadata_frame_lo]
 QED
 
 Theorem scalar_seq_success_clean:
