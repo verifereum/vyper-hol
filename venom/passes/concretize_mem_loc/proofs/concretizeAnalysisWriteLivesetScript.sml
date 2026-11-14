@@ -36,7 +36,7 @@ Proof
     metis_tac[joint_origin_history_erasure] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[origin_frame_erasure] >>
-  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_upto_at] >>
+  `access_ok lo G fn inst s` by metis_tac[o1SafeUptoTheory.ptr_discipline_upto_at] >>
   drule_all joint_write_owner_identity >> strip_tac >>
   drule_all origin_frame_current_lookup >> strip_tac >>
   Cases_on `tag`

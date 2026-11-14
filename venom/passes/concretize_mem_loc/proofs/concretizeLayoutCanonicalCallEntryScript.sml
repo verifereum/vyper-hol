@@ -104,7 +104,7 @@ Proof
     (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
     (drule_all layout_ordinary_entry_cut >> simp[]) >>
-  `taint_ok caller tn i s` by (drule_all ptr_discipline_upto_at >> simp[]) >>
+  `taint_ok caller tn i s` by (drule_all o1SafeUptoTheory.ptr_discipline_upto_at >> simp[]) >>
   `MEM i (fn_insts caller)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
   drule_all layout_stage_row_produce >> strip_tac >>

@@ -736,7 +736,7 @@ Proof
      `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
      `inst.inst_opcode <> INVOKE` by simp[] >>
      `step_inst 0 C inst s = OK post` by gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-     drule_all taint_within_upto_request >> simp[]) >>
+     drule_all o1SafeUptoTheory.taint_within_upto_request >> simp[]) >>
   `post.vs_allocas = s.vs_allocas` by metis_tac[ext_call_execution_fields] >>
   `?roT. eval_operand opr t = SOME roT /\
     (!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b /\

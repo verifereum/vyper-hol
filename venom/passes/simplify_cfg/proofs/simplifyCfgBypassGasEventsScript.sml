@@ -428,25 +428,23 @@ fun scfg_bypass_sync_tac g = (
     metis_tac[simplifyCfgMergeGlobalRunsTheory.scfg_enter_run_block] >>
   `exec_block k C bb s1 = OK u` by metis_tac[simplifyCfgMergeGlobalRunsTheory.scfg_enter_run_block] >>
   `~v.vs_halted` by metis_tac[venomExecPropsTheory.run_block_OK_not_halted] >>
-  `k <= MAX k j` by simp[] >>
-  drule (cj 2 gasEventsFuelTheory.gas_events_fuel_extension) >>
-  disch_then (qspecl_then [`C`, `fn.fn_name`, `scfg_bypass_block a b bb`, `t1`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `j <= MAX k j` by simp[] >>
-  drule (cj 3 gasEventsFuelTheory.gas_events_fuel_extension) >>
-  disch_then (qspecl_then [`C`, `fn'`, `v`] strip_assume_tac) >>
-  rename1 `gas_events_blocks (MAX k j) C fn' v = gas_events_blocks j C fn' v ++ more` >>
-  gvs[Abbr `s1`] >>
-  qexistsl_tac [`SUC (MAX k j)`, `tail ++ more`] >>
+  `run_block_entry k C (scfg_bypass_block a b bb) t = OK v` by
+    simp[venomExecSemanticsTheory.run_block_entry_def] >>
+  `?N more.
+    gas_events_blocks N C fn' t =
+      gas_events_block k C fn'.fn_name (scfg_bypass_block a b bb) t1 ++
+      gas_events_blocks j C fn' v ++ more /\
+    (terminates (run_blocks j C fn' v) ==>
+      more = [] /\ run_blocks N C fn' t = run_blocks j C fn' v)` by
+    (drule_all gasEventsFuelTheory.gas_events_blocks_assemble >>
+     disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
+  gvs[Abbr `s1`] >> qexistsl_tac [`N`, `tail ++ more`] >>
   pure_once_rewrite_tac[gas_events_blocks_def, run_blocks_def] >>
   simp[APPEND_ASSOC] >> strip_tac >>
   `scfg_result (run_blocks k C fn u) (run_blocks j C fn' v)` by metis_tac[] >>
   `terminates (run_blocks j C fn' v)` by
     (Cases_on `run_blocks k C fn u` >> Cases_on `run_blocks j C fn' v` >>
-     gvs[terminates_def, scfg_result_def]) >>
-  `!err. run_blocks j C fn' v <> Error err` by
-    (Cases_on `run_blocks j C fn' v` >> gvs[terminates_def]) >>
-  gvs[]) g;
+     gvs[terminates_def, scfg_result_def]) >> gvs[]) g;
 
 Resume scfg_bypass_gas_runs_forward[sync]:
   scfg_bypass_sync_tac

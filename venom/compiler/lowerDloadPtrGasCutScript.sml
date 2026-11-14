@@ -77,7 +77,7 @@ Theorem frame_block_gas_cut:
   step_inst fuel ctx inst s = OK s' /\ enters_block fn s' s1 /\
   gas_cut cut vs s1 ==> gas_cut cut vs s
 Proof
-  rw[] >> imp_res_tac step_inst_gas_le >> imp_res_tac contextCodegenRelPropsTheory.enters_block_readings >>
+  rw[] >> imp_res_tac step_inst_gas_le >> imp_res_tac o1SafeUptoTheory.enters_block_readings >>
   `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
   metis_tac[gas_cut_readings_mono]
 QED
@@ -87,7 +87,7 @@ Theorem frame_call_gas_cut:
   gas_cut cut vs s1 ==> gas_cut cut vs s
 Proof
   rw[] >> imp_res_tac gasOracleReplayTheory.gas_setup_callee_readings >>
-  imp_res_tac contextCodegenRelPropsTheory.enters_block_readings >>
+  imp_res_tac o1SafeUptoTheory.enters_block_readings >>
   `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
   metis_tac[gas_cut_readings_mono]
 QED

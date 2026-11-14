@@ -97,7 +97,7 @@ Proof
     fs[layout_ordinary_trace_def] >>
   `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
     (drule_all layout_ordinary_entry_cut >> simp[]) >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_at] >>
+  `taint_ok fn tn inst s` by metis_tac[o1SafeUptoTheory.ptr_discipline_upto_at] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (qpat_x_assum `resolved_config_ok _ _ _` mp_tac >>
      asm_rewrite_tac[] >> strip_tac >> drule resolved_config_current >>

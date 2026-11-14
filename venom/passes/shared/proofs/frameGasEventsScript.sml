@@ -94,22 +94,6 @@ Proof
   simp[] >> CASE_TAC >> simp[]
 QED
 
-Theorem gas_events_blocks_at:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  eval_phis s bb.bb_instructions = OK phi ==>
-  gas_events_blocks (SUC n) C fn s =
-    gas_events_block n C fn.fn_name bb
-      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ++
-    case exec_block n C bb
-           (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) of
-      OK p => if p.vs_halted then [] else gas_events_blocks n C fn p
-    | _ => []
-Proof
-  strip_tac >>
-  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [gas_events_blocks_def])) >>
-  simp[]
-QED
-
 Theorem exec_block_step_nonerror:
   get_instruction bb s.vs_inst_idx = SOME i /\
   (!e. exec_block k C bb s <> Error e) ==>
@@ -319,7 +303,7 @@ Proof
   qpat_x_assum `block_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
   disch_then (qspecl_then [`fn.fn_name`, `n`, `n'`] mp_tac) >> simp[] >>
-  strip_tac >> imp_res_tac gas_events_blocks_at >> simp[]
+  strip_tac >> imp_res_tac gasEventsTheory.gas_events_blocks_at >> simp[]
 QED
 
 Theorem run_events_agree_exit:
@@ -355,7 +339,7 @@ Proof
   qpat_x_assum `block_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
   disch_then (qspecl_then [`fn.fn_name`, `n`, `n'`] mp_tac) >> simp[] >>
-  strip_tac >> imp_res_tac gas_events_blocks_at >> simp[] >>
+  strip_tac >> imp_res_tac gasEventsTheory.gas_events_blocks_at >> simp[] >>
   Cases_on `rb` >> Cases_on `rb'` >> gvs[]
 QED
 

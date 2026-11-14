@@ -248,3 +248,53 @@ Proof
   drule_all frame_reachable_raw >> strip_tac >>
   first_x_assum (drule_all_then strip_assume_tac) >> fs[raw_mem_ok_def]
 QED
+
+Theorem enters_block_readings:
+  enters_block fn s s1 ==> s1.vs_gas_readings = s.vs_gas_readings
+Proof
+  rw[enters_block_def] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem ptr_discipline_upto_at:
+  ptr_discipline_upto lo n C vs0 /\
+  frame_reachable vs0 C stk PG G tn fn inst s /\ gas_cut n vs0 s ==>
+  access_ok lo G fn inst s /\ taint_ok fn tn inst s /\ allocas_from lo s /\
+  (ctx_has_dalloca C ==> allocas_below_fmp s)
+Proof
+  simp[ptr_discipline_upto_def] >> metis_tac[]
+QED
+
+Theorem taint_within_upto_request:
+  taint_within_upto D n ctx vs /\
+  frame_reachable vs ctx stk PG G tn fn inst s /\ gas_cut n vs s /\
+  active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel ctx inst s = OK s' /\
+  LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
+  tn.t_stor SUBSET
+    D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET
+    D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)
+Proof
+  strip_tac >> fs[taint_within_upto_def] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem taint_within_upto_halt:
+  taint_within_upto D n ctx vs /\
+  frame_reachable vs ctx stk PG G T0 fn inst s /\ gas_cut n vs s /\
+  active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel ctx inst s = Halt s_h ==>
+  (step_taint inst s s_h T0).t_stor SUBSET
+    D.d_stor s_h.vs_call_ctx.cc_address
+      (s_h.vs_accounts s_h.vs_call_ctx.cc_address).storage /\
+  (step_taint inst s s_h T0).t_trans SUBSET
+    D.d_trans s_h.vs_call_ctx.cc_address
+      (s_h.vs_transient s_h.vs_call_ctx.cc_address) /\
+  (step_taint inst s s_h T0).t_imm SUBSET D.d_imm s_h.vs_immutables /\
+  ret_taint T0 inst s SUBSET D.d_ret s_h.vs_returndata
+Proof
+  strip_tac >> fs[taint_within_upto_def] >> first_x_assum drule_all >> simp[]
+QED

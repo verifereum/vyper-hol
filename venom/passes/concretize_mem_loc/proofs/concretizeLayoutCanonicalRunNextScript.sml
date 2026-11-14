@@ -109,6 +109,67 @@ QED
 
 (* Leaf of the canonical simulation contract, run-next: a non-halted OK block ending in a terminator, followed by
    the OriginBlock edge and the rest of the run. *)
+Theorem layout_canonical_run_continue_prefix:
+  vs0.vs_allocas = FEMPTY /\ EVERY wf_function C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
+  layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb phi bb' tb /\
+  layout_canonical_OB D lo vs0 C C' q0 es qs ass qend q n qm (n+LENGTH wb)
+    bb phi bb' tb (OK post) (OK v) /\
+  decorated_block C bb phi (OK post) q n wb qm db /\
+  (?stk PG G tn i si oms om hs h.
+    qm = JointConfig stk PG G tn fn i si oms om hs h /\
+    active_inst fn i si /\ is_terminator i.inst_opcode) /\
+  joint_transition C qm (SOME (OriginBlock fuel post)) qn /\
+  selected_segment C q0 path n q (wb++[(SOME (OriginBlock fuel post),qn)]) qn ==>
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend
+    qn (n+LENGTH wb+1) fn post fn' v
+Proof
+  strip_tac >>
+  qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[layout_canonical_EB_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  `joint_segment C q wb (JointConfig stk PG G tn fn i si oms om hs h)` by
+    metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_segment] >>
+  `joint_segment C qn [] qn` by
+    simp[frameFiniteJointDecorationTheory.joint_segment_def] >>
+  `selected_segment C q0 path n q
+     (wb ++ ([(SOME (OriginBlock fuel post),qn)] ++ [])) qn` by
+    (pure_rewrite_tac[APPEND_NIL] >> first_assum ACCEPT_TAC) >>
+  drule_all selected_segment_edge >> strip_tac >>
+  `?birth ids rp rv saved. b.lop_ids = birth::ids /\ b.lop_anns = (rp,rv)::saved` by
+    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def] >>
+     gvs[]) >>
+  `u = si` by
+    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def,
+        layout_phase_normalize_def] >> gvs[]) >> gvs[] >>
+  `MEM fn C.ctx_functions /\ ?positions. layout_driver_row C' fn fn' positions` by
+    (fs[layout_canonical_run_def] >> metis_tac[]) >>
+  `EVERY bb_well_formed fn.fn_blocks /\
+   (!bb. MEM bb fn.fn_blocks ==> EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions)` by
+    (fs[EVERY_MEM, venomWfTheory.wf_function_def, fn_insts_def] >>
+     conj_tac >- metis_tac[] >>
+     metis_tac[MEM_fn_insts_blocks]) >>
+  qpat_x_assum `!k. k < LENGTH path ==> _`
+    (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
+  fs[joint_transition_block_iff] >> gvs[] >>
+  `n + (LENGTH wb + 1) = SUC b.lop_cursor` by simp[] >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  irule layout_canonical_jump_continue >>
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[layout_driver_indexed_def, layout_phase_canonical_def] >>
+  rule_assum_tac (PURE_REWRITE_RULE[GSYM ADD_ASSOC, GSYM ADD1]) >>
+  pure_rewrite_tac[GSYM ADD_ASSOC, GSYM ADD1] >>
+  fs[ADD_CLAUSES, joint_transition_block_iff] >>
+  `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
+    metis_tac[EL_MAP] >> metis_tac[]
+QED
+
 Theorem layout_canonical_run_continue:
   vs0.vs_allocas = FEMPTY /\ EVERY wf_function C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -132,37 +193,20 @@ Theorem layout_canonical_run_continue:
     qn (n+LENGTH wb+1) fn post fn' v
 Proof
   strip_tac >>
-  qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[layout_canonical_EB_def] >> strip_tac >>
-  gvs[layout_canonical_OB_def] >> first_x_assum drule >> strip_tac >> gvs[] >>
-  rule_assum_tac (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]) >>
-  drule_all (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]
-    selected_run_next_children) >> strip_tac >>
-  `?birth ids rp rv saved. b.lop_ids = birth::ids /\ b.lop_anns = (rp,rv)::saved` by
-    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def] >>
-     gvs[]) >>
-  `u = si` by
-    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def,
-        layout_phase_normalize_def] >> gvs[]) >> gvs[] >>
-  `MEM fn C.ctx_functions /\ ?positions. layout_driver_row C' fn fn' positions` by
-    (fs[layout_canonical_run_def] >> metis_tac[]) >>
-  `EVERY bb_well_formed fn.fn_blocks /\
-   (!bb. MEM bb fn.fn_blocks ==> EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions)` by
-    (fs[EVERY_MEM, venomWfTheory.wf_function_def, fn_insts_def] >>
-     conj_tac >- metis_tac[] >> metis_tac[MEM_fn_insts_blocks]) >>
-  qpat_x_assum `!k. k < LENGTH path ==> _`
-    (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
-  fs[joint_transition_block_iff] >> gvs[] >>
-  `n + (LENGTH wb + 1) = SUC b.lop_cursor` by simp[] >>
-  pop_assum (fn th => once_rewrite_tac[th]) >>
-  irule layout_canonical_jump_continue >>
-  goal_assum (drule_at Any) >> simp[] >>
-  fs[layout_driver_indexed_def, layout_phase_canonical_def] >>
-  rule_assum_tac (PURE_REWRITE_RULE[GSYM ADD_ASSOC, GSYM ADD1]) >>
-  pure_rewrite_tac[GSYM ADD_ASSOC, GSYM ADD1] >>
-  fs[ADD_CLAUSES, joint_transition_block_iff] >>
-  `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
-    metis_tac[EL_MAP] >> metis_tac[]
+  `joint_segment C q wb qm` by
+    metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_segment] >>
+  `joint_segment C qm [(SOME (OriginBlock fuel post),qn)] qn` by
+    simp[frameFiniteJointDecorationTheory.joint_segment_def] >>
+  `joint_segment C q (wb ++ [(SOME (OriginBlock fuel post),qn)]) qn` by
+    metis_tac[frameFiniteJointDecorationTheory.joint_segment_append] >>
+  `joint_segment C qn wr qe` by
+    metis_tac[cj 3 frameFiniteJointDecorationTheory.decorated_execution_segment] >>
+  `selected_segment C q0 path n q (wb ++ [(SOME (OriginBlock fuel post),qn)]) qn` by
+    (drule_all (PURE_REWRITE_RULE[APPEND_ASSOC]
+       (Q.INST [`u` |-> `wb ++ [(SOME (OriginBlock fuel post),qn)]`,
+                `v` |-> `wr`] selected_segment_parts)) >> simp[]) >>
+  irule layout_canonical_run_continue_prefix >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem layout_canonical_run_next_entry_certificate:
@@ -199,50 +243,21 @@ Proof
   qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
   `fn'.fn_name = fn.fn_name` by metis_tac[layout_canonical_run_fn_name] >>
+  `!v. rb' = OK v ==>
+    layout_canonical_run D lo vs0 C C' q0 es qs ass qend
+      qn (n+LENGTH wb+1) fn post fn' v` by
+    (rpt strip_tac >> gvs[] >> irule layout_canonical_run_continue_prefix >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   Cases_on `rb'` >> gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >>
-  `joint_segment C q wb (JointConfig stk PG G tn fn i si oms om hs h)` by
-    metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_segment] >>
-  `joint_segment C qn [] qn` by
-    simp[frameFiniteJointDecorationTheory.joint_segment_def] >>
-  `selected_segment C q0 path n q
-     (wb ++ ([(SOME (OriginBlock fuel post),qn)] ++ [])) qn` by
-    (pure_rewrite_tac[APPEND_NIL] >> first_assum ACCEPT_TAC) >>
-  drule_all selected_segment_edge >> strip_tac >>
-  `?birth ids rp rv saved. b.lop_ids = birth::ids /\ b.lop_anns = (rp,rv)::saved` by
-    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def] >>
-     gvs[]) >>
-  `u = si` by
-    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def,
-        layout_phase_normalize_def] >> gvs[]) >> gvs[] >>
-  `MEM fn C.ctx_functions /\ ?positions. layout_driver_row C' fn fn' positions` by
-    (fs[layout_canonical_run_def] >> metis_tac[]) >>
-  `EVERY bb_well_formed fn.fn_blocks /\
-   (!bb. MEM bb fn.fn_blocks ==> EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions)` by
-    (fs[EVERY_MEM, venomWfTheory.wf_function_def, fn_insts_def] >>
-     conj_tac >- metis_tac[] >>
-     metis_tac[MEM_fn_insts_blocks]) >>
-  qpat_x_assum `!k. k < LENGTH path ==> _`
-    (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
-  fs[joint_transition_block_iff] >> gvs[] >>
   `finite_block C bb
      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) (OK post)` by
     metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
   `~v.vs_halted` by
     metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint] >>
-  simp[] >> (
-    `n + (LENGTH wb + 1) = SUC b.lop_cursor` by simp[] >>
-    pop_assum (fn th => once_rewrite_tac[th]) >>
-    irule layout_canonical_jump_continue >>
-    goal_assum (drule_at Any) >> simp[] >>
-    fs[layout_driver_indexed_def, layout_phase_canonical_def] >>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE[GSYM ADD_ASSOC, GSYM ADD1]) >>
-    pure_rewrite_tac[GSYM ADD_ASSOC, GSYM ADD1] >>
-    fs[ADD_CLAUSES, joint_transition_block_iff] >>
-    `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
-      metis_tac[EL_MAP] >> metis_tac[])
+  simp[]
 QED
 
 Theorem layout_canonical_run_next_certificate_fuel:
@@ -277,40 +292,16 @@ Proof
   (conj_tac >- first_assum ACCEPT_TAC) >> gen_tac >> strip_tac >>
   qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
+  `!v. rb' = OK v ==>
+    layout_canonical_run D lo vs0 C C' q0 es qs ass qend
+      qn (n+LENGTH wb+1) fn post fn' v` by
+    (rpt strip_tac >> gvs[] >> irule layout_canonical_run_continue >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   Cases_on `rb'` >> gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >>
-  RULE_ASSUM_TAC (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]) >>
-  drule_all (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]
-    selected_run_next_children) >> strip_tac >>
-  `?birth ids rp rv saved. b.lop_ids = birth::ids /\ b.lop_anns = (rp,rv)::saved` by
-    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def] >>
-     gvs[]) >>
-  `u = si` by
-    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def,
-        layout_phase_normalize_def] >> gvs[]) >> gvs[] >>
-  `MEM fn C.ctx_functions /\ ?positions. layout_driver_row C' fn fn' positions` by
-    (fs[layout_canonical_run_def] >> metis_tac[]) >>
-  `EVERY bb_well_formed fn.fn_blocks /\
-   (!bb. MEM bb fn.fn_blocks ==> EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions)` by
-    (fs[EVERY_MEM, venomWfTheory.wf_function_def, fn_insts_def] >>
-     conj_tac >- metis_tac[] >>
-     metis_tac[MEM_fn_insts_blocks]) >>
-  qpat_x_assum `!k. k < LENGTH path ==> _`
-    (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
-  fs[joint_transition_block_iff] >> gvs[] >>
-  qexists `v` >> conj_tac >- (
-    `n + (LENGTH wb + 1) = SUC b.lop_cursor` by simp[] >>
-    pop_assum (fn th => once_rewrite_tac[th]) >>
-    irule layout_canonical_jump_continue >>
-    goal_assum (drule_at Any) >> simp[] >>
-    fs[layout_driver_indexed_def, layout_phase_canonical_def] >>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE[GSYM ADD_ASSOC, GSYM ADD1]) >>
-    pure_rewrite_tac[GSYM ADD_ASSOC, GSYM ADD1] >>
-    fs[ADD_CLAUSES, joint_transition_block_iff] >>
-    `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
-      metis_tac[EL_MAP] >> metis_tac[]) >>
+  qexists `v` >> conj_tac >- metis_tac[] >>
   strip_tac >>
   qpat_x_assum `events_OutR _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [events_OutR_def]) >>

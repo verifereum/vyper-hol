@@ -72,7 +72,7 @@ Proof
   strip_tac >>
   `step_inst 0 C inst s = Halt post` by gvs[step_inst_non_invoke] >>
   `inst.inst_opcode <> INVOKE` by gvs[] >>
-  drule_all taint_within_upto_halt >> strip_tac >>
+  drule_all o1SafeUptoTheory.taint_within_upto_halt >> strip_tac >>
   drule_all return_execution_envelope >> strip_tac >> gvs[] >>
   drule_all (SRULE[arithmeticTheory.ADD_COMM] concretize_return_payload) >>
   strip_tac >> gvs[] >>

@@ -300,3 +300,12 @@ Proof
   rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
   simp[mk_assign_inst_def, mk_nop_inst_def]
 QED
+
+Theorem concretize_positions_gas:
+  ((concretize_inst_with_positions p i).inst_opcode = GAS <=>
+   i.inst_opcode = GAS) /\
+  (i.inst_opcode = GAS ==> concretize_inst_with_positions p i = i)
+Proof
+  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
+  gvs[mk_assign_inst_def, mk_nop_inst_def]
+QED

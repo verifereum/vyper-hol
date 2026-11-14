@@ -45,9 +45,9 @@ Proof
   simp[Once joint_transition_cases] >> rpt strip_tac >>
   gvs[joint_state_def]
   >- metis_tac[gasCountTheory.step_inst_gas_le]
-  >- (drule contextCodegenRelPropsTheory.enters_block_readings >> simp[] >> strip_tac >>
+  >- (drule o1SafeUptoTheory.enters_block_readings >> simp[] >> strip_tac >>
       metis_tac[gasCountTheory.step_inst_gas_le])
-  >- (drule contextCodegenRelPropsTheory.enters_block_readings >> drule gas_setup_callee_readings >>
+  >- (drule o1SafeUptoTheory.enters_block_readings >> drule gas_setup_callee_readings >>
       simp[])
   >> metis_tac[return_readings_le]
 QED
@@ -129,14 +129,6 @@ Proof
   drule_all layout_cut_safe_frame >> simp[]
 QED
 
-Theorem ptr_discipline_upto_at:
-  ptr_discipline_upto lo n C vs0 /\
-  frame_reachable vs0 C stk PG G tn fn inst s /\ gas_cut n vs0 s ==>
-  access_ok lo G fn inst s /\ taint_ok fn tn inst s /\ allocas_from lo s /\
-  (ctx_has_dalloca C ==> allocas_below_fmp s)
-Proof
-  simp[ptr_discipline_upto_def] >> metis_tac[]
-QED
 
 (* The per-state pointer facts at a configuration on the trace. *)
 Theorem layout_cut_safe_ptr_at:
@@ -146,7 +138,7 @@ Theorem layout_cut_safe_ptr_at:
   (ctx_has_dalloca C ==> allocas_below_fmp s)
 Proof
   strip_tac >> drule_all layout_cut_safe_frame >> strip_tac >>
-  irule ptr_discipline_upto_at >> fs[layout_cut_safe_def] >> metis_tac[]
+  irule o1SafeUptoTheory.ptr_discipline_upto_at >> fs[layout_cut_safe_def] >> metis_tac[]
 QED
 
 Theorem layout_cut_safe_ptr_edge:
@@ -182,39 +174,4 @@ Proof
   `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
   `k <= LENGTH es` by fs[] >>
   drule_all layout_cut_safe_frame >> simp[]
-QED
-
-(* The request clause, at a request-growing step inside the cut. *)
-Theorem taint_within_upto_request:
-  taint_within_upto D n ctx vs /\
-  frame_reachable vs ctx stk PG G tn fn inst s /\ gas_cut n vs s /\
-  active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
-  step_inst fuel ctx inst s = OK s' /\
-  LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
-  tn.t_stor SUBSET
-    D.d_stor s.vs_call_ctx.cc_address
-      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
-  tn.t_trans SUBSET
-    D.d_trans s.vs_call_ctx.cc_address
-      (s.vs_transient s.vs_call_ctx.cc_address)
-Proof
-  strip_tac >> fs[taint_within_upto_def] >> first_x_assum drule_all >> simp[]
-QED
-
-(* The halt clause, at a halting step inside the cut. *)
-Theorem taint_within_upto_halt:
-  taint_within_upto D n ctx vs /\
-  frame_reachable vs ctx stk PG G T0 fn inst s /\ gas_cut n vs s /\
-  active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
-  step_inst fuel ctx inst s = Halt s_h ==>
-  (step_taint inst s s_h T0).t_stor SUBSET
-    D.d_stor s_h.vs_call_ctx.cc_address
-      (s_h.vs_accounts s_h.vs_call_ctx.cc_address).storage /\
-  (step_taint inst s s_h T0).t_trans SUBSET
-    D.d_trans s_h.vs_call_ctx.cc_address
-      (s_h.vs_transient s_h.vs_call_ctx.cc_address) /\
-  (step_taint inst s s_h T0).t_imm SUBSET D.d_imm s_h.vs_immutables /\
-  ret_taint T0 inst s SUBSET D.d_ret s_h.vs_returndata
-Proof
-  strip_tac >> fs[taint_within_upto_def] >> first_x_assum drule_all >> simp[]
 QED

@@ -25,15 +25,6 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >> gvs[]
 QED
 
-Theorem concretize_positions_gas:
-  ((concretize_inst_with_positions p i).inst_opcode = GAS <=>
-   i.inst_opcode = GAS) /\
-  (i.inst_opcode = GAS ==> concretize_inst_with_positions p i = i)
-Proof
-  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
-  gvs[mk_assign_inst_def, mk_nop_inst_def]
-QED
-
 (* The witnessed target instruction emits the same GAS events. *)
 Theorem layout_canonical_step_witness_gas:
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend q n i s j t a ==>
@@ -42,7 +33,7 @@ Theorem layout_canonical_step_witness_gas:
 Proof
   Cases_on `a` >>
   simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def] >>
-  strip_tac >> gvs[concretize_positions_gas] >>
+  strip_tac >> gvs[concretizeStepStructureTheory.concretize_positions_gas] >>
   gvs[layout_corridor_entry_def, ranked_terminal_entry_def,
       ranked_terminal_corridor_def, layout_phase_normalize_def] >>
   Cases_on `y.ltp_remaining` >> gvs[] >>

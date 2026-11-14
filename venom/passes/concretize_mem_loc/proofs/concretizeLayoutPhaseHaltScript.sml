@@ -38,7 +38,7 @@ Proof
       d_imm := K UNIV; d_ret := K {} |>`]
       (SPEC_ALL concretize_stop_sink_complete))) >> strip_tac >>
   `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
-  drule_all taint_within_upto_halt >> strip_tac >>
+  drule_all o1SafeUptoTheory.taint_within_upto_halt >> strip_tac >>
   qexists_tac `post'` >> conj_tac
   >- simp[step_inst_non_invoke] >>
   `concretize_supplement D (step_taint inst s post tn) post post'` by

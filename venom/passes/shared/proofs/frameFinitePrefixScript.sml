@@ -5,7 +5,7 @@
    Nothing after the last GAS instruction is executed, so the derivation
    exists even when the run later errors, runs out of fuel or never ends. *)
 Theory frameFinitePrefix
-Ancestors frameGasEvents gasEvents gasEventsFuel venomExecSemantics venomState venomInst
+Ancestors gasEvents gasEventsFuel venomExecSemantics venomState venomInst
   list rich_list arithmetic
 
 Inductive finite_prefix:
@@ -111,7 +111,7 @@ Resume gas_events_take_prefix[blocks]:
         simp[Once gas_events_blocks_def] >> gvs[]) >>
   rename1 `eval_phis _ _ = OK sphi` >> gvs[] >>
   qpat_x_assum `n <= LENGTH (gas_events_blocks _ _ _ _)` mp_tac >>
-  drule_all gas_events_blocks_at >>
+  drule_all gasEventsTheory.gas_events_blocks_at >>
   disch_then (fn th => rewrite_tac[th]) >>
   Cases_on `n <= LENGTH (gas_events_block f C fn.fn_name bb
     (sphi with vs_inst_idx := phi_prefix_length bb.bb_instructions))`

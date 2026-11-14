@@ -71,7 +71,7 @@ Proof
   `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
   `step_inst 0 C inst s = Halt post` by simp[step_inst_non_invoke] >>
   `inst.inst_opcode <> INVOKE` by simp[] >>
-  drule_all taint_within_upto_halt >> strip_tac >>
+  drule_all o1SafeUptoTheory.taint_within_upto_halt >> strip_tac >>
   `concretize_supplement D (step_taint inst s post tn) post post'` by
     metis_tac[GEN_ALL concretize_selfdestruct_supplement] >>
   qexists `post'` >> simp[] >>

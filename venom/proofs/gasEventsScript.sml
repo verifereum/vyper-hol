@@ -211,3 +211,19 @@ Proof
   qspecl_then [`fuel`, `C`, `owner`, `bb`, `s`, `inst`] mp_tac gas_events_block_at >>
   simp[] >> disch_then SUBST1_TAC >> simp[]
 QED
+
+Theorem gas_events_blocks_at:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK phi ==>
+  gas_events_blocks (SUC n) C fn s =
+    gas_events_block n C fn.fn_name bb
+      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ++
+    case exec_block n C bb
+           (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) of
+      OK p => if p.vs_halted then [] else gas_events_blocks n C fn p
+    | _ => []
+Proof
+  strip_tac >>
+  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [gas_events_blocks_def])) >>
+  simp[]
+QED

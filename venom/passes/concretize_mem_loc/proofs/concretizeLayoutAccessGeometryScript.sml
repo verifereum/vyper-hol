@@ -18,12 +18,12 @@ Proof
       metis_tac[gasCountTheory.step_inst_gas_le])
   >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >> irule gas_cut_readings_mono >>
       first_assum (irule_at Any) >>
-      drule contextCodegenRelPropsTheory.enters_block_readings >> simp[] >> strip_tac >>
+      drule o1SafeUptoTheory.enters_block_readings >> simp[] >> strip_tac >>
       metis_tac[gasCountTheory.step_inst_gas_le])
   >- (`gas_cut ncut vs0 s` by
-        (drule contextCodegenRelPropsTheory.enters_block_readings >> drule gas_setup_callee_readings >>
+        (drule o1SafeUptoTheory.enters_block_readings >> drule gas_setup_callee_readings >>
          rpt strip_tac >> gvs[gas_cut_def]) >>
-      conj_tac >- metis_tac[ptr_discipline_upto_at] >>
+      conj_tac >- metis_tac[o1SafeUptoTheory.ptr_discipline_upto_at] >>
       qpat_x_assum `_ ==> EVERY _ _` irule >> simp[]) >>
   `LENGTH s'.vs_gas_readings <= LENGTH s.vs_gas_readings` by
     (drule_all return_readings_le >> simp[]) >>
@@ -43,7 +43,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `allocas_from lo s` by metis_tac[ptr_discipline_upto_at] >>
+  `allocas_from lo s` by metis_tac[o1SafeUptoTheory.ptr_discipline_upto_at] >>
   drule_all frame_reachable_saved_allocas_from >> strip_tac >>
   gvs[frameActivationCacheTheory.activation_cache_def]
   >- metis_tac[allocas_from_def] >>

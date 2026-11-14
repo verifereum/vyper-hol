@@ -616,26 +616,23 @@ Resume scfg_chain_gas_runs_forward[single_sync]:
   `exec_block m C bt t1 = OK w` by metis_tac[scfg_enter_run_block] >>
   `exec_block k C bb s1 = OK u` by metis_tac[scfg_enter_run_block] >>
   `~w.vs_halted` by metis_tac[venomExecPropsTheory.run_block_OK_not_halted] >>
-  `m <= MAX m j` by simp[] >>
-  drule (cj 2 gas_events_fuel_extension) >>
-  disch_then (qspecl_then [`C`, `fn.fn_name`, `bt`, `t1`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `j <= MAX m j` by simp[] >>
-  drule (cj 3 gas_events_fuel_extension) >>
-  disch_then (qspecl_then [`C`, `scfg_chain fn a b`, `w`] strip_assume_tac) >>
-  rename1 `gas_events_blocks (MAX m j) C (scfg_chain fn a b) w =
-    gas_events_blocks j C (scfg_chain fn a b) w ++ more` >>
+  `run_block_entry m C bt t = OK w` by
+    simp[venomExecSemanticsTheory.run_block_entry_def] >>
+  `?N more.
+    gas_events_blocks N C (scfg_chain fn a b) t =
+      gas_events_block m C (scfg_chain fn a b).fn_name bt t1 ++
+      gas_events_blocks j C (scfg_chain fn a b) w ++ more /\
+    (terminates (run_blocks j C (scfg_chain fn a b) w) ==>
+      more = [] /\ run_blocks N C (scfg_chain fn a b) t =
+        run_blocks j C (scfg_chain fn a b) w)` by
+    (drule_all gasEventsFuelTheory.gas_events_blocks_assemble >>
+     disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
   `(scfg_chain fn a b).fn_name = fn.fn_name` by simp[scfg_chain_def] >>
-  gvs[Abbr `s1`] >>
-  qexistsl_tac [`SUC (MAX m j)`, `tail ++ more`] >>
+  gvs[Abbr `s1`] >> qexistsl_tac [`N`, `tail ++ more`] >>
   pure_once_rewrite_tac[gas_events_blocks_def, run_blocks_def] >>
-  simp[APPEND_ASSOC] >>
-  strip_tac >>
+  simp[APPEND_ASSOC] >> strip_tac >>
   `frame_result_rel (run_blocks k C fn u) (run_blocks j C (scfg_chain fn a b) w)` by metis_tac[] >>
-  drule frame_result_rel_terminates >> strip_tac >>
-  `!err. run_blocks j C (scfg_chain fn a b) w <> Error err` by
-    (Cases_on `run_blocks j C (scfg_chain fn a b) w` >> gvs[terminates_def]) >>
-  gvs[]
+  drule frame_result_rel_terminates >> strip_tac >> gvs[]
 QED
 Resume scfg_chain_gas_runs_forward[nonok]:
   qpat_x_assum `!m. m < SUC k ==> _` kall_tac >>
@@ -751,18 +748,19 @@ Resume scfg_chain_gas_runs_forward[pair_sync]:
   `exec_block (SUC h) C a s1 = OK u` by metis_tac[scfg_enter_run_block] >>
   `exec_block h C b u = OK v` by (fs[run_block_def] >> gvs[]) >>
   `~w.vs_halted` by metis_tac[venomExecPropsTheory.run_block_OK_not_halted] >>
-  `m <= MAX m j` by simp[] >>
-  drule (cj 2 gas_events_fuel_extension) >>
-  disch_then (qspecl_then [`C`, `fn.fn_name`, `bt`, `t1`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `j <= MAX m j` by simp[] >>
-  drule (cj 3 gas_events_fuel_extension) >>
-  disch_then (qspecl_then [`C`, `scfg_chain fn a b`, `w`] strip_assume_tac) >>
-  rename1 `gas_events_blocks (MAX m j) C (scfg_chain fn a b) w =
-    gas_events_blocks j C (scfg_chain fn a b) w ++ more` >>
+  `run_block_entry m C bt t = OK w` by
+    simp[venomExecSemanticsTheory.run_block_entry_def] >>
+  `?N more.
+    gas_events_blocks N C (scfg_chain fn a b) t =
+      gas_events_block m C (scfg_chain fn a b).fn_name bt t1 ++
+      gas_events_blocks j C (scfg_chain fn a b) w ++ more /\
+    (terminates (run_blocks j C (scfg_chain fn a b) w) ==>
+      more = [] /\ run_blocks N C (scfg_chain fn a b) t =
+        run_blocks j C (scfg_chain fn a b) w)` by
+    (drule_all gasEventsFuelTheory.gas_events_blocks_assemble >>
+     disch_then (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
   `(scfg_chain fn a b).fn_name = fn.fn_name` by simp[scfg_chain_def] >>
-  gvs[Abbr `s1`] >>
-  qexistsl_tac [`SUC (MAX m j)`, `tail ++ more`] >>
+  gvs[Abbr `s1`] >> qexistsl_tac [`N`, `tail ++ more`] >>
   `run_blocks (SUC (SUC h)) C fn s = run_blocks h C fn v` by
     simp[run_blocks_unfold] >>
   `gas_events_blocks (SUC (SUC h)) C fn s =
@@ -770,21 +768,9 @@ Resume scfg_chain_gas_runs_forward[pair_sync]:
       (sp with vs_inst_idx := phi_prefix_length a.bb_instructions) ++
     gas_events_block h C fn.fn_name b u ++ gas_events_blocks h C fn v` by
     (simp[Once gas_events_blocks_def] >> simp[Once gas_events_blocks_def]) >>
-  `gas_events_blocks (SUC (MAX m j)) C (scfg_chain fn a b) t =
-    gas_events_block (MAX m j) C fn.fn_name bt
-      (tp with vs_inst_idx := phi_prefix_length bt.bb_instructions) ++
-    gas_events_blocks (MAX m j) C (scfg_chain fn a b) w` by
-    simp[Once gas_events_blocks_def] >>
-  `run_blocks (SUC (MAX m j)) C (scfg_chain fn a b) t =
-    run_blocks (MAX m j) C (scfg_chain fn a b) w` by
-    simp[Once run_blocks_def] >>
-  simp[APPEND_ASSOC] >>
-  strip_tac >>
+  simp[APPEND_ASSOC] >> strip_tac >>
   `frame_result_rel (run_blocks h C fn v) (run_blocks j C (scfg_chain fn a b) w)` by metis_tac[] >>
-  drule frame_result_rel_terminates >> strip_tac >>
-  `!err. run_blocks j C (scfg_chain fn a b) w <> Error err` by
-    (Cases_on `run_blocks j C (scfg_chain fn a b) w` >> gvs[terminates_def]) >>
-  gvs[]
+  drule frame_result_rel_terminates >> strip_tac >> gvs[]
 QED
 
 Finalise scfg_chain_gas_runs_forward

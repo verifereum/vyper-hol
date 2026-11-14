@@ -150,7 +150,7 @@ Proof
      metis_tac[MEM_EL]) >>
   `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
     (drule_all layout_ordinary_entry_cut >> simp[]) >>
-  drule_all ptr_discipline_upto_at >> simp[]
+  drule_all o1SafeUptoTheory.ptr_discipline_upto_at >> simp[]
 QED
 
 Theorem layout_canonical_ordinary_environment:

@@ -290,17 +290,6 @@ Proof
   irule dftSsaPreserveTheory.dft_block_rel_wf_ssa >> simp[]
 QED
 
-Theorem run_blocks_terminates_fuel_eq[local]:
-  terminates (run_blocks f1 ctx fn s) /\ terminates (run_blocks f2 ctx fn s) ==>
-  run_blocks f1 ctx fn s = run_blocks f2 ctx fn s
-Proof
-  rpt strip_tac >> Cases_on `f1 <= f2`
-  >- (mp_tac (Q.SPECL [`f1`, `ctx`, `fn`, `s`] run_blocks_fuel_mono) >>
-      simp[] >> disch_then (qspec_then `f2 - f1` mp_tac) >> simp[])
-  >> mp_tac (Q.SPECL [`f2`, `ctx`, `fn`, `s`] run_blocks_fuel_mono) >>
-  simp[] >> disch_then (qspec_then `f1 - f2` mp_tac) >> simp[]
-QED
-
 Theorem entry_gas_update_comm[local]:
   (s with <| vs_prev_bb := NONE; vs_current_bb := l; vs_inst_idx := 0 |>)
     with vs_gas_readings := g =
@@ -470,7 +459,7 @@ Proof
   conj_tac >- metis_tac[] >>
   rw[ctx_sim_def] >> qexists_tac `fuel` >>
   `run_blocks fuel' C fn es = run_blocks fuel C fn es` by
-    (irule run_blocks_terminates_fuel_eq >> metis_tac[]) >>
+    (irule crossBlockSimPropsTheory.run_blocks_deterministic >> metis_tac[]) >>
   irule gas_dft_dead_result >>
   `run_blocks fuel' C fn es =
    run_context fuel C (vs' with vs_gas_readings := gobs ++ tail)` by metis_tac[] >>
