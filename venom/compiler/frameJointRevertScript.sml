@@ -80,6 +80,43 @@ Proof
   gvs[revert_forward_pair_def] >> decide_tac
 QED
 
+Theorem joint_revert_suffix_progress:
+  ALL_DISTINCT (fn_labels fn) /\
+  joint_revert_suffix fn bb i r
+    (JointConfig stk PG G tn current inst s oms om hs h) /\
+  joint_transition ctx
+    (JointConfig stk PG G tn current inst s oms om hs h) ev
+    (JointConfig stk' PG' G' tn' current' inst' post oms' om' hs' h') ==>
+  post.vs_inst_idx = SUC s.vs_inst_idx /\
+  r - post.vs_inst_idx < r - s.vs_inst_idx
+Proof
+  simp[joint_revert_suffix_def] >> strip_tac >>
+  qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
+  simp[Once joint_transition_cases] >> rpt strip_tac >>
+  drule_all forwarding_active_lookup >> strip_tac >>
+  drule_all forwarding_suffix_opcode >> strip_tac >>
+  gvs[is_terminator_def] >>
+  (Cases_on `inst.inst_opcode = REVERT`
+   >- metis_tac[forwarding_revert_no_step]) >>
+  gvs[] >>
+  TRY (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+       simp[step_inst_non_invoke] >> strip_tac >>
+       drule step_inst_base_intret_opcodes >> simp[] >> NO_TAC) >>
+  gvs[revert_forward_pair_def] >> decide_tac
+QED
+
+Theorem joint_revert_suffix_not_gas:
+  ALL_DISTINCT (fn_labels fn) /\
+  joint_revert_suffix fn bb i r
+    (JointConfig stk PG G tn current inst s oms om hs h) /\
+  active_inst current inst s ==>
+  inst.inst_opcode <> GAS
+Proof
+  rw[joint_revert_suffix_def] >>
+  drule_all forwarding_active_lookup >> strip_tac >>
+  drule_all forwarding_suffix_opcode >> strip_tac >> gvs[]
+QED
+
 Theorem joint_trace_revert_suffix:
   !j k. joint_trace vs0 C q0 es qs q /\ k <= j /\ j <= LENGTH es /\
   ALL_DISTINCT (fn_labels fn) /\
@@ -173,4 +210,38 @@ Theorem joint_trace_nonrevert_interval:
   !k. n <= k /\ k <= j ==> joint_nonrevert (EL k (q0::qs))
 Proof
   metis_tac[joint_trace_nonrevert_read_at]
+QED
+
+(* A recorded path ending at GAS has not entered a revert-only suffix. *)
+Theorem joint_trace_gas_nonrevert:
+  joint_trace vs0 C q0 es qs
+    (JointConfig stk PG G tn lastfn lastinst laststate oms om hs h) /\
+  k <= LENGTH es /\
+  EL k (q0::qs) = JointConfig stk0 PG0 G0 tn0 fn inst s oms0 om0 hs0 h0 /\
+  ALL_DISTINCT (fn_labels fn) /\
+  active_inst lastfn lastinst laststate /\ lastinst.inst_opcode = GAS ==>
+  ~in_revert_forward fn s
+Proof
+  strip_tac >> spose_not_then mp_tac >>
+  rewrite_tac[in_revert_forward_def, revert_forward_at_def] >>
+  disch_then (qx_choose_then `bb` strip_assume_tac) >>
+  `joint_revert_suffix fn bb s.vs_inst_idx j (EL k (q0::qs)) \/
+   joint_revert_suffix fn bb j s.vs_inst_idx (EL k (q0::qs))` by
+    (simp[joint_revert_suffix_def] >>
+     gvs[revert_forward_pair_def] >> metis_tac[]) >>
+  `EL (LENGTH es) (q0::qs) =
+    JointConfig stk PG G tn lastfn lastinst laststate oms om hs h` by
+    metis_tac[joint_trace_endpoint] >>
+  `!start stop.
+    joint_revert_suffix fn bb start stop (EL k (q0::qs)) ==>
+    joint_revert_suffix fn bb start stop
+      (JointConfig stk PG G tn lastfn lastinst laststate oms om hs h)` by
+    (rpt gen_tac >> disch_tac >>
+     mp_tac (Q.INST [`j` |-> `LENGTH es`, `k` |-> `k`,
+       `i` |-> `start`, `r` |-> `stop`, `fn` |-> `fn`, `bb` |-> `bb`,
+       `q` |-> `JointConfig stk PG G tn lastfn lastinst laststate oms om hs h`]
+       (SPEC_ALL joint_trace_revert_suffix)) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+     simp[]) >>
+  metis_tac[joint_revert_suffix_not_gas]
 QED
