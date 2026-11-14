@@ -1173,7 +1173,7 @@ QED
 (* ===== Fuel bounds (gas sufficiency S6b) ===== *)
 
 (* One split at most doubles the fuel a frame of fn needs. *)
-Theorem insert_split_supply_fn_fuel:
+Theorem insert_split_supply_fn_fuel[local]:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
   EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -1195,7 +1195,7 @@ Proof
   disch_then (qspec_then `u` mp_tac) >> simp[]
 QED
 
-Theorem supply_round_fuel:
+Theorem supply_round_fuel[local]:
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   cfg_norm_round_supply s fn = (fn',changed,s') ==>
   (~changed ==> fn' = fn) /\
@@ -1217,7 +1217,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem supply_iter_fuel:
+Theorem supply_iter_fuel[local]:
   !k s fn fn' s'.
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   cfg_norm_iter_supply k s fn = (fn',s') ==>
@@ -1270,7 +1270,7 @@ Finalise supply_iter_fuel
 
 (* A normalized function needs at most 2 ** b times the fuel, for any b
    bounding its block count. *)
-Theorem cfg_norm_function_supply_fuel:
+Theorem cfg_norm_function_supply_fuel[local]:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
   EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -1480,23 +1480,6 @@ Proof
   irule cfg_norm_function_supply_fn_bisim >> metis_tac[]
 QED
 
-Theorem cfg_norm_stage_sim:
-  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
-  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
-  vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==> ctx_sim D C C' vs vs
-Proof
-  strip_tac >>
-  `ctx_bisim C C'` by (irule cfg_norm_stage_bisim >> metis_tac[]) >>
-  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
-  irule ctx_bisim_ctx_sim >> simp[] >>
-  rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
-  `MEM fn C.ctx_functions /\ fn.fn_name = name` by
-    metis_tac[venomInstTheory.lookup_function_MEM,
-              ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
-  gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_MEM,
-      entry_fn_no_return_def] >> metis_tac[]
-QED
-
 Theorem cfg_norm_stage_max_live_eom:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' ==>
   max_live_eom C' = max_live_eom C
@@ -1536,7 +1519,7 @@ Proof
   Cases_on `(2:num) ** m` >> gvs[arithmeticTheory.MULT_CLAUSES]
 QED
 
-Theorem cfg_norm_stage_fn_bisim_fuel:
+Theorem cfg_norm_stage_fn_bisim_fuel[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions ==>
   LIST_REL
