@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarSuffix
 Ancestors
+  bodyPtrTypeBuiltinsScalarRawOutcome
   bodyFullConvertScalarRun bodyFullConvertScalarCertificate bodyFullConvertScalarFrame
   freshWrites stateFrame instIdxIndep
   exprSimConvert exprSimConvertFromBytes bodyPtrTypeBuiltinsScalarChecks
@@ -28,17 +29,6 @@ Proof
   irule gas_outcome_full_pure >>
   simp[] >> qexistsl_tac [`G`,`ee`,`INL vout`,`s`,`tn`] >>
   simp[gas_origin_ptr_path_rules] >> metis_tac[]
-QED
-
-Theorem zero_convert_child_post:
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v1 x s /\
-  is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv /\
-  typed_val_to_w256 tv v = 0w ==>
-  expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa s1 s0
-    ee v (Lit 0w) s
-Proof
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       expr_type_def, eval_operand_def] >> metis_tac[]
 QED
 
 (* Physical and ghost endpoints are selected before any dead mask. *)
@@ -84,7 +74,7 @@ Proof
       drule_at (Pat `run_inst_seq _ _ = _`) scalar_convert_run_origin >>
       disch_then (drule_all o SRULE []) >>
       disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-      drule_all scalar_convert_straight >>
+      drule_all bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh >>
       disch_then (qspecl_then [`x`,`cenv`] (mp_tac o SRULE [straight_fresh_def])) >>
       disch_then drule >> strip_tac >>
       qexistsl_tac [`dtv`,`t with vs_inst_idx := LENGTH sb.cs_current_insts`,`H`,`th`] >>

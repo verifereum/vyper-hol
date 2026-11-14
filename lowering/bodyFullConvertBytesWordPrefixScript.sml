@@ -1,31 +1,11 @@
 (* Fixed physical header/address endpoint, with dead-mask-uniform ghosts. *)
 Theory bodyFullConvertBytesWordPrefix
 Ancestors
+  bodyPtrSignedConvertSourceFixed
   wordLoadStorePtr bodyPtrSignedConvertLoad typedCopyPtr typedCopyLoopHeaderPtr
   fragGasSeqPtr ghostPcTransportPtr instIdxIndep fragExec exprLoweringProps
   venomInstProofs venomState venomExecSemantics venomInst finite_map
   ptrDiscipline emitHelperProps bodyPtrDefs
-
-Theorem prefix_run_endpoint[local]:
-  src <> len /\ lookup_var src s = SOME a /\
-  run_inst_seq [mk_inst i MLOAD [Var src] [len];
-                mk_inst j ADD [Var src;Lit 32w] [dp]] s = OK t ==>
-  t = update_var dp (a+32w) (update_var len (mload (w2n a) s) s)
-Proof
-  strip_tac >>
-  `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
-  `step_inst_base (mk_inst i MLOAD [Var src] [len]) s =
-     OK (update_var len (mload (w2n a) s) s)` by simp[step_MLOAD] >>
-  `eval_operand (Var src) (update_var len (mload (w2n a) s) s) = SOME a` by
-    fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  `eval_operand (Lit 32w) (update_var len (mload (w2n a) s) s) = SOME 32w` by
-    simp[eval_operand_def] >>
-  `step_inst_base (mk_inst j ADD [Var src;Lit 32w] [dp])
-      (update_var len (mload (w2n a) s) s) =
-    OK (update_var dp (a+32w) (update_var len (mload (w2n a) s) s))` by
-    (irule step_ADD >> simp[]) >>
-  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >> simp[run_inst_seq_def]
-QED
 
 Theorem prefix_uniform_checks[local]:
   ALL_DISTINCT [src;len;dp] /\ lookup_var src s = SOME a /\
@@ -48,7 +28,7 @@ Theorem prefix_uniform_checks[local]:
 Proof
   strip_tac >>
   `src <> len` by fs[] >>
-  drule_all prefix_run_endpoint >> strip_tac >>
+  drule_all bodyPtrSignedConvertSourceFixedTheory.bytestring_source_run_endpoint >> strip_tac >>
   qmatch_goalsub_abbrev_tac `step_prov PG G _ u` >>
   qabbrev_tac `G1 = step_prov PG G (mk_inst i MLOAD [Var src] [len]) u` >>
   qabbrev_tac `tn1 = step_taint (mk_inst i MLOAD [Var src] [len]) s u tn` >>
@@ -103,7 +83,7 @@ Proof
   strip_tac >> drule_all prefix_uniform_checks >>
   disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
   `src <> len` by fs[] >>
-  drule_all prefix_run_endpoint >> strip_tac >>
+  drule_all bodyPtrSignedConvertSourceFixedTheory.bytestring_source_run_endpoint >> strip_tac >>
   `ptr_covers H th dp t 32` by
     (qpat_x_assum `H = _` (fn eq => rewrite_tac[eq]) >>
      qpat_x_assum `th = _` (fn eq => rewrite_tac[eq]) >>

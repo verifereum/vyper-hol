@@ -1,5 +1,6 @@
 Theory bodyFullConvertScalarCertificate
-Ancestors exprSimBopRestWordLayout[qualified,ignore_grammar] loweringShapeDefs[qualified,ignore_grammar] marker[qualified,ignore_grammar] vyperTypeSystem[qualified,ignore_grammar]
+Ancestors
+  bodyPtrTypeBuiltinsScalarRawOutcome exprSimBopRestWordLayout[qualified,ignore_grammar] loweringShapeDefs[qualified,ignore_grammar] marker[qualified,ignore_grammar] vyperTypeSystem[qualified,ignore_grammar]
   bodyPtrTypeBuiltinsCheckedArithmetic bodyPtrSignedConvertBool
   bodyPtrTypeBuiltinsScalarChecks bodyPtrTypeBuiltinsScalarArithmetic
   fragGasSeqPtr ptrSafetyTransport ptrSafeRun exprLowering exprLoweringProps
@@ -242,21 +243,6 @@ Proof
   irule scalar_abort_origin_edge >> simp[] >> metis_tac[]
 QED
 
-Theorem scalar_convert_straight:
-  valid_conversion src dst /\ ~is_bytestring_type src ==>
-  straight_fresh (compile_type_convert x (case dst of FlagT name =>
-    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
-    | _ => mk_convert_op src dst))
-Proof
-  strip_tac >> drule_all scalar_dispatch_op >>
-  disch_then (qspec_then `cenv` mp_tac) >>
-  Cases_on `(case dst of FlagT name =>
-    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
-    | _ => mk_convert_op src dst)` >>
-  simp[straight_fresh_convert, straight_fresh_convert_scalar,
-       compile_type_convert_def, straight_fresh_return]
-QED
-
 Theorem scalar_convert_run_origin:
   valid_conversion src dst /\ ~is_bytestring_type src /\
   compile_type_convert x (case dst of FlagT name =>
@@ -282,7 +268,7 @@ Proof
   strip_tac >>
   `straight_fresh (compile_type_convert x (case dst of FlagT name =>
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
-    | _ => mk_convert_op src dst))` by metis_tac[scalar_convert_straight] >>
+    | _ => mk_convert_op src dst))` by metis_tac[bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh] >>
   drule_all fragGasFreshTheory.straight_fresh_code_prefix >> strip_tac >>
   drule_all scalar_convert_code >> disch_then (qspec_then `s` strip_assume_tac) >>
   `EVERY (\i. i.inst_opcode <> INVOKE) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
