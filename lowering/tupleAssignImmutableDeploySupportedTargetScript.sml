@@ -80,7 +80,9 @@ Proof
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
   mp_tac (SRULE [LET_THM] tuple_place_marked_head_step) >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >- simp[] >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (
   `arg_type_fits (EL i ltys) (EL i tys)` by
     (drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> simp[]) >>
   `~block_is_terminated sb` by
@@ -100,6 +102,17 @@ Proof
     (rpt strip_tac >> fs[loweringPostsTheory.target_post_def] >> metis_tac[]) >>
   rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >> qexistsl [`INL ()`,`ff`,`OK t`] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def] >> rpt strip_tac >>
+      drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >> simp[]) >>
+  simp[]) >>
+  rename1 `expr_exit (INR (Error (RuntimeError "write in static context"))) rr` >>
+  `exit_result rr` by
+    (Cases_on `rr` >>
+     gvs[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]) >>
+  rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INR (Error (RuntimeError "write in static context"))`,`ff`,`rr`] >>
   conj_tac
   >- (simp[gas_marked_exec_def] >> rpt strip_tac >>
       drule tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >> simp[]) >>
