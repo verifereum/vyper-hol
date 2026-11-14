@@ -383,3 +383,109 @@ Proof
   irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
   simp[rb_compile_register_positional_args, rb_compile_guarded_body]
 QED
+
+Theorem rb_compile_common_function_body:
+  rb_stmt_contract /\ rb_env_ok ce /\
+  EVERY (\(name,ptr,ty,e). rb_operand_ok ptr) kwvars ==>
+  rb_step (K T) (compile_common_function_body ce args kwvars nr key trans view stmts ret)
+Proof
+  strip_tac >> simp_tac std_ss [compile_common_function_body_def, LET_THM] >>
+  irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
+  simp[rb_compile_register_positional_args, rb_compile_guarded_body,
+       rb_compile_register_kwarg_vars]
+QED
+
+Theorem rb_compile_external_fn_bodies:
+  !packages. rb_stmt_contract /\
+    EVERY (\(lbl,ce,args,min_cds,pay,nr,key,trans,view,stmts,ret). rb_env_ok ce)
+      packages ==> rb_step (K T) (compile_external_fn_bodies packages)
+Proof
+  Induct >> simp[compile_external_fn_bodies_def, rb_step_return] >>
+  PairCases >> simp_tac std_ss [pairTheory.pair_case_thm] >> strip_tac >>
+  rewrite_tac[compile_external_fn_bodies_def] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_entry_checks] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_external_function_body] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem rb_compile_group_entries:
+  !entries. rb_expr_contract /\ rb_env_ok common.ec_env /\
+    rb_operand_ok method_id /\ rb_operand_ok (Label common.ec_common_label) /\
+    EVERY (\(sel,lbl,min_cds,k). rb_operand_ok (Label lbl)) entries /\
+    EVERY (\(name,ptr,ty,e). rb_operand_ok ptr) kwvars ==>
+    rb_step (K T) (compile_group_entries method_id entries common kwvars offset)
+Proof
+  Induct >> simp[compile_group_entries_def, rb_step_return] >>
+  PairCases >> simp_tac std_ss [pairTheory.pair_case_thm] >> strip_tac >>
+  rewrite_tac[compile_group_entries_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_entry_checks] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_entry_point_kwargs] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem rb_compile_internal_function:
+  rb_stmt_contract /\ rb_env_ok ce ==>
+  rb_step (K T) (compile_internal_function ce params has_buf nr key trans view
+    F imm_len stmts ret)
+Proof
+  strip_tac >> rewrite_tac[compile_internal_function_def] >>
+  irule rb_step_bind >>
+  qexists_tac `\v. case v of NONE => T | SOME op => rb_operand_ok op` >>
+  BETA_TAC >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[rb_step_return] >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
+  qx_gen_tac `ret_buf` >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_step_bind >>
+  qexists_tac `\r. EVERY (\(name,stk,op). rb_operand_ok op) (FST r)` >>
+  BETA_TAC >> reverse conj_tac >- simp[rb_compile_internal_param_decls] >>
+  qx_gen_tac `decls` >> strip_tac >>
+  ntac 2 (irule rb_bind_return >> BETA_TAC) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> qx_gen_tac `ret_pc` >> strip_tac >>
+  simp_tac std_ss [] >> irule rb_bind_return >> BETA_TAC >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (irule rb_materialize_internal_params >> simp[] >>
+      Cases_on `ce.ce_return_buf`
+      >- (Cases_on `ret_buf` >> gvs[rb_env_ok_def, rb_location_ok_def] >> metis_tac[]) >>
+      rename1 `_ = SOME loc` >> Cases_on `loc` >> Cases_on `ret_buf` >>
+      gvs[rb_env_ok_def, rb_location_ok_def] >> metis_tac[]) >>
+  qx_gen_tac `env2` >> strip_tac >>
+  irule rb_ignore >> conj_tac
+  >- (Cases_on `ret` >> simp[rb_step_return] >> IF_CASES_TAC >>
+      simp[rb_step_return] >> irule rb_step_ignore_bind >> simp[rb_step_return] >>
+      qexists_tac `rb_buffer_ok` >> simp[rb_compile_alloc_buffer]) >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_lock, rb_step_return]) >>
+  irule rb_ignore >> conj_tac
+  >- (gvs[rb_stmt_contract_def] >> first_x_assum irule >>
+      simp[rb_loop_ok_def, rb_env_ok_def] >> gvs[rb_env_ok_def] >> metis_tac[]) >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_step_def, comp_get_def] >>
+  gen_tac >> strip_tac >> irule rb_ignore >> reverse conj_tac
+  >- simp[rb_step_return] >> IF_CASES_TAC >> simp[rb_step_return] >>
+  irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
+  Cases_on `ret` >> simp[rb_emit_inst]
+QED
+
+Theorem rb_compile_internal_fn_bodies:
+  !packages. rb_stmt_contract /\
+    EVERY (\(lbl,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,stmts,ret).
+      rb_env_ok ce /\ ~ctor) packages ==>
+    rb_step (K T) (compile_internal_fn_bodies packages)
+Proof
+  Induct >> simp[compile_internal_fn_bodies_def, rb_step_return] >>
+  PairCases >> simp_tac std_ss [pairTheory.pair_case_thm] >> strip_tac >>
+  rewrite_tac[compile_internal_fn_bodies_def] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- gvs[rb_compile_internal_function] >>
+  first_x_assum irule >> simp[]
+QED
