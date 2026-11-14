@@ -138,6 +138,10 @@ Theorem ec_arith_tail_full_from_staging:
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func u /\ t2.vs_alloca_next <= u.vs_alloca_next /\
+    pure_frame cenv func es2 s2 t2 u /\
+    FLOOKUP u.vs_allocas cp.cs_next_id = SOME (w2n wo,64) /\
+    s2.cs_next_id <= cp.cs_next_id /\
+    MEM (mk_inst cp.cs_next_id ALLOCA [Lit 64w] [dst]) (fn_insts func) /\
     (!p. eval_operand x t2 = SOME p ==>
       mem_word_at (w2n wi) u.vs_memory = mem_word_at (w2n p) t2.vs_memory /\
       mem_word_at (w2n wi+32) u.vs_memory = mem_word_at (w2n p+32) t2.vs_memory) /\
