@@ -28,7 +28,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem entry_step_spill_bound[local]:
+Theorem entry_step_spill_bound:
   !ctx cp r lbl param_ops body_ops tail.
   generate_context_plan ctx = SOME cp /\ MEM r cp.cp_regions /\
   r.sr_plan = SOLabel lbl :: param_ops ++ body_ops ++ tail ==>
@@ -100,7 +100,7 @@ QED
 
 (* A revert forwarding starts at a RETURNDATACOPY, which is not a
    parameter, so it lies past the block's parameter prefix. *)
-Theorem get_params_el[local]:
+Theorem get_params_el:
   !l i. i < LENGTH (get_params l) ==>
         i < LENGTH l /\ is_param_opcode (EL i l).inst_opcode
 Proof

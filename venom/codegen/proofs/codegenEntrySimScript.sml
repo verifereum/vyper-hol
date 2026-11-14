@@ -171,7 +171,7 @@ QED
 
 (* entry_asm_state meets the entry relation of the first function, with no
    return address and nothing below the (empty) parameter block. *)
-Theorem entry_fn_entry_state_rel[local]:
+Theorem entry_fn_entry_state_rel:
   initial_ctx_rel_tail gas_tail cp prog ctx vs es /\
   ctx.ctx_functions = fe :: rest /\
   get_params (HD fe.fn_blocks).bb_instructions = [] /\
