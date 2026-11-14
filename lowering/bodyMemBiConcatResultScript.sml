@@ -115,7 +115,7 @@ Resume concat_result_vv_sim_mem[operands]:
    not_fresh_at s4 (STRING #"%" (toString (sa.cs_next_var + 2)))` by
     simp[not_fresh_at_def] >>
   qpat_assum `compile_concat _ _ _ _ _ _ s4 = _`
-    (mp_then Any mp_tac concat_args_sim_mem) >>
+    (mp_then Any mp_tac concat_args_sim_mem o SIMP_RULE pure_ss [LET_THM]) >>
   disch_then (qspecl_then [`0`, `0`, `tops`, `ctx`, `func`, `cx`, `env`, `es`,
     `t`, `ow`, `binst`, `B`, `bsz`, `oinst`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> simp[])) >>
