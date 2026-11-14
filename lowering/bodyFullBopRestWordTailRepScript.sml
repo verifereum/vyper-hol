@@ -171,6 +171,16 @@ Theorem rest_word_membership_tail_clean_reads:
    (!i. i < LENGTH ws ==>
      array_index (ArrayTV et bd) av (&i) = SOME (THE (array_index (ArrayTV et bd) av (&i))) /\
      value_has_type et (THE (array_index (ArrayTV et bd) av (&i)))) /\
+   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory ==>
+     ?w. eval_operand (vv_operand vv) u = SOME w /\
+       op_taint (Tu H) (vv_operand vv) = {} /\
+       ptr_mem_ok cx (ArrayT ety pbd) (ArrayV av) (vv_operand vv) (Gu H) (Tu H) u /\
+       (!i. i < LENGTH ws ==>
+         let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
+         mem_word_taint (Tu H).t_mem a = {} /\ mload a u = EL i ws) /\
+       (!cap. bd = Dynamic cap ==>
+         mem_word_taint (Tu H).t_mem (w2n w) = {} /\
+         mload (w2n w) u = n2w (LENGTH ws))) /\
    (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_prov (Gu H) (vv_operand vv) = NONE /\ op_taint (Tu H) (vv_operand vv) = {} /\
@@ -202,7 +212,7 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- (Cases_on `bd` >> gvs[] >> decide_tac) >>
   conj_tac >- (irule rest_word_membership_indexed_words >> metis_tac[]) >>
-  conj_tac >- simp[] >> suspend "ctor"
+  conj_tac >- simp[] >> conj_tac >- suspend "runtime_memory" >> suspend "ctor"
 QED
 
 Resume rest_word_membership_tail_clean_reads[ctor]:
@@ -247,6 +257,42 @@ Resume rest_word_membership_tail_clean_reads[ctor_length]:
   simp[] >>
   Cases_on `av` >>
   gvs[value_has_type_def, valueEncodingTheory.type_memory_size_def] >> decide_tac
+QED
+
+Resume rest_word_membership_tail_clean_reads[runtime_memory]:
+  strip_tac >>
+  `vv_holds cenv cx (ArrayT ety pbd) tv vv ee u` by
+    (fs[loweringPostsTheory.vv_post_def] >> metis_tac[]) >>
+  `?w. eval_operand (vv_operand vv) u = SOME w /\
+    op_taint (Tu H) (vv_operand vv) = {} /\
+    ptr_mem_ok cx (ArrayT ety pbd) (ArrayV av) (vv_operand vv) (Gu H) (Tu H) u` by
+    (Cases_on `vv` >>
+     gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def,
+       loweringPostsTheory.vv_holds_def, loweringPostsTheory.expr_val_rel_def,
+       bodyPtrDefsTheory.ptr_vv_ok_def, bodyPtrDefsTheory.ptr_val_ok_def,
+       compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
+  qexists_tac `w` >> simp[] >> suspend "memory_reads"
+QED
+
+Resume rest_word_membership_tail_clean_reads[memory_reads]:
+  markerLib.RESUME_TAC >> (
+  `!mem. mem_agree_outside (Tu H).t_mem u.vs_memory mem ==>
+    val_in_memory (ArrayTV et pbd) (ArrayV av) (w2n w) mem` by
+    (fs[bodyPtrDefsTheory.ptr_mem_ok_def] >> metis_tac[]) >>
+  `!mem. mem_agree_outside (Tu H).t_mem u.vs_memory mem ==>
+    val_in_memory (ArrayTV et bd) (ArrayV av) (w2n w) mem` by
+    (Cases_on `bd` >> Cases_on `av` >>
+     gvs[value_has_type_def, valueEncodingDefsTheory.val_in_memory_def]) >>
+  conj_tac
+  >- (`!i. i < array_length (ArrayTV et bd) av ==>
+        let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
+          a + 32 <= w2n w + type_memory_size (ArrayTV et bd) /\
+          mem_word_taint (Tu H).t_mem a = {} /\
+          mload a u = typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))` by
+        metis_tac[rest_word_membership_robust_indices, arithmeticTheory.LESS_EQ_REFL] >>
+      gvs[]) >>
+  gen_tac >> disch_tac >> gvs[] >>
+  metis_tac[rest_word_membership_robust_header])
 QED
 
 Finalise rest_word_membership_tail_clean_reads
