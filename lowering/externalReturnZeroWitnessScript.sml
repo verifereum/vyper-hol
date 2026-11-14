@@ -1,6 +1,6 @@
 (* Proof-only inhabitants of zero-size layouts. *)
 Theory externalReturnZeroWitness
-Ancestors externalReturnZeroWidening valueEncodingProofs valueEncoding valueEncodingDefs vyperValue vyperTyping
+Ancestors valueEncodingProofs valueEncoding valueEncodingDefs vyperValue vyperTyping
   vyperTypeArgFits vyperTypeSystem
 
 Theorem return_zero_widening_witness:
