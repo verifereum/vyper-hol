@@ -2,6 +2,7 @@
 Theory defaultDispatchFacts
 Ancestors sourceEntryCode runtimeBodyStartDefs checkedSelectorTableProps entryStateRel
   vyperCalldata compileVyper vyperABIEntries publicGetterProps list entryDispatchProps
+  defaultDispatchRouting defaultDispatchPlacement supportedDecls loweringShapeSource
 
 Theorem default_dispatch_raw_cases:
   calldata_dispatch tops cd = SOME (name,vals) ==>
@@ -178,4 +179,103 @@ Proof
        supportedDeclsTheory.supported_declaration_headers_def] >> metis_tac[]) >>
   drule_all lookup_function_default >>
   disch_then (qspec_then `NONE` mp_tac) >> simp[]
+QED
+
+Theorem default_selected_classified_member:
+  supported_program tops /\
+  MEM (mut,nr,rr,name,args,(ds:expr list),ret,fbody) (public_getters tops) ==>
+  MEM (mut,nr,rr,name,args,ds,ret,fbody) (FST (classify_functions tops))
+Proof
+  strip_tac >> drule public_getter_classified_mem >>
+  `module_consts_env tops [] = []` by
+    (irule supported_headers_module_consts_env >>
+     gvs[supportedProgramTheory.supported_program_def,
+       supported_declaration_headers_def] >> metis_tac[]) >>
+  simp[constSubstTheory.subst_consts_fn_empty]
+QED
+
+Theorem default_selected_raw_return:
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (mut,nr,rr,name,args,(ds:expr list),ret,fbody) (public_getters tops) ==>
+  lookup_raw_return_or_F (NONE:num option) name External tops = rr
+Proof
+  rw[MEM_public_getters] >>
+  gvs[public_getter_source_tuple] >>
+  drule_all public_getter_raw_return_none >>
+  simp[vyperInterpreterTheory.lookup_raw_return_or_F_def]
+QED
+
+Theorem default_decl_raw_return:
+  !tops mut nr rr name args ds ret fbody.
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (FunctionDecl External mut nr rr name args ds ret fbody) tops ==>
+  lookup_raw_return_or_F (NONE:num option) name External tops = rr
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h = FunctionDecl External mut nr rr name args ds ret fbody` >> gvs[]
+  >- simp[vyperInterpreterTheory.lookup_raw_return_or_F_def,
+       vyperInterpreterTheory.lookup_raw_return_def] >>
+  `~MEM (NONE,name) (external_name_keys_toplevel (NONE:num option) h)` by
+    (gvs[ALL_DISTINCT_APPEND] >>
+     `MEM (NONE,name) (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+       (simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+        goal_assum (drule_at Any) >>
+        simp[vyperTypeContractTheory.external_name_keys_toplevel_def]) >>
+     metis_tac[]) >>
+  Cases_on `h` >>
+  gvs[vyperInterpreterTheory.lookup_raw_return_or_F_def,
+    vyperInterpreterTheory.lookup_raw_return_def,
+    vyperTypeContractTheory.external_name_keys_toplevel_def,
+    ALL_DISTINCT_APPEND]
+  >~ [`FunctionDecl vis`] >-
+    (Cases_on `vis` >>
+     gvs[vyperInterpreterTheory.lookup_raw_return_def,
+       vyperTypeContractTheory.external_name_keys_toplevel_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem default_dispatch_source_cases:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  calldata_dispatch tops cd = SOME ("__default__",vals) /\
+  vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  (?tvs.
+    MEM (mut,F,lookup_raw_return_or_F (NONE:num option) "__default__" External tops,
+      "__default__",args,([]:expr list),ret,fbody) (FST (classify_functions tops)) /\
+    4 <= LENGTH cd /\
+    FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd)
+      (abi_external_signatures tops) = SOME ("__default__",MAP SND args) /\
+    OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+    4 + SUM (MAP tv_abi_size tvs) <= LENGTH cd /\
+    calldata_decode_args cd tvs 0 = SOME vals) \/
+  (args = [] /\ vals = [] /\
+    FST (SND (SND (classify_functions tops))) =
+      SOME (mut,F,lookup_raw_return_or_F (NONE:num option) "__default__" External tops,
+        "__default__",[],([]:expr list),ret,fbody) /\
+    (LENGTH cd < 4 \/
+     FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd)
+       (abi_external_signatures tops) = NONE))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule default_dispatch_raw_cases >>
+  disch_then (DISJ_CASES_THEN2 assume_tac strip_assume_tac)
+  >- (disj2_tac >> fs[] >>
+      `args = []` by metis_tac[default_fallback_no_args] >> gvs[] >>
+      drule_all default_fallback_classified >> strip_tac >>
+      drule loweringShapePropsTheory.classify_functions_fallback_mem >> strip_tac >>
+      drule_all default_decl_raw_return >> strip_tac >>
+      `module_consts_env tops [] = []` by
+        (irule supported_headers_module_consts_env >>
+         gvs[supportedProgramTheory.supported_program_def,
+           supported_declaration_headers_def] >> metis_tac[]) >>
+      gvs[constSubstTheory.subst_consts_fn_empty]) >>
+  disj1_tac >>
+  `MEM ("__default__",tys) (abi_external_signatures tops)` by
+    metis_tac[venomInstTheory.FIND_MEM] >>
+  drule_all default_selected_source_args >> strip_tac >> gvs[] >>
+  drule_all default_selected_raw_return >> strip_tac >>
+  drule_all default_selected_classified_member >> strip_tac >>
+  gvs[]
 QED
