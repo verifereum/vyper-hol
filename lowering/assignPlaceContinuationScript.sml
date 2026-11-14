@@ -186,7 +186,10 @@ Proof
   `storage_place_region cx p` by metis_tac[eval_target_place_region] >>
   `?dst loc. tr = (dst,SOME loc,SOME (ValPT dty)) /\
        loc <> LocCode /\ loc <> LocCalldata` by
-    (fs[target_post_def] >> Cases_on `p` >>
+    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ tr _` mp_tac >>
+     qpat_assum `storage_place_region cx p` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[target_post_def] >> Cases_on `p` >>
      gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[] >>
      PairCases_on `tr` >> gvs[value_type_place_def]) >>
   gnvs[] >>
@@ -242,7 +245,10 @@ Proof
      qpat_x_assum `stmt_state_rel _ _ _ _ _ _ /\ _` strip_assume_tac >>
      first_x_assum irule >> fs[not_fresh_at_def]) >>
   `place_ptr_rel cenv cx u (PlaceR p) dw (SOME loc) (Type dty)` by
-    (Cases_on `p` >> gvs[place_ptr_rel_def] >>
+    (Cases_on `p` >>
+     qpat_x_assum `place_ptr_rel cenv cx t' _ dw _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [place_ptr_rel_def]) >>
+     asm_simp_tac (srw_ss()) [place_ptr_rel_def] >>
      fs[expr_post_def, local_ptrs_reserved_def, not_fresh_at_def] >> metis_tac[]) >>
   `local_ptrs_reserved cenv su` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
