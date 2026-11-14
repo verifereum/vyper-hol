@@ -131,12 +131,12 @@ QED
 
 Theorem selected_reorder_wf_len[local]:
   LENGTH operands <= LENGTH ps.ps_stack /\ LENGTH operands <= 16 /\
+  reorder_plan dfg operands ps = (oa,sa) /\
+  swapped = TAKE (LENGTH operands - 2) operands ++
+    [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands] /\
+  reorder_plan dfg swapped ps = (ob,sb) /\
   (if comm /\ 2 <= LENGTH operands then
-     let (oa,sa) = reorder_plan dfg operands ps;
-         swapped = TAKE (LENGTH operands - 2) operands ++
-           [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands];
-         (ob,sb) = reorder_plan dfg swapped ps
-     in if reorder_cost oa < reorder_cost ob then (oa,sa) else (ob,sb)
+     (if reorder_cost oa < reorder_cost ob then (oa,sa) else (ob,sb))
    else reorder_plan dfg operands ps) = (ops,qs) ==>
   prefix_wf lo (LENGTH ps.ps_stack) ops /\
   prefix_end_len lo (LENGTH ps.ps_stack) ops = LENGTH qs.ps_stack /\
@@ -148,7 +148,6 @@ Proof
           [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]) =
         LENGTH operands` by simp[] >>
       qpat_x_assum `(if _ then _ else _) = _` mp_tac >> simp[] >>
-      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
       IF_CASES_TAC >> strip_tac >> gvs[] >>
       imp_res_tac reorder_plan_length_floor >>
       qspecl_then [`dfg`, `operands`, `ps`, `lo`] mp_tac reorder_plan_wf_len >>
@@ -198,9 +197,14 @@ Proof
   `prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops /\
    prefix_end_len lo (LENGTH ps1.ps_stack) reorder_ops = LENGTH ps4.ps_stack /\
    LENGTH (compute_operands inst) <= LENGTH ps4.ps_stack` by
-    (irule selected_reorder_wf_len >> simp[] >>
+    (Cases_on `reorder_plan dfg (compute_operands inst) ps1` >>
+     Cases_on `reorder_plan dfg
+       (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+        [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+         EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) ps1` >>
+     irule selected_reorder_wf_len >> simp[] >>
      qexistsl [`is_commutative inst.inst_opcode`, `dfg`] >>
-     fs[arithmeticTheory.GREATER_EQ]) >>
+     fs[arithmeticTheory.GREATER_EQ, LET_THM]) >>
   `prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) /\
    prefix_end_len lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) = LENGTH ps4.ps_stack` by
     metis_tac[prefix_wf_len_append] >>
