@@ -1,7 +1,7 @@
 (* Optional array-length code, checked at the post-index runtime state. *)
 Theory bodyFullTargetArrayLoad
 Ancestors
-  exprSimArrayIndex bodyFullUnwrapRun fragGasSeqPtr fragGasOriginPtr
+  exprSimArrayIndex bodyFullUnwrapRun fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrLoop
   fragExecMem fragExec exprLoweringProps emitHelperProps emitHelper compileEnv
   venomState venomInst venomExecSemantics fragGasPathPtr ptrSafeRun
   finite_map list rich_list words arithmetic typedCopyOriginPtrBase typedMemoryCopy
@@ -190,4 +190,131 @@ Proof
        update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        venom_state_component_equality] >>
   metis_tac[]
+QED
+
+Theorem array_length_frame_compose[local]:
+  array_length_frame sa s G tn u G1 tn1 /\
+  array_length_frame sm u G1 tn1 t G2 tn2 /\
+  sa.cs_next_var <= sm.cs_next_var ==>
+  array_length_frame sa s G tn t G2 tn2
+Proof
+  simp[array_length_frame_def] >> strip_tac >>
+  conj_tac
+  >- gvs[venom_state_component_equality] >>
+  metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+
+(* Concrete branch packet for the actual loader. The read equation in
+   step_ok is about its input state, after the effectful index has run. *)
+Definition array_length_loader_ok_def:
+  array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG s G tn t G' tn' <=>
+    if loc = LocCode /\ ctor /\ IS_SOME imm then
+      ?rb out1 sm out2 off base.
+        imm = SOME rb /\
+        eval_operand bop s = SOME off /\ eval_operand rb s = SOME base /\
+        let i1 = mk_inst sa.cs_next_id ADD [bop; rb] [out1];
+            u1 = update_var out1 (off + base) s;
+            s1 = u1 with vs_inst_idx := LENGTH sm.cs_current_insts;
+            G1 = step_prov PG G i1 u1;
+            tn1 = step_taint i1 s u1 tn;
+            i2 = mk_inst sm.cs_next_id ILOAD [Var out1] [out2];
+            u2 = update_var out2 w s1 in
+          emit_op ADD [bop; rb] sa = (Var out1,sm) /\
+          access_ok lo G func i1 s /\ taint_ok func tn i1 s /\
+          allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+          inst_mem_below_frontier i1 s /\ inst_dload_in_section i1 s /\
+          array_length_step_ok lo ctx func ILOAD [Var out1] w
+            sm out2 sb s1 G1 tn1 /\
+          p = Var out2 /\
+          t = (u2 with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+          G' = step_prov PG G1 i2 u2 /\ tn' = step_taint i2 s1 u2 tn1
+    else
+      ?opc out.
+        compile_ptr_load ctor imm loc bop = emit_op opc [bop] /\
+        MEM opc [MLOAD; SLOAD; TLOAD; CALLDATALOAD; ILOAD; DLOAD] /\
+        array_length_step_ok lo ctx func opc [bop] w sa out sb s G tn /\
+        p = Var out /\
+        t = (update_var out w s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+        G' = step_prov PG G (mk_inst sa.cs_next_id opc [bop] [out]) (update_var out w s) /\
+        tn' = step_taint (mk_inst sa.cs_next_id opc [bop] [out]) s (update_var out w s) tn
+End
+
+Theorem array_length_loader_joint[local]:
+  array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG s G tn t G' tn' /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
+  eval_operand p t = SOME w /\ ~t.vs_halted /\
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  array_length_frame sa s G tn t G' tn'
+Proof
+  strip_tac >>
+  reverse (Cases_on `loc = LocCode /\ ctor /\ IS_SOME imm`)
+  >- (qpat_x_assum `array_length_loader_ok _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      pure_asm_rewrite_tac[array_length_loader_ok_def, COND_CLAUSES] >> strip_tac >>
+      `MEM opc [ADD; MLOAD; SLOAD; TLOAD; CALLDATALOAD; ILOAD; DLOAD]` by simp[] >>
+      drule_all array_length_step_joint >>
+      disch_then (qspecl_then [`explicit`, `PG`, `D`] mp_tac) >>
+      simp[]) >>
+  gvs[array_length_loader_ok_def, LET_THM] >>
+  `array_length_step_ok lo ctx func ADD [bop; rb] (off + base')
+     sa out1 sm s G tn` by
+    (simp[array_length_step_ok_def] >>
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+       opcode_case_def] >> simp[exec_pure2_def]) >>
+  `emit_op ILOAD [Var out1] sm = (Var out2,sb)` by
+    fs[array_length_step_ok_def] >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  `MEM ADD [ADD; MLOAD; SLOAD; TLOAD; CALLDATALOAD; ILOAD; DLOAD] /\
+   MEM ILOAD [ADD; MLOAD; SLOAD; TLOAD; CALLDATALOAD; ILOAD; DLOAD]` by simp[] >>
+  dxrule_all array_length_step_joint >>
+  disch_then (qspecl_then [`explicit`, `PG`, `D`] mp_tac) >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  `~(update_var out1 (off + base') s with vs_inst_idx := LENGTH sm.cs_current_insts).vs_halted /\
+   (update_var out1 (off + base') s with vs_inst_idx := LENGTH sm.cs_current_insts).vs_current_bb = sm.cs_current_bb /\
+   (update_var out1 (off + base') s with vs_inst_idx := LENGTH sm.cs_current_insts).vs_inst_idx = LENGTH sm.cs_current_insts` by simp[update_var_def] >>
+  drule_all array_length_step_joint >>
+  disch_then (qspecl_then [`explicit`, `PG`, `D`] mp_tac) >>
+  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  simp[] >> conj_tac
+  >- (irule gas_origin_ptr_path_trans >> metis_tac[]) >>
+  irule array_length_frame_compose >>
+  metis_tac[ci_mono_def]
+QED
+
+(* The witnesses in the guarded packet are fixed concrete updates, not
+   horizon-dependent execution choices. Static arrays require no read packet. *)
+Theorem array_length_joint:
+  (if dyn then compile_ptr_load ctor imm loc bop
+   else comp_return (Lit (n2w cnt))) sa = (p,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (dyn ==> ?t G' tn'.
+    array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG
+      s G tn t G' tn') ==>
+  ?t G' tn'.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
+    eval_operand p t = SOME (if dyn then w else n2w cnt) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    array_length_frame sa s G tn t G' tn' /\
+    (if dyn then
+       array_length_loader_ok ctor imm loc bop w sa p sb lo ctx func PG
+         s G tn t G' tn'
+     else t = s /\ G' = G /\ tn' = tn)
+Proof
+  Cases_on `dyn` >> simp[] >> strip_tac
+  >- (drule_all array_length_loader_joint >>
+      disch_then (qspecl_then [`explicit`, `D`] strip_assume_tac) >>
+      qexistsl_tac [`t`, `G'`, `tn'`] >> simp[]) >>
+  gvs[comp_return_def] >>
+  simp[array_length_frame_def, eval_operand_def] >>
+  irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
