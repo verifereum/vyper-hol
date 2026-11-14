@@ -42,15 +42,16 @@ Theorem abi_encode_tuple_observation_vv_post:
   lower_abi_encode ensure mid src ei
     (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code staged final func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce staged /\
-  abi_encode_staged_observation ctx func ce cx es' staged out mid
+  abi_encode_staged_observation H ctx func ce cx es' staged out mid
     (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
       (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual /\
+  storage_well_formed_on cx es' (FST H) /\
   wb_frame ce es es' origin s0 s /\
   (~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid0) target args) ==>
    pure_frame ce func es origin s0 s) /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= staged.cs_next_var /\ origin.cs_next_id <= staged.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
-  vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid0) target args)
+  vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid0) target args)
     es origin final s0 es' (Value (BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv)))
     (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode ensure mid0) target args))
       <|ptr_operand := out; ptr_location := LocMemory|>) actual
@@ -60,7 +61,7 @@ Proof
   drule_all abi_encode_args_numerical_capacity >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   `well_typed_type_builtin_args (AbiEncode ensure mid0) target (MAP expr_type args)` by
     fs[expr_body_pre_def, well_typed_expr_def] >>
-  qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [abi_encode_staged_observation_def] >> strip_tac >>
   drule_all abi_encode_tuple_result_memory >> disch_then (qspec_then `N` assume_tac) >>
   `!name b n. local_region ce es'.scopes actual name b n ==>
@@ -71,7 +72,7 @@ Proof
      rpt gen_tac >> strip_tac >>
      irule abi_encode_setup_row_local_exclusion >>
      qpat_assum `abi_builtin_encode_setup _ _ _ = _` (irule_at Any) >>
-     qpat_assum `stmt_state_rel ctx func ce cx es' actual` (irule_at Any) >>
+     qpat_assum `stmt_state_rel H ctx func ce cx es' actual` (irule_at Any) >>
      metis_tac[]) >>
   drule abi_encode_strict_id_growth >> strip_tac >>
   `~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid0) target args) ==>
