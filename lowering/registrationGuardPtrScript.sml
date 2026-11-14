@@ -3,7 +3,7 @@
    variables, with clean ghosts, and pointer safety of the run after it
    gives pointer safety of the run through it. *)
 Theory registrationGuardPtr
-Ancestors
+Ancestors decoderNavigationPtr
   fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier
   unitTransformDefs memSafeRun venomInstProofs
   calldataClampPtr calldataRegistrationExec moduleLowering abiDecoderLoopRegisters
@@ -215,24 +215,13 @@ Proof
     simp[Abbr `ins`] >>
   `ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
    ~is_terminator ins.inst_opcode` by simp[Abbr `ins`,mk_inst_def] >>
-  `gas_path_mem_edge ctx fn (s with vs_inst_idx := n) 0
-    (OK (t with vs_inst_idx := SUC n))` by
-    (drule_all fragGasSeqMemTheory.straight_line_mem_edge >>
-     simp[Abbr `ins`,mk_inst_def]) >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn (s with vs_inst_idx := n) 0
-    (step_prov PG G ins t) (step_taint ins s t tn)
-    (OK (t with vs_inst_idx := SUC n))` by
-    (drule_all fragGasSeqPtrTheory.straight_line_ptr_edge >>
-     simp[Abbr `ins`,mk_inst_def,step_prov_inst_idx,step_taint_inst_idx]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG)
-    (s with vs_inst_idx := n,G,tn) []
-    (OK (t with vs_inst_idx := SUC n),step_prov PG G ins t,step_taint ins s t tn)` by
-    (simp[gas_origin_ptr_edge_def] >>
-     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
-  `~t.vs_halted` by metis_tac[venomInstProofsTheory.step_preserves_halted] >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[cj 1 gas_origin_ptr_path_rules,Abbr `ins`]
+  irule (SRULE [step_prov_inst_idx, step_taint_inst_idx]
+    (Q.INST [`s` |-> `s with vs_inst_idx := n`,
+      `t` |-> `t with vs_inst_idx := n`, `i` |-> `ins`]
+      (SPEC_ALL straight_line_step_origin))) >>
+  simp[Abbr `ins`] >> fs[MEM] >>
+  simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def, mk_inst_def]
 QED
 
 Theorem registration_ptr_guard_origin_frame:

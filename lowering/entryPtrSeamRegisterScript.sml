@@ -1038,21 +1038,11 @@ Proof
       contextCodegenRelTheory.source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def, mk_inst_def] >>
   `ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
     ~is_terminator ins.inst_opcode` by simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
-  `gas_path_mem_edge ctx fn s 0 (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    metis_tac[straight_line_mem_edge] >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s 0
-    (step_prov PG G ins t) (step_taint ins s t tn)
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
-    metis_tac[straight_line_ptr_edge] >>
-  `step_inst 0 ctx ins s = OK t` by simp[step_inst_non_invoke] >>
-  `~t.vs_halted` by metis_tac[step_preserves_halted] >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G ins t, step_taint ins s t tn)` by
-    (simp[gas_origin_ptr_edge_def] >> metis_tac[gas_path_mem_edge_zero_origin]) >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >>
-  simp[cj 1 gas_origin_ptr_path_rules, Abbr `ins`, arithmeticTheory.ADD1]
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx`
+    (fn th => pure_rewrite_tac [th]) >>
+  irule straight_line_step_origin >>
+  simp[Abbr `ins`] >> metis_tac[]
 QED
 
 Theorem registration_argument_prepare_joint[local]:
