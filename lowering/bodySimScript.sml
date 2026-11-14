@@ -117,8 +117,27 @@ Definition body_inv_def:
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id)) /\
     cenv_module_pins tops cenv /\
-    (!src ts. get_module_code cx src = SOME ts ==> src = NONE)
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+    (!vis mut nr rr fn args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
+       function_mutability_ok [(NONE, tops)] vis mut nr dflts body)
 End
+
+(* The type checker gives every function of the main module its declared
+   mutability (function_mutability_ok), as body_inv has it. *)
+Theorem check_contract_function_mutability_ok:
+  check_contract in_deploy layouts addr [(NONE, tops)] = SOME art /\
+  MEM (FunctionDecl vis mut nr rr fname args dflts ret stmts) tops ==>
+  function_mutability_ok [(NONE, tops)] vis mut nr dflts stmts
+Proof
+  strip_tac >>
+  `check_toplevel_decl [(NONE, tops)] art NONE
+     (FunctionDecl vis mut nr rr fname args dflts ret stmts)` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def, check_module_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  gvs[check_toplevel_decl_def]
+QED
 
 Theorem cenv_module_pins_immutable_section_layout:
   !tops cenv. cenv_module_pins tops cenv ==> immutable_section_layout cenv tops

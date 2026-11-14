@@ -92,7 +92,7 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `k` >> gvs[]
 QED
 
-Theorem sum_take_el_le[local]:
+Theorem sum_take_el_le:
   !l k. k < LENGTH l ==> SUM (TAKE k l) + EL k l <= SUM l
 Proof
   Induct >> simp[] >> rpt gen_tac >> Cases_on `k` >> simp[] >>
@@ -109,7 +109,7 @@ Definition tuple_offset_def:
     SUM (TAKE k (MAP (elem_size_in_location cenv loc) tys))
 End
 
-Theorem compile_expr_tuple_subscript[local]:
+Theorem compile_expr_tuple_subscript:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
     expr_type obj = TupleT tys /\
@@ -158,7 +158,7 @@ Proof
        slot_count_of_memory_size]
 QED
 
-Theorem tuple_offset_memory[local]:
+Theorem tuple_offset_memory:
   !cenv cx env es tys tvs k.
     expr_sim_inv cenv cx env es /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs ==>
@@ -467,7 +467,7 @@ QED
    precondition, and an in-range integer literal index whose element type
    is the annotation.  A place-typed base (the other branch of
    well_typed_expr) is an array or a mapping, never a tuple. *)
-Theorem tuple_pre_base[local]:
+Theorem tuple_pre_base:
   !cenv cx env ann obj idx es tys.
     expr_body_pre cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
@@ -894,7 +894,7 @@ Proof
 QED
 
 (* The base's read, a tuple of the element types. *)
-Theorem tuple_base_read[local]:
+Theorem tuple_base_read:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
     vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
     post_value_type cenv obj = TupleT tys /\
@@ -919,7 +919,7 @@ Proof
 QED
 
 (* The element's value_vv after the ADD, from the base's. *)
-Theorem tuple_vv_post[local]:
+Theorem tuple_vv_post:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     post_value_type cenv obj = TupleT tys /\
@@ -1037,7 +1037,7 @@ Proof
 QED
 
 (* The element's selection reads no gas observation. *)
-Theorem tuple_select_gas_obs[local]:
+Theorem tuple_select_gas_obs:
   !cx ty tv i ee r.
     select_result cx ty tv (ValueSubscript (IntV i)) ee = (r, ee) ==>
     !tail. select_result cx ty tv (ValueSubscript (IntV i))
@@ -1080,7 +1080,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem tuple_source[local]:
+Theorem tuple_source:
   !cx ann obj ity k.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) =
     bind (eval_expr cx obj)
@@ -1120,7 +1120,7 @@ Proof
 QED
 
 (* The source facts at the base's actual end state. *)
-Theorem tuple_base_facts[local]:
+Theorem tuple_base_facts:
   !cenv cx env obj ity k es0 tys btv es1.
     expr_body_pre cenv cx env
       (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es0 /\
