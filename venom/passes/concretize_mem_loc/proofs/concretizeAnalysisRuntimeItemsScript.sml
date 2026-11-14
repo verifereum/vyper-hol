@@ -75,8 +75,8 @@ Proof
   Induct >> Cases_on `qs` >> simp[joint_chain_def] >> metis_tac[]
 QED
 
-Theorem activation_cache_source_instruction:
-  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+Theorem activation_cache_source_instruction_static[local]:
+  joint_config_reachable vs0 C q /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   activation_cache q d owner aid site ==>
   ?inst. MEM inst (fn_insts owner) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_id = aid
@@ -96,8 +96,19 @@ Proof
   metis_tac[allocation_birth_source_instruction]
 QED
 
-Theorem activation_cache_source_size:
+Theorem activation_cache_source_instruction:
   joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  activation_cache q d owner aid site ==>
+  ?inst. MEM inst (fn_insts owner) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_id = aid
+Proof
+  mp_tac activation_cache_source_instruction_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem activation_cache_source_size_static[local]:
+  joint_config_reachable vs0 C q /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions /\
   activation_cache q d owner aid (b,sz) ==>
   FLOOKUP (source_alloca_sizes owner) aid = SOME sz
@@ -107,11 +118,35 @@ Proof
   drule origin_frame_erasure >> strip_tac >>
   qpat_x_assum `activation_cache _ _ _ _ _` mp_tac >>
   simp[activation_cache_def] >> strip_tac >> gvs[]
-  >- metis_tac[o1_frame_source_sizes_lookup] >>
+  >- metis_tac[o1_frame_source_sizes_lookup_static] >>
   `LENGTH l - SUC d < LENGTH l` by decide_tac >>
   `MEM (EL (LENGTH l - SUC d) l) l` by metis_tac[EL_MEM] >>
-  drule_all o1_frame_source_sizes_saved >>
+  drule_all o1_frame_source_sizes_saved_static >>
   metis_tac[cache_sizes_ok_lookup]
+QED
+
+Theorem activation_cache_source_size:
+  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions /\
+  activation_cache q d owner aid (b,sz) ==>
+  FLOOKUP (source_alloca_sizes owner) aid = SOME sz
+Proof
+  mp_tac activation_cache_source_size_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem activation_cache_static_item_static[local]:
+  joint_config_reachable vs0 C q /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions /\
+  activation_cache q d owner aid (b,sz) /\ b <= byte /\ byte < b + sz /\
+  static_alloca_items owner = SOME items ==>
+  MEM (Allocation aid,sz) items
+Proof
+  strip_tac >>
+  `0 < sz` by decide_tac >>
+  drule_all activation_cache_source_size_static >> strip_tac >>
+  metis_tac[source_alloca_sizes_positive_item]
 QED
 
 Theorem activation_cache_static_item:
@@ -121,14 +156,13 @@ Theorem activation_cache_static_item:
   static_alloca_items owner = SOME items ==>
   MEM (Allocation aid,sz) items
 Proof
-  strip_tac >>
-  `0 < sz` by decide_tac >>
-  drule_all activation_cache_source_size >> strip_tac >>
-  metis_tac[source_alloca_sizes_positive_item]
+  mp_tac activation_cache_static_item_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
-Theorem activation_cache_source_allocation:
-  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+Theorem activation_cache_source_allocation_static[local]:
+  joint_config_reachable vs0 C q /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
   activation_cache q d owner aid (b,sz) ==>
   MEM owner C.ctx_functions /\
@@ -143,16 +177,44 @@ Proof
      metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
   `?inst. MEM inst (fn_insts owner) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_id = aid` by
-    metis_tac[activation_cache_source_instruction] >>
+    metis_tac[activation_cache_source_instruction_static] >>
   `fn_inst_wf owner /\ fn_inst_ids_distinct owner` by (fs[EVERY_MEM] >> metis_tac[]) >>
   `?n. inst.inst_operands = [Lit n]` by
     (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_flat,
          EVERY_MEM, MEM_FLAT, MEM_MAP] >>
      `inst_wf inst` by metis_tac[] >> gvs[inst_wf_def]) >>
   `FLOOKUP (source_alloca_sizes owner) aid = SOME sz` by
-    metis_tac[activation_cache_source_size] >>
+    metis_tac[activation_cache_source_size_static] >>
   drule_all source_alloca_sizes_literal >> strip_tac >>
   qexistsl_tac [`inst`, `n`] >> gvs[]
+QED
+
+Theorem activation_cache_source_allocation:
+  joint_config_reachable vs0 C q /\ o1_run_state_ok vs0 /\
+  o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  activation_cache q d owner aid (b,sz) ==>
+  MEM owner C.ctx_functions /\
+  ?inst n. MEM inst (fn_insts owner) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = aid /\ inst.inst_operands = [Lit n] /\ w2n n = sz
+Proof
+  mp_tac activation_cache_source_allocation_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem activation_cache_source_static_item_static:
+  joint_config_reachable vs0 C q /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  o1_ctx_shape C /\ ctx_inst_ids_distinct C /\
+  activation_cache q d owner aid (b,sz) ==>
+  ?items. static_alloca_items owner = SOME items /\
+    MEM (Allocation aid,sz) items
+Proof
+  strip_tac >>
+  drule_all activation_cache_source_allocation_static >> strip_tac >>
+  drule_all source_static_alloca_items_total >> strip_tac >>
+  drule_all static_alloca_items_ALLOCA_exact >> strip_tac >> gvs[] >>
+  drule static_alloca_items_MEM >> strip_tac >> metis_tac[]
+
 QED
 
 Theorem activation_cache_source_static_item:
@@ -162,12 +224,48 @@ Theorem activation_cache_source_static_item:
   ?items. static_alloca_items owner = SOME items /\
     MEM (Allocation aid,sz) items
 Proof
-  strip_tac >>
-  drule_all activation_cache_source_allocation >> strip_tac >>
-  drule_all source_static_alloca_items_total >> strip_tac >>
-  drule_all static_alloca_items_ALLOCA_exact >> strip_tac >> gvs[] >>
-  drule static_alloca_items_MEM >> strip_tac >> metis_tac[]
+  mp_tac activation_cache_source_static_item_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
 
+Theorem joint_open_call_runtime_summary_static:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ c < j /\ j <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
+  joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+  EL j (q0::qs) = JointConfig stk PG G tn owner inst s oms om hs h /\
+  (!k. c < k /\ k <= j ==> LENGTH stk0 < activation_depth (EL k (q0::qs))) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ static_alloca_items owner = SOME items /\
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ b <= byte /\ byte < b + sz /\
+  o1_walk_view rpolicy 2 C' caller observed ==>
+  ?root name ops g p.
+    invoke.inst_opcode = INVOKE /\ invoke.inst_operands = Label name :: ops /\
+    lookup_function name C.ctx_functions = SOME root /\
+    source_call C caller root /\ RTC (source_call C) root owner /\
+    lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
+    MEM (Allocation aid,p,sz) g.fn_mems_used
+Proof
+  strip_tac >>
+  `EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions` by
+    (gvs[EVERY_MEM, o1_ctx_shape_def] >> rpt strip_tac >>
+     metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
+  `SUC (j-1) = j /\ j-1 < LENGTH es` by decide_tac >>
+  `joint_config_reachable vs0 C (EL j (q0::qs))` by
+    (drule joint_trace_edge_at >> disch_then (qspec_then `j-1` mp_tac) >>
+     pure_asm_rewrite_tac[] >> metis_tac[]) >>
+  `activation_cache (EL j (q0::qs)) (LENGTH stk) owner aid (b,sz)` by
+    simp[activation_cache_current] >>
+  `MEM (Allocation aid,sz) items` by
+    (irule activation_cache_static_item_static >>
+     goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
+     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  drule_all joint_open_call_observed_summary >> simp[]
 QED
 
 Theorem joint_open_call_runtime_summary:
@@ -190,23 +288,46 @@ Theorem joint_open_call_runtime_summary:
     lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
+  mp_tac joint_open_call_runtime_summary_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem joint_open_call_activation_summary_static:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ c < n /\ n <= LENGTH es /\
+  EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
+  joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+  (!k. c < k /\ k <= n ==> LENGTH stk0 < activation_depth (EL k (q0::qs))) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ static_alloca_items owner = SOME items /\
+  activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\ LENGTH stk0 < d /\
+  b <= byte /\ byte < b + sz /\ o1_walk_view rpolicy 2 C' caller observed ==>
+  ?root name ops g p.
+    invoke.inst_opcode = INVOKE /\ invoke.inst_operands = Label name :: ops /\
+    lookup_function name C.ctx_functions = SOME root /\
+    source_call C caller root /\ RTC (source_call C) root owner /\
+    lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
+    MEM (Allocation aid,p,sz) g.fn_mems_used
+Proof
   strip_tac >>
-  `EVERY (\f. fn_inst_wf f /\ fn_inst_ids_distinct f) C.ctx_functions` by
-    (gvs[EVERY_MEM, o1_ctx_shape_def] >> rpt strip_tac >>
-     metis_tac[o1_fn_shape_def, source_member_ids_distinct]) >>
-  `SUC (j-1) = j /\ j-1 < LENGTH es` by decide_tac >>
-  `joint_config_reachable vs0 C (EL j (q0::qs))` by
-    (drule joint_trace_edge_at >> disch_then (qspec_then `j-1` mp_tac) >>
-     pure_asm_rewrite_tac[] >> metis_tac[]) >>
-  `activation_cache (EL j (q0::qs)) (LENGTH stk) owner aid (b,sz)` by
-    simp[activation_cache_current] >>
-  `MEM (Allocation aid,sz) items` by
-    (irule activation_cache_static_item >>
-     goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
-     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `static_alloca_items _ = _`)) >>
-     simp[] >> metis_tac[]) >>
-  drule_all joint_open_call_observed_summary >> simp[]
+  `?t. c < t /\ t <= n /\ activation_depth (EL t (q0::qs)) = d /\
+    activation_cache (EL t (q0::qs)) d owner aid (b,sz) /\
+    (!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))` by
+    (irule joint_activation_cache_exposure >> simp[activation_depth_def] >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[]) >>
+  Cases_on `EL t (q0::qs)` >>
+  gvs[activation_depth_def, activation_cache_current] >>
+  irule joint_open_call_runtime_summary_static >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `EL t _ = _`)) >>
+  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ caller invoke _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
+  simp[] >> metis_tac[LESS_EQ_TRANS]
 QED
 
 Theorem joint_open_call_activation_summary:
@@ -228,22 +349,9 @@ Theorem joint_open_call_activation_summary:
     lookup_function root.fn_name observed.cu_context.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  strip_tac >>
-  `?t. c < t /\ t <= n /\ activation_depth (EL t (q0::qs)) = d /\
-    activation_cache (EL t (q0::qs)) d owner aid (b,sz) /\
-    (!k. t < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))` by
-    (irule joint_activation_cache_exposure >> simp[activation_depth_def] >>
-     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[]) >>
-  Cases_on `EL t (q0::qs)` >>
-  gvs[activation_depth_def, activation_cache_current] >>
-  irule joint_open_call_runtime_summary >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `EL t _ = _`)) >>
-  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ caller invoke _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
-  simp[] >> metis_tac[LESS_EQ_TRANS]
+  mp_tac joint_open_call_activation_summary_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 

@@ -8,12 +8,12 @@ Ancestors venomWfProps
   frameOriginHistory frameOriginReachable o1PassContract ptrDiscipline
   venomWf memLocDefs finite_map list pair
 
-Theorem concretize_production_kill_covers:
+Theorem concretize_production_kill_covers_static[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
-  o1_run_state_ok vs0 /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   joint_origin_history vs0 C stk PG G tn fn inst s oms om hs h /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ all_reachable fn /\
@@ -57,11 +57,66 @@ Proof
   PairCases_on `site` >>
   `context_alloca_size fn (imported_mems_used observed.cu_context fn)
       (Allocation aid) = site1` by
-    (drule_all concretize_runtime_context_size >> simp[]) >>
+    (drule_all concretize_runtime_context_size_static >> simp[]) >>
   `inst_write_size inst = SOME site1` by
     (gvs[ptr_ml_can_kill_def] >> metis_tac[]) >>
   qexistsl_tac [`site0`, `site1`] >> simp[] >>
   metis_tac[successful_full_write_covers]
+QED
+
+Theorem concretize_production_kill_covers:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  o1_run_state_ok vs0 /\
+  joint_origin_history vs0 C stk PG G tn fn inst s oms om hs h /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ all_reachable fn /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  MEM (Var v) inst.inst_operands /\ inst.inst_opcode <> PHI /\
+  ptr_ml_can_kill (Allocation aid) bp sizes inst /\
+  step_inst fuel C inst s = OK s' /\ access_ok lo G fn inst s /\
+  ~in_revert_forward fn s ==>
+  ?b sz. FLOOKUP G v = SOME (b,sz) /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+    !byte. b <= byte /\ byte < b + sz ==>
+      byte IN range_bytes (step_writes inst s s')
+Proof
+  mp_tac concretize_production_kill_covers_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_protected_cached_byte_no_kill_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  joint_origin_history vs0 C stk PG G tn fn inst s oms om hs h /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ all_reachable fn /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  MEM (Var v) inst.inst_operands /\ inst.inst_opcode <> PHI /\
+  step_inst fuel C inst s = OK s' /\ access_ok lo G fn inst s /\
+  ~in_revert_forward fn s /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+  b <= byte /\ byte < b + sz /\
+  byte NOTIN range_bytes (step_writes inst s s') ==>
+  ~ptr_ml_can_kill (Allocation aid) bp sizes inst
+Proof
+  rpt strip_tac >> drule_all concretize_production_kill_covers_static >>
+  strip_tac >> gvs[]
 QED
 
 Theorem concretize_protected_cached_byte_no_kill:
@@ -86,6 +141,7 @@ Theorem concretize_protected_cached_byte_no_kill:
   byte NOTIN range_bytes (step_writes inst s s') ==>
   ~ptr_ml_can_kill (Allocation aid) bp sizes inst
 Proof
-  rpt strip_tac >> drule_all concretize_production_kill_covers >>
-  strip_tac >> gvs[]
+  mp_tac concretize_protected_cached_byte_no_kill_static >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
