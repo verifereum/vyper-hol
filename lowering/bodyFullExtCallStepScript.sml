@@ -7,7 +7,9 @@
 Theory bodyFullExtCallStep
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
-  oracleCallOriginPtr
+  oracleCallOriginPtr gasOutcomeFullCompose
+  bodyFullExtCallPrefix bodyFullExtCallCallGhost bodyFullExtCallCallPath
+  bodyFullExtCallExit bodyFullExtCallSuccess bodyFullExtCallBoundary
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
   vyperInterpreter vyperAST list
 
@@ -112,5 +114,13 @@ Theorem extcall_call_full:
           k returnData
        od) (ee, t, G, tn) Q (\H res ee gt r. expr_exit res r)
 Proof
+  rpt gen_tac >> strip_tac >>
+  drule extcall_call_layout >> strip_tac >>
+  drule_all extcall_suffix_code >>
+  disch_then (qspec_then `func` strip_assume_tac) >>
+  drule_all extcall_check_code_split >> strip_tac >>
+  `fn_has_code s1 s2 func /\ fn_has_code s4 s5 func` by metis_tac[] >>
+  Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`
+  >- cheat >>
   cheat
 QED
