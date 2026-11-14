@@ -5,6 +5,9 @@ Ancestors
   exprSimProps exprSimCopy exprSimHypsDefs loweringPosts context vyperState
   vyperPlaceStatePreservation vyperPlaceResultTyping vyperPlaceTyping vyperValueOperation vyperValue
   valueEncodingDefs finite_map words exprSimSubscriptArrayLiveImmutableView loweringStateRelDefs
+  exprSimArrayIndex compileEnv emitHelperProps exprSimUnwrap fragGasMode fragGasSeq
+  freshWrites fragGasFresh fragExec venomState exprLoweringProps rich_list
+  exprSimUnopProps fragGasPath exprSimAbiEncodeArgsCountedLabels
 
 Theorem live_immutable_select:
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
@@ -161,6 +164,87 @@ Proof
   gvs[venomStateTheory.mload_def, mem_word_at_def, array_length_def,
       arithmeticTheory.ADD_COMM]
 QED
+
+Theorem imm_array_ctor_counted_optional[local]:
+  compile_array_subscript base_op iop T cnt ws esz sgn
+    (compile_ptr_load T cenv.ce_imm_alloca LocCode) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ local_ptrs_reserved cenv sc /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  (!x. base_op = Var x ==> not_fresh_at sc x) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\
+  eval_operand base_op s = SOME w /\ eval_operand iop s = SOME iw ==>
+  if idx_in_range sgn iw (mload (w2n w) s) then
+    ?q. gas_marked_path F ctx func s 0 (OK q) /\
+      stmt_state_rel H ctx func cenv cx ee q /\
+      eval_operand dst q = SOME ((w+n2w ws)+iw*n2w esz) /\
+      (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+      (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+      q.vs_memory = s.vs_memory /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts
+  else ?q. gas_marked_path F ctx func s 0 (Abort Revert_abort q)
+Proof
+  simp[compile_array_subscript_split, comp_bind_def, compile_ptr_load_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_imm_load_word T cenv.ce_imm_alloca base_op sc = (lop,sm)` >>
+  `straight_fresh (comp_ignore_bind (array_bounds_check iop lop sgn)
+      (array_elem_ptr base_op iop T ws esz))` by
+    simp[straight_fresh_array_check_ptr] >>
+  `cs_extends sc sm /\ sc.cs_next_var <= sm.cs_next_var /\
+   (!x. lop = Var x ==> not_fresh_at sm x)` by
+    (qpat_x_assum `compile_imm_load_word _ _ _ _ = _` mp_tac >>
+     Cases_on `cenv.ce_imm_alloca` >>
+     simp[compile_imm_load_word_def, emitHelperTheory.emit_op_def,
+          comp_bind_def, fresh_var_def, fresh_id_def, comp_ignore_bind_def,
+          comp_return_def, emit_def] >> strip_tac >> gvs[] >>
+     simp[not_fresh_at_def] >>
+     irule cs_extends_same_block >>
+     simp[same_blocks_def, GSYM APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `cs_extends sm sd` by metis_tac[straight_fresh_cs_extends] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all compile_imm_load_word_ctor_path_fields >> strip_tac >>
+  rename1 `gas_path ctx func s 0 (OK u)` >>
+  `~u.vs_halted` by metis_tac[gas_path_normal] >>
+  `gas_marked_path F ctx func s 0 (OK u)` by
+    fs[gas_marked_path_def] >>
+  `u.vs_labels = s.vs_labels` by metis_tac[abi_args_marked_path_labels] >>
+  `eval_operand base_op u = SOME w /\ eval_operand iop u = SOME iw` by
+    (conj_tac >> Cases_on `base_op` >> Cases_on `iop` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `(!x. base_op = Var x ==> not_fresh_at sm x) /\
+   (!x. iop = Var x ==> not_fresh_at sm x)` by
+    metis_tac[not_fresh_at_mono] >>
+  `eval_operand base_op (drop_fresh sm u) = SOME w /\
+   eval_operand iop (drop_fresh sm u) = SOME iw /\
+   eval_operand lop (drop_fresh sm u) = SOME (mload (w2n w) s) /\
+   fresh_vars_wrt sm (drop_fresh sm u)` by
+    simp[varsExtTheory.fresh_vars_wrt_drop_fresh, eval_operand_drop_fresh] >>
+  IF_CASES_TAC
+  >- suspend "success" >>
+  drule_all array_check_ptr_oob >> strip_tac >>
+  drule_all straight_fresh_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all gas_marked_path_then >> simp[] >> metis_tac[]
+QED
+
+Resume imm_array_ctor_counted_optional[success]:
+  drule_all array_check_ptr_run >> strip_tac >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  `gas_marked_path F ctx func s 0
+     (OK (t' with vs_inst_idx := LENGTH sd.cs_current_insts))` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  qexists_tac `t' with vs_inst_idx := LENGTH sd.cs_current_insts` >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!z v. not_fresh_at sm z /\ _ ==> _` irule >>
+  simp[] >> metis_tac[not_fresh_at_mono]
+QED
+
+Finalise imm_array_ctor_counted_optional
+
 
 Theorem live_immutable_array_counted:
   compile_array_subscript base_op iop

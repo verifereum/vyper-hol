@@ -162,7 +162,8 @@ Proof
      fs[vv_post_def, wb_frame_def] >> drule_all exprSimWordArgsTheory.expr_post_pure_frame >> simp[]) >>
   irule exprSimHashTheory.vv_post_frame_intro >>
   simp[vyperASTTheory.expr_type_def, expr_has_effect_thm,
-       vv_place_ptr_def, vv_storage_live_def]
+       vv_place_ptr_def, vv_storage_live_def] >>
+  gvs[expr_post_def]
 QED
 
 Theorem memory_value_array_element_post:
