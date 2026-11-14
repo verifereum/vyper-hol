@@ -64,7 +64,7 @@ Proof
   drule_all ricf_execution_noninvoke_terminal >> simp[]
 QED
 
-Theorem ricf_execution_builtin_next:
+Theorem ricf_execution_builtin_next[local]:
   ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates sites maps targets
     stk PG G tn fn inst s t /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\

@@ -14,6 +14,8 @@
 
 Theory readonlyInvokeCopyFwdSim
 Ancestors
+  readonlyInvokeCopyFwdExecutionFamily readonlyInvokeCopyFwdExecutionAssembly
+  readonlyInvokeCopyFwdExecutionTransform
   readonlyInvokeCopyFwdDefs invokeCopyFwdCommonDefs readonlyMemoryArgsDefs
   internalReturnCopyFwdSim reachableFnSim taintAgree o1PassContract
   ptrDiscipline unitMemInv venomExecSemantics venomInst venomWf venomState
@@ -32,5 +34,42 @@ Theorem ricf_pass_correct:
     fn_meta = icf_fn_meta_of C /\ rma = readonly_mem_analyze C ==>
     ctx_sim D C (ricf_transform_ctx fn_meta rma C) vs vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  mp_tac (Q.INST [`fn_meta` |-> `icf_fn_meta_of C`,
+    `rma` |-> `readonly_mem_analyze C`]
+    (SPEC_ALL ricf_execution_transform_midpoints)) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qabbrev_tac `Ct = ricf_transform_ctx (icf_fn_meta_of C) (readonly_mem_analyze C) C` >>
+  qabbrev_tac `R = (\(a,U,B0,E0,outer_history,outer_certificates,sites,maps,targets).
+    ricf_execution_boundary vs C mid_of log_of D a U B0 E0
+      outer_history outer_certificates sites maps targets)` >>
+  qabbrev_tac `Rret = (\(a,U,B0,E0,outer_history,outer_certificates,sites,maps,targets).
+    ricf_execution_return vs C Ct mid_of log_of D a U B0 E0
+      outer_history outer_certificates sites maps targets)` >>
+  `!f. MEM f C.ctx_functions ==>
+    ricf_logged_function_trace
+      (icf_build_ctx (icf_fn_meta_of C) C.ctx_functions (readonly_mem_analyze C) f)
+      f (log_of f) (mid_of f) /\ ricf_function_edit f (mid_of f) /\
+    ?f'. lookup_function f.fn_name Ct.ctx_functions = SOME f' /\
+      fn_entry_label f' = fn_entry_label f` by
+    (rpt strip_tac >>
+     qpat_x_assum `!fn. MEM fn _ ==> ricf_function_trace _ _ _ /\ _`
+       (qspec_then `f` mp_tac) >> simp[] >> strip_tac >> simp[] >>
+     qexists_tac `if (mid_of f).fn_blocks <> f.fn_blocks
+       then clear_nops_function (mid_of f) else mid_of f` >>
+     fs[Abbr `Ct`]) >>
+  `!fn fn'. MEM fn C.ctx_functions /\
+    lookup_function fn.fn_name Ct.ctx_functions = SOME fn' ==>
+    fn' = if (mid_of fn).fn_blocks <> fn.fn_blocks
+          then clear_nops_function (mid_of fn) else mid_of fn` by
+    (rpt strip_tac >>
+     qpat_x_assum `!fn. MEM fn _ ==> ricf_function_trace _ _ _ /\ _`
+       (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
+     gvs[Abbr `Ct`]) >>
+  mp_tac (SPEC_ALL ricf_execution_family) >>
+  (impl_tac >- simp[Abbr `R`,Abbr `Rret`]) >> strip_tac >>
+  mp_tac (SPEC_ALL ricf_execution_context_from_family) >>
+  (impl_tac
+   >- (gvs[Abbr `Ct`,Abbr `R`,Abbr `Rret`] >>
+       rpt strip_tac >> metis_tac[])) >> simp[]
 QED
