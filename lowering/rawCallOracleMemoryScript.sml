@@ -231,9 +231,22 @@ Proof
      irule raw_call_oracle_frame >> simp[] >>
      goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
-     conj_tac >> rpt gen_tac >> strip_tac >>
-     first_x_assum (drule_all_then mp_tac) >>
-     simp[regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         qpat_assum `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
+           loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz`
+           (qspecl_then [`name`,`b`,`sz`] mp_tac) >>
+         (impl_tac >- first_assum ACCEPT_TAC) >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >>
+         decide_tac) >>
+     rpt gen_tac >> strip_tac >>
+     qpat_assum `!aid b sz. aid < initial.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+       loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz`
+       (qspecl_then [`aid`,`b`,`sz`] mp_tac) >>
+     (impl_tac >- simp[]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >>
+     decide_tac) >>
   `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1))
     initial s0 u` by
     (drule exprSimRawCallCalldataTheory.raw_call_take_adopt_fields >> strip_tac >>
