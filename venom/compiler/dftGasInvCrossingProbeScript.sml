@@ -181,12 +181,16 @@ Theorem inv_crossed_predecessor_total_observation:
   ?t. ev_step orc p d fuel ctx x s = OK t
 Proof
   strip_tac >>
-  drule inv_crossing_candidate_necessary >> strip_tac >>
-  drule_all inv_fallible_crossing_classification >> strip_tac
-  >- (Cases_on `x.inst_opcode = ALLOCA`
-      >- metis_tac[inv_oracle_alloca_total] >>
-      irule inv_oracle_nofail_total >> simp[]) >>
-  irule inv_oracle_static_class_total >> simp[]
+  (drule inv_crossing_candidate_necessary >> strip_tac >>
+   drule_all inv_fallible_crossing_classification >> strip_tac
+   >- (Cases_on `x.inst_opcode = ALLOCA`
+       >- metis_tac[inv_oracle_alloca_total] >>
+       irule inv_oracle_nofail_total >> simp[]) >>
+   `~s.vs_call_ctx.cc_static` by
+     (spose_not_then assume_tac >>
+      gvs[inv_crossing_candidate_def, read_effects_def, write_effects_def,
+          all_effects_def]) >>
+   irule inv_oracle_static_class_total >> simp[])
 QED
 
 Theorem inv_crossed_predecessor_total:
