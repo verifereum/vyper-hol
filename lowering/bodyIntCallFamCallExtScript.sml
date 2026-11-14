@@ -1023,6 +1023,160 @@ Resume intcall_ext_kwarg_head_cps[kw_join]:
 QED
 Finalise intcall_ext_kwarg_head_cps
 
+Theorem intcall_ext_kwargs_fold_from_head[local]:
+  (!e es sa sb s ret kw op dty old_es old_rs old_vvs kont Q.
+    intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+    intcall_expr_producer fp e /\ supported_expr fp.jc_tops e /\
+    calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+    expr_body_pre ce fp.jc_cx env e es /\ ~expr_has_effect e /\
+    expr_type e = ext_call_kw_type ret kw /\
+    compile_ext_call_kwarg compile_expr ce ret kw e sa = ((op,dty),sb) /\
+    fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+    intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    extrequest_strong_captures fp.jc_ctx fp.jc_func ce fp.jc_cx old_es old_rs old_vvs
+      (es with gas_obs := []) sa s /\
+    gas_admissible (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+      expr_vv_res_ok es /\
+    (!v ee u.
+      extrequest_kwarg_post fp.jc_ctx fp.jc_func ce fp.jc_cx env ret kw e es sa s sb op dty
+        old_es old_rs old_vvs v ee u /\
+      extrequest_retained_value ce fp.jc_cx
+        (if kw = EKDefault then dty else BaseT (UintT 256)) v op ee sb u /\
+      extrequest_history_frame ce fp.jc_cx (es with gas_obs := []) sa s ee sb u /\
+      (?used. !tail. bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+        (es with gas_obs := used ++ tail) = (INL v,ee with gas_obs := tail)) /\
+      intcall_expr_cont fp ce env es sa s ee sb u ==>
+      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+        (kont v) (ee,u) Q (\r ef z. expr_exit r z)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (bind (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) kont)
+      (es,s) Q (\r ef z. expr_exit r z)) ==>
+  !ks xs es sa sb value_op gas_op default_op s k old_es old_rs old_vvs.
+    intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+    LENGTH ks = LENGTH xs /\ EVERY (intcall_expr_producer fp) xs /\
+    EVERY (supported_expr fp.jc_tops) xs /\
+    EVERY (\e. calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) xs /\
+    EVERY (\e. ~expr_has_effect e) xs /\
+    (!i ee. i < LENGTH xs /\ extrequest_kwargs_reach fp.jc_cx xs es i ee ==>
+      expr_body_pre ce fp.jc_cx env (EL i xs) ee) /\
+    (!i. i < LENGTH xs ==> expr_type (EL i xs) =
+      (if EL i ks = EKDefault then ret else BaseT (UintT 256))) /\
+    compile_ext_call_kwargs compile_expr ce ret ks xs sa = ((value_op,gas_op,default_op),sb) /\
+    fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+    intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    extrequest_strong_captures fp.jc_ctx fp.jc_func ce fp.jc_cx old_es old_rs old_vvs
+      (es with gas_obs := []) sa s /\
+    gas_admissible (bind (eval_exprs fp.jc_cx xs) k) expr_vv_res_ok es /\
+    (!vs ee u.
+      extrequest_kwargs_post fp.jc_ctx fp.jc_func ce fp.jc_cx ret ks xs es sa s sb
+        value_op gas_op default_op old_es old_rs old_vvs vs ee u /\
+      intcall_expr_cont fp ce env es sa s ee sb u ==>
+      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+        (k vs) (ee,u) Q (\r ef z. expr_exit r z)) ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (bind (eval_exprs fp.jc_cx xs) k) (es,s) Q (\r ef z. expr_exit r z)
+Proof
+  disch_then (mk_asm "head") >>
+  Induct_on `ks` >> rpt gen_tac
+  >- (Cases_on `xs` >> simp[compile_ext_call_kwargs_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >>
+      `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func) (k [])
+        (es with gas_obs := [],s) Q (\r ef z. expr_exit r z)` by
+        (first_x_assum irule >> conj_tac
+         >- (fs[intcall_expr_res_def] >>
+             simp[intcall_expr_cont_def, intcall_expr_res_def,
+               loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+             metis_tac[]) >>
+         irule exprExtRequestKwargsTheory.extrequest_kwargs_post_nil >>
+         fs[intcall_expr_res_def]) >>
+      simp[Once evaluate_def, bind_return] >>
+      qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+      >- (qexists `marks` >> disj1_tac >>
+          gvs[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
+          metis_tac[]) >>
+      drule stmtSimDeclGasTheory.gas_exempt_cert_start_gas_obs >>
+      disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!xs es sa sb value_op gas_op default_op s k old_es old_rs old_vvs. _`
+    (mk_asm "tail_ih") >>
+  Cases_on `xs` >- simp[NoAsms] >>
+  simp[NoAsms, Once compile_ext_call_kwargs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  qpat_x_assum `!vs ee u. _` (mk_asm "continuation") >>
+  rename1 `compile_ext_call_kwarg compile_expr ce ret kw e sa = ((op,dty),sm)` >>
+  qpat_x_assum `comp_bind _ _ sm = _` mp_tac >>
+  simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[comp_return_def] >>
+  rename1 `compile_ext_call_kwargs compile_expr ce ret ks xs sm = ((vo,go,dopt),sb)` >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`compile_expr`, `ce`, `ret`, `kw`, `e`, `sa`]
+      ci_mono_compile_ext_call_kwarg) >> simp[cj 1 compile_expr_ci_mono]) >>
+  `ci_mono sm sb` by
+    (mp_tac (Q.SPECL [`ks`, `xs`, `ce`, `ret`, `sm`]
+      exprExtRequestKwargsTheory.extrequest_kwargs_mono) >> simp[]) >>
+  `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
+    (irule fn_has_code_split >> fs[ci_mono_def]) >>
+  `expr_body_pre ce fp.jc_cx env e es` by
+    (qpat_x_assum `!i ee. _` (qspecl_then [`0`, `es with gas_obs := []`] mp_tac) >> simp[]) >>
+  `expr_type e = ext_call_kw_type ret kw` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >>
+     Cases_on `kw` >> simp[vyperTypeSystemTheory.ext_call_kw_type_def]) >>
+  rewrite_tac[exprExtRequestKwargsTheory.extrequest_kwargs_bind_cons] >>
+  asm "head" irule >>
+  qpat_assum `compile_ext_call_kwarg _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `extrequest_strong_captures _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[GSYM exprExtRequestKwargsTheory.extrequest_kwargs_bind_cons] >>
+  suspend "kwargs_head_cont"
+QED
+
+Resume intcall_ext_kwargs_fold_from_head[kwargs_head_cont]:
+  rpt gen_tac >> strip_tac >>
+  rename1 `extrequest_kwarg_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ v mid tm` >>
+  `mid.gas_obs = [] /\
+   extrequest_strong_captures fp.jc_ctx fp.jc_func ce fp.jc_cx old_es old_rs old_vvs mid sm tm` by
+    fs[exprExtRequestKwargSuffixTheory.extrequest_kwarg_post_def] >>
+  `mid with gas_obs := [] = mid` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `intcall_expr_res fp ce env mid sm tm /\ ~tm.vs_halted /\
+   tm.vs_current_bb = sm.cs_current_bb /\ tm.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  `gas_admissible (bind (eval_exprs fp.jc_cx xs) (\vs. k (v::vs))) expr_vv_res_ok mid` by
+    (qpat_assum `gas_admissible _ _ es` mp_tac >>
+     rewrite_tac[exprExtRequestKwargsTheory.extrequest_kwargs_bind_cons] >> strip_tac >>
+     drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >> simp[]) >>
+  `!i ee. i < LENGTH xs /\ extrequest_kwargs_reach fp.jc_cx xs mid i ee ==>
+    expr_body_pre ce fp.jc_cx env (EL i xs) ee` by
+    (rpt strip_tac >>
+     `extrequest_kwargs_reach fp.jc_cx (e::xs) es (SUC i) ee` by
+       (irule exprExtRequestKwargsTheory.extrequest_kwargs_reach_cons >>
+        goal_assum (drule_at Any) >> simp[]) >>
+     qpat_x_assum `!i ee. i < SUC _ /\ _ ==> _`
+       (qspecl_then [`SUC i`, `ee`] mp_tac) >> simp[]) >>
+  asm "tail_ih" irule >>
+  qpat_assum `compile_ext_call_kwargs _ _ _ _ _ _ = _` (irule_at Any) >>
+  qexistsl [`old_vvs`, `old_rs`, `old_es`] >> simp[] >>
+  suspend "kwargs_tail_cont"
+QED
+
+Resume intcall_ext_kwargs_fold_from_head[kwargs_tail_cont]:
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. i < SUC _ ==> _` (qspec_then `SUC i` mp_tac) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  asm "continuation" irule >> simp[] >> conj_tac
+  >- (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
+      qexistsl [`sm`, `mid`, `tm`] >>
+      fs[ci_mono_def, exprExtRequestHistoryTheory.extrequest_history_frame_def,
+        exprExtRequestReadProbeTheory.extrequest_read_frame_def]) >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\ local_ptrs_reserved ce sa` by
+    fs[intcall_expr_res_def] >>
+  drule_all exprExtRequestKwargsTheory.extrequest_kwargs_post_cons >>
+  Cases_on `kw` >> gvs[] >> metis_tac[]
+QED
+Finalise intcall_ext_kwargs_fold_from_head
+
 (* The operand hypotheses carry the internal frame, rather than exprs_case's
    universally quantified contract.  Execute each child with the smaller
    producer hypothesis, then reuse the canonical suffix:
