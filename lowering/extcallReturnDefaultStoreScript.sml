@@ -188,6 +188,61 @@ Proof
 QED
 
 (* Optional check, at the store endpoint; no memory or allocation changes. *)
+Theorem return_default_optional_check_counted_fields:
+  (if skip then comp_return () else compile_extcodesize_check addr) a = ((),b) /\
+  fn_has_code a b func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ w2w aw = target /\
+  stmt_state_rel H ctx func ce cx ee s /\
+  accounts_runtime_well_typed ee.accounts /\ local_ptrs_reserved ce a /\
+  wb_frame ce es ee sa s0 s /\ sa.cs_next_var <= a.cs_next_var ==>
+  ?u. if skip \/ ext_call_has_code target ee.accounts then
+    gas_marked_path F ctx func s 0 (OK u) /\
+    stmt_state_rel H ctx func ce cx ee u /\ wb_frame ce es ee sa s0 u /\
+    u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+    (!p. safe_operand a p ==> eval_operand p u = eval_operand p s) /\
+    ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\
+    u.vs_inst_idx = LENGTH b.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
+  else gas_marked_path F ctx func s 0 (Abort Revert_abort u)
+Proof
+  strip_tac >> Cases_on `skip`
+  >- (gvs[comp_return_def] >> qexists_tac `s` >>
+      simp[fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules]) >>
+  gvs[] >>
+  drule_all return_default_check_counted >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all extcall_precheck_code_word >>
+  disch_then (qspec_then `w2w aw` assume_tac) >>
+  Cases_on `ext_call_has_code (w2w aw) ee.accounts`
+  >- (gvs[] >>
+      qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s 0 (OK checked)` >>
+      qexists_tac `checked` >> simp[] >>
+      unabbrev_all_tac >> suspend "check_frame") >>
+  gvs[] >> metis_tac[]
+QED
+Resume return_default_optional_check_counted_fields[check_frame]:
+  conj_tac
+  >- (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[] >>
+      irule local_ptrs_reserved_fresh >> qexists_tac `a` >> simp[]) >>
+  conj_tac
+  >- (irule wb_frame_readonly_tail >>
+      goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
+      qexists_tac `a` >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >>
+      gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
+  drule extcall_codesize_check_shape >> strip_tac >>
+  simp[update_var_def] >>
+  reverse conj_tac >- fs[same_blocks_def] >>
+  Cases >> simp[exprSafeOperandTheory.safe_operand_def, eval_operand_def,
+    lookup_var_def, update_var_def, FLOOKUP_UPDATE, not_fresh_at_def,
+    ASCIInumbersTheory.toString_inj]
+QED
+Finalise return_default_optional_check_counted_fields
+
 Theorem return_default_optional_check_counted:
   (if skip then comp_return () else compile_extcodesize_check addr) a = ((),b) /\
   fn_has_code a b func /\ ~s.vs_halted /\
@@ -206,37 +261,7 @@ Theorem return_default_optional_check_counted:
     u.vs_inst_idx = LENGTH b.cs_current_insts
   else gas_marked_path F ctx func s 0 (Abort Revert_abort u)
 Proof
-  strip_tac >> Cases_on `skip`
-  >- (gvs[comp_return_def] >> qexists_tac `s` >>
-      simp[fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules]) >>
-  gvs[] >>
-  drule_all return_default_check_counted >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  drule_all extcall_precheck_code_word >>
-  disch_then (qspec_then `w2w aw` assume_tac) >>
-  Cases_on `ext_call_has_code (w2w aw) ee.accounts`
-  >- (gvs[] >>
-      qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s 0 (OK checked)` >>
-      qexists_tac `checked` >> simp[] >>
-      unabbrev_all_tac >> suspend "check_frame") >>
-  gvs[] >> metis_tac[]
+  strip_tac >> drule_all return_default_optional_check_counted_fields >>
+  strip_tac >> qexists `u` >>
+  Cases_on `skip \/ ext_call_has_code target ee.accounts` >> gvs[]
 QED
-Resume return_default_optional_check_counted[check_frame]:
-  conj_tac
-  >- (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[] >>
-      irule local_ptrs_reserved_fresh >> qexists_tac `a` >> simp[]) >>
-  conj_tac
-  >- (irule wb_frame_readonly_tail >>
-      goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
-      qexists_tac `a` >>
-      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-      rpt strip_tac >>
-      gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
-  drule extcall_codesize_check_shape >> strip_tac >>
-  simp[update_var_def] >>
-  reverse conj_tac >- fs[same_blocks_def] >>
-  Cases >> simp[exprSafeOperandTheory.safe_operand_def, eval_operand_def,
-    lookup_var_def, update_var_def, FLOOKUP_UPDATE, not_fresh_at_def,
-    ASCIInumbersTheory.toString_inj]
-QED
-Finalise return_default_optional_check_counted
