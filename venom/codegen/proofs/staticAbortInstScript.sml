@@ -5,7 +5,7 @@ Ancestors
   staticAbortDefs venomWf opcodeClass list arithmetic stackPlanGen venomInst
   staticAbortEmit staticAbortStraight asmIR staticAbortPlacement planExec
   asmSem words stackOpSim staticAbortTrace fnBlockBodySteps prefixExec
-  fnPlanPrefix
+  fnPlanPrefix fnPlanPlace
 
 Theorem static_abort_regular_net_io:
   inst_wf inst /\ inst_shape_ok inst /\ codegen_ready_inst inst /\
@@ -37,7 +37,11 @@ Theorem static_abort_generated_emit_labels:
   static_abort_emit_labels (SND (compute_label_offsets prog))
     (build_offset_to_pc prog) prog cplan.cp_initial_fmp pc inst emit
 Proof
-  rpt gen_tac >> strip_tac >> drule_all codegen_revert_placed >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`rpolicy`, `unit`, `cplan`, `prog`, `unit.cu_context`,
+    `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`]
+    mp_tac revert_postamble_placed >> simp[] >> strip_tac >>
+  drule_all fnPlanPlaceRevertPostambleTheory.codegen_revert_slice >> strip_tac >>
   simp[static_abort_emit_labels_def] >> rpt strip_tac >> gvs[execute_plan_def, exec_stack_op_def] >>
   drule_all assert_unreachable_end_placed >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
