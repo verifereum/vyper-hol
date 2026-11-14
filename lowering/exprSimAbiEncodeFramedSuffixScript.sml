@@ -646,3 +646,177 @@ Proof
   >- simp_tac (srw_ss()) [start_relabel_def]
   >- simp[start_relabel_def]
 QED
+
+Theorem abi_encode_raw_counted_blocks:
+  !dst src ei st out en ctx func at av sb cap d s.
+    compile_abi_encode_to_buf dst src ei st = (out,en) /\
+    abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
+    st.cs_blocks <> en.cs_blocks ==>
+    ?t. gas_marked_path F ctx func s 0 (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = en.cs_current_bb /\
+      t.vs_inst_idx = LENGTH en.cs_current_insts /\
+      mem_bytes_at d (LENGTH (enc at av)) t.vs_memory = enc at av /\
+      eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+      abi_encoder_registered_effect (frag_ids st en) [(d,LENGTH (enc at av))] s t /\
+      alloca_inv t /\
+      (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
+      window_alloca_growth s t /\
+      (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      t.vs_labels = s.vs_labels /\ abi_encode_exec_frame func s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `Q = \t.
+      mem_bytes_at d (LENGTH (enc at av)) t.vs_memory = enc at av /\
+      eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+      abi_encoder_registered_effect (frag_ids st en) [(d,LENGTH (enc at av))] s t /\
+      alloca_inv t /\
+      (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
+      window_alloca_growth s t /\
+      (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      t.vs_labels = s.vs_labels /\ abi_encode_exec_frame func s t` >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
+       t.vs_current_bb = en.cs_current_bb /\
+       t.vs_inst_idx = LENGTH en.cs_current_insts` suffices_by
+    (fs[Abbr `Q`] >> metis_tac[]) >>
+  qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  match_mp_tac (Q.INST [`sa` |-> `st`] (SPEC_ALL abi_decode_sim_gas_path_relabel)) >>
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `compile_abi_encode_to_buf dst src ei (start_relabel L ids st) =
+         (out,start_swap st L ids en)` by
+        metis_tac[abi_encode_raw_relabel_structure] >>
+      drule_all abi_encode_raw_relabel_window_pre >> strip_tac >>
+      drule_all abi_encode_framed_body_singleton >> strip_tac >>
+      `frag_ids (start_relabel L ids st) (start_swap st L ids en) = frag_ids st en` by
+        (simp_tac (srw_ss()) [abiEncoderPropsTheory.frag_ids_def,
+           start_relabel_def, start_swap_def, LET_THM] >>
+         COND_CASES_TAC >> simp_tac (srw_ss()) []) >>
+      `abi_encoder_registered_effect (window_alloca_sites fn' (frag_ids st en))
+         [(d,LENGTH (enc at av))] (s with vs_current_bb := L) t` by
+        metis_tac[window_strong_result_effect] >>
+      `!i. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+            ~MEM i (fn_insts fn') ==>
+            FLOOKUP t.vs_allocas i.inst_id = FLOOKUP s.vs_allocas i.inst_id` by
+        (rpt strip_tac >>
+         `i.inst_id NOTIN window_alloca_sites fn' (frag_ids st en)` by
+           (simp[window_alloca_sites_def] >> disj2_tac >> rpt strip_tac >>
+            `MEM inst (fn_insts func)` by
+              (qpat_x_assum `!i. MEM i (fn_insts fn') /\ _ ==> _` irule >> simp[]) >>
+            `inst = i` by
+              metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >> metis_tac[]) >>
+         fs[abi_encoder_registered_effect_def]) >>
+      `abi_encode_exec_frame func s t` by
+        (fs[abi_encode_exec_frame_def] >>
+         irule abi_encode_charge_difference_lift >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexists `fn'` >> simp[] >>
+         qpat_x_assum `_ + pending_alloca_size fn' t <= _` mp_tac >>
+         simp[pending_alloca_size_def]) >>
+      `cs_extends st en` by metis_tac[abi_encode_raw_relabel_structure] >>
+      drule_all start_swap_fields >> strip_tac >>
+      qpat_x_assum `window_strong_result _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE
+           [window_strong_result_def, abi_encoder_window_result_def]) >>
+      qpat_x_assum `abi_encoder_window_pre ctx func _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+      qpat_x_assum `abi_encoder_window_pre _ fn' _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+      qpat_x_assum `compile_abi_encode_to_buf _ _ _ st = _` kall_tac >>
+      qpat_x_assum `compile_abi_encode_to_buf _ _ _ (start_relabel _ _ _) = _` kall_tac >>
+      qexists `t` >>
+      qunabbrev_tac `Q` >> BETA_TAC >>
+      rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- (qpat_x_assum `abi_encoder_registered_effect (frag_ids _ _) _ _ _` mp_tac >>
+          qpat_assum `frag_ids (start_relabel _ _ _) _ = _`
+            (fn th => rewrite_tac[th]) >>
+          simp_tac (srw_ss()) [abi_encoder_registered_effect_def] >>
+          metis_tac[])
+      >- first_assum ACCEPT_TAC
+      >- (qpat_x_assum `!x w. not_fresh_at (start_relabel _ _ _) x /\ _ ==> _` mp_tac >>
+          simp_tac (srw_ss()) [start_relabel_def, lookup_var_def,
+             loweringStateRelDefsTheory.not_fresh_at_def])
+      >- (qpat_x_assum `window_alloca_growth _ _` mp_tac >>
+          simp_tac (srw_ss()) [window_alloca_growth_def] >> metis_tac[])
+      >- suspend "scratch_sizes"
+      >- (qpat_x_assum `t.vs_labels = _` mp_tac >> simp_tac (srw_ss()) [])
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- metis_tac[]
+      >- metis_tac[]
+      >- first_assum ACCEPT_TAC)
+  >- simp[]
+  >- metis_tac[abi_encode_raw_relabel_structure]
+  >- metis_tac[abi_encode_raw_relabel_structure]
+  >- metis_tac[abi_encode_raw_relabel_structure]
+  >- (irule (cj 3 exprSimAbiEncodeObliviousCodeTheory.code_step_frag_facts) >>
+      qspecl_then [`dst`, `src`, `ei`] mp_tac (cj 2 code_action_encoder_mutual) >>
+      rewrite_tac[exprSimAbiEncodeObliviousCodeTheory.code_action_def] >>
+      disch_then drule >> simp[GSYM enc_safe_opcode_def, ETA_THM])
+  >- suspend "returndata_closed"
+  >- suspend "prev_bb_closed"
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[abiEncoderExitPhiTheory.abi_encoder_core_exit_nonempty]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_raw_counted_blocks[scratch_sizes]:
+  rpt strip_tac >>
+  Cases_on `i IN window_alloca_sites fn' (frag_ids st en)`
+  >- (qpat_x_assum `!i b sz. i IN window_alloca_sites fn' _ /\ _ ==> _` irule >>
+      qexistsl [`b`, `i`] >>
+      qpat_assum `frag_ids (start_relabel _ _ _) _ = _` (fn th => rewrite_tac[th]) >>
+      metis_tac[]) >>
+  `FLOOKUP t.vs_allocas i = FLOOKUP s.vs_allocas i` by
+    (qpat_x_assum `abi_encoder_registered_effect (window_alloca_sites fn' (frag_ids st en)) _ _ _`
+       (mp_tac o REWRITE_RULE [abi_encoder_registered_effect_def]) >>
+     simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  qpat_x_assum `i IN window_alloca_sites func _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [window_alloca_sites_def]) >>
+  qpat_x_assum `!inst b sz. MEM inst (fn_insts func) /\ _ ==> _`
+    (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Resume abi_encode_raw_counted_blocks[returndata_closed]:
+  simp_tac (srw_ss()) [Abbr `Q`] >> rpt gen_tac >> strip_tac >>
+  `eval_operand out (t with vs_returndata := rd) = eval_operand out t` by
+    (Cases_on `out` >> simp_tac (srw_ss()) [eval_operand_def, lookup_var_def]) >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[abi_encode_registered_effect_bridge_updates]
+  >- (qpat_x_assum `alloca_inv t` mp_tac >>
+      simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+        alloca_next_valid_def])
+  >- (qpat_x_assum `!x w. not_fresh_at st x /\ _ ==> _` mp_tac >>
+      simp_tac (srw_ss()) [lookup_var_def])
+  >- (qpat_x_assum `window_alloca_growth s t` mp_tac >>
+      simp_tac (srw_ss()) [window_alloca_growth_def] >> metis_tac[])
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[abi_encode_exec_frame_bridge_updates]
+QED
+
+Resume abi_encode_raw_counted_blocks[prev_bb_closed]:
+  simp_tac (srw_ss()) [Abbr `Q`] >> rpt gen_tac >> strip_tac >>
+  `eval_operand out (t with vs_prev_bb := p) = eval_operand out t` by
+    (Cases_on `out` >> simp_tac (srw_ss()) [eval_operand_def, lookup_var_def]) >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[abi_encode_registered_effect_bridge_updates]
+  >- (qpat_x_assum `alloca_inv t` mp_tac >>
+      simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+        alloca_next_valid_def])
+  >- (qpat_x_assum `!x w. not_fresh_at st x /\ _ ==> _` mp_tac >>
+      simp_tac (srw_ss()) [lookup_var_def])
+  >- (qpat_x_assum `window_alloca_growth s t` mp_tac >>
+      simp_tac (srw_ss()) [window_alloca_growth_def] >> metis_tac[])
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[abi_encode_exec_frame_bridge_updates]
+QED
+
+Finalise abi_encode_raw_counted_blocks
+
