@@ -2,7 +2,8 @@
 Theory runtimeLabelBuiltins
 Ancestors
   runtimeLabelValues runtimeLabelInvariant builtinBytes context compileEnv
-  emitHelper venomInst list builtinSimple builtinSystem
+  emitHelper venomInst list builtinSimple builtinSystem builtinMath builtinHashing
+  builtinStrings
 
 Theorem rb_compile_assert_slice_bounds:
   rb_operand_ok sop /\ rb_operand_ok len /\ rb_operand_ok src_len ==>
@@ -294,3 +295,245 @@ Resume rb_compile_raw_call_finish[no_revert]:
 QED
 
 Finalise rb_compile_raw_call_finish
+
+Theorem rb_compile_unsafe_binop:
+  rb_operand_ok x /\ rb_operand_ok y ==>
+  rb_step rb_operand_ok (compile_unsafe_binop opc x y bits signed)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_unsafe_binop_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  Cases_on `bits < 256` >> Cases_on `signed` >>
+  simp[LET_THM, rb_emit_op, rb_step_return]
+QED
+
+Theorem rb_compile_unsafe_add:
+  rb_operand_ok x /\ rb_operand_ok y ==>
+  rb_step rb_operand_ok (compile_unsafe_add x y bits signed)
+Proof simp[compile_unsafe_add_def, rb_compile_unsafe_binop]
+QED
+
+Theorem rb_compile_unsafe_sub:
+  rb_operand_ok x /\ rb_operand_ok y ==>
+  rb_step rb_operand_ok (compile_unsafe_sub x y bits signed)
+Proof simp[compile_unsafe_sub_def, rb_compile_unsafe_binop]
+QED
+
+Theorem rb_compile_unsafe_mul:
+  rb_operand_ok x /\ rb_operand_ok y ==>
+  rb_step rb_operand_ok (compile_unsafe_mul x y bits signed)
+Proof simp[compile_unsafe_mul_def, rb_compile_unsafe_binop]
+QED
+
+Theorem rb_compile_unsafe_div:
+  rb_operand_ok x /\ rb_operand_ok y ==>
+  rb_step rb_operand_ok (compile_unsafe_div x y bits signed)
+Proof simp[compile_unsafe_div_def, rb_compile_unsafe_binop]
+QED
+
+Theorem rb_compile_pow_mod256:
+  rb_operand_ok x /\ rb_operand_ok y ==>
+  rb_step rb_operand_ok (compile_pow_mod256 x y)
+Proof simp[compile_pow_mod256_def, rb_emit_op]
+QED
+
+Theorem rb_compile_addmod:
+  rb_operand_ok a /\ rb_operand_ok b /\ rb_operand_ok c ==>
+  rb_step rb_operand_ok (compile_addmod a b c)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_addmod_def] >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_mulmod:
+  rb_operand_ok a /\ rb_operand_ok b /\ rb_operand_ok c ==>
+  rb_step rb_operand_ok (compile_mulmod a b c)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_mulmod_def] >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_shift:
+  rb_operand_ok v /\ rb_operand_ok bits_op ==>
+  rb_step rb_operand_ok (compile_shift v bits_op signed)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_shift_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (Cases_on `signed` >> simp[rb_emit_op]) >>
+  gen_tac >> strip_tac >> irule rb_bind_emit_op >> BETA_TAC >>
+  simp[rb_compile_select]
+QED
+
+Theorem rb_compile_keccak256_word:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_keccak256_word v)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_keccak256_word_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_keccak256_bytes:
+  rb_operand_ok p ==> rb_step rb_operand_ok (compile_keccak256_bytes p)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_keccak256_bytes_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
+QED
+
+Theorem rb_compile_keccak256_bytesm:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_keccak256_bytesm v n)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_keccak256_bytesm_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_method_id_hash:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_method_id_hash ty v)
+Proof
+  Cases_on `ty` >> simp[compile_method_id_hash_def, rb_compile_keccak256_bytes] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[compile_method_id_hash_def, rb_compile_keccak256_bytes] >>
+  rename1 `BytesT len` >> Cases_on `len` >>
+  simp[compile_method_id_hash_def, rb_compile_keccak256_bytes,
+       rb_compile_keccak256_bytesm]
+QED
+
+Theorem rb_compile_method_id_runtime:
+  rb_operand_ok v ==>
+  rb_step rb_operand_ok (compile_method_id_runtime ty v bytes4)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_method_id_runtime_def] >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_method_id_hash] >>
+  gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  Cases_on `bytes4` >> simp[rb_step_return] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_step_return]
+QED
+
+Theorem rb_compile_sha256_word:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_sha256_word v)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_sha256_word_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_sha256_bytes:
+  rb_operand_ok p ==> rb_step rb_operand_ok (compile_sha256_bytes p)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_sha256_bytes_def] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_sha256_bytesm:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_sha256_bytesm v n)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_sha256_bytesm_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> simp[rb_emit_void, rb_emit_op]
+QED
+
+Theorem rb_compile_uint2str:
+  rb_operand_ok v ==> rb_step rb_operand_ok (compile_uint2str v digits nbytes)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_uint2str_def] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
+  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  suspend "body"
+QED
+
+Resume rb_compile_uint2str[body]:
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+QED
+
+Finalise rb_compile_uint2str
