@@ -3976,6 +3976,83 @@ Proof
   MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] registration_actual_endpoint_relations_nr)
 QED
 
+Theorem registration_positional_args_joint_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) = (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, nr, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody, rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+    vars_pc_only
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                  vs_inst_idx := 0 |>) s1 /\
+    fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+    s1.vs_current_bb = st.cs_current_bb /\
+    s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+    tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
+    ~ctx_has_dalloca unit.cu_context ==>
+    ?s0 G0 tn0.
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+      (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
+      fresh_vars_wrt sa s0 /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+          !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all registration_owned_locals_joint_nr >>
+  disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (`!j. j < LENGTH args ==> ?aid q p n.
+       FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+       FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+       lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
+       (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+         val_in_memory (EL j tvs) (EL j tx.args) p mem)` by
+       (rpt strip_tac >>
+        qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n inst. _`
+          (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+        qexistsl_tac [`inst.inst_id`, `q`, `p`, `type_memory_size (EL j tvs)`] >> simp[]) >>
+     `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
+     `s0.vs_code = s1.vs_code` by
+       (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+          (qspecl_then [`ARB`,`ARB`] mp_tac) >> strip_tac >>
+        drule gas_origin_ptr_path_projections >> strip_tac >>
+        drule gas_origin_path_erase >>
+        simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
+        drule fragGasPathMemTheory.gas_path_mem_exec >>
+        metis_tac[gas_path_code_labels]) >>
+     gen_tac >> drule_all registration_actual_endpoint_relations_nr >>
+     disch_then (Q.ISPEC_THEN `H` ACCEPT_TAC)) >> simp[]
+QED
+
 Theorem registration_positional_args_joint[local]:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
    pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
@@ -4024,32 +4101,9 @@ Theorem registration_positional_args_joint[local]:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all registration_owned_locals_joint >>
-  disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
-  qexistsl_tac [`s0`, `G0`, `tn0`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >-
-    (`!j. j < LENGTH args ==> ?aid q p n.
-       FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
-       FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
-       lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
-       (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
-         val_in_memory (EL j tvs) (EL j tx.args) p mem)` by
-       (rpt strip_tac >>
-        qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n inst. _`
-          (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
-        qexistsl_tac [`inst.inst_id`, `q`, `p`, `type_memory_size (EL j tvs)`] >> simp[]) >>
-     `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
-     `s0.vs_code = s1.vs_code` by
-       (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
-          (qspecl_then [`ARB`,`ARB`] mp_tac) >> strip_tac >>
-        drule gas_origin_ptr_path_projections >> strip_tac >>
-        drule gas_origin_path_erase >>
-        simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
-        drule fragGasPathMemTheory.gas_path_mem_exec >>
-        metis_tac[gas_path_code_labels]) >>
-     gen_tac >> drule_all registration_actual_endpoint_relations >>
-     disch_then (Q.ISPEC_THEN `H` ACCEPT_TAC)) >> simp[]
+  drule_all registration_positional_args_joint_nr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
 QED
 
 (* Registration seam, proved at the shared owned endpoint:
@@ -4122,6 +4176,84 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+Theorem register_positional_args_ptr_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, nr, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody,
+       rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+    vars_pc_only
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                  vs_inst_idx := 0 |>) s1 /\
+    fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+    s1.vs_current_bb = st.cs_current_bb /\
+    s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+    tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
+    tn1.t_imm = {} ==>
+    ?s0 G0 tn0.
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
+      gas_path_mem unit.cu_context efn s1 0 (OK s0) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (s1, G1, tn1) [] (OK s0, G0, tn0)) /\
+      fresh_vars_wrt sa s0 /\
+      cenv.ce_return_pc = NONE /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+          !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (drule_all registration_supported_no_dalloca >> simp[]) >>
+  drule_all registration_positional_args_joint_nr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  `gas_path_mem unit.cu_context efn s1 0 (OK s0)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+      (qspecl_then [`ARB`, `ARB`] mp_tac) >>
+     strip_tac >> drule gas_origin_ptr_path_projections >> strip_tac >>
+     drule gas_origin_path_erase >> simp[fragGasModeTheory.gas_marked_path_def]) >>
+  `cenv.ce_return_pc = NONE` by
+    (drule compile_register_positional_args_cenv >> strip_tac >>
+     `cenv0.ce_return_pc = NONE` by
+       (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[package_external_fn_def, set_external_package_target_def] >> strip_tac >>
+        gvs[update_cenv_nonreentrant_def] >>
+        rw[update_cenv_ret_abi_def, build_compile_env_def] >>
+        rpt (pairarg_tac >> gvs[])) >>
+     qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
+       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
+QED
+
 Theorem register_positional_args_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
    pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
@@ -4175,14 +4307,7 @@ Theorem register_positional_args_ptr:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    (drule_all registration_supported_no_dalloca >> simp[]) >>
-  drule_all registration_positional_args_joint >>
+  drule_all register_positional_args_ptr_nr >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
-  `gas_path_mem unit.cu_context efn s1 0 (OK s0)` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
-      (qspecl_then [`ARB`, `ARB`] mp_tac) >>
-     strip_tac >> drule gas_origin_ptr_path_projections >> strip_tac >>
-     drule gas_origin_path_erase >> simp[fragGasModeTheory.gas_marked_path_def]) >>
   qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
 QED
