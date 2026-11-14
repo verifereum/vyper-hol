@@ -13,9 +13,8 @@ Libs
 Theorem concat_args_sim_mem:
   !args P k tops ctx func cenv cx env es sa sb s0 dv ov ow
    binst B bsz oinst.
-    compile_concat compile_expr cenv args (Var dv) (MAP (\e. let ety = expr_type e in
-                if is_bytestring_type ety then (T, 0:num)
-                else case ety of
+    compile_concat compile_expr cenv args (Var dv) (MAP (\e. if is_bytestring_type (expr_type e) then (T, 0:num)
+                else case expr_type e of
                        BaseT (BytesT (Fixed m)) => (F, m)
                      | _ => (F, 32:num)) args)
       (Var ov) sa = ((), sb) /\
