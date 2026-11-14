@@ -22,7 +22,6 @@ Theorem topcopy_store_continuation:
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   0 < type_slot_size tvt /\ 0 < type_memory_size tvt /\
   type_memory_bytes cenv typ = type_memory_size tvt /\
-  slot + type_slot_size tvt <= dimword(:256) /\
   (!gs v es1. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
     (INL v,es1) ==> value_has_type tvt v) /\
   stmt_env cenv lctx ret_ty
@@ -61,30 +60,30 @@ Theorem topcopy_store_continuation:
     ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G1 t) /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) ==>
-  ?ef u G2 tn2.
-    (!tail. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
-      (write_storage_slot cx tr (n2w slot) tvt v)
-      (ee with gas_obs := tail) = (INL (),ef with gas_obs := tail)) /\
-    (!H. valid_horizon cx st0 H ef.storage_trace ==>
-      gas_origin_ptr_path
-        (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (t,G1,tn1) [] (OK u,G2,tn2) /\
-      (?cenv''.
-        stmt_lands lctx sb (INL ()) u /\ ~u.vs_halted /\
-        (~block_is_terminated sb /\ cenv'' = cenv) /\
-        cenv_top_ext cenv cenv'' (ef with gas_obs := []).scopes /\
-        stmt_state_rel H ctx func cenv'' cx (ef with gas_obs := []) u /\
-        storage_well_formed_on cx (ef with gas_obs := []) (FST H) /\
-        return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-        s0.vs_alloca_next <= u.vs_alloca_next /\
-        ghost_inv_at (DF H) lo d cenv'' cx (ef with gas_obs := []) G2 tn2 u /\
-        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-          lookup_var x u = SOME w) /\
-        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-          FLOOKUP u.vs_allocas aid = SOME b) /\
-        (!x. not_fresh_at sa x ==>
-          FLOOKUP G2 x = FLOOKUP G0 x /\
-          op_taint tn2 (Var x) = op_taint tn0 (Var x))))
+  gas_outcome_full
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0
+    (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+      (write_storage_slot cx tr (n2w slot) tvt v))
+    (ee,t,G1,tn1)
+    (\H res ef G2 tn2 u. ?cenv''.
+      stmt_lands lctx sb res u /\ ~u.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ef.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ef u /\
+      storage_well_formed_on cx ef (FST H) /\
+      return_buf_frame d cenv'' sb u /\ alloca_history func u /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ef G2 tn2 u /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+        lookup_var x u = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+        FLOOKUP u.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==>
+        FLOOKUP G2 x = FLOOKUP G0 x /\
+        op_taint tn2 (Var x) = op_taint tn0 (Var x)))
+    (\H res ef gt r.
+      !tail. stmt_exit_ptr (RetQ H) (ef with gas_obs := tail) res gt r)
 Proof
   strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
@@ -94,6 +93,26 @@ Proof
      qexistsl_tac [`ee with gas_obs := []`, `gas_explicit marks s0.vs_gas_readings ++ []`] >>
      qpat_x_assum `!tail. _` (qspec_then `[]` ACCEPT_TAC)) >>
   `well_formed_type_value tvt` by metis_tac[evaluate_type_well_formed] >>
+  `assignable_type (get_tenv cx) (expr_type e)` by
+    (fs[type_stmt_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >> metis_tac[]) >>
+  `?writes. encode_value tvt v = SOME writes` by
+    metis_tac[value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
+  drule_all topcopy_write_endpoint >>
+  disch_then (qspecl_then [`tr`, `slot`] strip_assume_tac) >>
+  Cases_on `storage_trace_domain cx st0 ef.storage_trace`
+  >- suspend "normal" >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_bad_nil >>
+  simp[IgnAsm `ef = _`]
+QED
+
+Resume topcopy_store_continuation[normal]:
+  `slot + type_slot_size tvt <= dimword(:256)` by
+    (qpat_x_assum `storage_trace_domain cx st0 ef.storage_trace` mp_tac >>
+     qpat_assum `ef = _` SUBST_ALL_TAC >>
+     simp[storage_trace_domain_def, valid_horizon_def,
+       storage_observations_ok_def, storage_roots_fit_def]) >>
   `cs_extends sa sm /\ cs_extends sm sb` by
     metis_tac[cj 2 compile_expr_grows, cj 1 ci_mono_stmt_helpers,
       ci_mono_def, pairTheory.SND] >>
@@ -109,20 +128,21 @@ Proof
     (drule post_value_type_lowered >> strip_tac >> metis_tac[]) >>
   qpat_x_assum `expr_type e = typ` (SUBST_ALL_TAC o SYM) >>
   drule_all topcopy_assign_store_endpoint >> strip_tac >>
-  drule_all topcopy_write_endpoint >>
-  disch_then (qspecl_then [`tr`, `slot`] strip_assume_tac) >>
   `expr_sim_inv cenv cx env ee` by
     (`expr_body_pre cenv cx env e
        (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ [])` by simp[] >>
      qpat_assum `!tail. bind (eval_expr _ _) _ _ = _`
        (qspec_then `[]` assume_tac) >>
      drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_eval) >> simp[]) >>
-  qexistsl_tac [`ef`, `u`, `Gf`, `tf`] >> conj_tac
-  >- first_assum ACCEPT_TAC >>
+  `writes' = writes` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `writes' = writes` SUBST_ALL_TAC >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Gf`, `ef`, `INL ()`, `u`, `tf`] >>
+  simp[IgnAsm `ef = _`] >>
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  qexists_tac `cenv` >> suspend "post"
+  suspend "post"
 QED
 
 Resume topcopy_store_continuation[post]:
@@ -196,6 +216,10 @@ Resume topcopy_store_continuation[frames]:
 QED
 
 Resume topcopy_store_continuation[ghost]:
+  conj_tac
+  >- (`ef with gas_obs := [] = ef` by
+        simp[IgnAsm `ef = _`, vyperStateTheory.evaluation_state_component_equality] >>
+      metis_tac[]) >>
   irule (INST_TYPE [``:'a`` |-> ``:256``] store_copy_joint_frame_post_at) >>
   conj_tac >- suspend "taint" >>
   qexistsl_tac [`G1`, `ee`, `t`, `sa`, `tn1`] >>
