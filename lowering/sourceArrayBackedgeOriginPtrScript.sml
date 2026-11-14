@@ -1,6 +1,6 @@
 (* Same-witness synchronized loop backedge. *)
 Theory sourceArrayBackedgeOriginPtr
-Ancestors
+Ancestors decoderNavigationPtr
   decoderLoopBackedgeCorePtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem
   instMemFrontier sourceArrayBackedgeGasMem
   compileEnv loweringStateRelDefs wordLoadStorePtr abiDecoderContract instIdxIndep
@@ -21,28 +21,6 @@ Proof
     (simp[gas_origin_ptr_edge_def] >>
      metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
   metis_tac[gas_origin_ptr_path_rules, APPEND]
-QED
-
-Theorem backedge_joint_step[local]:
-  ~s.vs_halted /\ ~a.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
-  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-  step_inst_base i s = OK a /\
-  ptr_inst_ok D lo 0 ctx fn G tn i s ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-    (OK (a with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i a,step_taint i s a tn)
-Proof
-  strip_tac >> irule backedge_joint_edge >> simp[] >> conj_tac
-  >- (`gas_path_mem_edge ctx fn s (if i.inst_opcode = GAS then 1 else 0)
-        (OK (a with vs_inst_idx := SUC s.vs_inst_idx))` suffices_by simp[] >>
-      irule straight_line_mem_edge >> simp[] >> qexistsl_tac [`bb`,`i`] >> simp[]) >>
-  `gas_path_ptr_edge D lo ctx fn PG G tn s
-    (if i.inst_opcode = GAS then 1 else 0) (step_prov PG G i a)
-    (step_taint i s a tn) (OK (a with vs_inst_idx := SUC s.vs_inst_idx))`
-    suffices_by simp[] >>
-  irule straight_line_ptr_edge >> simp[] >> qexists_tac `bb` >> simp[]
 QED
 
 Theorem source_array_backedge_origin_ptr:
@@ -174,7 +152,7 @@ Proof
        (OK (a with vs_inst_idx := SUC (LENGTH prefix)),H,v)` by
        (simp_tac bool_ss [Abbr `H`, Abbr `v`] >>
         `SUC (LENGTH prefix) = SUC s.vs_inst_idx` by simp[] >>
-        pop_assum SUBST1_TAC >> irule backedge_joint_step >>
+        pop_assum SUBST1_TAC >> irule decoderNavigationPtrTheory.straight_line_step_origin >>
         simp[Abbr `ainst`, mk_inst_def, is_terminator_def,
           get_instruction_def, abi_decode_backedge_insts_def, EL_APPEND_EQN,
           below_frontier_no_ranges, inst_dload_in_section_other,
@@ -196,7 +174,7 @@ Proof
         `step_inst_base store aa = OK (ss with vs_inst_idx := SUC (LENGTH prefix))` by
           simp[Abbr `aa`, step_inst_inst_idx_indep, exec_result_map_def,
             Abbr `store`, mk_inst_def, is_terminator_def] >>
-        irule backedge_joint_step >> simp[] >>
+        irule decoderNavigationPtrTheory.straight_line_step_origin >> simp[] >>
         simp[Abbr `aa`, Abbr `store`, Abbr `a`, Abbr `ss`,
           mk_inst_def, is_terminator_def, get_instruction_def,
           abi_decode_backedge_insts_def, EL_APPEND_EQN, ADD1,
