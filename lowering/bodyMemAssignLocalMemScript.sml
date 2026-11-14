@@ -75,6 +75,26 @@ Proof
   qexists_tac `[]` >> simp[]
 QED
 
+Theorem assign_local_memory_bytes_pos[local]:
+  !cenv cx env es ret_ty id e env' ty.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    0 < type_memory_bytes cenv ty
+Proof
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `assignable_type env.type_defs ty` by
+    (gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+     Cases_on `type_place_target env (NameTarget id)` >> gvs[] >>
+     rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+     gvs[vyperTypeEnvTheory.type_place_target_NameTarget] >>
+     metis_tac[vyperTypeArgFitsTheory.type_widens_to_assignable_type]) >>
+  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
 Theorem assign_local_memory_type_cases[local]:
   !cenv e ty.
     (expr_type e = ty \/ lowered_value_type cenv e = ty \/
@@ -497,7 +517,6 @@ Proof
        (Cases >> simp_tac (srw_ss()) [vyperStorageBackendTheory.get_storage_def]) >>
      pop_assum (fn th => simp_tac (srw_ss())
        [vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
-  qexists_tac `cenv` >>
   simp[stmt_lands_def, cenv_top_ext_refl]
 QED
 
@@ -595,6 +614,7 @@ Proof
   `type_memory_bytes cenv lt < dimword (:256)` by simp[] >>
   `w2n sw + type_memory_bytes cenv lt <= s.vs_alloca_next` by simp[] >>
   drule_all (compile_scratch_prefix_body_path
+             |> INST_TYPE [alpha |-> ``:256``]
              |> Q.SPECL [`\H. valid_horizon cx st0 H tr`, `H0`]
              |> SIMP_RULE bool_ss []) >> strip_tac >>
   `sa.cs_next_var <= sn.cs_next_var` by
@@ -787,8 +807,6 @@ Proof
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
   qpat_x_assum `body_expr_mem_ok _ _` kall_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
-  disch_then (qspecl_then [`st0`, `sa`, `sV`, `sB`, `vv`, `op`, `s0`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -948,8 +966,8 @@ Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:
      qpat_x_assum `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> _` drule >> simp[]) >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by
     metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
-  qexists_tac `cenv` >>
-  simp[stmt_lands_def, cenv_top_ext_refl])
+  fs[stmt_lands_def, cenv_top_ext_refl,
+     exprSimWordArgsTheory.stmt_state_rel_gas_obs])
 QED
 
 Finalise compile_assign_local_memory_widen_stmt_frag_mem

@@ -6,7 +6,7 @@ Ancestors
   typedMemoryCopy venomState stmtSimDefs fragGasMode fragExec venomInst
   exprSimAlloc valueEncodingProps finite_map loweringHalt
 
-Theorem immutable_assign_normalize_prefix:
+Theorem immutable_assign_normalize_prefix_frame:
   compile_alloc_buffer (type_memory_size dtv) sa = (buf,mid) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty mid = ((),sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
@@ -41,7 +41,9 @@ Theorem immutable_assign_normalize_prefix:
     (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP r.vs_allocas aid = SOME entry) /\
-    alloca_frame ce es sa s ce es r
+    alloca_frame ce es sa s ce es r /\
+    r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+    r.vs_requests = s.vs_requests /\ r.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `cs_extends sa mid` by metis_tac[compile_alloc_buffer_extends] >>
@@ -64,6 +66,13 @@ Proof
          eval_operands_def, eval_operand_def, lookup_var_def, AllCaseEqs()] >>
      rpt strip_tac >>
      qpat_x_assum `!b sz. FLOOKUP s.vs_allocas sa.cs_next_id = _ ==> _` drule >> simp[]) >>
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `run_inst_seq _ _ = OK raw` mp_tac >>
+     simp[run_inst_seq_def, mk_inst_def,
+          venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+          venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[venomStateTheory.update_var_def]) >>
   qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
   qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
   `!x. src = Var x ==> not_fresh_at mid x` by metis_tac[] >>
@@ -117,5 +126,50 @@ Proof
      rpt strip_tac >> first_x_assum irule >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >>
      metis_tac[]) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `typed_copy_state_frame _ _ _ _ _`
+       (strip_assume_tac o SRULE [typed_copy_state_frame_def,
+          venom_state_component_equality]) >> simp[]) >>
   qexistsl_tac [`t`,`w`] >> simp[] >> metis_tac[]
+QED
+
+Theorem immutable_assign_normalize_prefix:
+  compile_alloc_buffer (type_memory_size dtv) sa = (buf,mid) /\
+  compile_store_memory_typed ce buf.buf_operand dty src sty mid = ((),sm) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv.
+       evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  stmt_state_rel H ctx func ce cx es s /\
+  eval_operand src s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+  type_memory_size dtv < dimword (:256) /\
+  w2n sw + type_memory_size stv < dimword (:256) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  (!b sz. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,sz) ==>
+     w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r pw. gas_marked_path F ctx func s 0 (OK r) /\
+    stmt_state_rel H ctx func ce cx es r /\
+    val_in_memory dtv v (w2n pw) r.vs_memory /\
+    eval_operand buf.buf_operand r = SOME pw /\
+    FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n pw,type_memory_size dtv) /\
+    w2n pw + type_memory_size dtv < dimword (:256) /\
+    ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+    r.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP r.vs_allocas aid = SOME entry) /\
+    alloca_frame ce es sa s ce es r
+Proof
+  strip_tac >> drule_all immutable_assign_normalize_prefix_frame >> metis_tac[]
 QED
