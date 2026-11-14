@@ -371,6 +371,10 @@ Theorem raw_log_post_gas_obs:
   expr_post H ctx func cenv cx e es0 sa sb s0 ee v op t ==>
   expr_post H ctx func cenv cx e es0 sa sb s0 (ee with gas_obs := gs) v op t
 Proof
+  `storage_well_formed_on cx (ee with gas_obs := gs) (FST H) <=>
+   storage_well_formed_on cx ee (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
   `locals_kept cenv es0 (ee with gas_obs := gs) s0 t <=>
    locals_kept cenv es0 ee s0 t` by
     simp[NoAsms, locals_kept_def, popped_kept_def] >>
@@ -378,7 +382,7 @@ Proof
   `stmt_state_rel H ctx func cenv cx (ee with gas_obs := gs) t` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `gs`] mp_tac) >>
-     simp[]) >> simp[]
+     simp[]) >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem raw_log_alloc_return_summary:
