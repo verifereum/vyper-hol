@@ -12,6 +12,7 @@ Ancestors
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata
+  bodyFullMemoryFrames bodyFullMemoryCopy bodyFullMemoryStore
   stmtSimAssignAttr exprSimFieldLayout exprSimHyps exprSimSource
   supportedExprForms supportedExprs supportedExprTraverse supportedStmtTraverse
   vyperTypeEnv vyperTypeInvariants vyperTypeContractStaticMaps

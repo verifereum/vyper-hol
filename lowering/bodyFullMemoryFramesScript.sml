@@ -1,6 +1,9 @@
 (* Constructor-compatible frames for local overwrites and buffer allocation. *)
 Theory bodyFullMemoryFrames
 Ancestors
+  bodySim exprSimHyps structFieldsProps bodyStorageMetadata compileVyper immutableLocationProps
+  vyperTypeInvariants vyperTypeSystem vyperTypeContract vyperTypeContractStaticMaps
+  exprSimHypsDefs gasContext immSectionDead
   assignTuplePtrLocalCopyGhost assignTuplePtrStoreWord assignTuplePtrCopyLen
   bodyPtrDefs robustCopyTransportPtr localPtrsProps compileEnv loweringStateRelDefs
   storageNormalizationOwnershipPtr reasonAllocationFramePtr exprSimAlloc
@@ -10,6 +13,122 @@ Ancestors
   unitTransformDefs memSafeRun contextCodegenRel codegenRel fragExecMem
   context ptrDiscipline ptrSafeRun venomInst venomInstProofs venomExecSemantics
   venomState vyperState vyperLookup finite_map pred_set list rich_list words
+
+(* A positive local cannot sit inside the contiguous immutable prefix. *)
+Theorem immutable_intervals_lower_bound[local]:
+  !tops off b n.
+    off <= b /\ 0 < n /\
+    (!pre vis name ty slot post.
+      tops = pre ++ VariableDecl vis Immutable name ty slot :: post ==>
+      regions_disjoint (off + compute_immutables_len sft pre)
+        (type_mem_bytes sft ty) b n) ==>
+    off + compute_immutables_len sft tops <= b
+Proof
+  Induct >- simp[compute_immutables_len_def] >> rpt gen_tac >> strip_tac >>
+  `!pre vis name ty slot post.
+    tops = pre ++ VariableDecl vis Immutable name ty slot :: post ==>
+    regions_disjoint (off + compute_immutables_len sft [h] +
+      compute_immutables_len sft pre) (type_mem_bytes sft ty) b n` by
+    (rpt strip_tac >>
+     qpat_x_assum `!pre vis name ty slot post. _`
+       (qspecl_then [`h::pre`,`vis`,`name`,`ty`,`slot`,`post`] mp_tac) >>
+     ONCE_REWRITE_TAC [immutable_len_cons] >>
+     asm_simp_tac bool_ss [CONJUNCT1 compute_immutables_len_def,
+       APPEND, arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_ASSOC]) >>
+  `off + compute_immutables_len sft [h] <= b` by
+    (Cases_on `h` >> simp[compute_immutables_len_def] >>
+     CASE_TAC >> gvs[compute_immutables_len_def] >>
+     qpat_x_assum `!pre vis name ty slot post. h::tops = _ ==> _`
+       (qspec_then `[]` mp_tac) >>
+     simp[compute_immutables_len_def,regions_disjoint_def] >> decide_tac) >>
+  ONCE_REWRITE_TAC [immutable_len_cons] >>
+  first_x_assum (qspecl_then [`off + compute_immutables_len sft [h]`,`b`,`n`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem body_full_local_region_lower_bound:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es0 /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  local_region cenv es.scopes s id b n /\ 0 < n /\
+  dead_lo_ok H D lo cenv cx ==> lo <= b
+Proof
+  strip_tac >> reverse (Cases_on `cenv.ce_is_ctor`) >- gvs[dead_lo_ok_def] >>
+  `env_context_consistent env cx` by
+    fs[expr_sim_inv_def,env_consistent_def] >>
+  `get_module_code cx NONE = SOME tops /\
+   cenv.ce_module = NONE /\
+   cenv.ce_struct_fields = make_struct_fields_map tops /\
+   cenv.ce_module_vars = add_immutable_locations
+     (get_struct_fields (make_struct_fields_map tops))
+     tops 0 (add_module_var_locations tops FEMPTY) /\
+   cenv.ce_module_var_type = build_var_type_map tops /\
+   ALL_DISTINCT (FLAT (MAP
+     (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    fs[body_inv_def,cenv_module_pins_def] >>
+  `!pre vis name ty slot post.
+    tops = pre ++ VariableDecl vis Immutable name ty slot :: post ==>
+    regions_disjoint
+      (compute_immutables_len (get_struct_fields cenv.ce_struct_fields) pre)
+      (type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty) b n` by
+    suspend "intervals" >>
+  `compute_immutables_len (get_struct_fields cenv.ce_struct_fields) tops <= b` by
+    (qspecl_then [`tops`,`0`,`b`,`n`] mp_tac
+      (Q.INST [`sft` |-> `get_struct_fields cenv.ce_struct_fields`]
+        immutable_intervals_lower_bound) >>
+     PURE_REWRITE_TAC [arithmeticTheory.ADD_CLAUSES] >>
+     (impl_tac >-
+       (conj_tac >- decide_tac >> conj_tac >> first_assum ACCEPT_TAC)) >>
+     simp_tac bool_ss []) >>
+  qpat_assum `cenv.ce_struct_fields = _` (fn th =>
+    qpat_x_assum `compute_immutables_len _ tops <= b`
+      (assume_tac o REWRITE_RULE [th])) >>
+  fs[dead_lo_ok_def,cx_tops_def,imm_len_def]
+QED
+
+Resume body_full_local_region_lower_bound[intervals]:
+  rpt gen_tac >> strip_tac >>
+  `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
+  `~MEM (NONE,name)
+    (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) post))` by
+    (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+     qpat_assum `tops = _` (fn th => REWRITE_TAC [th]) >>
+     simp[ALL_DISTINCT_APPEND,toplevel_vtype_keys_toplevel_def]) >>
+  `!v nm t sl. MEM (VariableDecl v Immutable nm t sl) post ==> nm <> name` by
+    metis_tac[module_toplevel_vtype_key_MEM_Variable] >>
+  `FLOOKUP cenv.ce_module_vars (NONE,name) = SOME (ImmutableLoc
+    (compute_immutables_len (get_struct_fields cenv.ce_struct_fields) pre))` by
+    (qpat_assum `cenv.ce_struct_fields = _` (fn sf =>
+       qpat_assum `cenv.ce_module_vars = _` (fn vs =>
+         PURE_REWRITE_TAC [REWRITE_RULE [GSYM sf] vs])) >>
+     qpat_assum `tops = _` (fn th => PURE_REWRITE_TAC [th]) >>
+     irule (SIMP_RULE bool_ss [arithmeticTheory.ADD_CLAUSES]
+       (Q.INST [`off` |-> `0`] add_immutable_locations_declaration_lookup)) >>
+     metis_tac[]) >>
+  `cenv.ce_module_var_type (NONE,name) = SOME ty` by
+    metis_tac[build_maps_variable] >>
+  `FLOOKUP env.bare_globals (NONE,name) = SOME ty` by
+    (fs[env_context_consistent_def,bare_globals_complete_def] >> metis_tac[]) >>
+  `?tv. evaluate_type (get_tenv cx) ty = SOME tv` by suspend "type" >>
+  `type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty =
+    type_memory_size tv` by
+    metis_tac[type_mem_bytes_type_memory_bytes,expr_sim_inv_memory_size] >>
+  `immutable_decl_sep cenv cx es.scopes s.vs_vars s.vs_allocas s.vs_alloca_next` by
+    fs[stmt_state_rel_def,immutable_alloca_sep_def] >>
+  fs[immutable_decl_sep_alt] >> metis_tac[]
+QED
+
+Resume body_full_local_region_lower_bound[type]:
+  `FLOOKUP env.toplevel_vtypes (NONE,name) = SOME (Type ty)` by
+    metis_tac[env_context_consistent_bare_global_find_NONE] >>
+  qpat_assum `env_context_consistent _ _`
+    (strip_assume_tac o REWRITE_RULE [env_context_consistent_def]) >>
+  qpat_x_assum `!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==> _`
+    (qspecl_then [`NONE`,`name`,`Type ty`] mp_tac) >>
+  simp[well_formed_vtype_def,well_formed_type_def,optionTheory.IS_SOME_EXISTS]
+QED
+
+Finalise body_full_local_region_lower_bound
 
 Theorem body_full_local_scope_ghost_post:
   ghost_inv_at D lo d cenv cx es G tn s /\
