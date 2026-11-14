@@ -109,3 +109,68 @@ Proof
            is_terminator_def, exec_result_map_def]) >>
   fs[eval_operand_def, lookup_var_def]
 QED
+
+Theorem double_check_runtime_endpoint[local]:
+  MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
+  code = [mk_inst id opc1 [x;Lit lower] [a];
+    mk_inst (id+1) ISZERO [Var a] [b];
+    mk_inst (id+2) opc2 [x;Lit upper] [c];
+    mk_inst (id+3) ISZERO [Var c] [d];
+    mk_inst (id+4) AND [Var b;Var d] [e];
+    mk_inst (id+5) ASSERT [Var e] []] /\
+  (!z. x = Var z ==> ~MEM z [a;b;c;d;e]) ==>
+  (!t. run_inst_seq code s = OK t ==>
+    state_frame t = state_frame s /\
+    (!z. ~MEM z [a;b;c;d;e] ==> lookup_var z t = lookup_var z s) /\
+    eval_operand x t = eval_operand x s) /\
+  (!err t. run_inst_seq code s = Abort err t ==>
+    state_frame t = state_frame (revert_state (set_returndata [] s)) /\
+    (!z. ~MEM z [a;b;c;d;e] ==> lookup_var z t = lookup_var z s) /\
+    eval_operand x t = eval_operand x s)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt gen_tac >> disch_tac >>
+      `((t with vs_vars := s.vs_vars) = s) /\
+       (!z. ~MEM z [a;b;c;d;e] ==> lookup_var z t = lookup_var z s)` by
+        (irule scalar_double_check_runtime_frame >> metis_tac[]) >>
+      conj_tac
+      >- (qpat_x_assum `(t with vs_vars := _) = s` (mp_tac o AP_TERM ``state_frame``) >>
+          simp[stateFrameTheory.state_frame_def]) >>
+      conj_tac >- simp[] >>
+      `t.vs_labels = s.vs_labels` by
+        (qpat_x_assum `(t with vs_vars := _) = s`
+          (mp_tac o AP_TERM ``\v:venom_state. v.vs_labels``) >> simp[]) >>
+      Cases_on `x` >> simp[eval_operand_def] >> metis_tac[]) >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `code = _` SUBST_ALL_TAC >>
+  qpat_x_assum `run_inst_seq _ s = _` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs(),
+    bodyPtrSignedConvertScalarOpsTheory.convert_scalar_no_abort,
+    bodyPtrSignedConvertScalarOpsTheory.scalar_iszero_no_abort] >> strip_tac >>
+  qpat_x_assum `step_inst_base (mk_inst id opc1 _ _) _ = _`
+    (mp_then Any mp_tac bodyPtrSignedConvertScalarOpsTheory.convert_scalar_run_shape) >> simp[] >>
+  disch_then (qx_choose_then `w1` SUBST_ALL_TAC) >>
+  qpat_x_assum `step_inst_base (mk_inst _ opc2 _ _) _ = _`
+    (mp_then Any mp_tac bodyPtrSignedConvertScalarOpsTheory.convert_scalar_run_shape) >> simp[] >>
+  disch_then (qx_choose_then `w2` SUBST_ALL_TAC) >>
+  qpat_x_assum `MEM opc1 _` kall_tac >>
+  qpat_x_assum `MEM opc2 _` kall_tac >>
+  qpat_x_assum `step_inst_base (mk_inst _ ISZERO _ _) _ = _`
+    (mp_then Any strip_assume_tac bodyPtrSignedConvertIszeroTheory.iszero_run_shape) >> gvs[] >>
+  qpat_x_assum `step_inst_base (mk_inst _ ISZERO _ _) _ = _`
+    (mp_then Any strip_assume_tac bodyPtrSignedConvertIszeroTheory.iszero_run_shape) >> gvs[] >>
+  qpat_x_assum `step_inst_base (mk_inst _ AND _ _) _ = _`
+    (mp_then Any mp_tac bodyPtrSignedConvertScalarOpsTheory.convert_scalar_run_shape) >> simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = Abort _ _` mp_tac >>
+  CONV_TAC (LAND_CONV (LAND_CONV (REWRITE_CONV
+    [step_inst_base_def, mk_inst_def, instruction_accessors,
+     instruction_accfupds, combinTheory.K_THM, opcode_case_def]))) >>
+  simp[AllCaseEqs(), eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  strip_tac >> gvs[] >>
+  simp[stateFrameTheory.state_frame_def, revert_state_def, set_returndata_def,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `x` >> gvs[eval_operand_def, lookup_var_def, revert_state_def,
+                      set_returndata_def, update_var_def, FLOOKUP_UPDATE]
+QED
