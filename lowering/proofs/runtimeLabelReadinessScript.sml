@@ -3,6 +3,7 @@
    labels occupy disjoint prefixed namespaces. *)
 Theory runtimeLabelReadiness
 Ancestors
+  runtimeLabelStmtIO runtimeLabelPrimitives
   compileVyper vyperCompiler venomInst list runtimeLabelInvariant runtimeLabelValues
   runtimeLabelABI runtimeLabelBuiltins runtimeLabelExpr runtimeLabelStmt
   runtimeLabelGenerators entryExtractionCodePredicate entryCodePredicate loweringShapeDefs

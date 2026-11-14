@@ -1,145 +1,9 @@
 (* Statement boundaries consume the expression certificate, not its proof. *)
 Theory runtimeLabelStmt
 Ancestors
-  runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
+  runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelBuiltinArithmetic
+  runtimeLabelStmtIO runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   stmtLowering exprLowering compileEnv context emitHelper venomInst list
-
-Theorem rb_compile_log_save_arg:
-  rb_env_ok ce /\ rb_operand_ok op ==>
-  rb_step rb_operand_ok (compile_log_save_arg ce src_ty op es)
-Proof
-  strip_tac >> pure_rewrite_tac[compile_log_save_arg_def] >>
-  IF_CASES_TAC >> simp[rb_step_return, rb_compile_materialize_vv,
-                       rb_value_ok_def]
-QED
-
-Theorem rb_compile_log_eval_all:
-  !es. rb_expr_contract /\ rb_env_ok ce ==>
-  rb_step (EVERY (rb_operand_ok o FST)) (compile_log_eval_all ce es)
-Proof
-  Induct >> simp[compile_log_eval_all_def, rb_step_return] >>
-  rpt strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
-  gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_log_save_arg] >>
-  gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `EVERY (rb_operand_ok o FST)` >>
-  BETA_TAC >> reverse conj_tac >- simp[] >>
-  simp[rb_step_return]
-QED
-
-Theorem rb_compile_log_topic_ops:
-  !ops. EVERY (rb_operand_ok o FST) ops ==>
-  rb_step (EVERY rb_operand_ok) (compile_log_topic_ops ops)
-Proof
-  Induct >> simp[compile_log_topic_ops_def, rb_step_return] >>
-  rpt strip_tac >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_encode_log_topic] >>
-  gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[] >> simp[rb_step_return]
-QED
-
-Theorem rb_split_log_ops:
-  !ops flags. EVERY (rb_operand_ok o FST) ops ==>
-  EVERY (rb_operand_ok o FST) (FST (split_log_ops ops flags)) /\
-  EVERY (rb_operand_ok o FST) (SND (split_log_ops ops flags))
-Proof
-  recInduct split_log_ops_ind >>
-  simp[split_log_ops_def] >> rpt strip_tac >>
-  pairarg_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem rb_compile_log_store_data:
-  !ops tys buf off. rb_env_ok ce /\ EVERY (rb_operand_ok o FST) ops /\
-  rb_operand_ok buf ==>
-  rb_step (K T) (compile_log_store_data ce ops tys buf off)
-Proof
-  Induct >> Cases_on `tys` >>
-  simp[compile_log_store_data_def, rb_step_return, rb_emit_void] >>
-  rpt strip_tac >>
-  irule rb_bind_emit_op >> BETA_TAC >> simp[] >>
-  gen_tac >> strip_tac >> irule rb_ignore >>
-  conj_tac >- simp[rb_compile_store_memory] >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem rb_compile_load_tuple_elements:
-  !tys off. rb_operand_ok base_op ==>
-  rb_step (EVERY rb_operand_ok) (compile_load_tuple_elements ce base_op tys off)
-Proof
-  Induct >> simp[compile_load_tuple_elements_def, rb_step_return] >>
-  rpt strip_tac >>
-  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[] >> simp[rb_step_return]
-QED
-
-Theorem rb_compile_internal_return:
-  rb_env_ok ce /\ rb_operand_ok pc /\
-  (case rv of NONE => T | SOME v => rb_operand_ok v) /\
-  (case buf of NONE => T | SOME b => rb_operand_ok b) ==>
-  rb_step (K T) (compile_internal_return ce rv pc n rty sty tys buf)
-Proof
-  strip_tac >> pure_rewrite_tac[compile_internal_return_def] >>
-  Cases_on `n > 0` >> simp[]
-  >- (Cases_on `rv` >> gvs[rb_emit_inst] >>
-      Cases_on `tys = []` >> simp[rb_emit_inst] >>
-      irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
-      reverse conj_tac >- simp[rb_compile_load_tuple_elements] >>
-      gen_tac >> strip_tac >> simp[rb_emit_inst, EVERY_APPEND]) >>
-  Cases_on `buf` >> gvs[rb_emit_inst] >>
-  Cases_on `rv` >> gvs[rb_emit_inst] >>
-  irule rb_ignore >> simp[rb_compile_store_memory, rb_emit_inst]
-QED
-
-Theorem rb_compile_external_return:
-  (case rv of NONE => T | SOME v => rb_operand_ok v) ==>
-  rb_step (K T) (compile_external_return rv prim raw info maxsz guard key transient view)
-Proof
-  strip_tac >> pure_rewrite_tac[compile_external_return_def] >>
-  irule rb_ignore >> conj_tac
-  >- (Cases_on `guard` >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
-  Cases_on `rv` >> gvs[rb_emit_inst] >>
-  Cases_on `raw` >> simp[]
-  >- (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-      simp[rb_emit_inst]) >>
-  Cases_on `prim` >> simp[]
-  >- (irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
-      reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
-      gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-      irule rb_bind_return >> BETA_TAC >>
-      irule rb_ignore >> simp[rb_emit_void, rb_emit_inst]) >>
-  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
-  gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_bind_return >> BETA_TAC >>
-  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_abi_encode] >>
-  gen_tac >> strip_tac >> simp[rb_emit_inst]
-QED
-
-Theorem rb_compile_internal_return_from_env:
-  rb_env_ok ce /\ rb_operand_ok v /\ rb_operand_ok rpc ==>
-  rb_step (K T) (compile_internal_return_from_env ce ty sty v rpc)
-Proof
-  strip_tac >> pure_rewrite_tac[compile_internal_return_from_env_def] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_return_unlock] >>
-  irule rb_step_bind >>
-  qexists_tac `\b. case b of NONE => T | SOME op => rb_operand_ok op` >>
-  BETA_TAC >> reverse conj_tac
-  >- (Cases_on `ce.ce_return_buf` >> simp[rb_step_return] >>
-      rename1 `SOME loc` >> Cases_on `loc` >> simp[rb_step_return]
-      >- (irule rb_bind_emit_op >> BETA_TAC >> simp[rb_step_return]) >>
-      gvs[rb_env_ok_def, rb_location_ok_def, rb_step_return]) >>
-  gen_tac >> strip_tac >> irule rb_bind_return >> BETA_TAC >>
-  irule rb_compile_internal_return >> simp[]
-QED
 
 Theorem rb_compile_mcopy_guard:
   rb_step (K T) action ==> rb_step (K T) (compile_mcopy_guard ce action)
@@ -157,7 +21,7 @@ Proof
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
@@ -165,19 +29,19 @@ Proof
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
   rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   rpt (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   simp[rb_emit_inst]
 QED
@@ -195,7 +59,7 @@ Proof
   gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_unwrap_value] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_store_memory] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_store_memory] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -211,12 +75,12 @@ Proof
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
   irule rb_bind_return >> BETA_TAC >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_custom_error_store_args] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_custom_error_store_args] >>
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
   irule rb_bind_return >> BETA_TAC >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   IF_CASES_TAC
   >- (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
       simp[rb_emit_inst]) >>
@@ -249,7 +113,7 @@ Proof
   reverse conj_tac >- (Cases_on `signed` >> simp[rb_emit_op]) >>
   gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   simp[rb_emit_void]
@@ -261,7 +125,7 @@ Theorem rb_compile_iter_elem_copy:
 Proof
   strip_tac >> pure_rewrite_tac[compile_iter_elem_copy_def] >>
   Cases_on `slots` >> simp[]
-  >- (irule rb_ignore >> simp[rb_compile_slot_to_memory, rb_step_return]) >>
+  >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_slot_to_memory, rb_step_return]) >>
   Cases_on `loc <> LocMemory` >> simp[]
   >- (Cases_on `n <= 32` >> simp[]
       >- (irule rb_bind_ptr_load >> BETA_TAC >>
@@ -288,16 +152,16 @@ Proof
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
       irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_step_return] >> gen_tac >> strip_tac >>
-      irule rb_ignore >> simp[rb_compile_copy_memory, rb_compile_store_memory])
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_copy_memory, rb_compile_store_memory])
   >~ [`emit_inst INVALID [] []`]
-  >- (irule rb_ignore >> simp[rb_emit_inst, rb_step_return]) >>
+  >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]) >>
   (irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac
   >- (IF_CASES_TAC >> simp[rb_step_return] >>
       irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-      irule rb_ignore >> simp[cj 1 rb_typed_memory, rb_step_return]) >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[cj 1 rb_typed_memory, rb_step_return]) >>
   gen_tac >> strip_tac >>
   Cases_on `prim` >> simp[rb_emit_void, cj 1 rb_slots] >>
   gvs[rb_env_ok_def, rb_compile_imm_store_word] >>
@@ -339,13 +203,13 @@ Proof
       >- (irule rb_compile_get_target_ptr >> gvs[rb_expr_contract_def]) >>
       gen_tac >> strip_tac >>
       rpt (irule rb_bind_return >> BETA_TAC) >>
-      irule rb_ignore >> reverse conj_tac >- gvs[] >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- gvs[] >>
       Cases_on `is_word_type src_ty` >> simp[]
       >- (Cases_on `is_word_type (case SND (SND x) of SOME (ValPT t) => t | _ => src_ty)` >>
           simp[rb_emit_void] >> irule rb_compile_store_at_loc >>
           gvs[rb_env_ok_def]) >>
       irule rb_compile_assign_value >> gvs[]) >>
-  irule rb_ignore >> gvs[rb_emit_void]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> gvs[rb_emit_void]
 QED
 
 Theorem rb_compile_tuple_unpack:
@@ -361,7 +225,7 @@ Proof
       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
       irule rb_bind_return >> BETA_TAC >>
-      irule rb_ignore >> simp[rb_emit_void, rb_step_return]) >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_void, rb_step_return]) >>
   gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `EVERY rb_operand_ok` >> BETA_TAC >>
   simp[rb_compile_tuple_load_all, rb_compile_tuple_store_all]
@@ -408,12 +272,12 @@ Proof
   >> suspend "stmts"
 QED
 Resume compile_stmts_no_runtime_begin[expr]:
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (irule rb_step_weaken >> qexists_tac `rb_value_ok` >>
       gvs[rb_expr_contract_def]) >> simp[rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[annassign]:
-  irule rb_ignore >> conj_tac >- simp[rb_emit_local_alloca] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_local_alloca] >>
   irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- gvs[rb_expr_contract_def] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
@@ -472,43 +336,43 @@ Resume compile_stmts_no_runtime_begin[assert_bare]:
   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
   gen_tac >> strip_tac >>
   ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[assert_unreachable]:
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
   gen_tac >> strip_tac >>
   ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[assert_reason]:
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
   gen_tac >> strip_tac >>
   ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   rpt (irule rb_bind_return >> BETA_TAC) >>
   irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_reason_message] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_revert_with_reason] >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_revert_with_reason] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[assert_custom]:
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
   gen_tac >> strip_tac >>
   ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_revert_with_custom_error] >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_revert_with_custom_error] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[raise_reason]:
   irule rb_step_bind >> qexists_tac `rb_value_ok` >> BETA_TAC >>
@@ -539,7 +403,7 @@ Resume compile_stmts_no_runtime_begin[append]:
       irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
       gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-      irule rb_ignore >> simp[rb_compile_store_memory, rb_step_return]) >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_store_memory, rb_step_return]) >>
   gen_tac >> strip_tac >> irule rb_bind_return >> BETA_TAC >>
   irule rb_compile_dynarray_append >> gvs[]
 QED
@@ -550,10 +414,10 @@ Resume compile_stmts_no_runtime_begin[continue]:
   gvs[rb_loop_ok_def, rb_emit_inst, rb_operand_ok_def]
 QED
 Resume compile_stmts_no_runtime_begin[catchall1]:
-  irule rb_ignore >> simp[rb_emit_inst, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[catchall2]:
-  irule rb_ignore >> simp[rb_emit_inst, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[stmts]:
   irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
@@ -561,7 +425,7 @@ Resume compile_stmts_no_runtime_begin[stmts]:
   gen_tac >> strip_tac >> IF_CASES_TAC >- simp[rb_step_return] >>
   irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_declare_stmt_local] >>
-  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac >>
+  gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
@@ -570,21 +434,21 @@ Resume compile_stmts_no_runtime_begin[if]:
   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
   gen_tac >> strip_tac >>
   ntac 3 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[] >>
   irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_step_def, comp_get_def] >> gen_tac >> strip_tac >>
   irule rb_bind_return >> BETA_TAC >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[] >>
   irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_step_def, comp_get_def] >> gen_tac >> strip_tac >>
   irule rb_bind_return >> BETA_TAC >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
   IF_CASES_TAC >> simp[rb_step_return] >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 Resume compile_stmts_no_runtime_begin[return_none]:
   `rb_step (K T)
@@ -595,13 +459,13 @@ Resume compile_stmts_no_runtime_begin[return_none]:
          (emit_inst STOP [] [])) env.ce_nonreentrant)` by
     (Cases_on `env.ce_ctor_exit_label` >> simp[]
      >- (pairarg_tac >> simp[] >>
-         irule rb_ignore >> simp[rb_emit_inst] >>
+         irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst] >>
          IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
      gvs[rb_env_ok_def, rb_operand_ok_def, rb_emit_inst]) >>
   Cases_on `env.ce_return_pc` >> simp[] >> rename1 `_ = SOME loc` >>
   `rb_location_ok loc` by gvs[rb_env_ok_def] >>
   Cases_on `loc` >> gvs[rb_location_ok_def] >>
-  (irule rb_ignore >> conj_tac >- simp[rb_compile_return_unlock])
+  (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_return_unlock])
   >- (irule rb_bind_emit_op >> simp[rb_emit_inst]) >> simp[rb_emit_inst]
 QED
 
@@ -620,7 +484,7 @@ Resume compile_stmts_no_runtime_begin[log]:
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
   irule rb_bind_return >> BETA_TAC >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_log_store_data] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_log_store_data] >>
   rpt (irule rb_bind_return >> BETA_TAC) >>
   irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
@@ -655,14 +519,14 @@ Resume compile_stmts_no_runtime_begin[return_external]:
        reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
        gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
        irule rb_bind_return >> BETA_TAC >>
-       irule rb_ignore >> simp[cj 1 rb_typed_memory, rb_step_return]) >>
+       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[cj 1 rb_typed_memory, rb_step_return]) >>
    gen_tac >> strip_tac >> IF_CASES_TAC
-   >- (simp[] >> irule rb_ignore >> conj_tac
+   >- (simp[] >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
        >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
        irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
        reverse conj_tac >- simp[rb_compile_alloc_buffer] >>
        gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-       irule rb_ignore >> simp[cj 1 rb_typed_memory, rb_compile_external_return]) >>
+       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[cj 1 rb_typed_memory, rb_compile_external_return]) >>
    simp[rb_compile_external_return])
 QED
 
@@ -672,19 +536,19 @@ Resume compile_stmts_no_runtime_begin[range]:
     gen_tac >> strip_tac) >>
   irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_declare_local] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_local_alloca] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_local_alloca] >>
   ntac 5 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac
   >- (Cases_on `start_e` >> simp[rb_emit_op, rb_step_return] >>
       Cases_on `end_e` >> simp[rb_emit_op, rb_step_return] >>
       CASE_TAC >> simp[rb_emit_op, rb_step_return] >>
       CASE_TAC >> simp[rb_emit_op, rb_step_return]) >>
-  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+  gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (Cases_on `start_e` >> simp[rb_compile_range_bound_checks, rb_step_return] >>
       Cases_on `end_e` >> simp[rb_compile_range_bound_checks, rb_step_return] >>
       CASE_TAC >> simp[rb_compile_range_bound_checks, rb_step_return] >>
@@ -694,24 +558,24 @@ QED
 
 Resume compile_stmts_no_runtime_begin[range_tail]:
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (rename1 `rb_env_ok bce` >>
       Cases_on `FLOOKUP bce.ce_vars id` >> simp[rb_emit_void] >>
       rename1 `_ = SOME loc` >>
       `rb_location_ok loc` by metis_tac[rb_env_ok_def] >>
       Cases_on `loc` >> gvs[rb_location_ok_def, rb_emit_void]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (first_x_assum irule >> simp[rb_loop_ok_def, rb_operand_ok_def]) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  ntac 2 (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 
 Resume compile_stmts_no_runtime_begin[iter]:
@@ -727,24 +591,24 @@ Resume compile_stmts_no_runtime_begin[iter]:
   gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_declare_local] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_local_alloca] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_local_alloca] >>
   ntac 5 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_step_return] >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
       irule rb_bind_emit_op >> BETA_TAC >> simp[] >> simp[rb_emit_void]) >>
   suspend "iter_tail"
 QED
 Resume compile_stmts_no_runtime_begin[iter_tail]:
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_return >> BETA_TAC >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
@@ -753,20 +617,20 @@ Resume compile_stmts_no_runtime_begin[iter_tail]:
   irule rb_bind_emit_op >> BETA_TAC >>
   reverse conj_tac >- (simp[] >> irule rb_value_operand >> first_assum MATCH_ACCEPT_TAC) >>
   gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (rename1 `rb_env_ok bce` >>
       Cases_on `FLOOKUP bce.ce_vars id` >> simp[rb_emit_void] >>
       rename1 `_ = SOME loc` >>
       `rb_location_ok loc` by metis_tac[rb_env_ok_def] >>
       Cases_on `loc` >> gvs[rb_location_ok_def, rb_emit_void,
         rb_compile_iter_elem_copy]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (first_x_assum irule >> simp[rb_loop_ok_def, rb_operand_ok_def]) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_jmp_if_not_terminated] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  ntac 2 (irule rb_ignore >> (conj_tac >- simp[rb_emit_inst])) >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  ntac 2 (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> (conj_tac >- simp[rb_emit_inst])) >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 
 Finalise compile_stmts_no_runtime_begin

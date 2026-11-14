@@ -1,7 +1,7 @@
 (* ABI operand exclusion, using the context/value preservation boundary. *)
 Theory runtimeLabelABI
 Ancestors
-  runtimeLabelValues runtimeLabelInvariant abiEncoder emitHelper compileEnv
+  runtimeLabelPrimitives runtimeLabelValues runtimeLabelInvariant abiEncoder emitHelper compileEnv
   context venomInst list
 
 Theorem rb_compile_abi_int_clamp:
@@ -64,7 +64,7 @@ Theorem rb_compile_abi_encode_static:
 Proof
   strip_tac >> pure_rewrite_tac[compile_abi_encode_static_def] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> simp[rb_emit_void, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_void, rb_step_return]
 QED
 
 Theorem rb_compile_abi_decode_static:
@@ -74,7 +74,7 @@ Theorem rb_compile_abi_decode_static:
 Proof
   strip_tac >> pure_rewrite_tac[compile_abi_decode_static_def] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> simp[rb_emit_void]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_void]
 QED
 
 Theorem rb_compile_abi_encode_static_info:
@@ -84,7 +84,7 @@ Proof
   Cases_on `info` >>
   simp[compile_abi_encode_static_info_def, rb_compile_abi_encode_static,
        rb_step_return] >> strip_tac >>
-  irule rb_ignore >> simp[rb_emit_void, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_void, rb_step_return]
 QED
 
 Theorem rb_compile_abi_dec_addr:
@@ -126,7 +126,7 @@ Proof
   irule rb_bind_abi_dec_addr >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> reverse conj_tac >- simp[rb_step_return] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- simp[rb_step_return] >>
   Cases_on `hi = Lit 0w` >> simp[rb_step_return] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_void]
@@ -142,11 +142,11 @@ Proof
   irule rb_bind_abi_dec_addr >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> reverse conj_tac >- simp[rb_step_return] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- simp[rb_step_return] >>
   Cases_on `hi = Lit 0w` >> simp[rb_step_return] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_compile_abi_decode_range_check]
 QED
 
@@ -166,17 +166,17 @@ Proof
   strip_tac >> pure_rewrite_tac[compile_abi_encode_dyn_static_loop_def, LET_THM] >>
   BETA_TAC >> irule rb_bind_alloc_buffer >> BETA_TAC >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
@@ -188,9 +188,9 @@ Proof
   conj_tac >- (qexists_tac `rb_operand_ok` >>
                simp[rb_compile_abi_encode_static_info]) >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
 QED
@@ -213,7 +213,7 @@ Proof
   >- simp[compile_abi_encode_child_def, rb_compile_abi_encode_static]
   >- suspend "bytes"
   >- (rpt strip_tac >> pure_rewrite_tac[compile_abi_encode_child_def] >>
-      irule rb_ignore >> simp[rb_emit_void, rb_step_return])
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_void, rb_step_return])
   >- suspend "array"
   >- simp[compile_abi_encode_child_def, rb_step_return]
   >- suspend "complex"
@@ -231,9 +231,9 @@ Resume rb_abi_encode[child]:
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
     irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
     reverse conj_tac >- metis_tac[] >>
-    gen_tac >> strip_tac >> irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+    gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-    irule rb_ignore >> simp[rb_emit_void, rb_step_return]) >>
+    irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_void, rb_step_return]) >>
   metis_tac[]
 QED
 
@@ -243,9 +243,9 @@ Resume rb_abi_encode[bytes]:
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
@@ -256,9 +256,9 @@ Resume rb_abi_encode[array]:
   pure_rewrite_tac[Once compile_abi_encode_child_def, LET_THM] >> BETA_TAC >>
   irule rb_bind_alloc_buffer >> BETA_TAC >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (
     IF_CASES_TAC >> simp[rb_compile_abi_encode_dyn_static_loop] >>
@@ -266,7 +266,7 @@ Resume rb_abi_encode[array]:
   gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >> simp[rb_emit_op]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >> simp[rb_emit_op]
 QED
 
 Resume rb_abi_encode[complex]:
@@ -275,7 +275,7 @@ Resume rb_abi_encode[complex]:
   IF_CASES_TAC >- (
     irule rb_bind_alloc_buffer >> BETA_TAC >>
     gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-    irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+    irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
     irule rb_step_ignore_bind >> conj_tac >-
       (qexists_tac `rb_operand_ok` >> metis_tac[]) >> simp[rb_emit_op]) >>
   irule rb_step_ignore_bind >> conj_tac >-
@@ -296,21 +296,21 @@ Resume rb_abi_encode[loop]:
   pure_rewrite_tac[Once compile_abi_encode_child_def, LET_THM] >> BETA_TAC >>
   irule rb_bind_alloc_buffer >> BETA_TAC >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_alloc_buffer >> BETA_TAC >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
@@ -323,13 +323,13 @@ Resume rb_abi_encode[loop]:
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- metis_tac[] >>
   gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_step_ignore_bind >> conj_tac >-
     (qexists_tac `rb_operand_ok` >> simp[rb_emit_op]) >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_op]
@@ -368,7 +368,7 @@ Resume rb_abi_decode[complex]:
   pure_rewrite_tac[Once compile_abi_decode_to_buf_def, LET_THM] >> BETA_TAC >>
   IF_CASES_TAC >- metis_tac[] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_abi_decode_range_check] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_abi_decode_range_check] >>
   metis_tac[]
 QED
 
@@ -379,7 +379,7 @@ Resume rb_abi_decode[elems]:
   reverse conj_tac >- simp[rb_compile_getelemptr_abi] >>
   gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- metis_tac[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- metis_tac[] >>
   gvs[arithmeticTheory.ADD_COMM]
 QED
 
@@ -389,14 +389,14 @@ Resume rb_abi_decode[bytes]:
   reverse conj_tac >- (
     IF_CASES_TAC >> simp[rb_step_return] >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-    irule rb_ignore >> simp[rb_compile_abi_decode_range_check, rb_step_return]) >>
+    irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_abi_decode_range_check, rb_step_return]) >>
   gen_tac >> strip_tac >>
   irule rb_bind_abi_dec_addr >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
-  irule rb_ignore >> conj_tac >- (
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- (
     IF_CASES_TAC >> simp[rb_step_return] >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[rb_compile_abi_decode_range_check]) >>
   IF_CASES_TAC >- (Cases_on `opc` >> simp[rb_emit_void]) >>
@@ -404,7 +404,7 @@ Resume rb_abi_decode[bytes]:
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[rb_emit_void]
 QED
 
@@ -415,19 +415,19 @@ Resume rb_abi_decode[array]:
   reverse conj_tac >- (
     IF_CASES_TAC >> simp[rb_step_return] >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-    irule rb_ignore >> simp[rb_compile_abi_decode_range_check, rb_step_return]) >>
+    irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_abi_decode_range_check, rb_step_return]) >>
   gen_tac >> strip_tac >>
   irule rb_bind_abi_dec_addr >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
-  irule rb_ignore >> conj_tac >- (
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- (
     IF_CASES_TAC >> simp[rb_step_return] >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[rb_compile_abi_decode_range_check]) >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   IF_CASES_TAC >- (
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
     irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
@@ -436,7 +436,7 @@ Resume rb_abi_decode[array]:
     Cases_on `opc` >> simp[rb_emit_void]) >>
   irule rb_bind_alloc_buffer >> BETA_TAC >>
   gen_tac >> simp[rb_buffer_ok_def] >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >> metis_tac[]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >> metis_tac[]
 QED
 
 Resume rb_abi_decode[loop]:
@@ -445,15 +445,15 @@ Resume rb_abi_decode[loop]:
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_abi_dec_addr >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
@@ -465,11 +465,11 @@ Resume rb_abi_decode[loop]:
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- metis_tac[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- metis_tac[] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> simp[rb_new_block, rb_step_return]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_new_block, rb_step_return]
 QED
 
 Finalise rb_abi_decode

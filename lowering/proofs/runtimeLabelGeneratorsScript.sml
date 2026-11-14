@@ -1,7 +1,7 @@
 (* Runtime orchestration consumes body certificates at the proof interface. *)
 Theory runtimeLabelGenerators
 Ancestors
-  runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
+  runtimeLabelExprCallbacks runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   moduleLowering stmtLowering compileEnv context emitHelper venomInst list
   loweringShapeDefs combinatorics alist
 
@@ -15,10 +15,10 @@ Proof
   simp[compile_selector_checks_def] >> strip_tac >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   ntac 2 (irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- gvs[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- gvs[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   first_x_assum irule >> gvs[]
 QED
 
@@ -30,10 +30,10 @@ Proof
   strip_tac >> rewrite_tac[compile_selector_dispatch_linear_def] >>
   ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> simp[rb_compile_selector_checks, rb_emit_inst]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_selector_checks, rb_emit_inst]
 QED
 
 Theorem rb_compile_sparse_bucket_search:
@@ -52,10 +52,10 @@ Proof
       ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
       simp[rb_emit_op]) >>
   gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   first_x_assum irule >> gvs[]
 QED
 
@@ -92,8 +92,8 @@ Theorem rb_create_bucket_blocks:
 Proof
   ho_match_mp_tac create_bucket_blocks_ind >> rpt strip_tac >>
   simp[Once create_bucket_blocks_def, rb_step_return] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- gvs[rb_compile_sparse_bucket_search] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- gvs[rb_compile_sparse_bucket_search] >>
   first_x_assum irule >> gvs[]
 QED
 
@@ -118,7 +118,7 @@ Theorem rb_data_label_fold:
       (comp_return ()) labels)
 Proof
   Induct using SNOC_INDUCT >> simp[FOLDL_SNOC, rb_step_return] >>
-  gen_tac >> irule rb_ignore >> simp[rb_emit_data_item]
+  gen_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_data_item]
 QED
 
 Theorem rb_sparse_target_list:
@@ -144,11 +144,11 @@ Proof
   strip_tac >> rewrite_tac[compile_selector_dispatch_sparse_def] >>
   ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   IF_CASES_TAC
-  >- (irule rb_ignore >> conj_tac
+  >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
       >- (irule rb_compile_selector_checks >>
           gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD]) >>
       simp[rb_emit_inst]) >>
@@ -159,13 +159,13 @@ Proof
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_return >> BETA_TAC >>
   ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (irule rb_emit_inst >> simp[EVERY_MAP] >>
       irule (SRULE [] rb_sparse_target_list) >> gvs[]) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_data_section] >>
-  irule rb_ignore >> conj_tac >- simp[rb_data_label_fold] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_data_section] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_data_label_fold] >>
   irule rb_create_bucket_blocks >> simp[rb_group_into_buckets]
 QED
 
@@ -191,7 +191,7 @@ Theorem rb_compile_entry_checks:
   rb_step (K T) (compile_entry_checks min_cds payable)
 Proof
   rewrite_tac[compile_entry_checks_def] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_step_return] >>
       ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
       simp[rb_emit_void]) >>
@@ -205,14 +205,14 @@ Theorem rb_compile_guarded_body:
   rb_step (K T) (compile_guarded_body ce nr key trans view stmts ret)
 Proof
   strip_tac >> rewrite_tac[compile_guarded_body_def] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_lock, rb_step_return]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- gvs[rb_stmt_contract_def, rb_loop_ok_def] >>
   irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_step_def, comp_get_def] >>
   gen_tac >> strip_tac >> IF_CASES_TAC >> simp[rb_step_return] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
   Cases_on `ret` >> simp[rb_emit_inst]
 QED
@@ -222,7 +222,7 @@ Theorem rb_compile_fallback_body:
   rb_step (K T) (compile_fallback_body ce payable nr key trans view stmts ret)
 Proof
   strip_tac >> rewrite_tac[compile_fallback_body_def] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_step_return] >>
       ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
       simp[rb_emit_void]) >>
@@ -255,7 +255,7 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   rename1 `_ = SOME loc` >> Cases_on `loc` >> simp[] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- gvs[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- gvs[rb_emit_void] >>
   first_x_assum irule >> gvs[rb_env_bind_local, rb_location_ok_def]
 QED
 
@@ -295,8 +295,8 @@ Proof
   Cases_on `h1`
   >- (simp[] >>
       ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-      irule rb_ignore >> conj_tac >- simp[rb_compile_abi_clamp_basetype] >>
-      irule rb_ignore >> reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_abi_clamp_basetype] >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- (first_x_assum irule >> simp[]) >>
       Cases_on `FLOOKUP ce.ce_vars h0` >> simp[rb_step_return] >>
       rename1 `_ = SOME loc` >> Cases_on `var_location_decode_operand loc` >>
       simp[rb_step_return] >> irule rb_emit_void >> simp[] >>
@@ -311,11 +311,11 @@ Proof
      gvs[rb_env_ok_def] >> metis_tac[]) >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac
   >- (ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-      irule rb_ignore >> conj_tac >- simp[rb_compile_abi_arg_ptr_guard] >>
-      irule rb_ignore >> conj_tac
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_abi_arg_ptr_guard] >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
       >- (irule (cj 1 rb_abi_decode) >> Cases_on `opc = CALLDATALOAD` >> simp[]) >>
       first_x_assum irule >> simp[]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (irule (cj 1 rb_abi_decode) >> Cases_on `opc = CALLDATALOAD` >> simp[]) >>
   first_x_assum irule >> simp[]
 QED
@@ -335,7 +335,7 @@ Proof
   `rb_env_ok (ce with ce_vars updated_by
     (\m. m |+ (h0,PtrVar buf.buf_operand x)))` by
       gvs[rb_env_bind_local, rb_buffer_ok_def, rb_location_ok_def] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_decode_args] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_decode_args] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -353,13 +353,13 @@ Proof
       reverse conj_tac
       >- (IF_CASES_TAC >> simp[rb_step_return] >>
           ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-          irule rb_ignore >> simp[rb_compile_abi_arg_ptr_guard, rb_step_return]) >>
-      gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+          irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_abi_arg_ptr_guard, rb_step_return]) >>
+      gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
       >- (irule (cj 1 rb_abi_decode) >> gvs[]) >>
       first_x_assum irule >> gvs[]) >>
   irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
-  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+  gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> gvs[rb_emit_void] >> IF_CASES_TAC >>
       gvs[rb_compile_store_bytestring, rb_emit_void]) >>
   first_x_assum irule >> gvs[]
@@ -372,7 +372,7 @@ Theorem rb_compile_entry_point_kwargs:
   rb_step (K T) (compile_entry_point_kwargs ce kwvars offset num common)
 Proof
   strip_tac >> rewrite_tac[compile_entry_point_kwargs_def] >>
-  irule rb_ignore >> simp[rb_compile_init_kwargs, rb_emit_inst]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_compile_init_kwargs, rb_emit_inst]
 QED
 
 Theorem rb_compile_external_function_body:
@@ -403,9 +403,9 @@ Proof
   Induct >> simp[compile_external_fn_bodies_def, rb_step_return] >>
   PairCases >> simp_tac std_ss [pairTheory.pair_case_thm] >> strip_tac >>
   rewrite_tac[compile_external_fn_bodies_def] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_entry_checks] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_external_function_body] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_entry_checks] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_external_function_body] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -421,11 +421,11 @@ Proof
   rewrite_tac[compile_group_entries_def] >>
   irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_entry_checks] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_entry_point_kwargs] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_entry_checks] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_entry_point_kwargs] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -458,20 +458,20 @@ Proof
       rename1 `_ = SOME loc` >> Cases_on `loc` >> Cases_on `ret_buf` >>
       gvs[rb_env_ok_def, rb_location_ok_def] >> metis_tac[]) >>
   qx_gen_tac `env2` >> strip_tac >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (Cases_on `ret` >> simp[rb_step_return] >> IF_CASES_TAC >>
       simp[rb_step_return] >> irule rb_step_ignore_bind >> simp[rb_step_return] >>
       qexists_tac `rb_buffer_ok` >> simp[rb_compile_alloc_buffer]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_lock, rb_step_return]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (gvs[rb_stmt_contract_def] >> first_x_assum irule >>
       simp[rb_loop_ok_def, rb_env_ok_def] >> gvs[rb_env_ok_def] >> metis_tac[]) >>
   irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_step_def, comp_get_def] >>
-  gen_tac >> strip_tac >> irule rb_ignore >> reverse conj_tac
+  gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac
   >- simp[rb_step_return] >> IF_CASES_TAC >> simp[rb_step_return] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (IF_CASES_TAC >> simp[rb_compile_nonreentrant_unlock, rb_step_return]) >>
   Cases_on `ret` >> simp[rb_emit_inst]
 QED
@@ -485,8 +485,8 @@ Proof
   Induct >> simp[compile_internal_fn_bodies_def, rb_step_return] >>
   PairCases >> simp_tac std_ss [pairTheory.pair_case_thm] >> strip_tac >>
   rewrite_tac[compile_internal_fn_bodies_def] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- gvs[rb_compile_internal_function] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- gvs[rb_compile_internal_function] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -497,7 +497,7 @@ Theorem rb_fold_ignore:
 Proof
   strip_tac >> Induct using SNOC_INDUCT >>
   simp[FOLDL_SNOC, rb_step_return] >> gen_tac >>
-  irule rb_ignore >> simp[]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[]
 QED
 
 Theorem rb_emit_dense_data_sections:
@@ -505,16 +505,16 @@ Theorem rb_emit_dense_data_sections:
 Proof
   Induct >> simp[emit_dense_data_sections_def, rb_step_return] >>
   gen_tac >> simp_tac std_ss [emit_dense_data_sections_def, LET_THM] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_data_section] >>
-  irule rb_ignore >> reverse conj_tac >- simp[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_data_section] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- simp[] >>
   qmatch_goalsub_abbrev_tac `FOLDL action seed mids` >>
   qid_spec_tac `mids` >> Induct using SNOC_INDUCT >>
   simp[FOLDL_SNOC, Abbr `seed`] >- simp[rb_step_return] >>
   gen_tac >> simp_tac std_ss [Abbr `action`] >>
-  irule rb_ignore >> conj_tac >- simp[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[] >>
   pairarg_tac >> asm_simp_tac std_ss [LET_THM] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_data_item] >>
-  irule rb_ignore >> simp[rb_emit_data_item]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_data_item] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_data_item]
 QED
 
 Theorem rb_compile_selector_dispatch_dense:
@@ -526,28 +526,28 @@ Proof
   strip_tac >> simp_tac std_ss [compile_selector_dispatch_dense_def, LET_THM] >>
   ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   ntac 6 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   ntac 10 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
   ntac 11 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   ntac 5 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
-  irule rb_ignore >> conj_tac >- gvs[rb_emit_inst, EVERY_MAP] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_data_section] >>
-  irule rb_ignore >> reverse conj_tac >- simp[rb_emit_dense_data_sections] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_void] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- gvs[rb_emit_inst, EVERY_MAP] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_data_section] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> reverse conj_tac >- simp[rb_emit_dense_data_sections] >>
   qmatch_goalsub_abbrev_tac `FOLDL action seed bs` >>
   qid_spec_tac `bs` >> Induct using SNOC_INDUCT >>
   simp[FOLDL_SNOC, Abbr `seed`] >- simp[rb_step_return] >>
   gen_tac >> simp_tac std_ss [Abbr `action`] >>
-  irule rb_ignore >> conj_tac >- simp[] >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_data_item] >>
-  irule rb_ignore >> simp[rb_emit_data_item]
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_data_item] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_data_item]
 QED
 
 Theorem compile_generate_runtime_no_runtime_begin:
@@ -558,18 +558,18 @@ Theorem compile_generate_runtime_no_runtime_begin:
 Proof
   strip_tac >> simp_tac std_ss [compile_generate_runtime_def, LET_THM] >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (gvs[rb_runtime_inputs_ok_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
       Cases_on `strategy` >>
       simp[rb_compile_selector_dispatch_sparse, rb_compile_selector_dispatch_dense,
         rb_compile_selector_dispatch_linear, EVERY_MAP, EVERY_MEM,
         pairTheory.FORALL_PROD]) >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (irule rb_compile_external_fn_bodies >>
       gvs[rb_runtime_inputs_ok_def, EVERY_MEM, pairTheory.FORALL_PROD,
           rb_external_package_ok_def] >> metis_tac[]) >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (Cases_on `fallback` >> simp[rb_emit_inst] >> PairCases_on `x` >> simp_tac std_ss [pairTheory.pair_case_thm] >>
       irule rb_compile_fallback_body >>
       gvs[rb_runtime_inputs_ok_def, rb_fallback_ok_def]) >>
@@ -594,14 +594,14 @@ Proof
   Cases >> simp_tac std_ss [rb_group_ok_def] >> strip_tac
   >- (PairCases_on `p` >> gvs[rb_group_ok_def] >>
       rewrite_tac[compile_external_groups_def] >>
-      irule rb_ignore >> conj_tac >- simp[rb_compile_selector_checks] >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_selector_checks] >>
       irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
       reverse conj_tac >- (first_x_assum irule >> simp[]) >>
       gen_tac >> strip_tac >> simp[rb_step_return, rb_job_ok_def]) >>
   rewrite_tac[compile_external_groups_def] >>
   irule rb_step_bind >> qexists_tac `EVERY (\(name,ptr,ty,e). rb_operand_ok ptr)` >>
   BETA_TAC >> reverse conj_tac >- simp[rb_compile_create_kwarg_allocas] >>
-  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+  gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- simp[rb_compile_group_entries] >>
   irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
@@ -615,12 +615,12 @@ Proof
   Induct >> simp[compile_external_jobs_def, rb_step_return] >>
   Cases >> simp_tac std_ss [rb_job_ok_def] >> strip_tac >>
   rewrite_tac[compile_external_jobs_def]
-  >- (irule rb_ignore >> conj_tac
+  >- (irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
       >- (irule rb_compile_external_fn_bodies >>
           PairCases_on `p` >> gvs[rb_external_package_ok_def]) >>
       first_x_assum irule >> simp[]) >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac >- simp[rb_compile_common_function_body] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_compile_common_function_body] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -632,12 +632,12 @@ Proof
   strip_tac >> rewrite_tac[compile_group_dispatch_linear_def] >>
   ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
-  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_emit_inst] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
   ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
   irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_external_groups] >>
-  gen_tac >> strip_tac >> irule rb_ignore >> simp[rb_emit_inst, rb_step_return]
+  gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_inst, rb_step_return]
 QED
 
 Theorem compile_generate_grouped_runtime_no_runtime_begin:
@@ -650,10 +650,10 @@ Proof
   irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
   reverse conj_tac
   >- (irule rb_compile_group_dispatch_linear >> gvs[rb_grouped_runtime_inputs_ok_def]) >>
-  qx_gen_tac `jobs` >> strip_tac >> irule rb_ignore >> conj_tac
+  qx_gen_tac `jobs` >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- simp[rb_compile_external_jobs] >>
-  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
-  irule rb_ignore >> conj_tac
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac >- simp[rb_new_block] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> conj_tac
   >- (Cases_on `fallback` >> simp[rb_emit_inst] >> PairCases_on `x` >>
       simp_tac std_ss [pairTheory.pair_case_thm] >>
       irule rb_compile_fallback_body >>

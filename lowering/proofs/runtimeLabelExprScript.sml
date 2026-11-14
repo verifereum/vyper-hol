@@ -1,7 +1,8 @@
 (* Expression compilation preserves reserved-operand exclusion. *)
 Theory runtimeLabelExpr
 Ancestors
-  runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
+  runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelPrimitives
+  runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
   exprLowering exprCallBounds
 
 Theorem rb_as_ptr_val:
