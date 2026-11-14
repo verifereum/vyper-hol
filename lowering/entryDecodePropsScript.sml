@@ -422,7 +422,8 @@ Proof
         (`~(i < 0)` by intLib.ARITH_TAC >>
          simp[integer_wordTheory.i2w_def]) >>
       qspecl_then [`n`, `Num i`] mp_tac n2w_lsr_clamp_ok >> simp[]) >>
-  qspecl_then [`cenv.ce_flag_n_members (nsid_to_string p)`, `n`]
+  rename1 `nsid_to_string flag_id` >>
+  qspecl_then [`cenv.ce_flag_n_members (nsid_to_string flag_id)`, `n`]
     mp_tac n2w_lsr_clamp_ok >> simp[]
 QED
 
