@@ -1188,7 +1188,7 @@ Resume encode_value_memory_live[dynamic_child]:
 QED
 Finalise encode_value_memory_live
 
-Theorem copy_fold_lookup[local]:
+Theorem copy_fold_lookup:
   !is addr f q w st.
     (!i. MEM i is /\ addr i = q ==> f i = w) ==>
     lookup_storage q (FOLDL (\t i. update_storage (addr i) (f i) t) st is) =
