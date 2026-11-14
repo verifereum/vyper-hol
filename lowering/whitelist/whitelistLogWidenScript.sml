@@ -19,7 +19,7 @@ Ancestors
   emitHelperProps vyperInterpreter vyperState vyperTyping list
   stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
-  fragGasMode fragGasPath fragGasSeq rich_list
+  fragGasMode fragGasPath fragGasSeq fragGasSeqAbort rich_list
   stmtSimLogCompose stmtSimLog bodySimLogArgs e2eDefs vyperEvent vyperEventArgCompat vyperABI
   vyperTypeSystem supportedTypes supportedDecls supportedStmts
   supportedExprs supportedExprTraverse supportedStmtTraverse
@@ -196,7 +196,6 @@ Proof
     (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>
   qpat_x_assum `!e tail s. _` (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_return_def,
       comp_ignore_bind_def] >>
   pairarg_tac >> gvs[] >>
@@ -214,7 +213,7 @@ Proof
   impl_tac
   >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[Abbr `axs`] >>
       first_assum ACCEPT_TAC) >>
-  qpat_assum `~cx.txn.is_static` (rewrite_tac o single o MATCH_MP eval_log_nonstatic_bind) >>
+  rewrite_tac[log_eval_bind] >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "args_summary" >>
   qexists_tac `marks` >> disj2_tac >>
@@ -290,11 +289,55 @@ Resume compile_log_ready_stmt_frag_widen[args_value]:
       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
       encode_event_topic aty v = encode_event_topic (SND arg) v) ds vs` by
     (irule LIST_REL_mono >> first_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static_suffix" >>
+  `check_not_static cx = return ()` by simp[FUN_EQ_THM, return_def] >>
+  qpat_x_assum `check_not_static cx = return ()`
+    (fn th => rewrite_tac[th, ignore_bind_def, bind_return]) >>
   qpat_assum `MAP SND ds = tys`
     (fn th => drule_all (REWRITE_RULE [th]
       (Q.INST [`xs` |-> `ds`] log_success_suffix_actual_run))) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   suspend "suffix"
+QED
+
+Resume compile_log_ready_stmt_frag_widen[static_suffix]:
+  rename1 `compile_stmt _ _ _ (Log _ _) sa = ((),sb)` >>
+  qpat_assum `MAP SND ds = tys`
+    (fn th => drule_all (REWRITE_RULE [th]
+      (Q.INST [`xs` |-> `ds`] log_static_suffix_actual_run))) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sm sb) (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, same_blocks_def, inst_extends_def,
+         IS_PREFIX_APPEND, Excl "enc_def"] >>
+     qexists_tac `l` >>
+     REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  qspecl_then [`F`,`emitted_insts sm sb`,`t`,`u`,`ExHalt_abort`,`ctx`,`func`,`bb`]
+    mp_tac run_inst_seq_abort_gas_path >>
+  impl_tac >- simp[Excl "enc_def"] >>
+  disch_then (qx_choose_then `n` (qx_choose_then `j` strip_assume_tac)) >>
+  `gas_marked_exec F (ctx,func)
+     (bind (lift_option (encode_source_event (get_tenv cx) cx.sources
+                          cx.txn.target id vs) "Log encode event")
+       (\ev. ignore_bind (check_not_static cx) (push_log ev)))
+     (es_end with gas_obs := [], t) (REPLICATE n F)
+     (INR (Error (RuntimeError "write in static context"))) es_end
+     (Abort ExHalt_abort (u with vs_inst_idx := j))` by
+    (irule gas_marked_exec_no_source_read >>
+     simp[bind_def, lift_option_def, return_def, ignore_bind_def, Excl "enc_def"]) >>
+  qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
+  simp[gas_summary_at_def, Excl "enc_def"] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+               `es_end`,`Abort ExHalt_abort (u with vs_inst_idx := j)`] >>
+  conj_tac
+  >- (irule gas_marked_exec_bind_normal >>
+      qexistsl_tac [`es_end`,`t`,`vs`] >> simp[Excl "enc_def"] >>
+      qpat_x_assum `gas_marked_exec _ _ (bind (lift_option _ _) _) _ _ _ _ _`
+        mp_tac >>
+      qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
+      simp[Excl "enc_def"]) >>
+  simp[exit_result_def, stmt_exit_def, expr_exit_def]
 QED
 
 Resume compile_log_ready_stmt_frag_widen[suffix]:
@@ -340,7 +383,7 @@ Resume compile_log_ready_stmt_frag_widen[suffix]:
       qpat_x_assum `gas_marked_exec _ _ (bind (lift_option _ _) push_log) _ _ _ _ _`
         mp_tac >>
       qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
-      simp[Excl "enc_def"]) >>
+      simp[ETA_THM, Excl "enc_def"]) >>
   suspend "post"
 QED
 
