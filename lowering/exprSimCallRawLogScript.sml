@@ -124,8 +124,8 @@ Proof
   Cases_on `q` >> simp[]
 QED
 
-Theorem raw_log_eval[local]:
-  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) ==>
+Theorem raw_log_eval:
+  compatible_bound (Dynamic n) (LENGTH topics) ==>
   vyperState$bind (eval_expr cx
         (Call ann RawLog
           [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -136,12 +136,13 @@ Theorem raw_log_eval[local]:
      v <- read_result cx r;
      bs <- lift_option_type (dest_BytesV v) "raw_log data";
      type_check (LENGTH vs <= 4) "raw_log too many topics";
+     check_not_static cx;
      push_log (encode_raw_event_values cx.txn.target vs bs);
      return NoneV od
 Proof
   simp[compatible_bound_def] >> strip_tac >>
   simp[FUN_EQ_THM] >> gen_tac >>
-  simp[bind_def, raw_log_source_eval] >>
+  simp[bind_def, raw_log_source_eval_checked] >>
   Cases_on `eval_exprs cx topics x` >>
   rename1 `eval_exprs cx topics x = (rr, st1)` >> Cases_on `rr` >>
   simp[bind_def, ignore_bind_def, return_def, read_result_def] >>
@@ -155,58 +156,11 @@ Proof
   rename1 `dest_BytesV dv` >> Cases_on `dest_BytesV dv` >>
   simp[raise_def, return_def, bind_def, ignore_bind_def, read_result_def] >>
   Cases_on `LENGTH x' <= 4` >>
+  simp[raise_def, return_def, bind_def, ignore_bind_def, read_result_def] >>
+  Cases_on `cx.txn.is_static` >>
   simp[raise_def, return_def, bind_def, ignore_bind_def, read_result_def]
 QED
 
-Theorem raw_log_eval_cases[local]:
-  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-       data] dflt) es /\
-  (do r <- eval_expr cx
-        (Call ann RawLog
-          [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-             (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-           data] dflt);
-      read_result cx r od) es = (res, es') ==>
-  (?exc. eval_exprs cx topics es = (INR exc, es') /\ res = INR exc) \/
-  (?vs es1 exc.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INR exc, es') /\
-     res = INR exc) \/
-  (?vs es1 bs es2.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INL (BytesV bs), es2) /\
-     res = INL NoneV /\
-     es' = es2 with logs := es2.logs ++
-       [encode_raw_event_values cx.txn.target vs bs])
-Proof
-  strip_tac >>
-  `no_type_error_result res` by
-    (drule_all expr_sim_pre_eval >> simp[]) >>
-  qpat_x_assum `expr_sim_pre _ _ _ _ _` kall_tac >>
-  qpat_x_assum `bind _ _ es = _` mp_tac >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[raw_log_eval] >>
-  Cases_on `eval_exprs cx topics es` >>
-  rename1 `eval_exprs cx topics es = (tr, es1)` >> Cases_on `tr`
-  >- (rename1 `eval_exprs cx topics es = (INL vs, es1)` >>
-      `LENGTH vs <= 4` by (drule eval_exprs_length >> simp[]) >>
-      simp[bind_def] >> Cases_on `eval_expr cx data es1` >>
-      rename1 `eval_expr cx data es1 = (dr, es2)` >> Cases_on `dr` >> simp[]
-      >- (rename1 `read_result cx tv es2` >>
-          Cases_on `read_result cx tv es2` >>
-          rename1 `read_result cx tv es2 = (vr, es3)` >> Cases_on `vr` >> simp[]
-          >- (rename1 `dest_BytesV v` >> Cases_on `v` >>
-              simp[dest_BytesV_def, lift_option_type_def, lift_option_def,
-                   type_check_def, assert_def, raise_def, return_def,
-                   bind_def, ignore_bind_def, push_log_def] >>
-              strip_tac >> gvs[no_type_error_result_def] >> metis_tac[]) >>
-          metis_tac[]) >>
-      metis_tac[]) >>
-  simp[bind_def] >> metis_tac[]
-QED
 
 Theorem raw_log_eval_value[local]:
   eval_expr cx (Call ann RawLog args dflt) es = (INL tv, es') ==>
@@ -218,36 +172,6 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem raw_log_raw_eval_cases[local]:
-  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-       data] dflt) es /\
-  eval_expr cx
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
-       data] dflt) es = (res, es') ==>
-  (?exc. eval_exprs cx topics es = (INR exc, es') /\ res = INR exc) \/
-  (?vs es1 exc.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INR exc, es') /\
-     res = INR exc) \/
-  (?vs es1 bs es2.
-     eval_exprs cx topics es = (INL vs, es1) /\
-     (do r <- eval_expr cx data; read_result cx r od) es1 = (INL (BytesV bs), es2) /\
-     res = INL (Value NoneV) /\
-     es' = es2 with logs := es2.logs ++
-       [encode_raw_event_values cx.txn.target vs bs])
-Proof
-  strip_tac >> Cases_on `res` >>
-  imp_res_tac raw_log_eval_value >> gvs[] >>
-  drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_eval_cases >>
-  simp[bind_def, read_result_def, return_def] >>
-  metis_tac[]
-QED
 
 Theorem raw_log_topics_source[local]:
   expr_sim_pre cenv cx env
@@ -315,14 +239,6 @@ Proof
   simp[expr_ok_def, expr_sim_ok_def] >> metis_tac[]
 QED
 
-Theorem raw_log_post_vv[local]:
-  expr_post H ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s ==>
-  vv_post H ctx func cenv cx e es sa sb s0 es' (Value NoneV)
-    (StackValue NoneT (Lit 0w)) s
-Proof
-  simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-       vv_own_def, read_result_def, return_def] >> metis_tac[]
-QED
 
 Theorem compile_multi_exprs_lower_word_args[local]:
   !topics. compile_multi_exprs compile_expr cenv topics =
@@ -504,7 +420,7 @@ QED
 
 (* The dynamic payload's tail: the endpoint of the MLOAD/ADD/LOG run does
    not depend on the horizon, the posts hold at every valid one. *)
-Theorem raw_log_dynamic_tail_summary[local]:
+Theorem raw_log_dynamic_tail_summary:
   expr_has_effect e /\
   (!H. valid_horizon cx st0 H es2.storage_trace ==>
      expr_post H ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) ptr_op s) /\
@@ -529,6 +445,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
   gas_summary_at F (ctx,func) []
     (do bytes <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
         type_check (LENGTH vs <= 4) "raw_log too many topics";
+        check_not_static cx;
         push_log (encode_raw_event_values cx.txn.target vs bytes);
         return NoneV od) (es2,s)
     (\rr ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -543,6 +460,7 @@ Proof
     (qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `H0` mp_tac) >> simp[]) >>
   drule_all raw_log_dynamic_data_view >> strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
   `EVERY (\op. !p. op = Var p ==> not_fresh_at sd p) ops` by
     gvs[EVERY_CONJ] >>
   qmatch_asmsub_abbrev_tac `emit_inst LOG logops [] sm` >>
@@ -556,6 +474,10 @@ Proof
          fresh_var_def, fresh_id_def, emit_def, comp_return_def, emitted_insts_def] >>
      CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
      simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static" >>
+  `check_not_static cx = return ()` by simp[FUN_EQ_THM, return_def] >>
+  pop_assum (fn th => rewrite_tac[th, ignore_bind_def, bind_return]) >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
      ?t'. run_inst_seq (emitted_insts sd sb) s = OK t' /\
        stmt_state_rel H ctx func cenv cx
@@ -596,7 +518,7 @@ Proof
      simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
      disch_then strip_assume_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all hash_run_path >> disch_then (qspec_then `ctx` strip_assume_tac) >>
-  irule raw_log_tail_summary >> conj_tac >- simp[dest_BytesV_def] >>
+  irule (REWRITE_RULE [ignore_bind_def] raw_log_tail_summary) >> conj_tac >- simp[dest_BytesV_def] >>
   qexistsl_tac [`bs`, `t1 with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   conj_tac >- simp[dest_BytesV_def] >>
   reverse conj_tac >- metis_tac[listTheory.LENGTH] >>
@@ -628,8 +550,38 @@ Proof
   simp[]
 QED
 
+Resume raw_log_dynamic_tail_summary[static]:
+  qunabbrev_tac `logops` >>
+  `u = ()` by (Cases_on `u` >> simp[]) >> gvs[] >>
+  `?z. run_inst_seq (emitted_insts sd sb) s = Abort ExHalt_abort z` by
+    (drule_all raw_log_dynamic_static_run >> simp[]) >>
+  pop_assum strip_assume_tac >>
+  `sb.cs_current_bb = sd.cs_current_bb /\
+   sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb /\
+   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) (emitted_insts sd sb)` by
+    (simp[] >>
+     qpat_x_assum `FILTER _ _ = []` mp_tac >>
+     qpat_x_assum `EVERY _ (emitted_insts sd sm)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[EVERY_MEM, FILTER_EQ_NIL, mk_inst_def] >> metis_tac[]) >>
+  simp[dest_BytesV_def] >>
+  mp_tac (Q.INST
+    [`Q` |-> `\rr ee t. F`, `dv` |-> `BytesV (bs)`,
+     `vals` |-> `vs`, `bs` |-> `bs`, `es` |-> `es2`,
+     `s` |-> `s`, `sa` |-> `sd`, `sb` |-> `sb`, `t` |-> `z`,
+     `ctx` |-> `ctx`, `func` |-> `func`, `cx` |-> `cx`]
+    raw_log_static_suffix_summary) >>
+  (impl_tac >- simp[dest_BytesV_def]) >>
+  simp[dest_BytesV_def, gas_summary_at_def] >>
+  disch_then (qx_choose_then `rr` (qx_choose_then `ee`
+    (qx_choose_then `r` strip_assume_tac))) >>
+  qexistsl_tac [`rr`, `ee`, `r`] >> simp[]
+QED
+Finalise raw_log_dynamic_tail_summary
+
 (* The 32-byte payload's tail: as above, around the MSTORE and the LOG. *)
-Theorem raw_log_fixed_tail_summary[local]:
+Theorem raw_log_fixed_tail_summary:
   expr_has_effect e /\
   (!H. valid_horizon cx st0 H es2.storage_trace ==>
      expr_post H ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) val_op s) /\
@@ -655,6 +607,7 @@ Theorem raw_log_fixed_tail_summary[local]:
   gas_summary_at F (ctx,func) []
     (do bytes <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
         type_check (LENGTH vs <= 4) "raw_log too many topics";
+        check_not_static cx;
         push_log (encode_raw_event_values cx.txn.target vs bytes);
         return NoneV od) (es2,s)
     (\rr ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -670,6 +623,10 @@ Proof
        (qspec_then `H0` mp_tac) >> simp[]) >>
   drule hash_fixed_post_view >> simp[] >> strip_tac >>
   `stmt_state_rel H0 ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static" >>
+  `check_not_static cx = return ()` by simp[FUN_EQ_THM, return_def] >>
+  pop_assum (fn th => rewrite_tac[th, ignore_bind_def, bind_return]) >>
   `b + 32 < dimword (:256)` by
     (irule (INST_TYPE [alpha |-> ``:256``] hash_live_footprint_bound) >>
      qpat_assum `stmt_state_rel H0 _ _ _ _ _ s` (irule_at Any) >>
@@ -748,7 +705,7 @@ Proof
   qpat_assum `LENGTH vs <= 4` (fn th =>
     let val v = rand (rand (rator (concl th)))
     in irule (REWRITE_RULE [th]
-         (INST [mk_var ("vals", type_of v) |-> v] raw_log_tail_summary))
+         (INST [mk_var ("vals", type_of v) |-> v] (REWRITE_RULE [ignore_bind_def] raw_log_tail_summary)))
     end) >>
   qexistsl_tac [`bs`, `t1 with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   conj_tac >- simp[dest_BytesV_def] >>
@@ -780,6 +737,36 @@ Proof
       gvs[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs]) >>
   simp[]
 QED
+
+Resume raw_log_fixed_tail_summary[static]:
+  `u = ()` by (Cases_on `u` >> simp[]) >> gvs[] >>
+  `s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `?z. run_inst_seq (emitted_insts sd sb) s = Abort ExHalt_abort z` by
+    (drule_all raw_log_fixed_static_run >> simp[]) >>
+  pop_assum strip_assume_tac >>
+  `sb.cs_current_bb = sd.cs_current_bb /\
+   sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb /\
+   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) (emitted_insts sd sb)` by
+    (gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_id_def, emit_def, comp_return_def, emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  simp[dest_BytesV_def] >>
+  mp_tac (Q.INST
+    [`Q` |-> `\rr ee t. F`, `dv` |-> `BytesV (TAKE 32 (word_to_bytes_be (w:bytes32)))`,
+     `vals` |-> `vs`, `bs` |-> `TAKE 32 (word_to_bytes_be (w:bytes32))`, `es` |-> `es2`,
+     `s` |-> `s`, `sa` |-> `sd`, `sb` |-> `sb`, `t` |-> `z`,
+     `ctx` |-> `ctx`, `func` |-> `func`, `cx` |-> `cx`]
+    raw_log_static_suffix_summary) >>
+  (impl_tac >- simp[dest_BytesV_def]) >>
+  simp[dest_BytesV_def, gas_summary_at_def] >>
+  disch_then (qx_choose_then `rr` (qx_choose_then `ee`
+    (qx_choose_then `r` strip_assume_tac))) >>
+  qexistsl_tac [`rr`, `ee`, `r`] >> simp[]
+QED
+Finalise raw_log_fixed_tail_summary
 
 (* The buffer's ALLOCA: one endpoint, its relation at each valid horizon. *)
 Theorem raw_log_alloc_path[local]:
@@ -879,7 +866,6 @@ Proof
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
-  `~cx.txn.is_static` by gvs[stmt_state_rel_def, state_rel_def] >>
   simp[raw_log_eval] >>
   drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
   simp[expr_size_def] >> strip_tac >>
@@ -893,6 +879,8 @@ Proof
       simp[storage_trace_frame_lifts] >> gen_tac >>
       irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_check_not_static] >>
       irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
   qexists `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee topics topic_ops vs t /\
@@ -966,7 +954,11 @@ Resume raw_log_dynamic_sim[data]:
      drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) expr_sim_pre_res_ok) >> simp[]) >>
   pure_once_rewrite_tac[GSYM bind_assoc] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule expr_sim_suffix >> simp[raw_log_tail_trace_frame] >>
+  irule expr_sim_suffix >>
+  simp[storage_trace_frame_bind_all, storage_trace_frame_lifts,
+       storage_trace_frame_ignore_bind, storage_trace_frame_checks,
+       storage_trace_frame_check_not_static, storage_trace_frame_state_updates,
+       storage_trace_frame_return] >>
   qexistsl [`cenv`, `v`, `st1`, `st2`, `expr_type data`] >>
   simp[] >> reverse conj_tac
   >- metis_tac[local_ptrs_reserved_next_var] >>
@@ -1092,7 +1084,6 @@ Proof
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
-  `~cx.txn.is_static` by gvs[stmt_state_rel_def, state_rel_def] >>
   simp[raw_log_eval] >>
   drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_topics_sim >>
   simp[expr_size_def] >> strip_tac >>
@@ -1106,6 +1097,8 @@ Proof
       simp[storage_trace_frame_lifts] >> gen_tac >>
       irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_check_not_static] >>
       irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
   qexists `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee topics topic_ops vs t /\
@@ -1200,7 +1193,11 @@ Resume raw_log_fixed_sim[data]:
   goal_assum (drule_at Any) >>
   pure_once_rewrite_tac[GSYM bind_assoc] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule expr_sim_suffix >> simp[raw_log_tail_trace_frame] >>
+  irule expr_sim_suffix >>
+  simp[storage_trace_frame_bind_all, storage_trace_frame_lifts,
+       storage_trace_frame_ignore_bind, storage_trace_frame_checks,
+       storage_trace_frame_check_not_static, storage_trace_frame_state_updates,
+       storage_trace_frame_return] >>
   qexistsl [`cenv`, `v`, `st2`, `st3`, `expr_type data`] >>
   simp[] >> reverse conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists `st1` >> simp[] >>
