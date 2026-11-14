@@ -1683,7 +1683,8 @@ Proof
       qexistsl_tac [`es`, `s`] >>
       gvs[stmt_state_rel_def, mstore_def]) >>
   qexistsl_tac [`es`, `s`] >> simp[] >> reverse conj_tac
-  >- (strip_tac >> conj_tac >- simp[mstore_def] >>
+  >- (disch_tac >> conj_tac
+      >- simp[mstore_def, write_memory_with_expansion_def] >>
       simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
   simp[mstore_def]
 QED
