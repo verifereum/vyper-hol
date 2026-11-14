@@ -3,7 +3,7 @@ Theory whitelistForIterMem
 Ancestors
   vyperTypeContract
   whitelistForIterDynFrag stmtSimForArrayFrame exprSimSubscriptMap exprSimDefs loweringPosts
-  stmtSimDefs gasOutcome gasSummary supportedStmts supportedExprTraverse vyperTypeSystem vyperState
+  stmtSimDefs gasOutcome gasSummary supportedStmts supportedExprTraverse vyperTypeSystem vyperState context
   vyperInterpreter valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   stmtLowering exprLowering venomState
   exprSimPopNestedLocalMemory vyperTargetPlaceWrite compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr abiEncoderMemory immutableValue immutableEncoding immutableEncodingProofs exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort exprOperandVar exprSimWordArgs exprBopSimProps bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases targetPlaceSimDefs exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperAST vyperState vyperInterpreter vyperTypeSystem vyperTypeCallGraph venomState
@@ -1731,3 +1731,138 @@ Proof
   drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
   simp[] >> metis_tac[]
 QED
+
+Theorem memory_iterator_place_observation:
+  vv_post ctx func cenv cx e es sa sb s0 mid
+    (PlaceR (MemoryPlace name path)) vv t /\
+  post_value_type cenv e = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) /\
+  read_result cx (PlaceR (MemoryPlace name path)) mid = (INL (ArrayV av),mid) /\
+  vv_location vv = SOME LocMemory /\
+  eval_operand (vv_operand vv) t = SOME array_base /\
+  local_ptrs_reserved cenv sb /\
+  (!ei. P ei ==> expr_sim_inv cenv cx env ei /\
+    ?entry. lookup_scopes name ei.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) ==>
+  !ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s /\
+    array_caller_frame sb t s /\ alloca_frame cenv mid sb t cenv ei s ==>
+    val_in_memory (ArrayTV tv bd) (ArrayV av) (w2n array_base) s.vs_memory
+Proof
+  strip_tac >>
+  `vv_holds cenv cx (ArrayT et bd) (PlaceR (MemoryPlace name path)) vv mid t /\
+   vv_at cenv cx (ArrayT et bd) sa sb mid
+     (PlaceR (MemoryPlace name path)) vv t` by fs[vv_post_def] >>
+  `val_in_memory (ArrayTV tv bd) (ArrayV av) (w2n array_base) t.vs_memory` by
+    (qpat_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `vv_location vv = SOME LocMemory` mp_tac >>
+     qpat_assum `eval_operand (vv_operand vv) t = SOME array_base` mp_tac >>
+     qpat_assum `read_result cx (PlaceR (MemoryPlace name path)) _ = _` mp_tac >>
+     qpat_assum `evaluate_type (get_tenv cx) (ArrayT et bd) = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `vv` >>
+     simp[vv_holds_def, vv_location_def, vv_operand_def] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  Q.SUBGOAL_THEN `val_wf (ArrayTV tv bd) (ArrayV av) /\
+   ((?aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+      aid < sb.cs_next_id /\ off <= w2n array_base /\
+      w2n array_base + val_footprint (ArrayTV tv bd) (ArrayV av) <= off + sz /\
+      (!name b size. local_region cenv mid.scopes t name b size ==>
+        off + sz <= b \/ b + size <= off)) \/
+    (?off sz t0 tv0. local_region cenv mid.scopes t name off sz /\
+      off <= w2n array_base /\ cenv.ce_var_type name = SOME t0 /\
+      evaluate_type (get_tenv cx) t0 = SOME tv0 /\
+      mem_path_offset tv0 path = SOME (w2n array_base - off, ArrayTV tv bd)) \/
+    val_footprint (ArrayTV tv bd) (ArrayV av) = 0)` ASSUME_TAC
+  >- (qpat_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      qpat_assum `vv_location vv = SOME LocMemory` mp_tac >>
+      qpat_assum `eval_operand (vv_operand vv) t = SOME array_base` mp_tac >>
+      qpat_assum `read_result cx (PlaceR (MemoryPlace name path)) _ = _` mp_tac >>
+      qpat_assum `evaluate_type (get_tenv cx) (ArrayT et bd) = _` mp_tac >>
+      rpt (pop_assum kall_tac) >> Cases_on `vv` >>
+      simp[vv_at_def, vv_location_def, vv_operand_def] >> rpt strip_tac >>
+      gvs[local_place_at_def] >> metis_tac[]) >>
+  suspend "frames"
+QED
+
+Resume memory_iterator_place_observation[frames]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `val_wf _ _ /\ _` (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  qpat_x_assum `(?aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\ _) \/ _`
+    strip_assume_tac
+  >- (qpat_assum `alloca_frame cenv mid sb t cenv ei s` mp_tac >>
+      qpat_assum `FLOOKUP t.vs_allocas aid = SOME (off,sz)` mp_tac >>
+      qpat_assum `aid < sb.cs_next_id` mp_tac >>
+      qpat_assum `off <= w2n array_base` mp_tac >>
+      qpat_assum `w2n array_base + val_footprint (ArrayTV tv bd) (ArrayV av) <= off + sz`
+        mp_tac >>
+      qpat_assum `!name b size. local_region cenv mid.scopes t name b size ==> _` mp_tac >>
+      qpat_assum `val_wf (ArrayTV tv bd) (ArrayV av)` mp_tac >>
+      qpat_assum `val_in_memory (ArrayTV tv bd) (ArrayV av)
+        (w2n array_base) t.vs_memory` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >>
+      `mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz t.vs_memory` by
+        (qpat_x_assum `alloca_frame _ _ _ _ _ _ _`
+           (mp_tac o Q.SPECL [`aid`, `off`, `sz`] o
+            REWRITE_RULE [alloca_frame_def]) >> simp[] >> metis_tac[]) >>
+      `mem_bytes_at (w2n array_base) (val_footprint (ArrayTV tv bd) (ArrayV av))
+          t.vs_memory =
+       mem_bytes_at (w2n array_base) (val_footprint (ArrayTV tv bd) (ArrayV av))
+          s.vs_memory` by
+        (qpat_assum `mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz t.vs_memory`
+           (mp_tac o Q.SPECL [`w2n (array_base:bytes32)`,
+              `val_footprint (ArrayTV tv bd) (ArrayV av)`] o CONJUNCT1 o
+            MATCH_MP valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
+         simp[arithmeticTheory.ADD_COMM]) >>
+      irule exprSimPropsTheory.val_in_memory_footprint_agree >>
+      simp[] >> qexists_tac `t.vs_memory` >> simp[])
+  >- suspend "local" >>
+  irule exprSimPropsTheory.val_in_memory_footprint_agree >>
+  simp[] >> qexists_tac `t.vs_memory` >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
+Resume memory_iterator_place_observation[local]:
+  `expr_sim_inv cenv cx env ei /\
+   ?live_entry. lookup_scopes name ei.scopes = SOME live_entry /\
+     evaluate_subscripts live_entry.type live_entry.value path = INL (ArrayV av)` by
+    metis_tac[] >>
+  `?old_entry dp w. lookup_scopes name mid.scopes = SOME old_entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz) /\
+    lookup_var dp t = SOME w /\ off = w2n w` by fs[local_region_def] >>
+  `not_fresh_at sb dp` by metis_tac[local_ptrs_reserved_def] >>
+  `lookup_var dp s = SOME w` by
+    metis_tac[stmtSimForArrayLoopTheory.array_caller_frame_def] >>
+  `?decl_ty. FLOOKUP env.var_types name = SOME decl_ty /\
+    evaluate_type (get_tenv cx) decl_ty = SOME live_entry.type /\
+    cenv.ce_var_type name = SOME decl_ty` by
+    (qpat_assum `expr_sim_inv cenv cx env ei` mp_tac >>
+     qpat_assum `lookup_scopes name ei.scopes = SOME live_entry` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     rpt strip_tac >>
+     `IS_SOME (FLOOKUP env.var_types name)` by metis_tac[] >>
+     Cases_on `FLOOKUP env.var_types name` >> gvs[] >> metis_tac[]) >>
+  `live_entry.type = tv0` by
+    (qpat_assum `cenv.ce_var_type name = SOME t0` mp_tac >>
+     qpat_assum `cenv.ce_var_type name = SOME decl_ty` mp_tac >>
+     qpat_assum `evaluate_type (get_tenv cx) t0 = SOME tv0` mp_tac >>
+     qpat_assum `evaluate_type (get_tenv cx) decl_ty = SOME live_entry.type` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[]) >>
+  `value_has_type live_entry.type live_entry.value /\ well_formed_type_value live_entry.type` by
+    (qpat_assum `expr_sim_inv cenv cx env ei` mp_tac >>
+     qpat_assum `lookup_scopes name ei.scopes = SOME live_entry` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_sim_inv_def, state_well_typed_def] >> rpt strip_tac >>
+     metis_tac[vyperTypeStatePreservationTheory.lookup_scopes_well_typed_value_has_type,
+       vyperPlaceTypingTheory.lookup_scopes_well_typed_type]) >>
+  `local_ptrs_rel func cenv ei.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `local_ptrs_rel _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [local_ptrs_rel_def]) >>
+  disch_then (qspecl_then [`name`, `live_entry`, `dp`, `sz`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `val_in_memory live_entry.type live_entry.value off s.vs_memory` by
+    metis_tac[memoryValueEncodingTheory.memory_value_rel_val_in_memory] >>
+  mp_tac (Q.SPECL [`path`, `live_entry.type`, `live_entry.value`,
+    `w2n (array_base:bytes32) - off`, `ArrayTV tv bd`, `ArrayV av`,
+    `off`, `s.vs_memory`] imm_typed_path_memory) >>
+  simp[] >> `off + (w2n array_base - off) = w2n array_base` by decide_tac >> gvs[]
+QED
+Finalise memory_iterator_place_observation
