@@ -108,10 +108,11 @@ Proof
 QED
 
 (* So its DLOAD offset bound holds at every reachable instruction. *)
-Theorem lower_dload_stage_dload_ok:
+Theorem lower_dload_stage_dload_ok_static:
   !rpolicy view C C' vs.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_ctx_shape C /\
+    (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     mem_inv raw_mem_ok C vs ==>
     mem_inv dload_offset_ok C' vs
 Proof
@@ -126,6 +127,17 @@ Proof
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[EL_MEM]) >>
   drule_all lower_dload_stage_no_dload >> simp[dload_offset_ok_def]
+QED
+
+Theorem lower_dload_stage_dload_ok:
+  !rpolicy view C C' vs.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    o1_ctx_shape C /\ o1_run_state_ok vs /\
+    mem_inv raw_mem_ok C vs ==>
+    mem_inv dload_offset_ok C' vs
+Proof
+  rpt strip_tac >> irule lower_dload_stage_dload_ok_static >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
 
 (* And no DLOAD to need headroom for: the bound is raw_mem_ok's frontier
