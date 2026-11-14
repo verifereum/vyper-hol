@@ -138,6 +138,9 @@ Proof
    eval_operand op s = SOME (typed_val_to_w256 ftv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `compile_store_at_loc cenv.ce_imm_alloca dst op
     (SOME (if tr then LocTransient else LocStorage)) su = ((),sb)` by

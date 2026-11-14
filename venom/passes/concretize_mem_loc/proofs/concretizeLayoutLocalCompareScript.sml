@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalCompare
-Ancestors concretizeLayoutPointerRanges frameRelocationCompareAccess
+Ancestors concretizeLayoutCutSafe concretizeLayoutPointerRanges frameRelocationCompareAccess
   frameRelocationCompareSteps frameActivationSeparation frameResolvedTrace
   frameActivationLifetime frameActivationCache frameJointTransition finite_map list
   frameActivationLookup frameRawEndpoints concretizeLayoutPositions
@@ -41,7 +41,7 @@ Theorem concretize_comparison_geometry:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\ s.vs_alloca_next < dimword (:256) /\
   vs0.vs_allocas = FEMPTY /\
   joint_config_reachable vs0 C
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
@@ -78,7 +78,7 @@ Proof
       (fn::MAP (\f. f.cf_fn) stk) (tu0,tu1) = concretize_positions C' owner tu1` by
     metis_tac[resolved_activation_lookup] >>
   `b+sz < dimword (:256)` by
-    (drule_all joint_activation_cache_strict >> simp[]) >>
+    (drule_all joint_activation_cache_strict_frontier >> simp[]) >>
   drule_all concretize_positions_activation_numeric >> strip_tac >>
   simp[arithmeticTheory.ADD_COMM])
 QED
@@ -104,8 +104,8 @@ Theorem concretize_compare_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -151,7 +151,7 @@ Proof
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s /\ access_ok lo G fn inst s` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -195,6 +195,9 @@ Proof
     (irule disciplined_compare_vars >> simp[] >>
      qexistsl_tac [`P`, `fn`, `w`] >> gvs[]) >>
   `FLOOKUP rv u <> NONE \/ FLOOKUP rv k <> NONE` by (fs[] >> metis_tac[]) >>
+  `c <= LENGTH es` by simp[] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (drule_all layout_cut_safe_frontier >> simp[]) >>
   drule_at (Pat `ctx_pass_stage _ _ _ _ _`) concretize_comparison_geometry >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `lifetime_ok _ _ _`)) >>

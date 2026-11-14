@@ -6,6 +6,7 @@
  *)
 Theory ptrDisciplineAgree
 Ancestors
+  o1SafeUpto
   ptrDiscipline ctxLookupAgree ctxLookupAgreeHelpers venomExecSemantics
   venomInst venomState list
 
@@ -109,6 +110,22 @@ Proof
   metis_tac[]
 QED
 
+Theorem ptr_discipline_upto_ctx_agree:
+  ctx_agree R ctx ctx' /\ ctx'.ctx_entry = ctx.ctx_entry /\
+  (!entry. ctx.ctx_entry = SOME entry ==> R entry) /\
+  (!fn. MEM fn ctx'.ctx_functions ==> MEM fn ctx.ctx_functions) /\
+  ptr_discipline_upto lo n ctx vs ==>
+  ptr_discipline_upto lo n ctx' vs
+Proof
+  simp[ptr_discipline_upto_def] >> strip_tac >> conj_tac
+  >- (qexists_tac `P` >> fs[EVERY_MEM]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all frame_reachable_ctx_agree_back >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >>
+  strip_tac >> first_x_assum irule >>
+  fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]
+QED
+
 Theorem ptr_discipline_ctx_agree:
   ctx_agree R ctx ctx' /\ ctx'.ctx_entry = ctx.ctx_entry /\
   (!entry. ctx.ctx_entry = SOME entry ==> R entry) /\
@@ -116,13 +133,21 @@ Theorem ptr_discipline_ctx_agree:
   ptr_discipline lo ctx vs ==>
   ptr_discipline lo ctx' vs
 Proof
-  simp[ptr_discipline_def] >> strip_tac >> qexists_tac `P` >> conj_tac
-  >- fs[EVERY_MEM] >>
+  strip_tac >> irule ptr_discipline_upto_all >>
+  irule ptr_discipline_upto_ctx_agree >>
+  metis_tac[ptr_discipline_upto_whole]
+QED
+
+Theorem taint_within_upto_ctx_agree:
+  ctx_agree A ctx ctx' /\ ctx'.ctx_entry = ctx.ctx_entry /\
+  (!entry. ctx.ctx_entry = SOME entry ==> A entry) /\
+  taint_within_upto D n ctx vs ==>
+  taint_within_upto D n ctx' vs
+Proof
+  simp[taint_within_upto_def] >> strip_tac >> conj_tac >>
   rpt gen_tac >> strip_tac >>
   drule_all frame_reachable_ctx_agree_back >> strip_tac >>
-  first_x_assum drule >> strip_tac >> simp[] >>
-  strip_tac >> first_x_assum irule >>
-  fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]
+  first_x_assum irule >> metis_tac[]
 QED
 
 Theorem taint_within_ctx_agree:
@@ -131,9 +156,7 @@ Theorem taint_within_ctx_agree:
   taint_within D ctx vs ==>
   taint_within D ctx' vs
 Proof
-  simp[taint_within_def] >> strip_tac >> conj_tac >> rpt gen_tac >> strip_tac
-  >- (drule_all frame_reachable_ctx_agree_back >> strip_tac >>
-      first_x_assum irule >> metis_tac[])
-  >> drule_all final_taint_ctx_agree >> strip_tac >>
-  first_x_assum drule >> simp[]
+  strip_tac >> irule taint_within_upto_all >>
+  irule taint_within_upto_ctx_agree >>
+  metis_tac[taint_within_upto_whole]
 QED

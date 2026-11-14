@@ -1,6 +1,7 @@
 (* Join the physical RHS post to the staged local store. *)
 Theory widenedAssignPtrRead
-Ancestors widenedAssignPtrContinuation widenedAssignPtrRhsInput assignRelayoutCaller
+Ancestors
+  targetPlaceSim widenedAssignPtrContinuation widenedAssignPtrRhsInput assignRelayoutCaller
   bodySim bodyPtrDefs exprSimHyps exprSimHypsDefs exprSimDefs exprSimSource
   exprLowering exprLoweringProps loweringPosts compileEnv context
   stmtSimAssignSource memoryLocalRhsProps stmtSimAugAssign
@@ -71,7 +72,7 @@ Proof
   `get_tenv cx = env.type_defs` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `?dtv. evaluate_type (get_tenv cx) ty = SOME dtv` by
-    (drule_all expr_sim_inv_local >> strip_tac >> metis_tac[]) >>
+    (drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >> metis_tac[]) >>
   `bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
     (INL v, ee with gas_obs := [])` by
