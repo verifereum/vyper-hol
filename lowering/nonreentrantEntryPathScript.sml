@@ -398,13 +398,23 @@ Proof
       ghost_inv H NONE cenv cx es_lock G' tn' u` by simp[] >>
      fs[stmt_state_rel_inst_idx, ghost_inv_cx_dead,
         ghost_inv_at_inst_idx]) >>
+  `fresh_vars_wrt body_sa (u with vs_inst_idx := s_reg.vs_inst_idx +
+    LENGTH (transient_lock_code nkey (mut = View) sa))` by
+    fs[fresh_vars_wrt_def] >>
+  `~block_is_terminated body_sa /\ ~u.vs_halted /\
+    u.vs_current_bb = body_sa.cs_current_bb /\
+    s_reg.vs_inst_idx + LENGTH (transient_lock_code nkey (mut = View) sa) =
+      LENGTH body_sa.cs_current_insts /\
+    u.vs_gas_readings = s_reg.vs_gas_readings /\
+    u.vs_code = s_reg.vs_code /\ u.vs_labels = s_reg.vs_labels` by
+    (Cases_on `mut = View` >> Cases_on `sa.cs_current_insts` >>
+     gvs[transient_lock_code_execution, transient_lock_checked_state_def,
+         update_var_def, tstore_def, block_is_terminated_def,
+         transient_lock_code_def, LAST_APPEND, LAST_CONS_cond,
+         mk_inst_def, is_terminator_def]) >>
   qexistsl_tac
     [`u with vs_inst_idx := s_reg.vs_inst_idx +
         LENGTH (transient_lock_code nkey (mut = View) sa)`, `G'`, `tn'`] >>
-  simp[return_buf_frame_def, stmt_state_rel_inst_idx] >>
-  Cases_on `mut = View` >> Cases_on `sa.cs_current_insts` >>
-  gvs[transient_lock_code_execution, transient_lock_checked_state_def,
-      update_var_def, tstore_def, fresh_vars_wrt_def,
-      block_is_terminated_def, transient_lock_code_def, LAST_APPEND,
-      mk_inst_def, is_terminator_def]
+  simp[return_buf_frame_def] >>
+  rpt strip_tac >> fs[] >> metis_tac[]
 QED
