@@ -4,7 +4,7 @@ Ancestors
   bodyMemTbConvertLoadMemory exprLowering emitHelper compileEnv
   fragExecMem instMemFrontier venomExecSemantics venomState venomInst
   emitHelperProps exprLoweringProps list rich_list memSafeRun fragGasSeqMem
-  bodyUnopFragMemory fragGasMode fragGasPathMem fragExec
+  bodyUnopFragMemory fragGasSeqAbort fragGasMode fragGasPathMem fragExec
 
 Theorem convert_bytestring_cast_mem_ok:
   compile_type_convert v (ConvBytestringCast n k) sa = (op,sb) /\

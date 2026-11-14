@@ -1,6 +1,6 @@
 Theory bodyMemBiBlockHashPath
 Ancestors
-  bodyUnopFragMemory builtinProps builtinSimple builtinMisc fragGasFresh fragGasSeqMem
+  bodyUnopFragMemory fragGasSeqAbort builtinProps builtinSimple builtinMisc fragGasFresh fragGasSeqMem
   allocaHistoryFragment instMemFrontier memSafeRun fragExec fragExecMem varsExt fragGasMode
   compileEnv loweringStateRelDefs exprLoweringProps exprSimProps venomInstProofs emitHelper
   exprSimDefs finite_map

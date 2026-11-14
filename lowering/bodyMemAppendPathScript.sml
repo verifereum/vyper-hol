@@ -4,9 +4,9 @@ Ancestors
   bodyMemAppendFacts bodyDeclMemoryCounted bodyDeclZeroGasPath bodyDeclMemoryCore bodyUnopFragMemory
   stmtSimAppendStorageCompose stmtSimAppendStorage appendStorageRel
   varsExt freshWrites stateFrame exprOperandVar stmtSimProps stmtSimDefs exprSimDefs
-  fragGasMode fragGasPathMem fragExecMem fragExec
+  fragGasSeqAbort fragGasMode fragGasPathMem fragExecMem fragExec
   exprLoweringProps emitHelperProps loweringPosts compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics
-  vyperState vyperStorage list rich_list words finite_map
+  vyperState vyperStorage vyperStorageBackend list rich_list words finite_map
 
 Theorem append_storage_word_frame_fields_mem[local]:
   state_frame u = state_frame
@@ -251,8 +251,10 @@ Proof
   >- (`?len. len = w2n (if tr then tload slot s else sload slot s) /\
         len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap` by
         metis_tac[] >>
-      `?H. stmt_state_rel H ctx func cenv cx es s /\
-           MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)` by metis_tac[] >>
+      Q.SUBGOAL_THEN
+        `?H. stmt_state_rel H ctx func cenv cx es s /\
+             MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)` assume_tac
+      >- metis_tac[] >>
       drule_all append_storage_word_success_path_mem >>
       disch_then (qspec_then `lctx` strip_assume_tac) >>
       qexists_tac `OK t` >> simp[] >> metis_tac[]) >>

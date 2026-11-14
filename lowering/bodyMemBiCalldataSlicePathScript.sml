@@ -10,7 +10,7 @@ Ancestors
   vyperContext vyperState vyperValue vyperTypeSystem vyperAST exprSimProps
   context localPtrsProps immutableMemoryFrame vyperTypeInvariants
   exprSimMemDefs instMemFrontier vyperInterpreter exprLowering valueCopy
-  venomMemDefs bodyUnopFragMemory fragGasSeqMem fragGasMode
+  venomMemDefs bodyUnopFragMemory fragGasSeqAbort fragGasSeqMem fragGasMode
   allocaHistoryFragment rich_list
   vyperStorageTrace vyperStorageFootprint
 

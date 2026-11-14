@@ -2,7 +2,7 @@
 Theory bodyMemTbConvertLoadMemory
 Ancestors
   bodyMemAssignTopCopyIndex
-  bodyMemTbConvertSourceMemory fragExecMem instMemFrontier bodyMemAssignTopCopyFacts
+  fragExecMem instMemFrontier
   fragGasSeqMem fragExec
   venomExecSemantics exprLowering emitHelperProps emitHelper compileEnv
   venomState venomInst context list rich_list words loweringSlice exprLoweringProps memSafeRun exprSimWordBuiltins

@@ -1,7 +1,7 @@
 (* Counted, memory-checked paths for a local array pop. *)
 Theory bodyMemPopLocalPath
 Ancestors
-  exprSimPop bodyUnopFragMemory venomMemProofs fragExecMem
+  exprSimPop bodyUnopFragMemory fragGasSeqAbort venomMemProofs fragExecMem
   exprLoweringProps venomInst venomInstProofs venomExecSemantics
   instMemFrontier list venomState storageCopyGasPath
   exprLowering compileEnv fragGasSeqMem allocaHistoryFragment
