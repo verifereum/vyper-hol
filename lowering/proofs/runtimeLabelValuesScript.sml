@@ -2,7 +2,7 @@
 Theory runtimeLabelValues
 Ancestors
   runtimeLabelInvariant context compileEnv emitHelper loweringShapeDefs
-  venomInst list finite_map
+  venomInst list finite_map stmtLowering
 
 Theorem rb_compile_alloc_buffer:
   !size. rb_step rb_buffer_ok (compile_alloc_buffer size)
@@ -722,3 +722,57 @@ Resume rb_slots[dispatch]:
 QED
 
 Finalise rb_slots
+
+Theorem rb_env_bind_local:
+  rb_env_ok env /\ rb_location_ok loc ==>
+  rb_env_ok (env with ce_vars updated_by (\m. m |+ (id,loc)))
+Proof
+  simp[rb_env_ok_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  Cases_on `id = k` >> gvs[] >> metis_tac[]
+QED
+
+Theorem rb_declare_local:
+  rb_env_ok env ==> rb_step rb_env_ok (declare_local env id ty)
+Proof
+  strip_tac >> pure_rewrite_tac[declare_local_def, LET_THM] >> BETA_TAC >>
+  Cases_on `env.ce_alloca_locals` >> simp[]
+  >- (irule rb_bind_fresh_var >> BETA_TAC >> gen_tac >>
+      irule rb_step_return >>
+      simp[rb_env_ok_def, FLOOKUP_UPDATE, rb_location_ok_def] >>
+      rpt strip_tac >> gvs[rb_env_ok_def] >>
+      Cases_on `id = k` >> gvs[rb_location_ok_def] >> metis_tac[]) >>
+  irule rb_step_return >> gvs[rb_env_ok_def] >> metis_tac[]
+QED
+
+Theorem rb_declare_stmt_local:
+  rb_env_ok env ==> rb_step rb_env_ok (declare_stmt_local env s)
+Proof
+  Cases_on `s` >> simp[declare_stmt_local_def, rb_declare_local, rb_step_return]
+QED
+
+Theorem rb_emit_local_alloca:
+  rb_step (K T) (emit_local_alloca env id)
+Proof
+  simp[emit_local_alloca_def] >>
+  Cases_on `FLOOKUP env.ce_vars id` >> simp[rb_step_return] >>
+  Cases_on `x` >> simp[rb_step_return] >>
+  rename1 `PtrVar op sz` >> Cases_on `op` >>
+  simp[rb_step_return, rb_emit_inst]
+QED
+
+Theorem rb_compile_return_unlock:
+  rb_step (K T) (compile_return_unlock env)
+Proof
+  pure_rewrite_tac[compile_return_unlock_def, LET_THM] >> pairarg_tac >>
+  Cases_on `is_nonreentrant` >>
+  simp[rb_compile_nonreentrant_unlock, rb_step_return]
+QED
+
+Theorem rb_compile_fixed_region_with_id:
+  !n. rb_step (\ib. rb_buffer_ok (SND ib)) (compile_fixed_region_with_id n)
+Proof
+  simp[rb_step_def, rb_state_ok_def, compile_fixed_region_with_id_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, rb_buffer_ok_def,
+       state_insts_def, all_blocks_def, EVERY_APPEND, mk_inst_def]
+QED
