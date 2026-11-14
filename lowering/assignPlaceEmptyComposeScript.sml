@@ -32,6 +32,8 @@ Proof
 QED
 
 
+(* Empty values still emit one header store. Static storage faults belong
+   after target evaluation; the memory branch remains a successful write. *)
 Theorem assign_place_empty_stmt_frag:
   !ctx func cx lctx RetQ cenv ty env bt e es dty.
     ~expr_can_mutate cenv (target_to_expr bt) /\
