@@ -3,7 +3,7 @@ Ancestors
   o1CodeEndCfgRounds o1CodeEndCfgCollapse o1LabelFlowSimplifyPreservation
   o1LabelFlowLateSimplify o1LabelFlowSimplifyChain o1LabelFlowSimplifyJump o1LabelFlowRetention
   o1ContractSimplifyCfg o1PassContract o1PassLift codegenSymRel simplifyCfgStruct
-  simplifyCfgDefs simplifyCfgShape simplifyCfgFixupShape simplifyCfgInvariant
+  simplifyCfgDefs simplifyCfgRoundSemantics simplifyCfgShape simplifyCfgFixupShape simplifyCfgInvariant
   simplifyCfgBypassDataflow simplifyCfgWfssa simplifyCfgSimTools cfgTransform venomInst list
   simplifyCfgCorrectness simplifyCfgProof simplifyCfgStaticInterface simplifyCfgShapeCore
   simplifyCfgPhiRepair o1ContractCfgNorm venomWfProps simplifyCfgControl
@@ -178,7 +178,7 @@ QED
 
 Theorem code_end_iter_static[local]:
   !fuel f.
-  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
+  scfg_static f /\ wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
   scfg_phi_safe f /\ fn_defs_reach_uses f /\ EVERY label_positions_ok (fn_insts f) /\
   (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
@@ -187,25 +187,27 @@ Theorem code_end_iter_static[local]:
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
   (!x. code_end_var (FST (simplify_cfg_iter_with_labels fuel f)) x ==> code_end_var f x)
 Proof
-  Induct_on `fuel`
-  >- (simp[simplify_cfg_iter_with_labels_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
-  drule_all simplify_cfg_round_ssa_invariant >> strip_tac >>
-  drule_all code_end_round_static >> strip_tac >>
-  Cases_on `simplify_cfg_round_with_labels f` >>
-  rename1 `simplify_cfg_round_with_labels f = (next_fn,round_changed)` >>
-  RULE_ASSUM_TAC (PURE_REWRITE_RULE [pairTheory.FST]) >>
-  simp[NoAsms, simplify_cfg_iter_with_labels_def] >>
-  qpat_assum `simplify_cfg_round_with_labels f = _` (fn th => rewrite_tac[th]) >>
-  simp[NoAsms] >> IF_CASES_TAC
-  >- (simp[NoAsms] >> metis_tac[]) >>
-  Cases_on `simplify_cfg_iter_with_labels fuel next_fn` >> simp[NoAsms] >>
-  first_x_assum (qspec_then `next_fn` mp_tac) >> simp[] >>
-  (impl_tac >- metis_tac[]) >> strip_tac >> metis_tac[]
+  qabbrev_tac `P = \f. wf_ssa f /\ wf_function f /\ fn_inst_wf f /\
+    first_block_no_preds f /\ scfg_phi_safe f /\ fn_defs_reach_uses f /\
+    EVERY label_positions_ok (fn_insts f) /\
+    (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+      i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY)` >>
+  `P f` by (simp[Abbr `P`] >> metis_tac[]) >>
+  mp_tac (Q.INST [`R` |-> `\a b. P a ==>
+    P b /\ (!x. code_end_var b x ==> code_end_var a x)`]
+    scfg_iter_relation) >> BETA_TAC >> impl_tac
+  >- (conj_tac >- simp[] >> conj_tac
+      >- (rpt gen_tac >> rpt strip_tac >> metis_tac[]) >>
+      gen_tac >> strip_tac >> simp[Abbr `P`] >> strip_tac >>
+      drule_all simplify_cfg_round_ssa_invariant >> strip_tac >>
+      drule_all code_end_round_static >> simp[] >> metis_tac[]) >>
+  disch_then (qspecl_then [`fuel`,`f`] mp_tac) >> simp[] >>
+  simp[Abbr `P`] >> metis_tac[]
 QED
 
 Theorem code_end_fn_static[local]:
-  wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
+  scfg_static f /\ wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
   scfg_phi_safe f /\ fn_defs_reach_uses f /\ EVERY label_positions_ok (fn_insts f) /\
   (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) ==>
@@ -295,7 +297,10 @@ Proof
   `EVERY label_positions_ok (fn_insts f)` by metis_tac[o1_fn_shape_label_positions_ok] >>
   `scfg_phi_safe f` by
     (irule wf_ssa_phi_safe >> fs[o1_fn_shape_def, first_block_no_phi_def]) >>
-  fs[o1_fn_shape_def] >> metis_tac[wf_ssa_defs_reach_uses]
+  `simplify_cfg_fn_ok f` by
+    (irule simplify_cfg_fn_ok_ssa >> fs[o1_fn_shape_def]) >>
+  fs[o1_fn_shape_def, scfg_static_def] >>
+  metis_tac[wf_ssa_defs_reach_uses, fn_shape_ok_scfg_shape]
 QED
 
 Theorem code_end_stage_preserves[local]:
