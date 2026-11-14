@@ -136,18 +136,6 @@ Proof
   qpat_x_assum `!i j. _` (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]
 QED
 
-(* Definition probes: zero-size sites and natural bases beyond word256. *)
-Theorem occurrence_natural_geometry_zero_wrap_probe[local]:
-  occurrence_natural_geometry 0 0 []
-    (FEMPTY |+ ((0,0),(2 ** 256,0))) []
-    (s with vs_alloca_next := 2 ** 256) /\
-  occurrence_natural_geometry 0 0 []
-    (FEMPTY |+ ((0,0),(2 ** 256,1))) []
-    (s with vs_alloca_next := 2 ** 256 + 1)
-Proof
-  simp[occurrence_natural_geometry_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[]
-QED
 
 Theorem occurrence_geometry_entry:
   enters_block fn

@@ -393,17 +393,6 @@ Proof
   simp[ircf_witness_main_def, mk_raw_function_def, mk_inst_def]
 QED
 
-Theorem ircf_witness_alloca_src[local]:
-  !fuel. step_inst fuel ircf_witness_ctx
-    (mk_inst 1 ALLOCA [Lit 32w] ["%src"])
-    (init_venom_state "main") =
-    OK ((init_venom_state "main") with
-      <| vs_vars := FEMPTY |+ ("%src",0w);
-         vs_allocas := FEMPTY |+ (1,(0,32)); vs_alloca_next := 32 |> )
-Proof
-  simp[step_inst_def, step_inst_base_def, mk_inst_def, exec_alloca_def,
-       eval_operand_def, init_venom_state_def, update_var_def]
-QED
 
 Theorem ircf_witness_run_no_error[local]:
   !e. run_blocks 3 ircf_witness_ctx ircf_witness_main
