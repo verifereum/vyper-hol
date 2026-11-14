@@ -60,7 +60,7 @@ End
 
 (* A slice of non-ALLOCA instructions, passed over with the allocations
    unchanged, keeps the allocation history. *)
-Theorem alloca_history_no_alloca_slice[local]:
+Theorem alloca_history_no_alloca_slice:
   !func s t bb insts rest.
     alloca_history func s /\
     t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
