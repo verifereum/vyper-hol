@@ -197,6 +197,87 @@ Proof
   simp[supply_state_agree_inst_idx] >> metis_tac[]
 QED
 
+Theorem supply_ready_body_entry:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  supply_ready fn pred target split repls u v /\
+  enters_block fn' v v1 /\ active_inst fn' inst' v1 ==>
+  ?bb a. MEM bb fn.fn_blocks /\ enters_block fn u a /\
+    supply_prefix_defined fn a /\
+    active_inst fn (EL a.vs_inst_idx bb.bb_instructions) a /\
+    a.vs_current_bb = bb.bb_label /\ v1.vs_current_bb = bb.bb_label /\
+    a.vs_inst_idx = phi_prefix_length bb.bb_instructions /\
+    v1.vs_inst_idx = a.vs_inst_idx /\
+    inst' = EL v1.vs_inst_idx
+      (supply_block_image pred target split repls bb).bb_instructions /\
+    supply_state_agree fn a v1
+Proof
+  strip_tac >>
+  `supply_entry_defined fn u` by gvs[supply_ready_def] >>
+  drule_all supply_entry_defined_lookup >> strip_tac >>
+  drule_all supply_ready_image_lookup >> strip_tac >>
+  qpat_x_assum `enters_block _ _ _` mp_tac >>
+  simp[enters_block_def] >> strip_tac >>
+  rename1 `eval_phis v (supply_block_image pred target split repls bb).bb_instructions = OK sp` >>
+  `?out. eval_phis u bb.bb_instructions = OK out /\ supply_state_agree fn out sp` by
+    (qpat_x_assum `supply_ready _ _ _ _ _ _ _` mp_tac >>
+     simp[supply_ready_def] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = u.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `out.vs_current_bb = u.vs_current_bb /\ sp.vs_current_bb = v.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  `u.vs_current_bb = v.vs_current_bb` by gvs[supply_ready_def] >>
+  `phi_prefix_length (supply_block_image pred target split repls bb).bb_instructions =
+   phi_prefix_length bb.bb_instructions` by metis_tac[supply_block_image_phi_prefix] >>
+  `wf_function fn'` by metis_tac[insert_split_supply_wf_function] >>
+  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions /\
+   inst' = EL (phi_prefix_length bb.bb_instructions)
+     (supply_block_image pred target split repls bb).bb_instructions` by
+    (qpat_x_assum `active_inst _ _ _` mp_tac >>
+     simp[active_inst_def] >>
+     disch_then (qx_choose_then `next_bb` strip_assume_tac) >>
+     `next_bb = supply_block_image pred target split repls bb` by
+       metis_tac[MEM_lookup_block, wf_function_def, fn_labels_def,
+                 optionTheory.SOME_11] >> gvs[]) >>
+  `enters_block fn u (out with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    (simp[enters_block_def] >> metis_tac[]) >>
+  `supply_prefix_defined fn
+     (out with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    metis_tac[supply_prefix_enters_block] >>
+  qexistsl [`bb`, `out with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
+  simp[supply_state_agree_inst_idx] >>
+  simp[active_inst_def] >> qexists_tac `bb` >> simp[]
+QED
+
+Theorem supply_split_next_prefix:
+  ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  v.vs_inst_idx < LENGTH split.bb_instructions /\
+  inst' = EL v.vs_inst_idx split.bb_instructions /\
+  ~is_terminator inst'.inst_opcode /\ ~v.vs_halted /\
+  supply_state_agree fn a v /\ step_inst fuel D inst' v = OK w /\
+  (!n. ?m. exec_block n D split v = OK m /\
+           supply_ready fn pred target split repls u m) ==>
+  supply_state_agree fn a (w with vs_inst_idx := SUC v.vs_inst_idx) /\
+  ~w.vs_halted /\ w.vs_current_bb = v.vs_current_bb /\
+  inst'.inst_opcode = ASSIGN /\
+  (!n. ?m. exec_block n D split (w with vs_inst_idx := SUC v.vs_inst_idx) = OK m /\
+           supply_ready fn pred target split repls u m)
+Proof
+  strip_tac >> drule_all supply_split_step_agree >> strip_tac >>
+  `run_insts fuel D [inst'] v = OK w` by simp[analysisSimDefsTheory.run_insts_def] >>
+  `w.vs_current_bb = v.vs_current_bb` by
+    (mp_tac (Q.SPEC `[inst']` supply_assigns_run_control) >> simp[] >> metis_tac[]) >>
+  `supply_state_agree fn a (w with vs_inst_idx := SUC v.vs_inst_idx)` by
+    gvs[supply_state_agree_def, stateFrameTheory.execution_frame_def,
+        venomStateTheory.lookup_var_def] >>
+  simp[] >> gen_tac >> first_x_assum (qspec_then `n` strip_assume_tac) >>
+  `step_inst n D inst' v = OK w` by metis_tac[supply_assign_fuel_independent] >>
+  drule_all supply_exec_block_step_residual >> strip_tac >> metis_tac[]
+QED
+
 Theorem supply_frame_split_next:
   wf_function fn' /\ MEM split fn'.fn_blocks /\
   ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\
@@ -230,6 +311,68 @@ Proof
   qpat_x_assum `supply_state_agree fn a w` mp_tac >>
   simp[supply_state_agree_def, stateFrameTheory.execution_frame_def,
        venomStateTheory.lookup_var_def]
+QED
+
+(* Keep the caller's chosen source cursor across an ordinary target step. *)
+Theorem supply_body_next_prefix:
+  wf_function fn /\ fn_inst_wf fn /\ wf_function fn' /\
+  MEM bb fn.fn_blocks /\
+  MEM (supply_block_image pred target split repls bb) fn'.fn_blocks /\
+  a.vs_current_bb = bb.bb_label /\ v.vs_current_bb = bb.bb_label /\
+  a.vs_inst_idx = v.vs_inst_idx /\
+  a.vs_inst_idx < LENGTH bb.bb_instructions /\
+  phi_prefix_length bb.bb_instructions <= a.vs_inst_idx /\
+  inst = EL a.vs_inst_idx bb.bb_instructions /\
+  inst' = EL v.vs_inst_idx
+    (supply_block_image pred target split repls bb).bb_instructions /\
+  supply_prefix_defined fn a /\ supply_state_agree fn a v /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel D inst' v = OK w /\
+  active_inst fn' next' (w with vs_inst_idx := SUC v.vs_inst_idx) ==>
+  ?u. step_inst fuel C inst a = OK u /\
+      supply_prefix_defined fn (u with vs_inst_idx := SUC a.vs_inst_idx) /\
+      active_inst fn (EL (SUC a.vs_inst_idx) bb.bb_instructions)
+        (u with vs_inst_idx := SUC a.vs_inst_idx) /\
+      supply_state_agree fn (u with vs_inst_idx := SUC a.vs_inst_idx)
+        (w with vs_inst_idx := SUC v.vs_inst_idx) /\
+      u.vs_current_bb = bb.bb_label /\ w.vs_current_bb = bb.bb_label /\
+      SUC a.vs_inst_idx < LENGTH bb.bb_instructions /\
+      next' = EL (SUC a.vs_inst_idx)
+        (supply_block_image pred target split repls bb).bb_instructions
+Proof
+  strip_tac >>
+  `bb_well_formed bb` by metis_tac[wf_function_def, listTheory.EVERY_MEM] >>
+  `inst.inst_opcode <> PHI` by metis_tac[supply_body_non_phi] >>
+  `inst' = inst` by
+    (gvs[] >> simp[supply_block_image_body_index]) >>
+  `step_inst fuel C inst v = OK w` by metis_tac[step_inst_non_invoke] >>
+  `lift_result
+     (\u w. supply_state_agree fn u w /\
+            u.vs_current_bb = w.vs_current_bb /\ u.vs_inst_idx = w.vs_inst_idx)
+     (supply_state_agree fn) (supply_state_agree fn)
+     (step_inst fuel C inst a) (step_inst fuel C inst v)` by
+    (irule supply_step_nonterm >> simp[] >> rpt strip_tac >>
+     irule supply_operand_in_fn >>
+     qexistsl [`bb`, `inst`] >> simp[] >> metis_tac[listTheory.EL_MEM]) >>
+  Cases_on `step_inst fuel C inst a` >>
+  gvs[stateEquivTheory.lift_result_def] >>
+  rename1 `step_inst fuel C inst a = OK u` >>
+  `w.vs_current_bb = bb.bb_label` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+  `SUC a.vs_inst_idx < LENGTH bb.bb_instructions /\
+   next' = EL (SUC a.vs_inst_idx)
+     (supply_block_image pred target split repls bb).bb_instructions` by
+    (qpat_x_assum `active_inst fn' next' _` mp_tac >>
+     simp[active_inst_def] >>
+     disch_then (qx_choose_then `next_bb` strip_assume_tac) >>
+     `next_bb = supply_block_image pred target split repls bb` by
+       metis_tac[same_label_same_block, supply_block_image_label] >> gvs[]) >>
+  `supply_prefix_defined fn (u with vs_inst_idx := SUC a.vs_inst_idx)` by
+    (irule supply_prefix_defined_step >> metis_tac[]) >>
+  qpat_assum `a.vs_inst_idx = v.vs_inst_idx`
+    (fn th => rewrite_tac[GSYM th]) >>
+  simp[supply_state_agree_inst_idx] >>
+  simp[active_inst_def] >> qexists_tac `bb` >> simp[]
 QED
 
 Theorem supply_frame_body_next:
@@ -361,6 +504,61 @@ Proof
   qexistsl [`bb`, `EL v.vs_inst_idx bb.bb_instructions`, `a`, `u`] >> simp[]
 QED
 
+Theorem supply_prefix_exit_pair:
+  supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  MEM bb fn.fn_blocks /\ bb.bb_label = a.vs_current_bb /\
+  supply_prefix_defined fn a /\ active_inst fn inst a /\
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst a = OK u /\
+  ~u.vs_halted /\ supply_body_exit fn pred target split bb u w ==>
+  supply_entry_pair fn s pred target split repls u w
+Proof
+  strip_tac >> fs[supply_norm_inv_def, supply_body_exit_def] >>
+  `~w.vs_halted` by metis_tac[supply_state_agree_halted] >>
+  `supply_entry_defined fn u` by metis_tac[supply_prefix_terminator_entry] >>
+  `inst.inst_opcode <> INVOKE` by
+    (Cases_on `inst.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]) >>
+  `step_inst_base inst a = OK u` by metis_tac[step_inst_non_invoke] >>
+  `u.vs_prev_bb = SOME bb.bb_label` by metis_tac[step_inst_base_term_prev_bb] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def, listTheory.EVERY_MEM] >>
+  `inst = LAST bb.bb_instructions` by
+    (qpat_x_assum `active_inst fn inst a` mp_tac >> simp[active_inst_def] >>
+     disch_then (qx_choose_then `active_bb` strip_assume_tac) >>
+     `active_bb = bb` by metis_tac[same_label_same_block] >>
+     gvs[bb_well_formed_def, listTheory.LAST_EL] >> metis_tac[]) >>
+  `bb.bb_label = pred.bb_label <=> bb = pred` by metis_tac[same_label_same_block] >>
+  `bb = pred ==> (inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ)` by
+    (strip_tac >> gvs[] >> irule supply_multi_successor_jump >> simp[] >>
+     qpat_x_assum `EVERY label_positions_ok _` mp_tac >>
+     rewrite_tac[fn_insts_def, ctxLookupAgreeHelpersTheory.fn_insts_EVERY_block] >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `split.bb_label <> bb.bb_label` by
+    (drule_all supply_split_label_not_old >>
+     simp[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
+  Cases_on `bb = pred /\ u.vs_current_bb = target.bb_label`
+  >- (gvs[supply_entry_pair_def] >> disj2_tac >> simp[supply_pending_def] >>
+      `EVERY (\x. MEM x s.irs_used_vars) (block_ir_vars target)` by
+        (gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
+             venomFnScheduleRunnerTheory.list_subset_def,
+             listTheory.EVERY_MEM, irSupplyTheory.fn_ir_vars_def] >>
+         metis_tac[listTheory.MEM_FLAT, listTheory.MEM_MAP]) >>
+      drule cfgNormSupplyProofsTheory.EVERY_phi_vars_needing_forward_covered >>
+      disch_then (qspecl_then [`bb.bb_label`, `bb`] assume_tac) >>
+      gvs[listTheory.EVERY_MEM] >> rpt strip_tac >> simp[] >>
+      `exec_block fuel C bb a = OK u` by
+        (qpat_x_assum `active_inst fn _ a` mp_tac >> simp[active_inst_def] >>
+         disch_then (qx_choose_then `active_bb` strip_assume_tac) >>
+         `active_bb = bb` by metis_tac[same_label_same_block] >>
+         irule supply_active_terminator_exec_block >> metis_tac[]) >>
+      `x IN FDOM u.vs_vars` by
+        (irule phi_forward_sources_exec_block_defined >>
+         qexistsl [`C`, `fn`, `fuel`, `bb`, `a`, `target`] >> simp[]) >>
+      simp[venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_DEF]) >>
+  simp[supply_entry_pair_def] >> disj1_tac >> irule supply_ready_other_entry >>
+  Cases_on `bb = pred` >> gvs[] >> metis_tac[]
+QED
+
 Theorem supply_frame_body_exit_pair:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
   EVERY label_positions_ok (fn_insts fn) /\
@@ -462,6 +660,53 @@ Proof
   simp[supply_frame_body_def] >>
   qexistsl [`bb`, `out with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
   simp[supply_state_agree_inst_idx] >> metis_tac[]
+QED
+
+Theorem supply_pending_split_entry:
+  wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') /\
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst a = OK u /\
+  supply_pending fn s pred target split u w /\
+  enters_block fn' w z /\ active_inst fn' next z ==>
+  a.vs_current_bb = pred.bb_label /\ z.vs_current_bb = split.bb_label /\
+  z.vs_inst_idx = 0 /\ next = EL 0 split.bb_instructions /\
+  ~z.vs_halted /\ supply_state_agree fn a z /\
+  (!n. ?m. exec_block n D split z = OK m /\
+           supply_ready fn pred target split repls u m)
+Proof
+  strip_tac >>
+  drule_all supply_pending_split_lookup >> strip_tac >>
+  drule supply_split_no_phi_entry >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
+  `z = w with vs_inst_idx := 0` by gvs[enters_block_def] >>
+  `supply_state_agree fn a u` by metis_tac[supply_terminator_step_self_agree] >>
+  `a.vs_current_bb = pred.bb_label` by
+    (`inst.inst_opcode <> INVOKE` by
+       (Cases_on `inst.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]) >>
+     `step_inst_base inst a = OK u` by metis_tac[step_inst_non_invoke] >>
+     `u.vs_prev_bb = SOME a.vs_current_bb` by
+       metis_tac[step_inst_base_term_prev_bb] >> gvs[supply_pending_def]) >>
+  `!n. ?m. exec_block n D split z = OK m /\
+        supply_ready fn pred target split repls u m` by
+    (gen_tac >> drule_all supply_pending_contract >>
+     disch_then (qspecl_then [`n`, `D`] strip_assume_tac) >>
+     qexists_tac `m` >> gvs[run_block_entry_def]) >>
+  `supply_state_agree fn a z` by
+    (`supply_state_agree fn u w` by gvs[supply_pending_def] >>
+     `supply_state_agree fn a w` by metis_tac[supply_state_agree_trans] >>
+     gvs[supply_state_agree_def, stateFrameTheory.execution_frame_def,
+         venomStateTheory.lookup_var_def]) >>
+  `wf_function fn'` by metis_tac[insert_split_supply_wf_function] >>
+  `next = EL 0 split.bb_instructions` by
+    (qpat_x_assum `active_inst fn' next _` mp_tac >>
+     simp[active_inst_def] >>
+     disch_then (qx_choose_then `next_bb` strip_assume_tac) >>
+     `lookup_block next_bb.bb_label fn'.fn_blocks = SOME next_bb` by
+       (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+     `next_bb = split` by gvs[] >> gvs[]) >>
+  gvs[supply_pending_def]
 QED
 
 Theorem supply_frame_pending_block:
@@ -953,6 +1198,85 @@ Proof
   simp[call_corr_def] >> strip_tac >>
   gvs[inst_wf_def, decode_invoke_def] >>
   irule EQ_SYM >> irule supply_eval_operands_cong >> simp[]
+QED
+
+Theorem supply_body_call_prefix:
+  MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\
+  inst' = EL i (supply_block_image pred target split repls bb).bb_instructions /\
+  inst_wf inst /\ label_positions_ok inst /\
+  supply_state_agree fn a v /\ inst'.inst_opcode = INVOKE /\
+  decode_invoke inst' = SOME (nm,ops) /\ eval_operands ops v = SOME args /\
+  fn_entry_label callee' = fn_entry_label callee /\
+  setup_callee callee' args v = SOME cs ==>
+  inst' = inst /\ decode_invoke inst = SOME (nm,ops) /\
+  eval_operands ops a = SOME args /\ setup_callee callee args a = SOME cs /\
+  fn_entry_state callee cs /\ fn_entry_state callee' cs
+Proof
+  strip_tac >>
+  `inst.inst_opcode = INVOKE` by metis_tac[supply_block_image_index] >>
+  `inst' = inst` by
+    (irule EQ_TRANS >> qexists_tac `EL i bb.bb_instructions` >> simp[] >>
+     irule supply_block_image_index_unchanged >>
+     gvs[venomInstTheory.is_terminator_def]) >>
+  `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
+  `call_corr inst a inst v` by metis_tac[supply_unchanged_inst_projection] >>
+  `eval_operands ops a = SOME args /\
+   stateFrame$execution_frame v = stateFrame$execution_frame a` by
+    gvs[call_corr_def] >>
+  `setup_callee callee args a = SOME cs` by
+    metis_tac[setup_callee_execution_frame] >>
+  metis_tac[setup_callee_fn_entry_state]
+QED
+
+Theorem supply_body_return_prefix:
+  wf_function fn /\ wf_function fn' /\ supply_prefix_defined fn a /\
+  MEM bb fn.fn_blocks /\
+  MEM (supply_block_image pred target split repls bb) fn'.fn_blocks /\
+  a.vs_current_bb = bb.bb_label /\ v.vs_current_bb = bb.bb_label /\
+  a.vs_inst_idx = v.vs_inst_idx /\
+  a.vs_inst_idx < LENGTH bb.bb_instructions /\
+  supply_state_agree fn a v /\
+  stateFrame$execution_frame e = stateFrame$execution_frame e' /\
+  bind_outputs (EL a.vs_inst_idx bb.bb_instructions).inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state v e')) = SOME w /\
+  active_inst fn' next' (w with vs_inst_idx := SUC v.vs_inst_idx) ==>
+  ?u. bind_outputs (EL a.vs_inst_idx bb.bb_instructions).inst_outputs ret.iret_values
+        (adopt_return_fmp ret (merge_callee_state a e)) = SOME u /\
+      supply_prefix_defined fn (u with vs_inst_idx := SUC a.vs_inst_idx) /\
+      active_inst fn (EL (SUC a.vs_inst_idx) bb.bb_instructions)
+        (u with vs_inst_idx := SUC a.vs_inst_idx) /\
+      supply_state_agree fn (u with vs_inst_idx := SUC a.vs_inst_idx)
+        (w with vs_inst_idx := SUC v.vs_inst_idx) /\
+      u.vs_current_bb = bb.bb_label /\ w.vs_current_bb = bb.bb_label /\
+      SUC a.vs_inst_idx < LENGTH bb.bb_instructions /\
+      next' = EL (SUC a.vs_inst_idx)
+        (supply_block_image pred target split repls bb).bb_instructions
+Proof
+  strip_tac >> drule_all supply_return_agree >> strip_tac >>
+  `!outs vals st st'. bind_outputs outs vals st = SOME st' ==>
+     st'.vs_current_bb = st.vs_current_bb` by
+    (mp_tac (Q.ISPEC `\s:venom_state. s.vs_current_bb`
+       venomInstProofs1Theory.bind_outputs_preserves) >>
+     simp[venomStateTheory.update_var_def]) >>
+  `u.vs_current_bb = bb.bb_label /\ w.vs_current_bb = bb.bb_label` by
+    (`u.vs_current_bb = (adopt_return_fmp ret (merge_callee_state a e)).vs_current_bb /\
+      w.vs_current_bb = (adopt_return_fmp ret (merge_callee_state v e')).vs_current_bb` by
+       metis_tac[] >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
+  `SUC a.vs_inst_idx < LENGTH bb.bb_instructions /\
+   next' = EL (SUC a.vs_inst_idx)
+     (supply_block_image pred target split repls bb).bb_instructions` by
+    (qpat_x_assum `active_inst fn' next' _` mp_tac >>
+     simp[active_inst_def] >>
+     disch_then (qx_choose_then `next_bb` strip_assume_tac) >>
+     `next_bb = supply_block_image pred target split repls bb` by
+       metis_tac[same_label_same_block, supply_block_image_label] >> gvs[]) >>
+  `supply_prefix_defined fn (u with vs_inst_idx := SUC a.vs_inst_idx)` by
+    (irule supply_prefix_defined_return >> metis_tac[]) >>
+  qexists_tac `u` >> simp[supply_state_agree_inst_idx] >>
+  simp[active_inst_def] >> qexists_tac `bb` >> simp[]
 QED
 
 Theorem supply_frame_body_projection:
