@@ -73,15 +73,19 @@ what the interpreter would run.
    bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
    endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
-   tuple indices, exponents and `method_id` (`fold_constant`).
+   tuple indices and `method_id` (`fold_constant`). Exponents use
+   `pin_fold_expr`, which preserves operations the compiler does not fold,
+   including unsafe arithmetic. Boolean operators fold their literal children
+   before translation to conditional expressions.
 4. A position whose value must be known at compile time but does not
    evaluate is rejected, never given a default: a declaration with such an
    annotation bound or `range` bound fails validation (`bound_resolved`,
    `iter_bound_resolved`), and a call with such a keyword or slice length
    translates to an expression the type checker rejects (`kwargs_checked`,
    `rejected_expr`). Rejection is the cost of an evaluator smaller than the
-   compiler's folder: `True or False` as a flag, or a `range` count defined by
-   `uint256_addmod`, is accepted by the compiler and rejected here.
+   compiler's folder: a `range` count defined by `uint256_addmod` is accepted
+   by the compiler and rejected here. A closed Boolean flag such as
+   `True or False` is folded and accepted.
 
 Annotation nodes carry no compiler types, and neither do the functions of an
 imported module that nothing calls. So in a count (an annotation bound, a
