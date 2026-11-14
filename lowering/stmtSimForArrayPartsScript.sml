@@ -133,10 +133,11 @@ QED
 
 (* Cut the actual compiler at copy entry, body entry and the back edge.
    Primitive emission remains opaque here; later static lemmas own it. *)
-Theorem compile_for_array_stages:
-  FLOOKUP cenv.ce_vars name = SOME (PtrVar arr_op arr_sz) /\
-  compile_stmt cenv lctx ty
-    (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts) st =
+Theorem compile_for_array_memory_stages:
+  expr_type e = ArrayT et (Fixed n) /\
+  compile_expr cenv (ArrayT et (Fixed n)) e st = (av,se) /\
+  vv_location av = SOME LocMemory /\ vv_operand av = arr_op /\
+  compile_stmt cenv lctx ty (For id et (Array e) n stmts) st =
     ((),st') ==>
   ?bc entry cond bod incr exit idx off ep sa sb0 sb1 sj.
     (do bc <- declare_local cenv id et;
@@ -159,7 +160,7 @@ Theorem compile_for_array_stages:
                    Lit (n2w (elem_size_in_location cenv LocMemory et))];
         ep <- emit_op ADD [arr_op; off];
         return (bc,entry,cond,bod,incr,exit,idx,off,ep)
-     od) st = ((bc,entry,cond,bod,incr,exit,idx,off,ep),sa) /\
+     od) se = ((bc,entry,cond,bod,incr,exit,idx,off,ep),sa) /\
     (case FLOOKUP bc.ce_vars id of
        SOME (MemLoc dst _) =>
          compile_iter_elem_copy cenv ep (Lit (n2w dst))
@@ -178,10 +179,10 @@ Theorem compile_for_array_stages:
         return ()
      od) sj = ((),st')
 Proof
-  strip_tac >> drule compile_array_name >> strip_tac >>
+  strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[compile_for_fixed_array, vv_location_def,
-       vv_operand_def, mk_ptr_def, is_slot_addressed_def,
+  simp[Once compile_stmt_def] >>
+  simp[is_slot_addressed_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   metis_tac[]
@@ -431,7 +432,15 @@ Theorem compile_for_array_parts:
          mk_inst (sj.cs_next_id + 2) JMP [Label cond] []]|> /\
     st'.cs_current_bb = exit /\ st'.cs_current_insts = []
 Proof
-  strip_tac >> drule_all compile_for_array_stages >> strip_tac >>
+  strip_tac >>
+  `compile_expr cenv (ArrayT et (Fixed n))
+     (Name (ArrayT et (Fixed n)) name) st =
+     (LocatedValue (ArrayT et (Fixed n)) (mk_ptr arr_op LocMemory),st)` by
+    metis_tac[compile_array_name] >>
+  drule_at (Pat `compile_stmt _ _ _ _ _ = _`) compile_for_array_memory_stages >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  simp[expr_type_def, vv_location_def, vv_operand_def, mk_ptr_def] >>
+  strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
   dxrule_all compile_for_array_prefix >> strip_tac >>
   dxrule compile_for_array_suffix >> strip_tac >>
