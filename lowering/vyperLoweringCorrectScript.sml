@@ -129,8 +129,6 @@ End
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
-    ~vs.vs_call_ctx.cc_static /\
-    ~tx.is_static /\
     vs.vs_prev_hashes = tx.block_hashes /\
     vs.vs_code = tx.code
 End
@@ -273,7 +271,9 @@ Theorem external_return_prim_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
@@ -288,8 +288,8 @@ Theorem external_return_prim_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
-    simp[state_rel_def] >>
+  `(nr /\ ~iv ==> !s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static)` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
     return_bytes_prim_value >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
@@ -312,7 +312,9 @@ Theorem external_return_word_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
@@ -346,6 +348,7 @@ Theorem external_return_none_unlock_result_rel:
     cenv.ce_return_pc = NONE /\
     cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
     frag_exec ctx st st'
@@ -357,8 +360,8 @@ Theorem external_return_none_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
-    simp[state_rel_def] >>
+  `(nr /\ ~iv ==> !s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static)` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -378,6 +381,7 @@ Theorem external_fallthrough_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
     (if nr then compile_nonreentrant_lock nkey ut iv else comp_return ()) st =
       ((), sa) /\
     compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\
@@ -393,8 +397,8 @@ Theorem external_fallthrough_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
-    simp[state_rel_def] >>
+  `(nr /\ ~iv ==> !s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static)` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`] mp_tac
     compile_guarded_body_stop_unlock_frag >>
@@ -534,7 +538,9 @@ Theorem external_return_static_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
@@ -551,8 +557,8 @@ Theorem external_return_static_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
-    simp[state_rel_def] >>
+  `(nr /\ ~iv ==> !s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static)` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -612,7 +618,9 @@ Theorem external_return_static_cenv_unlock_result_rel:
     compile_external_return (SOME op) F F cenv.ce_ret_enc_info
       cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
     cenv.ce_ret_enc_info = AbiCopy m /\ return_buffer_ok cenv /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
@@ -776,7 +784,9 @@ Theorem external_return_abi_unlock_result_rel:
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
       (x, st') /\
-    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> ~cx.txn.is_static) /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
@@ -804,8 +814,8 @@ Theorem external_return_abi_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
-    simp[state_rel_def] >>
+  `(nr /\ ~iv ==> !s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static)` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
   drule_all return_abi_value_package >>
   disch_then (qspec_then
     `needs_external_call_wrap ret /\
