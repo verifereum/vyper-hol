@@ -465,10 +465,12 @@ Proof
   >- suspend "word" >>
   drule_all tuple_place_owned_memory_forward_frame >> strip_tac >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!H: (bool # 'b word # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff t` by
     (rpt strip_tac >>
-     qpat_assum `!H. stmt_state_rel H _ _ _ _ ee s ==> _` drule >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee r` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
      irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `val_in_memory _ _ _ t.vs_memory`)) >>
      qexistsl_tac [`dty`, `ee`, `env`, `p`, `r`, `s`, `sa`] >>
@@ -484,7 +486,8 @@ Resume tuple_place_owned_memory_run_frame[word]:
     gvs[compile_assign_value_def] >>
   `eval_operand op s = SOME (typed_val_to_w256 stv v)` by fs[expr_val_rel_def] >>
   qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 stv v) s` >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!H: (bool # 'b word # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff u` by
     (rpt strip_tac >> Cases_on `p`
      >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])
