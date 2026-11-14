@@ -1032,6 +1032,7 @@ Theorem call_pipeline_gas_link:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
+    (FST (HD es.contexts)).msgParams.gasLimit - (FST (HD es.contexts)).gasUsed < 2 ** 64 /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
     (!vs. gas_variant vs (entry_venom_state prog cp es) ==>
           source_unit_execution_correct tops ret am tx unit vs) /\
@@ -1115,6 +1116,7 @@ Theorem vyper_call_correct_identity:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
+    (FST (HD es.contexts)).msgParams.gasLimit - (FST (HD es.contexts)).gasUsed < 2 ** 64 /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?r es'.
@@ -1168,6 +1170,7 @@ Theorem vyper_call_correct_asm_opt:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
+    (FST (HD es.contexts)).msgParams.gasLimit - (FST (HD es.contexts)).gasUsed < 2 ** 64 /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?r es'.
@@ -1189,6 +1192,7 @@ Theorem vyper_call_correct:
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
+    (FST (HD es.contexts)).msgParams.gasLimit - (FST (HD es.contexts)).gasUsed < 2 ** 64 /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?r es'.
