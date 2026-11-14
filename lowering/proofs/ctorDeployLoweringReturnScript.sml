@@ -863,7 +863,7 @@ Proof
   `SUM (MAP asm_inst_size pre) < dimword(:256)` by
     metis_tac[deploy_numeric_label_bound, deploy_runtime_suffix_offset] >>
   qexists_tac `SUM (MAP asm_inst_size pre)` >>
-  simp[deploy_runtime_suffix_offset] >>
+  fs[deploy_runtime_suffix_offset] >>
   irule deploy_runtime_suffix_slice >> simp[]
 QED
 
