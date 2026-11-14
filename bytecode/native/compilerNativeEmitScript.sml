@@ -251,7 +251,9 @@ val suite_fixtures = [
     "ifexp_string", "ifexp_struct", "uint2str_arg"]),
   ("raw-calls", [
     "rc01_stmt_nooutsize", "rc02_outsize_ret", "rc03_value_gas", "rc04_static",
-    "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc17_nested_len",
+    "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc10_msgdata",
+    "rc11_msgdata_outsize", "rc12_msgdata_gas", "rc13_msgdata_value",
+    "rc14_msgdata_rof", "rc15_msgdata_static", "rc17_nested_len",
     "rc19_dyn_data", "rc20_storage_data", "rc21_internal_value_gas_order",
     "rc22_bool_in_if", "rc25_stmt_argdata", "rc29_delegate"]),
   ("../tests/fixtures/load_timing", [
