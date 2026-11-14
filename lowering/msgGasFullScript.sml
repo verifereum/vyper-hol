@@ -2,7 +2,7 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
-  bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
+  bodySimFull bodyFullPop gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
   ptrDiscipline gasShadow gasSummary gasOracleReplay allocaHistory
