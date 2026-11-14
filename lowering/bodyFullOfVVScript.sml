@@ -15,7 +15,6 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem expr_sim_full_of_vv:
-  (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
         ~is_word_type (post_value_type cenv e) ==>
         type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\

@@ -220,16 +220,6 @@ Proof
   simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
 QED
 
-Theorem vv_store_bound_frame_mem_src:
-  vv_store_bound cx ty lt es tv vv s /\
-  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
-  s.vs_alloca_next <= t.vs_alloca_next ==>
-  vv_store_bound cx ty lt es tv vv t
-Proof
-  Cases_on `vv` >> simp[vv_operand_def, vv_store_bound_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
-QED
-
 Theorem vv_post_add_path_mem_src[local]:
   emit_op ADD [Lit kb; Lit ko] sm = (dst,sn) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\

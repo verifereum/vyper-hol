@@ -694,7 +694,7 @@ Theorem ifexp_widen_arm_step_full:
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
        ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
+    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -723,7 +723,7 @@ Theorem ifexp_widen_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-      expr_store_bound cx (expr_type e) v op z /\
+      expr_store_bound cx (post_value_type cenv e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
       alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
