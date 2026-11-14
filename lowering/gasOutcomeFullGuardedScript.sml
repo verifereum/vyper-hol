@@ -8,33 +8,6 @@ Ancestors
   stmtSimIfProps bodyDeclMemoryCompose
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState list
 
-Theorem origin_ptr_path_zero_prefix[local]:
-  gas_origin_ptr_path cx st [] (OK s1, G1, tn1) /\
-  gas_origin_ptr_path cx (s1, G1, tn1) marks out ==>
-  gas_origin_ptr_path cx st marks out
-Proof
-  PairCases_on `out` >> strip_tac >>
-  qpat_x_assum `gas_origin_ptr_path _ _ [] _`
-    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
-  simp[] >> disch_then drule >> simp[]
-QED
-
-(* A storage-trace-framed source only appends to the trace. *)
-Theorem storage_trace_frame_prefix[local]:
-  storage_trace_frame source /\ source (es with gas_obs := g) = (res, ee) ==>
-  ?X. ee.storage_trace = es.storage_trace ++ X
-Proof
-  strip_tac >>
-  `(es with gas_obs := g) with storage_trace := es.storage_trace =
-     es with gas_obs := g` by simp[evaluation_state_component_equality] >>
-  qpat_x_assum `storage_trace_frame _`
-    (mp_tac o Q.SPECL [`es with gas_obs := g`, `es.storage_trace`] o
-     REWRITE_RULE [storage_trace_frame_def]) >>
-  pop_assum SUBST1_TAC >>
-  Cases_on `source ((es with gas_obs := g) with storage_trace := [])` >>
-  simp[] >> strip_tac >> gvs[]
-QED
-
 Theorem gas_outcome_full_zero_prefix_guarded:
   storage_trace_frame source /\
   storage_trace_domain cx st0 es.storage_trace /\
@@ -77,7 +50,7 @@ Proof
       `valid_horizon cx st0 H es.storage_trace` by
         (qpat_assum `!tail. source _ = _` (qspec_then `[]` assume_tac) >>
          drule_all storage_trace_frame_prefix >> strip_tac >>
-         gvs[] >> drule valid_horizon_append >> simp[]) >>
+         gvs[] >> drule valid_horizon_prefix >> simp[]) >>
       res_tac >> simp[] >> metis_tac[origin_ptr_path_zero_prefix]) >>
   disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`,

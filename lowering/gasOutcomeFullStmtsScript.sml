@@ -8,7 +8,7 @@ Ancestors
   bodyDeclMemoryCompose
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState list
 
-Theorem origin_ptr_path_zero_prefix[local]:
+Theorem origin_ptr_path_zero_prefix:
   gas_origin_ptr_path cx st [] (OK s1, G1, tn1) /\
   gas_origin_ptr_path cx (s1, G1, tn1) marks out ==>
   gas_origin_ptr_path cx st marks out

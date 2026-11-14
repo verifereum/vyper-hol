@@ -42,13 +42,6 @@ Definition gas_outcome_full_def:
               (s, G, tn) marks (leaf, leaf_pg, leaf_g, leaf_tn, finish))
 End
 
-(* A horizon valid for a trace is valid for each of its prefixes. *)
-Theorem valid_horizon_append:
-  valid_horizon cx st0 H (xs ++ ys) ==> valid_horizon cx st0 H xs
-Proof
-  simp[valid_horizon_def]
-QED
-
 Theorem gas_outcome_full_post_mono:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q R /\

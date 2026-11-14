@@ -9,18 +9,6 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint
   vyperInterpreter vyperState venomState list arithmetic
 
-(* The right computation only appends storage observations, so a horizon
-   valid at its end is valid where it started. *)
-Theorem valid_horizon_frame_obs[local]:
-  storage_trace_frame f /\
-  f (ee with gas_obs := xs) = (res, ee2 with gas_obs := ys) /\
-  valid_horizon cx st0 H ee2.storage_trace ==>
-  valid_horizon cx st0 H ee.storage_trace
-Proof
-  rpt strip_tac >> drule_all storage_trace_frame_prefix >> simp[] >>
-  strip_tac >> gvs[] >> metis_tac[valid_horizon_append]
-QED
-
 (* The continuation sees the left run's own source equation and its post on
    every valid horizon of one endpoint.
    The certificate premises are the existing type-specific bind/error
@@ -82,9 +70,11 @@ Proof
      ee.storage_trace` by fs[storage_trace_domain_def] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        valid_horizon cx st0 H es.storage_trace` by
-    (qpat_x_assum `!tail. source _ = _`
+    (rpt strip_tac >> qpat_x_assum `!tail. source _ = _`
        (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
-     metis_tac[valid_horizon_frame_obs]) >>
+     `valid_horizon cx st0 H (ee with gas_obs := []).storage_trace` by
+       simp[] >>
+     drule_all valid_horizon_frame >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) marks (r, G', tn') /\
@@ -156,9 +146,13 @@ Proof
   (* the right endpoint *)
   `!H. valid_horizon cx st0 H ee'.storage_trace ==>
        valid_horizon cx st0 H ee.storage_trace` by
-    (qpat_x_assum `!tail. next v _ = _`
+    (rpt strip_tac >> qpat_x_assum `!tail. next v _ = _`
        (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
-     metis_tac[valid_horizon_frame_obs]) >>
+     qpat_assum `!v. storage_trace_frame (next v)`
+       (qspec_then `v` assume_tac) >>
+     `valid_horizon cx st0 H (ee' with gas_obs := []).storage_trace` by
+       simp[] >>
+     drule_all valid_horizon_frame >> simp[]) >>
   drule gas_explicit_append_path >>
   disch_then (qspec_then `marks'` assume_tac) >>
   rewrite_tac[gas_outcome_full_def] >>

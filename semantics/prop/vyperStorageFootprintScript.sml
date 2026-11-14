@@ -318,7 +318,7 @@ Proof
        type_slot_size_def, wordsTheory.n2w_dimword]
 QED
 
-Theorem valid_horizon_prefix[local]:
+Theorem valid_horizon_prefix:
   valid_horizon cx st0 H (xs ++ ys) ==> valid_horizon cx st0 H xs
 Proof
   simp[valid_horizon_def]
