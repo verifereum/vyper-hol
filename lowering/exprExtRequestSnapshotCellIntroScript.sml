@@ -192,4 +192,3 @@ Proof
      metis_tac[extrequest_head_path_nonhalting]) >>
   qexists_tac `u` >> fs[gas_marked_exec_def] >> metis_tac[]
 QED
-
