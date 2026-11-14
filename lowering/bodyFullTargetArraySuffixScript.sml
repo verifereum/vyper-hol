@@ -1215,3 +1215,77 @@ Proof
   disch_then (qspecl_then [`shadow_ctx`, `PG`] strip_assume_tac) >>
   qexistsl [`loc`, `b`, `iw`, `nw`, `t3`, `G3`, `tn3`] >> simp[]
 QED
+
+(* The same encoded length used by the finite run decides the actual
+   source extension.  In particular it is the post-index storage header. *)
+Theorem array_tail_packet_extend_result[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  eval_operand iop t2 = SOME iw /\
+  (!id path entry etv av.
+    pv = PlaceR (MemoryPlace id path) /\
+    lookup_scopes id mid2.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV av) ==>
+    nw = n2w (array_length (ArrayTV etv bd) av)) /\
+  (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+    nw = n2w (case bd of Fixed cap => cap | Dynamic cap =>
+      w2n (lookup_storage slot (get_storage cx mid2 tr)) )) ==>
+  ?res. extend_place cx pv (ValueSubscript v) mid2 = (res,mid2) /\
+    (idx_in_range (is_signed_type (expr_type e)) iw nw ==>
+      ?child. res = INL child) /\
+    (~idx_in_range (is_signed_type (expr_type e)) iw nw ==>
+      ?msg. res = INR (Error (RuntimeError msg)))
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+    fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  drule_all array_tail_packet_source_bounds >> strip_tac >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  Cases_on `pv` >> gvs[place_ptr_rel_def] >>
+  rename1 `PlaceR pl` >> Cases_on `pl` >> gvs[place_ptr_rel_def] >>
+  IF_CASES_TAC >> gvs[]
+QED
+
+Theorem array_tail_packet_endpoint_frame[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  (u with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|>) = t2 /\
+  tn3.t_mem = tn2.t_mem /\ tn3.t_stor = tn2.t_stor /\
+  tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
+  (!x. not_fresh_at sn x ==>
+    FLOOKUP G3 x = FLOOKUP G2 x /\ FLOOKUP tn3.t_var x = FLOOKUP tn2.t_var x /\
+    FLOOKUP u.vs_vars x = FLOOKUP t2.vs_vars x) ==>
+  stmt_state_rel H ctx func cenv cx mid2 u /\
+  ghost_inv_at (DF H) lo d cenv cx mid2 G3 tn3 u /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G3 tn3
+Proof
+  strip_tac >>
+  drule_all array_tail_packet_source_index >> strip_tac >>
+  drule_all array_tail_packet_index_kept >> strip_tac >>
+  `local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var` by
+    (fs[array_tail_packet_def] >> metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sn x` by
+    metis_tac[not_fresh_at_mono] >>
+  `u = t2 with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `stmt_state_rel H ctx func cenv cx mid2 u` by
+    (once_asm_rewrite_tac[] >> simp[stmt_state_rel_inst_idx] >>
+     irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def, lookup_var_def,
+        exprLoweringPropsTheory.stmt_state_rel_inst_idx] >> metis_tac[]) >>
+  simp[] >> reverse conj_tac
+  >- (irule bodyFullUnwrapRunTheory.ghost_kept_at_clean_suffix >>
+      qexistsl [`G2`, `tn2`] >> simp[op_taint_def] >> metis_tac[]) >>
+  `ghost_inv_at (DF H) lo d cenv cx mid2 G2 tn2 t2` by
+    (fs[array_tail_packet_def] >> metis_tac[]) >>
+  irule ghost_inv_at_fresh_write >> qexistsl [`G2`, `t2`, `sa`, `tn2`] >>
+  simp[op_taint_def, lookup_var_def] >>
+  fs[array_tail_packet_def] >>
+  qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+  simp[venom_state_component_equality]
+QED
