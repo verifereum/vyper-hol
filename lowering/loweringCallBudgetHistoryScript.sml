@@ -1,5 +1,6 @@
 (* Quantitative lowering histories and unasserted correctness headers.
- * The thirteen ML terms below are typechecked proposals, not theorems.
+ * All thirteen accepted headers remain as closed ML quotations below.
+ * Only the structural subset is proved at the end of this file.
  * No source/emitter correspondence follows from these definitions.
  *)
 Theory loweringCallBudgetHistory
@@ -8,6 +9,7 @@ Ancestors
   sourceCallCount loweringStateRelDefs compileVyper vyperCompiler
   o1PassContract fragGasOriginPtr contextRawReachable
   vyperLoweringCorrect e2eDefs exprSimHypsDefs lowerDloadDefs
+  list rich_list arithmetic pred_set
 
 Datatype:
   lower_budget_point = <|
@@ -533,4 +535,171 @@ val call_budget_constant_owners =
     call_budget_headers));
 val _ = app (fn owner => print ("CONSTANT_OWNER " ^ owner ^ "\n"))
   call_budget_constant_owners;
-val _ = print ("CALL_BUDGET_HEADERS_CLOSED 13; no header theorem asserted\n");
+val _ = print ("CALL_BUDGET_HEADERS_CLOSED 13\n");
+
+Theorem lower_budget_path_ordinals:
+  !checked D lo explicit ctx p h marks q n.
+    lower_budget_path checked (D,lo,explicit,ctx) p h marks q /\ n < LENGTH h ==>
+    lower_event_ordinal (EL n h) = n
+Proof
+  qsuff_tac
+    `!checked cfg p h marks q.
+      lower_budget_path checked cfg p h marks q ==>
+      !n. n < LENGTH h ==> lower_event_ordinal (EL n h) = n`
+  >- metis_tac[] >>
+  ho_match_mp_tac lower_budget_path_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[LENGTH_APPEND, EL_APPEND_EQN] >>
+  Cases_on `n < LENGTH h` >> gvs[lower_event_ordinal_def] >>
+  `n = LENGTH h` by decide_tac >> gvs[lower_event_ordinal_def]
+QED
+
+Theorem lower_budget_filter_indices_length[local]:
+  !P h.
+    LENGTH (FILTER (\a. P (EL a h)) (GENLIST I (LENGTH h))) =
+    LENGTH (FILTER P h)
+Proof
+  rpt gen_tac >>
+  qspecl_then [`P`, `\a. EL a h`, `GENLIST I (LENGTH h)`]
+    (mp_tac o AP_TERM ``LENGTH``) FILTER_MAP >>
+  simp[MAP_GENLIST, combinTheory.o_DEF, GENLIST_ID]
+QED
+
+Theorem lower_budget_inj_list_length[local]:
+  !f xs ys.
+    ALL_DISTINCT xs /\ INJ f (set xs) (set ys) ==>
+    LENGTH xs <= LENGTH ys
+Proof
+  rpt strip_tac >>
+  `CARD (set xs) <= CARD (set ys)` by
+    metis_tac[INJ_CARD, FINITE_LIST_TO_SET] >>
+  `CARD (set xs) = LENGTH xs` by
+    metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET] >>
+  metis_tac[CARD_LIST_TO_SET, LESS_EQ_TRANS]
+QED
+
+Theorem lower_budget_pairs_count:
+  !h pair.
+    lower_history_pairs h pair ==>
+    LENGTH (FILTER lower_event_allocates h) <= SUC (lower_history_count h)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac kall_tac)) o
+    REWRITE_RULE [lower_history_pairs_def]) >>
+  qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h))
+    (GENLIST I (LENGTH h))` >>
+  qabbrev_tac `effects = FILTER (\a. lower_event_consumes (EL a h))
+    (GENLIST I (LENGTH h)) ++ [LENGTH h]` >>
+  `ALL_DISTINCT allocs` by
+    simp[Abbr`allocs`, FILTER_ALL_DISTINCT, ALL_DISTINCT_GENLIST] >>
+  `INJ pair (set allocs) (set effects)` by
+    (simp_tac (srw_ss())
+       [INJ_DEF, Abbr`allocs`, Abbr`effects`, MEM_FILTER, MEM_GENLIST] >>
+     rpt strip_tac >>
+     metis_tac[prim_recTheory.LESS_REFL]) >>
+  qspecl_then [`pair`, `allocs`, `effects`] mp_tac lower_budget_inj_list_length >>
+  simp[Abbr`allocs`, Abbr`effects`, lower_budget_filter_indices_length,
+       lower_history_count_def]
+QED
+
+Theorem lower_budget_completed_pairs_count:
+  !h pair q.
+    lower_history_pairs h pair /\ lower_history_current h pair q ==>
+    LENGTH (FILTER (\a. lower_event_allocates (EL a h) /\
+      pair a < LENGTH h) (GENLIST I (LENGTH h))) <= lower_history_count h /\
+    (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
+      LENGTH (FILTER lower_event_allocates h) <= lower_history_count h)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH (FILTER (\a. lower_event_allocates (EL a h) /\
+    pair a < LENGTH h) (GENLIST I (LENGTH h))) <= lower_history_count h` by
+    (qpat_x_assum `lower_history_pairs h pair`
+       (CONJUNCTS_THEN2 assume_tac
+         (CONJUNCTS_THEN2 assume_tac kall_tac) o
+         REWRITE_RULE [lower_history_pairs_def]) >>
+     qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h) /\
+       pair a < LENGTH h) (GENLIST I (LENGTH h))` >>
+     qabbrev_tac `effects = FILTER (\a. lower_event_consumes (EL a h))
+       (GENLIST I (LENGTH h))` >>
+     `ALL_DISTINCT allocs` by
+       simp[Abbr`allocs`, FILTER_ALL_DISTINCT, ALL_DISTINCT_GENLIST] >>
+     `INJ pair (set allocs) (set effects)` by
+       (simp_tac (srw_ss())
+          [INJ_DEF, Abbr`allocs`, Abbr`effects`, MEM_FILTER, MEM_GENLIST] >>
+        rpt strip_tac >>
+        metis_tac[prim_recTheory.LESS_REFL]) >>
+     qspecl_then [`pair`, `allocs`, `effects`] mp_tac lower_budget_inj_list_length >>
+     simp[Abbr`allocs`, Abbr`effects`, lower_budget_filter_indices_length,
+          lower_history_count_def]) >>
+  conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
+  `FILTER (\a. lower_event_allocates (EL a h) /\ pair a < LENGTH h)
+     (GENLIST I (LENGTH h)) =
+   FILTER (\a. lower_event_allocates (EL a h)) (GENLIST I (LENGTH h))` by
+    (rw[FILTER_EQ, MEM_GENLIST] >>
+     fs[lower_history_current_def] >> metis_tac[]) >>
+  fs[lower_budget_filter_indices_length]
+QED
+
+Theorem lower_budget_path_forget_checks:
+  !D lo explicit ctx p h marks q.
+    lower_budget_path T (D,lo,explicit,ctx) p h marks q ==>
+    lower_budget_path F (D,lo,explicit,ctx) p h marks q
+Proof
+  qsuff_tac
+    `!checked cfg p h marks q.
+      lower_budget_path checked cfg p h marks q ==>
+      lower_budget_path F cfg p h marks q`
+  >- metis_tac[] >>
+  ho_match_mp_tac lower_budget_path_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac
+  >- metis_tac[lower_budget_path_entry]
+  >- metis_tac[lower_budget_path_next]
+  >- metis_tac[lower_budget_path_block]
+  >- metis_tac[lower_budget_path_call]
+  >- metis_tac[lower_budget_path_ret]
+QED
+
+Theorem lower_budget_remaining_step:
+  !k h e remaining.
+    lower_history_count (h ++ [e]) + remaining = k ==>
+    lower_history_count h +
+      (if lower_event_consumes e then SUC remaining else remaining) = k
+Proof
+  rpt gen_tac >> Cases_on `lower_event_consumes e` >>
+  simp[lower_history_count_def, FILTER_APPEND]
+QED
+
+Theorem gas_outcome_full_budget_forget:
+  !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R.
+    gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+      tops cx st0 source (es,s,G,tn) Q R ==>
+    gas_outcome_full (DF,lo,explicit,ctx,func,PG)
+      tops cx st0 source (es,s,G,tn) Q R
+Proof
+  simp[gas_outcome_full_budget_def]
+QED
+
+Theorem gas_outcome_full_budget_prefix:
+  !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
+    H h marks q.
+    gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
+      tops cx st0 source (es,s,G,tn) Q R /\
+    (!obs. entry_calls_within k s.vs_outcomes
+      (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) /\
+    lower_budget_path T (DF H,lo,explicit,ctx)
+      <| bp_stack := []; bp_params := PG; bp_prov := G;
+         bp_taint := tn; bp_fn := func; bp_state := s |>
+      h marks q ==>
+    ?remaining pair.
+      lower_history_count h + remaining = k /\
+      LENGTH (FILTER lower_event_allocates h) <= k /\
+      (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
+        SUC (LENGTH (FILTER lower_event_allocates h)) <= k) /\
+      lower_history_pairs h pair /\ lower_history_current h pair q /\
+      (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
+        ?fn i pre op sz post. lower_alloc_record h n fn i pre op sz post)
+Proof
+  rw[gas_outcome_full_budget_def, lower_budget_continuation_def] >>
+  metis_tac[lower_budget_path_forget_checks]
+QED
