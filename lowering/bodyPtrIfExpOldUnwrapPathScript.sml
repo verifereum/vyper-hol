@@ -38,7 +38,8 @@ Proof
   >- (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[vv_at_def, contextTheory.mk_ptr_def]) >>
   qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_at_def, contextTheory.mk_ptr_def, local_place_at_def] >>
+  pure_rewrite_tac[vv_at_def, contextTheory.mk_ptr_def] >>
+  simp[local_place_at_def] >>
   metis_tac[]
 QED
 
