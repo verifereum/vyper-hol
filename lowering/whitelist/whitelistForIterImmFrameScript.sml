@@ -6,61 +6,6 @@ Ancestors
   vyperTypeInvariants vyperInterpreter vyperCallOutcomeFrame vyperAST list rich_list finite_map alist
   supportedStmts supportedStmtTraverse
 
-Theorem lookup_immutable_set_other:
-  (src',name') <> (src,name) /\
-  set_immutable cx src' name' tv v es = (r,es') ==>
-  lookup_immutable cx es' src name = lookup_immutable cx es src name
-Proof
-  simp[set_immutable_def, get_address_immutables_def,
-       set_address_immutables_def, bind_def, lift_option_type_def,
-       return_def, raise_def] >>
-  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
-  simp[return_def, raise_def] >>
-  rpt strip_tac >> gvs[lookup_immutable_def] >>
-  Cases_on `src' = src` >>
-  gvs[set_source_immutables_def, get_source_immutables_def, FLOOKUP_UPDATE,
-      ALOOKUP_ADELKEY]
-QED
-
-Theorem lookup_immutable_write_other:
-  write_place cx p v es = (r,es') /\
-  (!src' name' path. p = ImmutablePlace src' name' path ==>
-                      (src',name') <> (src,name)) ==>
-  lookup_immutable cx es' src name = lookup_immutable cx es src name
-Proof
-  Cases_on `p`
-  >- (strip_tac >> drule write_storage_place_immutables >>
-      simp[lookup_immutable_def])
-  >- (strip_tac >> drule write_memory_place_immutables >>
-      simp[lookup_immutable_def]) >>
-  rename1 `write_place cx (ImmutablePlace other_src other_name path)` >>
-  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
-  simp[write_place_def, bind_def, get_immutables_def,
-       get_address_immutables_def, lift_option_type_def, lift_sum_def,
-       return_def, raise_def] >>
-  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
-  Cases_on `FLOOKUP (get_source_immutables other_src imms) other_name` >>
-  simp[return_def, raise_def] >>
-  rename1 `FLOOKUP _ _ = SOME tva` >>
-  Cases_on `assign_subscripts (FST tva) (SND tva) path (Replace v)` >>
-  simp[return_def, raise_def] >>
-  rpt strip_tac >> irule lookup_immutable_set_other >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
-(* Relate the semantic immutable root to the syntactic write guard. *)
-Theorem lookup_global_immutable_root:
-  lookup_global cx src id es =
-    (INL (PlaceR (ImmutablePlace other_src other_id path)),es') ==>
-  other_src = src /\ other_id = id /\ path = []
-Proof
-  simp[lookup_global_def, vyperMiscTheory.option_CASE_rator,
-       vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-       bind_def, lift_option_type_def, return_def, raise_def,
-       get_immutables_def, get_address_immutables_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), bind_def, return_def, raise_def]
-QED
-
 Theorem extend_place_immutable_root:
   extend_place cx pv sb es =
     (INL (PlaceR (ImmutablePlace src id path)),es') ==>
@@ -103,7 +48,7 @@ Proof
   >~ [`eval_base_place _ (TopLevelNameTarget _) _ = _`]
   >- (rename1 `eval_base_place cx (TopLevelNameTarget nsid) es = _` >>
       PairCases_on `nsid` >> gvs[Once evaluate_def] >>
-      drule lookup_global_immutable_root >> simp[place_access_def]) >>
+      drule vyperBareGlobalNameTheory.lookup_global_immutable_root >> simp[place_access_def]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   drule extend_place_immutable_root >> strip_tac >> gvs[] >>
   rename1 `eval_base_place cx inner _ = _` >>
@@ -132,7 +77,7 @@ Theorem typed_guarded_immutable_target_write:
   write_place cx p v es1 = (r,es2) ==>
   lookup_immutable cx es2 src name = lookup_immutable cx es1 src name
 Proof
-  rpt strip_tac >> irule lookup_immutable_write_other >>
+  rpt strip_tac >> irule vyperBareGlobalNameTheory.lookup_immutable_write_other >>
   goal_assum (drule_at Any) >> rpt strip_tac >> gvs[] >>
   drule eval_target_place_immutable_root >> strip_tac >>
   drule_at (Pat `type_place_target env target`) typed_guarded_array_root >>
@@ -152,7 +97,7 @@ Proof
   gvs[append_place_def, bind_def, AllCaseEqs()] >>
   imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
   imp_res_tac lift_sum_state >> gvs[] >>
-  irule lookup_immutable_write_other >> goal_assum (drule_at Any) >> simp[]
+  irule vyperBareGlobalNameTheory.lookup_immutable_write_other >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem same_immutables_observation[local]:
@@ -160,37 +105,6 @@ Theorem same_immutables_observation[local]:
   lookup_immutable cx t src name = lookup_immutable cx s src name
 Proof
   simp[lookup_immutable_def]
-QED
-
-Theorem pop_place_immutable_other[local]:
-  (!other_src other_name path. p = ImmutablePlace other_src other_name path ==>
-     (other_src,other_name) <> (src,name)) /\
-  pop_place cx p es = (res,es') ==>
-  lookup_immutable cx es' src name = lookup_immutable cx es src name
-Proof
-  Cases_on `p` >> strip_tac
-  >- (drule vyperScopePreservationTheory.pop_storage_place_scopes_immutables >>
-      simp[lookup_immutable_def])
-  >- (rename1 `MemoryPlace id path` >>
-      Cases_on `find_containing_scope id es.scopes` >>
-      gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
-          return_def, raise_def] >>
-      PairCases_on `x` >>
-      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
-          check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-      fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
-      imp_res_tac vyperStatePreservationTheory.lift_sum_state >>
-      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
-      gvs[lookup_immutable_def] >>
-      pairarg_tac >>
-      gvs[bind_def, ignore_bind_def, set_scopes_def, return_def,
-          lookup_immutable_def]) >>
-  gvs[pop_place_def, bind_def, ignore_bind_def, get_immutables_def,
-      get_address_immutables_def, lift_option_type_def, lift_sum_def,
-      return_def, raise_def, AllCaseEqs()] >>
-  gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  irule lookup_immutable_set_other >> goal_assum (drule_at Any) >> simp[]
 QED
 
 (* The immutable instance of the evaluator frame: no write lands on the
@@ -219,7 +133,7 @@ Proof
   impl_tac
   >- (conj_tac >- simp[lookup_immutable_def] >>
       simp[] >> rpt strip_tac >>
-      irule pop_place_immutable_other >> goal_assum (drule_at Any) >>
+      irule vyperBareGlobalNameTheory.pop_place_immutable_other >> goal_assum (drule_at Any) >>
       rpt strip_tac >> gvs[] >>
       drule eval_target_place_immutable_root >> simp[]) >>
   BETA_TAC >> strip_tac >> rpt conj_tac >> rpt strip_tac >> metis_tac[]
@@ -499,7 +413,7 @@ Proof
     qmatch_asmsub_rename_tac `write_place cx p result write_state` >>
     `lookup_immutable cx es' src name = lookup_immutable cx write_state src name`
       suffices_by metis_tac[] >>
-    irule lookup_immutable_write_other >>
+    irule vyperBareGlobalNameTheory.lookup_immutable_write_other >>
     goal_assum (drule_at Any) >> rpt strip_tac >> gvs[] >>
     drule eval_target_place_immutable_root >> strip_tac >>
     drule_at (Pat `type_place_target env bt`) typed_guarded_array_root >>
