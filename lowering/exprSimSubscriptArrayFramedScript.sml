@@ -342,6 +342,51 @@ Proof
   qexistsl_tac [`t'`, `j`] >> drule_all gas_marked_path_then >> simp[]
 QED
 
+(* As fixed_array_subscript_counted_ok, and the endpoint keeps the accounts, transient storage,
+   requests and call context, so stmt_state_rel moves to it at every horizon. *)
+Theorem fixed_array_subscript_counted_fields:
+  compile_array_subscript base_op idx_op F cnt ws esz sgn loader sa = (op,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!z. base_op = Var z ==> not_fresh_at sa z) /\
+  (!z. idx_op = Var z ==> not_fresh_at sa z) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  idx_in_range sgn i (n2w cnt) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    eval_operand op t = SOME (b + i * n2w esz) /\
+    (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >>
+  `eval_operand base_op (drop_fresh sa s) = SOME b /\
+   eval_operand idx_op (drop_fresh sa s) = SOME i` by
+    metis_tac[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[varsExtTheory.fresh_vars_wrt_drop_fresh] >>
+  `array_len_ok F cnt loader base_op (drop_fresh sa s) (n2w cnt)` by
+    simp[array_len_ok_static] >>
+  drule_all compile_array_subscript_ok >> strip_tac >>
+  `straight_fresh (compile_array_subscript base_op idx_op F cnt ws esz sgn loader)` by
+    simp[straight_fresh_compile_array_subscript] >>
+  drule_all straight_fresh_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all straight_fresh_run_post >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+  rename1 `run_inst_seq _ s = OK tq` >>
+  `tq.vs_accounts = s.vs_accounts /\ tq.vs_transient = s.vs_transient /\
+   tq.vs_requests = s.vs_requests /\ tq.vs_call_ctx = s.vs_call_ctx` by
+    (qspecl_then [`emitted_insts sa sb`,`sa`,`s`,`tq`] mp_tac run_inst_seq_writes_fresh >>
+     impl_tac >- simp[] >>
+     disch_then (fn th => once_rewrite_tac[CONJUNCT1 th]) >> simp[]) >>
+  qexists_tac `tq with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
+QED
+
 Theorem fixed_array_subscript_counted_ok:
   compile_array_subscript base_op idx_op F cnt ws esz sgn loader sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -360,19 +405,7 @@ Theorem fixed_array_subscript_counted_ok:
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  strip_tac >>
-  `eval_operand base_op (drop_fresh sa s) = SOME b /\
-   eval_operand idx_op (drop_fresh sa s) = SOME i` by
-    metis_tac[eval_operand_drop_fresh] >>
-  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[varsExtTheory.fresh_vars_wrt_drop_fresh] >>
-  `array_len_ok F cnt loader base_op (drop_fresh sa s) (n2w cnt)` by
-    simp[array_len_ok_static] >>
-  drule_all compile_array_subscript_ok >> strip_tac >>
-  `straight_fresh (compile_array_subscript base_op idx_op F cnt ws esz sgn loader)` by
-    simp[straight_fresh_compile_array_subscript] >>
-  drule_all straight_fresh_clean_success_path >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  drule_all straight_fresh_run_post >> strip_tac >>
+  strip_tac >> drule_all fixed_array_subscript_counted_fields >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -510,7 +543,9 @@ Proof
   drule_all gas_marked_path_then >> simp[] >> metis_tac[]
 QED
 
-Theorem runtime_array_subscript_counted_ok:
+(* As runtime_array_subscript_counted_ok, and the endpoint keeps the accounts, transient storage,
+   requests and call context, so stmt_state_rel moves to it at every horizon. *)
+Theorem runtime_array_subscript_counted_fields:
   compile_array_subscript base_op idx_op T cnt ws esz sgn
     (compile_imm_load_word F imm) sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -528,7 +563,9 @@ Theorem runtime_array_subscript_counted_ok:
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   simp[compile_array_subscript_split, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
@@ -590,6 +627,20 @@ Proof
   drule_all straight_fresh_run_post >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK (t'' with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_marked_path_then >> simp[]) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `compile_imm_load_word _ _ _ _ = _` assume_tac >>
+     qpat_assum `eval_operand base_op s = SOME b`
+       (mp_then (Pos last) mp_tac compile_imm_load_word_runtime_run) >>
+     disch_then drule >> strip_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK t` mp_tac >>
+     simp[] >> rw[] >> simp[update_var_def]) >>
+  `t''.vs_accounts = s.vs_accounts /\ t''.vs_transient = s.vs_transient /\
+   t''.vs_requests = s.vs_requests /\ t''.vs_call_ctx = s.vs_call_ctx` by
+    (`writes_fresh sm (emitted_insts sm sb)` by metis_tac[straight_fresh_def] >>
+     qspecl_then [`emitted_insts sm sb`,`sm`,`u`,`t''`] mp_tac run_inst_seq_writes_fresh >>
+     impl_tac >- simp[] >>
+     disch_then (fn th => once_rewrite_tac[CONJUNCT1 th]) >> simp[Abbr `u`]) >>
   qexists_tac `t'' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[Abbr `u`] >> rpt strip_tac >>
   qpat_x_assum `!z v. not_fresh_at sm z /\ _ ==> _`
@@ -598,6 +649,30 @@ Proof
   >- (qpat_x_assum `!z. not_fresh_at sa z ==> _` drule >>
       simp[lookup_var_def]) >>
   irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem runtime_array_subscript_counted_ok:
+  compile_array_subscript base_op idx_op T cnt ws esz sgn
+    (compile_imm_load_word F imm) sa = (op,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!z. base_op = Var z ==> not_fresh_at sa z) /\
+  (!z. idx_op = Var z ==> not_fresh_at sa z) /\
+  eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
+  idx_in_range sgn i (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    eval_operand op t = SOME ((b + n2w ws) + i * n2w esz) /\
+    (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all runtime_array_subscript_counted_fields >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 (* Successful source selection after an index which preserves the captured
