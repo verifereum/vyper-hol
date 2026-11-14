@@ -116,7 +116,11 @@ Theorem layout_request_base_certificate:
     (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
-  strip_tac >> match_mp_tac layout_request_base_lift >> conj_tac
+  strip_tac >>
+  `(ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp)` by
+    simp[] >>
+  match_mp_tac layout_request_base_lift >> conj_tac
   >- (drule_all layout_canonical_base_certificate >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   `layout_request_state D s t` by metis_tac[layout_request_ES_requests] >>
