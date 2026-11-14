@@ -14,7 +14,7 @@ Theory bodyIntCallSeams
 Ancestors
   bodyIntCallSeamDefs bodyIntCallSeamArgs bodyIntCallSeamReturn bodyIntCallNonreentrantLock
   bodyIntCallJointPackage bodyIntCallJointInd vyperTypeCallStackSoundness
-  bodyIntCallNrBodyCode bodyIntCallNrInvokedCode bodyIntCallNrNormalLanding
+  bodyIntCallNrPackaging bodyIntCallNrBodyCode bodyIntCallNrInvokedCode bodyIntCallNrNormalLanding
   bodyIntCallArgSequence bodyIntCallCompilerListTags bodyIntCallCompilerSeparation
   bodyIntCallCopyFrame bodyIntCallDecoderCountedClosure bodyIntCallEncoderActualCopy
   bodyIntCallEncoderCountedExport bodyIntCallLocalArrayProducer bodyIntCallMcopyFrame
@@ -110,7 +110,18 @@ Theorem intcall_seam2_nonreentrant:
             then SOME (HD argv) else NONE)
            sa.cs_next_id sb.cs_next_id t)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `?E. call_stack_follows (call_edge_rel E) ((NONE,name)::cx.stk) /\
+       irreflexive (TC (call_edge_rel E)) /\
+       functions_follow_call_graph E (cx with stk updated_by CONS (NONE,name))`
+    by (qpat_x_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [intcall_entry_def]) >>
+        qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+        simp_tac (srw_ss()) [call_evaluation_safe_def] >> strip_tac >>
+        qexists_tac `edges` >> asm_simp_tac (srw_ss()) []) >>
+  `!fp. fp.jc_edges = E /\ fp.jc_owner = (NONE,name) /\ fp.jc_tops = tops ==>
+        intcall_stmts_producer fp ss` by simp[intcall_joint_producers] >>
+  drule_all intcall_callee_packaging_nr >> simp[]
 QED
 
 Theorem intcall_callee_body_sim:

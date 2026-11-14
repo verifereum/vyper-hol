@@ -159,5 +159,54 @@ Proof
   goal_assum (drule_at (Pat `lookup_callable_function _ _ _ = _`)) >>
   qexistsl [`P`, `body_start`, `staged`] >>
   simp[is_view_mut_def, GSYM markerTheory.Abbrev_def] >>
-  FAIL_TAC "guard continuation"
+  suspend "body"
 QED
+
+Resume intcall_callee_packaging_nr[body]:
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  drule internal_package_return_option >> strip_tac >>
+  `intcall_stmts_producer fp ss` by (first_x_assum irule >> simp[]) >>
+  drule_all intcall_root_caller_exit_fields >> strip_tac >>
+  drule_all bodyIntCallNrPackageInputsTheory.intcall_entry_package_inputs_nr >> strip_tac >>
+  `fp.jc_root_ce.ce_nonreentrant = (T,global_nonreentrant_slot,T,is_view_mut mut)` by
+    (drule bodyIntCallActualEntryFieldsTheory.compile_internal_entry_fields >> strip_tac >>
+     gvs[compile_env_component_equality, is_view_mut_def]) >>
+  `~block_is_terminated body_start` by
+    (irule internal_guarded_body_open >> goal_assum (drule_at Any)) >>
+  `stmts_env fp.jc_root_ce NoLoop
+    (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty)
+    ss body_start = (body_env,body_end)` by
+    (Cases_on `ret = NoneT` >> gvs[]) >>
+  `cx_tops fp.jc_cx = cx_tops cx` by
+    fs[gasContextTheory.cx_tops_def, vyperContextTheory.get_module_code_def] >>
+  pure_rewrite_tac[bodyIntCallSeamDefsTheory.intcall_callee_src_F] >>
+  qpat_assum `cx_tops fp.jc_cx = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+  qpat_assum `fp.jc_ctx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `fp.jc_func = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `fp.jc_cx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule intcall_producer_callee_outcome_nr >>
+  conj_tac >- simp[Abbr `P`] >>
+  qpat_x_assum `fp.jc_root_ce = _` kall_tac >>
+  simp[] >> conj_tac >- (qexists `(NONE,name)` >> simp[]) >>
+  conj_tac >- (qpat_assum `has_rb <=> _`
+    (fn th => pure_rewrite_tac[GSYM th]) >> Cases_on `has_rb` >> simp[]) >>
+  conj_tac >- (goal_assum (drule_at Any)) >>
+  goal_assum (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  qexistsl [`body_env`, `env_after`, `body_end`] >> simp[] >>
+  conj_tac >- suspend "normal" >>
+  conj_tac >- (qpat_x_assum `stmts_env fp.jc_root_ce _ _ _ _ = _` mp_tac >> simp[]) >>
+  metis_tac[]
+QED
+
+Resume intcall_callee_packaging_nr[normal]:
+  rpt strip_tac >>
+  qpat_x_assum `~block_is_terminated body_end ==> _` mp_tac >>
+  simp[] >> strip_tac >>
+  qpat_assum `fp.jc_ctx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `fp.jc_func = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule intcall_joint_normal_unlock_ret_path >> simp[] >>
+  goal_assum (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  qexistsl [`after`, `su`] >>
+  simp[is_view_mut_def]
+QED
+Finalise intcall_callee_packaging_nr
