@@ -73,6 +73,8 @@ Theorem call_state_rel_add_frame_gas:
 Proof
   rw[call_state_rel_def] >>
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
+  `(add_frame_gas g es).originalAccounts = es.originalAccounts` by
+    (simp[add_frame_gas_def] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]) >>
   simp[add_frame_gas_wf_state, add_frame_gas_fields, add_frame_gas_bounded] >>
   fs[]
 QED
