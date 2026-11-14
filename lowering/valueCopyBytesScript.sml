@@ -58,6 +58,24 @@ Proof
   Cases_on `v` >> gvs[value_has_type_def, val_in_memory_def]
 QED
 
+(* Retag a memory bytestring using only its source read and destination
+   typing; pointer provenance is independent of its value interpretation. *)
+Theorem vv_holds_bytestring_memory_retag:
+  !cenv cx src dst sv dv v raw tag p ee s.
+    p.ptr_location = LocMemory /\
+    is_bytestring_type src /\ is_bytestring_type dst /\
+    evaluate_type (get_tenv cx) src = SOME sv /\
+    evaluate_type (get_tenv cx) dst = SOME dv /\
+    value_has_type dv v /\
+    read_result cx raw ee = (INL v,ee) /\
+    vv_holds cenv cx src raw (LocatedValue tag p) ee s ==>
+    vv_holds cenv cx dst raw (LocatedValue dst p) ee s
+Proof
+  rpt strip_tac >>
+  `~is_word_type dst` by metis_tac[is_bytestring_word_type] >>
+  gvs[vv_holds_def] >> metis_tac[bytestring_val_in_memory_transfer]
+QED
+
 Theorem bytestring_val_footprint_eq:
   !tenv t1 t2 tv1 tv2 v.
     is_bytestring_type t1 /\ is_bytestring_type t2 /\
