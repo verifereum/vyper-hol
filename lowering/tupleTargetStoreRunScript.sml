@@ -4,7 +4,7 @@ Ancestors
   loweringPosts stmtSimDefs stmtSimProps
   tupleAssignParts valueCopy context stmtSimAssignStore fragGasSeq fragGasMode vyperLookup exprSimProps
   loweringSlice
-  tupleTargetStoreProps tupleLocalStoreRun stmtSimAssignStorage
+  tupleTargetStoreProps tupleLocalStoreRun stmtSimAssignStorage stmtSimAssignStorageFacts
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
   storageStoreFrame stmtSimDeclPath stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
@@ -12,6 +12,8 @@ Ancestors
   tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingDefs valueEncodingProps vyperTyping stmtLoweringMono
   vyperInterpreter freshWrites memoryValueEncoding
   vyperStorageFootprint vyperStorageTrace vyperFiniteStoragePreservation localPtrsProps
+Libs
+  horizonTypeLib
 
 Theorem tuple_store_word_step:
   !cenv ty tys bt gs op ops st sp sf dst loc vt.
@@ -149,12 +151,14 @@ Proof
   `fn_has_code st sp func /\ fn_has_code sp sf func` by
     metis_tac[fn_has_code_split] >>
   drule_all tuple_field_add_frame_path >>
-  disch_then (qx_choose_then `mid` (map_every assume_tac o CONJUNCTS)) >>
+  disch_then (qspec_then `ctx`
+    (qx_choose_then `mid` (map_every assume_tac o CONJUNCTS))) >>
   `eval_operand op mid = SOME w` by
     (Cases_on `op` >> gvs[eval_operand_def]) >>
   `~mid.vs_call_ctx.cc_static` by gvs[] >>
   drule_all tuple_storage_store_head_path >>
-  disch_then (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)) >>
+  disch_then (qspec_then `ctx`
+    (qx_choose_then `t` (map_every assume_tac o CONJUNCTS))) >>
   qexistsl_tac [`mid`, `t`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -188,9 +192,11 @@ Proof
   qabbrev_tac `es1 = es with storage_trace :=
     es.storage_trace ++ [StorageRoot rtr rslot rtv]` >>
   `valid_horizon cx st0 H es1.storage_trace` by
-    (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qpat_assum `write_storage_slot _ _ _ _ _ _ = _` (irule_at Any) >>
-     simp[vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
+    (irule (INST_TYPE [alpha |-> ``:unit``]
+              vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`write_storage_slot cx tr slot tv v`, `INL ()`, `es'`] >>
+     asm_simp_tac (srw_ss())
+       [vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
   `MEM (rtr,n2w rslot,rtv) (FST H)` by
     (qpat_x_assum `valid_horizon _ _ _ es1.storage_trace` mp_tac >>
      simp[Abbr `es1`, vyperStorageFootprintTheory.valid_horizon_def,
@@ -222,9 +228,11 @@ Proof
   rpt strip_tac >>
   qabbrev_tac `es1 = es with storage_trace := obs` >>
   `valid_horizon cx st0 H es1.storage_trace` by
-    (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qpat_assum `write_storage_slot _ _ _ _ _ _ = _` (irule_at Any) >>
-     simp[vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
+    (irule (INST_TYPE [alpha |-> ``:unit``]
+              vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`write_storage_slot cx tr slot tv v`, `INL ()`, `es'`] >>
+     asm_simp_tac (srw_ss())
+       [vyperStorageTraceTheory.storage_trace_frame_write_storage_slot]) >>
   `storage_well_formed_on cx es1 (FST H)` by
     (`es1.accounts = es.accounts /\ es1.tStorage = es.tStorage` by
        simp[Abbr `es1`] >>
@@ -558,8 +566,8 @@ Proof
   Cases_on `is_word_type ty`
   >- suspend "word" >>
   gvs[] >> drule_all tuple_local_copy_path >>
-  disch_then (qx_choosel_then [`dw`, `t`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `p`, `sz`, `entry`, `dw`] >> simp[] >>
+  disch_then (qspec_then `ctx` (qx_choosel_then [`dw`, `t`] strip_assume_tac)) >>
+  qexistsl_tac [`t`, `dw`] >> simp[] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
@@ -596,8 +604,10 @@ Resume tuple_target_local_head_path[word]:
     simp[Abbr `u`, mstore_def, LET_THM] >>
   `!x. lookup_var x (u with vs_inst_idx := SUC s.vs_inst_idx) = lookup_var x s` by
     simp[lookup_var_def] >>
-  qexistsl [`u with vs_inst_idx := SUC s.vs_inst_idx`, `p`, `sz`, `entry`, `dw`] >>
-  simp[stmt_state_rel_inst_idx, localPtrsPropsTheory.local_ptrs_rel_inst_idx]
+  qexistsl [`u with vs_inst_idx := SUC s.vs_inst_idx`, `dw`] >>
+  simp[stmt_state_rel_inst_idx, localPtrsPropsTheory.local_ptrs_rel_inst_idx] >>
+  rpt strip_tac >>
+  qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >> simp[]
 QED
 
 Finalise tuple_target_local_head_path
@@ -644,7 +654,7 @@ Resume tuple_target_nonlocal_head_path[toplevel]:
   drule_all encode_value_word_typed >> strip_tac >>
   `eval_operand (Lit (n2w k)) s = SOME (n2w k)` by simp[eval_operand_def] >>
   drule_all tuple_storage_store_head_path >>
-  disch_then (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)) >>
+  disch_then (qspec_then `ctx` (qx_choose_then `t` (map_every assume_tac o CONJUNCTS))) >>
   conj_tac
   >- (drule vyperScopePreservationTheory.write_storage_slot_scopes >> simp[]) >>
   qexists_tac `t` >>
@@ -684,8 +694,8 @@ Resume tuple_target_nonlocal_head_path[field]:
   qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
   gvs[compile_tuple_store_all_def, comp_return_def] >>
   drule_all encode_value_word_typed >> strip_tac >>
-  drule_all tuple_field_storage_head_path >>
-  disch_then (qx_choosel_then [`mid`, `t`] (map_every assume_tac o CONJUNCTS)) >>
+  drule_all (at_horizon_named "H" tuple_field_storage_head_path) >>
+  disch_then (qspec_then `ctx` (qx_choosel_then [`mid`, `t`] (map_every assume_tac o CONJUNCTS))) >>
   conj_tac
   >- (drule vyperScopePreservationTheory.write_storage_slot_scopes >> simp[]) >>
   qexists_tac `t` >>
@@ -763,30 +773,28 @@ Proof
   rpt strip_tac >> drule_all tuple_target_assignment_scope_frame >> strip_tac >>
   Cases_on `?id. g = BaseTarget (NameTarget id)`
   >- (pop_assum strip_assume_tac >> gvs[] >>
-      drule_all tuple_target_local_head_path >>
-      disch_then (qx_choosel_then [`t`, `idp`, `sz`, `entry`, `dw`]
-        (map_every assume_tac o CONJUNCTS)) >>
+      drule_all (at_horizon_named "H" tuple_target_local_head_path) >>
+      disch_then (qspec_then `ctx` (qx_choosel_then [`t`, `idp`, `sz`, `entry`, `dw`]
+        (map_every assume_tac o CONJUNCTS))) >>
       qexists_tac `t` >> conj_tac >- suspend "local_rel" >>
       conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac
       >- (irule alloca_inv_fields >> qexists_tac `s` >> asm_rewrite_tac[]) >>
       reverse (rpt conj_tac) >- suspend "local_frame"
       >~ [`t.vs_memory = s.vs_memory`]
-      >- (disj2_tac >> qexistsl_tac [`id`, `idp`, `sz`, `entry`, `dw`] >>
+      >- (disj2_tac >> qexistsl_tac [`idp`, `sz`, `entry`, `dw`] >>
           asm_rewrite_tac[]) >>
       gvs[]) >>
   `is_word_type ty` by metis_tac[tuple_target_aligned_nonlocal_word] >>
   gvs[] >> drule_all tuple_target_nonlocal_head_path >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (qx_choose_then `t` (map_every assume_tac o CONJUNCTS))) >>
+  disch_then (qspec_then `ctx` (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)))) >>
   `local_ptrs_rel func cenv es'.scopes t` by
     (qpat_assum `es'.scopes = es.scopes` SUBST1_TAC >>
-     irule local_ptrs_rel_frame >> qexists_tac `s` >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac
-     >- (rpt strip_tac >> qpat_x_assum `!x. not_fresh_at st x ==> _` irule >>
-         fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-     gvs[]) >>
+     irule local_ptrs_rel_frame >> qexists_tac `s` >> gvs[] >>
+     rpt strip_tac >~ [`s.vs_alloca_next <= b`] >- gvs[] >>
+     qpat_x_assum `!x. not_fresh_at st x ==> _` irule >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `alloca_inv t` by
     (irule alloca_inv_fields >> qexists_tac `s` >> asm_rewrite_tac[]) >>
   qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -983,7 +991,7 @@ Resume tuple_store_targets_path[head_setup]:
     suspend "head_operand" >>
   `!x. op = Var x ==> not_fresh_at st x` by fs[] >>
   drule_all tuple_target_store_head_path >>
-  disch_then (qx_choose_then `s1` (map_every assume_tac o CONJUNCTS)) >>
+  disch_then (qspec_then `ctx` (qx_choose_then `s1` (map_every assume_tac o CONJUNCTS))) >>
   suspend "tail"
 QED
 
@@ -1096,15 +1104,15 @@ QED
 Resume tuple_store_targets_path[compose_rel]:
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 H es1.storage_trace` by
-    (irule valid_horizon_frame >>
-     qpat_assum `assign_tuple_target_list _ gs vs1 es1 = _` (irule_at Any) >>
+    (irule (INST_TYPE [alpha |-> ``:unit``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`assign_tuple_target_list cx gs vs1`, `INL ()`, `es'`] >>
      fs[evaluate_storage_trace_frame]) >>
   `stmt_state_rel H ctx func cenv cx es1 s1 /\
    storage_well_formed_on cx es1 (FST H)` by
     (qpat_x_assum `!st0 H. valid_horizon _ _ H es1.storage_trace /\ _ ==> _` irule >>
-     qexists_tac `st0` >> asm_rewrite_tac[]) >>
+     asm_rewrite_tac[] >> qexists_tac `st0` >> asm_rewrite_tac[]) >>
   qpat_x_assum `!st0 H. valid_horizon _ _ H es'.storage_trace /\ _ ==> _` irule >>
-  qexists_tac `st0` >> asm_rewrite_tac[]
+  asm_rewrite_tac[] >> qexists_tac `st0` >> asm_rewrite_tac[]
 QED
 
 Finalise tuple_store_targets_path
