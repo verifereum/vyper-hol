@@ -44,7 +44,8 @@ Theorem ecrecover_args_suffix_full:
         t.vs_inst_idx = LENGTH sm.cs_current_insts /\
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
-        ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+        ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+        EVERY (\x. op_taint tn x = {}) xs)
       (\H rr mid gt r. wb_args_exit rr r)
 Proof
   Induct
@@ -157,6 +158,7 @@ Proof
       t.vs_inst_idx = LENGTH s1.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      ptr_val_ok cx (post_value_type cenv e) v x G1 tn1 t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\ ~t.vs_halted` by
     (gen_tac >> strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> _`
@@ -187,7 +189,8 @@ Proof
         u.vs_inst_idx = LENGTH sm.cs_current_insts /\
         alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx fin G tn u /\
-        ghost_kept_at lo cenv mid s1 G1 tn1 t G tn)
+        ghost_kept_at lo cenv mid s1 G1 tn1 t G tn /\
+        EVERY (\x. op_taint tn x = {}) ys)
       (\H rr fin gt r. wb_args_exit rr r)` by
     (first_x_assum irule >> simp[] >>
      rpt conj_tac
@@ -238,6 +241,7 @@ Proof
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
   qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  `op_taint tn1 x = {}` by fs[ptr_val_ok_def] >>
   gvs[] >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
         (qpat_assum `!tail. bind (eval_expr cx e) _ _ = _` (qspec_then `[]` mp_tac) >>
@@ -255,6 +259,18 @@ Proof
          qpat_assum `!tail. bind (eval_expr cx e) _ _ = _`
            (qspec_then `[]` mp_tac) >> simp[]) >>
       `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  `ghost_kept cenv mid s1 G1 tn1 t G' tn'` by
+    (qpat_assum `ghost_kept_at lo cenv mid s1 G1 tn1 t G' tn'`
+       (mp_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+     simp[NoAsms, ghost_kept_def] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `op_taint tn' x = {}` by
+    (qpat_assum `ghost_kept cenv mid s1 G1 tn1 t G' tn'` mp_tac >>
+     qpat_assum `op_taint tn1 x = {}` mp_tac >>
+     qpat_assum `!z. x = Var z ==> not_fresh_at s1 z` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[wordArgsPtrTheory.ghost_kept_operand]) >>
+  simp[EVERY_DEF] >>
   conj_tac
   >- (drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
       simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
