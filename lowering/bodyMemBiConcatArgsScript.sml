@@ -80,6 +80,13 @@ Theorem concat_args_sim_mem:
       (\rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)
 Proof
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV (GSYM
+    (SIMP_CONV pure_ss [LET_THM]
+      ``\e. let ety = expr_type e in
+          if is_bytestring_type ety then (T, 0:num)
+          else case ety of
+                 BaseT (BytesT (Fixed m)) => (F, m)
+               | _ => (F, 32:num)``)))) >>
   Induct
   >- (rpt strip_tac >>
       qpat_x_assum `compile_concat _ _ [] _ _ _ _ = _`
