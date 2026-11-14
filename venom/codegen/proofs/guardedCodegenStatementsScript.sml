@@ -33,7 +33,7 @@ val guarded_codegen_memory_body =
    here; actual EVM/control alignment must establish it before composition. *)
 val guarded_boundary_stops_body =
   ``\ctx vs. !fn inst s fuel post.
-      guarded_raw_reachable vs ctx fn inst s /\
+      guarded_raw_reachable vs ctx fn inst s /\ active_inst fn inst s /\
       MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
       s.vs_outcomes = [] ==>
       step_inst fuel ctx inst s <> OK post``;
@@ -72,10 +72,11 @@ val guarded_codegen_unbacked_prefix =
       unbacked_call_reachable unit.cu_context vs ==>
       ?total.
         FUNPOW (step o SND) total (INL (), es) = (r, target) /\
-        (?fn inst s n ast k es1 ps ra rest mem0 bb rest_ops ps_after.
+        (?fn inst s fuel post n ast k es1 ps ra rest mem0 bb rest_ops ps_after.
           guarded_raw_reachable vs unit.cu_context fn inst s /\
           MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
-          s.vs_outcomes = [] /\
+          s.vs_outcomes = [] /\ active_inst fn inst s /\
+          step_inst fuel unit.cu_context inst s = OK post /\
           k < total /\
           asm_steps (SND (compute_label_offsets prog))
             (build_offset_to_pc prog) prog n (entry_asm_state vs es) =
