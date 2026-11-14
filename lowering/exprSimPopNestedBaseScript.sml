@@ -894,7 +894,7 @@ QED
    a horizon valid for the trace: the root is one of the horizon's regions,
    the place's slots fit the slot space and are in range (the backend is
    well formed on the horizon), and the place is read live. *)
-Theorem nested_pop_traced_root[local]:
+Theorem nested_pop_traced_root:
   valid_horizon cx st0 H es.storage_trace /\
   storage_well_formed_on cx es (FST H) /\
   (?offset tv0 path delta.
