@@ -3084,26 +3084,6 @@ Proof
   simp[do_swap_spilled_unchanged]
 QED
 
-Theorem rf_popmany_fold_spilled[local]:
-  !items ops ps.
-  (SND (FOLDL (\(ops,ps) v.
-    case stack_get_depth v ps.ps_stack of
-      NONE => (ops,ps)
-    | SOME dist =>
-      (\(swap_ops,ps').
-         (ops ++ swap_ops ++ [SOPop 1],
-          ps' with ps_stack := stack_pop 1 ps'.ps_stack))
-        (if dist = 0 then ([],ps) else do_swap dist ps))
-    (ops,ps) items)).ps_spilled = ps.ps_spilled
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  fs[LET_THM] >>
-  Cases_on `stack_get_depth h ps.ps_stack` >> simp[] >>
-  Cases_on `x = 0` >> simp[] >>
-  Cases_on `do_swap x ps` >> simp[] >>
-  qspecl_then [`x`, `ps`] mp_tac do_swap_spilled_unchanged >> simp[]
-QED
-
 Theorem rf_popmany_spilled = fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged
 
 Theorem rf_assign_plan_spill_lookup:

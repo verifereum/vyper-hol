@@ -188,19 +188,6 @@ Proof
   fs[wordsTheory.word_add_n2w, word_size_def, LESS_MOD]
 QED
 
-Theorem bytestring_copy_len_word[local]:
-  !L. L + 64 < dimword (:256) ==>
-      w2n (((n2w L + 31w) && ~31w) + 32w : bytes32) =
-      32 + 32 * word_size L
-Proof
-  rpt strip_tac >> irule bytestring_copy_len_word_exact >>
-  `(L + 31) DIV 32 * 32 <= L + 31` by
-    (qspec_then `32` mp_tac DIVISION >> simp[] >>
-     disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
-  qpat_x_assum `_ DIV _ * _ <= _` mp_tac >>
-  simp_tac pure_ss [word_size_def, MULT_COMM] >> decide_tac
-QED
-
 (* The steps of the copy, as rewrites: the operands' values are THE of
    their evaluation, so simp can chain them. *)
 Theorem step_MLOAD_some[local]:

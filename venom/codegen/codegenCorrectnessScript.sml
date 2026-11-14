@@ -91,16 +91,6 @@ Theorem stack_params_rel_def = codegenEntryRelTheory.stack_params_rel_def
 
 Theorem initial_state_rel_def = codegenEntryRelTheory.initial_state_rel_def
 
-Theorem initial_state_rel_entry_clauses[local]:
-  ∀cp prog off fn vs es ctxt rb rest.
-    initial_state_rel cp prog off fn vs es /\
-    es.contexts = (ctxt, rb) :: rest ==>
-    context_memory_rel cp vs.vs_memory (buffer_to_list ctxt.memory) /\
-    ctxt.pc = asm_pc_to_offset prog off
-Proof
-  rpt strip_tac >> gvs[initial_state_rel_def]
-QED
-
 (* ===== Return Value Correspondence ===== *)
 
 (* After execution: return data and side effects match. *)
@@ -121,100 +111,9 @@ End
 
 (* ===== Composition Helpers ===== *)
 
-(* Terminal state composition: venom_asm_terminal_rel + asm_evm_rel → final_state_rel.
-   After asm execution ends at a terminal, the asm state relates to both Venom (terminal_rel)
-   and EVM (evm_rel). Composing these gives the end-to-end final_state_rel. *)
-Theorem terminal_asm_evm_final[local]:
-  !prog vs' as' es'.
-    venom_asm_terminal_rel vs' as' /\
-    asm_evm_rel prog as' es' ==>
-    final_state_rel vs' es'
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[venom_asm_terminal_rel_def, asm_evm_rel_def, final_state_rel_def] >>
-  every_case_tac >> gvs[]
-QED
-
 (* The obsolete single-function codegen unfolding is intentionally absent:
    context codegen is exposed through [codegen_assembly] and the selected
    region is located by [ops_contain_at]. *)
-
-(* Prefix of a list is an asm_block_at position 0 *)
-Theorem asm_block_at_prefix[local]:
-  !xs ys. asm_block_at (xs ++ ys) 0 xs
-Proof
-  Induct >> simp[asm_block_at_def, EL_APPEND1]
-QED
-
-(* Bridge from a positioned context-region entry to an assembly state. *)
-Theorem initial_state_bridge[local]:
-  ∀cp prog off fn vs es ctx i r unit lo.
-    initial_state_rel cp prog off fn vs es /\
-    generate_context_plan ctx = SOME cp /\
-    i < LENGTH ctx.ctx_functions /\
-    EL i ctx.ctx_functions = fn /\
-    EL i cp.cp_regions = r /\
-    ops_contain_at off
-      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
-      (execute_plan cp.cp_initial_fmp r.sr_plan) /\
-    prog = execute_plan cp.cp_initial_fmp (context_plan_ops cp) ++
-           data_segment_asm unit.cu_data_segment /\
-    lo = SND (compute_label_offsets prog) /\
-    (case es.contexts of
-       (ctxt, rb) :: _ =>
-         ctxt.msgParams.code = assemble prog /\
-         ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog)
-     | [] => F) ==>
-    ∃as0.
-      context_venom_asm_rel cp lo
-        (fn_init_ps fn r.sr_spill_base) vs as0 /\
-      asm_evm_rel prog as0 es /\
-      asm_block_at prog off
-        (execute_plan cp.cp_initial_fmp r.sr_plan) /\
-      as0.as_pc = off
-Proof
-  rpt gen_tac >> strip_tac >>
-  every_case_tac >> gvs[] >>
-  rename1 `es.contexts = (ctxt, rb) :: rest` >>
-  qexists_tac `<| as_stack := ctxt.stack;
-                   as_memory := buffer_to_list ctxt.memory;
-                   as_accounts := vs.vs_accounts;
-                   as_transient := vs.vs_transient;
-                   as_returndata := vs.vs_returndata;
-                   as_logs := vs.vs_logs;
-                   as_pc := off;
-                   as_call_ctx := vs.vs_call_ctx;
-                   as_tx_ctx := vs.vs_tx_ctx;
-                   as_block_ctx := vs.vs_block_ctx;
-                   as_code := vs.vs_code;
-                   as_prev_hashes := vs.vs_prev_hashes;
-                   as_outcomes := vs.vs_outcomes;
-                   as_requests := vs.vs_requests;
-                   as_pending_deletions := vs.vs_pending_deletions;
-                   as_gas_readings := vs.vs_gas_readings |>` >>
-  gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
-      block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
-      context_venom_asm_rel_def, fn_init_ps_def,
-      init_plan_state_def, init_spill_alloc_def, LET_THM,
-      plan_spill_rel_def, FLOOKUP_DEF, asm_evm_rel_def] >>
-  conj_tac >- suspend "plan_stack" >>
-  conj_tac >- (rpt gen_tac >> simp[CONJ_ASSOC]) >>
-  gvs[asm_block_at_def, ops_contain_at_def, EL_APPEND1]
-QED
-
-Resume initial_state_bridge[plan_stack]:
-  simp[plan_stack_rel_def, operand_val_def] >>
-  rpt strip_tac >>
-  rename1 `j < LENGTH ctxt.stack` >>
-  simp[EL_REVERSE, EL_MAP, operand_val_def, FLOOKUP_DEF] >>
-  qpat_x_assum `!k. k < LENGTH ctxt.stack ==> _`
-    (qspec_then `PRE (LENGTH ctxt.stack - j)` mp_tac) >>
-  simp[EL_REVERSE] >>
-  `PRE (LENGTH ctxt.stack - PRE (LENGTH ctxt.stack - j)) = j` by simp[] >>
-  simp[]
-QED
-
-Finalise initial_state_bridge
 
 (* run_blocks never returns OK — it always terminates with
    Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
