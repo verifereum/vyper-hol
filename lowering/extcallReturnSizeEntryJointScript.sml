@@ -2,6 +2,7 @@
 Theory extcallReturnSizeEntryJoint
 Ancestors
   extcallReturnSizeJoint extcallReturnEntryBridge abiReturnPrefixTransport
+  extcallReturnDefaultControlJoint exprSimAlloc
   abiMalformedRecursiveInterface bodyFullGhostFrame bodyFullUnwrapRun
   exprSimWordArgs abiReturnSize bodyPtrDefs ptrDiscipline
   loweringStateRelDefs exprLoweringProps compileEnv venomState
@@ -97,3 +98,52 @@ Resume return_prepared_joint_entry[wb]:
   simp[]
 QED
 Finalise return_prepared_joint_entry
+
+Theorem return_allocated_short_joint:
+  compile_alloc_buffer n a = (buf,m) /\
+  compile_return_value_decode low cap m = (hi,b) /\
+  fn_has_code a m func /\ fn_has_code m b func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H0 ctx func cenv cx ee s /\ local_ptrs_reserved cenv a /\
+  n < dimword (:256) /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  low < dimword (:256) /\ cap < dimword (:256) /\
+  LENGTH s.vs_returndata < dimword (:256) /\ LENGTH s.vs_returndata < low ==>
+  ?z Gf tm. !D.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (Abort Revert_abort z,Gf,tm)
+Proof
+  strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts a m) s = OK r` >>
+  drule_all return_default_alloc_run_step >> strip_tac >>
+  drule_all return_default_alloc_control >> strip_tac >>
+  qabbrev_tac `u = r with vs_inst_idx := LENGTH m.cs_current_insts` >>
+  qabbrev_tac `AG = step_prov PG G (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString a.cs_next_var)]) r` >>
+  qabbrev_tac `atn = step_taint (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString a.cs_next_var)]) s r tn` >>
+  `~u.vs_halted /\ allocas_from lo u /\
+   u.vs_current_bb = m.cs_current_bb /\
+   u.vs_inst_idx = LENGTH m.cs_current_insts /\
+   LENGTH u.vs_returndata < dimword (:256) /\ LENGTH u.vs_returndata < low` by
+    simp[Abbr `u`, allocas_from_def] >>
+  mp_tac (Q.INST [`a` |-> `m`, `s` |-> `u`, `lo` |-> `low`]
+    return_size_actual_run) >>
+  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts m b) u = Abort Revert_abort v` >>
+  mp_tac (Q.INST [`a` |-> `m`, `s` |-> `u`, `G` |-> `AG`,
+    `tn` |-> `atn`, `err` |-> `Revert_abort`] return_size_abort_joint) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`v with vs_inst_idx := j`, `H`, `tm`] >> gen_tac >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,AG,atn)` by
+    (simp[Abbr `u`, Abbr `AG`, Abbr `atn`] >>
+     irule return_default_alloc_joint >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _`
+    (qspec_then `D` assume_tac) >>
+  qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+    (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  simp[] >> disch_then irule >> gvs[]
+QED
