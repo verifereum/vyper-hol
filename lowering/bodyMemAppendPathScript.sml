@@ -88,6 +88,9 @@ Theorem append_storage_word_success_post_mem[local]:
 Proof
   strip_tac >>
   qmatch_asmsub_abbrev_tac `state_frame u = state_frame su` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_append_storage_word >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' su` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ es' _` mp_tac >>
