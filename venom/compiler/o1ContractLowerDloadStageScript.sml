@@ -326,7 +326,8 @@ QED
 Theorem lower_dload_run_contract:
   o1_run_contract rpolicy D 1
 Proof
-  rw[o1_run_contract_def, o1_stage_contract_def] >>
+  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
   match_mp_tac o1_static_stage_lower_dload >> fs[o1_run_state_ok_def]
 QED
 
