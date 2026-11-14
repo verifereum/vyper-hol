@@ -1,6 +1,7 @@
 (* Source preconditions and invariant preservation for expression evaluation. *)
 Theory exprSimSource
 Ancestors
+  gasCount
   exprWordOperand exprSimPopNestedLocalPath
   compileEnv valueEncoding
   exprSimHypsDefs exprSimDefs loweringSlice allocLimits gasContext list finite_map pair
@@ -637,4 +638,30 @@ Proof
   gvs[no_control_exc_def, no_type_error_result_def]
   >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
   metis_tac[eval_expr_calls_no_halt, expr_body_pre_def]
+QED
+
+Theorem operand_eval_evidence_semantics:
+  expr_body_pre cenv cx env e es /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  expr_sim_inv cenv cx env ee /\
+  expr_result_typed env e (Value v) /\
+  (is_word_type (expr_type e) ==>
+    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+      value_has_type tyv v)
+Proof
+  strip_tac >>
+  first_x_assum (qspec_then `[]` assume_tac) >>
+  qpat_x_assum `ee = _` SUBST_ALL_TAC >>
+  qpat_assum `_ = (INL v,_)`
+    (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] expr_body_pre_eval)) >>
+  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+  simp[expr_body_pre_gas_obs] >> strip_tac >>
+  simp[] >> strip_tac >>
+  qpat_assum `_ = (INL v,_)`
+    (mp_then Any mp_tac (REWRITE_RULE [ETA_THM] expr_body_pre_word_value)) >>
+  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+  simp[expr_body_pre_gas_obs]
 QED

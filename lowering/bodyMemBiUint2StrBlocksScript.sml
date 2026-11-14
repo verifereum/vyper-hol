@@ -1,7 +1,7 @@
 (* Memory checks for the concrete uint2str instruction templates. *)
 Theory bodyMemBiUint2StrBlocks
 Ancestors
-  bodyMemBiUint2StrBounds exprSimUint2Str fragExecMem instMemFrontier
+  exprSimUint2Str fragExecMem instMemFrontier venomMemDefs arithmetic
   memSafeRun venomInst venomState finite_map list rich_list
   venomExecSemantics exprLoweringProps exprSimBopRestWordLoopPath
   fragGasMode fragGasPathMem allocaHistoryFragment
@@ -17,7 +17,7 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
-Theorem u2s_body_mem_ok[local]:
+Theorem u2s_body_mem_ok:
   eval_operand (Var (u2s_var a 0)) s = SOME xw /\
   eval_operand (Var (u2s_var a 1)) s = SOME iw /\
   eval_operand buf s = SOME bw /\
@@ -79,7 +79,7 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
-Theorem u2s_final_mem_ok[local]:
+Theorem u2s_final_mem_ok:
   eval_operand buf s = SOME bw /\
   eval_operand (Var (u2s_var a 1)) s = SOME iw /\
   (!z. buf = Var z ==> not_fresh_at a z) /\
@@ -169,7 +169,7 @@ Proof
        eval_operands_def, eval_operand_def]
 QED
 
-Theorem u2s_zero_mem_ok[local]:
+Theorem u2s_zero_mem_ok:
   eval_operand buf s = SOME bw /\
   (!z. buf = Var z ==> not_fresh_at a z) /\
   w2n (bw+n2w n) + 32 <= s.vs_alloca_next /\
@@ -257,7 +257,7 @@ Proof
   metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_fields]
 QED
 
-Theorem u2s_block_history[local]:
+Theorem u2s_block_history:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = pre ++ code ++ [j] /\
