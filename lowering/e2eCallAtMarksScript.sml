@@ -118,7 +118,7 @@ Proof
   >- (qexists_tac `SUC fuel` >>
       simp[run_context_def, run_function_def] >>
       simp[fragExecTheory.run_blocks_run_from_no_phi]) >>
-  gen_tac >> Cases_on `fuel'` >- simp[Once mem_safe_blocks_def] >>
+  Cases >- simp[Once mem_safe_blocks_def] >>
   `eval_phis
     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)
     bb.bb_instructions = OK
