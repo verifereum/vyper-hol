@@ -1,6 +1,6 @@
 (* Ghost frame for the payload-copy instruction; independent of the ABI type. *)
 Theory calldataBulkPayloadPtr
-Ancestors fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier calldataDecodePtr decoderRawEndpointPtr
+Ancestors memSafeRun fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier calldataDecodePtr decoderRawEndpointPtr
   bodyPtrDefs ptrDiscipline venomInst venomState finite_map pred_set
   decoderGhostFramePtr emitHelperProps fragExec venomExecSemantics
   codegenRel contextCodegenRel ptrSafeRun compileEnv loweringStateRelDefs emitHelper list arithmetic
