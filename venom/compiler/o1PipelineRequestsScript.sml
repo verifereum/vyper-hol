@@ -399,7 +399,7 @@ Proof
   qexists_tac `vo` >> simp[gas_variant_refl] >> rpt strip_tac >>
   `o1_run_contract rp D k` by metis_tac[o1_run_contracts_same] >>
   fs[o1_run_contract_def, o1_stage_contract_def] >>
-  metis_tac[o1_run_abort_same]
+  metis_tac[o1_run_abort_same, ctx_sim_fuel_imp_ctx_sim]
 QED
 
 Theorem guarded_ctx_sim_rq_trans_all_dead[local]:

@@ -6,7 +6,7 @@ Ancestors
   extCallOracle list rich_list pair
   e2eDefs e2eProducers e2eEntry e2eComposition sourceUnitExecution
   vyperLoweringCorrect supportedProgram o1PipelineCorrect loweringShapeProps
-  vyperCompiler vyperContext immutableCodeLayout
+  vyperCompiler vyperContext immutableCodeLayout loweringShapeSource vyperInterpreter
 
 (* A terminating raw run has a matching lowered request prefix on either
    exit path; ctx_sim supplies the halt case and ctx_abort_rq the abort. *)
@@ -48,17 +48,22 @@ Theorem compiled_request_outcome_alignment:
   MEM (EL k (call_requests es), EL k si.vs_outcomes) (call_trace es) /\
   request_agree_except D (EL k ss.vs_requests) (EL k (call_requests es))
 Proof
-  strip_tac >>
-  drule_all ctx_sim_abort_request_prefix >> strip_tac >>
-  drule_all codegen_request_prefix >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ctx_sim_abort_request_prefix >>
+  disch_then (qx_choose_then `matched_fuel`
+    (qx_choose_then `matched_state` (map_every assume_tac o CONJUNCTS))) >>
+  mp_tac (Q.SPECL [`matched_fuel`, `rpolicy`, `lowered`, `cplan`,
+    `prog`, `Inv`, `so`, `es`, `matched_state`] codegen_request_prefix) >>
+  impl_tac >- asm_rewrite_tac[] >> disch_tac >>
   `call_requests es = MAP FST (call_trace es)` by
     (simp[call_requests_def, FILTER_EQ_ID, EVERY_MAP] >>
      gvs[EVERY_MEM, FORALL_PROD]) >>
-  `k < LENGTH (call_trace es)` by fs[] >>
+  `k < LENGTH (call_trace es)` by metis_tac[LENGTH_MAP] >>
   conj_tac
-  >- (drule (Q.SPECL [`k`, `call_trace es`] EL_MEM) >>
-      simp[EL_MAP] >> Cases_on `EL k (call_trace es)` >> simp[]) >>
-  fs[request_prefix_rel_EL, IS_PREFIX_APPEND, EL_APPEND1]
+  >- (simp[MEM_EL] >> qexists_tac `k` >> simp[EL_MAP]) >>
+  fs[request_prefix_rel_EL, IS_PREFIX_APPEND] >>
+  qpat_x_assum `!i. i < LENGTH matched_state.vs_requests ==> _`
+    (qspec_then `k` mp_tac) >> simp[EL_APPEND1]
 QED
 
 Theorem source_compiled_request_alignment:
@@ -84,7 +89,7 @@ Theorem source_compiled_request_alignment:
   request_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
     rq (EL k (call_requests es))
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     fs[source_typing_ok_def] >>
@@ -102,8 +107,10 @@ Proof
   `vs.vs_outcomes = MAP SND (call_trace es)` by
     (drule gas_variant_outcomes >> simp[entry_venom_state_def]) >>
   drule_all compiled_request_outcome_alignment >> strip_tac >> simp[] >>
-  irule (request_agree_dead_trans |>
+  irule (SPEC_ALL request_agree_dead_trans |>
     Q.INST [`am'` |-> `am`, `res` |-> `ARB`, `rqs` |-> `[]`,
             `tx` |-> `tx`, `r1` |-> `EL k ss.vs_requests`]) >>
-  simp[external_call_dead_def, cx_dead_def, initial_evaluation_context_def]
+  simp[external_call_dead_def, cx_dead_def, initial_evaluation_context_def] >>
+  qexistsl_tac [`am`, `k`, `ss`] >>
+  fs[cx_dead_def, initial_evaluation_context_def]
 QED
