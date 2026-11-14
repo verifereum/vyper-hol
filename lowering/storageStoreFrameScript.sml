@@ -1,6 +1,7 @@
 (* A single storage instruction, with all non-storage state framed. *)
 Theory storageStoreFrame
 Ancestors
+  fragGasSeqAbort compileEnv
   loweringPosts stmtSimDefs stmtSimProps
   list rich_list finite_map fragExec  stmtSimDecl emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState
@@ -72,4 +73,30 @@ Proof
   disch_then (qspec_then `\r. F` assume_tac) >>
   drule frag_exec_no_exit_run >> disch_then drule >>
   disch_then (qspec_then `s` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_emit_static_path:
+  emit_void (if tr then TSTORE else SSTORE) [dst; op] st = ((), st') /\
+  eval_operand dst s = SOME addr /\ eval_operand op s = SOME w /\
+  fn_has_code st st' func /\ ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  gas_marked_path F ctx func s 0
+    (Abort ExHalt_abort (halt_state (set_returndata [] s)))
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `st'.cs_current_bb = st.cs_current_bb` by
+    gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH st.cs_current_insts) =
+     SOME (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_marked_path F ctx func s
+     (if (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] []).inst_opcode = GAS then 1 else 0)
+     (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+    (irule gas_marked_path_abort >>
+     Cases_on `tr` >>
+     simp[mk_inst_def, is_terminator_def, step_inst_base_def, eval_operands_def]) >>
+  Cases_on `tr` >> gvs[mk_inst_def]
 QED
