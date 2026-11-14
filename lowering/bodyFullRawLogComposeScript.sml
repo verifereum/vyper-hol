@@ -10,7 +10,7 @@ Ancestors
   vyperTypeInvariants exprLowering compileEnv vyperEvalExprPreservesScopesDom
 Libs pairLib
 
-Theorem raw_log_topics_operands_shape:
+Theorem raw_log_topics_operands_shape[local]:
   expr_body_pre cenv cx env
     (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt) es /\
   EVERY (\e. MEM e topics) suffix /\
