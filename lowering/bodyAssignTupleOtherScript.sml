@@ -214,7 +214,11 @@ Proof
   `acyclic_struct_metadata cenv.ce_struct_fields` by
     gvs[body_inv_def] >>
   `expr_sim ctx func cenv cx (TupleT tys) e es` by
-    (gvs[body_expr_ok_def] >> metis_tac[]) >>
+    (qpat_x_assum `body_expr_ok cx e`
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+     disch_then (qspecl_then
+       [`tops`, `ctx`, `func`, `cenv`, `env`, `TupleT tys`, `es`] mp_tac) >>
+     simp[]) >>
   mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`,
     `env`, `tops`, `bindings`, `gs`, `e`, `es`, `tys`, `tvs`, `ltys`, `ltvs`]
     compile_assign_tuple_mixed_stmt_frag) >>
