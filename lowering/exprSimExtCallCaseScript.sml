@@ -693,6 +693,57 @@ Proof
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[]
 QED
 
+Theorem extcall_request_positional_nil[local]:
+  expr_sim_inv ce cx env ea /\
+  (!H. valid_horizon cx st0 H ea.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ea r0 /\
+    storage_well_formed_on cx ea (FST H)) /\
+  ~r0.vs_halted /\ r0.vs_current_bb = ca.cs_current_bb /\
+  r0.vs_inst_idx = LENGTH ca.cs_current_insts /\ local_ptrs_reserved ce ca /\
+  (!vs. storage_trace_frame (kont vs)) /\
+  (!ee t.
+    (?H0. valid_horizon cx st0 H0 ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee t /\
+      storage_well_formed_on cx ee (FST H)) /\
+    wb_frame ce ea ee ca r0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = ca.cs_current_bb /\
+    t.vs_inst_idx = LENGTH ca.cs_current_insts /\ ee.gas_obs = [] /\
+    outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM ea.scopes = MAP FDOM ee.scopes /\ local_ptrs_reserved ce ca /\
+    expr_sim_inv ce cx env ee /\
+    (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+      (ea with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+    pure_frame ce func ea ca r0 t ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (kont []) (ee,t) Q
+      (\H res ee r. expr_exit res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (eval_exprs cx []) kont) (ea,r0) Q (\H res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `eval_exprs cx [] = return []` by
+    simp[FUN_EQ_THM, exprSimWordArgsTheory.eval_exprs_nil, return_def] >>
+  asm_rewrite_tac[bind_return] >>
+  reverse (Cases_on `storage_trace_domain cx st0 ea.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[]) >>
+  `!H. valid_horizon cx st0 H ea.storage_trace ==>
+       storage_well_formed_on cx (ea with gas_obs := []) (FST H)` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >>
+     strip_tac >>
+     irule (iffRL storage_well_formed_on_backends) >>
+     qexists_tac `ea` >> simp[]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (kont [])
+     (ea with gas_obs := [],r0) Q (\H res ee r. expr_exit res r)` by
+    (first_x_assum irule >>
+     simp[exprSimWordArgsTheory.wb_frame_refl, expr_sim_inv_gas_obs] >>
+     conj_tac >- metis_tac[storage_trace_domain_def] >>
+     fs[expr_sim_inv_def,
+        vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]) >>
+  drule gasOutcomeTheory.gas_outcome_start_gas_obs >>
+  disch_then (qspec_then `ea.gas_obs` mp_tac) >> simp[]
+QED
 
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
