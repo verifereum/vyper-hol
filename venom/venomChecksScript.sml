@@ -19,5 +19,6 @@ Ancestors
   assertCombinerNonVacuity
   (* branch_opt's output checker accepts and runs a rewritten function *)
   branchOptCheckWitness
+  mmMergeWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata

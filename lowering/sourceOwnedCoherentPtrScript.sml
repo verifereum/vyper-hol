@@ -354,7 +354,9 @@ Resume source_owned_coherent_decoder_ptr[tuple]:
     (simp_tac bool_ss [LIST_REL_EL_EQN] >>
      asm_rewrite_tac[] >> qx_gen_tac `i` >> strip_tac >>
      asm_x "members" (qspec_then `i` mp_tac) >>
-     asm_rewrite_tac[] >> simp_tac bool_ss []) >>
+     disch_then (fn th => qpat_assum `LENGTH _ = LENGTH tvs`
+       (fn len => qpat_assum `i < LENGTH tvs`
+         (ACCEPT_TAC o CONJUNCT1 o MATCH_MP th o PURE_REWRITE_RULE [GSYM len])))) >>
   drule_all source_tuple_values >> strip_tac >>
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   qpat_x_assum `av = _` SUBST_ALL_TAC >>
@@ -440,7 +442,9 @@ Resume source_owned_coherent_decoder_ptr[struct]:
     (simp_tac bool_ss [LIST_REL_EL_EQN] >> asm_rewrite_tac[] >>
      qx_gen_tac `i` >> strip_tac >>
      asm_x "members" (qspec_then `i` mp_tac) >>
-     asm_rewrite_tac[] >> simp_tac bool_ss []) >>
+     disch_then (fn th => qpat_assum `LENGTH _ = LENGTH tvs`
+       (fn len => qpat_assum `i < LENGTH tvs`
+         (ACCEPT_TAC o CONJUNCT1 o MATCH_MP th o PURE_REWRITE_RULE [GSYM len])))) >>
   `LENGTH args = LENGTH tvs` by
     (qpat_assum `LENGTH (MAP SND args) = LENGTH tvs` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
