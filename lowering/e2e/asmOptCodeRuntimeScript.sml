@@ -8,6 +8,8 @@ Ancestors
   runtimeSymSrcUnit codegenAsmOpt contextCodegenRel ptrDiscipline immutableCodeLayout
   lowerDloadDefs o1CodeEndOffset
 
+val _ = Parse.hide "tops";
+
 Theorem source_typing_ok_code_update:
   source_typing_ok tops am tx /\ LENGTH c < 2 ** 256 ==>
   source_typing_ok tops am (tx with code := c)

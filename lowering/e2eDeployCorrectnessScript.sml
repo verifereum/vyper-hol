@@ -258,6 +258,9 @@ Proof
   drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
   drule compile_vyper_runtime_nonempty_asm_opt >> strip_tac >>
   drule compile_vyper_deploy_nonempty_asm_opt >> strip_tac >>
+  `asm_opt_finalizer IN accepted_finalizers` by
+    simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   qpat_x_assum `deploy_bc = assemble prog'` SUBST_ALL_TAC >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
   drule_all asm_opt_deploy_result >>
