@@ -331,7 +331,9 @@ Proof
   disch_then (drule_at (Pat `tuple_in_memory _ _ _ r.vs_memory`)) >>
   disch_then (qspec_then `ss` mp_tac) >>
   disch_then (qspecl_then [`sb`, `ee`, `env`, `asz`, `inst.inst_id`] mp_tac) >>
-  (impl_tac >- (fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >> asm_rewrite_tac[])) >>
+  (impl_tac >-
+    (simp_tac (srw_ss()) [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     asm_rewrite_tac[])) >>
   strip_tac >> pure_rewrite_tac[CONJ_ASSOC] >> conj_tac
   >- (fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
       conj_tac
