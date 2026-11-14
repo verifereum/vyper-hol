@@ -6512,13 +6512,58 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem ld_recursive_member_return_clause[local]:
+val ld_pop_witness_first_static_goal =
+  let val (pre,res) = dest_imp (concl ld_recursive_paired_return_pop_static)
+      val rest = subst [ld_combined_return_witness |-> boolSyntax.T] pre
+      val heads = map (fn name =>
+        valOf (List.find (fn v => fst (dest_var v) = name) (free_vars rest)))
+        ["sf", "astail", "tf", "gtail"]
+  in mk_imp(ld_combined_return_witness,
+       list_mk_forall(heads,mk_imp(rest,res))) end;
+
+Theorem ld_pop_witness_first_static[local]:
+  ^ld_pop_witness_first_static_goal
+Proof
+  disch_tac >> rpt gen_tac >> disch_tac >>
+  mp_tac ld_recursive_paired_return_pop_static >>
+  pure_asm_rewrite_tac[AND_CLAUSES, IMP_CLAUSES] >>
+  simp_tac (srw_ss()) []
+QED
+
+val ld_restore_witness_first_static_goal =
+  let val (_,body) = strip_forall (concl ld_recursive_return_restore_static)
+      val (pre,res) = dest_imp body
+      val popbody = #1 (dest_conj (#2 (dest_conj pre)))
+      val rest = subst [ld_combined_return_witness |-> boolSyntax.T,
+                       popbody |-> boolSyntax.T] pre
+      val params = map (fn name =>
+        valOf (List.find (fn v => fst (dest_var v) = name) (free_vars rest)))
+        ["gtail", "D", "names"]
+  in mk_imp(ld_combined_return_witness,mk_imp(popbody,
+       list_mk_forall(params,mk_imp(rest,res)))) end;
+
+Theorem ld_restore_witness_first_static[local]:
+  ^ld_restore_witness_first_static_goal
+Proof
+  disch_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+  mp_tac (SPEC_ALL ld_recursive_return_restore_static) >>
+  (impl_tac >- (pure_asm_rewrite_tac[AND_CLAUSES, IMP_CLAUSES] >>
+    simp_tac (srw_ss()) [])) >>
+  disch_then ACCEPT_TAC
+QED
+
+val ld_member_return_header = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
   o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_return_goal
+  lo = vs0.vs_alloca_next ==> ^ld_recursive_member_return_goal``;
+
+Theorem ld_recursive_member_return_clause_static[local]:
+  ^(subst [``o1_run_state_ok`` |-> ld_static_run] ld_member_return_header)
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >> rule_assum_tac BETA_RULE >>
+  qpat_x_assum `o1_initial_state_ok vs0 /\ _` strip_assume_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `(^ld_recursive_member_candidate) _ _ _ _ _ _ _`
     (strip_assume_tac o CONV_RULE ld_member_beta_conv) >>
   CONV_TAC ld_member_beta_conv >>
@@ -6526,7 +6571,9 @@ Proof
     POP_ASSUM_LIST (K ALL_TAC) >> simp[MEM] >> metis_tac[]) >>
   conj_tac >- (qpat_assum `!f i st tv. MEM (f,i,st,tv) _ ==> MEM f _` mp_tac >>
     POP_ASSUM_LIST (K ALL_TAC) >> simp[MEM] >> metis_tac[]) >>
-  drule_all ld_recursive_combined_return_anchor >> strip_tac >>
+  drule_all (CONV_RULE (ONCE_DEPTH_CONV
+    (REWR_CONV (BETA_CONV ``^ld_static_run vs0``)))
+    ld_recursive_combined_return_anchor_static) >> strip_tac >>
   qpat_x_assum `(^ld_recursive_combined_return_zero) _ _ _ _ _ _ _`
     (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 assume_tac
@@ -6549,7 +6596,7 @@ Proof
   qpat_x_assum `saved = tf.lf_state` SUBST_ALL_TAC >>
   asm "return_body" (qspecl_then [`sf`, `astail`, `tf`, `gtail`]
     (drule_at (Pat `bind_outputs _ _ _ = SOME _`)) o
-    MATCH_MP (BETA_RULE ld_pop_witness_first)) >>
+    MATCH_MP (BETA_RULE ld_pop_witness_first_static)) >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = IntRet _ _`)) >>
   disch_then (qspecl_then [`names`, `D`] mp_tac) >>
   impl_tac
@@ -6558,7 +6605,7 @@ Proof
     mk_asm "return_pop" th >> strip_assume_tac th)) >>
   asm "return_body" (fn th =>
     asm "return_pop" (qspecl_then [`gtail`, `D`, `names`] mp_tac o MATCH_MP
-      (MATCH_MP (BETA_RULE ld_restore_witness_first) th))) >>
+      (MATCH_MP (BETA_RULE ld_restore_witness_first_static) th))) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       simp_tac (srw_ss()) []) >>
@@ -6567,6 +6614,15 @@ Proof
   qpat_assum `active_inst tf.lf_fn inst' _`
     (fn th => simp_tac (srw_ss()) [th]) >>
   first_x_assum irule >> first_assum ACCEPT_TAC
+QED
+
+Theorem ld_recursive_member_return_clause[local]:
+  ^ld_member_return_header
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_tac >>
+  match_mp_tac (CONV_RULE (DEPTH_CONV BETA_CONV) ld_recursive_member_return_clause_static) >>
+  rule_assum_tac (REWRITE_RULE [o1PassContractTheory.o1_run_state_ok_def]) >>
+  asm_simp_tac bool_ss []
 QED
 
 Theorem ld_recursive_combined_coverage:
