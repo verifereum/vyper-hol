@@ -52,6 +52,8 @@ Resume empty_memory_vv_sim_ptr[run]:
   pop_assum (qx_choose_then `H0` assume_tac) >>
   `stmt_state_rel H0 ctx func cenv cx es s0 /\
    ghost_inv H0 d cenv cx es G0 tn0 s0` by simp[] >>
+  `local_ptrs_rel func cenv es.scopes s0` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es t` by
