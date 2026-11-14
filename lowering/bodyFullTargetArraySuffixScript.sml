@@ -7,7 +7,7 @@ Ancestors
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
-  vyperValue compileEnv valueEncoding vyperTypeEnv
+  vyperValue compileEnv valueEncoding vyperTypeEnv vyperInterpreter vyperState
 
 Definition array_tail_packet_def:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
@@ -274,4 +274,96 @@ Proof
   simp[extend_place_storage_array_index] >>
   Cases_on `bd` >> fs[Abbr `n`] >>
   rpt IF_CASES_TAC >> gvs[] >> decide_tac
+QED
+
+Theorem array_tail_packet_index_post:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace ==>
+  target_post H ctx func cenv cx es sa sn s0 mid2 pv (Type (ArrayT et bd)) rb t2
+Proof
+  strip_tac >>
+  `place_readable cx mid2 pv` by
+    (drule_all array_tail_packet_source_bounds >> strip_tac >>
+     Cases_on `pv` >> simp[place_readable_def] >>
+     rename1 `PlaceR pl` >> Cases_on `pl` >> simp[place_readable_def] >>
+     first_x_assum (qspecl_then [`s`, `l`] mp_tac) >> simp[] >> strip_tac >>
+     simp[read_place_def, read_memory_path_def, get_scopes_def,
+          bind_def, lift_option_type_def, lift_sum_def, return_def]) >>
+  fs[array_tail_packet_def] >> first_x_assum drule >> strip_tac >>
+  `!l. FST rb <> Label l` by
+    metis_tac[target_subscript_typed_base_not_label] >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `MAP FDOM es.scopes = MAP FDOM mid1.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_base_place_preserves_scopes_dom >> simp[]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     disch_then (qspecl_then [`bt`, `cenv`, `sa`] mp_tac) >> simp[ci_mono_def]) >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 H mid1.storage_trace` by
+    (drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
+  `storage_trace_frame (eval_base_place cx bt)` by
+    simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  drule_all target_post_index_frame >> simp[]
+QED
+
+Theorem array_tail_packet_index_kept:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2
+Proof
+  strip_tac >>
+  fs[array_tail_packet_def] >> first_x_assum drule >> strip_tac >>
+  `MAP FDOM es.scopes = MAP FDOM mid1.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_base_place_preserves_scopes_dom >> simp[]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     disch_then (qspecl_then [`bt`, `cenv`, `sa`] mp_tac) >> simp[ci_mono_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!name b sz. local_region cenv es.scopes s0 name b sz ==>
+     local_region cenv mid1.scopes t1 name b sz` by
+    (rpt strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl [`s0`, `sa`, `es.scopes`] >> fs[target_post_def]) >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 H mid1.storage_trace` by
+    (drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
+  `storage_trace_frame (eval_base_place cx bt)` by
+    simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
+  `local_ptrs_rel func cenv es.scopes s0` by
+    (first_x_assum drule >> simp[stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def]) >>
+  `!name b sz. local_region cenv mid1.scopes t1 name b sz ==>
+     local_region cenv es.scopes s0 name b sz` by
+    (rpt strip_tac >> irule exprSimPropsTheory.local_region_frame >>
+     conj_tac >- metis_tac[] >>
+     qexistsl [`sa`, `mid1.scopes`, `t1`] >> fs[target_post_def]) >>
+  fs[ghost_kept_at_def, target_post_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `aid < sm.cs_next_id` by decide_tac >>
+      `FLOOKUP t1.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      `!n b len. local_region cenv mid1.scopes t1 n b len ==>
+         off + sz <= b \/ b + len <= off` by metis_tac[] >>
+      `i IN tn1.t_mem` by
+        (qpat_x_assum `!aid off sz i. FLOOKUP t1.vs_allocas aid = _ /\ _ ==> _` irule >>
+         metis_tac[]) >>
+      qpat_x_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _` irule >>
+      metis_tac[]) >>
+  metis_tac[]
 QED
