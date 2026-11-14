@@ -2,6 +2,10 @@
    endpoint, ghost and post at every finite horizon. *)
 Theory msgGasFull
 Ancestors
+  (* Concat producers remain reachable while their expression leaf is assembled. *)
+  bodyFullBuiltinConcatFrame bodyFullBuiltinConcatFixed
+  bodyFullBuiltinConcatBytes bodyFullBuiltinConcatScratch
+  bodyFullBuiltinBytestringOutBuffer
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
   fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
