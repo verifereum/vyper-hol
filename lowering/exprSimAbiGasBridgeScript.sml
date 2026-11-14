@@ -1148,9 +1148,10 @@ Finalise frag_exec_gas_path
 
 (* The same for a fragment proved in the abi_decode_sim form, such as the
    ABI encoder and decoder executions. *)
-Theorem abi_decode_sim_gas_path:
+Theorem abi_decode_sim_gas_path_named:
   !ctx sa sb Q fn s.
     (!fn'. fn_has_code sa sb fn' /\ fn_inst_ids_distinct fn' /\
+       fn'.fn_name = fn.fn_name /\
        (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP ==>
             MEM i (fn_insts fn)) /\
        (sa.cs_blocks = sb.cs_blocks \/
@@ -1180,6 +1181,7 @@ Proof
   >- (rpt conj_tac
       >- metis_tac[frag_observer_has_code]
       >- metis_tac[frag_observer_ids_distinct]
+      >- simp[frag_observer_def]
       >- metis_tac[frag_observer_nonstop_inclusion] >>
       metis_tac[frag_observer_end_phi_zero]) >>
   strip_tac >> rename1 `Q t` >>
@@ -1204,6 +1206,34 @@ Proof
   qexists_tac `u` >> simp[gas_marked_path_def] >>
   `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
   gvs[frag_observer_cut_def]
+QED
+
+Theorem abi_decode_sim_gas_path:
+  !ctx sa sb Q fn s.
+    (!fn'. fn_has_code sa sb fn' /\ fn_inst_ids_distinct fn' /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP ==>
+            MEM i (fn_insts fn)) /\
+       (sa.cs_blocks = sb.cs_blocks \/
+        !bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
+             phi_prefix_length bb.bb_instructions = 0) ==>
+       ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+           abi_decode_sim ctx fn' s t) /\
+    cs_extends sa sb /\ frag_gas_free sa sb /\
+    (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
+    fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
+    ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path F ctx fn s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >> irule abi_decode_sim_gas_path_named >> simp[] >>
+  metis_tac[]
 QED
 
 (* ===== Relabeled entry block ===== *)
