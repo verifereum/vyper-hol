@@ -110,6 +110,37 @@ convert the upstream compile-only tests into replayed tests.
 
 ### Static allocation acceptance bounds
 
+`ext_call_alloc_ok` previously accepted every `CreateTarget`. It now checks
+the aggregate physical static buffers emitted by the existing CREATE lowering:
+
+- RawCreate with constructor arguments requires the temporary tuple's memory
+  size and `49152 + ABI_size` each to be strictly below `2 ** 64`.
+- Non-raw blueprint creation with constructor arguments requires the tuple's
+  memory size and `ABI_size` each to be strictly below `2 ** 64`.
+
+The types come from the actual arguments' `expr_type` and the compilation
+environment's struct layout, not external-call result types or keyword-index
+metadata. Salt and blueprint code-offset operands are excluded according to
+their respective evaluation-order layouts. Empty argument tuples, raw blueprint
+arguments, malformed arity, minimal proxies and copy-of retain their previous
+checker result. The latter two use fixed small buffers or dynamic allocation.
+Each argument still undergoes the existing recursive allocation checks.
+
+Pinned Python's `Context.allocate_buffer` rejects every physical allocation
+of `2 ** 64` bytes or more. The blueprint ABI check has zero acceptance delta
+from that limit on coherent valid types: their memory footprint is at most
+their ABI bound, so the legacy tuple staging check adds no restriction.
+For arbitrary compilation environments, struct memory-size metadata can exceed
+its ABI fields; the tuple check also covers that actual HOL buffer.
+
+RawCreate has a separate, pre-existing producer discrepancy: HOL reserves
+49152 bytes for initcode, while the pin uses its actual `Bytes[maxlen]` bound.
+Consequently, this checker also rejects the narrow window
+`maxlen < 49152 /\ 2 ** 64 - 49152 <= ABI_size < 2 ** 64 - maxlen`.
+This is an explicit HOL acceptance narrowing associated with the pending
+RawCreate producer port, not a claim that Python rejects those allocations.
+The producer and its bytecode remain unchanged here.
+
 The HOL compiler reserves initial headroom for the separate dynamic-allocation
 proof by narrowing two existing acceptance comparisons. These are HOL-only
 restrictions: pinned Python has a per-buffer allocation limit, but no matching

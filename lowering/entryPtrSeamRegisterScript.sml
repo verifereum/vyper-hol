@@ -221,7 +221,7 @@ Proof
      simp[fcgDefsTheory.fcg_path_def, venomInstTheory.ctx_fn_names_def] >>
      metis_tac[lookup_function_mem]) >>
   reverse conj_tac
-  >- (fs[lowering_context_ok_def] >> decide_tac) >>
+  >- metis_tac[lowering_context_ok_alloca_budget] >>
   simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> conj_tac
   >- (rpt strip_tac >>
       `reachable_fcg_acyclic ctx (fcg_analyze ctx)` by

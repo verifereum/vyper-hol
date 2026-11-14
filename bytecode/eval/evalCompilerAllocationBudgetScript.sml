@@ -1,7 +1,7 @@
 (* Checked allocation-budget regressions; no execution-memory claims. *)
 Theory evalCompilerAllocationBudget
 Ancestors vyperCompiler venomInst venomWf words venomExecSemantics
-  venomState stackPlanGen fmpLowerDefs
+  venomState stackPlanGen fmpLowerDefs allocLimits
 Libs computeLib wordsLib
 
 (* Every block ends in a terminator, so the test units are well-formed
@@ -215,6 +215,74 @@ Theorem allocation_plan_spill_boundary_eval:
     (\fn base labels. SOME ([], (init_plan_state base) with
       ps_alloc updated_by (\al. al with sa_next_offset := 2 ** 254 - 31)))
     (allocation_plan_test_context 0) = NONE
+Proof
+  EVAL_TAC
+QED
+
+(* CREATE checker fixtures; no producer change. *)
+Theorem create_raw_alloc_boundary_eval:
+  let w = Name (BaseT (UintT 256)) "word";
+      a = \n. Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args" in
+    ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+      [w;w;a (2 ** 59 - 1537)] /\
+    ~ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+      [w;w;a (2 ** 59 - 1536)] /\
+    ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
+      [w;w;a (2 ** 59 - 1537);w] /\
+    ~ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
+      [w;w;a (2 ** 59 - 1536);w]
+Proof
+  EVAL_TAC
+QED
+
+Theorem create_blueprint_alloc_boundary_eval:
+  let w = Name (BaseT (UintT 256)) "word";
+      a = \n. Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args" in
+    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+      [w;w;w;a (2 ** 59 - 1)] /\
+    ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+      [w;w;w;a (2 ** 59)] /\
+    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
+      [w;w;w;w;a (2 ** 59 - 1)] /\
+    ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T F [2;3])
+      [w;w;w;w;a (2 ** 59)] /\
+    ~ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T [])
+      [w;w;w;a (2 ** 58);a (2 ** 58)]
+Proof
+  EVAL_TAC
+QED
+
+(* Empty, raw, fixed-buffer, and malformed cases allocate no new variable
+   static constructor buffer. Their operands remain checked recursively. *)
+Theorem create_alloc_nonallocating_paths_eval:
+  let w = Name (BaseT (UintT 256)) "word";
+      huge = Name (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 59))) "args" in
+    ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [w;w] /\
+    ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [w;w;w] /\
+    ext_call_alloc_ok cenv (CreateTarget RawCreate T T []) [w;w] /\
+    ext_call_alloc_ok cenv (CreateTarget RawCreate F T []) [w] /\
+    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) F T []) [w;w;w] /\
+    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint F) T T []) [w;w;w] /\
+    ext_call_alloc_ok cenv (CreateTarget (CreateFromBlueprint T) F T [])
+      [w;w;w;huge] /\
+    ext_call_alloc_ok cenv (CreateTarget CreateCopyOf F T []) [w;w;huge] /\
+    ext_call_alloc_ok cenv (CreateTarget CreateMinimalProxy F T []) [w;w;huge]
+Proof
+  EVAL_TAC
+QED
+
+(* Struct metadata can describe a larger staging footprint than its ABI
+   fields. The checker must use the environment's actual physical size. *)
+Theorem create_alloc_struct_environment_eval:
+  let w = Name (BaseT (UintT 256)) "word";
+      arg = Name (StructT (NONE,"S")) "args";
+      c = cenv with ce_struct_fields :=
+        FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)]) in
+    abi_size_bound c.ce_struct_fields (TupleT [expr_type arg]) = 32 /\
+    type_memory_bytes c (TupleT [expr_type arg]) = 2 ** 64 /\
+    ~ext_call_alloc_ok c (CreateTarget RawCreate F T []) [w;w;arg] /\
+    ~ext_call_alloc_ok c (CreateTarget (CreateFromBlueprint F) F T [])
+      [w;w;w;arg]
 Proof
   EVAL_TAC
 QED
