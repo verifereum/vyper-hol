@@ -178,9 +178,10 @@ Proof
   gvs[ld_intervals_def] >> metis_tac[]
 QED
 
-Theorem ld_sync_dload_prefix_raw:
+Theorem ld_sync_dload_prefix_raw_static:
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0) /\ mem_inv dload_headroom_ok C vs0 /\
   ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
   ir_supply_covers_fn f.lf_supply fn /\
   ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
@@ -208,9 +209,10 @@ Proof
   metis_tac[]
 QED
 
-Theorem ld_sync_prefix_raw:
+Theorem ld_sync_prefix_raw_static:
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0) /\
   ptr_discipline lo C vs0 /\ mem_inv dload_headroom_ok C vs0 /\
   ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
   ir_supply_covers_fn f.lf_supply fn /\ fn' = ld_image f /\
@@ -227,7 +229,7 @@ Proof
   Cases_on `inst.inst_opcode = DLOAD` >-
     (`?off out. inst.inst_operands = [off] /\ inst.inst_outputs = [out]` by
        (fs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
-     irule ld_sync_dload_prefix_raw >> metis_tac[]) >>
+     irule ld_sync_dload_prefix_raw_static >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DLOADBYTES` >-
     (`?dest off len. inst.inst_operands = [dest;off;len]` by
        (fs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
@@ -245,7 +247,7 @@ Proof
   fs[raw_mem_ok_def, inst_mem_ok_in_fn_def]
 QED
 
-Resume ld_sync_prefix_raw[forward]:
+Resume ld_sync_prefix_raw_static[forward]:
   `t.vs_inst_idx = p` by metis_tac[ld_sync_envelope_position] >>
   `t.vs_current_bb = s.vs_current_bb` by
     metis_tac[ld_sync_control] >>
@@ -262,11 +264,12 @@ Resume ld_sync_prefix_raw[forward]:
   `t.vs_alloca_next < dimword(:256)` by metis_tac[ld_sync_ambient_headroom] >>
   gvs[raw_mem_ok_def, inst_mem_ok_in_fn_def, in_revert_forward_def]
 QED
-Finalise ld_sync_prefix_raw
+Finalise ld_sync_prefix_raw_static
 
-Theorem ld_owned_current_raw:
+Theorem ld_owned_current_raw_static:
   ^ld_owned lo P C C' vs0 Sigma names fn' ti t /\
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ ptr_discipline lo C vs0 /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0) /\ ptr_discipline lo C vs0 /\
   mem_inv dload_headroom_ok C vs0 /\
   (!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn) ==>
   raw_mem_ok C' fn' ti t
@@ -287,9 +290,69 @@ Proof
      Cases_on `j = k` >- simp[] >>
      `j < k \/ k < j` by decide_tac >>
      fs[] >> metis_tac[lowerDloadSafetyBoundaryTheory.list_precedes_distinct]) >>
-  gvs[] >> irule ld_sync_prefix_raw >>
+  gvs[] >> irule ld_sync_prefix_raw_static >>
   goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexists_tac `p` >> simp[]
+QED
+
+Theorem ld_owned_or_forward_current_raw_static:
+  (^ld_owned lo P C C' vs0 Sigma names fn' ti t \/ ^ld_forward C' fn' ti t) /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0) /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\
+  (!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn) ==>
+  raw_mem_ok C' fn' ti t
+Proof
+  strip_tac
+  >- (drule_all ld_owned_current_raw_static >> simp[]) >>
+  drule ld_forward_current_raw >> simp[]
+QED
+
+Theorem ld_sync_dload_prefix_raw:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
+  ir_supply_covers_fn f.lf_supply fn /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
+  ld_prefix C' fn' X p h t0 t ==>
+  raw_mem_ok C' fn' (EL h X) t
+Proof
+  strip_tac >> fs[o1PassContractTheory.o1_run_state_ok_def] >>
+  irule ld_sync_dload_prefix_raw_static >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ld_sync_prefix_raw:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  ptr_discipline lo C vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
+  ir_supply_covers_fn f.lf_supply fn /\ fn' = ld_image f /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t ==>
+  raw_mem_ok C' fn' (EL h X) t
+Proof
+  strip_tac >> fs[o1PassContractTheory.o1_run_state_ok_def] >>
+  irule ld_sync_prefix_raw_static >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ld_owned_current_raw:
+  ^ld_owned lo P C C' vs0 Sigma names fn' ti t /\
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\
+  (!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn) ==>
+  raw_mem_ok C' fn' ti t
+Proof
+  strip_tac >> fs[o1PassContractTheory.o1_run_state_ok_def] >>
+  irule (BETA_RULE ld_owned_current_raw_static) >>
+  goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+  simp[] >> qexistsl_tac [`P`,`Sigma`,`names`] >> simp[] >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem ld_owned_or_forward_current_raw:
