@@ -252,9 +252,9 @@ Resume ptr_extcodecopy_prefix_execution_static[operands]:
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_extcodecopy_scalar_discipline >> simp[]
 QED
-Finalise ptr_extcodecopy_prefix_execution_static
+Finalise ptr_extcodecopy_prefix_execution_static[local]
 
-Theorem ptr_extcodecopy_prefix_execution[local]:
+Theorem ptr_extcodecopy_prefix_execution:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
@@ -577,9 +577,9 @@ Resume ptr_extcodecopy_write_certificate_static[owned]:
   qpat_x_assum `!j. j < w2n sz ==> _` (qspec_then `x-w2n dst` mp_tac) >>
   simp[arithmeticTheory.ADD_COMM]
 QED
-Finalise ptr_extcodecopy_write_certificate_static
+Finalise ptr_extcodecopy_write_certificate_static[local]
 
-Theorem ptr_extcodecopy_write_certificate[local]:
+Theorem ptr_extcodecopy_write_certificate:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -717,9 +717,9 @@ Resume ptr_extcodecopy_prefix_step_static[retention]:
                simp[ptr_ledger_next_def, ptr_observe_def]) >>
   irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
-Finalise ptr_extcodecopy_prefix_step_static
+Finalise ptr_extcodecopy_prefix_step_static[local]
 
-Theorem ptr_extcodecopy_prefix_step[local]:
+Theorem ptr_extcodecopy_prefix_step:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\

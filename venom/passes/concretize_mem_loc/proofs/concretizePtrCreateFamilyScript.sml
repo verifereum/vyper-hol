@@ -1270,9 +1270,9 @@ Resume ptr_create_family_delegate_write_certificate_static[owned]:
   qpat_x_assum `!j. j < w2n rz /\ _ ==> _` (qspec_then `b-w2n r` mp_tac) >>
   simp[ADD_COMM]
 QED
-Finalise ptr_create_family_delegate_write_certificate_static
+Finalise ptr_create_family_delegate_write_certificate_static[local]
 
-Theorem ptr_create_family_delegate_write_certificate[local]:
+Theorem ptr_create_family_delegate_write_certificate:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -1359,9 +1359,9 @@ Resume ptr_paired_prefix_delegate_successor_static[attach]:
   irule ptr_paired_writes_pair >> simp[] >>
   fs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
-Finalise ptr_paired_prefix_delegate_successor_static
+Finalise ptr_paired_prefix_delegate_successor_static[local]
 
-Theorem ptr_paired_prefix_delegate_successor[local]:
+Theorem ptr_paired_prefix_delegate_successor:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

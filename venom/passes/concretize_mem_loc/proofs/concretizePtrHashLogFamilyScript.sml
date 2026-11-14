@@ -675,9 +675,9 @@ Resume ptr_paired_hash_log_execution_static[log]:
     (irule ptr_log_successor_relations >> simp[]) >>
   qexists_tac `a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]` >> simp[]
 QED
-Finalise ptr_paired_hash_log_execution_static
+Finalise ptr_paired_hash_log_execution_static[local]
 
-Theorem ptr_paired_hash_log_execution[local]:
+Theorem ptr_paired_hash_log_execution:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -823,9 +823,9 @@ Resume ptr_paired_prefix_hash_log_static[sample]:
   gvs[step_prov_def, out_prov_def] >>
   irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED
-Finalise ptr_paired_prefix_hash_log_static
+Finalise ptr_paired_prefix_hash_log_static[local]
 
-Theorem ptr_paired_prefix_hash_log[local]:
+Theorem ptr_paired_prefix_hash_log:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

@@ -38,7 +38,7 @@ QED
 
 (* A live cache at j holding a demanded byte and a live cache at n holding a
    written byte relocate the two bytes to distinct positions. *)
-Theorem relocation_cached_pair_noncollision[local]:
+Theorem relocation_cached_pair_noncollision_static[local]:
   joint_trace vs0 C q0 es qs q /\
   joint_observed_read (EL j (q0::qs)) a /\
   byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
@@ -81,7 +81,7 @@ Proof
   suspend "distinct"
 QED
 
-Resume relocation_cached_pair_noncollision[distinct]:
+Resume relocation_cached_pair_noncollision_static[distinct]:
   qpat_assum `!k d owner aid base size. _` (qspec_then `j` mp_tac) >>
   simp[] >> disch_then drule >> strip_tac >>
   qpat_assum `!k d owner aid base size. _` (qspec_then `n` mp_tac) >>
@@ -108,7 +108,35 @@ Resume relocation_cached_pair_noncollision[distinct]:
      qexistsl_tac [`byte`, `a`] >> simp[] >> metis_tac[]) >> decide_tac
 QED
 
-Finalise relocation_cached_pair_noncollision
+Finalise relocation_cached_pair_noncollision_static[local]
+
+
+Theorem relocation_cached_pair_noncollision:
+  joint_trace vs0 C q0 es qs q /\
+  joint_observed_read (EL j (q0::qs)) a /\
+  byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
+  activation_cache (EL j (q0::qs)) d' owner' aid' (b',sz') /\
+  activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
+  activation_depth q0 = 0 /\ n < LENGTH es /\ n <= j /\ j <= LENGTH es /\
+  (!k d owner aid base size. k <= LENGTH es /\
+     activation_cache (EL k (q0::qs)) d owner aid (base,size) ==>
+     canonical_metadata C C' (Allocation aid) (positions owner aid) size) /\
+  ~joint_read_exempt (EL n (q0::qs)) /\
+  (!k. n <= k /\ k < j ==> a NOTIN joint_writes (EL k (q0::qs)) (EL k es)) /\
+  lo <= a /\ lo <= byte /\ a <> byte /\
+  b' <= a /\ a < b' + sz' /\ b <= byte /\ byte < b + sz ==>
+  positions owner' aid' + (a - b') <> positions owner aid + (byte - b)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL relocation_cached_pair_noncollision_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
 
 (* Static bytes stay below lo, cached bytes land in [lo, initial fmp) under
    DALLOCA, and dynamic bytes stay at or above the initial fmp. Without
@@ -168,7 +196,7 @@ Proof
    `lo <= positions owner aid` by metis_tac[] >> decide_tac,
    decide_tac,
    `lo <= positions owner aid` by metis_tac[] >> decide_tac,
-   drule_all relocation_cached_pair_noncollision >> gvs[],
+   drule_all relocation_cached_pair_noncollision_static >> gvs[],
    suspend "cached_dynamic",
    decide_tac,
    suspend "dynamic_cached",

@@ -275,9 +275,9 @@ Resume ptr_paired_prefix_storage_write_static[fields]:
   qpat_x_assum `_ = s'` (SUBST1_TAC o SYM) >>
   simp[sstore_def, tstore_def]
 QED
-Finalise ptr_paired_prefix_storage_write_static
+Finalise ptr_paired_prefix_storage_write_static[local]
 
-Theorem ptr_paired_prefix_storage_write[local]:
+Theorem ptr_paired_prefix_storage_write:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
