@@ -115,21 +115,43 @@ Proof
   >- (irule immutable_assign_empty_stmt_frag >> metis_tac[]) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   drule_all immutable_assign_code_parts >> strip_tac >> gvs[] >>
-  (irule forced_vv_then_stmt_outcome >>
-  qexistsl_tac [
-    `\raw ee t. vv_post ctx func cenv cx e es sa sm s0 ee raw vv t /\
-      t.vs_current_bb = sm.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sm.cs_current_insts`, `e`,
+  (MATCH_MP_TAC (Q.SPECL [
+    `ctx`,`func`,`cx`,`st0`,`lctx`,`RetQ`,`cenv`,`cenv`,`sa`,`sb`,`s0`,
+    `Assign (BaseTarget (TopLevelNameTarget (NONE,nsid1))) e`,`e`,
     `\raw. do v <- read_result cx raw;
-       p <- eval_target_place cx (TopLevelNameTarget (NONE,nsid1)); write_place cx p v od`] >>
-  reverse conj_tac
-  >- (conj_tac >- simp[Once evaluate_def] >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+       p <- eval_target_place cx (TopLevelNameTarget (NONE,nsid1)); write_place cx p v od`,
+    `es`,
+    `\H raw ee t. vv_post H ctx func cenv cx e es sa sm s0 ee raw vv t /\
+      t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts`] forced_vv_then_stmt_outcome) >>
+  BETA_TAC >>
+  conj_tac >- simp[Once evaluate_def] >>
+  conj_tac
+  >- (qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-      disch_then (qspecl_then [`sa`,`sm`,`vv`,`s0`] mp_tac) >>
+      disch_then (qspecl_then [`st0`,`sa`,`sm`,`vv`,`s0`] mp_tac) >>
       impl_tac >- (simp[] >> metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible]) >>
       simp[]) >>
+  conj_tac
+  >- (gen_tac >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+      gen_tac >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
+  rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
+  `storage_trace_frame (eval_expr cx e)` by
+    simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace`
+       suffices_by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.valid_horizon_frame]) >>
+  `t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
   `~block_is_terminated sb` by metis_tac[immutable_assign_loccode_open] >>
   `!region x. cenv.ce_imm_alloca = SOME region /\ region = Var x ==>
      not_fresh_at sa x` by metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base] >>
@@ -141,10 +163,10 @@ Proof
                 p <- eval_target_place cx (TopLevelNameTarget (cenv.ce_module,nsid1)); write_place cx p v od)
        (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
     gas_marked_path F ctx func t 0 (OK q) /\
-    stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin q` by
-    (irule immutable_assign_normal_continuation >>
-     goal_assum (drule_at Any) >> simp[] >>
-     metis_tac[]) >>
-  qexistsl_tac [`INL ()`,`fin`,`OK q`] >> simp[] >>
-  metis_tac[stmtSimDeclComposeTheory.stmt_post_end_gas_obs])
+    !H. valid_horizon cx st0 H fin.storage_trace ==>
+      stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin q` by
+    (irule (Q.INST [`H0` |-> `H1`] immutable_assign_normal_continuation_horizons) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`INL ()`,`fin`,`OK q`] >>
+  fs[stmtSimDeclComposeTheory.stmt_post_end_gas_obs] >> metis_tac[])
 QED
