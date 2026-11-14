@@ -2459,7 +2459,7 @@ QED
 
 Theorem append_storage_aggregate_abort_path:
   compile_dynarray_append cenv bop vop 1 n dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot s else sload slot s) /\
@@ -2542,7 +2542,7 @@ Finalise append_storage_aggregate_abort_path
 
 Theorem append_storage_aggregate_suffix_mem:
   compile_dynarray_append cenv bop vop 1 stride dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   cap < dimword (:256) /\ stride < dimword (:256) /\
   evaluate_type tenv dt = SOME tv /\ value_has_type tv v /\
