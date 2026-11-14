@@ -335,8 +335,11 @@ Proof
   simp[unop_result_def, evaluate_builtin_def] >>
   rw[unop_frag_def] >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
-    (qpat_x_assum `stmt_state_rel H ctx func cenv cx es0 s0` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_def]) >>
+    (qpat_assum `!H. valid_horizon _ _ H es0.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac[stmt_state_rel_def, state_rel_def] >> rpt strip_tac >>
+     first_assum ACCEPT_TAC) >>
   `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
   gvs[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_pos] >>
   `tx_env_ok cx.txn` by gvs[call_ctx_rel_def] >>
@@ -406,8 +409,9 @@ Resume compile_blockhash_frag[window_ok]:
      drule tx_env_ok_hash_window >>
      disch_then (qspec_then `n` mp_tac) >> gvs[] >> strip_tac >>
      simp[word_of_bytes_be_to_bytes]) >>
-  `stmt_state_rel H ctx func cenv cx es0 (s0 with vs_vars := t.vs_vars)` by
-    (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  `!H'. valid_horizon cx st0 H' es0.storage_trace ==>
+        stmt_state_rel H' ctx func cenv cx es0 (s0 with vs_vars := t.vs_vars)` by
+    (rpt strip_tac >> irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      simp[lookup_var_def]) >>
   qpat_x_assum `t = s0 with vs_vars := _` SUBST_ALL_TAC >>
@@ -662,10 +666,19 @@ Proof
        (es with gas_obs := gs)` >>
      drule_all eval_expr_method_id_literal >> strip_tac >>
      gvs[bind_def, read_result_def, return_def]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
-       mp_tac) >> simp[NoAsms]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >> conj_tac
+     >- (drule msg_gas_state_frame >>
+         disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
+           mp_tac) >> simp[NoAsms]) >>
+     `(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   drule compile_expr_method_id_literal >> strip_tac >>
   gvs[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
       lower_value_def, comp_bind_def, compile_literal_vv_def,
@@ -673,7 +686,8 @@ Proof
   conj_tac >- (irule (cj 1 gas_path_rules) >> simp[]) >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
-       vyperValueTheory.evaluate_type_def]
+       vyperValueTheory.evaluate_type_def] >>
+  rpt strip_tac >> irule (cj 1 gas_path_rules) >> simp[]
 QED
 
 Theorem compile_method_id_literal_word_case_sim:

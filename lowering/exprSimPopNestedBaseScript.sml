@@ -185,35 +185,45 @@ QED
    only the header slot changed.  Pure indices leave the state alone, so
    the header the target points at stays live. *)
 Theorem nested_pop_storage_dead_header:
-  declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
+  MEM (tr,root_slot,root) (FST H) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
   w2n slot = w2n root_slot + delta /\ storage_dead H tr st j b ==>
   storage_dead H tr
     (update_storage slot (n2w (w2n (lookup_storage slot st) - 1)) st) j b
 Proof
-  strip_tac >> fs[storage_dead_def] >>
+  rewrite_tac[storage_dead_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+      strip_assume_tac)))) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rename1 `dead_bytes st (w2n k) tv' j b` >>
-  qexistsl [`mid'`, `n'`, `subs'`, `k`, `tv'`] >>
-  simp[] >> conj_tac >- metis_tac[] >>
+  qexistsl_tac [`k`, `tv'`] >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
   Cases_on `(k,tv') = (root_slot,root)`
-  >- (gvs[] >> irule nested_pop_dead_bytes_subregion >>
-      goal_assum (drule_at Any) >> simp[] >>
+  >- (gvs[] >> irule nested_pop_dead_bytes_subregion >> simp[] >>
       qexistsl [`tv`, `n`, `path`] >> simp[]) >>
   `ranges_disjoint (w2n k) (type_slot_size tv')
                    (w2n root_slot) (type_slot_size root)` by
-    (first_x_assum irule >> metis_tac[]) >>
+    (qpat_x_assum `!s t. MEM _ (FST H) /\ _ ==> ranges_disjoint _ _ _ _`
+       (qspecl_then [`root_slot`, `root`] mp_tac) >>
+     impl_tac >- (rpt strip_tac >> gvs[]) >>
+     simp[]) >>
   drule storage_subregion_bounds >> strip_tac >>
   `dead_bytes (update_storage slot (n2w (w2n (lookup_storage slot st) - 1)) st)
      (w2n k) tv' j b = dead_bytes st (w2n k) tv' j b` suffices_by simp[] >>
   irule (cj 1 accountsRelPropsTheory.dead_bytes_frame) >>
   match_mp_tac nested_pop_lookup_frame >>
-  gvs[vyperStorageFrameTheory.ranges_disjoint_def,
-      vyperValueTheory.type_slot_size_def] >> decide_tac
+  conj_tac >- simp[] >>
+  fs[vyperStorageFrameTheory.ranges_disjoint_def,
+     vyperValueTheory.type_slot_size_def] >> decide_tac
 QED
 
 Theorem nested_pop_stmt_state_rel_header:
   stmt_state_rel H ctx func cenv cx es s /\
-  declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
+  MEM (tr,root_slot,root) (FST H) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
   w2n slot = w2n root_slot + delta ==>
   stmt_state_rel H ctx func cenv cx
@@ -268,13 +278,15 @@ Theorem nested_pop_live_array_agree:
   storage_range_agree (vyperStorageBackend$get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s) slot (ArrayTV tv (Dynamic n))
 Proof
-  strip_tac >> irule accountsRelPropsTheory.storage_range_agree_of_live >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`cx`, `tr`] >> simp[] >>
-  Cases_on `tr` >>
-  gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
-      transient_rel_def, vyperStorageBackendTheory.get_storage_def,
-      vfmStateTheory.lookup_account_def]
+  strip_tac >>
+  `storage_agree (storage_dead H tr (vyperStorageBackend$get_storage cx es tr))
+     (vyperStorageBackend$get_storage cx es tr)
+     (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+         transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+         vfmStateTheory.lookup_account_def]) >>
+  drule_all accountsRelPropsTheory.storage_range_agree_of_live >> simp[]
 QED
 
 Theorem nested_pop_array_header_load:
@@ -292,7 +304,7 @@ QED
 
 Theorem nested_pop_updated_state_rel:
   stmt_state_rel H ctx func cenv cx es s /\
-  declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
+  MEM (tr,root_slot,root) (FST H) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
   w2n slot = w2n root_slot + delta /\
   local_ptrs_reserved cenv sa /\
@@ -449,14 +461,15 @@ Theorem nested_pop_extend_storage_class:
   (?tr slot kt vt. next = HashMapRef tr slot kt vt)
 Proof
   strip_tac
-  >- (gvs[extend_place_def, bind_def, return_def, AllCaseEqs()] >>
+  >- (gvs[extend_place_def, bind_def, return_def, ignore_bind_def,
+          record_storage_event_def, AllCaseEqs()] >>
       drule extend_storage_place_subregion >> strip_tac >> gvs[] >> metis_tac[]) >>
   Cases_on `sb` >>
   gvs[extend_place_def, bind_def, return_def, raise_def, lift_option_type_def,
-      AllCaseEqs()] >>
+      ignore_bind_def, record_storage_event_def, AllCaseEqs()] >>
   Cases_on `vt` >>
   gvs[extend_place_def, bind_def, return_def, raise_def, lift_option_type_def,
-      AllCaseEqs()] >> metis_tac[]
+      ignore_bind_def, record_storage_event_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem nested_pop_lookup_storage_class:
@@ -468,7 +481,8 @@ Proof
   PairCases_on `d` >> Cases_on `d0` >>
   simp[lookup_global_def, bind_def, lift_option_type_def, return_def,
        raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[return_def, bind_def, lift_option_type_def, raise_def, AllCaseEqs()] >>
+  gvs[return_def, bind_def, lift_option_type_def, raise_def,
+      ignore_bind_def, record_storage_event_def, AllCaseEqs()] >>
   gvs[return_def] >> metis_tac[]
 QED
 
@@ -685,7 +699,7 @@ Proof
   Cases_on `pv` >> simp[extend_place_def, raise_def, nested_pop_result_slots_def]
   >- (Cases_on `p` >>
       simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def,
-           AllCaseEqs()] >> rpt strip_tac >> gvs[]
+           record_storage_event_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
       >~ [`extend_storage_place _ _ _ _ _ _`]
       >- (drule extend_storage_place_subregion >> strip_tac >> gvs[] >>
           simp[nested_pop_result_slots_def] >> rpt strip_tac >>
@@ -695,7 +709,7 @@ Proof
   Cases_on `sb` >> simp[extend_place_def, raise_def] >>
   Cases_on `v` >>
   simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
-       AllCaseEqs()] >> rpt strip_tac >>
+       ignore_bind_def, record_storage_event_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[nested_pop_result_slots_def, vyperMiscTheory.option_CASE_rator,
       return_def, raise_def, AllCaseEqs()] >>
   drule storage_mapping_region_step >>
@@ -703,6 +717,33 @@ Proof
   simp[] >> rpt strip_tac >>
   irule nested_pop_mapping_leaf_slots >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem nested_pop_result_slots_storage_frame[local]:
+  (!b. get_storage cx st' b = get_storage cx st b) ==>
+  (nested_pop_result_slots cx st' pv <=> nested_pop_result_slots cx st pv)
+Proof
+  strip_tac >> Cases_on `pv` >> simp[nested_pop_result_slots_def] >>
+  Cases_on `p` >>
+  simp[nested_pop_result_slots_def, vyperStorageBackendTheory.get_storage_backend_eq]
+QED
+
+(* nested_pop_extend_result_slots, the extension run in a state that only
+   differs from st off the storage backends (its trace, say). *)
+Theorem nested_pop_extend_result_slots_frame[local]:
+  contract_storage_well_formed cx st /\ nested_pop_result_slots cx st pv /\
+  (!b. get_storage cx s b = get_storage cx st b) /\
+  extend_place cx pv sb s = (INL pv',st') ==>
+  nested_pop_result_slots cx st pv'
+Proof
+  strip_tac >>
+  `contract_storage_well_formed cx s` by
+    (irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
+     qexists `st` >> simp[]) >>
+  `nested_pop_result_slots cx s pv` by
+    metis_tac[nested_pop_result_slots_storage_frame] >>
+  drule_all nested_pop_extend_result_slots >>
+  metis_tac[nested_pop_result_slots_storage_frame]
 QED
 
 Theorem nested_pop_eval_base_slots:
@@ -732,8 +773,16 @@ Proof
   >~ [`pure_expr e`]
   >- (drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
       drule read_result_state >> strip_tac >> gvs[] >>
-      drule_all nested_pop_extend_result_slots >> simp[]) >>
-  drule_all nested_pop_extend_result_slots >> simp[]
+      drule_at (Pat `extend_place _ _ _ _ = _`) nested_pop_extend_result_slots_frame >>
+      disch_then irule >> simp[] >> Cases >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _`
+             (fn th => once_rewrite_tac [th])) >>
+      simp[vyperStorageBackendTheory.get_storage_def]) >>
+  drule_at (Pat `extend_place _ _ _ _ = _`) nested_pop_extend_result_slots_frame >>
+  disch_then irule >> simp[] >> Cases >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+         (fn th => once_rewrite_tac [th])) >>
+  simp[vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem nested_pop_eval_target_slots:
@@ -812,6 +861,7 @@ QED
 Theorem nested_pop_suffix_vv_post:
   target_post H ctx func cenv cx es sa sm s0 mid pv vt op t /\
   ci_mono sa sm /\ stmt_state_rel H ctx func cenv cx es' u /\
+  storage_well_formed_on cx es' (FST H) /\
   es'.scopes = mid.scopes /\
   storage_holds cx tr ann v slot es' u /\ lookup_var x u = SOME slot /\
   u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
@@ -840,20 +890,78 @@ Proof
    metis_tac[])
 QED
 
-(* The pop suffix on a storage dynarray whose place is a storage region,
-   in range (slots_in_range) and live (storage_read_live) in the
-   storage at the target's end (pop_nested_storage_sim gives these facts
-   for any indices). *)
-Theorem nested_pop_storage_live_suffix_sim:
-  storage_layout_safe cx /\
-  storage_place_region cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) /\
+(* The header slot of a dynarray place under a root the trace records, at
+   a horizon valid for the trace: the root is one of the horizon's regions,
+   the place's slots fit the slot space and are in range (the backend is
+   well formed on the horizon), and the place is read live. *)
+Theorem nested_pop_traced_root[local]:
+  valid_horizon cx st0 H es.storage_trace /\
+  storage_well_formed_on cx es (FST H) /\
+  (?offset tv0 path delta.
+     MEM (StorageRoot tr offset tv0) es.storage_trace /\
+     storage_subregion tv0 path delta (ArrayTV tv (Dynamic n)) /\
+     slot = n2w offset + n2w delta) ==>
+  (?root rtv path delta.
+     MEM (tr,root,rtv) (FST H) /\
+     storage_subregion rtv path delta (ArrayTV tv (Dynamic n)) /\
+     w2n slot = w2n root + delta) /\
+  w2n slot + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256) /\
   slots_in_range (vyperStorageBackend$get_storage cx es tr) (w2n slot)
     (ArrayTV tv (Dynamic n)) /\
   storage_read_live H tr (vyperStorageBackend$get_storage cx es tr) slot
-    (ArrayTV tv (Dynamic n)) /\
-  target_post H ctx func cenv cx es0 sa sm s0 es
-    (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
-    (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t /\
+    (ArrayTV tv (Dynamic n))
+Proof
+  strip_tac >>
+  `MEM (tr,n2w offset,tv0) (FST H)` by
+    (irule vyperFiniteStoragePreservationTheory.storage_observations_ok_root >>
+     fs[vyperStorageFootprintTheory.valid_horizon_def] >> metis_tac[]) >>
+  `regions_consistent (FST H)` by
+    fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+  `storage_place_observed H (StoragePlace tr slot (ArrayTV tv (Dynamic n)))` by
+    (simp[vyperStoragePlaceObservedTheory.storage_place_observed_def] >>
+     qexistsl [`n2w offset`, `tv0`, `path`, `delta`] >> simp[]) >>
+  `w2n (n2w offset : bytes32) + type_slot_size tv0 <= dimword (:256)` by
+    metis_tac[vyperStorageFootprintTheory.regions_consistent_def] >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `w2n (n2w offset : bytes32) + delta < dimword (:256)` by
+    (fs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `delta < dimword (:256)` by decide_tac >>
+  `w2n slot = w2n (n2w offset : bytes32) + delta` by
+    (qpat_x_assum `slot = _` SUBST1_TAC >>
+     qpat_x_assum `w2n (n2w offset : bytes32) + delta < _` mp_tac >>
+     qpat_x_assum `delta < dimword _` mp_tac >>
+     rewrite_tac[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >>
+     rpt strip_tac >>
+     `delta MOD dimword (:256) = delta` by
+       (irule arithmeticTheory.LESS_MOD >> first_assum ACCEPT_TAC) >>
+     pop_assum SUBST1_TAC >>
+     irule arithmeticTheory.LESS_MOD >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac
+  >- (qexistsl [`n2w offset`, `tv0`, `path`, `delta`] >> simp[])
+  >- decide_tac
+  >- (`slots_in_range (vyperStorageBackend$get_storage cx es tr)
+         (w2n (n2w offset : bytes32)) tv0` by
+        metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+      drule_all vyperStorageRegionWriteTheory.storage_subregion_slots_in_range >>
+      simp[]) >>
+  irule accountsRelPropsTheory.storage_place_observed_read_live >>
+  simp[vyperValueTheory.type_slot_size_def]
+QED
+
+(* The pop suffix on a storage dynarray whose place lies under a root the
+   trace records.  The run is fixed by the state the target ends in; any
+   horizon valid for the trace relates it (pop_nested_storage_sim gives
+   these facts for any indices). *)
+Theorem nested_pop_storage_live_suffix_sim:
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sm s0 es
+         (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
+         (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t) /\
+  (?offset tv0 path delta.
+     MEM (StorageRoot tr offset tv0) es.storage_trace /\
+     storage_subregion tv0 path delta (ArrayTV tv (Dynamic n)) /\
+     slot = n2w offset + n2w delta) /\
   compile_dynarray_pop hdr 1 (type_slot_size tv) cenv.ce_is_ctor
     cenv.ce_imm_alloca (if tr then LocTransient else LocStorage) sm = (q,r) /\
   pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) es = (res,es') /\
@@ -863,25 +971,69 @@ Theorem nested_pop_storage_live_suffix_sim:
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   gas_summary_at F (ctx,func) []
     (pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))) (es,t)
-    (\res fin u. ?v. res = INL v /\ vv_post H ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
-      (LocatedValue ann (mk_ptr q (if tr then LocTransient else LocStorage))) u /\
+    (\res fin u. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      ?v. res = INL v /\
+      vv_post H ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
+        (LocatedValue ann (mk_ptr q (if tr then LocTransient else LocStorage))) u /\
       u.vs_current_bb = r.cs_current_bb /\ u.vs_inst_idx = LENGTH r.cs_current_insts)
     (\res fin r. expr_exit res r)
 Proof
-  strip_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!tail. pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))
        (es with gas_obs := tail) = (res,es' with gas_obs := tail)` by
     metis_tac[nested_pop_storage_gas_obs] >>
-  `stmt_state_rel H ctx func cenv cx es t` by fs[target_post_def] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       storage_well_formed_on cx es' (FST H)` by
+    (rpt strip_tac >>
+     qpat_assum `!H. _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then assume_tac) >>
+     `well_formed_type_value (ArrayTV tv (Dynamic n)) /\
+      storage_well_formed_on cx es (FST H)` by
+       (fs[target_post_def, place_ptr_rel_def] >>
+        metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]) >>
+     mp_tac (Q.INST [`p` |-> `StoragePlace tr slot (ArrayTV tv (Dynamic n))`,
+                     `st` |-> `es`, `st'` |-> `es'`,
+                     `observations` |-> `es.storage_trace`, `etv` |-> `tv`]
+       vyperFiniteStoragePreservationTheory.pop_place_preserves_storage_well_formed_on) >>
+     impl_tac
+     >- (fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+         rpt strip_tac >> gvs[] >> metis_tac[]) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+   (?root rtv path delta.
+      MEM (tr,root,rtv) (FST H) /\
+      storage_subregion rtv path delta (ArrayTV tv (Dynamic n)) /\
+      w2n slot = w2n root + delta) /\
+   w2n slot + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256) /\
+   slots_in_range (vyperStorageBackend$get_storage cx es tr) (w2n slot)
+     (ArrayTV tv (Dynamic n)) /\
+   storage_read_live H tr (vyperStorageBackend$get_storage cx es tr) slot
+     (ArrayTV tv (Dynamic n))` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!H. _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then assume_tac) >>
+     `storage_well_formed_on cx es (FST H)` by fs[target_post_def] >>
+     irule nested_pop_traced_root >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `?offset tv0 path delta. _` kall_tac >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `target_post H0 ctx func cenv cx es0 sa sm s0 es
+     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
+     (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t` by
+    metis_tac[] >>
+  `stmt_state_rel H0 ctx func cenv cx es t /\
+   storage_well_formed_on cx es (FST H0)` by fs[target_post_def] >>
   `~cx.txn.is_static /\ ~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
-  drule_all nested_pop_storage_natural_region >> strip_tac >>
-  drule_all nested_pop_live_array_agree >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> (?root rtv path delta. _) /\ _`
+    (drule_then (strip_assume_tac o CONJUNCT2)) >>
+  drule_at (Pos (el 2)) nested_pop_live_array_agree >>
+  disch_then drule >> impl_tac >- decide_tac >> strip_tac >>
   drule nested_pop_array_header_load >> strip_tac >>
-  qpat_x_assum `storage_layout_safe _` kall_tac >>
-  qpat_x_assum `storage_place_region _ _` kall_tac >>
   qpat_x_assum `storage_read_live _ _ _ _ _` kall_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
   qpat_x_assum `pop_place _ _ _ = _`
     (mp_tac o SIMP_RULE (srw_ss())
       [pop_place_def, vyperStorageBackendTheory.get_storage_backend_eq,
@@ -890,7 +1042,8 @@ Proof
        vyperStorageTheory.encode_value_def, vyperStorageTheory.encode_base_to_slot_def,
        integer_wordTheory.i2w_def]) >>
   Cases_on `lookup_storage slot (vyperStorageBackend$get_storage cx es tr) = 0w`
-  >- (simp[assert_def, bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+  >- (simp[assert_def, bind_def, return_def, raise_def] >> strip_tac >>
+      gvs[] >>
       drule nested_pop_suffix_shape >> strip_tac >> suspend "empty") >>
   `0 < w2n (lookup_storage slot (vyperStorageBackend$get_storage cx es tr))` by
     (Cases_on `lookup_storage slot (vyperStorageBackend$get_storage cx es tr)` >> gvs[]) >>
@@ -902,6 +1055,7 @@ Resume nested_pop_storage_live_suffix_sim[empty]:
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
    (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6])` by
     (fs[] >> metis_tac[]) >>
+  `(if tr then tload slot t else sload slot t) = 0w` by metis_tac[] >>
   drule_all nested_pop_suffix_empty >>
   disch_then (qspecl_then [`sm.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   `?j. gas_marked_path F ctx func t 0 (Abort a (s' with vs_inst_idx := j))` by
@@ -919,13 +1073,11 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
    (!x. hdr = Var x ==> ~MEM x [x0;x1;x2;x3;x4;x5;x6])` by
     (fs[] >> metis_tac[]) >>
-  ` (if tr then tload (root + n2w delta) t else sload (root + n2w delta) t) <> 0w` by
-    metis_tac[] >>
+  `(if tr then tload slot t else sload slot t) <> 0w` by metis_tac[] >>
   drule_all nested_pop_suffix_run >>
   disch_then (qspecl_then [`sm.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   qpat_x_assum `ALL_DISTINCT [x6; x5; x4; x3; x2; x1; x0]` kall_tac >>
   qpat_x_assum `ALL_DISTINCT [x0; x1; x2; x3; x4; x5; x6]` kall_tac >>
-  qmatch_asmsub_abbrev_tac `eval_operand hdr t = SOME slot` >>
   qmatch_asmsub_abbrev_tac `0 < w2n lenw` >>
   `lenw - 1w = n2w (w2n lenw - 1)` by
     (simp[wordsTheory.n2w_sub]) >>
@@ -935,14 +1087,9 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   `!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q t` by
     (fs[ci_mono_def, not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum irule >> fs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  `stmt_state_rel H ctx func cenv cx
-    (vyperStorageBackend$set_storage cx es tr
+  qabbrev_tac `fin = vyperStorageBackend$set_storage cx es tr
       (apply_writes slot [(0,n2w (w2n lenw - 1))]
-        (vyperStorageBackend$get_storage cx es tr))) u` by
-    (`w2n slot = w2n root + delta` by simp[arithmeticTheory.ADD_COMM] >>
-     qunabbrev_tac `lenw` >> drule_all nested_pop_updated_state_rel >> simp[]) >>
-  qmatch_asmsub_abbrev_tac
-    `stmt_state_rel H ctx func cenv cx fin u` >>
+        (vyperStorageBackend$get_storage cx es tr))` >>
   `storage_holds cx tr ann
     (PlaceR (StoragePlace tr (slot + n2w (1 + (w2n lenw - 1) * type_slot_size tv)) tv))
     (slot + n2w (1 + (w2n lenw - 1) * type_slot_size tv)) fin u` by
@@ -950,17 +1097,11 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
      irule nested_pop_positive_holds >>
      rpt conj_tac >- first_assum ACCEPT_TAC >- REFL_TAC >- REFL_TAC
      >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`n`, `t`] >> rpt conj_tac
-     >- first_assum ACCEPT_TAC
-     >- (qpat_assum `w2n slot = _` (fn th => REWRITE_TAC [th]) >>
-         first_assum ACCEPT_TAC) >>
-     first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`n`, `t`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas` by
     (qpat_x_assum `u = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
      Cases_on `tr` >>
      simp_tac (srw_ss()) [NoAsms, sstore_def, tstore_def, LET_THM]) >>
-  qpat_x_assum `u = _ with vs_vars := _` kall_tac >>
-  qpat_x_assum `u = _ with vs_vars := _` kall_tac >>
   `lookup_var x6 u =
      SOME (slot + n2w (1 + (w2n lenw - 1) * type_slot_size tv))` by
     (qpat_x_assum `lookup_var x6 u = _` mp_tac >>
@@ -972,7 +1113,8 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   `!q. not_fresh_at sm q ==> lookup_var q u = lookup_var q t` by
     (rpt strip_tac >> qpat_assum `!x. ~MEM x _ ==> _` irule >>
      fs[] >> rpt strip_tac >> gvs[]) >>
-  `fin with gas_obs := [] = fin` by
+  `fin with gas_obs := [] = fin /\ fin.scopes = es.scopes /\
+   fin.storage_trace = es.storage_trace` by
     (qunabbrev_tac `fin` >> Cases_on `tr` >>
      simp[vyperStorageBackendTheory.set_storage_def,
           evaluation_state_component_equality]) >>
@@ -998,66 +1140,48 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   qexistsl_tac [`res`, `es'`,
     `OK (u with vs_inst_idx := LENGTH r.cs_current_insts)`] >>
   simp[exprSimVVFrameTheory.vv_post_inst_idx] >>
-  `fin.scopes = es.scopes` by
-    (qunabbrev_tac `fin` >> Cases_on `tr` >>
-     simp[vyperStorageBackendTheory.set_storage_def]) >>
+  rpt strip_tac >>
+  (* Every horizon valid for the trace relates the run. *)
+  `valid_horizon cx st0 H es.storage_trace` by
+    (qpat_x_assum `valid_horizon _ _ H _` mp_tac >> simp[]) >>
+  `target_post H ctx func cenv cx es0 sa sm s0 es
+     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
+     (Type (ArrayT ann (Dynamic n)))
+     (hdr,SOME (slot_loc tr),SOME (ValPT (ArrayT ann (Dynamic n)))) t` by
+    metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx es t /\
+   storage_well_formed_on cx es (FST H)` by fs[target_post_def] >>
+  `?root rtv path delta.
+      MEM (tr,root,rtv) (FST H) /\
+      storage_subregion rtv path delta (ArrayTV tv (Dynamic n)) /\
+      w2n slot = w2n root + delta` by
+    (once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> (?root rtv path delta. _) /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  `stmt_state_rel H ctx func cenv cx fin u` by
+    (qunabbrev_tac `fin` >> qunabbrev_tac `lenw` >>
+     irule nested_pop_updated_state_rel >>
+     qpat_assum `stmt_state_rel H _ _ _ _ es t` (irule_at Any) >>
+     qpat_assum `MEM (tr,root,rtv) (FST H)` (irule_at Any) >>
+     qpat_assum `storage_subregion rtv _ _ _` (irule_at Any) >>
+     qpat_assum `local_ptrs_reserved _ _` (irule_at Any) >> simp[]) >>
+  qpat_assum `!H. _ ==> storage_well_formed_on _ _ _` (drule_then assume_tac) >>
   irule nested_pop_suffix_vv_post >>
   qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[] >>
-  qpat_x_assum `storage_holds _ _ _ _ _ fin u` mp_tac >> simp[]
+  simp[] >> conj_tac >- fs[] >>
+  qpat_x_assum `storage_holds _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
 
 Finalise nested_pop_storage_live_suffix_sim
 
-Theorem nested_pop_target_storage_preserved:
-  !cenv cx env ann bt es obs res st'.
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    eval_target_place cx bt (es with gas_obs := obs) = (res,st') ==>
-    contract_storage_well_formed cx st'
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?n. type_place_target env bt = SOME (Type (ArrayT ann (Dynamic n)))` by
-    gvs[expr_body_pre_def, well_typed_expr_def] >>
-  `contract_storage_well_formed cx (es with gas_obs := obs)` by
-    (irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
-     qexists `es` >>
-     gvs[expr_body_pre_def, expr_sim_inv_def] >> Cases >>
-     simp[vyperStorageBackendTheory.get_storage_def]) >>
-  `runtime_storage_consistent env cx (es with gas_obs := obs)` by
-    gvs[expr_body_pre_def, expr_sim_inv_def,
-        runtime_storage_consistent_def, runtime_consistent_def] >>
-  Cases_on `int_calls_target bt = []`
-  >- (irule (cj 8 eval_expr_oracle_storage_mutual) >>
-      conj_tac >- gvs[expr_body_pre_def, expr_sim_inv_def] >>
-      goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
-      simp[] >>
-      gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_target_def,
-          int_calls_expr_def, supported_expr_exists_def, expr_has_evm_run_def,
-          oracle_storage_ok_payload] >> metis_tac[]) >>
-  `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    (Cases_on `int_calls_target bt` >>
-     gvs[expr_body_pre_def, int_calls_expr_def] >> metis_tac[]) >>
-  irule (cj 8 body_oracle_storage_mutual) >>
-  rpt (goal_assum (drule_at Any)) >>
-  gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_target_def,
-      int_calls_expr_def, supported_expr_exists_def, expr_has_evm_run_def,
-      listTheory.EVERY_CONJ] >>
-  goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
-  qexists `env` >>
-  gvs[oracle_storage_ok_payload, well_typed_target_def] >>
-  qexists `ArrayT ann (Dynamic n)` >> simp[]
-QED
-
 (* Pop on a storage or transient root, any indices.  The indices may pop or
    call and so shrink an ancestor after its pointer is captured; the place
-   the target returns is still in range and live in the target's end state.
-   Where that comes from (for vyperStorageFootprint's port): the target's
-   region fits under the root's declared capacity
-   (vyperPlaceStoragePreservation.storage_place_region_slots_in_range), and
-   its bytes are live there (accountsRelProps.storage_place_region_read_live)
-   from contract_storage_well_formed in the end state
-   (nested_pop_target_storage_preserved) and storage_layout_safe, both from
-   expr_sim_inv.  No slot-separation or storage-frame premise. *)
+   the target returns is still in range and live in the target's end state:
+   the target's evaluation records the root it lies under in the storage
+   trace (eval_target_place_observed_region), every horizon valid for that
+   trace holds the root, and the place is in range and read live under it
+   (nested_pop_traced_root).  A trace no horizon is valid for is the
+   bad-storage outcome.  No slot-separation or storage-frame premise. *)
 Theorem pop_nested_storage_sim:
   !ctx func cenv cx env ann bt ty es src id ts d.
     pop_target_frag ctx func cenv cx env bt es /\
@@ -1095,7 +1219,7 @@ Proof
     metis_tac[nested_pop_target_admissible] >>
   qpat_x_assum `pop_target_frag _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [pop_target_frag_def]) >>
-  disch_then (qspecl_then [`ArrayT ann (Dynamic n)`, `sa`, `sm`,
+  disch_then (qspecl_then [`ArrayT ann (Dynamic n)`, `st0`, `sa`, `sm`,
                            `(hdr,loc,pt)`, `s0`] mp_tac) >>
   impl_tac >- simp[] >>
   `eval_expr cx (Pop ann bt) = vyperState$bind (eval_target_place cx bt) (pop_place cx)` by
@@ -1104,50 +1228,58 @@ Proof
   rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >>
   qexists_tac `marks`
-  >- (disj1_tac >> suspend "summary") >>
-  disj2_tac >> rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_pop_place])
+  >- suspend "summary" >>
+  disj2_tac >> disj2_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_place)
 QED
 
 Resume pop_nested_storage_sim[summary]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >>
-  disch_then (qx_choosel_then [`tres`, `tend`, `tr0`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`tres`, `tend`, `tr0`]
+    (CONJUNCTS_THEN assume_tac)) >>
+  reverse (Cases_on `storage_trace_domain cx st0 tend.storage_trace`)
+  >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_pop_place,
+           gasStorageTheory.gas_bad_storage_at_def] >>
+      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_marked_exec_def]) >>
+  `?H0. valid_horizon cx st0 H0 tend.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  disj2_tac >> disj1_tac >>
   gvs[]
   >- suspend "normal" >>
-  Cases_on `tres` >> gvs[expr_exit_def] >>
+  `expr_exit tres tr0` by metis_tac[] >>
+  Cases_on `tres` >- fs[] >>
   rename1 `expr_exit (INR exc) tr0` >>
   qexistsl_tac [`INR exc`, `tend`, `tr0`] >> simp[] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  qpat_x_assum `expr_exit (INR exc) tr0` mp_tac >>
-  Cases_on `tr0` >> simp[expr_exit_def] >>
-  Cases_on `exc` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+  disj2_tac >> metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 
 Resume pop_nested_storage_sim[normal]:
-  rename1 `target_post H _ _ _ _ _ _ _ _ _ (PlaceR p) _ _ t` >>
+  qpat_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
+  rename1 `gas_marked_exec _ _ (eval_target_place _ _) _ _ (INL p) _ (OK t)` >>
   `eval_target_place cx bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL p, tend with gas_obs := [])` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> strip_tac >>
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
-  drule_all nested_pop_target_storage_preserved >> strip_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >>
      metis_tac[gas_marked_path_exec, gas_path_normal]) >>
   drule_all nested_pop_eval_target_storage_class >> strip_tac >> gvs[] >>
+  qpat_assum `!H. valid_horizon _ _ H tend.storage_trace ==> _`
+    (drule_then assume_tac) >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
-  drule eval_target_place_region >> strip_tac >>
   rename1 `evaluate_type (get_tenv cx) ann = SOME tv` >>
-  `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
-    simp[vyperValueTheory.type_slot_size_def] >>
-  drule_all vyperPlaceStoragePreservationTheory.storage_place_region_slots_in_range >>
-  strip_tac >>
-  drule_all accountsRelPropsTheory.storage_place_region_read_live >> strip_tac >>
   drule_all pop_storage_element_size >>
   disch_then (qspec_then `tr` assume_tac) >>
   fs[GSYM slot_loc_def] >>
@@ -1157,6 +1289,8 @@ Resume pop_nested_storage_sim[normal]:
   gvs[Abbr `esz`] >>
   simp[slot_loc_def] >>
   rename1 `evaluate_type (get_tenv cx) ann = SOME tv` >>
+  drule vyperFiniteStoragePreservationTheory.eval_target_place_observed_region >>
+  disch_then assume_tac >>
   Cases_on `pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))
               (tend with gas_obs := [])` >>
   rename1 `_ = (pres, pend)` >>
@@ -1164,7 +1298,9 @@ Resume pop_nested_storage_sim[normal]:
                   `res` |-> `pres`, `es'` |-> `pend`,
                   `pt` |-> `SOME (ValPT (ArrayT ann (Dynamic n)))`]
           nested_pop_storage_live_suffix_sim) >>
-  impl_tac >- fs[slot_loc_def] >>
+  impl_tac
+  >- (fs[slot_loc_def] >> conj_tac >- metis_tac[] >>
+      qexistsl [`offset`, `tv'`, `path`, `delta`] >> simp[]) >>
   rewrite_tac[gas_summary_at_def] >>
   disch_then (qx_choosel_then [`pres'`, `pend'`, `pr`]
                 (CONJUNCTS_THEN assume_tac)) >>
