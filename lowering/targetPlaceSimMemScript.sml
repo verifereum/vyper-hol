@@ -6,7 +6,7 @@ Theory targetPlaceSimMem
 Ancestors
   bodyMemoryPreds targetPlaceSimCases targetPlaceSim exprSimMemDefs
   bodyPtrPopTargetFragTransport
-  allocaHistory exprSimDefs targetPlaceSimDefs gasContext gasOutcome gasSummary
+  allocaHistory exprSimDefs targetPlaceSimDefs gasContext gasOutcome gasSummary gasSummaryCompose
   gasExemptCert gasStorage vyperStorageFootprint vyperStorageTrace
   stmtSimProps loweringPosts exprLowering compileEnv
   supportedTargets vyperAST vyperInterpreter vyperState vyperTypeSystem
@@ -91,7 +91,7 @@ Proof
       disch_then (DISJ_CASES_THEN strip_assume_tac)
       >- (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
             (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-          impl_tac >- first_assum ACCEPT_TAC >>
+          impl_tac >- simp[] >>
           strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
           qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
             (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
@@ -100,10 +100,10 @@ Proof
               (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
             disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings`
                           mp_tac) >>
-            qpat_assum `!tail. source _ = _` (qspec_then `[]` mp_tac) >>
-            simp[bind_def] >> strip_tac >>
+            qpat_assum `!tail. source _ = _`
+              (assume_tac o SIMP_RULE (srw_ss()) [] o Q.SPEC `[]`) >>
             Cases_on `pv` >>
-            simp[get_place_def, raise_def, target_place_res_ok_def]) >>
+            gvs[bind_def, get_place_def, raise_def, target_place_res_ok_def]) >>
           rpt BasicProvers.VAR_EQ_TAC >>
           rewrite_tac[gas_outcome_def] >>
           qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -122,7 +122,7 @@ Proof
           simp[]) >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >>
+      impl_tac >- simp[] >>
       strip_tac >>
       `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >>
       rpt BasicProvers.VAR_EQ_TAC >>
@@ -133,9 +133,7 @@ Proof
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       BETA_TAC >> disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       qx_gen_tac `H1` >> strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-        (qspec_then `H1` mp_tac) >>
-      simp[expr_exit_INR_type]) >>
+      metis_tac[expr_exit_INR_type]) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
   rewrite_tac[gas_outcome_def] >>
@@ -179,13 +177,14 @@ Proof
     (mp_tac o REWRITE_RULE [target_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
-  mp_tac (BETA_RULE (Q.INST [`P` |->
+  irule (BETA_RULE (Q.INST [`memory` |-> `T`, `tops` |-> `cx_tops cx`,
+    `source` |-> `eval_base_place cx bt`, `P` |->
     `\H pv ee t. target_post H ctx func cenv cx es sa sb s0 ee pv (Type ty) r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
     gas_outcome_get_place_mem)) >>
-  disch_then irule >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   irule gas_outcome_post_mono >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   rpt gen_tac >> strip_tac >> gvs[]
@@ -290,13 +289,14 @@ Proof
     (mp_tac o REWRITE_RULE [target_sim_mem_pure_def]) >>
   disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
-  mp_tac (BETA_RULE (Q.INST [`P` |->
+  irule (BETA_RULE (Q.INST [`memory` |-> `T`, `tops` |-> `cx_tops cx`,
+    `source` |-> `eval_base_place cx bt`, `P` |->
     `\H pv ee t. target_post H ctx func cenv cx es sa sb s0 ee pv (Type ty) r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
         target_pure_frame cenv cx es s0 t`]
     gas_outcome_get_place_mem)) >>
-  disch_then irule >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   first_assum ACCEPT_TAC
 QED
