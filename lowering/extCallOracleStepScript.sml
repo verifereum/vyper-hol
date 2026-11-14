@@ -163,7 +163,7 @@ Theorem exec_ext_call_oracle_step:
     state_rel func cenv cx es s /\ inst.inst_outputs = [out] /\
     w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
-    stat = IS_NONE value_opt /\
+    (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
     take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
       (INL (rq, outcome), es1) ==>
     ?s'. exec_ext_call inst s gas aw vw ao az ro rz stat =
@@ -186,7 +186,8 @@ Theorem exec_ext_call_oracle_step:
 Proof
   rpt gen_tac >> strip_tac >>
   `accounts_rel cx es s /\ es.outcomes = SOME s.vs_outcomes /\
-   ~s.vs_call_ctx.cc_static` by fs[state_rel_def] >>
+   s.vs_call_ctx.cc_static = cx.txn.is_static` by
+    fs[state_rel_def, call_ctx_rel_def] >>
   `?rest. rq = call_outcome_request target (read_memory (w2n ao) (w2n az) s)
                  value_opt es /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
@@ -215,6 +216,35 @@ Proof
   irule state_rel_adopt_consume >> simp[]
 QED
 
+Theorem frame_call_value_success:
+  frame_call_value cx value_opt es = (INL framed_value, es') ==>
+  es' = es /\
+  (cx.txn.is_static ==> value_opt = NONE \/ value_opt = SOME 0) /\
+  framed_value = (if cx.txn.is_static then NONE else value_opt)
+Proof
+  rw[frame_call_value_def, bind_def, ignore_bind_def, check_def, assert_def,
+     vyperStateTheory.return_def] >> gvs[AllCaseEqs()]
+QED
+
+(* CALL evaluates all operands before the static-value fault. *)
+Theorem call_static_value_abort:
+  state_rel func cenv cx es s /\ cx.txn.is_static /\
+  inst.inst_opcode = CALL /\
+  inst.inst_operands = [gop; aop; vop; iop; zop; rop; cop] /\
+  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
+  eval_operand vop s = SOME vw /\ vw <> 0w /\
+  eval_operand iop s = SOME ip /\ eval_operand zop s = SOME iz /\
+  eval_operand rop s = SOME rp /\ eval_operand cop s = SOME cap ==>
+  frame_call_value cx (SOME (w2n vw)) es =
+    (INR (Error (RuntimeError "write in static context")), es) /\
+  step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))
+Proof
+  strip_tac >>
+  `s.vs_call_ctx.cc_static` by fs[state_rel_def, call_ctx_rel_def] >>
+  simp[frame_call_value_def, bind_def, ignore_bind_def, check_def, assert_def,
+       vyperStateTheory.return_def, w2n_eq_0, step_inst_base_opcode_eqs]
+QED
+
 (* ===== send ===== *)
 
 (* send's CALL [gas; to; value; 0; 0; 0; 0] against eval_send, in oracle
@@ -236,6 +266,8 @@ Theorem send_call_oracle_step:
     eval_operand val_op s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
     LENGTH gas_vs = (if has_gas then 1 else 0) /\
     eval_send cx has_gas (to_v :: amount_v :: gas_vs) es = (res, es') ==>
+    (res = INR (Error (RuntimeError "write in static context")) /\
+     step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
     res = INR (Error (RuntimeError "call outcome accounts")) \/
     ?s'. s' = s with <| vs_outcomes := s'.vs_outcomes;
                         vs_requests := s'.vs_requests;
@@ -252,29 +284,46 @@ Theorem send_call_oracle_step:
 Proof
   rpt gen_tac >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes /\
-   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static /\
-   ~cx.txn.is_static` by
-    fs[state_rel_def] >>
+   local_ptrs_rel func cenv es.scopes s /\
+   s.vs_call_ctx.cc_static = cx.txn.is_static` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  Cases_on `cx.txn.is_static /\ vw <> 0w`
+  >- (disj1_tac >>
+      qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
+      fs[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def,
+         type_check_def, assert_def, check_def, lift_option_type_def,
+         vyperStateTheory.return_def, w2n_eq_0] >>
+      Cases_on `eval_operand gas_op s` >>
+      fs[step_inst_base_opcode_eqs, eval_operand_def]) >>
+  disj2_tac >>
   `step_inst_base inst s =
      exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
-       (0w:bytes32) (0w:bytes32) F` by
+       (0w:bytes32) (0w:bytes32) cx.txn.is_static` by
     (Cases_on `eval_operand gas_op s` >> fs[] >>
      simp[step_inst_base_opcode_eqs, eval_operand_def]) >>
+  `frame_call_value cx (SOME (w2n vw)) es =
+     (INL (if cx.txn.is_static then NONE else SOME (w2n vw)), es)` by
+    (Cases_on `cx.txn.is_static` >> fs[frame_call_value_def, w2n_eq_0,
+      bind_def, ignore_bind_def, check_def, assert_def, vyperStateTheory.return_def]) >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `~cx.txn.is_static` (fn th =>
-    simp[eval_send_def, frame_call_value_def, update_pending_deletions_def, th, bind_def, ignore_bind_def,
-         type_check_def, assert_def, check_def, lift_option_type_def,
-         vyperStateTheory.return_def]) >>
-  Cases_on `take_call_outcome (w2w aw) [] (SOME (w2n vw)) es` >>
+  simp[eval_send_def, update_pending_deletions_def, bind_def, ignore_bind_def,
+       type_check_def, assert_def, check_def, lift_option_type_def,
+       vyperStateTheory.return_def] >>
+  Cases_on `take_call_outcome (w2w aw) []
+    (if cx.txn.is_static then NONE else SOME (w2n vw)) es` >>
   qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
   Cases_on `tr` >> simp[]
   >- (rename1 `INL x` >> PairCases_on `x` >> rename1 `INL (rq, outcome)` >>
       simp[] >> strip_tac >> disj2_tac >>
       qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `inst`,
                    `THE (eval_operand gas_op s)`, `aw`, `vw`, `0w`, `0w`,
-                   `0w:bytes32`, `0w:bytes32`, `F`, `out`, `w2w aw`, `SOME (w2n vw)`, `rq`,
+                   `0w:bytes32`, `0w:bytes32`, `cx.txn.is_static`, `out`, `w2w aw`,
+                   `if cx.txn.is_static then NONE else SOME (w2n vw)`, `rq`,
                    `outcome`, `es1`] mp_tac exec_ext_call_oracle_step >>
-      simp[read_memory_def, write_memory_with_expansion_empty_0] >>
+      (impl_tac >-
+        (Cases_on `cx.txn.is_static` >>
+         gvs[read_memory_def, write_memory_with_expansion_empty_0])) >>
+      simp[write_memory_with_expansion_empty_0] >>
       strip_tac >>
       `s' = s with <| vs_outcomes := s'.vs_outcomes;
                       vs_requests := s'.vs_requests;
