@@ -20,3 +20,22 @@ Proof
   gvs[abi_decode_load_def, abi_decode_source_def, cd_word_def,
        cd_bytes_def, word_add_def, w2n_n2w]
 QED
+
+Theorem default_registration_bytes_owner:
+  FLOOKUP ce.ce_vars name = SOME (PtrVar (Var dst) (type_memory_size tv)) /\
+  val_wf tv x /\ val_in_memory tv x s.vs_alloca_next t.vs_memory /\
+  eval_operand (Var dst) t = SOME (n2w s.vs_alloca_next) /\
+  ptr_covers H u dst t (type_memory_size tv) /\
+  FLOOKUP t.vs_allocas st.cs_next_id =
+    SOME (s.vs_alloca_next,type_memory_size tv) /\
+  t.vs_alloca_next = s.vs_alloca_next + type_memory_size tv /\
+  s.vs_alloca_next + type_memory_size tv < dimword (:256) /\
+  st.cs_next_id < st1.cs_next_id /\ not_fresh_at st1 dst /\
+  MEM ins (fn_insts fn) /\ ins.inst_opcode = ALLOCA /\
+  ins.inst_outputs = [dst] /\ ins.inst_id = st.cs_next_id ==>
+  default_registration_owner fn ce st1 t H u ((name,ty),tv)
+    (x,Var dst,s.vs_alloca_next,st.cs_next_id)
+Proof
+  simp[default_registration_owner_def] >> strip_tac >>
+  qexists `ins` >> simp[]
+QED
