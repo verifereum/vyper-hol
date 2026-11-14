@@ -468,7 +468,8 @@ val code_rewrites = [
   in [th, TRANS (GSYM eta) abstracted] end)
     [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
      wordsTheory.word_from_bin_list_def, wordsTheory.word_div_def,
-     wordsTheory.word_mod_def, wordsTheory.word_asr_n2w,
+     wordsTheory.word_mod_def, wordsTheory.word_quot_def,
+     wordsTheory.word_rem_def, wordsTheory.word_asr_n2w,
      prove (``(i : int) ** (n : num) =
                 if i < 0 /\ ODD n then ~&(Num i EXP n) else &(Num i EXP n)``,
        Cases_on `i` >> simp[integerTheory.INT_EXP, integerTheory.NUM_OF_INT] >>
