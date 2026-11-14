@@ -205,9 +205,10 @@ Proof
     stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
-  irule aug_place_loaded_storage_suffix >> simp[] >> conj_tac
-  >- (goal_assum (drule_at (Pat `lower_value`)) >>
-      goal_assum (drule_at (Pat `compile_binop`)) >> simp[] >> metis_tac[]) >>
-  goal_assum (drule_at (Pat `type_stmt`)) >>
-  goal_assum (drule_at (Pat `eval_target_place`)) >> simp[]
+  mp_tac (Q.INST
+    [`dst` |-> `FST r`, `prefix` |-> `gas_explicit marks s0.vs_gas_readings`]
+    (SPEC_ALL aug_place_loaded_storage_suffix)) >>
+  impl_tac >- (simp[] >>
+    qexistsl_tac [`offset`, `tv0`, `path`, `delta`] >> simp[]) >>
+  simp[]
 QED
