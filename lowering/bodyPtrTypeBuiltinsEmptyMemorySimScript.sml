@@ -9,6 +9,7 @@ Ancestors
   gasContext fragGasPathPtr valueEncoding valueEncodingProofs words allocLimits
   venomState gasSummary exprSimVVFrame list venomInstProofs venomExecSemantics stmtFragPtr
   bodyPtrHashBuiltinsGhostFrame exprSimSubscriptArrayCompose
+  gasStorage vyperStorageFootprint fragGasSeqPtr bodyPtrTypeBuiltinsEmptyExec
 
 Theorem empty_memory_vv_sim_ptr:
   !d ctx PG func cenv cx env ty ann typ args es.
@@ -45,8 +46,34 @@ Proof
 QED
 Resume empty_memory_vv_sim_ptr[run]:
   drule_all empty_type_buffer_size >> strip_tac >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_bad_storage_at_def, storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es s0 /\
+   ghost_inv H0 d cenv cx es G0 tn0 s0` by simp[] >>
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s0` by simp[] >>
+     drule_all compile_builtin_empty_complex_run >> strip_tac >> gvs[]) >>
+  `?HG0 th0. inst_seq_ptr (cx_dead H0 cx) 0 ctx func PG G0 tn0
+    (emitted_insts sa sb) s0 HG0 th0` by
+    (drule_all empty_buffer_framed_certificate >>
+     disch_then (qspecl_then [`cx_dead H0 cx`, `PG`] strip_assume_tac) >>
+     metis_tac[]) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (Value (default_value tv))`, `es`, `HG0`, `th0`,
+    `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  conj_tac >- simp[] >> qx_gen_tac `H` >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   stmt_state_rel H ctx func cenv cx es t /\
+   ghost_inv H d cenv cx es G0 tn0 s0` by simp[] >>
   `?p w HG th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
+    inst_seq_ptr (cx_dead H cx) 0 ctx func PG G0 tn0
+      (emitted_insts sa sb) s0 HG th /\
     gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     ptr_covers HG th p t (type_memory_bytes cenv typ) /\
@@ -55,8 +82,12 @@ Resume empty_memory_vv_sim_ptr[run]:
         (case typ of ArrayT _ (Dynamic _) => T | _ => F)
        then 32 else type_memory_bytes cenv typ) ==> a NOTIN th.t_mem) /\
     ghost_inv H d cenv cx es HG th t /\ ghost_kept cenv es sa G0 tn0 s0 HG th` by
-    (irule empty_buffer_framed_path >> simp[] >>
+    (drule_all empty_buffer_framed_certificate >>
+     disch_then (qspecl_then [`cx_dead H cx`, `PG`] strip_assume_tac) >>
+     drule_all empty_buffer_checked_path >> strip_tac >>
      goal_assum (drule_at Any) >> simp[]) >>
+  `HG = HG0 /\ th = th0` by metis_tac[inst_seq_ptr_ghost_unique] >>
+  gvs[] >>
   suspend "post"
 QED
 Resume empty_memory_vv_sim_ptr[post]:
@@ -70,10 +101,6 @@ Resume empty_memory_vv_sim_ptr[post]:
     ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) buf.buf_operand HG t` by
     suspend "pointer" >>
   `t.vs_current_bb = sb.cs_current_bb` by suspend "bb" >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL (Value (default_value tv))`, `es`, `HG`, `th`,
-    `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[expr_type_def, base_ptr_def] >>
   suspend "transport"
 QED
