@@ -2,7 +2,7 @@
 Theory bodyMemBiKeccakTyped
 Ancestors
   bodyMemBiKeccakOpenFree bodyMemBiKeccakCompose exprSimHash exprSimMemDefs bodyMemoryPreds exprSimMemoryStack exprSimSource
-  exprSimUnwrap exprSimUnopComposeProps exprSimUnopProps exprUnopSimDefs exprSimWordArgs
+  exprSimUnwrap exprSimUnwrapProps exprSimUnopComposeProps exprSimUnopProps exprUnopSimDefs exprSimWordArgs
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasNormalPrefix fragGasMode fragGasPath
   gasStorage vyperStorageTrace vyperStorageFootprint
   exprSimProps exprSimDefs exprSimHypsDefs loweringPosts exprLoweringProps

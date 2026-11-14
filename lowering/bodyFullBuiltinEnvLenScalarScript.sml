@@ -4,7 +4,7 @@ Ancestors
   bodySimFull bodyFullGhostFrame exprSimLen exprSimSource exprSimHypsDefs
   exprPtrCtorImmStore representationCleanPtr exprSimBopRestWordLoadSafety
   assignBasePtrStoragePath
-  exprSimUnwrap exprLowering exprLoweringProps loweringPosts bodyPtrDefs
+  exprSimUnwrapProps exprLowering exprLoweringProps loweringPosts bodyPtrDefs
   fragGasSeqPtr fragGasOriginPtr gasOutcomeFullCompose gasShadowState
   vyperStorageFootprint vyperTypeSystem vyperTypeBuiltins vyperAST
   loweringStateRelDefs ptrDiscipline codegenRel contextCodegenRel

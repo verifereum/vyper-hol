@@ -2,7 +2,7 @@
 Theory bodyMemTbExtract32WordSuffix
 Ancestors
   bodyMemTbExtract32SuffixPost exprSimMemoryStack exprSimDefs exprSimMemDefs
-  exprSimUnwrap vyperStorageFootprint loweringPosts compileEnv exprLowering vyperAST vyperInterpreter
+  exprSimUnwrap exprSimUnwrapProps vyperStorageFootprint loweringPosts compileEnv exprLowering vyperAST vyperInterpreter
 
 Theorem extract32_word_suffix_success:
   compile_extract32_load l d off ca = (raw,cm) /\

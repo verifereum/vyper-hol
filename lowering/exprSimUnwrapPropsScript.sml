@@ -19,6 +19,16 @@ Proof
   rpt strip_tac >> first_x_assum drule_all >> metis_tac[]
 QED
 
+(* A StackValue: no code. *)
+Theorem expr_post_of_vv_post_stack:
+  !func cenv cx e es sa sb s0 es' v t op s ctx.
+    vv_post H ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue t op) s ==>
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s
+Proof
+  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def,
+     read_result_def, return_def]
+QED
+
 Theorem expr_post_of_vv_post_memory:
   !func cenv cx e es sa sb s0 es' v t p s ctx.
     vv_post H ctx func cenv cx e es sa sb s0 es' (Value v) (LocatedValue t p) s /\

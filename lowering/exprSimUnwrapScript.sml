@@ -24,7 +24,6 @@
  *                        pointer into memory, without the cheated cases
  *   unwrap_value_sim   — unwrap_value's code takes vv_post H to expr_post,
  *                        one lemma per form of value_vv:
- *                        expr_post_of_vv_post_stack,
  *                        unwrap_memory_sim (expr_post_of_vv_post_memory,
  *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
@@ -226,16 +225,6 @@ QED
 (* unwrap_value's code, run where compile_expr's code ends, takes vv_post H to
    expr_post.  One lemma per form of value_vv. *)
 
-(* A StackValue: no code. *)
-Theorem expr_post_of_vv_post_stack:
-  !func cenv cx e es sa sb s0 es' v t op s ctx.
-    vv_post H ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue t op) s ==>
-    expr_post H ctx func cenv cx e es sa sb s0 es' v op s
-Proof
-  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def,
-     read_result_def, return_def]
-QED
-
 (* An aggregate in memory: the pointer is the operand, no code. *)
 
 (* The end of a one-instruction load of a word: the loaded word in a fresh
@@ -290,31 +279,6 @@ Proof
   rpt strip_tac >>
   simp[Once venomExecSemanticsTheory.step_inst_base_def, mk_inst_def] >>
   simp[venomExecSemanticsTheory.exec_read1_def]
-QED
-
-(* Admissibility rules out type/value mismatches; a word type's memory
-   representation is its typed word encoding, including zero padding. *)
-Theorem immutable_word_mem_word_at[local]:
-  !tenv t tv v off mem.
-    evaluate_type tenv t = SOME tv /\ is_word_type t /\
-    immutable_value_admissible tv v /\ val_in_memory tv v off mem ==>
-    mem_word_at off mem = typed_val_to_w256 tv v
-Proof
-  rpt strip_tac >> Cases_on `t`
-  >~ [`BaseT bt`]
-  >- (Cases_on `bt` >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-      gvs[vyperValueTheory.evaluate_type_def, is_word_type_def,
-          AllCaseEqs()] >>
-      Cases_on `v` >>
-      gvs[immutable_value_admissible_def,
-          valueEncodingPropsTheory.val_in_memory_fixed_bytes,
-          valueEncodingPropsTheory.val_in_memory_address,
-          val_in_memory_def, typed_val_to_w256_def]) >>
-  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[immutable_value_admissible_def, val_in_memory_def,
-      typed_val_to_w256_def]
 QED
 
 (* At runtime a word immutable is in the data section at its offset, as

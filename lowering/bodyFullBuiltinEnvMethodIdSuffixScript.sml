@@ -4,7 +4,7 @@ Ancestors
   bodyFullBuiltinEnvMethodIdHashDynamic bodyFullBuiltinEnvMethodIdHashFixed
   bodyFullBuiltinEnvMethodIdSelector bodyFullBuiltinEnvMethodIdBuffer
   bodyFullBuiltinEnvMethodIdRuntime bodyFullGhostFrame bodyFullUnwrapRun wordArgsPtr
-  exprSimHash exprSimSource exprSimWordArgs exprSimMemDefs exprSimUnwrap
+  exprSimHash exprSimSource exprSimWordArgs exprSimMemDefs exprSimUnwrapProps
   exprSimVVFrame exprSimMemoryStack exprSimPtrLiteralBuffer bodySimFull bodyPtrDefs bodyMemoryDefs
   fragExec fragGasOriginPtr gasOutcomeFullCompose loweringPosts loweringStateRelDefs
   exprLoweringProps exprLowering compileEnv context freshWrites venomMemDefs
