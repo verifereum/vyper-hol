@@ -10,19 +10,19 @@ Theorem opcode_every_dynarray_append[local]:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
-  P load_op /\
-  P store_op ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_dynarray_append ce base_op value ws sz dt sy cap prim load_op store_op st)))
+    (state_insts (SND (compile_dynarray_append ce base_op value ws sz dt sy cap prim loc st)))
   )
 Proof
   strip_tac >>
-  strip_tac >> simp[compile_dynarray_append_def] >>
+  simp[compile_dynarray_append_def] >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
     CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+      (UNDISCH opcode_every_ptr_load), (UNDISCH opcode_every_ptr_store),
+      (UNDISCH opcode_every_imm_store_words),
       (UNDISCH opcode_every_store_memory), (UNDISCH opcode_every_word_copy_loop), every_state_insts_return,
       cj 1 (UNDISCH opcode_every_store_slots)])])
 QED
@@ -209,9 +209,6 @@ Theorem opcode_every_stmt_append:
 Proof
   strip_tac >>
   strip_tac >> rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  `!l. load_opc_for l <> RETURNDATACOPY /\ load_opc_for l <> INVOKE /\ load_opc_for l <> CREATE /\ load_opc_for l <> CREATE2 /\
-       store_opc_for l <> RETURNDATACOPY /\ store_opc_for l <> INVOKE /\ store_opc_for l <> CREATE /\ store_opc_for l <> CREATE2` by
-    (Cases >> simp[load_opc_for_def, store_opc_for_def]) >>
   simp[Once compile_stmt_def] >>
   ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- (rpt strip_tac >> irule (UNDISCH opcode_every_get_target_ptr) >>
@@ -226,5 +223,5 @@ Proof
           (UNDISCH opcode_every_alloc_buffer), (UNDISCH opcode_every_store_memory)])])) >>
   gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- simp[every_state_insts_return] >> gen_tac >>
-  match_mp_tac (UNDISCH opcode_every_dynarray_append) >> simp[]
+  simp[(UNDISCH opcode_every_dynarray_append)]
 QED
