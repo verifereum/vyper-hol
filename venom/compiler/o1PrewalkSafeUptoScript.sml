@@ -14,7 +14,8 @@ Ancestors
   o1ContractMakeSsa o1ContractMakeSsaPtr o1ContractMakeSsaTaint
   o1ContractMakeSsaSrc o1PassContract o1PassLift ptrDiscipline
   ptrDisciplineAgree ctxLookupAgree unitMemInv unitShapeDefs
-  unitTransformDefs fcgPruning list
+  unitTransformDefs fcgPruning list o1ContractLowerDload
+  o1ContractLowerDloadSim o1ContractLowerDloadStage venomPassSchedule
 
 (* ===== Pruning ===== *)
 
@@ -210,4 +211,72 @@ Proof
   `o1_safe_upto D lo n mid.cu_context vs` by
     (irule simplify_cfg_stage_safe_upto >> metis_tac[]) >>
   irule o1_safe_upto_prune >> gvs[]
+QED
+
+(* The raw safety facts actually supplied to ConcretizeMemLoc. *)
+Theorem o1_walk_before_layout_safe_upto:
+  (!k. k < LENGTH o1_fn_passes ==>
+    ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+      (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  callee_first names (stage 0).ctx_functions /\
+  dead_wf D /\ o1_run_state_ok w /\ o1_safe_upto D lo n (stage 0) w ==>
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) (stage 2) (stage 3) /\
+  o1_ctx_shape (stage 2) /\
+  EVERY make_ssa_input_ok (stage 2).ctx_functions /\
+  callee_first names (stage 2).ctx_functions /\
+  EVERY ssa_form (stage 2).ctx_functions /\
+  o1_ptr_safe_upto D lo n (stage 2) w /\ alloca_frontier_upto n (stage 2) w /\
+  (?name fn lbl. (stage 2).ctx_entry = SOME name /\
+    lookup_function name (stage 2).ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl)
+Proof
+  strip_tac >>
+  (* the facts LowerDload, ConcretizeMemLoc and FmpLowering read *)
+  `ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) (o1_walk_view rpolicy 0)
+     (stage 0) (stage 1) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) (o1_walk_view rpolicy 1)
+     (stage 1) (stage 2) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2)
+     (stage 2) (stage 3)` by
+    (qpat_assum `!k. k < LENGTH _ ==> _`
+       (fn th => map_every (fn k => assume_tac
+         (SIMP_RULE (srw_ss()) [o1_fn_passes_def] (Q.SPEC k th))) [`0`,`1`,`2`]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `o1_ctx_shape (stage 0) /\ o1_ctx_shape (stage 1) /\ o1_ctx_shape (stage 2) /\
+   EVERY (o1_fn_row 0) (stage 0).ctx_functions /\
+   EVERY (o1_fn_row 1) (stage 1).ctx_functions /\
+   EVERY (o1_fn_row 2) (stage 2).ctx_functions` by
+    (qpat_assum `!k. k <= LENGTH _ ==> o1_ctx_shape _`
+       (fn th => map_every (fn k => assume_tac
+         (SIMP_RULE (srw_ss()) [o1_fn_passes_def] (Q.SPEC k th))) [`0`,`1`,`2`]) >>
+     qpat_assum `!k. k <= LENGTH _ ==> EVERY _ _`
+       (fn th => map_every (fn k => assume_tac
+         (SIMP_RULE (srw_ss()) [o1_fn_passes_def] (Q.SPEC k th))) [`0`,`1`,`2`]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `EVERY make_ssa_input_ok (stage 0).ctx_functions /\
+   EVERY make_ssa_input_ok (stage 2).ctx_functions` by
+    fs[EVERY_MEM, o1_fn_row_def] >>
+  `callee_first names (stage 1).ctx_functions` by
+    metis_tac[make_ssa_src_stage_callee_first] >>
+  `callee_first names (stage 2).ctx_functions` by
+    metis_tac[lower_dload_stage_callee_first] >>
+  `o1_safe_upto D lo n (stage 1) w` by
+    (drule_all make_ssa_stage_safe_upto >> simp[]) >>
+  `EVERY ssa_form (stage 1).ctx_functions` by
+    metis_tac[make_ssa_stage_wf_ssa, venomWfTheory.wf_ssa_def, EVERY_MEM] >>
+  `EVERY ssa_form (stage 2).ctx_functions` by
+    metis_tac[lower_dload_stage_ssa_form] >>
+  `o1_ptr_safe_upto D lo n (stage 2) w /\ alloca_frontier_upto n (stage 2) w` by
+    (drule_all lower_dload_stage_safe_upto >> simp[]) >>
+  `?name fn lbl. (stage 1).ctx_entry = SOME name /\
+     lookup_function name (stage 1).ctx_functions = SOME fn /\
+     fn_entry_label fn = SOME lbl` by
+    (fs[o1_safe_upto_def, mem_inv_raw_reachable] >> metis_tac[]) >>
+  drule_all lower_dload_stage_lookup_supply >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  `(stage 2).ctx_entry = (stage 1).ctx_entry` by fs[ctx_pass_stage_def] >>
+  simp[] >> metis_tac[]
 QED
