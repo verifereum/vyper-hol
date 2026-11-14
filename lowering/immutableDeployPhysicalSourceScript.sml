@@ -114,7 +114,7 @@ QED
 Theorem immutable_rhs_physical_memory:
   expr_body_pre ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post ctx func ce cx e ers sa sb s0 ee v op s /\
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv /\
   ~is_word_type (lowered_value_type ce e) ==>
   ?ptv w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\

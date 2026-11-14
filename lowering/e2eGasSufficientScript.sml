@@ -47,6 +47,8 @@ Ancestors
   ctorDeployEntry ctorDeployMemory ctorDeployDload ctorDeployDead
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
+val _ = Parse.hide "tops";
+
 (* ===== add_frame_gas keeps the call's state relation ===== *)
 
 (* Only gas fields change, so the account maps and the return data the
@@ -111,7 +113,7 @@ QED
 Theorem vyper_call_gas_sufficient_identity:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
