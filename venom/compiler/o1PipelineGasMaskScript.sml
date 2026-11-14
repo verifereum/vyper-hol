@@ -138,7 +138,7 @@ Proof
      fs[o1_run_state_ok_def, o1_initial_state_ok_def]) >>
   `run_context f A w = run_blocks f A fa st /\
    run_context f' B w = run_blocks f' B fb st` by
-    (gvs[Abbr `st`, run_context_def, run_function_def]) >>
+    (pure_rewrite_tac[run_context_def, run_function_def] >> simp[Abbr `st`]) >>
   `terminates (run_blocks f A fa st) /\ terminates (run_blocks f' B fb st)` by
     metis_tac[] >>
   `f <= f + f' /\ f' <= f + f'` by decide_tac >>
@@ -780,10 +780,10 @@ Proof
     (simp[Abbr `e`] >> irule context_fn_entry_state >>
      fs[o1_run_state_ok_def, o1_initial_state_ok_def]) >>
   `run_context fuel (stage 9) vs_out = run_blocks fuel (stage 9) fn e` by
-    (simp[Abbr `e`, run_context_def, run_function_def]) >>
+    (pure_rewrite_tac[run_context_def, run_function_def] >> simp[Abbr `e`]) >>
   `?fuel8. terminates (run_blocks fuel8 (stage 8) fn8 e)` by metis_tac[] >>
   `run_context fuel8 (stage 8) vs_out = run_blocks fuel8 (stage 8) fn8 e` by
-    (simp[Abbr `e`, run_context_def, run_function_def]) >>
+    (pure_rewrite_tac[run_context_def, run_function_def] >> simp[Abbr `e`]) >>
   mp_tac (Q.INST [`C` |-> `stage 8`, `C'` |-> `stage 9`, `name` |-> `nm`,
                   `fn` |-> `fn8`, `view` |-> `o1_walk_view rpolicy 8`]
             cfg_norm_stage_gas_events_prefix) >>
@@ -855,7 +855,7 @@ Proof
    run_context f' (stage 7) w =
      run_blocks f' (stage 7) fn7
        (w with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)` by
-    (simp[run_context_def, run_function_def]) >>
+    (pure_rewrite_tac[run_context_def, run_function_def] >> simp[]) >>
   `gas_events_blocks fuel8 (stage 7) fn7
      (w with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) =
    gas_events_blocks f' (stage 7) fn7
