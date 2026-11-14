@@ -28,7 +28,9 @@
 
 Theory codegenRel
 Ancestors
-  asmWf asmSem stackPlanGen
+  asmWf asmSem stackPlanGen words list
+Libs
+  BasicProvers
 
 (* ===== Operand Evaluation in Venom State ===== *)
 
@@ -533,4 +535,42 @@ Theorem venom_asm_rel_stack_cleanup_promised[simp]:
   venom_asm_rel lo (ps with ps_stack := stk) vs ast
 Proof
   simp[venom_asm_rel_def]
+QED
+
+Theorem fixed_source_write_range_word_bounds:
+  len < dimword(:256) ==>
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (fixed_source_write_range s dst value len)
+Proof
+  rw[fixed_source_write_range_def] >> every_case_tac >> simp[w2n_lt]
+QED
+
+Theorem sized_source_write_range_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (sized_source_write_range s dst src len)
+Proof
+  rw[sized_source_write_range_def] >> every_case_tac >> simp[w2n_lt]
+QED
+
+Theorem dret_source_write_ranges_word_bounds:
+  !(pairs : (bytes32 # bytes32) list) cursor.
+    EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+      (dret_source_write_ranges cursor pairs)
+Proof
+  Induct >> simp[dret_source_write_ranges_def] >>
+  Cases_on `h` >> simp[dret_source_write_ranges_def, w2n_lt]
+QED
+
+Theorem source_memory_write_ranges_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (source_memory_write_ranges inst s)
+Proof
+  `32 < dimword(:256)` by
+    simp[dimword_def, venomLayoutTheory.dimindex_256] >>
+  `1 < dimword(:256)` by decide_tac >>
+  Cases_on `inst.inst_opcode` >> simp[source_memory_write_ranges_def] >>
+  every_case_tac >>
+  simp[fixed_source_write_range_word_bounds,
+       sized_source_write_range_word_bounds,
+       dret_source_write_ranges_word_bounds, w2n_lt]
 QED
