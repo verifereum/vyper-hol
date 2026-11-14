@@ -3,8 +3,75 @@ Theory exprPtrUnwrapAllocEntry
 Ancestors
   exprPtrUnwrapAllocation exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation
   bufferAllocationExecution exprSimAlloc loweringPosts exprLoweringProps
+  fragGasSeqPtr fragGasSeqAbort fragExec fragExecMem allocaHistory
   ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst finite_map words
   compileEnv loweringStateRelDefs fragGasPathPtr stmtAppendStorageRunPtr exprPtrUnwrapStorageSource
+
+Theorem unwrap_alloc_origin_path:
+  compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?out u.
+    buf.buf_operand = Var out /\
+    step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s = OK u /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+       step_prov PG G (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) u,
+       step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s u tn)
+Proof
+  strip_tac >> drule_all unwrap_alloc_generated_step >>
+  disch_then (qspec_then `s` strip_assume_tac) >>
+  qexistsl [`out`, `update_var out (n2w (buffer_allocation_base s sm.cs_next_id))
+    (buffer_allocation_fields s sm.cs_next_id nb)`] >>
+  simp[] >>
+  qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
+  drule_all unwrap_alloc_code_prefix >> strip_tac >>
+  qpat_x_assum `s.vs_inst_idx = _` (fn th => rewrite_tac[GSYM th]) >>
+  qspec_then `[inst]` mp_tac run_inst_seq_gas_origin_ptr_path >>
+  simp[Abbr `inst`, mk_inst_def, is_terminator_def, arithmeticTheory.ADD1] >>
+  disch_then irule >>
+  simp[run_inst_seq_def, GSYM mk_inst_def] >>
+  conj_tac
+  >- (simp[run_inst_seq_mem_ok_def, unitTransformDefsTheory.inst_mem_below_frontier_def,
+      memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+      contextCodegenRelTheory.source_memory_read_ranges_def,
+      codegenRelTheory.source_memory_write_ranges_def]) >>
+  conj_tac
+  >- gvs[] >>
+  simp[inst_seq_ptr_def] >>
+  irule unwrap_alloc_ptr_check >>
+  simp[] >>
+  simp[Abbr `u`, update_var_def,
+    bufferAllocationExecutionTheory.buffer_allocation_fields_def] >>
+  Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >> simp[]
+QED
+
+Theorem unwrap_alloc_origin_history:
+  compile_alloc_buffer nb sa = (buf,sm) /\ buf.buf_operand = Var root /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u ==>
+  alloca_history func (u with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >> drule_all unwrap_alloc_code_prefix >> strip_tac >>
+  drule unwrap_alloc_generated_code >> strip_tac >>
+  `out = root` by fs[] >>
+  qpat_x_assum `out = root` SUBST_ALL_TAC >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  qpat_x_assum `get_instruction _ _ = _` mp_tac >>
+  qpat_assum `s.vs_inst_idx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `root = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  disch_tac >>
+  drule_all allocaHistoryTheory.alloca_history_base_step >>
+  simp[mk_inst_def, is_terminator_def]
+QED
 
 Theorem unwrap_alloc_entry:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\

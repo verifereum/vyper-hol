@@ -30,7 +30,7 @@ Ancestors
   fragGasPathPtr gasContext bodySim immSectionDead stmtSimDefs exprSimDefs exprSimProps exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
-  finite_map words
+  finite_map words pred_set
 
 (* D holds every dead byte D0 does. *)
 Definition dead_sub_def:
@@ -145,6 +145,26 @@ Definition ghost_inv_at_def:
          FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next
 End
+
+Theorem ghost_inv_at_mem_decrease:
+  ghost_inv_at D lo d cenv cx es G tn s /\ m SUBSET tn.t_mem ==>
+  ghost_inv_at D lo d cenv cx es G (tn with t_mem := m) s
+Proof
+  strip_tac >>
+  `!mem. mem_agree_outside m s.vs_memory mem ==>
+     mem_agree_outside tn.t_mem s.vs_memory mem` by
+    (gvs[mem_agree_outside_def, SUBSET_DEF] >> metis_tac[]) >>
+  `!p sz. ptr_covers G (tn with t_mem := m) p s sz <=> ptr_covers G tn p s sz` by
+    simp[ptr_covers_def, op_taint_def] >>
+  `return_buf_ptr d cenv G (tn with t_mem := m) s <=> return_buf_ptr d cenv G tn s` by
+    (Cases_on `d` >- simp[return_buf_ptr_def] >>
+     rename1 `return_buf_ptr (SOME pair) _ _ _ _` >> PairCases_on `pair` >>
+     simp[return_buf_ptr_def]) >>
+  gvs[ghost_inv_at_def, op_taint_def, stor_taint_ok_at_def] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> metis_tac[]) >>
+  gvs[SUBSET_DEF] >> metis_tac[]
+QED
 
 Definition ghost_inv_cx_dead:
   ghost_inv H d cenv cx es G tn s <=>

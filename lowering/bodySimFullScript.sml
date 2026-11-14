@@ -43,7 +43,7 @@ Definition expr_sim_full_def:
         (es, s0, G0, tn0)
         (\H res ee G tn t. ?v. res = INL v /\
           expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
-          expr_store_bound cx (expr_type e) v op t /\
+          expr_store_bound cx (post_value_type cenv e) v op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
@@ -88,7 +88,7 @@ Definition expr_vv_sim_full_def:
         (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tv. res = INL tv /\
           vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
-          vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
+          vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
             ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
