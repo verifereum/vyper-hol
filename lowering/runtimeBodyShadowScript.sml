@@ -112,7 +112,7 @@ QED
    - The shadow stmts_env pairs with the actual one through a
      gas_shadow_compiles result for stmts_env (FST equal: same cenv').
    - gas_shadow_lookup_function gives the shadow partner of func. *)
-Theorem runtime_selected_body_shadow:
+Theorem runtime_selected_body_shadow_with_shadow:
   !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
    bindings ctx cx env env' ret.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -124,7 +124,9 @@ Theorem runtime_selected_body_shadow:
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
     type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb.
+    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      shadow_ctx = shadow_unit.cu_context /\
       lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
       gas_shadow_context unit.cu_context shadow_ctx /\
       gas_shadow_function func shadow_func /\
@@ -294,5 +296,420 @@ Proof
      disch_then (qspecl_then [`unit.cu_context.ctx_functions`,
         `shadow_unit.cu_context.ctx_functions`, `"__entry"`] mp_tac) >>
      fs[gas_shadow_context_def]) >>
-  qexistsl_tac [`shadow_unit.cu_context`, `func'`, `shadow_sa`, `shadow_sb`] >> simp[]
+  `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
+    (qpat_assum `classify_functions tops = _` mp_tac >>
+     qpat_assum `MAP (set_external_package_target _ o _) _ = _` mp_tac >>
+     qpat_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME shadow_unit` mp_tac >>
+     rpt (qpat_x_assum `Abbrev _` mp_tac) >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[runtime_gas_shadow_unit_def, markerTheory.Abbrev_def] >>
+     pure_rewrite_tac [gas_shadow_external_package_def, GSYM APPEND_ASSOC, APPEND] >>
+     first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`func'`, `shadow_sa`, `shadow_sb`, `shadow_unit`] >> simp[]
+QED
+
+Theorem runtime_selected_body_shadow:
+  !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_selected_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    compile_guarded_body cenv F key ut iv fbody rt sa = ((),st') /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb.
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sa sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sa shadow_sb shadow_func
+Proof
+  rpt strip_tac >>
+  drule_all runtime_selected_body_shadow_with_shadow >>
+  disch_then (qx_choosel_then
+    [`func`, `shadow_ctx`, `shadow_func`, `cenv'`, `sb`, `shadow_sa`,
+     `shadow_sb`, `shadow_unit`] strip_assume_tac) >>
+  qexistsl_tac [`func`, `shadow_ctx`, `shadow_func`, `cenv'`, `sb`,
+                `shadow_sa`, `shadow_sb`] >> simp[]
+QED
+
+(* The fallback's payable check is compile_entry_checks at the minimum
+   calldata size 4, where the size check is skipped. *)
+Theorem compile_fallback_body_entry_checks[local]:
+  compile_entry_checks 4 pay s = ((),st) ==>
+  compile_fallback_body cenv pay nr key ut iv body rt s =
+    compile_guarded_body cenv nr key ut iv body rt st
+Proof
+  Cases_on `pay` >>
+  simp[compile_fallback_body_def, compile_entry_checks_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+(* run_lowering_pinned_body_interval for the fallback, compiled at the
+   fallback label after every external package's body. *)
+Theorem run_lowering_fallback_body_interval[local]:
+  run_lowering sels packs ints (SOME (ce,pay,nr,key,ut,iv,body,rt)) rp
+    buckets metadata dense info "__entry" = SOME unit /\
+  rp.rpol_frontend_dispatch = Linear /\
+  EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels /\
+  EVERY external_fn_shape_ok packs /\
+  EVERY internal_fn_shape_ok ints /\
+  fallback_shape_ok (SOME (ce,pay,nr,key,ut,iv,body,rt)) /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ints)) /\
+  fresh_label "fallback" (initial_compile_state "__entry") = (fl,ls) /\
+  compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
+    fl ls = ((),ds) /\
+  compile_external_fn_bodies packs ds = ((),opened) /\
+  new_block fl opened = (opened.cs_current_bb,checks) /\
+  compile_entry_checks 4 pay checks = ((),st) /\
+  compile_guarded_body ce nr key ut iv body rt st = ((),st') ==>
+  ?func.
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    MEM func unit.cu_context.ctx_functions /\
+    shape_state st /\ cs_extends st st' /\ fn_has_code st st' func
+Proof
+  strip_tac >>
+  `shape_state (initial_compile_state "__entry")` by
+    simp[shape_state_initial_compile_state] >>
+  Cases_on `compile_generate_runtime sels packs ints
+    (SOME (ce,pay,nr,key,ut,iv,body,rt)) Linear buckets metadata dense info
+    (initial_compile_state "__entry")` >>
+  rename1 `_ = (u,final)` >> Cases_on `u` >>
+  drule_all runtime_dispatch_shape_boundary >> strip_tac >>
+  drule_all runtime_external_boundary >> strip_tac >>
+  gvs[] >>
+  `compile_fallback_body ce pay nr key ut iv body rt checks =
+     compile_guarded_body ce nr key ut iv body rt st` by
+    (irule compile_fallback_body_entry_checks >> simp[]) >>
+  gvs[] >>
+  rename1 `compile_external_fn_bodies packs ds = ((),opened)` >>
+  `shape_state opened /\ cs_extends ds opened` by
+    (irule external_bodies_run_shape >> simp[] >> qexists_tac `packs` >> simp[]) >>
+  `shape_state checks /\ cs_extends opened checks` by
+    metis_tac[shape_state_new_block, cs_extends_new_block] >>
+  `shape_state st /\ cs_extends checks st` by
+    (mp_tac (Q.SPECL [`4`, `pay`] compile_entry_checks_shape) >>
+     pure_rewrite_tac[shape_step_def] >>
+     disch_then (qspecl_then [`checks`, `()`, `st`] mp_tac) >>
+     simp[shape_extends_def]) >>
+  `cs_extends st entry_end` by
+    (mp_tac (Q.SPECL [`ce`, `nr`, `key`, `ut`, `iv`, `body`, `rt`]
+       compile_guarded_body_shape) >>
+     impl_tac >- fs[fallback_shape_ok_def] >>
+     pure_rewrite_tac[shape_step_def] >>
+     disch_then (qspecl_then [`st`, `()`, `entry_end`] mp_tac) >>
+     simp[shape_extends_def]) >>
+  `MEM (mk_raw_function "__entry" (all_blocks entry_end))
+    unit.cu_context.ctx_functions` by
+    (irule run_lowering_packaged_entry_member >>
+     goal_assum $ drule_at Any >> simp[] >> metis_tac[]) >>
+  `?func. lookup_function "__entry" unit.cu_context.ctx_functions = SOME func` by
+    (irule lookup_function_exists_for_name >> simp[MEM_MAP] >>
+     goal_assum $ drule_at Any >> simp[mk_raw_function_def]) >>
+  `cs_extends (initial_compile_state "__entry") st` by
+    metis_tac[cs_extends_trans] >>
+  `cs_extends entry_end entry_end` by simp[cs_extends_refl] >>
+  drule_all run_lowering_entry_interval >> strip_tac >>
+  qexists_tac `func` >> gvs[] >>
+  irule external_decoder_fn_has_code >> simp[] >>
+  qexists_tac `initial_compile_state "__entry"` >> simp[]
+QED
+
+(* runtime_selected_body_shadow for the __default__ fallback: no
+   positional arguments, so the body starts right after the payable
+   check. *)
+Theorem runtime_fallback_body_shadow_with_shadow:
+  !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_fallback_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    compile_guarded_body cenv F key ut iv fbody rt sa = ((),st') /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      shadow_ctx = shadow_unit.cu_context /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sa sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sa shadow_sb shadow_func
+Proof
+  rpt gen_tac >> strip_tac >>
+  `runtime_bodies_shape_ok tops` by
+    metis_tac[supported_program_runtime_bodies_shape_ok] >>
+  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+    (FST (SND (classify_functions tops))))` by
+    (irule supported_names_internal_names_distinct >>
+     fs[supported_program_def, supported_declaration_names_def]) >>
+  fs[runtime_fallback_body_start_def] >>
+  gvs[compile_register_positional_args_def, comp_return_def] >>
+  rename1 `compile_entry_checks 4 pay checks = ((),st)` >>
+  `~EXISTS external_has_defaults exts` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  `fallback_shape_ok (SOME (ce,pay,F,key,ut,iv,fbody,
+     if ret = NoneT then NONE else SOME ret))` by
+    (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
+       `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def] >> strip_tac >>
+  qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
+  impl_tac >- fs[] >>
+  rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
+    (build_selectors (type_env tops) exts)` by
+    rewrite_tac[build_selectors_fn_labels] >>
+  `EVERY external_fn_shape_ok
+     (MAP (set_external_package_target rpolicy.rpol_target o
+       package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
+    (simp_tac (srw_ss()) [EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
+     rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
+  `EVERY internal_fn_shape_ok
+    (MAP (set_internal_package_target rpolicy.rpol_target o
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+     irule package_internal_fn_shape_ok >> gs[]) >>
+  `lowering_policy_ok rpolicy` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     rw[run_lowering_def]) >>
+  `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
+  `EVERY (\d. internal_label_ok (FST d))
+     (internal_fn_descriptors
+       (MAP (set_internal_package_target rpolicy.rpol_target o
+         package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)) /\
+   ALL_DISTINCT (MAP FST (internal_fn_descriptors
+       (MAP (set_internal_package_target rpolicy.rpol_target o
+         package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)))` by
+    gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+         internal_fn_descriptors_MAP_package_internal_fn] >>
+  `fresh_label "fallback" (initial_compile_state "__entry") =
+     (fallback_lbl,label_st)` by simp[] >>
+  qmatch_asmsub_abbrev_tac
+    `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
+  `fall = SOME (ce,pay,F,key,ut,iv,fbody,if ret = NoneT then NONE else SOME ret)` by
+    gvs[Abbr `fall`] >>
+  qpat_x_assum `Abbrev (fall = _)` kall_tac >> gvs[] >>
+  mp_tac (Q.INST
+    [`ints` |-> `ips`, `rp` |-> `rpolicy`, `body` |-> `fbody`,
+     `rt` |-> `if ret = NoneT then NONE else SOME ret`, `nr` |-> `F`,
+     `buckets` |-> `0`, `metadata` |-> `0`, `dense` |-> `[]`,
+     `fl` |-> `fallback_lbl`, `ls` |-> `label_st`, `ds` |-> `dispatch_st`]
+    run_lowering_fallback_body_interval) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule guarded_body_code >> strip_tac >>
+  `?cenv'. stmts_env ce NoLoop ret fbody st = (cenv',sb)` by
+    (irule guarded_body_stmts_env >> metis_tac[]) >>
+  `fn_has_code st sb func /\ fn_has_code sb st' func` by
+    metis_tac[fn_has_code_split] >>
+  qspec_then `packs` mp_tac gas_shadow_compiles_compile_external_fn_bodies >>
+  rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`dispatch_st`, `dispatch_st`] mp_tac) >>
+  simp[gas_shadow_state_refl] >>
+  Cases_on `compile_external_fn_bodies (MAP gas_shadow_external_package packs)
+    dispatch_st` >>
+  rename1 `_ = (z,shadow_opened)` >> simp[] >> strip_tac >> gvs[] >>
+  `gas_shadow_state checks (SND (new_block fallback_lbl shadow_opened))` by
+    (mp_tac (Q.INST [`label` |-> `fallback_lbl`] gas_shadow_compiles_new_block) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`opened`, `shadow_opened`] mp_tac) >> simp[]) >>
+  Cases_on `new_block fallback_lbl shadow_opened` >>
+  rename1 `_ = (oldbb,shadow_checks)` >> gvs[] >>
+  `oldbb = shadow_opened.cs_current_bb` by
+    (qpat_x_assum `new_block fallback_lbl shadow_opened = _` mp_tac >>
+     simp[new_block_def]) >>
+  `gas_shadow_state st (SND (compile_entry_checks 4 pay shadow_checks))` by
+    (mp_tac (Q.INST [`min_cds` |-> `4`, `payable` |-> `pay`]
+       gas_shadow_compiles_compile_entry_checks) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`checks`, `shadow_checks`] mp_tac) >> simp[]) >>
+  Cases_on `compile_entry_checks 4 pay shadow_checks` >>
+  rename1 `_ = (v,shadow_st)` >> Cases_on `v` >> gvs[] >>
+  `gas_shadow_state
+     (SND (compile_guarded_body ce F key ut iv fbody
+       (if ret = NoneT then NONE else SOME ret) st))
+     (SND (compile_guarded_body ce F key ut iv (MAP gas_shadow_stmt fbody)
+       (if ret = NoneT then NONE else SOME ret) shadow_st))` by
+    (irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def]
+       gas_shadow_compiles_compile_guarded_body)) >> simp[]) >>
+  Cases_on `compile_guarded_body ce F key ut iv (MAP gas_shadow_stmt fbody)
+    (if ret = NoneT then NONE else SOME ret) shadow_st` >>
+  rename1 `_ = (v,shadow_end)` >> Cases_on `v` >> gvs[] >>
+  qspecl_then [`fbody`, `ce`, `NoLoop`, `ret`] mp_tac gas_shadow_stmts_env >>
+  rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`st`, `shadow_st`] mp_tac) >> simp[] >>
+  Cases_on `stmts_env ce NoLoop ret (MAP gas_shadow_stmt fbody) shadow_st` >>
+  rename1 `_ = (ec,shadow_sb)` >> simp[] >> strip_tac >> gvs[] >>
+  `OPTREL gas_shadow_unit (SOME unit)
+    (run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package
+        (SOME (ce,pay,F,key,ut,iv,fbody,if ret = NoneT then NONE else SOME ret)))
+      rpolicy 0 0 [] info "__entry")` by
+    (qpat_x_assum `run_lowering sels packs ips _ _ _ _ _ _ _ = SOME unit`
+       (SUBST1_TAC o SYM) >> irule gas_shadow_run_lowering) >>
+  Cases_on `run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package
+        (SOME (ce,pay,F,key,ut,iv,fbody,if ret = NoneT then NONE else SOME ret)))
+      rpolicy 0 0 [] info "__entry"` >>
+  gvs[optionTheory.OPTREL_def] >> rename1 `gas_shadow_unit unit shadow_unit` >>
+  `EVERY external_fn_shape_ok (MAP gas_shadow_external_package packs)` by
+    (simp[EVERY_MAP, EVERY_MEM] >>
+     metis_tac[gas_shadow_external_fn_shape_ok, EVERY_MEM]) >>
+  `EVERY internal_fn_shape_ok (MAP gas_shadow_internal_package ips)` by
+    (simp[EVERY_MAP, EVERY_MEM] >>
+     metis_tac[gas_shadow_internal_fn_shape_ok, EVERY_MEM]) >>
+  `fallback_shape_ok (SOME (ce,pay,F,key,ut,iv,MAP gas_shadow_stmt fbody,
+     if ret = NoneT then NONE else SOME ret))` by
+    (drule gas_shadow_fallback_shape_ok >>
+     simp[gas_shadow_fallback_package_def]) >>
+  `EVERY (\d. internal_label_ok (FST d))
+      (internal_fn_descriptors (MAP gas_shadow_internal_package ips)) /\
+    ALL_DISTINCT (MAP FST (internal_fn_descriptors
+      (MAP gas_shadow_internal_package ips)))` by
+    simp[] >>
+  qpat_x_assum `run_lowering sels packs ips _ _ _ _ _ _ _ = _` kall_tac >>
+  gvs[gas_shadow_fallback_package_def] >>
+  mp_tac (Q.INST
+    [`packs` |-> `MAP gas_shadow_external_package packs`,
+     `ints` |-> `MAP gas_shadow_internal_package ips`,
+     `rp` |-> `rpolicy`, `unit` |-> `shadow_unit`,
+     `body` |-> `MAP gas_shadow_stmt fbody`,
+     `rt` |-> `if ret = NoneT then NONE else SOME ret`, `nr` |-> `F`,
+     `buckets` |-> `0`, `metadata` |-> `0`, `dense` |-> `[]`,
+     `fl` |-> `fallback_lbl`, `ls` |-> `label_st`, `ds` |-> `dispatch_st`,
+     `opened` |-> `shadow_opened`, `checks` |-> `shadow_checks`,
+     `st` |-> `shadow_st`, `st'` |-> `shadow_end`]
+    run_lowering_fallback_body_interval) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `stmts_env ce NoLoop ret (MAP gas_shadow_stmt fbody) =
+   stmts_env ce NoLoop
+     (case (if ret = NoneT then NONE else SOME ret) of
+        NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody)` by
+    (Cases_on `ret = NoneT` >- (
+       gvs[] >>
+       `~stmts_valued_return (MAP gas_shadow_stmt fbody)` by
+         metis_tac[type_stmts_none_valued_return, gas_shadow_valued_return] >>
+       `supported_stmts tops bindings (MAP gas_shadow_stmt fbody)` by
+         metis_tac[gas_shadow_supported_stmts] >>
+       irule stmtsEnvRetTyTheory.stmts_env_ret_ty >> metis_tac[]) >> simp[]) >>
+  `compile_stmts ce NoLoop
+     (case (if ret = NoneT then NONE else SOME ret) of
+        NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody) shadow_st =
+      ((),shadow_sb)` by
+    (simp[stmtSimPropsTheory.compile_stmts_env] >> gvs[]) >>
+  qpat_x_assum `compile_guarded_body _ _ _ _ _ (MAP _ _) _ _ = _`
+    (mp_tac o MATCH_MP guarded_body_code) >> strip_tac >>
+  gvs[] >> rename1 `gas_shadow_state sb shadow_sb` >>
+  `fn_has_code shadow_st shadow_sb func'` by metis_tac[fn_has_code_split] >>
+  `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
+    fs[gas_shadow_unit_def] >>
+  `gas_shadow_function func func'` by
+    (mp_tac gas_shadow_lookup_function >>
+     disch_then (qspecl_then [`unit.cu_context.ctx_functions`,
+        `shadow_unit.cu_context.ctx_functions`, `"__entry"`] mp_tac) >>
+     fs[gas_shadow_context_def]) >>
+  `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
+    (qpat_assum `set_fallback_package_target _ _ = SOME _` mp_tac >>
+     qpat_assum `classify_functions tops = _` mp_tac >>
+     qpat_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME shadow_unit` mp_tac >>
+     rpt (qpat_x_assum `Abbrev _` mp_tac) >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[runtime_gas_shadow_unit_def, markerTheory.Abbrev_def] >>
+     pure_rewrite_tac [gas_shadow_external_package_def,
+       gas_shadow_fallback_package_def, GSYM APPEND_ASSOC, APPEND] >>
+     first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`func'`, `shadow_st`, `shadow_sb`, `shadow_unit`] >>
+  simp[]
+QED
+
+(* The body's shadow placement at either entry endpoint: a selected
+   external package, or the __default__ fallback. *)
+Theorem runtime_entry_body_shadow_with_shadow:
+  !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_entry_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    compile_guarded_body cenv F key ut iv fbody rt sa = ((),st') /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      shadow_ctx = shadow_unit.cu_context /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sa sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sa shadow_sb shadow_func
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `runtime_entry_body_start _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [runtime_entry_body_start_def])
+  >- (drule_all runtime_selected_body_shadow_with_shadow >> simp[])
+  >- (drule_all runtime_fallback_body_shadow_with_shadow >> simp[])
+QED
+
+Theorem runtime_entry_body_shadow:
+  !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_entry_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    compile_guarded_body cenv F key ut iv fbody rt sa = ((),st') /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sa shadow_sb.
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sa sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sa shadow_sb shadow_func
+Proof
+  rpt strip_tac >>
+  drule_all runtime_entry_body_shadow_with_shadow >>
+  disch_then (qx_choosel_then
+    [`func`, `shadow_ctx`, `shadow_func`, `cenv'`, `sb`, `shadow_sa`,
+     `shadow_sb`, `shadow_unit`] strip_assume_tac) >>
+  qexistsl_tac [`func`, `shadow_ctx`, `shadow_func`, `cenv'`, `sb`,
+                `shadow_sa`, `shadow_sb`] >> simp[]
 QED
