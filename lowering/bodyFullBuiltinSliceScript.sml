@@ -4,11 +4,20 @@
 Theory bodyFullBuiltinSlice
 Ancestors
   bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose
+  bodyFullBuiltinSliceCode bodyFullBuiltinSliceMemoryTail
+  bodyFullBuiltinSliceDynamicCapture bodyFullBuiltinSliceFixedCapture
+  bodyFullBuiltinSliceOperands exprSimSliceExtcodeTyped
   bodyFullBuiltinBytestringQuery bodyFullBuiltinBytestringBuffer
   bodyFullBuiltinBytestringBounds bodyFullBuiltinBytestringCopy
+  bodyFullBuiltinBytestringAbort
+  bodyFullBuiltinSliceCodeTail
+  exprSimSliceSelfCode
   bodyPtrBytestringBuiltinsWindowGhost wordArgsPtr
   exprSimSliceSource exprSimSliceOrdinaryFrame exprSimHypsDefs
   exprLowering vyperInterpreter vyperAST list
+  fragExec emitHelperProps bodyPtrBytestringBuiltinsSlice
+  bodyPtrBytestringBuiltinsBuffer loweringPosts loweringStateRelDefs
+  reasonCodeResourcesPtr bodyPtrAttributeFields
 
 Theorem slice_builtin_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
