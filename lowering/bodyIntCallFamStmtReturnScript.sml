@@ -1,7 +1,8 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: Return. *)
 Theory bodyIntCallFamStmtReturn
 Ancestors
-  bodyIntCallReturnInactive
+  bodyIntCallReturnInactive bodyIntCallReturnUnlockCompose
+  bodyIntCallReturnUnlockBare bodyIntCallReturnUnlockEndpoint
   bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackExit
   bodyIntCallFamStmtReturnProducer bodyIntCallFamStmtReturnMemoryEndpoint
   bodySim stmtSimReturn stmtSimDefs loweringPosts compileEnv loweringStateRelDefs ctorReturnFrame
@@ -65,7 +66,13 @@ Theorem intcall_return_unlock_nonreentrant:
   FST fp.jc_root_ce.ce_nonreentrant ==>
   intcall_stmts_producer fp [Return eo]
 Proof
-  cheat
+  strip_tac >> Cases_on `eo`
+  >- (irule intcall_bare_return_unlock_producer >> simp[]) >>
+  rename1 `Return (SOME e)` >>
+  irule intcall_valued_return_from_endpoint >> reverse conj_tac
+  >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  irule intcall_return_unlock_endpoint >> metis_tac[]
 QED
 
 Theorem intcall_return_stmt_step:
