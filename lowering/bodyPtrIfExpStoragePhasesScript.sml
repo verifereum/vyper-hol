@@ -189,29 +189,3 @@ Proof
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, Abbr `r`,
     eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
-
-Theorem ifexp_copy_store_phase:
-  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
-  eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
-  ?t tn'.
-    run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
-    inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var addr;value] []]
-      s G tn' /\
-    t = mstore (w2n d) w s /\
-    tn'.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + 32}) UNION
-      {w2n d + k | k IN op_taint tn value} /\
-    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
-Proof
-  strip_tac >>
-  `step_inst_base (mk_inst id MSTORE [Var addr;value] []) s =
-     OK (mstore (w2n d) w s)` by
-    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
-  `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var addr;value] []) s` by
-    (irule ifexp_materialize_mstore_check >> simp[]) >>
-  qexistsl_tac [`mstore (w2n d) w s`,
-    `step_taint (mk_inst id MSTORE [Var addr;value] []) s (mstore (w2n d) w s) tn`] >>
-  simp[run_inst_seq_def, inst_seq_ptr_def, scalar_void_prov] >>
-  conj_tac >- simp[ifexp_materialize_mstore_taint] >>
-  simp[ifexp_materialize_mstore_ghost]
-QED

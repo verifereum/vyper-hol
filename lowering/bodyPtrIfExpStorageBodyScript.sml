@@ -1,6 +1,7 @@
 Theory bodyPtrIfExpStorageBody
 Ancestors
   bodyPtrIfExpStoragePhases bodyPtrIfExpBytesCounted slotCopyExecution copyExecution
+  wordLoadStorePtr
   exprLoweringProps fragExec venomExecSemantics venomState venomInst
   finite_map ptrDiscipline instIdxIndep bodyPtrDefs fragGasSeqPtr
 

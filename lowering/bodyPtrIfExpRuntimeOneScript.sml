@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpRuntimeOne
 Ancestors bodyPtrIfExpRuntimeCompiler bodyPtrIfExpRuntimeOffset
-  bodyPtrIfExpMaterializeWord exprSimCopy exprSimStorageCopy fragExec
+  bodyPtrIfExpMaterializeWord exprSimCopy exprSimStorageCopy fragExec wordLoadStorePtr
   instIdxIndep venomState emitHelper context compileEnv loweringStateRelDefs venomExecSemantics
   venomInst exprSimPtrProps fragGasPathPtr immutableCopyExecution
   exprLoweringProps emitHelperProps bodyPtrIfExpScalarLoad finite_map

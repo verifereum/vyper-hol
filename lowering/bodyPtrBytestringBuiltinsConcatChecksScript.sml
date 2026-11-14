@@ -1,9 +1,9 @@
 (* Pointer checks for the straight-line Concat append arms. *)
 Theory bodyPtrBytestringBuiltinsConcatChecks
 Ancestors
-  bodyPtrBytestringBuiltinsConcatPrefix assignTuplePtrLocalBytesCopy
+  bodyPtrBytestringBuiltinsAllocation assignTuplePtrLocalBytesCopy
   exprSimConcatStep concatMemory wordLoadStorePtr exprPtrUnwrapOffsetSegment
-  bodyPtrIfExpBytesFrame bodyPtrIfExpBytesCounted bodyPtrIfExpStoragePhases
+  assignTuplePtrLocalFixedCopy bodyPtrDefs
   context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps venomInst venomState
   venomExecSemantics ptrDiscipline fragGasSeqPtr finite_map words pred_set list
 
@@ -50,9 +50,7 @@ QED
 Resume concat_fixed_seq_ptr[offset]:
   qabbrev_tac `s0 = t' with vs_inst_idx := SUC t.vs_inst_idx` >>
   `ptr_covers G' tn' dp s0 (bsz-32)` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`G`,`t`,`tn`] >>
-     gvs[Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+    (gvs[ptr_covers_def, Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `lookup_var dp s0 = SOME (n2w (B+32)) /\
    eval_operand (Var r0) s0 = SOME (n2w k)` by
     (gvs[Abbr `s0`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
@@ -111,9 +109,7 @@ Resume concat_fixed_seq_ptr[last_store]:
       lookup_var_def, update_var_def, mstore_def,
       write_memory_with_expansion_def, write_memory_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `ptr_covers H th oq s3 32` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`G`,`t`,`tn`] >> simp[] >>
-     gvs[op_taint_def] >> metis_tac[]) >>
+    (gvs[ptr_covers_def, op_taint_def] >> metis_tac[]) >>
   `eval_operand (Var oq) s3 = SOME ow /\
    eval_operand (Var r2) s3 = SOME (n2w k+n2w m)` by
     simp[eval_operand_def, Abbr `s3`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
@@ -253,9 +249,7 @@ QED
 Resume concat_bytes_seq_ptr[source_offset]:
   qabbrev_tac `s0 = t' with vs_inst_idx := SUC t.vs_inst_idx` >>
   `ptr_covers G' tn' src s0 (32+N)` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`G`,`t`,`tn`] >>
-     gvs[Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+    (gvs[ptr_covers_def, Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `lookup_var src s0 = SOME sw` by
     (gvs[Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `eval_operand (Lit 32w) s0 = SOME (n2w 32) /\ op_taint tn' (Lit 32w) = {}` by
@@ -269,9 +263,7 @@ QED
 Resume concat_bytes_seq_ptr[offset_load]:
   qabbrev_tac `s1 = t'' with vs_inst_idx := SUC s0.vs_inst_idx` >>
   `ptr_covers Gf tnf oq s1 32` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`G`,`t`,`tn`] >>
-     gvs[Abbr `s1`, Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+    (gvs[ptr_covers_def, Abbr `s1`, Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `lookup_var oq s1 = SOME ow` by
     (gvs[Abbr `s1`, Abbr `s0`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tnf.t_mem` by gvs[] >>
@@ -283,9 +275,7 @@ QED
 Resume concat_bytes_seq_ptr[dest_offset]:
   qabbrev_tac `s2 = t''' with vs_inst_idx := SUC s1.vs_inst_idx` >>
   `ptr_covers G'' tn'' dp s2 (bsz-32)` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`G`,`t`,`tn`] >>
-     gvs[Abbr `s2`, Abbr `s1`, Abbr `s0`, lookup_var_def,
+    (gvs[ptr_covers_def, Abbr `s2`, Abbr `s1`, Abbr `s0`, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `lookup_var dp s2 = SOME (n2w (B+32)) /\
    eval_operand (Var r2) s2 = SOME (n2w k)` by
@@ -303,9 +293,7 @@ Resume concat_bytes_seq_ptr[copy]:
   qabbrev_tac `s3 = t'''' with vs_inst_idx := SUC s2.vs_inst_idx` >>
   `ptr_covers Gf' tnf' r3 s3 N` by simp[Abbr `s3`] >>
   `ptr_covers Gf' tnf' r1 s3 N` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`Gf`,`t''`,`tnf`] >>
-     gvs[Abbr `s3`, Abbr `s2`, Abbr `s1`, lookup_var_def,
+    (gvs[ptr_covers_def, Abbr `s3`, Abbr `s2`, Abbr `s1`, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `lookup_var r1 s3 = SOME (sw+32w) /\
    lookup_var r3 s3 = SOME (n2w (B+32)+n2w k) /\
@@ -326,7 +314,7 @@ Resume concat_bytes_seq_ptr[copy_certificate]:
     (step_taint (mk_inst (sx.cs_next_id+4) MCOPY [Var r3;Var r1;Var r0] []) s3
       (mcopy (w2n (n2w (B+32)+n2w k:256 word)) (w2n (sw+32w:256 word))
         (w2n (n2w N:256 word)) s3) tnf')`
-  >- (match_mp_tac bodyPtrIfExpBytesCountedTheory.mcopy_operand_seq_ptr >> simp[]) >>
+  >- (match_mp_tac (cj 1 assignTuplePtrLocalFixedCopyTheory.mcopy_operand_seq_ptr) >> simp[]) >>
   suspend "copy_frame"
 QED
 
@@ -410,9 +398,7 @@ Resume concat_bytes_seq_ptr[last_store]:
       lookup_var_def, update_var_def, mcopy_def,
       write_memory_with_expansion_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `ptr_covers H th oq s5 32` by
-    (irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
-     qexistsl_tac [`G`,`t`,`tn`] >> simp[] >>
-     gvs[op_taint_def] >> metis_tac[]) >>
+    (gvs[ptr_covers_def, op_taint_def] >> metis_tac[]) >>
   `eval_operand (Var oq) s5 = SOME ow /\
    eval_operand (Var r4) s5 = SOME (n2w k+n2w N)` by
     simp[eval_operand_def, Abbr `s5`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
