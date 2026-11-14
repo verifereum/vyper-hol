@@ -82,7 +82,7 @@ Proof
   `ss.vs_allocas = FEMPTY /\ ss.vs_inst_idx = 0` by
     fs[Abbr `ss`, initial_venom_state_rel_def] >>
   drule gas_path_mem_exec >> strip_tac >> gvs[fragExecTheory.exit_result_def] >>
-  drule registration_path_code >> simp[] >> strip_tac >>
+  drule gas_path_code_labels >> simp[] >> strip_tac >>
   rpt conj_tac
   >- (irule gas_path_mem_zero_history >> simp[] >>
       qexistsl_tac [`ctx`, `ss`] >> simp[alloca_history_empty] >>
