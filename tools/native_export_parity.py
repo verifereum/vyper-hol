@@ -31,9 +31,10 @@ then compiles each JSON natively, and each contract gets a verdict:
                list is stale (a listed contract no longer mismatches or is
                gone); fails the check
 
-Run it with the patched pin's Python and PYTHONHASHSEED=0:
+Run it with the patched pin's Python and PYTHONHASHSEED=0 (not with -I,
+which ignores PYTHONHASHSEED; -P -s isolate the imports instead):
 
-  PYTHONHASHSEED=0 VENV/bin/python -I tools/native_export_parity.py \\
+  PYTHONHASHSEED=0 VENV/bin/python -P -s tools/native_export_parity.py \\
       tests/vyper-test-exports WORKDIR [--report FILE]
 """
 
@@ -145,7 +146,7 @@ def seed_dependent(contract: Contract, native: Path) -> bool:
               "print(n.compile_contract(sys.stdin.read(), pathlib.Path(sys.argv[2]))[1], end='')")
     for seed in OTHER_SEEDS:
         code = subprocess.run(
-            [sys.executable, "-I", "-c", script, str(ROOT / "tools"), contract.id + ".vy"],
+            [sys.executable, "-P", "-s", "-c", script, str(ROOT / "tools"), contract.id + ".vy"],
             input=contract.source, capture_output=True, text=True, check=True,
             env={**os.environ, "PYTHONHASHSEED": str(seed)})
         if code.stdout == native.read_text():
@@ -235,8 +236,9 @@ def main() -> None:
     parser.add_argument("--report", type=Path, help="also write the report here")
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     args = parser.parse_args()
-    if os.environ.get("PYTHONHASHSEED") != "0":
-        raise SystemExit("run with PYTHONHASHSEED=0: Vyper's bytes depend on it")
+    if os.environ.get("PYTHONHASHSEED") != "0" or sys.flags.hash_randomization:
+        raise SystemExit("run with PYTHONHASHSEED=0, and without -I or -E, which ignore it: "
+                         "Vyper's bytes depend on it")
     import vyper
     pin = (ROOT / "VYPER_PIN").read_text().strip()
     if len(vyper.__commit__) < 8 or not pin.startswith(vyper.__commit__):

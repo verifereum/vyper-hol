@@ -463,7 +463,7 @@ def main():
     for source in exported:  # programs after a runner crash
         verdicts.setdefault(source.stem, ("runner-error", f"no runner verdict (runner exit {status})"))
     for name, reason in unchecked.items():
-        if verdicts[name][0] != "frontend-gap":
+        if verdicts[name][0] not in ("frontend-gap", "runner-error"):
             verdicts[name] = ("checker-gap", f"{reason[:200]} (runner: {verdicts[name][1] or 'pass'})")
     counts.update(category for category, _ in verdicts.values())
     for name, (category, detail) in verdicts.items():

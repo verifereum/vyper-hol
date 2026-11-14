@@ -271,7 +271,7 @@ jobs:
 
       - name: Check native bytecode parity on the exported contracts
         run: |
-          PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -I \
+          PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -P -s \
             tools/native_export_parity.py tests/vyper-test-exports "$RUNNER_TEMP/export-parity" \
             --report export-parity-report.txt
 
