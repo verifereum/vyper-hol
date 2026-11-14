@@ -31,6 +31,8 @@ Ancestors
   asmOptCodeRuntime asmOptCodeCommon e2eSelfCodeFree
   list
 
+val _ = Parse.hide "tops";
+
 (* =====================================================================
    Call-Level Correctness (Main Theorem)
    ===================================================================== *)
