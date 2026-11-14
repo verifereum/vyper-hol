@@ -942,7 +942,7 @@ Theorem ld_invoke_pop_core:
   ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
   fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
   t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
-  inst.inst_opcode = INVOKE /\ 
+  inst.inst_opcode = INVOKE /\
   decode_invoke inst = SOME (nm,ops) /\
   lookup_function nm C.ctx_functions = SOME callee /\
   eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
