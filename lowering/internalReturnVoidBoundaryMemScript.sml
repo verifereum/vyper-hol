@@ -37,7 +37,7 @@ Proof
     fs[stmt_state_rel_def, state_rel_def] >>
   gvs[] >> drule_all compile_internal_void_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  goal_assum (drule_at Any) >> simp[intret_q_def] >>
+  goal_assum (drule_at Any) >> irule intret_q_intro >> simp[] >>
   qexists_tac `s0` >>
   simp[result_rel_def, intret_vals_match_def] >>
   conj_tac

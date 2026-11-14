@@ -81,7 +81,7 @@ QED
    tuple: subscript_type_ok is false of every other type, and a place-typed
    base whose place_type is ValPT has a value vtype, which subscript_vtype
    indexes only for an array. *)
-Theorem subscript_base_array_or_tuple[local]:
+Theorem subscript_base_array_or_tuple:
   !cenv cx env ann obj idx es.
     expr_body_pre cenv cx env (Subscript ann obj idx) es /\
     place_type cenv obj = ValPT (expr_type obj) ==>

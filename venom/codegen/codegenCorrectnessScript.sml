@@ -39,8 +39,8 @@
  *
  * Reverted — handled explicitly (separate case in theorem conclusion).
  *
- * WriteInStaticContext — initial_ctx_rel excludes static entry frames.
- *   Venom does not demote writes to nops; no static-write simulation is claimed.
+ * WriteInStaticContext — a state write in a static frame faults on both
+ *   sides: Venom aborts, the assembly faults, the EVM frame fails.
  *
  * OutOfBoundsRead — RETURNDATACOPY past returndata length. Should be
  *   discharged by construction: Venom ExHalt maps to this. The proof

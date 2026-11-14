@@ -329,9 +329,11 @@ Resume compile_internal_return_memory_frag[fragments]:
   `frag_exec ctx sm sb (\s. s = return_unlock_state cenv pre) (\s. F)
      (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
     (irule emit_ret_pc_frag >> qexists_tac `rpc` >> simp[] >>
-     simp[intret_mem_q_def, intret_q_def, result_rel_def,
-          intret_vals_match_def] >>
-     conj_tac >- (qexists_tac `pre` >> fs[stmt_state_rel_def]) >>
+     simp[intret_mem_q_def] >>
+     conj_tac
+     >- (irule intret_q_intro >>
+         simp[result_rel_def, intret_vals_match_def] >>
+         qexists_tac `pre` >> fs[stmt_state_rel_def]) >>
      simp[Abbr `pre`]) >>
   `frag_exec ctx sa sb (\s. s = s0) (\s. F)
      (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by

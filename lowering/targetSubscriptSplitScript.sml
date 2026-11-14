@@ -642,9 +642,9 @@ QED
 
 Theorem target_subscript_extend_summary_normal:
   extend_place cx pv (ValueSubscript key) es = (INL pv',es') /\
-  gas_marked_path F ctx func s 0 (OK u) /\
+  gas_marked_path memory ctx func s 0 (OK u) /\
   Q (INL pv') (es' with gas_obs := []) u ==>
-  gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
+  gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
     (es,s) Q (\res ee r. expr_exit res r)
 Proof
   strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
@@ -655,9 +655,9 @@ QED
 
 Theorem target_subscript_extend_summary_error:
   extend_place cx pv (ValueSubscript key) es = (INR err,es') /\
-  gas_marked_path F ctx func s 0 r /\
+  gas_marked_path memory ctx func s 0 r /\
   exit_result r /\ expr_exit (INR err) r ==>
-  gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
+  gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
     (es,s) Q (\res ee r. expr_exit res r)
 Proof
   strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
@@ -670,17 +670,17 @@ QED
 (* A successful index is followed by a no-observation place extension.
    The continuation summary retains the exact source extension computation. *)
 Theorem target_subscript_index_bind_outcome:
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome memory (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (mid,t)
     (\res ee u. ?key. res = INL key /\ P key ee u)
     (\res ee r. expr_exit res r) /\
   (!right key ee u.
-    gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (mid,t) right (INL key) ee (OK u) /\
     P key (ee with gas_obs := []) u ==>
-    gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
+    gas_summary_at memory (ctx,func) [] (extend_place cx pv (ValueSubscript key))
       (ee with gas_obs := [],u) Q (\res ee r. expr_exit res r)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome memory (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
     (mid,t) Q (\res ee r. expr_exit res r)
@@ -714,29 +714,21 @@ Proof
 QED
 
 Theorem target_subscript_bind_outcome:
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+  gas_outcome memory (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
     (\res ee t. ?pv. res = INL pv /\ P pv ee t)
     (\res ee r. expr_exit res r) /\
   (!left pv mid t.
-    gas_marked_exec F (ctx,func) (eval_base_place cx bt)
+    gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
       (es,s0) left (INL pv) mid (OK t) /\
     P pv (mid with gas_obs := []) t ==>
-    gas_outcome F (cx_tops cx) (ctx,func)
+    gas_outcome memory (cx_tops cx) (ctx,func)
       (bind (bind (eval_expr cx e) (read_result cx))
         (\key. extend_place cx pv (ValueSubscript key)))
-      (mid with gas_obs := [],t)
-      (\res ee u. ?pv'. res = INL pv' /\
-        target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-        u.vs_current_bb = sb.cs_current_bb /\
-        u.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (mid with gas_obs := [],t) Q
       (\res ee r. expr_exit res r)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome memory (cx_tops cx) (ctx,func)
     (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    Q (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
@@ -923,7 +915,7 @@ Proof
   imp_res_tac (cj 2 subscript_pop_not_label) >> gvs[]
 QED
 
-Theorem target_subscript_index_source_diagnostic[local]:
+Theorem target_subscript_index_source_diagnostic:
   expr_body_pre cenv cx env e s /\
   bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
   expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value key)
@@ -933,7 +925,7 @@ Proof
   simp[]
 QED
 
-Theorem target_subscript_index_runtime_diagnostic[local]:
+Theorem target_subscript_index_runtime_diagnostic:
   expr_body_pre cenv cx env e s /\
   bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
   ?itv. evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
@@ -944,7 +936,7 @@ Proof
   drule read_result_state >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem target_subscript_memory_array_ready[local]:
+Theorem target_subscript_memory_array_ready:
   expr_sim_inv cenv cx env es /\
   target_post ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path)) bvt rb s /\
@@ -1057,7 +1049,7 @@ Proof
   fs[expr_sim_inv_def]
 QED
 
-Theorem target_subscript_suffix_var[local]:
+Theorem target_subscript_suffix_var:
   target_subscript_suffix cenv e rb ix sn = (op,sb) ==>
   !x. FST op = Var x ==> not_fresh_at sb x
 Proof
@@ -1071,7 +1063,7 @@ Proof
   metis_tac[exprOperandVarTheory.compiler_subscript_ops_var]
 QED
 
-Theorem target_subscript_vtype_well_formed[local]:
+Theorem target_subscript_vtype_well_formed:
   !tenv base_vt idx_ty result_vt.
     well_formed_vtype tenv base_vt /\
     subscript_vtype base_vt idx_ty = SOME result_vt ==>
@@ -1112,7 +1104,7 @@ Proof
   drule_all attribute_type_runtime_step >> strip_tac >> metis_tac[]
 QED
 
-Theorem target_subscript_pre_result_well_formed[local]:
+Theorem target_subscript_pre_result_well_formed:
   target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
   well_formed_vtype (get_tenv cx) vt
 Proof
@@ -1122,7 +1114,7 @@ Proof
   fs[env_consistent_def, env_context_consistent_def]
 QED
 
-Theorem target_subscript_marked_nonhalted[local]:
+Theorem target_subscript_marked_nonhalted:
   gas_marked_exec memory (ctx,func) source (es,s0) marks res mid (OK t) ==>
   ~t.vs_halted
 Proof

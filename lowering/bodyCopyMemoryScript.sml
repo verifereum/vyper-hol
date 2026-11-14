@@ -42,7 +42,7 @@ Proof
   simp[DROP_APPEND, DROP_LENGTH_TOO_LONG, mk_inst_def, is_terminator_def]
 QED
 
-Theorem copy_memory_body_history[local]:
+Theorem copy_memory_body_history:
   compile_copy_memory dst src n sa = ((),sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -647,7 +647,7 @@ Proof
     (qspecl_then [`b`, `k`] mp_tac) >> metis_tac[ADD_COMM]
 QED
 
-Theorem copy_memory_body_code[local]:
+Theorem copy_memory_body_code:
   compile_copy_memory dst src n sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)

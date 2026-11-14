@@ -338,7 +338,7 @@ QED
 
 (* A field step reads no gas: its result and state do not depend on the
    source's gas observations. *)
-Theorem extend_place_attr_gas_obs[local]:
+Theorem extend_place_attr_gas_obs:
   !cx pv fld es gs.
     extend_place cx pv (AttrSubscript fld) (es with gas_obs := gs) =
       (FST (extend_place cx pv (AttrSubscript fld) es), es with gas_obs := gs) /\
@@ -389,7 +389,7 @@ QED
 
 (* The source's field step on a base place typed by a struct: the field's
    place, at the base's pointer plus the field's offset. *)
-Theorem attr_place_step[local]:
+Theorem attr_place_step:
   !cenv cx env es1 es' t pv w0 rb sid fld fty res.
     expr_sim_inv cenv cx env es1 /\
     place_ptr_rel cenv cx t pv w0 (FST (SND rb)) (Type (StructT sid)) /\

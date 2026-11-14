@@ -45,7 +45,7 @@ Proof
   drule_all compile_internal_word_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >>
-  simp[intret_q_def] >>
+  irule intret_q_intro >> simp[] >>
   qexists_tac `s` >>
   simp[result_rel_def] >> conj_tac
   >- fs[stmt_state_rel_def] >>

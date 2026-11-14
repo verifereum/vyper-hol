@@ -2925,7 +2925,7 @@ Proof
 QED
 
 (* Bytestring code uses the runtime length, independently of capacity. *)
-Theorem store_slots_bytes_compile_eq[local]:
+Theorem store_slots_bytes_compile_eq:
   !cenv src dst dty sty tr.
     is_bytestring_type dty /\ is_bytestring_type sty ==>
     compile_store_slots cenv src dst dty tr =
@@ -2944,7 +2944,7 @@ Proof
        is_bytestring_type_def]
 QED
 
-Theorem store_slots_bytes_encoding[local]:
+Theorem store_slots_bytes_encoding:
   !tenv sty dty stv tv v.
     is_bytestring_type sty /\ is_bytestring_type dty /\
     type_widens_to tenv sty dty /\
