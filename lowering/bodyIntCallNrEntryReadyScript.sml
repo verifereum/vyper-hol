@@ -8,6 +8,8 @@ Ancestors
   vyperState fragGasSeq fragGasSeqAbort venomInst emitHelper
   supportedProgram bodySim bodyIntCallActualEntrySemantic compileVyper
   bodyIntCallPackageBounds bodyIntCallJointInputs bodyMemoryDefs vyperContext
+  bodyIntCallSeamDefs gasOutcome gasSummary gasExemptCert fragGasMode fragGasPath
+  bodyIntCallPackagePrefix
 
 Theorem internal_entry_lock_runtime_resources:
   fmp_room ctx func s /\ immutable_base_zero ce s /\
@@ -314,4 +316,30 @@ Proof
   qpat_x_assum `!locked. lock_if_nr cx _ _ _ = _ ==> _` drule >>
   simp[] >> qpat_x_assum `lock_if_nr cx _ _ _ = _` mp_tac >>
   simp[lock_if_nr_def]
+QED
+
+Theorem intcall_callee_lock_success_outcome[local]:
+  (!gs. lock_if_nr cx T (is_view_mut mut) (es with gas_obs := gs) =
+    (INL (),locked with gas_obs := gs)) /\ ~s.vs_halted /\
+  gas_outcome F tops (ctx,func) (intcall_callee_src cx name mut F ss)
+    (locked,s) Q R ==>
+  gas_outcome F tops (ctx,func) (intcall_callee_src cx name mut T ss)
+    (es,s) Q R
+Proof
+  rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
+      qexistsl [`res`, `es_end`, `r`] >>
+      pure_rewrite_tac[gas_marked_exec_def] >> simp[] >>
+      pure_rewrite_tac[intcall_callee_src_def, ignore_bind_def, bind_def] >>
+      asm_rewrite_tac[] >> fs[intcall_callee_src_F, ignore_bind_def]) >>
+  disj2_tac >> qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
+  pure_rewrite_tac[intcall_callee_src_def, ignore_bind_def, bind_assoc] >>
+  BETA_TAC >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_exempt_cert_bind_unit))) >>
+  qexistsl [`locked`, `s`] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules] >>
+  fs[intcall_callee_src_F, ignore_bind_def] >>
+  drule stmtSimDeclGasTheory.gas_exempt_cert_start_gas_obs >> simp[]
 QED
