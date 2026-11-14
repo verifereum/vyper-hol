@@ -76,13 +76,14 @@ QED
    for pack_checks, even with no protected triples and completely clean taint.
    This is an interface probe, not a reachable-program counterexample. *)
 Theorem ricf_pack_two_overlap_probe:
-  let s = s0 with vs_memory :=
-    GENLIST (\i. if i = 0 \/ i = 64 then 1w else 2w) 128 in
-  read_memory 0 1 s = read_memory 64 1 s /\
-  read_memory 32 1 s = read_memory 96 1 s /\
-  ~ricf_pack_checks {} (32w:bytes32)
-    ([(0w,1w);(32w,1w)]:(bytes32 # bytes32) list)
-    ([(64w,1w);(96w,1w)]:(bytes32 # bytes32) list) {} s s
+  read_memory 0 1 (s0 with vs_memory := GENLIST (\i. if i = 0 \/ i = 64 then 1w else 2w) 128) =
+  read_memory 64 1 (s0 with vs_memory := GENLIST (\i. if i = 0 \/ i = 64 then 1w else 2w) 128)
+  /\ read_memory 32 1 (s0 with vs_memory := GENLIST (\i. if i = 0 \/ i = 64 then 1w else 2w)
+  128) = read_memory 96 1 (s0 with vs_memory := GENLIST (\i. if i = 0 \/ i = 64 then 1w else 2w)
+  128) /\ ~ricf_pack_checks {} (32w:bytes32) ([(0w,1w);(32w,1w)]:(bytes32 # bytes32) list)
+  ([(64w,1w);(96w,1w)]:(bytes32 # bytes32) list) {} (s0 with vs_memory := GENLIST (\i. if i = 0
+  \/ i = 64 then 1w else 2w) 128) (s0 with vs_memory := GENLIST (\i. if i = 0 \/ i = 64 then 1w
+  else 2w) 128)
 Proof
   `dimword (:256) = 2 ** 256` by
     simp[wordsTheory.dimword_def, fcpTheory.index_bit0,

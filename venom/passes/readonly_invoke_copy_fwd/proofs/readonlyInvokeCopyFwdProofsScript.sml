@@ -213,20 +213,11 @@ Proof
 QED
 
 Theorem ricf_block_step_mcopy[simp]:
-  i < LENGTH cur_bb.bb_instructions /\
-  (EL i cur_bb.bb_instructions).inst_opcode = MCOPY ==>
-  ricf_block_step ctx (changed, cur_bb) i =
-    case ricf_try_forward ctx cur_bb i of
-      NONE => (changed, cur_bb)
-    | SOME (src_var_opt, rewrite_sites) =>
-        let src_op =
-          case src_var_opt of
-            SOME sv => Var sv
-          | NONE =>
-              EL 1 (EL i cur_bb.bb_instructions).inst_operands in
-        let new_insts = ricf_apply_forward
-          cur_bb.bb_instructions i src_op rewrite_sites in
-        (T, cur_bb with bb_instructions := new_insts)
+  i < LENGTH cur_bb.bb_instructions /\ (EL i cur_bb.bb_instructions).inst_opcode = MCOPY ==>
+  ricf_block_step ctx (changed, cur_bb) i = case ricf_try_forward ctx cur_bb i of NONE =>
+  (changed, cur_bb) | SOME (src_var_opt, rewrite_sites) => (T, cur_bb with bb_instructions :=
+  (ricf_apply_forward cur_bb.bb_instructions i (case src_var_opt of SOME sv => Var sv | NONE =>
+  EL 1 (EL i cur_bb.bb_instructions).inst_operands) rewrite_sites))
 Proof
   rw[ricf_block_step_def]
 QED

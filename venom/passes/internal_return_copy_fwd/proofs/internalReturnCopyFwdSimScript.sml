@@ -491,23 +491,17 @@ Proof
 QED
 
 Theorem ircf_forward_copy_transport:
-  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
-  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
-  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
-  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
-  ircf_alias_boundary fn s G /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\ s.vs_inst_idx = k /\
-  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
-  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
-  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t ==>
-  ?db rb.
-    lookup_var d s = SOME (n2w db) /\ lookup_var sr s = SOME (n2w rb) /\
-    let tm = tn with t_mem :=
-      (tn.t_mem DIFF {i | db <= i /\ i < db+w2n sz}) UNION
-      {db+q | q < w2n sz /\ rb+q IN tn.t_mem} in
-    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tm
-      (mcopy db rb (w2n sz) s) t /\
-    ircf_cross tm {(db,rb,w2n sz)} (mcopy db rb (w2n sz) s) t
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\ vs.vs_allocas = FEMPTY /\
+  ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\ wf_function fn /\
+  wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\ ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\ s.vs_inst_idx = k /\ k IN ircf_fwds bb
+  (ircf_tbb fn_meta rma C fn bb) /\ ircf_copy_roots fn (EL k bb.bb_instructions) = SOME
+  (d,sr,sz) /\ taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t ==> ?db rb.
+  lookup_var d s = SOME (n2w db) /\ lookup_var sr s = SOME (n2w rb) /\ taint_agree D (ircf_dead
+  (ircf_dst_ids fn_meta rma C) s stk) (tn with t_mem := (tn.t_mem DIFF {i | db <= i /\ i <
+  db+w2n sz}) UNION {db+q | q < w2n sz /\ rb+q IN tn.t_mem}) (mcopy db rb (w2n sz) s) t /\
+  ircf_cross (tn with t_mem := (tn.t_mem DIFF {i | db <= i /\ i < db+w2n sz}) UNION {db+q | q <
+  w2n sz /\ rb+q IN tn.t_mem}) {(db,rb,w2n sz)} (mcopy db rb (w2n sz) s) t
 Proof
   strip_tac >> drule_all ircf_forward_copy_sites >> strip_tac >>
   `MEM fn C.ctx_functions` by
@@ -2785,24 +2779,18 @@ Proof
 QED
 
 Theorem ircf_setup_entry:
-  frame_reachable vs C stk PG G tn caller inst s /\
-  active_inst caller inst s /\ inst.inst_opcode = INVOKE /\
-  decode_invoke inst = SOME (nm,ops) /\
-  lookup_function nm C.ctx_functions = SOME callee /\
-  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
-  taint_ok caller tn inst s /\
-  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
-  ircf_cross tn (ircf_gam_cur fn_meta rma C caller s UNION
-                ircf_gam_stk fn_meta rma C stk) s t ==>
-  let f = <| cf_fn := caller; cf_inst := inst; cf_state := s;
-             cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>;
-      callee' = ircf_transform_function fn_meta C.ctx_functions rma callee
-  in ?ct. eval_operands ops t = SOME args /\
-    setup_callee callee' args t = SOME ct /\
-    ircf_R D fn_meta rma C (f::stk) (MAP (op_prov G) ops) FEMPTY
-      (tn with t_var := FEMPTY) callee cs ct /\
-    block_reach vs C (f::stk) (MAP (op_prov G) ops) FEMPTY
-      (tn with t_var := FEMPTY) callee cs
+  frame_reachable vs C stk PG G tn caller inst s /\ active_inst caller inst s /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\ lookup_function nm
+  C.ctx_functions = SOME callee /\ eval_operands ops s = SOME args /\ setup_callee callee args s
+  = SOME cs /\ taint_ok caller tn inst s /\ taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma
+  C) s stk) tn s t /\ ircf_cross tn (ircf_gam_cur fn_meta rma C caller s UNION ircf_gam_stk
+  fn_meta rma C stk) s t ==> ?ct. eval_operands ops t = SOME args /\ setup_callee
+  (ircf_transform_function fn_meta C.ctx_functions rma callee) args t = SOME ct /\ ircf_R D
+  fn_meta rma C ((<| cf_fn := caller; cf_inst := inst; cf_state := s; cf_params := PG; cf_prov
+  := G; cf_tvar := tn.t_var |>)::stk) (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY)
+  callee cs ct /\ block_reach vs C ((<| cf_fn := caller; cf_inst := inst; cf_state := s;
+  cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>)::stk) (MAP (op_prov G) ops) FEMPTY (tn
+  with t_var := FEMPTY) callee cs
 Proof
   simp[] >> strip_tac >>
   `eval_operands ops s = eval_operands ops t` by
@@ -2894,28 +2882,19 @@ Proof
 QED
 
 Theorem ircf_invoke_recursive_result:
-  ctx_wf C /\
-  fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
-    (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
-  frame_reachable vs C stk PG G tn caller inst s /\
-  active_inst caller inst s /\ inst.inst_opcode = INVOKE /\
-  decode_invoke inst = SOME (nm,ops) /\
-  lookup_function nm C.ctx_functions = SOME callee /\
-  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
-  taint_ok caller tn inst s /\
-  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
-  ircf_cross tn (ircf_gam_cur fn_meta rma C caller s UNION
-                ircf_gam_stk fn_meta rma C stk) s t /\
-  terminates (step_inst k C inst s) ==>
-  let f = <| cf_fn := caller; cf_inst := inst; cf_state := s;
-             cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>;
-      callee' = ircf_transform_function fn_meta C.ctx_functions rma callee
-  in ?ct m. eval_operands ops t = SOME args /\
-    setup_callee callee' args t = SOME ct /\
-    fn_run_rel D (ircf_R_ret_reachable vs D fn_meta rma C)
-      (f::stk) (MAP (op_prov G) ops) callee
-      (run_blocks k C callee cs)
-      (run_blocks m (ircf_transform_ctx fn_meta rma C) callee' ct)
+  ctx_wf C /\ fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C) (ircf_R D fn_meta rma C)
+  (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\ frame_reachable vs C stk PG G tn caller
+  inst s /\ active_inst caller inst s /\ inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME
+  (nm,ops) /\ lookup_function nm C.ctx_functions = SOME callee /\ eval_operands ops s = SOME
+  args /\ setup_callee callee args s = SOME cs /\ taint_ok caller tn inst s /\ taint_agree D
+  (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\ ircf_cross tn (ircf_gam_cur fn_meta
+  rma C caller s UNION ircf_gam_stk fn_meta rma C stk) s t /\ terminates (step_inst k C inst s)
+  ==> ?ct m. eval_operands ops t = SOME args /\ setup_callee (ircf_transform_function fn_meta
+  C.ctx_functions rma callee) args t = SOME ct /\ fn_run_rel D (ircf_R_ret_reachable vs D
+  fn_meta rma C) ((<| cf_fn := caller; cf_inst := inst; cf_state := s; cf_params := PG; cf_prov
+  := G; cf_tvar := tn.t_var |>)::stk) (MAP (op_prov G) ops) callee (run_blocks k C callee cs)
+  (run_blocks m (ircf_transform_ctx fn_meta rma C) (ircf_transform_function fn_meta
+  C.ctx_functions rma callee) ct)
 Proof
   simp[] >> strip_tac >>
   `terminates (run_blocks k C callee cs)` by

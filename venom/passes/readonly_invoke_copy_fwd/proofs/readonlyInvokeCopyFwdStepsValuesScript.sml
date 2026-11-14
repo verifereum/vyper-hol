@@ -24,17 +24,14 @@ Ancestors
    covered by Core and are not reproved here. *)
 
 Theorem ricf_cert_assign:
-  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
-  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [a] /\
-  inst.inst_outputs = [out] /\ eval_operand a s = SOME x ==>
-  ?y. let u = update_var out x s;
-          v = update_var out y t;
-          H = set_prov G0 [out] (op_prov G0 a);
-          un = tn0 with t_var := set_var_taint tn0.t_var [out] (op_taint tn0 a)
-      in step_inst_base inst s = OK u /\ step_inst_base inst t = OK v /\
-         ricf_cert_core D ids stk PG
-           (ricf_effective_prov fn u H) (ricf_effective_taint fn u un)
-           fn sites maps targets H un cur curs u v
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\ inst.inst_opcode
+  = ASSIGN /\ inst.inst_operands = [a] /\ inst.inst_outputs = [out] /\ eval_operand a s = SOME x
+  ==> ?y. step_inst_base inst s = OK (update_var out x s) /\ step_inst_base inst t = OK
+  (update_var out y t) /\ ricf_cert_core D ids stk PG (ricf_effective_prov fn (update_var out x
+  s) (set_prov G0 [out] (op_prov G0 a))) (ricf_effective_taint fn (update_var out x s) (tn0 with
+  t_var := set_var_taint tn0.t_var [out] (op_taint tn0 a))) fn sites maps targets (set_prov G0
+  [out] (op_prov G0 a)) (tn0 with t_var := set_var_taint tn0.t_var [out] (op_taint tn0 a)) cur
+  curs (update_var out x s) (update_var out y t)
 Proof
   strip_tac >>
   `?y. eval_operand a t = SOME y /\
@@ -48,17 +45,16 @@ QED
 
 Theorem ricf_cert_param:
   ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
-  (inst.inst_opcode = PARAM \/ inst.inst_opcode = FMP_PARAM) /\
-  inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [out] /\
-  w2n idx < LENGTH s.vs_params ==>
-  let u = update_var out (EL (w2n idx) s.vs_params) s;
-      v = update_var out (EL (w2n idx) t.vs_params) t;
-      H = set_prov G0 [out] (EL (w2n idx) (ricf_complete_params PG s.vs_params));
-      un = tn0 with t_var := set_var_taint tn0.t_var [out] {}
-  in step_inst_base inst s = OK u /\ step_inst_base inst t = OK v /\
-     ricf_cert_core D ids stk PG
-       (ricf_effective_prov fn u H) (ricf_effective_taint fn u un)
-       fn sites maps targets H un cur curs u v
+  (inst.inst_opcode = PARAM \/ inst.inst_opcode = FMP_PARAM) /\ inst.inst_operands = [Lit idx]
+  /\ inst.inst_outputs = [out] /\ w2n idx < LENGTH s.vs_params ==> step_inst_base inst s = OK
+  (update_var out (EL (w2n idx) s.vs_params) s) /\ step_inst_base inst t = OK (update_var out
+  (EL (w2n idx) t.vs_params) t) /\ ricf_cert_core D ids stk PG (ricf_effective_prov fn
+  (update_var out (EL (w2n idx) s.vs_params) s) (set_prov G0 [out] (EL (w2n idx)
+  (ricf_complete_params PG s.vs_params)))) (ricf_effective_taint fn (update_var out (EL (w2n
+  idx) s.vs_params) s) (tn0 with t_var := set_var_taint tn0.t_var [out] {})) fn sites maps
+  targets (set_prov G0 [out] (EL (w2n idx) (ricf_complete_params PG s.vs_params))) (tn0 with
+  t_var := set_var_taint tn0.t_var [out] {}) cur curs (update_var out (EL (w2n idx) s.vs_params)
+  s) (update_var out (EL (w2n idx) t.vs_params) t)
 Proof
   strip_tac >>
   `LENGTH s.vs_params = LENGTH t.vs_params /\
@@ -74,23 +70,18 @@ Proof
 QED
 
 Theorem ricf_cert_affine:
-  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
-  FLOOKUP sites (db,sz) = SOME (db,sb,sz) /\
-  ricf_value_agree sites (SOME (db,sz)) {} x y /\
-  ((inst.inst_opcode = ADD /\ f = word_add) \/
-   (inst.inst_opcode = OFFSET /\ f = word_add) \/
-   (inst.inst_opcode = SUB /\ f = word_sub)) /\
-  inst.inst_operands = [a;b] /\ inst.inst_outputs = [out] /\
-  eval_operand a s = SOME x /\ eval_operand a t = SOME y /\
-  eval_operand b s = SOME z /\ eval_operand b t = SOME z ==>
-  let u = update_var out (f x z) s;
-      v = update_var out (f y z) t;
-      H = set_prov G0 [out] (SOME (db,sz));
-      un = tn0 with t_var := set_var_taint tn0.t_var [out] {}
-  in step_inst_base inst s = OK u /\ step_inst_base inst t = OK v /\
-     ricf_cert_core D ids stk PG
-       (ricf_effective_prov fn u H) (ricf_effective_taint fn u un)
-       fn sites maps targets H un cur curs u v
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\ FLOOKUP sites
+  (db,sz) = SOME (db,sb,sz) /\ ricf_value_agree sites (SOME (db,sz)) {} x y /\
+  ((inst.inst_opcode = ADD /\ f = word_add) \/ (inst.inst_opcode = OFFSET /\ f = word_add) \/
+  (inst.inst_opcode = SUB /\ f = word_sub)) /\ inst.inst_operands = [a;b] /\ inst.inst_outputs =
+  [out] /\ eval_operand a s = SOME x /\ eval_operand a t = SOME y /\ eval_operand b s = SOME z
+  /\ eval_operand b t = SOME z ==> step_inst_base inst s = OK (update_var out (f x z) s) /\
+  step_inst_base inst t = OK (update_var out (f y z) t) /\ ricf_cert_core D ids stk PG
+  (ricf_effective_prov fn (update_var out (f x z) s) (set_prov G0 [out] (SOME (db,sz))))
+  (ricf_effective_taint fn (update_var out (f x z) s) (tn0 with t_var := set_var_taint tn0.t_var
+  [out] {})) fn sites maps targets (set_prov G0 [out] (SOME (db,sz))) (tn0 with t_var :=
+  set_var_taint tn0.t_var [out] {}) cur curs (update_var out (f x z) s) (update_var out (f y z)
+  t)
 Proof
   strip_tac >>
   `ricf_sites_ok sites` by
@@ -103,26 +94,20 @@ Proof
 QED
 
 Theorem ricf_cert_comparison:
-  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
-  FLOOKUP sites (db,sz) = SOME (db,sb,sz) /\
-  ricf_value_agree sites (SOME (db,sz)) {} x x' /\
-  ricf_value_agree sites (SOME (db,sz)) {} y y' /\
-  db <= w2n x /\ w2n x <= db+sz /\ db <= w2n y /\ w2n y <= db+sz /\
-  db+sz < dimword (:256) /\ sb+sz < dimword (:256) /\
-  ((inst.inst_opcode = EQ /\ f = (\x y. bool_to_word (x = y))) \/
-   (inst.inst_opcode = LT /\ f = (\x y. bool_to_word (w2n x < w2n y))) \/
-   (inst.inst_opcode = GT /\ f = (\x y. bool_to_word (w2n y < w2n x)))) /\
-  inst.inst_operands = [a;b] /\ inst.inst_outputs = [out] /\
-  eval_operand a s = SOME x /\ eval_operand a t = SOME x' /\
-  eval_operand b s = SOME y /\ eval_operand b t = SOME y' ==>
-  let u = update_var out (f x y) s;
-      v = update_var out (f x' y') t;
-      H = set_prov G0 [out] NONE;
-      un = tn0 with t_var := set_var_taint tn0.t_var [out] {}
-  in step_inst_base inst s = OK u /\ step_inst_base inst t = OK v /\
-     ricf_cert_core D ids stk PG
-       (ricf_effective_prov fn u H) (ricf_effective_taint fn u un)
-       fn sites maps targets H un cur curs u v
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\ FLOOKUP sites
+  (db,sz) = SOME (db,sb,sz) /\ ricf_value_agree sites (SOME (db,sz)) {} x x' /\ ricf_value_agree
+  sites (SOME (db,sz)) {} y y' /\ db <= w2n x /\ w2n x <= db+sz /\ db <= w2n y /\ w2n y <= db+sz
+  /\ db+sz < dimword (:256) /\ sb+sz < dimword (:256) /\ ((inst.inst_opcode = EQ /\ f = (\x y.
+  bool_to_word (x = y))) \/ (inst.inst_opcode = LT /\ f = (\x y. bool_to_word (w2n x < w2n y)))
+  \/ (inst.inst_opcode = GT /\ f = (\x y. bool_to_word (w2n y < w2n x)))) /\ inst.inst_operands
+  = [a;b] /\ inst.inst_outputs = [out] /\ eval_operand a s = SOME x /\ eval_operand a t = SOME
+  x' /\ eval_operand b s = SOME y /\ eval_operand b t = SOME y' ==> step_inst_base inst s = OK
+  (update_var out (f x y) s) /\ step_inst_base inst t = OK (update_var out (f x' y') t) /\
+  ricf_cert_core D ids stk PG (ricf_effective_prov fn (update_var out (f x y) s) (set_prov G0
+  [out] NONE)) (ricf_effective_taint fn (update_var out (f x y) s) (tn0 with t_var :=
+  set_var_taint tn0.t_var [out] {})) fn sites maps targets (set_prov G0 [out] NONE) (tn0 with
+  t_var := set_var_taint tn0.t_var [out] {}) cur curs (update_var out (f x y) s) (update_var out
+  (f x' y') t)
 Proof
   strip_tac >>
   `ricf_sites_ok sites` by
@@ -144,18 +129,15 @@ QED
 Theorem ricf_cert_local_read:
   ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
   ((inst.inst_opcode = GETFMP /\ inst.inst_operands = [] /\ f = (\s. s.vs_fmp)) \/
-   (inst.inst_opcode = INITIAL_FMP /\ inst.inst_operands = [] /\ f = (\s. s.vs_initial_fmp)) \/
-   (inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] /\
-      f = (\s. s.vs_return_pc_token))) /\ inst.inst_outputs = [out] /\
-  ricf_value_agree sites NONE {} (f s) (f t) ==>
-  let u = update_var out (f s) s;
-      v = update_var out (f t) t;
-      H = set_prov G0 [out] NONE;
-      un = tn0 with t_var := set_var_taint tn0.t_var [out] {}
-  in step_inst_base inst s = OK u /\ step_inst_base inst t = OK v /\
-     ricf_cert_core D ids stk PG
-       (ricf_effective_prov fn u H) (ricf_effective_taint fn u un)
-       fn sites maps targets H un cur curs u v
+  (inst.inst_opcode = INITIAL_FMP /\ inst.inst_operands = [] /\ f = (\s. s.vs_initial_fmp)) \/
+  (inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] /\ f = (\s.
+  s.vs_return_pc_token))) /\ inst.inst_outputs = [out] /\ ricf_value_agree sites NONE {} (f s)
+  (f t) ==> step_inst_base inst s = OK (update_var out (f s) s) /\ step_inst_base inst t = OK
+  (update_var out (f t) t) /\ ricf_cert_core D ids stk PG (ricf_effective_prov fn (update_var
+  out (f s) s) (set_prov G0 [out] NONE)) (ricf_effective_taint fn (update_var out (f s) s) (tn0
+  with t_var := set_var_taint tn0.t_var [out] {})) fn sites maps targets (set_prov G0 [out]
+  NONE) (tn0 with t_var := set_var_taint tn0.t_var [out] {}) cur curs (update_var out (f s) s)
+  (update_var out (f t) t)
 Proof
   strip_tac >> simp[step_inst_base_opcode_eqs] >>
   irule ricf_cert_bind >>
@@ -165,22 +147,19 @@ QED
 (* BUMP is a pair of local bindings; it changes no allocation or FMP field.
    The two output agreements permit scalar or inherited-pointer uses. *)
 Theorem ricf_cert_bump:
-  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
-  inst.inst_opcode = BUMP /\ inst.inst_operands = [a;b] /\
-  inst.inst_outputs = [out;next] /\
-  eval_operand a s = SOME x /\ eval_operand a t = SOME y /\
-  eval_operand b s = SOME z /\ eval_operand b t = SOME z' /\
-  ricf_value_agree sites p m x y /\
-  ricf_value_agree sites q n (x+z) (y+z') ==>
-  let u = update_var next (x+z) (update_var out x s);
-      v = update_var next (y+z') (update_var out y t);
-      H = set_prov (set_prov G0 [out] p) [next] q;
-      un = (tn0 with t_var := set_var_taint tn0.t_var [out] m) with t_var :=
-        set_var_taint (set_var_taint tn0.t_var [out] m) [next] n
-  in step_inst_base inst s = OK u /\ step_inst_base inst t = OK v /\
-     ricf_cert_core D ids stk PG
-       (ricf_effective_prov fn u H) (ricf_effective_taint fn u un)
-       fn sites maps targets H un cur curs u v
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\ inst.inst_opcode
+  = BUMP /\ inst.inst_operands = [a;b] /\ inst.inst_outputs = [out;next] /\ eval_operand a s =
+  SOME x /\ eval_operand a t = SOME y /\ eval_operand b s = SOME z /\ eval_operand b t = SOME z'
+  /\ ricf_value_agree sites p m x y /\ ricf_value_agree sites q n (x+z) (y+z') ==>
+  step_inst_base inst s = OK (update_var next (x+z) (update_var out x s)) /\ step_inst_base inst
+  t = OK (update_var next (y+z') (update_var out y t)) /\ ricf_cert_core D ids stk PG
+  (ricf_effective_prov fn (update_var next (x+z) (update_var out x s)) (set_prov (set_prov G0
+  [out] p) [next] q)) (ricf_effective_taint fn (update_var next (x+z) (update_var out x s))
+  ((tn0 with t_var := set_var_taint tn0.t_var [out] m) with t_var := set_var_taint
+  (set_var_taint tn0.t_var [out] m) [next] n)) fn sites maps targets (set_prov (set_prov G0
+  [out] p) [next] q) ((tn0 with t_var := set_var_taint tn0.t_var [out] m) with t_var :=
+  set_var_taint (set_var_taint tn0.t_var [out] m) [next] n) cur curs (update_var next (x+z)
+  (update_var out x s)) (update_var next (y+z') (update_var out y t))
 Proof
   strip_tac >>
   `ricf_cert_core D ids stk PG

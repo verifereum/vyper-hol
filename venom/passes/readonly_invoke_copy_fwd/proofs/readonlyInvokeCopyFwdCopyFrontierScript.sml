@@ -24,17 +24,16 @@ QED
    nonidentity copy is invisible to the caller even though it is not dead
    in that caller.  In particular full saved-dead containment is false. *)
 Theorem ricf_nested_copy_frontier_probe:
-  !s a D.
-  let current = ricf_copy_probe_state s;
-      saved = a with <| vs_allocas := FEMPTY; vs_alloca_next := 0;
-                        vs_vars := FEMPTY; vs_params := [] |> in
-  ricf_frame_agree D (ircf_dead {7} saved []) FEMPTY [] FEMPTY entry_taint
-    (mcopy 0 1 1 (merge_callee_state saved current))
-    (merge_callee_state saved current) /\
-  ~({i | 0 <= i /\ i < 0+1} SUBSET ircf_dead {7} saved []) /\
-  FLOOKUP current.vs_allocas 7 = SOME (0,1) /\
-  read_byte 0 (mcopy 0 1 1 current).vs_memory = 9w /\
-  read_byte 0 current.vs_memory = 7w
+  !s a D. ricf_frame_agree D (ircf_dead {7} (a with <| vs_allocas := FEMPTY; vs_alloca_next :=
+  0; vs_vars := FEMPTY; vs_params := [] |>) []) FEMPTY [] FEMPTY entry_taint (mcopy 0 1 1
+  (merge_callee_state (a with <| vs_allocas := FEMPTY; vs_alloca_next := 0; vs_vars := FEMPTY;
+  vs_params := [] |>) (ricf_copy_probe_state s))) (merge_callee_state (a with <| vs_allocas :=
+  FEMPTY; vs_alloca_next := 0; vs_vars := FEMPTY; vs_params := [] |>) (ricf_copy_probe_state s))
+  /\ ~({i | 0 <= i /\ i < 0+1} SUBSET ircf_dead {7} (a with <| vs_allocas := FEMPTY;
+  vs_alloca_next := 0; vs_vars := FEMPTY; vs_params := [] |>) []) /\ FLOOKUP
+  (ricf_copy_probe_state s).vs_allocas 7 = SOME (0,1) /\ read_byte 0 (mcopy 0 1 1
+  (ricf_copy_probe_state s)).vs_memory = 9w /\ read_byte 0 (ricf_copy_probe_state s).vs_memory =
+  7w
 Proof
   rpt gen_tac >> simp_tac bool_ss [LET_THM] >>
   qmatch_goalsub_abbrev_tac `merge_callee_state saved current` >>

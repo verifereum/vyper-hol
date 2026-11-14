@@ -178,10 +178,9 @@ QED
 (* Two source destinations share a target; identity of the target site is
    not an injectivity constraint on provenance. *)
 Theorem ricf_shared_target_probe:
-  let sites = FEMPTY |+ ((64,32),(64,0,32)) |+ ((96,32),(96,0,32)) in
-  ricf_sites_ok sites /\
-  ricf_params_agree sites [SOME (64,32); SOME (96,32); NONE]
-    [64w;96w;0w] [0w;0w;0w]
+  ricf_sites_ok (FEMPTY |+ ((64,32),(64,0,32)) |+ ((96,32),(96,0,32))) /\ ricf_params_agree
+  (FEMPTY |+ ((64,32),(64,0,32)) |+ ((96,32),(96,0,32))) [SOME (64,32); SOME (96,32); NONE]
+  [64w;96w;0w] [0w;0w;0w]
 Proof
   simp_tac bool_ss [LET_THM] >> conj_tac
   >- (rw[ricf_sites_ok_def, FLOOKUP_UPDATE] >>
@@ -555,16 +554,17 @@ QED
    while an equal live write of two clears the only tainted address.
    The saved target memory is never rewritten to make the probe pass. *)
 Theorem ricf_live_equal_write_probe:
-  let a = s0 with vs_memory := [];
-      cf = frame with <| cf_state := a; cf_params := [] |>;
-      u = write_memory_with_expansion 0 [2w] a in
-  read_byte 0 cf.cf_state.vs_memory <>
-    read_byte 0 (a with vs_memory := [1w]).vs_memory /\
-  read_byte 0 u.vs_memory = 2w /\
-  ricf_live_stack_agree D ids (tn with t_mem := {0})
-    [FEMPTY] [cf] [a with vs_memory := [1w]] u u /\
-  ricf_live_stack_agree D ids (tn with t_mem := {})
-    [FEMPTY] [cf] [a with vs_memory := [1w]] u u
+  read_byte 0 (frame with <| cf_state := (s0 with vs_memory := []); cf_params := []
+  |>).cf_state.vs_memory <> read_byte 0 ((s0 with vs_memory := []) with vs_memory :=
+  [1w]).vs_memory /\ read_byte 0 (write_memory_with_expansion 0 [2w] (s0 with vs_memory :=
+  [])).vs_memory = 2w /\ ricf_live_stack_agree D ids (tn with t_mem := {0}) [FEMPTY] [(frame
+  with <| cf_state := (s0 with vs_memory := []); cf_params := [] |>)] [(s0 with vs_memory := [])
+  with vs_memory := [1w]] (write_memory_with_expansion 0 [2w] (s0 with vs_memory := []))
+  (write_memory_with_expansion 0 [2w] (s0 with vs_memory := [])) /\ ricf_live_stack_agree D ids
+  (tn with t_mem := {}) [FEMPTY] [(frame with <| cf_state := (s0 with vs_memory := []);
+  cf_params := [] |>)] [(s0 with vs_memory := []) with vs_memory := [1w]]
+  (write_memory_with_expansion 0 [2w] (s0 with vs_memory := [])) (write_memory_with_expansion 0
+  [2w] (s0 with vs_memory := []))
 Proof
   simp_tac bool_ss [LET_THM] >>
   `read_byte 0 ([]:byte list) <> read_byte 0 [1w]`
@@ -709,19 +709,15 @@ QED
    or replaced with the current frame map.  Live shared memory is empty;
    saved locals are nontrivial and do not observe historical memory. *)
 Theorem ricf_indexed_displaced_stack_probe:
-  let headmap = FEMPTY |+ ((4,1),(4,8,1));
-      tailmap = FEMPTY |+ ((12,1),(12,16,1));
-      a = s0 with <| vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>;
-      b = s0 with <| vs_vars := FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>;
-      cf = frame with <| cf_state := a; cf_params := [SOME (4,1)];
-                         cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
-      older = frame with <| cf_state := b; cf_params := [SOME (12,1)];
-                            cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
-      actual = [a with vs_params := [8w]; b with vs_params := [16w]];
-      live = s0 with vs_memory := [] in
-  4 <> 8 /\ 12 <> 16 /\
-  ricf_live_stack_agree D ids (tn with t_mem := {})
-    [headmap;tailmap] [cf;older] actual live live
+  4 <> 8 /\ 12 <> 16 /\ ricf_live_stack_agree D ids (tn with t_mem := {}) [(FEMPTY |+
+  ((4,1),(4,8,1)));(FEMPTY |+ ((12,1),(12,16,1)))] [(frame with <| cf_state := (s0 with <|
+  vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>); cf_params := [SOME (4,1)];
+  cf_prov := FEMPTY; cf_tvar := FEMPTY |>);(frame with <| cf_state := (s0 with <| vs_vars :=
+  FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>); cf_params := [SOME (12,1)]; cf_prov :=
+  FEMPTY; cf_tvar := FEMPTY |>)] ([(s0 with <| vs_vars := FEMPTY; vs_params := [4w];
+  vs_alloca_next := 0 |>) with vs_params := [8w]; (s0 with <| vs_vars := FEMPTY; vs_params :=
+  [12w]; vs_alloca_next := 0 |>) with vs_params := [16w]]) (s0 with vs_memory := []) (s0 with
+  vs_memory := [])
 Proof
   simp_tac bool_ss [LET_THM] >>
   simp[ricf_live_stack_cons, ricf_live_frame_decompose,
@@ -734,26 +730,36 @@ Proof
 QED
 
 Theorem ricf_indexed_entry_return_probe:
-  let headmap = FEMPTY |+ ((4,1),(4,8,1));
-      tailmap = FEMPTY |+ ((12,1),(12,16,1));
-      a = s0 with <| vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>;
-      b = s0 with <| vs_vars := FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>;
-      cf = frame with <| cf_state := a; cf_params := [SOME (4,1)];
-                         cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
-      older = frame with <| cf_state := b; cf_params := [SOME (12,1)];
-                            cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
-      actual = [a with vs_params := [8w]; b with vs_params := [16w]];
-      live = s0 with <| vs_memory := []; vs_vars := FEMPTY;
-                       vs_params := []; vs_prev_bb := NONE |>;
-      clean = tn with t_mem := {} in
-  4 <> 8 /\ 12 <> 16 /\
-  ricf_live_boundary_core D ids [cf;older] [] FEMPTY clean fn
-    FEMPTY [headmap;tailmap] actual FEMPTY clean live live /\
-  ricf_indexed_boundary D ids [headmap;tailmap] [cf;older]
-    [] FEMPTY clean fn live live /\
-  (!PG G un fn' ret u v.
-    ricf_indexed_return D ids [headmap;tailmap] [cf;older] PG G un fn' ret u v ==>
-    ricf_live_return_core D ids [cf;older] [headmap;tailmap] actual un u v)
+  4 <> 8 /\ 12 <> 16 /\ ricf_live_boundary_core D ids [(frame with <| cf_state := (s0 with <|
+  vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>); cf_params := [SOME (4,1)];
+  cf_prov := FEMPTY; cf_tvar := FEMPTY |>);(frame with <| cf_state := (s0 with <| vs_vars :=
+  FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>); cf_params := [SOME (12,1)]; cf_prov :=
+  FEMPTY; cf_tvar := FEMPTY |>)] [] FEMPTY (tn with t_mem := {}) fn FEMPTY [(FEMPTY |+
+  ((4,1),(4,8,1)));(FEMPTY |+ ((12,1),(12,16,1)))] ([(s0 with <| vs_vars := FEMPTY; vs_params :=
+  [4w]; vs_alloca_next := 0 |>) with vs_params := [8w]; (s0 with <| vs_vars := FEMPTY; vs_params
+  := [12w]; vs_alloca_next := 0 |>) with vs_params := [16w]]) FEMPTY (tn with t_mem := {}) (s0
+  with <| vs_memory := []; vs_vars := FEMPTY; vs_params := []; vs_prev_bb := NONE |>) (s0 with
+  <| vs_memory := []; vs_vars := FEMPTY; vs_params := []; vs_prev_bb := NONE |>) /\
+  ricf_indexed_boundary D ids [(FEMPTY |+ ((4,1),(4,8,1)));(FEMPTY |+ ((12,1),(12,16,1)))]
+  [(frame with <| cf_state := (s0 with <| vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next
+  := 0 |>); cf_params := [SOME (4,1)]; cf_prov := FEMPTY; cf_tvar := FEMPTY |>);(frame with <|
+  cf_state := (s0 with <| vs_vars := FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>);
+  cf_params := [SOME (12,1)]; cf_prov := FEMPTY; cf_tvar := FEMPTY |>)] [] FEMPTY (tn with t_mem
+  := {}) fn (s0 with <| vs_memory := []; vs_vars := FEMPTY; vs_params := []; vs_prev_bb := NONE
+  |>) (s0 with <| vs_memory := []; vs_vars := FEMPTY; vs_params := []; vs_prev_bb := NONE |>) /\
+  (!PG G un fn' ret u v. ricf_indexed_return D ids [(FEMPTY |+ ((4,1),(4,8,1)));(FEMPTY |+
+  ((12,1),(12,16,1)))] [(frame with <| cf_state := (s0 with <| vs_vars := FEMPTY; vs_params :=
+  [4w]; vs_alloca_next := 0 |>); cf_params := [SOME (4,1)]; cf_prov := FEMPTY; cf_tvar := FEMPTY
+  |>);(frame with <| cf_state := (s0 with <| vs_vars := FEMPTY; vs_params := [12w];
+  vs_alloca_next := 0 |>); cf_params := [SOME (12,1)]; cf_prov := FEMPTY; cf_tvar := FEMPTY |>)]
+  PG G un fn' ret u v ==> ricf_live_return_core D ids [(frame with <| cf_state := (s0 with <|
+  vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>); cf_params := [SOME (4,1)];
+  cf_prov := FEMPTY; cf_tvar := FEMPTY |>);(frame with <| cf_state := (s0 with <| vs_vars :=
+  FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>); cf_params := [SOME (12,1)]; cf_prov :=
+  FEMPTY; cf_tvar := FEMPTY |>)] [(FEMPTY |+ ((4,1),(4,8,1)));(FEMPTY |+ ((12,1),(12,16,1)))]
+  ([(s0 with <| vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>) with vs_params :=
+  [8w]; (s0 with <| vs_vars := FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>) with
+  vs_params := [16w]]) un u v)
 Proof
   simp_tac bool_ss [LET_THM] >>
   qmatch_goalsub_abbrev_tac `ricf_live_boundary_core D ids stk [] FEMPTY clean fn

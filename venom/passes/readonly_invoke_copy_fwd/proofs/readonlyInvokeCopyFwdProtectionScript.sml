@@ -213,16 +213,13 @@ Definition ricf_protection_prune_sites_def:
 End
 
 Theorem ricf_protection_alignment_retire:
-  ricf_protection_alignment sites maps stk cur curs records ==>
-  let rs = FILTER keep records in
-  ricf_protection_alignment
-    (ricf_protection_prune_sites (ricf_protection_ranges RPE_Inherited rs) sites)
-    (GENLIST (\j. ricf_protection_prune_sites
-       (ricf_protection_ranges (RPE_SuspendedInherited j) rs) (EL j maps))
-       (LENGTH stk)) stk
-    (cur INTER ricf_protection_ranges RPE_Current rs)
-    (GENLIST (\j. EL j curs INTER
-       ricf_protection_ranges (RPE_SuspendedCurrent j) rs) (LENGTH stk)) rs
+  ricf_protection_alignment sites maps stk cur curs records ==> ricf_protection_alignment
+  (ricf_protection_prune_sites (ricf_protection_ranges RPE_Inherited (FILTER keep records))
+  sites) (GENLIST (\j. ricf_protection_prune_sites (ricf_protection_ranges
+  (RPE_SuspendedInherited j) (FILTER keep records)) (EL j maps)) (LENGTH stk)) stk (cur INTER
+  ricf_protection_ranges RPE_Current (FILTER keep records)) (GENLIST (\j. EL j curs INTER
+  ricf_protection_ranges (RPE_SuspendedCurrent j) (FILTER keep records)) (LENGTH stk)) (FILTER
+  keep records)
 Proof
   simp[LET_THM, ricf_protection_alignment_def,
        ricf_protection_prune_sites_def, ricf_site_triples_def,

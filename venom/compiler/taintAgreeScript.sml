@@ -3456,13 +3456,12 @@ QED
 (* An existential memory mask cannot be replaced by an execution mask
    without an additional agreement premise.  Only byte zero differs. *)
 Theorem taint_agree_memory_mask_counterexample:
-  !D tn.
-    let s = (init_venom_state "entry") with
-              <| vs_memory := [0w]; vs_alloca_next := 1 |>;
-        t = s with vs_memory := [1w]
-    in
-      taint_agree D {} (tn with <| t_var := FEMPTY; t_mem := UNIV |>) s t /\
-      ~taint_agree D {} (tn with <| t_var := FEMPTY; t_mem := {} |>) s t
+  !D tn. taint_agree D {} (tn with <| t_var := FEMPTY; t_mem := UNIV |>) ((init_venom_state
+  "entry") with <| vs_memory := [0w]; vs_alloca_next := 1 |>) (((init_venom_state "entry") with
+  <| vs_memory := [0w]; vs_alloca_next := 1 |>) with vs_memory := [1w]) /\ ~taint_agree D {} (tn
+  with <| t_var := FEMPTY; t_mem := {} |>) ((init_venom_state "entry") with <| vs_memory :=
+  [0w]; vs_alloca_next := 1 |>) (((init_venom_state "entry") with <| vs_memory := [0w];
+  vs_alloca_next := 1 |>) with vs_memory := [1w])
 Proof
   simp[taint_agree_def, ld_shared_agree_def, init_venom_state_def,
        word_agree_except_def, read_byte_def]
