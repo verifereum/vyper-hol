@@ -19,7 +19,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem extcall_value_from_vv_full:
+Theorem extcall_value_from_vv_full[local]:
   !cx ann is_static skip sig opts args dflt.
   (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     body_inv tops ctx cenv cx /\
