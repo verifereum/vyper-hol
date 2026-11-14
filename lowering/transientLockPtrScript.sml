@@ -98,6 +98,45 @@ Proof
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
+(* An abort keeps the ghost of the last successful scalar instruction. *)
+Theorem transient_lock_abort_ptr_ghost:
+  ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w nkey) = {} /\
+  (tload (n2w nkey) ss = 1w \/ ~iv /\ ss.vs_call_ctx.cc_static) ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
+    (transient_lock_code nkey iv st) ss G' tn'
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`iv` |-> `T`]
+    (SPEC_ALL transient_lock_check_ptr_ghost)) >> simp[] >> strip_tac >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  `inst_seq_ptr D 0 ctx func PG G tn
+     (transient_lock_code nkey T st) ss G' tn'` by
+    fs[transient_lock_code_def] >>
+  Cases_on `iv` >- simp[] >>
+  `transient_lock_code nkey F st = transient_lock_code nkey T st ++
+     [mk_inst (st.cs_next_id + 4) TSTORE [Lit (n2w nkey); Lit 1w] []]` by
+    simp[transient_lock_code_def] >>
+  asm_rewrite_tac[] >> Cases_on `tload (n2w nkey) ss = 1w`
+  >- (irule inst_seq_ptr_abort_append >> simp[] >>
+      conj_tac
+      >- simp[transient_lock_code_def, mk_inst_def, is_terminator_def] >>
+      qexistsl_tac [`Revert_abort`,
+        `revert_state (set_returndata [] (transient_lock_checked_state st nkey ss))`] >>
+      simp[transient_lock_code_execution]) >>
+  irule inst_seq_ptr_append_ok >> conj_tac
+  >- simp[transient_lock_code_def, mk_inst_def, is_terminator_def] >>
+  qexistsl_tac [`G'`, `transient_lock_checked_state st nkey ss`, `tn'`] >>
+  simp[transient_lock_code_execution] >>
+  `ss.vs_call_ctx.cc_static` by fs[] >>
+  simp[inst_seq_ptr_def, step_TSTORE_lit_static,
+       transient_lock_checked_state_def, update_var_def,
+       transient_lock_code_def] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, op_taint_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, step_TSTORE_lit_static]
+QED
+
 Theorem literal_tstore_clean_inst_seq_ptr:
   ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
   (!b. ~((key,b) IN tn.t_trans)) ==>

@@ -58,7 +58,7 @@ Proof
 QED
 
 (* In a static frame TSTORE halts. *)
-Theorem step_TSTORE_lit_static[local]:
+Theorem step_TSTORE_lit_static:
   ss.vs_call_ctx.cc_static ==>
   step_inst_base (mk_inst id TSTORE [Lit key;Lit value] []) ss =
     Abort ExHalt_abort (halt_state (set_returndata [] ss))

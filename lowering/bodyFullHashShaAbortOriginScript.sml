@@ -81,10 +81,10 @@ Proof
   drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]
 QED
 
-Theorem sha_origin_abort_endpoint_unique[local]:
+Theorem sha_origin_abort_endpoint_unique:
   gas_origin_ptr_path (D1,lo,explicit,ctx,fn,PG) (s,G,tn) marks
     (Abort a t,G1,tn1) /\
-  gas_origin_ptr_path (D2,lo,explicit,ctx,fn,PG) (s,G,tn) marks'
+  gas_origin_ptr_path (D2,lo,explicit2,ctx,fn,PG) (s,G,tn) marks'
     (Abort a u,G2,tn2) ==> t = u
 Proof
   strip_tac >>
