@@ -216,7 +216,7 @@ QED
 
 Resume ecadd_expr_vv_sim_ptr[entry_rebase]:
   fs[as_ptr_val_def, contextTheory.mk_ptr_def] >>
-  irule precompile_two_operand_entry_rebase >>
+  irule wordArgsPtrTheory.precompile_two_operand_entry_rebase >>
   qpat_assum `vv_post _ _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_post _ _ _ _ _ b _ s1 sm _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_post _ _ _ _ _ a _ sa s1 _ _ _ _ _` (irule_at Any) >>

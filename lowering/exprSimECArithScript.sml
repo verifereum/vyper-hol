@@ -705,7 +705,7 @@ QED
 
 (* Scratch separation consumes the allocation/local placement disjunction,
    rather than assuming that every point came from a fresh allocation. *)
-Theorem ec_point_scratch_disjoint[local]:
+Theorem ec_point_scratch_disjoint:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) sa sb es v pop s /\
   eval_operand pop s = SOME w /\
   (!aid b sz. aid < sb.cs_next_id /\
@@ -769,7 +769,7 @@ Proof
   gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]
 QED
 
-Theorem ec_point_fresh_scratch_disjoint[local]:
+Theorem ec_point_fresh_scratch_disjoint:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sa es v pop s /\
   eval_operand pop s = SOME w /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\

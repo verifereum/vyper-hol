@@ -1,52 +1,10 @@
 Theory bodyMemEcArithAssemble
 Ancestors
-  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks loweringStateRelDefs
+  exprSimECArith bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks loweringStateRelDefs
   fragGasSeqMem allocaHistoryFragment exprSimProps exprSimPrecompiles
   exprLoweringProps emitHelperProps compileEnv context venomState venomInst
   loweringHalt fragExecMem loweringPosts vyperValue
   bodyMemEcArithCode bodyMemEcArithPrefix instMemFrontier
-
-(* Restatement of private exprSimECArith.ec_point_scratch_disjoint;
-   original: alan-ref/base/exprSimECArithScript.sml.txt, lines 705-722. *)
-Theorem ec_point_scratch_disjoint:
-  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) sa sb es v pop s /\
-  eval_operand pop s = SOME w /\
-  (!aid b sz. aid < sb.cs_next_id /\
-     FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-     regions_disjoint scratch scratch_size b sz) /\
-  (!name b sz. local_region cenv es.scopes s name b sz ==>
-     regions_disjoint scratch scratch_size b sz) ==>
-  regions_disjoint scratch scratch_size (w2n w) 64
-Proof
-  simp[expr_val_at_def, evaluate_type_def, is_word_type_def,
-       type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
-  strip_tac >> gvs[]
-  >- (first_x_assum drule >> simp[] >>
-      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  first_x_assum drule >>
-  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
-QED
-
-(* Restatement of private exprSimECArith.ec_point_fresh_scratch_disjoint;
-   original reference lines 766-783. *)
-Theorem ec_point_fresh_scratch_disjoint:
-  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sa es v pop s /\
-  eval_operand pop s = SOME w /\ local_ptrs_reserved cenv sa /\
-  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-  (!aid b sz. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-     regions_disjoint scratch len b sz) /\
-  (!name b sz. local_region cenv es.scopes t name b sz ==>
-     regions_disjoint scratch len b sz) ==>
-  regions_disjoint scratch len (w2n w) 64
-Proof
-  strip_tac >> irule ec_point_scratch_disjoint >>
-  qexistsl_tac [`cenv`, `cx`, `es`, `pop`, `s`, `lo`, `sa`, `v`] >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >>
-      irule exprSimPropsTheory.local_region_frame_fwd >>
-      qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]) >>
-  metis_tac[]
-QED
 
 Theorem ec_prefix_mem_lift:
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
@@ -105,7 +63,7 @@ Proof
   `!x. MEM (Var x) [p;ib.buf_operand;scalar] ==> not_fresh_at sa x` by
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `regions_disjoint (w2n w) 96 (w2n point) 64` by
-    (irule ec_point_fresh_scratch_disjoint >>
+    (irule exprSimECArithTheory.ec_point_fresh_scratch_disjoint >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      qexists_tac `s1` >> simp[] >> rpt strip_tac >>
      first_x_assum drule >> simp[]) >>
@@ -165,13 +123,13 @@ Proof
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `regions_disjoint (w2n w) 128 (w2n point) 64` by
     (qpat_x_assum `expr_val_at _ _ _ _ _ _ v2 q s` kall_tac >>
-     irule ec_point_fresh_scratch_disjoint >>
+     irule exprSimECArithTheory.ec_point_fresh_scratch_disjoint >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      qexists_tac `s1` >> simp[] >> rpt strip_tac >>
      first_x_assum drule >> simp[]) >>
   `regions_disjoint (w2n w) 128 (w2n point2) 64` by
     (qpat_x_assum `expr_val_at _ _ _ _ _ _ v p s` kall_tac >>
-     irule ec_point_fresh_scratch_disjoint >>
+     irule exprSimECArithTheory.ec_point_fresh_scratch_disjoint >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      qexists_tac `s1` >> simp[] >> rpt strip_tac >>
      first_x_assum drule >> simp[]) >>
@@ -330,7 +288,7 @@ Proof
     `!x. MEM (Var x) [p;ib.buf_operand;scalar] ==> not_fresh_at sa x` by
       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
     `regions_disjoint (w2n wi) 96 (w2n point) 64` by
-      (irule ec_point_fresh_scratch_disjoint >>
+      (irule exprSimECArithTheory.ec_point_fresh_scratch_disjoint >>
        goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
        qexists_tac `s1` >> simp[] >> rpt strip_tac >>
        first_assum drule_all >> simp[]) >>
@@ -415,11 +373,11 @@ Proof
       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
     `regions_disjoint (w2n wi) 128 (w2n point) 64` by
       (qpat_assum `expr_val_at _ _ _ lo _ _ _ p _`
-         (mp_then Any mp_tac ec_point_fresh_scratch_disjoint) >>
+         (mp_then Any mp_tac exprSimECArithTheory.ec_point_fresh_scratch_disjoint) >>
        disch_then drule_all >> simp[]) >>
     `regions_disjoint (w2n wi) 128 (w2n point2) 64` by
       (qpat_assum `expr_val_at _ _ _ lo2 _ _ _ q _`
-         (mp_then Any mp_tac ec_point_fresh_scratch_disjoint) >>
+         (mp_then Any mp_tac exprSimECArithTheory.ec_point_fresh_scratch_disjoint) >>
        disch_then drule_all >> simp[]) >>
     `cenv.ce_is_ctor ==> !name tv iv off.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
