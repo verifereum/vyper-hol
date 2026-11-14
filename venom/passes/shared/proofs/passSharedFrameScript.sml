@@ -120,7 +120,7 @@ Definition commute_equiv_def:
     commute_frame s1 = commute_frame s2
 End
 
-Theorem state_equiv_imp_commute_equiv[local]:
+Theorem state_equiv_imp_commute_equiv:
   !vars s1 s2. state_equiv vars s1 s2 ==> commute_equiv vars s1 s2
 Proof
   rw[state_equiv_def, execution_equiv_def, commute_equiv_def]
@@ -133,7 +133,7 @@ QED
 (* inst_defs = inst_outputs, inst_uses = operand_vars *)
 
 (* commute_equiv is weaker than state_equiv *)
-Theorem commute_equiv_subset[local]:
+Theorem commute_equiv_subset:
   !v1 v2 s1 s2. commute_equiv v1 s1 s2 /\ v1 SUBSET v2 ==>
     commute_equiv v2 s1 s2
 Proof
@@ -145,7 +145,7 @@ QED
    (see state_equiv_imp_commute_equiv above) *)
 
 (* result_equiv for OK gives state_equiv *)
-Theorem result_equiv_ok_state_equiv[local]:
+Theorem result_equiv_ok_state_equiv:
   !vars s1 s2 r1 r2.
     result_equiv vars (OK s1) (OK s2) ==> state_equiv vars s1 s2
 Proof
@@ -238,7 +238,7 @@ Proof
 QED
 
 (* Helper: eval_operand agrees when lookup_var agrees on Var operands *)
-Theorem eval_operand_agree[local]:
+Theorem eval_operand_agree:
   !op s s'.
     (!x. MEM (Var x) [op] ==> lookup_var x s = lookup_var x s') /\
     s.vs_labels = s'.vs_labels ==>
@@ -415,7 +415,7 @@ QED
 (* Non-INVOKE aborters (ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY) are all
    abort_incompatible with INVOKE. So step_inst_base can't abort for a
    non-INVOKE instruction that is abort_compatible with INVOKE. *)
-Theorem no_abort_with_invoke[local]:
+Theorem no_abort_with_invoke:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode /\
@@ -631,7 +631,7 @@ QED
    All of these return OK iff operands evaluate (+ condition nonzero for ASSERT). *)
 (* When state_equiv holds between s and s', step returns OK on s' too.
    This is a simple wrapper around step_inst_result_equiv_full. *)
-Theorem step_inst_transfer_via_equiv[local]:
+Theorem step_inst_transfer_via_equiv:
   !fuel ctx inst s v s' vars.
     step_inst fuel ctx inst s = OK v /\
     state_equiv vars s s' /\
@@ -651,7 +651,7 @@ QED
 (* Helper: derive eval_operand agreement from lookup_var agreement *)
 (* Helper: derive that non-terminator OK step preserves context fields needed
    for step_inst_base_ok_transfer *)
-Theorem step_preserves_transfer_ctx[local]:
+Theorem step_preserves_transfer_ctx:
   !fuel ctx inst s v.
     step_inst fuel ctx inst s = OK v /\
     ~is_terminator inst.inst_opcode ==>
