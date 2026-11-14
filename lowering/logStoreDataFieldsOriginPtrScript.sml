@@ -18,7 +18,11 @@ Ancestors
   robustCopyTransportPtr ptrDiscipline stmtLowering eventLoweringStructure
   exprLoweringProps localValueStoreProps exprSimProps loweringShapeDefs
   fragExec valueEncoding valueEncodingDefs vyperValue compileEnv emitHelper
-  venomState
+  venomState stmtSimLogDataFrame exprSimMemDefs allocationPtr
+  exprSimAggregateChildren placeMemoryTypeInterfaces representationCleanPtr
+  exprPtrUnwrapFacts valueCopyBytes valueEncodingProps typedLogFieldChecked
+  bytesCopyProps vyperTypeSystem venomMemDefs memoryLocalRhsProps
+  loweringPosts loweringStateRelDefs vyperTyping vyperEventArgCompat
 
 (* A data field f = (operand, source type) about to be stored as dty into
    the buffer [b, b + cap): a word is the operand's value, clean; any other
@@ -52,6 +56,130 @@ Definition log_field_src_def:
            (if is_bytestring_type dty then val_store_size stv v
             else type_memory_size stv))
 End
+
+(* Logical capture and actual allocation ownership supply a physical store input. *)
+Theorem log_field_src_from_capture:
+  stmt_state_rel H ctx func cenv cx ee s /\
+  expr_val_rel cx lty v op s /\
+  expr_val_at cenv cx lty sa sb ee v op s /\
+  expr_store_bound cx lty v op s /\
+  ptr_val_ok cx lty v op G tn s /\
+  evaluate_type (get_tenv cx) lty = SOME ltv /\
+  value_has_type ltv v /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  value_has_type stv v /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type dtv v /\
+  assignable_type (get_tenv cx) dty /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  event_arg_compatible dty lty /\
+  type_widens_to (get_tenv cx) sty dty /\
+  (~is_word_type dty /\ ~is_bytestring_type dty ==> sty = lty) /\
+  (!x. op = Var x ==> not_fresh_at packing_sa x) /\
+  FLOOKUP s.vs_allocas dest = SOME (b,cap) /\
+  sb.cs_next_id <= dest /\
+  (!name a n. local_region cenv ee.scopes s name a n ==>
+     a + n <= b \/ b + cap <= a) ==>
+  log_field_src cenv (get_tenv cx) b cap packing_sa G tn s
+    (op,sty) dty dtv v
+Proof
+  rpt strip_tac >>
+  `val_wf ltv v /\ val_wf stv v /\ val_wf dtv v` by
+    metis_tac[CONJUNCT1 typed_value_wf] >>
+  `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
+  `allocas_non_overlapping s` by
+    fs[stmt_state_rel_def, state_rel_def, alloca_inv_def] >>
+  `log_source_apart cx b cap (op,lty) v s` by
+    (mp_tac (Q.INST [`ty` |-> `lty`, `sm` |-> `sb`,
+      `es` |-> `ee`, `n` |-> `cap`] log_allocated_source_apart) >>
+     simp[] >> metis_tac[]) >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[]) >>
+  Cases_on `is_word_type dty`
+  >- (`dty = lty` by metis_tac[word_event_compatible_same] >>
+      gvs[] >> simp[log_field_src_def] >> gvs[expr_val_rel_def]) >>
+  `~is_word_type lty` by
+    metis_tac[CONJUNCT1 event_arg_compatible_word_shape] >>
+  `?sw. eval_operand op s = SOME sw` by gvs[expr_val_rel_def] >>
+  `ptr_mem_ok cx lty v op G tn s` by fs[ptr_val_ok_def] >>
+  Cases_on `is_bytestring_type dty`
+  >- suspend "bytes" >>
+  suspend "aggregate"
+QED
+
+Resume log_field_src_from_capture[bytes]:
+  `is_bytestring_type lty` by metis_tac[event_arg_compatible_bytestring] >>
+  `arg_type_fits sty dty` by fs[type_widens_to_def] >>
+  `is_bytestring_type sty` by
+    metis_tac[compileEnvTheory.arg_type_fits_bytestring_source] >>
+  `val_footprint ltv v <> 0 /\ val_store_size ltv v <> 0` by
+    (qspecl_then [`get_tenv cx`, `lty`, `ltv`] mp_tac bytestring_type_value >>
+     simp[] >> strip_tac >> gvs[] >>
+     Cases_on `v` >> gvs[value_has_type_def, val_footprint_def, val_store_size_def]) >>
+  `val_store_size stv v = val_store_size ltv v /\
+   val_footprint stv v = val_footprint ltv v` by
+    metis_tac[bytestring_val_store_size_eq, bytestring_val_footprint_eq] >>
+  `?xs. op = Var xs /\ ptr_covers G tn xs s (val_store_size ltv v)` by
+    (mp_tac (Q.INST [`t` |-> `lty`, `tv` |-> `ltv`,
+      `n` |-> `val_store_size ltv v`, `w` |-> `sw`] ptr_mem_ok_read_covers) >>
+     simp[]) >>
+  `lookup_var xs s = SOME sw` by gvs[eval_operand_def] >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory ltv v (w2n sw) mem` by
+    (fs[ptr_mem_ok_def] >> metis_tac[]) >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory stv v (w2n sw) mem` by
+    metis_tac[bytestring_val_in_memory_transfer] >>
+  `w2n sw + val_store_size ltv v <= s.vs_alloca_next` by
+    (fs[expr_store_bound_def] >> metis_tac[]) >>
+  `w2n sw + val_footprint stv v <= b \/ b + cap <= w2n sw` by
+    (qpat_x_assum `log_source_apart _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [log_source_apart_def]) >>
+     disch_then (qspecl_then [`ltv`, `sw`] mp_tac) >> simp[]) >>
+  simp[log_field_src_def] >>
+  qexistsl_tac [`xs`, `stv`, `sw`] >> asm_rewrite_tac [] >> decide_tac
+QED
+
+Resume log_field_src_from_capture[aggregate]:
+  `sty = lty` by metis_tac[] >>
+  `stv = ltv` by metis_tac[optionTheory.SOME_11] >>
+  `~is_bytestring_type lty` by
+    (fs[event_arg_compatible_alias_def] >>
+     metis_tac[memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target]) >>
+  `0 < type_memory_size dtv` by
+    (irule (CONJUNCT1 type_memory_size_pos) >>
+     metis_tac[assignable_type_slot_size_pos]) >>
+  `0 < type_memory_size stv` by
+    metis_tac[type_widens_to_zero_memory_size, arithmeticTheory.NOT_ZERO_LT_ZERO] >>
+  `val_footprint ltv v = type_memory_size stv` by
+    metis_tac[evaluated_nonbytes_footprint] >>
+  `?xs. op = Var xs /\ ptr_covers G tn xs s (type_memory_size stv)` by
+    (mp_tac (Q.INST [`ty` |-> `lty`, `tv` |-> `ltv`,
+      `m` |-> `type_memory_size stv`, `w` |-> `sw`]
+      (SPEC_ALL ptr_val_ok_read_covers)) >> simp[] >>
+     metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO]) >>
+  `lookup_var xs s = SOME sw` by gvs[eval_operand_def] >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory stv v (w2n sw) mem` by
+    (fs[ptr_mem_ok_def] >> metis_tac[]) >>
+  `w2n sw <= w2n sw + type_memory_size stv - 1 /\
+   w2n sw + type_memory_size stv - 1 < w2n sw + val_footprint ltv v` by
+    decide_tac >>
+  `w2n sw + type_memory_size stv - 1 < s.vs_alloca_next` by
+    (mp_tac (Q.INST [`t` |-> `lty`, `tv` |-> `ltv`,
+      `es` |-> `ee`, `w` |-> `sw`,
+      `i` |-> `w2n (sw : bytes32) + type_memory_size stv - 1`]
+      (SPEC_ALL expr_val_at_below_frontier)) >> simp[] >> gvs[] >> decide_tac) >>
+  `w2n sw + type_memory_size stv <= s.vs_alloca_next` by decide_tac >>
+  `w2n sw + type_memory_size stv <= b \/ b + cap <= w2n sw` by
+    (qpat_x_assum `log_source_apart _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [log_source_apart_def]) >>
+     disch_then (qspecl_then [`ltv`, `sw`] mp_tac) >> simp[] >>
+     gvs[] >> decide_tac) >>
+  simp[log_field_src_def] >> gvs[] >> decide_tac
+QED
+
+Finalise log_field_src_from_capture
 
 (* Helper: a store into a window of the buffer keeps every field source. *)
 Theorem log_field_src_frame:
