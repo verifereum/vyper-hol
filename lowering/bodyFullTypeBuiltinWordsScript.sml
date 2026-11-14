@@ -6,7 +6,7 @@ Ancestors
   ptrDiscipline compileEnv context valueEncoding vyperTyping vyperTypeSystem
   vyperContext vyperValueOperation vyperAST vyperInterpreter vyperState venomState
 
-Theorem type_builtin_literal_vv_full[local]:
+Theorem type_builtin_literal_vv_full:
   expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es /\
   is_word_type ann /\
   (!gs. eval_expr cx (TypeBuiltin ann tb typ args) (es with gas_obs := gs) =
