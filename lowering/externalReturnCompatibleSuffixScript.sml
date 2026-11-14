@@ -28,7 +28,7 @@ Theorem return_selected_compatible_suffix:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es se sa s0 ee v op s /\
+  expr_post H ctx func ce cx e es se sa s0 ee v op s /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
@@ -43,7 +43,7 @@ Theorem return_selected_compatible_suffix:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -84,7 +84,7 @@ Proof
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
