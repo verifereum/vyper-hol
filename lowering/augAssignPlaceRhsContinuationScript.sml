@@ -299,7 +299,9 @@ Resume aug_place_rhs_operator_write_mem[callback]:
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_assum `!rhs ee. ee.gas_obs = [] /\ _ ==> _`
     (qspecl_then [`v`, `ee`] mp_tac) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  impl_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `gs` >> first_assum ACCEPT_TAC) >> strip_tac >>
   `eval_operand y t = SOME (val_to_w256 v)` by
     (drule_all expr_post_word_operand >> simp[]) >>
   `eval_operand x t = SOME (val_to_w256 cur) /\ eval_operand dst t = SOME w` by
