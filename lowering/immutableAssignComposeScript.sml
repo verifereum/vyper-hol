@@ -99,8 +99,10 @@ Proof
     metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
   `storage_well_formed_on cx fin (FST H)` by
     (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends,
-               evaluation_state_accfupds]) >>
+     `storage_well_formed_on cx fin (FST H) <=>
+      storage_well_formed_on cx ee (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     fs[]) >>
   `alloca_frame ce ee su s ce fin q` by
     (irule immutable_assign_suffix_alloca_frame >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
@@ -111,7 +113,7 @@ Proof
   irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem immutable_assign_word_stmt_post:
+Theorem immutable_assign_word_stmt_post_frame:
   compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -128,6 +130,8 @@ Theorem immutable_assign_word_stmt_post:
   (!x. op = Var x ==> not_fresh_at su x) /\
   eval_operand op s = SOME (typed_val_to_w256 itv v) ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx /\
     stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
 Proof
   strip_tac >>
@@ -136,6 +140,10 @@ Proof
   `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
   drule_all immutable_assign_word_store >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s`
+       mp_tac >> simp[venom_state_component_equality]) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[] >>
   `type_memory_size itv = 32` by metis_tac[word_tv_memory_size] >>
   `same_blocks su sb` by
@@ -160,6 +168,102 @@ Proof
   simp[] >> conj_tac
   >- (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >>
       fs[regions_disjoint_def] >> decide_tac) >>
+  metis_tac[evaluated_immutable_admissible]
+QED
+
+Theorem immutable_assign_word_stmt_post:
+  compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
+  fn_has_code su sb func /\ ~block_is_terminated sb /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+  expr_sim_inv ce cx env ee /\
+  local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\ is_word_type ity /\
+  value_has_type itv v /\ off < dimword (:256) /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) /\
+  (!x. op = Var x ==> not_fresh_at su x) /\
+  eval_operand op s = SOME (typed_val_to_w256 itv v) ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all immutable_assign_word_stmt_post_frame >> metis_tac[]
+QED
+
+Theorem immutable_assign_direct_stmt_post_frame:
+  compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty bytes su = ((),sb) /\
+  fn_has_code su sb func /\ ~block_is_terminated sb /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+  expr_sim_inv ce cx env ee /\
+  local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  ity = sty /\ ~is_bytestring_type ity /\
+  copy_size = (if is_bytestring_type ity then type_memory_bytes ce sty else bytes) /\
+  n = (if copy_size <= 32 then 1 else (copy_size+31) DIV 32) /\
+  32*n <= type_memory_size itv /\
+  value_has_type itv v /\ value_has_type stv v /\
+  val_in_memory stv v a s.vs_memory /\ val_footprint stv v <= k /\
+  k <= 32*n /\ a+k < dimword (:256) /\ off+32*n < dimword (:256) /\
+  (a+k <= off \/ off+32*n <= a) /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) /\
+  (!x. op = Var x ==> not_fresh_at su x) /\
+  (!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at su x) /\
+  eval_operand op s = SOME (n2w a) ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx /\
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w` by
+    fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def] >>
+  `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
+  drule immutable_assign_direct_store >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
+  disch_then (qspecl_then [`n`,`k`,`ce.ce_imm_alloca`,`ctx`,`copy_size`,`off`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `compile_imm_store_words ce.ce_imm_alloca op (Lit (n2w off)) n 0 su = ((),sb)` by
+    (qpat_x_assum `n = _` (fn th => rewrite_tac[th]) >>
+     irule immutable_store_suffix_words >>
+     fs[compile_assign_value_def, comp_bind_def, comp_return_def] >>
+     gvs[comp_return_def]) >>
+  `LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    metis_tac[immutable_assign_store_words_memory_length] >>
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s`
+       mp_tac >> simp[venom_state_component_equality]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  ntac 4 (conj_tac >- simp[]) >>
+  `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
+   (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+     vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
+     vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s`
+       mp_tac >> simp[venom_state_component_equality] >> strip_tac >> simp[]) >>
+  irule immutable_assign_suffix_stmt_post >> simp[] >>
+  conj_tac >- fs[same_blocks_def] >>
+  qexistsl_tac [`env`,`id`,`itv`,`ity`,`off`,`v`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      gvs[regions_disjoint_def] >>
+      disj2_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
+      qexists_tac `off + type_memory_size itv` >>
+      simp[arithmeticTheory.LESS_EQ_MONO_ADD_EQ, arithmeticTheory.ADD_COMM]) >>
   metis_tac[evaluated_immutable_admissible]
 QED
 
@@ -192,41 +296,105 @@ Theorem immutable_assign_direct_stmt_post:
     stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w` by
-    fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def] >>
-  `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
-  drule immutable_assign_direct_store >>
+  drule_all immutable_assign_direct_stmt_post_frame >> metis_tac[]
+QED
+
+Theorem immutable_assign_normalized_stmt_post_frame:
+  compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty L su = ((),sb) /\
+  ity <> sty /\ ~is_bytestring_type ity /\
+  fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
+  local_ptrs_reserved ce su /\ (!x. op = Var x ==> not_fresh_at su x) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv.
+       evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  type_widens_to (get_tenv cx) sty ity /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  value_has_type stv v /\ value_has_type itv v /\ val_wf stv v /\ val_wf itv v /\
+  stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+  expr_sim_inv ce cx env ee /\
+  eval_operand op s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size stv < dimword (:256) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  (!b sz. FLOOKUP s.vs_allocas su.cs_next_id = SOME (b,sz) ==>
+     w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  ce.ce_is_ctor /\
+  (!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at su x) /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) /\
+  L = type_memory_size itv /\ L = 32*n /\ 0 < L /\ off+L < dimword (:256) ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx /\
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~(is_bytestring_type ity /\ is_bytestring_type sty)` by simp[] >>
+  drule_all immutable_assign_normalized_compile >> strip_tac >>
+  `cs_extends su mid /\ ci_mono su mid` by
+    metis_tac[compile_alloc_buffer_extends, ci_mono_compile_alloc_buffer, pairTheory.SND] >>
+  `cs_extends mid sm /\ ci_mono mid sm` by
+    metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
+  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity L sm = ((),sb)` by
+    (simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
+     qpat_x_assum `(if _ then _ else _) sm = _` mp_tac >> simp[]) >>
+  `cs_extends sm sb` by metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code su sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `compile_alloc_buffer (type_memory_size itv) su = (buf,mid)` by metis_tac[] >>
+  drule immutable_assign_normalize_prefix_frame >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (qspec_then `get_tenv cx` mp_tac) >>
+  (impl_tac >- (simp[] >> gvs[])) >> strip_tac >>
+  `ci_mono su sm` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `local_ptrs_reserved ce sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `su` >> fs[ci_mono_def]) >>
+  `!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at sm x` by
+    metis_tac[compiler_ci_mono_not_fresh] >>
+  `!x. buf.buf_operand = Var x ==> not_fresh_at sm x` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> simp[] >>
+     irule compiler_ci_mono_not_fresh >> qexists_tac `mid` >> simp[]) >>
+  `regions_disjoint off L (w2n pw) L` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s` kall_tac >>
+     drule_all immutable_assign_declared_region >> strip_tac >>
+     first_x_assum (qspecl_then [`su.cs_next_id`,`w2n pw`,`type_memory_size itv`] mp_tac) >>
+     simp[regions_disjoint_def]) >>
+  `n = (if L <= 32 then 1 else (L+31) DIV 32)` by
+    (Cases_on `L <= 32` >- (fs[] >> decide_tac) >>
+     qpat_assum `L = 32*n` (fn th => rewrite_tac[th]) >>
+     simp[arithmeticTheory.MULT_COMM, arithmeticTheory.ADD_DIV_ADD_DIV]) >>
+  qpat_assum `compile_assign_value _ _ _ buf.buf_operand _ _ ity ity _ _ = _`
+    (mp_then Any mp_tac immutable_assign_direct_stmt_post_frame) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ r`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ r.vs_memory`)) >>
+  disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP env.bare_globals _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
-  disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
-  disch_then (qspecl_then [`n`,`k`,`ce.ce_imm_alloca`,`ctx`,`copy_size`,`off`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `compile_imm_store_words ce.ce_imm_alloca op (Lit (n2w off)) n 0 su = ((),sb)` by
-    (qpat_x_assum `n = _` (fn th => rewrite_tac[th]) >>
-     irule immutable_store_suffix_words >>
-     fs[compile_assign_value_def, comp_bind_def, comp_return_def] >>
-     gvs[comp_return_def]) >>
-  `LENGTH s.vs_memory <= LENGTH u.vs_memory` by
-    metis_tac[immutable_assign_store_words_memory_length] >>
-  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
-   (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
-     vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
-     vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s` by
-    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s`
-       mp_tac >> simp[venom_state_component_equality] >> strip_tac >> simp[]) >>
-  irule immutable_assign_suffix_stmt_post >> simp[] >>
-  conj_tac >- fs[same_blocks_def] >>
-  qexistsl_tac [`env`,`id`,`itv`,`ity`,`off`,`v`] >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      gvs[regions_disjoint_def] >>
-      disj2_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `off + type_memory_size itv` >>
-      simp[arithmeticTheory.LESS_EQ_MONO_ADD_EQ, arithmeticTheory.ADD_COMM]) >>
-  metis_tac[evaluated_immutable_admissible]
+  disch_then (qspecl_then [`n`,`lctx`,`L`,`L`] mp_tac) >>
+  (impl_tac >- (qpat_x_assum `n = if _ then _ else _` kall_tac >>
+    simp[] >> conj_tac >- metis_tac[val_footprint_le] >>
+    fs[regions_disjoint_def])) >> strip_tac >>
+  qexists_tac `q` >> conj_tac
+  >- (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+      qexists_tac `r` >> simp[]) >>
+  ntac 4 (conj_tac >- simp[]) >>
+  irule stmt_post_entry_frame >>
+  qexistsl_tac [`ee`,`r`,`sm`] >>
+  qpat_x_assum `n = if _ then _ else _` kall_tac >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule compiler_ci_mono_not_fresh >>
+      qexists_tac `su` >> simp[]) >>
+  fs[ci_mono_def]
 QED
 
 Theorem immutable_assign_normalized_stmt_post:
@@ -264,68 +432,11 @@ Theorem immutable_assign_normalized_stmt_post:
     stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~(is_bytestring_type ity /\ is_bytestring_type sty)` by simp[] >>
-  drule_all immutable_assign_normalized_compile >> strip_tac >>
-  `cs_extends su mid /\ ci_mono su mid` by
-    metis_tac[compile_alloc_buffer_extends, ci_mono_compile_alloc_buffer, pairTheory.SND] >>
-  `cs_extends mid sm /\ ci_mono mid sm` by
-    metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
-  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity L sm = ((),sb)` by
-    (simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
-     qpat_x_assum `(if _ then _ else _) sm = _` mp_tac >> simp[]) >>
-  `cs_extends sm sb` by metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>
-  `fn_has_code su sm func /\ fn_has_code sm sb func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `compile_alloc_buffer (type_memory_size itv) su = (buf,mid)` by metis_tac[] >>
-  drule immutable_assign_normalize_prefix >>
-  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  disch_then (qspec_then `get_tenv cx` mp_tac) >>
-  (impl_tac >- (simp[] >> gvs[])) >> strip_tac >>
-  `ci_mono su sm` by
-    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
-  `local_ptrs_reserved ce sm` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `su` >> fs[ci_mono_def]) >>
-  `!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at sm x` by
-    metis_tac[compiler_ci_mono_not_fresh] >>
-  `!x. buf.buf_operand = Var x ==> not_fresh_at sm x` by
-    (drule compile_alloc_buffer_parts >> strip_tac >> simp[] >>
-     irule compiler_ci_mono_not_fresh >> qexists_tac `mid` >> simp[]) >>
-  `regions_disjoint off L (w2n pw) L` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s` kall_tac >>
-     drule_all immutable_assign_declared_region >> strip_tac >>
-     first_x_assum (qspecl_then [`su.cs_next_id`,`w2n pw`,`type_memory_size itv`] mp_tac) >>
-     simp[regions_disjoint_def]) >>
-  `n = (if L <= 32 then 1 else (L+31) DIV 32)` by
-    (Cases_on `L <= 32` >- (fs[] >> decide_tac) >>
-     qpat_assum `L = 32*n` (fn th => rewrite_tac[th]) >>
-     simp[arithmeticTheory.MULT_COMM, arithmeticTheory.ADD_DIV_ADD_DIV]) >>
-  qpat_assum `compile_assign_value _ _ _ buf.buf_operand _ _ ity ity _ _ = _`
-    (mp_then Any mp_tac immutable_assign_direct_stmt_post) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ r`)) >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ r.vs_memory`)) >>
-  disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP env.bare_globals _ = _`)) >>
-  disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
-  disch_then (qspecl_then [`n`,`lctx`,`L`,`L`] mp_tac) >>
-  (impl_tac >- (qpat_x_assum `n = if _ then _ else _` kall_tac >>
-    simp[] >> conj_tac >- metis_tac[val_footprint_le] >>
-    fs[regions_disjoint_def])) >> strip_tac >>
-  qexists_tac `q` >> conj_tac
-  >- (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
-      qexists_tac `r` >> simp[]) >>
-  irule stmt_post_entry_frame >>
-  qexistsl_tac [`ee`,`r`,`sm`] >>
-  qpat_x_assum `n = if _ then _ else _` kall_tac >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> irule compiler_ci_mono_not_fresh >>
-      qexists_tac `su` >> simp[]) >>
-  fs[ci_mono_def]
+  drule_all immutable_assign_normalized_stmt_post_frame >> metis_tac[]
 QED
 
 (* Store dispatch after the RHS has been materialised. *)
-Theorem immutable_assign_value_stmt_post:
+Theorem immutable_assign_value_stmt_post_frame:
   body_inv tops ctx ce cx /\ cx.in_deploy /\
   supported_immutable_type tops (ce.ce_module,id) = SOME ity /\
   expr_body_pre ce cx env e es /\
@@ -347,6 +458,8 @@ Theorem immutable_assign_value_stmt_post:
   off + type_memory_size itv < dimword (:256) /\
   write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx /\
     stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -363,7 +476,7 @@ Proof
       `expr_type e = ity` by metis_tac[compileEnvTheory.type_widens_to_word] >>
       `eval_operand op s = SOME (typed_val_to_w256 itv v)` by
         fs[expr_post_def, expr_val_rel_def] >>
-      irule immutable_assign_word_stmt_post >>
+      irule immutable_assign_word_stmt_post_frame >>
       simp[] >>
       qexistsl_tac [`type_memory_bytes ce ity`,`env`,`id`,`itv`,`ity`,`loc`,`off`,
         `op`,`lowered_value_type ce e`,`v`] >>
@@ -411,7 +524,14 @@ Proof
       disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
       disch_then (qspecl_then [`func`,`ctx`,`off`] mp_tac) >>
       (impl_tac >- (simp[] >> gvs[regions_disjoint_def] >> metis_tac[])) >> strip_tac >>
+      `q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+       q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx` by
+        (qpat_x_assum `q with <|vs_vars := _; vs_memory := _;
+          vs_immutables := _; vs_prev_bb := _; vs_current_bb := _;
+          vs_inst_idx := _|> = s` mp_tac >>
+         simp[venom_state_component_equality]) >>
       qexists_tac `q` >> conj_tac >- first_assum ACCEPT_TAC >>
+      ntac 4 (conj_tac >- simp[]) >>
       `q with vs_inst_idx := LENGTH sb.cs_current_insts = q` by
         simp[venom_state_component_equality] >>
       pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
@@ -443,7 +563,7 @@ Proof
       qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       simp[] >> disch_tac >>
       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
-        (mp_then Any mp_tac immutable_assign_direct_stmt_post) >>
+        (mp_then Any mp_tac immutable_assign_direct_stmt_post_frame) >>
       disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
       disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
@@ -485,7 +605,7 @@ Proof
   `?n. type_memory_size itv = 32*n` by metis_tac[type_memory_size_slots] >>
   `val_wf itv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   qpat_assum `compile_assign_value _ _ _ op _ _ _ _ _ _ = _`
-    (mp_then Any mp_tac immutable_assign_normalized_stmt_post) >>
+    (mp_then Any mp_tac immutable_assign_normalized_stmt_post_frame) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
@@ -495,6 +615,34 @@ Proof
   (impl_tac >-
     (`acyclic_struct_metadata ce.ce_struct_fields` by fs[bodySimTheory.body_inv_def] >>
      simp[] >> fs[expr_sim_inv_def] >> metis_tac[])) >> simp[]
+QED
+
+Theorem immutable_assign_value_stmt_post:
+  body_inv tops ctx ce cx /\ cx.in_deploy /\
+  supported_immutable_type tops (ce.ce_module,id) = SOME ity /\
+  expr_body_pre ce cx env e es /\
+  assignable_type env.type_defs (expr_type e) /\
+  type_widens_to env.type_defs (expr_type e) ity /\
+  (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
+  expr_sim_inv ce cx env ee /\
+  expr_post H ctx func ce cx e ers si su s0 ee v op s /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity) loc
+    ity (lowered_value_type ce e) (type_memory_bytes ce ity) su = ((),sb) /\
+  fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
+  local_ptrs_reserved ce su /\ (!x. op = Var x ==> not_fresh_at su x) /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  (!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at su x) /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  off + type_memory_size itv < dimword (:256) /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all immutable_assign_value_stmt_post_frame >> metis_tac[]
 QED
 
 (* The read/unwrap and immutable write form a zero-mark RHS continuation. *)
@@ -550,6 +698,129 @@ Proof
   qexistsl_tac [`fin`,`q`] >> simp[] >> conj_tac
   >- (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
       qexists_tac `u` >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >> simp[]) >>
+  `stmt_state_rel H ctx func ce cx ee r` by fs[vv_post_def] >>
+  `local_ptrs_reserved ce (sa with cs_next_var := sm.cs_next_var)` by
+    (fs[local_ptrs_reserved_def, ci_mono_def, not_fresh_at_def] >> metis_tac[]) >>
+  `alloca_frame ce es sa s0 ce ee r` by
+    (drule_all vv_post_alloca_frame >> simp[]) >>
+  `alloca_frame ce ee (sa with cs_next_var := sm.cs_next_var) r ce ee u` by
+    metis_tac[expr_post_alloca_frame] >>
+  `alloca_frame ce es sa s0 ce ee u` by
+    (irule alloca_frame_trans >>
+     qexistsl_tac [`ce`,`ee`,`r`,`sa with cs_next_var := sm.cs_next_var`] >>
+     simp[] >> fs[vv_post_def]) >>
+  irule stmt_post_entry_frame >>
+  qexistsl_tac [`ee`,`u`,`su`] >> simp[] >>
+  fs[vv_post_def, expr_post_def, ci_mono_def, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* A constructor immutable write leaves the world observed by H unchanged. *)
+Theorem immutable_assign_stmt_post_transport:
+  stmt_post H0 ctx func cx lctx ce ce sa sb es s0 (INL ()) fin q /\
+  stmt_state_rel H ctx func ce cx ee u /\
+  storage_well_formed_on cx ee (FST H) /\
+  write_place cx (ImmutablePlace src id []) v ee = (INL (),fin) /\
+  q.vs_accounts = u.vs_accounts /\ q.vs_transient = u.vs_transient /\
+  q.vs_requests = u.vs_requests /\ q.vs_call_ctx = u.vs_call_ctx ==>
+  stmt_post H ctx func cx lctx ce ce sa sb es s0 (INL ()) fin q
+Proof
+  strip_tac >>
+  `?imms. fin = ee with immutables := imms` by
+    (drule vyperPlaceFramesTheory.write_immutable_place_frame >> simp[]) >>
+  `stmt_state_rel H0 ctx func ce cx fin q` by fs[stmt_post_def] >>
+  `stmt_state_rel H ctx func ce cx fin q` by
+    (fs[stmt_state_rel_def, state_rel_def] >> gvs[] >>
+     gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
+         venomStateTheory.contract_storage_def,
+         venomStateTheory.contract_transient_def] >> metis_tac[]) >>
+  `storage_well_formed_on cx fin (FST H) <=>
+   storage_well_formed_on cx ee (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> gvs[]) >>
+  `storage_well_formed_on cx fin (FST H)` by metis_tac[] >>
+  gvs[stmt_post_def]
+QED
+
+Theorem immutable_assign_normal_continuation_horizons:
+  body_inv tops ctx ce cx /\ cx.in_deploy /\
+  supported_immutable_type tops (ce.ce_module,id) = SOME ity /\
+  expr_body_pre ce cx env e es /\
+  assignable_type env.type_defs (expr_type e) /\
+  type_widens_to env.type_defs (expr_type e) ity /\
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  unwrap_value ce vv sm = (op,su) /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity)
+    (vv_location vv) ity (lowered_value_type ce e) (type_memory_bytes ce ity) su = ((),sb) /\
+  fn_has_code sm su func /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated sb /\ local_ptrs_reserved ce sa /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    vv_post H ctx func ce cx e es sa sm s0 ee tv vv r) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+  (!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at sa x) /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  off + type_memory_size itv < dimword (:256) ==>
+  ?fin q.
+    (!tail. (do v <- read_result cx tv;
+                p <- eval_target_place cx (TopLevelNameTarget (ce.ce_module,id)); write_place cx p v od)
+       (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
+    gas_marked_path F ctx func r 0 (OK q) /\
+    !H. valid_horizon cx st0 H fin.storage_trace ==>
+      stmt_post H ctx func cx lctx ce ce sa sb es s0 (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `stmt_state_rel H0 ctx func ce cx es s0 /\
+   vv_post H0 ctx func ce cx e es sa sm s0 ee tv vv r` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func ce cx e es sa sm s0 ee tv vv r` by metis_tac[] >>
+  `ci_mono sa sm` by metis_tac[cj 1 compile_expr_ci_mono, pairTheory.SND] >>
+  `ci_mono sm su` by metis_tac[ci_mono_unwrap_value, pairTheory.SND] >>
+  `local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su` by
+    (fs[ci_mono_def, local_ptrs_reserved_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[cj 1 compiler_compile_var] >>
+  drule exprSimAggregateSourceTheory.vv_post_materialises >> strip_tac >>
+  drule_all exprSimAggregateBodyCountedTheory.unwrap_value_body_rebased_path_horizons >>
+  strip_tac >>
+  `expr_post H0 ctx func ce cx e ee
+     (sa with cs_next_var := sm.cs_next_var) su r ee v op u` by metis_tac[] >>
+  drule_all immutable_assign_read_source >> strip_tac >>
+  `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
+  `(do pv <- eval_expr cx e; read_result cx pv od) (es with gas_obs := gs) = (INL v,ee)` by
+    simp[bind_def] >>
+  `!x. op = Var x ==> not_fresh_at su x` by
+    (drule compiler_unwrap_value_var >> Cases_on `vv` >> gvs[vv_operand_def]) >>
+  `!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==> not_fresh_at su x` by
+    (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  drule_all immutable_assign_value_stmt_post_frame >>
+  disch_then (qspec_then `lctx` strip_assume_tac) >>
+  `fin.storage_trace = ee.storage_trace` by
+    (drule vyperPlaceFramesTheory.write_immutable_place_frame >>
+     strip_tac >> simp[]) >>
+  qexistsl_tac [`fin`,`q`] >> simp[] >> conj_tac
+  >- (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+      qexists_tac `u` >> simp[]) >>
+  rpt strip_tac >>
+  `vv_post H ctx func ce cx e es sa sm s0 ee tv vv r /\
+   expr_post H ctx func ce cx e ee
+     (sa with cs_next_var := sm.cs_next_var) su r ee v op u` by metis_tac[] >>
+  `stmt_post H ctx func cx lctx ce ce su sb ee u (INL ()) fin q` by
+    (irule (immutable_assign_stmt_post_transport
+       |> INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       |> Q.INST [`H0` |-> `H0`, `ee` |-> `ee`, `u` |-> `u`,
+                  `src` |-> `ce.ce_module`, `id` |-> `id`, `v` |-> `v`]) >>
+     simp[] >> conj_tac
+     >- (qexistsl_tac [`ee`,`id`,`u`,`v`] >> simp[] >> fs[expr_post_def]) >>
+     qexists_tac `H0` >> simp[]) >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
     (drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >> simp[]) >>
   `stmt_state_rel H ctx func ce cx ee r` by fs[vv_post_def] >>

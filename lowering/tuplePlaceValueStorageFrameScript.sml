@@ -2,10 +2,11 @@
    state-correct execution endpoint. Normalization may change fresh scratch. *)
 Theory tuplePlaceValueStorageFrame
 Ancestors
-  tuplePlaceStore tuplePlaceFramedStore placeStoreStorage placeStoreSlots stmtLoweringMono
+  tuplePlaceStore tuplePlaceFramedStore placeStore placeStoreStorage placeStoreSlots stmtLoweringMono
   stmtSimDefs exprSimHypsDefs loweringPosts venomState stmtLowering exprLowering
   compileEnv loweringStateRelDefs vyperInterpreter vyperState vyperValue vyperTypeSystem
   fragGasPath fragGasMode arithmetic exprLoweringProps stmtSimStoreCopy
+Libs horizonTypeLib
 
 (* Every observed horizon puts the written leaf inside one of its regions,
    at the slot the store runs on. *)
@@ -19,7 +20,7 @@ Theorem tuple_place_storage_leaf_horizon:
 Proof
   rw[vyperStoragePlaceObservedTheory.storage_place_observed_def] >>
   drule_all place_store_storage_leaf_bounds >> strip_tac >>
-  metis_tac[]
+  metis_tac[ADD_COMM]
 QED
 
 Theorem tuple_place_value_storage_run_frame:
@@ -119,13 +120,16 @@ Resume tuple_place_value_storage_run_frame[equal]:
     place_store_slots_suffix_run_horizons >>
   (impl_tac >- (fs[] >> metis_tac[])) >>
   strip_tac >> qexists_tac `t` >> gvs[] >> rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _ (* g|sg *)`] >-
   (rpt strip_tac >>
   `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl dtv /\
      w2n (root + n2w delta) = w2n rk + dl` by
     (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
   qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
-  metis_tac[])
+  qexistsl_tac [`dl`, `pth`, `rt`, `rk`] >> conj_tac
+    >- (qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >>
+        qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >> decide_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC)
 QED
 
 Resume tuple_place_value_storage_run_frame[bytes]:
@@ -150,13 +154,16 @@ Resume tuple_place_value_storage_run_frame[bytes]:
     mp_tac place_store_slots_bytes_run_horizons >>
   (impl_tac >- (fs[] >> metis_tac[])) >>
   strip_tac >> qexists_tac `t` >> gvs[] >> rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _ (* g|sg *)`] >-
   (rpt strip_tac >>
   `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl dtv /\
      w2n (root + n2w delta) = w2n rk + dl` by
     (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
   qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
-  metis_tac[])
+  qexistsl_tac [`dl`, `pth`, `rt`, `rk`] >> conj_tac
+    >- (qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >>
+        qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >> decide_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC)
 QED
 
 Resume tuple_place_value_storage_run_frame[normalize]:
@@ -208,7 +215,8 @@ Resume tuple_place_value_storage_run_frame[normalize]:
      w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw)` by
     (qpat_assum `!sw. eval_operand op s = SOME sw ==> _` (qspec_then `sw` mp_tac) >>
      simp[arithmeticTheory.ADD_COMM]) >>
-  drule_at (Pat `compile_alloc_buffer _ _ = _`) tuple_place_normalize_frame >>
+  drule_at (Pat `compile_alloc_buffer _ _ = _`)
+    (at_horizon_named "H" (at_horizon_named "H0" tuple_place_normalize_frame)) >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`H0`, `cx`, `ctx`, `func`, `ee`, `stv`, `v`, `sw`, `s`] mp_tac) >>
   (impl_tac >- (simp[arithmeticTheory.ADD_COMM] >> metis_tac[])) >>
@@ -265,13 +273,16 @@ Resume tuple_place_value_storage_run_frame[normalize_suffix]:
      disch_then (qx_choose_then `t`
        (strip_assume_tac o SRULE [wordsTheory.n2w_w2n])) >>
      qexists_tac `t` >> rpt conj_tac
-     >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+     >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _ (* g|sg *)`] >-
     (rpt strip_tac >>
     `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl dtv /\
        w2n (root + n2w delta) = w2n rk + dl` by
       (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
     qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
-    metis_tac[]) >>
+    qexistsl_tac [`dl`, `pth`, `rt`, `rk`] >> conj_tac
+    >- (qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >>
+        qpat_x_assum `w2n (root + n2w delta) = _` mp_tac >> decide_tac) >>
+    conj_tac >> first_assum ACCEPT_TAC) >>
      fs[]) >>
   qexists_tac `t` >> conj_tac
   >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]

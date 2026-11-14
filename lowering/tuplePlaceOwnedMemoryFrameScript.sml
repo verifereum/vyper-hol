@@ -376,14 +376,15 @@ Resume tuple_place_owned_memory_forward_frame[staged]:
   disch_then (qspecl_then [`ee.scopes`, `sa`, `cenv`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then strip_assume_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
-       stmt_state_rel H ctx func cenv cx ee r` by
-    (qpat_assum `(r with <|vs_vars := _; vs_allocas := _;
+  qpat_assum `(r with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|>) = s`
-       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexists_tac `H0` >> fs[]) >>
+    (strip_assume_tac o SRULE [venom_state_component_equality]) >>
   qexistsl_tac [`r`, `t`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac
+   >- (rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+       conj_tac >- (qexists_tac `H0` >> asm_rewrite_tac[]) >>
+       qexists_tac `s` >> fs[])) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- (qpat_assum `(t with <|vs_vars := _; vs_memory := _;
      vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = r` mp_tac >>
@@ -464,10 +465,12 @@ Proof
   >- suspend "word" >>
   drule_all tuple_place_owned_memory_forward_frame >> strip_tac >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!H: (bool # 'b word # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff t` by
     (rpt strip_tac >>
-     qpat_assum `!H. stmt_state_rel H _ _ _ _ ee s ==> _` drule >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee r` by
+       (first_assum irule >> first_assum ACCEPT_TAC) >>
      irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `val_in_memory _ _ _ t.vs_memory`)) >>
      qexistsl_tac [`dty`, `ee`, `env`, `p`, `r`, `s`, `sa`] >>
@@ -483,7 +486,8 @@ Resume tuple_place_owned_memory_run_frame[word]:
     gvs[compile_assign_value_def] >>
   `eval_operand op s = SOME (typed_val_to_w256 stv v)` by fs[expr_val_rel_def] >>
   qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 stv v) s` >>
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!H: (bool # 'b word # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx ee s ==>
        stmt_state_rel H ctx func cenv cx ff u` by
     (rpt strip_tac >> Cases_on `p`
      >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])
