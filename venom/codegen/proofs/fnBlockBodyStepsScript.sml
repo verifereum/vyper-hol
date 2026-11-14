@@ -2,7 +2,7 @@
  * The per-instruction steps of fnBlockBody$block_body_frame_sim.
  *
  * body_inv bundles that theorem's premises (all but the fuel-level
- * simulation hypotheses) at instruction k of block bb; body_result is
+ * simulation hypotheses) at instruction k of block bb; body_result_simple is
  * its conclusion about a run result.  Each instruction class gets one
  * lemma: an ordinary, GAS or INVOKE instruction that steps OK moves the
  * invariant to k + 1 (body_inv_advance); a JMP or JNZ hands the rest of
@@ -18,7 +18,7 @@
 Theory fnBlockBodySteps
 Ancestors
   fnBlockBodyHelpers fnBlockPlanStatic fnAliasStep
-  fnFrameStepsRevertForwardDeep fnFrameDeep fnSimSpec fnPlanPlace
+  fnFrameStepsRevertForwardDeep fnFrameDeep fnSimSpec fnPlanPlace asmRunBounded
   fnPlanCover fnPlanPlaceDfsBlock fnPlanLineage fnLineageStatic
   fnPlanPrefix opcodeClass cfgAnalysisProps
   stepWriteFootprintForward asmTargetSafety codegen allocMono
@@ -30,8 +30,8 @@ Ancestors
 
 (* ===== The invariant and the conclusion ===== *)
 
-(* block_body_frame_sim's premises other than gen_fn_sim_at and
-   gen_fn_frame_sim_at, in its variable order. *)
+(* block_body_frame_sim's premises other than gen_fn_sim_at_simple and
+   gen_fn_frame_sim_at_simple, in its variable order. *)
 Definition body_inv_def:
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -113,17 +113,24 @@ End
 
 (* block_body_frame_sim's conclusion about the run result res from the
    assembly state as. *)
+(* The safety mode constrains the same witness as the optional budget. *)
 Definition body_result_def:
-  body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
     (!vs'. res = Halt vs' ==>
-       ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+       ?n as'. cost_le b n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               asm_steps lo o2pc prog n as = AsmHalt as' /\
                venom_asm_terminal_rel vs' as') /\
     (!a vs'. res = Abort a vs' ==>
-       ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+       ?n as'. cost_le b n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
                 (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
                venom_asm_terminal_rel vs' as') /\
     (!ret vs'. res = IntRet ret vs' ==>
-       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
+       ?n as'. cost_le b n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               asm_steps lo o2pc prog n as = AsmOK as' /\
                as'.as_pc = pc_ret /\
                as'.as_stack = REVERSE ret.iret_values ++ rest /\
                context_memory_rel cpl vs'.vs_memory as'.as_memory /\
@@ -133,29 +140,61 @@ Definition body_result_def:
                shared_state_rel vs' as')
 End
 
+
+Theorem body_result_resource_mono:
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res /\
+  (c = NONE \/ ?B C. b = SOME B /\ c = SOME C /\ B <= C) ==>
+  body_result safe c lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  simp[body_result_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexistsl_tac [`n`, `as'`] >> simp[] >> irule cost_le_mono >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem body_result_resource_prefix:
+  asm_steps lo o2pc prog n as = AsmOK as1 /\
+  (safe ==> create_safe_prefix lo o2pc prog n as) /\
+  body_result safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
+  body_result safe (OPTION_MAP (\B. n + B) b)
+    lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  rw[body_result_def] >> gvs[] >>
+  qexistsl_tac [`n + n'`, `as'`] >>
+  imp_res_tac asm_steps_add_ok >> simp[] >>
+  Cases_on `b` >> gvs[cost_le_def] >>
+  metis_tac[create_safe_prefix_compose]
+QED
+
+(* Resource-free results specialize the same execution witnesses. *)
+Definition body_result_simple_def:
+  body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+    body_result F NONE lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+End
+
 Theorem body_result_error:
   !lo o2pc prog cpl ctx fn mem0 pc_ret rest as e.
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Error e)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (Error e)
 Proof
-  simp[body_result_def]
+  simp[body_result_simple_def, body_result_def]
 QED
 
 Theorem body_result_ok:
   !lo o2pc prog cpl ctx fn mem0 pc_ret rest as s.
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as (OK s)
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as (OK s)
 Proof
-  simp[body_result_def]
+  simp[body_result_simple_def, body_result_def]
 QED
 
-(* Assembly steps that end OK in as1 compose with a result from as1. *)
 Theorem body_result_prefix:
   !lo o2pc prog cpl ctx fn mem0 pc_ret rest as as1 n res.
     asm_steps lo o2pc prog n as = AsmOK as1 /\
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
-    body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
+    body_result_simple lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
 Proof
-  rw[body_result_def] >> gvs[] >>
-  qexistsl_tac [`n' + n`, `as'`] >> imp_res_tac asm_steps_add_ok >> fs[]
+  rpt gen_tac >>
+  mp_tac (Q.INST [`safe` |-> `F`, `b` |-> `NONE`]
+    body_result_resource_prefix) >> simp[GSYM body_result_simple_def]
 QED
 
 (* ===== Generic facts ===== *)
@@ -427,7 +466,9 @@ Theorem body_inv_facts:
     (?roff rpc. FLOOKUP lo "revert" = SOME roff /\ roff < dimword (:256) /\
        FLOOKUP o2pc roff = SOME rpc /\
        asm_block_at prog rpc
-         (execute_plan cpl.cp_initial_fmp revert_postamble))
+         (execute_plan cpl.cp_initial_fmp revert_postamble)) /\
+    LENGTH bb.bb_instructions <= context_inst_count ctx /\
+    LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) <= LENGTH prog
 Proof
   strip_tac >> unpack_inv >>
   qspecl_then [`ctx`, `unit`, `Inv`, `cpl`, `i`, `fn`] mp_tac body_fn_shape >>
@@ -467,6 +508,9 @@ Proof
   >- metis_tac[]
   >- fs[]
   >- metis_tac[]
+  >- (irule context_inst_count_block >> metis_tac[EL_MEM])
+  >- (qpat_x_assum `asm_block_at prog pc0 _` mp_tac >>
+      simp[asm_block_at_def, execute_plan_def, execute_plan_append])
 QED
 
 Theorem body_inv_inst:
@@ -536,6 +580,7 @@ Theorem body_inv_step:
         | SORestore off => off < dimword(:256) | _ => T) ops /\
       (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
       asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp ops) /\
+      LENGTH (execute_plan cpl.cp_initial_fmp ops) <= LENGTH prog /\
       (!lbl j. j < LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
                EL j (execute_plan cpl.cp_initial_fmp ops) = AsmLabel lbl ==>
                ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
@@ -569,6 +614,7 @@ Proof
   >- (rw[EVERY_MEM] >> Cases_on `s` >> simp[] >> metis_tac[])
   >- metis_tac[]
   >- gvs[]
+  >- (irule asm_block_at_length >> metis_tac[])
   >- (qspecl_then [`prog`, `lo`, `o2pc`, `as.as_pc`,
                    `execute_plan cpl.cp_initial_fmp ops`] mp_tac
         asm_block_labels >>

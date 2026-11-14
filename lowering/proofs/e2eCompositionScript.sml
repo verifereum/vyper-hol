@@ -306,10 +306,12 @@ Theorem venom_frame_rel_assertion:
   (a = Revert_abort \/ s = "UNREACHABLE") /\
   venom_frame_rel es r es' (Abort a ss) ==>
   ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                (exc = Reverted \/ s = "UNREACHABLE")
+                ((exc = Reverted /\ frame_raises es Reverted) \/
+                 s = "UNREACHABLE")
 Proof
   Cases_on `a` >> simp[venom_frame_rel_def] >>
-  rpt strip_tac >> goal_assum $ drule_at Any >> simp[]
+  rpt strip_tac >> goal_assum $ drule_at Any >>
+  gvs[frameGasTheory.frame_raises_inst_raises] >> metis_tac[]
 QED
 
 Theorem external_call_result_rel_frame_success:
