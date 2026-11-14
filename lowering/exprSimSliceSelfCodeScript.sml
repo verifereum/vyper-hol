@@ -47,7 +47,7 @@ Proof
   strip_tac >> gvs[is_self_code_def]
 QED
 
-Theorem eval_self_addr_exprs[local]:
+Theorem eval_self_addr_exprs:
   eval_exprs cx [Builtin st (Env SelfAddr) []] =
     return [AddressV cx.txn.target]
 Proof
@@ -61,7 +61,7 @@ Proof
        lift_sum_def, read_result_def, bind_def, ignore_bind_def, return_def]
 QED
 
-Theorem slice_self_code_actions[local]:
+Theorem slice_self_code_actions:
   eval_expr cx
     (Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
       [Builtin ct (Acc Code) [Builtin st (Env SelfAddr) []]; start; len]) =
@@ -83,7 +83,7 @@ Proof
        vyperContextTheory.evaluate_builtin_def]
 QED
 
-Theorem slice_code_decompose[local]:
+Theorem slice_code_decompose:
   compile_slice_code start len sz sa = (r, sb) ==>
   ?out dst sc sd se sf src_len.
     r = out /\

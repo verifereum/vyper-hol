@@ -4,6 +4,7 @@ Ancestors
   targetPureWalkCallees vyperReadOnlyTargetCallFree vyperMachineFrame
   vyperCallOutcomeFrame vyperReadOnlyCalls vyperInterpreter vyperState
   vyperEvalFrame exprLowering compileVyper vyperTypeContract
+  targetPureWalkTraversal
 Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -12,16 +13,6 @@ val _ = Parse.hide "body";
 (* Transfer the existing primitive interface to the weaker, log-free frame. *)
 val machine_leaf = irule state_rel_frame_machine >>
   conj_tac >- simp[machine_frame_def];
-
-Theorem walk_bind[local]:
-  state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) f /\
-  (!v. state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (g v)) ==>
-  state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
-    (vyperState$bind f g)
-Proof
-  strip_tac >> match_mp_tac state_rel_frame_bind_guarded >>
-  conj_tac >- simp[machine_frame_def] >> simp[]
-QED
 
 Theorem target_walk_internal_frame:
   cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\

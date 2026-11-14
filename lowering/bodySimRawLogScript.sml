@@ -12,6 +12,7 @@ Libs
 
 
 Theorem raw_log_step_frame:
+  ~cx.txn.is_static /\
   inst.inst_opcode = LOG /\
   inst.inst_operands = Lit (n2w (LENGTH ops)) ::
     (REVERSE ops ++ [sz; pop]) /\ LENGTH ops <= 4 /\
@@ -27,7 +28,8 @@ Theorem raw_log_step_frame:
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
 Proof
   strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all raw_log_step >>
   disch_then SUBST1_TAC >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
@@ -39,6 +41,7 @@ QED
 
 
 Theorem raw_log_dynamic_tail_frag:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op, s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
@@ -71,6 +74,7 @@ QED
 
 
 Theorem raw_log_fixed_tail_frag:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::

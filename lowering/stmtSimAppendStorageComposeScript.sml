@@ -721,6 +721,49 @@ QED
 (* From the operand's state, the suffix either aborts on a full array or
    stores the element and the new length, along an actual path with no GAS
    reads. *)
+Theorem append_storage_word_abort_path[local]:
+  compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
+    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+  fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
+  eval_operand op s = SOME w /\ cap < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  (cap <= w2n (if tr then tload slot s else sload slot s) \/
+   s.vs_call_ctx.cc_static) ==>
+  !ctx. ?a t. gas_marked_path F ctx func s 0 (Abort a t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >>
+  drule_all append_storage_word_suffix_code >> strip_tac >>
+  `fresh_vars_wrt sb (drop_fresh sb s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `eval_operand (Lit slot) (drop_fresh sb s) = SOME slot /\
+   eval_operand op (drop_fresh sb s) = SOME w` by
+    simp[eval_operand_def, eval_operand_drop_fresh] >>
+  `vars_ext_result (run_inst_seq (emitted_insts sb sf) (drop_fresh sb s))
+     (run_inst_seq (emitted_insts sb sf) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >> fs[EVERY_MEM]) >>
+  `?a t'. run_inst_seq (emitted_insts sb sf) (drop_fresh sb s) = Abort a t'` by
+    (Cases_on `cap <= w2n (if tr then tload slot s else sload slot s)`
+     >- (`cap <= w2n (if tr then tload slot (drop_fresh sb s)
+                     else sload slot (drop_fresh sb s))` by
+           simp[storage_load_drop_fresh] >>
+         drule_all compile_dynarray_append_word_abort >> metis_tac[]) >>
+     `w2n (if tr then tload slot (drop_fresh sb s)
+           else sload slot (drop_fresh sb s)) < cap` by
+       (simp[storage_load_drop_fresh] >> decide_tac) >>
+     `(drop_fresh sb s).vs_call_ctx.cc_static` by fs[drop_fresh_def] >>
+     drule_all compile_dynarray_append_word_static >> metis_tac[]) >>
+  `?a t'. run_inst_seq (emitted_insts sb sf) s = Abort a t'` by
+    (qpat_x_assum `vars_ext_result _ _` mp_tac >>
+     simp[vars_ext_result_def] >> metis_tac[]) >>
+  rename1 `run_inst_seq (emitted_insts sb sf) s = Abort actual_abort actual_state` >>
+  qspecl_then [`emitted_insts sb sf`, `s`, `actual_state`, `actual_abort`, `ctx`, `func`, `bb`]
+    mp_tac run_inst_seq_abort_zero_path >>
+  impl_tac >- fs[EVERY_MEM] >>
+  disch_then (qx_choose_then `j` assume_tac) >>
+  qexistsl_tac [`actual_abort`, `actual_state with vs_inst_idx := j`] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem append_storage_word_suffix_path:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
@@ -758,17 +801,9 @@ QED
 
 Resume append_storage_word_suffix_path[abort]:
   strip_tac >>
-  `cap <= w2n (if tr then tload slot (drop_fresh sb s)
-               else sload slot (drop_fresh sb s))` by
-    simp[storage_load_drop_fresh] >>
-  drule_all compile_dynarray_append_word_abort >> strip_tac >>
-  `?a t'. run_inst_seq (emitted_insts sb sf) s = Abort a t'` by
-    (qpat_x_assum `vars_ext_result _ _` mp_tac >>
-     simp[vars_ext_result_def] >> metis_tac[]) >>
-  qspecl_then [`emitted_insts sb sf`, `s`, `t'`, `a`, `ctx`, `func`, `bb`]
-    mp_tac run_inst_seq_abort_zero_path >>
-  impl_tac >- fs[EVERY_MEM] >>
-  metis_tac[]
+  qpat_assum `cap <= w2n (if tr then tload slot s else sload slot s)`
+    (fn th => assume_tac (DISJ1 th ``s.vs_call_ctx.cc_static``)) >>
+  drule_all append_storage_word_abort_path >> simp[]
 QED
 
 Resume append_storage_word_suffix_path[store]:
@@ -817,6 +852,7 @@ Theorem append_storage_word_success_post[local]:
   (!x a. not_fresh_at sb x /\ lookup_var x s = SOME a ==>
          lookup_var x u = SOME a) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  ~cx.txn.is_static /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
@@ -926,7 +962,40 @@ Resume compile_append_storage_word_stmt_frag[operand]:
   `(if tr then tload slot t else sload slot t) =
    lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr)` by
     metis_tac[append_storage_header_agree] >>
-  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      qpat_assum `t.vs_call_ctx.cc_static`
+        (fn th => assume_tac (DISJ2
+          ``cenv.ce_module_dynarray_capacity nid <=
+            w2n (if tr then tload slot t else sload slot t)`` th)) >>
+      drule_all append_storage_word_abort_path >> simp[] >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      rename1 `gas_marked_path F ctx func t 0 (Abort a ta)` >>
+      `?m. !tail.
+        append_place cx (StoragePlace tr slot
+          (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v
+          (es_end with gas_obs := tail) =
+          (INR (Error (RuntimeError m)), es_end with gas_obs := tail)` by
+        (Cases_on `w2n (lookup_storage slot (get_storage cx es_end tr)) <
+                    cenv.ce_module_dynarray_capacity nid`
+         >- (qexists_tac `"write in static context"` >> gen_tac >>
+             irule append_storage_static >> simp[get_storage_gas_obs]) >>
+         qexists_tac `"append full storage array"` >> gen_tac >>
+         irule append_storage_full >> simp[get_storage_gas_obs] >> decide_tac) >>
+      `gas_marked_exec F (ctx,func)
+        (append_place cx (StoragePlace tr slot
+          (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v)
+        (es_end with gas_obs := [], t) []
+        (INR (Error (RuntimeError m))) es_end (Abort a ta)` by
+        simp[gas_marked_exec_def] >>
+      qexistsl_tac [`INR (Error (RuntimeError m))`, `es_end`, `Abort a ta`] >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
+      irule (SIMP_RULE std_ss [APPEND_NIL]
+        (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
+      qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all append_storage_word_suffix_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   Cases_on `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v

@@ -8,8 +8,9 @@
  * oracle mode the CALL takes the same outcome as the source's eval_send
  * (extCallOracleStep's send_call_oracle_step): on success both adopt it and
  * state_rel holds after, on failure the source raises "send failed" and
- * the ASSERT of the 0w success word aborts.  expr_sim_inv's
- * outcomes_accounts_typed rules out the third source result, the
+ * the ASSERT of the 0w success word aborts.  In a static frame, nonzero
+ * value instead faults at CALL after all operands run.  expr_sim_inv's
+ * outcomes_accounts_typed rules out the source's
  * "call outcome accounts" error, which Venom does not make.  The NoneV
  * result occupies no bytes, so expr_val_at holds of it wherever Lit 0w
  * points.
@@ -154,7 +155,7 @@ Theorem eval_send_value:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
        get_accounts_def, update_accounts_def, update_pending_deletions_def, get_transient_storage_def,
        lift_option_def, update_transient_def, append_logs_def,
@@ -375,7 +376,11 @@ Theorem send_call_read_step:
                        vs_logs := t'.vs_logs;
                        vs_pending_deletions := t'.vs_pending_deletions;
                        vs_returndata := t'.vs_returndata |> /\
-    ((res = INL NoneV /\
+    ((res = INR (Error (RuntimeError "write in static context")) /\
+      step_inst_base (mk_inst id CALL
+        [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
+        Abort ExHalt_abort (halt_state (set_returndata [] t))) \/
+     (res = INL NoneV /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
         OK (update_var out 1w t') /\ state_rel func cenv cx es' t') \/
@@ -394,7 +399,9 @@ Proof
       [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]`] |>
     SRULE [mk_inst_def]) >>
   disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
-  gvs[mk_inst_def] >> metis_tac[]
+  gvs[mk_inst_def]
+  >- (qexists_tac `t` >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem send_tail_frag:

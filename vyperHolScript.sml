@@ -21,6 +21,8 @@ Ancestors
   vyperLoweringHol
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
+  staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
+  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
@@ -44,6 +46,8 @@ Ancestors
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
   stmtSimReturnWiden bodyMemory
+  (* whitelist: retained raw-call and CREATE compiler shape proofs *)
+  whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
   batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr

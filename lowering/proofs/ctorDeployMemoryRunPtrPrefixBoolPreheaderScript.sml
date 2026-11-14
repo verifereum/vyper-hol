@@ -250,7 +250,7 @@ Proof
   `a+(32*n+32) = a+32*(n+1)` by decide_tac >>
   asm_rewrite_tac[] >>
   Cases_on `a+32*(n+1) <= data_size` >>
-  simp[step_inst_base_def, bool_to_word_def]
+  simp[step_inst_base_opcode_eqs, bool_to_word_def]
 QED
 
 Theorem prefix_bool_preheader_limit_continuation:
