@@ -92,3 +92,83 @@ Proof
   `y <> tv` by metis_tac[] >> simp[]
 QED
 
+
+Theorem store_slots_word_init_invariant:
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv];
+    mk_inst (id+1) JMP [Label hdr] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (!y. not_fresh_at sa y ==> y <> cv) ==>
+  ?u Gf tf.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tf)) /\
+    (\j Gj tj q.
+      store_copy_frame sa loc b k s j q /\
+      eval_operand (Var cv) q = SOME (n2w j) /\
+      op_taint tj (Var cv) = {} /\ op_prov Gj (Var cv) = NONE /\
+      allocas_from lo q /\
+      (!y. not_fresh_at sa y ==> FLOOKUP Gj y = FLOOKUP G y /\
+        op_taint tj (Var y) = op_taint tn (Var y)) /\
+      tj.t_mem = tn.t_mem /\ tj.t_imm = tn.t_imm /\
+      (if loc = LocStorage then tj.t_trans = tn.t_trans else tj.t_stor = tn.t_stor) /\
+      toplevel_copy_source_taint loc tj SUBSET
+        toplevel_copy_source_taint loc tn DIFF
+          {(k+n2w i,jj) | (i,jj) | i<j} UNION
+          {(k+n2w i,jj) | i<j /\ jj<32 /\ w2n b+32*i+jj IN tn.t_mem}) 0 Gf tf u /\
+    ~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  `?u Gf tf.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tf)) /\
+    store_copy_frame sa loc b k s 0 u /\
+    eval_operand (Var cv) u = SOME 0w /\ op_prov Gf (Var cv) = NONE /\
+    op_taint tf (Var cv) = {} /\ allocas_from lo u /\ ~u.vs_halted /\
+    u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 /\
+    (!y. not_fresh_at sa y ==> FLOOKUP Gf y = FLOOKUP G y /\
+      op_taint tf (Var y) = op_taint tn (Var y)) /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm` by
+    (irule store_slots_word_init >>
+     simp[Excl "isPREFIX"] >> conj_tac >- metis_tac[] >>
+     qexists_tac `id` >> simp[Excl "isPREFIX"]) >>
+  qexistsl_tac [`u`,`Gf`,`tf`] >>
+  simp[exprSimPtrTopLevelStorageCopyTheory.toplevel_copy_source_taint_def]
+QED
+
+Theorem store_slots_word_header_invariant:
+  Inv = (\i Gi ti q.
+    store_copy_frame sa loc b k sbase i q /\
+    eval_operand (Var cv) q = SOME (n2w i) /\
+    op_taint ti (Var cv) = {} /\ op_prov Gi (Var cv) = NONE /\
+    allocas_from lo q /\
+    (!y. not_fresh_at sa y ==> FLOOKUP Gi y = FLOOKUP Gbase y /\
+      op_taint ti (Var y) = op_taint tbase (Var y)) /\
+    ti.t_mem = tbase.t_mem /\ ti.t_imm = tbase.t_imm /\
+    (if loc = LocStorage then ti.t_trans = tbase.t_trans else ti.t_stor = tbase.t_stor) /\
+    toplevel_copy_source_taint loc ti SUBSET
+      toplevel_copy_source_taint loc tbase DIFF
+        {(k+n2w ii,jj) | (ii,jj) | ii<i} UNION
+        {(k+n2w ii,jj) | ii<i /\ jj<32 /\ w2n b+32*ii+jj IN tbase.t_mem}) /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [Var cv;cnt] [tv]) /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst jid JNZ [Var tv;Label yes;Label no] []) /\
+  eval_operand cnt s = SOME (n2w n) /\ op_taint tn cnt = {} /\
+  op_prov G cnt = NONE /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  cv <> tv /\ (!y. not_fresh_at sa y ==> y <> tv) /\
+  Inv j G tn s /\ j <= n /\ n < dimword(:256) ==>
+  ?u Gf tf.
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,Gf,tf)) /\
+    Inv j Gf tf u /\ ~u.vs_halted /\ u.vs_inst_idx = 0 /\
+    u.vs_current_bb = (if j=n then yes else no)
+Proof
+  strip_tac >> gvs[] >>
+  drule_all (SRULE [] store_slots_word_header_frame) >>
+  disch_then (qx_choosel_then [`u`,`Gf`,`tf`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`Gf`,`tf`] >> simp[] >>
+  gvs[exprSimPtrTopLevelStorageCopyTheory.toplevel_copy_source_taint_def] >>
+  metis_tac[]
+QED
