@@ -383,7 +383,9 @@ Proof
                o1_walk_step_same) >>
      impl_tac >- fs[] >> strip_tac >> rpt strip_tac >>
      asm_rewrite_tac [] >>
-     irule o1_walk_step_gas >> fs[] >> metis_tac[]) >>
+     mp_tac (Q.INST [`C` |-> `stage k`, `C'` |-> `stage (SUC k)`,
+                     `w` |-> `w`, `f` |-> `f`] o1_walk_step_gas) >>
+     impl_tac >- fs[] >> simp[]) >>
   Induct
   >- (strip_tac >> qpat_assum `!k. k < 7 /\ _ ==> _` (qspec_then `0` mp_tac) >>
       fs[]) >>
