@@ -149,7 +149,7 @@ Proof
   Cases_on `step_inst m D i s` >>
   Cases_on `step_inst m D i t` >>
   gvs[terminates_def, step_result_rel_def, scfg_result_def, frame_result_rel_def] >>
-  metis_tac[scfg_payload_frame]
+  imp_res_tac scfg_payload_frame >> gvs[]
 QED
 
 Theorem scfg_chain_gas_exec_nonleft_distance[local]:
