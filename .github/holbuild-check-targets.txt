@@ -2,6 +2,8 @@
 # free of cheats, oracles, axioms and hypotheses. THEORY checks every stored
 # theorem of a theory; THEORY:THEOREM checks one. Add a selector here to
 # enforce a theorem or theory clean; never check tags or hypotheses in a script.
+o1ContractFmpLoweringTheory
+o1PreDftStaticMemTheory
 abiBuiltinValidSourceTheory
 abiBuiltinValidUnwrapTheory
 abiDecodeBoundsTestTheory

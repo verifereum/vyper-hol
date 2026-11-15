@@ -13,7 +13,9 @@ Theorem o1_static_mem_before_dft_transport:
       (stage k) (stage (SUC k))) /\
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
   (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
-  fmp_free_ctx (stage 3) /\ callee_first names (stage 3).ctx_functions /\
+  fmp_free_ctx (stage 3) /\
+  EVERY no_raw_fmp_ops (stage 3).ctx_functions /\
+  callee_first names (stage 3).ctx_functions /\
   o1_run_state_ok vs /\ max_live_eom (stage 3) = SOME eom /\
   mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
     (stage 3) vs ==>
@@ -62,7 +64,7 @@ QED
 Resume o1_static_mem_before_dft_transport[sealed]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
-     (stage 3).ctx_functions` by fs[fmp_free_ctx_def] >>
+     (stage 3).ctx_functions` by fs[fmp_free_ctx_def, EVERY_MEM] >>
   drule_all fmp_lowering_stage_sealed >> strip_tac >>
   `ctx_seal_eq (stage 3) (stage 4)` by
     (fs[ctx_seal_eq_def, ctx_pass_stage_def] >>
@@ -87,7 +89,7 @@ Resume o1_static_mem_before_dft_transport[sealed]:
   `mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
      (stage 6) vs` by (drule_all simplify_cfg_stage_mem_inv_rf >> simp[]) >>
   `mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
-     (stage 7) vs` by (drule_all sue_stage_mem_inv_rf >> simp[]) >>
+     (stage 7) vs` by (drule_all sue_stage_mem_inv >> simp[]) >>
   conj_tac >- (
     `max_live_eom (stage 4) = max_live_eom (stage 3)` by
       (irule ctx_pass_stage_max_live_eom >>

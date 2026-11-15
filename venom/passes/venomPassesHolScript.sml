@@ -18,6 +18,7 @@ Ancestors
   fmpStageOpSteps
   fmpStageFmpSteps
   fmpStageBlockSim
+  o1PreDftStaticMem
   (* lower dload/dloadbytes *)
   lowerDload
   (* branch optimization *)
