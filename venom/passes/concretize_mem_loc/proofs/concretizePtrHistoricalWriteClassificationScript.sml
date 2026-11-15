@@ -13,12 +13,12 @@ Proof
   gvs[taint_ok_def] >> metis_tac[]
 QED
 
-Theorem ptr_historical_write_classification:
+Theorem ptr_historical_write_classification_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
   ptr_stage_placements C' positions /\
   ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
   j < LENGTH h /\ EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -70,7 +70,34 @@ Proof
   disj2_tac >> rename1 `FLOOKUP TGj dv = SOME owner` >> PairCases_on `owner` >>
   `?pb. FLOOKUP positions (Allocation owner1) = SOME (pb,sb)` by
     (`j <= j` by simp[] >>
-     drule_all ptr_transcript_historical_placement >> metis_tac[]) >>
+     drule_all ptr_transcript_historical_placement_static >> metis_tac[]) >>
   drule_all ptr_stage_placements_strict_bound >> strip_tac >>
   qexistsl [`dv`,`owner0`,`owner1`,`db`,`sb`,`pb`] >> simp[]
+QED
+
+Theorem ptr_historical_write_classification:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  ptr_stage_placements C' positions /\
+  ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
+  j < LENGTH h /\ EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  mem_write_ops (EL j h).po_inst = SOME ops /\
+  eval_operand ops.iao_ofst (EL j h).po_state = SOME d /\
+  MEM (w2n d,len) (source_memory_write_ranges (EL j h).po_inst (EL j h).po_state) /\
+  access_ok lo (EL j h).po_prov fn (EL j h).po_inst (EL j h).po_state /\
+  taint_ok fn (EL j h).po_taint (EL j h).po_inst (EL j h).po_state /\
+  ~in_revert_forward fn (EL j h).po_state /\ len <> 0 ==>
+  (op_prov TGj ops.iao_ofst = NONE /\ op_taint (EL j h).po_taint ops.iao_ofst = {} /\
+    (w2n d + len <= lo \/ dyn_floor C vs <= w2n d)) \/
+  (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (token,bid) /\
+    FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
+    FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
+    db <= w2n d /\ w2n d + len <= db+sb /\ pb+sb < dimword(:256))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_historical_write_classification_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

@@ -18,12 +18,12 @@ Ancestors
   list rich_list arithmetic words finite_map pred_set
 
 (* The runtime frame contract is consumed at the actual final paired sample. *)
-Theorem ptr_dalloca_paired_frame_ptr:
+Theorem ptr_dalloca_paired_frame_ptr_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
@@ -129,7 +129,7 @@ Proof
      simp[EL_APPEND_EQN]) >>
   `LENGTH h-1 <= EL (LENGTH done) (done ++ [LENGTH h-1])` by
     simp[EL_APPEND_EQN] >>
-  mp_tac (Q.INST [`endpoint` |-> `a`] ptr_dalloca_ghost_history) >>
+  mp_tac (Q.INST [`endpoint` |-> `a`] ptr_dalloca_ghost_history_static) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspecl_then [`LENGTH h-1`,`LENGTH done`] mp_tac) >>
   (impl_tac >- fs[]) >>
@@ -150,7 +150,7 @@ Proof
      metis_tac[]) >>
   Cases_on `in_revert_forward a.po_fn a.po_state`
   >- (`in_revert_forward at.po_fn at.po_state` by
-        (drule_all ptr_paired_prefix_forwarding >> simp[]) >>
+        (drule_all ptr_paired_prefix_forwarding_static >> simp[]) >>
       `a.po_inst.inst_opcode = RETURNDATACOPY \/
        a.po_inst.inst_opcode = REVERT` by
         (qpat_assum `in_revert_forward a.po_fn a.po_state`
@@ -173,7 +173,7 @@ Proof
   suspend "ordinary"
 QED
 
-Resume ptr_dalloca_paired_frame_ptr[ordinary]:
+Resume ptr_dalloca_paired_frame_ptr_static[ordinary]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `ptr_stage_placements C' positions` by fs[ptr_paired_memory_prefix_def] >>
   `vs.vs_allocas = FEMPTY` by
@@ -194,7 +194,7 @@ Resume ptr_dalloca_paired_frame_ptr[ordinary]:
     (rpt strip_tac >> Cases_on `FLOOKUP TG v`
      >- metis_tac[] >>
      rename1 `FLOOKUP TG v = SOME tag` >> PairCases_on `tag` >>
-     drule_all ptr_stage_placements_live_owner >> strip_tac >>
+     drule_all ptr_stage_placements_live_owner_static >> strip_tac >>
      `b+sz <= dyn_floor C vs` by
        (drule_all ptr_reachable_owner_below_dyn_floor >> simp[]) >>
      qpat_assum `dyn_floor C vs <= b` mp_tac >>
@@ -243,7 +243,7 @@ Resume ptr_dalloca_paired_frame_ptr[ordinary]:
   suspend "read_byte"
 QED
 
-Resume ptr_dalloca_paired_frame_ptr[read_byte]:
+Resume ptr_dalloca_paired_frame_ptr_static[read_byte]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `!off len i.
      MEM (off,len) (source_memory_read_ranges a.po_inst at.po_state) /\
@@ -300,7 +300,7 @@ Resume ptr_dalloca_paired_frame_ptr[read_byte]:
      mp_tac (Q.INST [
        `a` |-> `a`, `at` |-> `at`, `ops` |-> `read_ops`,
        `x` |-> `read_x`, `y` |-> `read_y`, `n` |-> `len`]
-       ptr_paired_current_range_classification_memory) >>
+       ptr_paired_current_range_classification_memory_static) >>
      (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[])) >>
      disch_then (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS)
        (qx_choose_then `read_v`
@@ -349,7 +349,7 @@ Resume ptr_dalloca_paired_frame_ptr[read_byte]:
   suspend "read_transport"
 QED
 
-Resume ptr_dalloca_paired_frame_ptr[read_transport]:
+Resume ptr_dalloca_paired_frame_ptr_static[read_transport]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   qpat_assum `~(a.po_inst.inst_opcode = RETURNDATACOPY \/
     a.po_inst.inst_opcode = REVERT)`
@@ -372,4 +372,27 @@ Resume ptr_dalloca_paired_frame_ptr[read_transport]:
   disch_then ACCEPT_TAC
 QED
 
-Finalise ptr_dalloca_paired_frame_ptr
+Finalise ptr_dalloca_paired_frame_ptr_static
+
+Theorem ptr_dalloca_paired_frame_ptr:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
+  EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst ==>
+  access_ok eom at.po_prov at.po_fn at.po_inst at.po_state /\
+  taint_ok at.po_fn at.po_taint at.po_inst at.po_state
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_paired_frame_ptr_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

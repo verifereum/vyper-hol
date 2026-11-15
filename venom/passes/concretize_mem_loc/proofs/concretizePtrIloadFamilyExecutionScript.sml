@@ -15,12 +15,12 @@ Ancestors concretizeMemLocDefs concretizePtrLoadTransport
   concretizePtrHistoricalPlacement concretizePtrPlacementBounds
   concretizePtrStagePlacements concretizePtrComparisonTransport
 
-Theorem ptr_paired_iload_execution_back:
+Theorem ptr_paired_iload_execution_back_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -48,7 +48,7 @@ Proof
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
   `MEM a.po_fn C.ctx_functions` by
-    (drule_all ptr_frame_sizes >> simp[]) >>
+    (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -62,7 +62,7 @@ Proof
   suspend "inputs"
 QED
 
-Resume ptr_paired_iload_execution_back[inputs]:
+Resume ptr_paired_iload_execution_back_static[inputs]:
   `~retpc_var a.po_fn out` by
     (fs[fn_shape_ok_def, retpc_shape_ok_def] >>
      spose_not_then assume_tac >>
@@ -100,7 +100,7 @@ Resume ptr_paired_iload_execution_back[inputs]:
   suspend "read"
 QED
 
-Resume ptr_paired_iload_execution_back[nonrevert]:
+Resume ptr_paired_iload_execution_back_static[nonrevert]:
   `ALL_DISTINCT (fn_labels a.po_fn)` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
   qpat_x_assum `active_inst a.po_fn a.po_inst a.po_state` mp_tac >>
@@ -113,13 +113,13 @@ Resume ptr_paired_iload_execution_back[nonrevert]:
   drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
 QED
 
-Resume ptr_paired_iload_execution_back[read]:
+Resume ptr_paired_iload_execution_back_static[read]:
   `!j. j < 32 /\ w2n x + j NOTIN a.po_taint.t_mem ==>
     read_byte (w2n x+j) a.po_state.vs_memory =
       read_byte (w2n y+j) at.po_state.vs_memory` by
     (gen_tac >> strip_tac >>
      irule (Q.INST [`ops` |-> `<|iao_ofst := op; iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w)|>`]
-       (SPEC_ALL ptr_paired_read_range_masked_bytes) |> SIMP_RULE (srw_ss()) []) >>
+       (SPEC_ALL ptr_paired_read_range_masked_bytes_static) |> SIMP_RULE (srw_ss()) []) >>
      rpt (goal_assum (drule_at Any)) >>
      simp[mem_read_ops_def, inst_read_op_def, source_memory_read_ranges_def] >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
@@ -138,4 +138,32 @@ Resume ptr_paired_iload_execution_back[read]:
   metis_tac[]
 QED
 
-Finalise ptr_paired_iload_execution_back
+Finalise ptr_paired_iload_execution_back_static
+
+Theorem ptr_paired_iload_execution_back:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  a.po_inst.inst_opcode = ILOAD /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  !fuel t'. step_inst fuel C' a.po_inst at.po_state = OK t' ==>
+    ?s'. step_inst fuel C a.po_inst a.po_state = OK s' /\
+      ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
+        (step_taint a.po_inst a.po_state s' a.po_taint)
+        a.po_fn at.po_fn s' t'
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_iload_execution_back_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

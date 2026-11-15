@@ -70,12 +70,12 @@ Proof
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def]
 QED
 
-Theorem ptr_paired_prefix_dalloca:
+Theorem ptr_paired_prefix_dalloca_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ptr_discipline lo C vs /\ EVERY ssa_form C.ctx_functions /\
   a.po_inst.inst_opcode = DALLOCA /\ ptr_chrono_step C' at zt ==>
@@ -95,7 +95,7 @@ Proof
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -190,7 +190,7 @@ Proof
    qexistsl_tac [`0`, `post`] >> fs[Abbr `post`, update_var_def] >> rfs[])
 QED
 
-Resume ptr_paired_prefix_dalloca[operands]:
+Resume ptr_paired_prefix_dalloca_static[operands]:
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
@@ -219,4 +219,25 @@ Resume ptr_paired_prefix_dalloca[operands]:
   qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
   simp[taint_ok_def] >> metis_tac[]
 QED
-Finalise ptr_paired_prefix_dalloca
+Finalise ptr_paired_prefix_dalloca_static
+
+Theorem ptr_paired_prefix_dalloca:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ptr_discipline lo C vs /\ EVERY ssa_form C.ctx_functions /\
+  a.po_inst.inst_opcode = DALLOCA /\ ptr_chrono_step C' at zt ==>
+  ?z TG'.
+    TG' = set_prov TG a.po_inst.inst_outputs NONE /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_dalloca_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

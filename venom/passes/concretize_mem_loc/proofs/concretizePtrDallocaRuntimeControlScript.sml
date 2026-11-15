@@ -178,6 +178,89 @@ Proof
 QED
 
 (* Join actual call edges to the production stage and its callee entry shape. *)
+Theorem ptr_dalloca_historical_runtime_call_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht endpoint_t done tokens registry births PT TG saved entries H calls ws /\
+  o1_ctx_shape C /\ q < LENGTH done /\ n = EL q done /\
+  a = EL n h /\ at = EL q ht /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  EL n H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  b = EL (SUC n) h /\ bt = EL (SUC q) ht /\
+  ptr_tagged_chrono_step C (HD tsj) a b PTj TGj sj PTj' TGj' sj' /\
+  ptr_chrono_step C' at bt /\
+  a.po_inst.inst_opcode = INVOKE /\
+  ptr_dalloca_ghost_vars a.po_prov a.po_taint.t_var a.po_state
+    at.po_prov at.po_taint.t_var at.po_state /\
+  (!v site. FLOOKUP at.po_prov v = SOME site ==> FLOOKUP TGj v = NONE) /\
+  (!v site. FLOOKUP TGj v = NONE /\ FLOOKUP a.po_prov v = SOME site ==>
+     FLOOKUP at.po_prov v = SOME site) ==>
+  ptr_dalloca_ghost_vars b.po_prov b.po_taint.t_var b.po_state
+    bt.po_prov bt.po_taint.t_var bt.po_state /\
+  (!v site. FLOOKUP bt.po_prov v = SOME site ==> FLOOKUP TGj' v = NONE) /\
+  (!v site. FLOOKUP TGj' v = NONE /\ FLOOKUP b.po_prov v = SOME site ==>
+     FLOOKUP bt.po_prov v = SOME site) /\
+  LENGTH PTj' = LENGTH b.po_params /\
+  LENGTH b.po_params = LENGTH bt.po_params /\
+  (!k site. k < LENGTH b.po_params ==>
+    (EL k bt.po_params = SOME site ==>
+      EL k b.po_params = SOME site /\ EL k PTj' = NONE /\
+      EL k b.po_state.vs_params = EL k bt.po_state.vs_params) /\
+    (EL k PTj' = NONE /\ EL k b.po_params = SOME site ==>
+      EL k bt.po_params = SOME site)) /\
+  sj' = (PTj,TGj)::sj /\
+  b.po_stack =
+    <| cf_fn := a.po_fn; cf_inst := a.po_inst; cf_state := a.po_state;
+       cf_params := a.po_params; cf_prov := a.po_prov;
+       cf_tvar := a.po_taint.t_var |> :: a.po_stack /\
+  bt.po_stack =
+    <| cf_fn := at.po_fn; cf_inst := at.po_inst; cf_state := at.po_state;
+       cf_params := at.po_params; cf_prov := at.po_prov;
+       cf_tvar := at.po_taint.t_var |> :: at.po_stack
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `a.po_inst.inst_opcode <> ALLOCA` by simp[] >>
+  drule_all ptr_dalloca_historical_control_inst >> strip_tac >>
+  mp_tac ptr_stage_paired_bridge_static >>
+  (impl_tac >-
+    (rpt conj_tac >> asm_rewrite_tac[] >>
+     qexists_tac `names` >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `bridge_R` (qx_choose_then `bridge_lp`
+    (qx_choose_then `bridge_positions` (map_every assume_tac o CONJUNCTS)))) >>
+  `!name fn. lookup_function name C.ctx_functions = SOME fn ==>
+    first_block_no_phi fn` by
+    (rpt strip_tac >> imp_res_tac lookup_function_MEM >>
+     fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `!name fn. lookup_function name C'.ctx_functions = SOME fn ==>
+    first_block_no_phi fn` by
+    (rpt strip_tac >>
+     `?source. lookup_function name C.ctx_functions = SOME source /\
+       ptr_paired_code bridge_R bridge_lp bridge_positions source fn` by
+       (drule_all list_rel_lookup_function >>
+        disch_then (qspec_then `name` mp_tac) >>
+        Cases_on `lookup_function name C.ctx_functions` >> simp[]) >>
+     `wf_function source /\ first_block_no_preds source /\
+       first_block_no_phi source` by
+       (imp_res_tac lookup_function_MEM >>
+        fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+     mp_tac (Q.INST [`p` |-> `bridge_lp (source:ir_function)`,
+       `fn` |-> `source:ir_function`]
+       concretize_positions_first_block) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+     fs[ptr_paired_code_def, first_block_no_phi_def]) >>
+  mp_tac (Q.INST [`Ct` |-> `C'`, `token` |-> `HD tsj`,
+    `PT` |-> `PTj`, `TG` |-> `TGj`, `saved` |-> `sj`,
+    `PT'` |-> `PTj'`, `TG'` |-> `TGj'`, `saved'` |-> `sj'`]
+    ptr_dalloca_runtime_chrono_call) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem ptr_dalloca_historical_runtime_call:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht endpoint_t done tokens registry births PT TG saved entries H calls ws /\
@@ -223,42 +306,9 @@ Theorem ptr_dalloca_historical_runtime_call:
        cf_params := at.po_params; cf_prov := at.po_prov;
        cf_tvar := at.po_taint.t_var |> :: at.po_stack
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `a.po_inst.inst_opcode <> ALLOCA` by simp[] >>
-  drule_all ptr_dalloca_historical_control_inst >> strip_tac >>
-  mp_tac ptr_stage_paired_bridge >>
-  (impl_tac >-
-    (rpt conj_tac >> asm_rewrite_tac[] >>
-     qexists_tac `names` >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choose_then `bridge_R` (qx_choose_then `bridge_lp`
-    (qx_choose_then `bridge_positions` (map_every assume_tac o CONJUNCTS)))) >>
-  `!name fn. lookup_function name C.ctx_functions = SOME fn ==>
-    first_block_no_phi fn` by
-    (rpt strip_tac >> imp_res_tac lookup_function_MEM >>
-     fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
-  `!name fn. lookup_function name C'.ctx_functions = SOME fn ==>
-    first_block_no_phi fn` by
-    (rpt strip_tac >>
-     `?source. lookup_function name C.ctx_functions = SOME source /\
-       ptr_paired_code bridge_R bridge_lp bridge_positions source fn` by
-       (drule_all list_rel_lookup_function >>
-        disch_then (qspec_then `name` mp_tac) >>
-        Cases_on `lookup_function name C.ctx_functions` >> simp[]) >>
-     `wf_function source /\ first_block_no_preds source /\
-       first_block_no_phi source` by
-       (imp_res_tac lookup_function_MEM >>
-        fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
-     mp_tac (Q.INST [`p` |-> `bridge_lp (source:ir_function)`,
-       `fn` |-> `source:ir_function`]
-       concretize_positions_first_block) >>
-     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-     fs[ptr_paired_code_def, first_block_no_phi_def]) >>
-  mp_tac (Q.INST [`Ct` |-> `C'`, `token` |-> `HD tsj`,
-    `PT` |-> `PTj`, `TG` |-> `TGj`, `saved` |-> `sj`,
-    `PT'` |-> `PTj'`, `TG'` |-> `TGj'`, `saved'` |-> `sj'`]
-    ptr_dalloca_runtime_chrono_call) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then ACCEPT_TAC
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_historical_runtime_call_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 (* Restore the actual saved heads at the departed return instruction. *)

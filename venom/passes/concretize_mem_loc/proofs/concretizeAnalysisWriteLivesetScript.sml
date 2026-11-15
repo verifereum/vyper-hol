@@ -8,11 +8,11 @@ Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeAnalysisStoreMark concret
   concretizeMemLocDefs venomWf finite_map list arithmetic
   contextCodegenRel frameJointTrace unitTransformDefs frameJointTransition frameAllocationOwnership
 
-Theorem concretize_write_owner_liveset:
+Theorem concretize_write_owner_liveset_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' owner observed /\
@@ -49,7 +49,7 @@ Proof
   >> suspend "dynamic"
 QED
 
-Resume concretize_write_owner_liveset[local]:
+Resume concretize_write_owner_liveset_headroom_static[local]:
   rename1 `FLOOKUP om v = SOME (OriginLocal localid,(b,sz))` >>
   `FLOOKUP s.vs_allocas localid = SOME (b,sz)` by
     metis_tac[origin_frame_current_cache] >>
@@ -81,7 +81,7 @@ Resume concretize_write_owner_liveset[local]:
   goal_assum (drule_at (Pat `MEM _ fn.fn_blocks`)) >> simp[]
 QED
 
-Resume concretize_write_owner_liveset[incoming]:
+Resume concretize_write_owner_liveset_headroom_static[incoming]:
   `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by
     (strip_tac >> `b + sz <= w2n vs0.vs_initial_fmp` by metis_tac[] >>
      simp[] >> decide_tac) >>
@@ -114,10 +114,35 @@ Resume concretize_write_owner_liveset[incoming]:
   simp[ptr_incr_ssort_ordered, enumeralTheory.OL]
 QED
 
-Resume concretize_write_owner_liveset[dynamic]:
+Resume concretize_write_owner_liveset_headroom_static[dynamic]:
   drule_all origin_frame_dynamic_site_upto >> strip_tac >>
   `b + sz <= w2n vs0.vs_initial_fmp` by metis_tac[] >>
   qpat_x_assum `_ <= FST _` mp_tac >> simp[] >> decide_tac
 QED
 
-Finalise concretize_write_owner_liveset
+Finalise concretize_write_owner_liveset_headroom_static
+
+Theorem concretize_write_owner_liveset:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\ EVERY all_reachable C.ctx_functions /\
+  o1_walk_view rpolicy 2 C' owner observed /\
+  joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  joint_transition C (JointConfig stk PG G tn fn inst s oms om hs h) ev qnext /\
+  ~in_revert_forward fn s /\
+  byte IN joint_writes (JointConfig stk PG G tn fn inst s oms om hs h) ev /\ lo <= byte /\
+  activation_cache (JointConfig stk PG G tn fn inst s oms om hs h) d owner aid (b,sz) /\
+  b <= byte /\ byte < b+sz /\
+  activation_location (JointConfig stk PG G tn fn inst s oms om hs h) d owner p ==>
+  ?addrs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel owner)
+    observed.cu_context owner
+    (bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner)
+    (cfg_analyze owner)) (Allocation aid) = SOME addrs /\ MEM p addrs
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_write_owner_liveset_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

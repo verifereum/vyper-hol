@@ -101,8 +101,8 @@ Proof
   `F` by decide_tac
 QED
 
-Theorem ptr_dalloca_initial_writer_snapshot:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+Theorem ptr_dalloca_initial_writer_snapshot_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ EL w H = (tsw,rw,bw,PTw,TGw,sw,ew) ==>
   ptr_source_ownership vs C (TAKE (SUC w) h) (EL w h) tsw rw bw PTw TGw sw /\
@@ -111,7 +111,7 @@ Theorem ptr_dalloca_initial_writer_snapshot:
   EL (LENGTH (EL w h).po_stack-d) tsw = token /\
   FLOOKUP bw (token,aid) = SOME (b,sz)
 Proof
-  pure_rewrite_tac[ptr_demand_interval_def] >>
+  pure_rewrite_tac[ptr_demand_interval_static_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `w <= w /\ w < LENGTH h` by decide_tac >>
   qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
@@ -127,8 +127,24 @@ Proof
   gvs[]
 QED
 
-Theorem ptr_dalloca_initial_writer_owner:
+Theorem ptr_dalloca_initial_writer_snapshot:
   ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ EL w H = (tsw,rw,bw,PTw,TGw,sw,ew) ==>
+  ptr_source_ownership vs C (TAKE (SUC w) h) (EL w h) tsw rw bw PTw TGw sw /\
+  d <= LENGTH (EL w h).po_stack /\
+  FLOOKUP (ptr_owner_view d (EL w h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+  EL (LENGTH (EL w h).po_stack-d) tsw = token /\
+  FLOOKUP bw (token,aid) = SOME (b,sz)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_initial_writer_snapshot_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_dalloca_initial_writer_owner_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\ EL w H = (tsw,rw,bw,PTw,TGw,sw,ew) /\
   ptr_observation_reachable vs C (EL w h) /\ mem_inv raw_mem_ok C vs ==>
@@ -139,7 +155,7 @@ Theorem ptr_dalloca_initial_writer_owner:
     MEM (off,len) (source_memory_write_ranges (EL w h).po_inst (EL w h).po_state) /\
     off <= b+k /\ b+k < off+len /\ b <= off /\ off+len <= b+sz
 Proof
-  strip_tac >> drule_all ptr_dalloca_initial_writer_snapshot >> strip_tac >>
+  strip_tac >> drule_all ptr_dalloca_initial_writer_snapshot_static >> strip_tac >>
   `vs.vs_allocas = FEMPTY /\ ptr_discipline lo C vs /\
    EVERY wf_function C.ctx_functions /\
    EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
@@ -148,7 +164,7 @@ Proof
    lo <= b+k /\ k < sz /\
    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
      (EL (SUC w) h).po_state)` by
-    (fs[ptr_demand_interval_def] >>
+    (fs[ptr_demand_interval_static_def] >>
      `w < LENGTH h` by decide_tac >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `w` strip_assume_tac) >>
@@ -161,6 +177,24 @@ Proof
   `b+sz <= dyn_floor C vs` by
     (drule_all ptr_reachable_owner_below_dyn_floor >> simp[]) >>
   drule_all ptr_dalloca_source_writer_owner >> simp[]
+QED
+
+Theorem ptr_dalloca_initial_writer_owner:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ EL w H = (tsw,rw,bw,PTw,TGw,sw,ew) /\
+  ptr_observation_reachable vs C (EL w h) /\ mem_inv raw_mem_ok C vs ==>
+  ?ops u off len.
+    mem_write_ops (EL w h).po_inst = SOME ops /\ ops.iao_ofst = Var u /\
+    FLOOKUP (EL w h).po_prov u = SOME (b,sz) /\
+    FLOOKUP TGw u = SOME (token,aid) /\
+    MEM (off,len) (source_memory_write_ranges (EL w h).po_inst (EL w h).po_state) /\
+    off <= b+k /\ b+k < off+len /\ b <= off /\ off+len <= b+sz
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_initial_writer_owner_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_dalloca_owned_write_forward:
@@ -242,6 +276,72 @@ Proof
      inst_shape_ok_def] >> metis_tac[]
 QED
 
+Theorem ptr_dalloca_writer_forward_memory_static:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H ws /\
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w ==>
+  pa+k IN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
+    (EL (SUC q) ht).po_state) /\
+  (EL q ht).po_inst = (EL w h).po_inst /\ (EL w h).po_inst.inst_opcode <> DRET /\
+  ?ops sizeop x z xt off.
+    mem_write_ops (EL w h).po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+    eval_operand ops.iao_ofst (EL w h).po_state = SOME x /\
+    eval_operand sizeop (EL w h).po_state = SOME z /\
+    eval_operand ops.iao_ofst (EL q ht).po_state = SOME xt /\
+    eval_operand sizeop (EL q ht).po_state = SOME z /\
+    b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~in_revert_forward (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_state` by
+    (fs[ptr_demand_interval_static_def] >>
+     qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
+       (qspec_then `w` mp_tac) >> simp[] >> decide_tac) >>
+  drule_all ptr_paired_historical_event_memory_static >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions /\
+   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\ k < sz /\
+   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_static_def] >>
+  drule_all ptr_dalloca_writer_instruction_facts >> strip_tac >>
+  gvs[] >>
+  drule_all ptr_dalloca_initial_writer_snapshot_static >> strip_tac >>
+  drule_all ptr_dalloca_initial_writer_owner_static >> strip_tac >>
+  `!uu. uu IN FDOM TGj ==> uu IN fn_pv P (EL (EL q done) h).po_fn` by
+    (qx_gen_tac `uu` >> strip_tac >>
+     `?tag. FLOOKUP TGj uu = SOME tag` by metis_tac[FLOOKUP_DEF] >>
+     drule_all ptr_source_tagged_var_support >> simp[]) >>
+  `(EL (EL q done) h).po_state.vs_labels = (EL q ht).po_state.vs_labels` by
+    metis_tac[ptr_history_content_labels] >>
+  `pa+sz < dimword(:256)` by
+    (drule_all ptr_stage_placements_strict_bound >> simp[]) >>
+  `(EL (SUC (EL q done)) h).po_state.vs_returndata =
+    (EL (SUC q) ht).po_state.vs_returndata` by
+    (drule ptr_paired_memory_samples >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule_all ptr_paired_samples_post_returndata >> simp[]) >>
+  `(EL q ht).po_inst = (EL (EL q done) h).po_inst` by
+    (drule ptr_step_write_opcode >> simp[] >> strip_tac >>
+     simp[concretize_positions_unchanged]) >>
+  `(MEM (EL (EL q done) h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
+     LENGTH (EL (SUC (EL q done)) h).po_state.vs_returndata =
+     LENGTH (EL (SUC q) ht).po_state.vs_returndata)` by simp[] >>
+  drule_all ptr_dalloca_owned_write_forward >>
+  strip_tac >> gvs[] >> rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
+QED
+
 Theorem ptr_dalloca_writer_forward_memory:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
@@ -270,42 +370,10 @@ Theorem ptr_dalloca_writer_forward_memory:
     eval_operand sizeop (EL q ht).po_state = SOME z /\
     b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~in_revert_forward (EL (EL q done) h).po_fn
-      (EL (EL q done) h).po_state` by
-    (fs[ptr_demand_interval_def] >>
-     qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
-       (qspec_then `w` mp_tac) >> simp[] >> decide_tac) >>
-  drule_all ptr_paired_historical_event_memory >> strip_tac >>
-  `EVERY (fn_ptr_ok P) C.ctx_functions /\
-   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\ k < sz /\
-   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
-     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_def] >>
-  drule_all ptr_dalloca_writer_instruction_facts >> strip_tac >>
-  gvs[] >>
-  drule_all ptr_dalloca_initial_writer_snapshot >> strip_tac >>
-  drule_all ptr_dalloca_initial_writer_owner >> strip_tac >>
-  `!uu. uu IN FDOM TGj ==> uu IN fn_pv P (EL (EL q done) h).po_fn` by
-    (qx_gen_tac `uu` >> strip_tac >>
-     `?tag. FLOOKUP TGj uu = SOME tag` by metis_tac[FLOOKUP_DEF] >>
-     drule_all ptr_source_tagged_var_support >> simp[]) >>
-  `(EL (EL q done) h).po_state.vs_labels = (EL q ht).po_state.vs_labels` by
-    metis_tac[ptr_history_content_labels] >>
-  `pa+sz < dimword(:256)` by
-    (drule_all ptr_stage_placements_strict_bound >> simp[]) >>
-  `(EL (SUC (EL q done)) h).po_state.vs_returndata =
-    (EL (SUC q) ht).po_state.vs_returndata` by
-    (drule ptr_paired_memory_samples >> strip_tac >>
-     drule ptr_structural_transcript_erasure >> strip_tac >>
-     drule_all ptr_paired_samples_post_returndata >> simp[]) >>
-  `(EL q ht).po_inst = (EL (EL q done) h).po_inst` by
-    (drule ptr_step_write_opcode >> simp[] >> strip_tac >>
-     simp[concretize_positions_unchanged]) >>
-  `(MEM (EL (EL q done) h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
-     LENGTH (EL (SUC (EL q done)) h).po_state.vs_returndata =
-     LENGTH (EL (SUC q) ht).po_state.vs_returndata)` by simp[] >>
-  drule_all ptr_dalloca_owned_write_forward >>
-  strip_tac >> gvs[] >> rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_writer_forward_memory_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_dalloca_writer_forward:
@@ -443,6 +511,53 @@ Proof
   drule_all ptr_dalloca_chrono_ordinary_update >> simp[]
 QED
 
+Theorem ptr_dalloca_writer_updates_memory_static:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H ws /\
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w ==>
+  ?fuel post fuelT postT.
+    step_inst fuel C (EL w h).po_inst (EL w h).po_state = OK post /\
+    (EL (SUC w) h).po_taint =
+      step_taint (EL w h).po_inst (EL w h).po_state post (EL w h).po_taint /\
+    (EL (SUC w) h).po_state = post with vs_inst_idx := SUC (EL w h).po_state.vs_inst_idx /\
+    step_inst fuelT C' (EL q ht).po_inst (EL q ht).po_state = OK postT /\
+    (EL (SUC q) ht).po_taint =
+      step_taint (EL q ht).po_inst (EL q ht).po_state postT (EL q ht).po_taint /\
+    (EL (SUC q) ht).po_state = postT with vs_inst_idx := SUC (EL q ht).po_state.vs_inst_idx
+Proof
+  strip_tac >> drule_all ptr_dalloca_writer_forward_memory_static >> strip_tac >>
+  drule ptr_dalloca_demand_writer_source_edge_static >> strip_tac >>
+  `ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+    births PT TG saved entries H /\
+   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_static_def] >>
+  `ptr_chrono_step C' (EL q ht) (EL (SUC q) ht)` by
+    (drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_target >>
+     disch_then (mp_tac o MATCH_MP ptr_chrono_history_adjacent) >>
+     disch_then (qspec_then `q` mp_tac) >>
+     drule ptr_paired_memory_samples >>
+     simp[ptr_paired_samples_def, ptr_sample_list_def]) >>
+  drule_all ptr_dalloca_chrono_writer_update >> strip_tac >>
+  qpat_x_assum `ptr_chrono_step C _ _` kall_tac >>
+  `(EL q ht).po_inst.inst_opcode <> DRET` by simp[] >>
+  drule_all ptr_dalloca_chrono_writer_update >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
 Theorem ptr_dalloca_writer_updates_memory:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H ws /\
@@ -470,24 +585,10 @@ Theorem ptr_dalloca_writer_updates_memory:
       step_taint (EL q ht).po_inst (EL q ht).po_state postT (EL q ht).po_taint /\
     (EL (SUC q) ht).po_state = postT with vs_inst_idx := SUC (EL q ht).po_state.vs_inst_idx
 Proof
-  strip_tac >> drule_all ptr_dalloca_writer_forward_memory >> strip_tac >>
-  drule ptr_dalloca_demand_writer_source_edge >> strip_tac >>
-  `ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
-    births PT TG saved entries H /\
-   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
-     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_def] >>
-  `ptr_chrono_step C' (EL q ht) (EL (SUC q) ht)` by
-    (drule ptr_structural_transcript_erasure >> strip_tac >>
-     drule ptr_structural_trace_target >>
-     disch_then (mp_tac o MATCH_MP ptr_chrono_history_adjacent) >>
-     disch_then (qspec_then `q` mp_tac) >>
-     drule ptr_paired_memory_samples >>
-     simp[ptr_paired_samples_def, ptr_sample_list_def]) >>
-  drule_all ptr_dalloca_chrono_writer_update >> strip_tac >>
-  qpat_x_assum `ptr_chrono_step C _ _` kall_tac >>
-  `(EL q ht).po_inst.inst_opcode <> DRET` by simp[] >>
-  drule_all ptr_dalloca_chrono_writer_update >> strip_tac >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_writer_updates_memory_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_dalloca_writer_updates:

@@ -201,11 +201,11 @@ Proof
   gvs[update_var_def] >> metis_tac[]
 QED
 
-Theorem layout_dalloca_trace_step:
+Theorem layout_dalloca_trace_step_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ fixed_region_reserved lo C /\
@@ -263,7 +263,7 @@ Proof
      concretize_positions C' owner aid + sz <= w2n s.vs_initial_fmp` by
     (rpt strip_tac >>
      drule_at (Pat `activation_cache _ _ _ _ _`)
-       concretizeLayoutPositionsTheory.concretize_positions_cache_room >>
+       concretizeLayoutPositionsTheory.concretize_positions_cache_room_static >>
      disch_then drule_all >> simp[]) >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
@@ -307,11 +307,46 @@ Proof
   gvs[update_var_def, FLOOKUP_UPDATE, resolve_tag_def] >> metis_tac[]
 QED
 
-Theorem layout_extcodecopy_trace_step:
+Theorem layout_dalloca_trace_step:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  callee_first names C.ctx_functions /\ fixed_region_reserved lo C /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
+  g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
+  g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+  g.lop_cursor < LENGTH es /\
+  EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
+  inst.inst_opcode = DALLOCA /\ inst.inst_outputs = [v] /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = OK post ==>
+  ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
+    k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q
+      (INL g) (INL k) (OK post) (OK tpost)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_dalloca_trace_step_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem layout_extcodecopy_trace_step_headroom_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -357,7 +392,7 @@ Proof
     (REWRITE_RULE[GSYM concretize_local_obs_def, ETA_AX]
       (Q.INST [`D` |-> `<| d_stor := K (K UNIV); d_trans := K (K UNIV);
         d_imm := K UNIV; d_ret := K {} |>`]
-        (SPEC_ALL concretize_extcodecopy_local_complete))) >>
+        (SPEC_ALL concretize_extcodecopy_local_complete_headroom_static))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
@@ -394,6 +429,45 @@ Proof
   disch_then (qspec_then `tpost` mp_tac) >>
   simp[is_terminator_def, origin_set_def, finite_mapTheory.DRESTRICT_UNIV, ETA_AX] >>
   gvs[write_memory_with_expansion_def] >> metis_tac[]
+QED
+
+Theorem layout_extcodecopy_trace_step:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
+  g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
+  g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+  g.lop_cursor < LENGTH es /\
+  EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
+  ~joint_read_exempt (EL g.lop_cursor (q0::qs)) /\
+  inst.inst_opcode = EXTCODECOPY /\ inst.inst_operands = [opa;opd;ops;opn] /\
+  inst.inst_outputs = [] /\
+  eval_operand opa s = SOME addr /\ eval_operand opd s = SOME dst /\
+  eval_operand ops s = SOME src /\ eval_operand opn s = SOME sz /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = OK post ==>
+  ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
+    k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q
+      (INL g) (INL k) (OK post) (OK tpost)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL layout_extcodecopy_trace_step_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 val _ = export_theory();

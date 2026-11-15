@@ -15,12 +15,12 @@ Ancestors concretizePtrHistoricalWriteExclusion concretizePtrStageReserved
   passSharedDefs codegenRel concretizePtrWriteClassification
   ptrDiscipline list pred_set arithmetic finite_map
 
-Theorem ptr_paired_fixed_actual_write_reflection:
+Theorem ptr_paired_fixed_actual_write_reflection_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -42,7 +42,7 @@ Proof
   Cases_on `in_revert_forward (EL (EL q done) h).po_fn
     (EL (EL q done) h).po_state` >- simp[] >>
   simp[] >>
-  drule_all ptr_paired_historical_event >> strip_tac >>
+  drule_all ptr_paired_historical_event_static >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_mixed_vars bj positions TGj aa.po_taint
     aa.po_fn (EL q ht).po_fn aa.po_state (EL q ht).po_state` >>
   `MEM aa.po_fn C.ctx_functions` by
@@ -96,7 +96,7 @@ Proof
     (qx_choose_then `dest` (qx_choose_then `z` (qx_choose_then `destt`
       (map_every assume_tac o CONJUNCTS)))))) >>
   unabbrev_all_tac >>
-  drule_all ptr_historical_write_classification >>
+  drule_all ptr_historical_write_classification_static >>
   disch_then (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
   >- (`MEM (EL (EL q done) h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
         LENGTH (EL (SUC (EL q done)) h).po_state.vs_returndata =
@@ -129,4 +129,31 @@ Proof
     (irule concretizePtrStageBoundsTheory.ptr_stage_placements_endpoint_bound >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
   Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def] >> decide_tac
+QED
+
+Theorem ptr_paired_fixed_actual_write_reflection:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (x < lo \/ dyn_floor C vs <= x) /\ q < LENGTH done /\
+  x IN range_bytes (step_writes (EL q ht).po_inst
+    (EL q ht).po_state (EL (SUC q) ht).po_state) ==>
+  x IN range_bytes (step_writes (EL (EL q done) h).po_inst
+    (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) \/
+  in_revert_forward (EL (EL q done) h).po_fn
+    (EL (EL q done) h).po_state
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_fixed_actual_write_reflection_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

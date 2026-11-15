@@ -106,7 +106,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem ptr_endpoint_actual_protected_livesets:
+Theorem ptr_endpoint_actual_protected_livesets_static:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
@@ -132,7 +132,7 @@ Theorem ptr_endpoint_actual_protected_livesets:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
   (?w. w + 1 < LENGTH h /\
     x IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
@@ -183,7 +183,7 @@ Proof
            then NONE else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a))
       (ptr_owner_view d (EL k h)).cf_inst` by
     (`w <= t` by decide_tac >>
-     match_mp_tac (Q.INST [`byte` |-> `x`] ptr_stage_owner_actual_interval_no_kill) >>
+     match_mp_tac (Q.INST [`byte` |-> `x`] ptr_stage_owner_actual_interval_no_kill_static) >>
      asm_rewrite_tac[] >> conj_tac >- decide_tac >>
      rpt conj_tac
      >- (rpt strip_tac >>
@@ -206,4 +206,57 @@ Proof
   qpat_x_assum `bp = _` SUBST_ALL_TAC >>
   qpat_x_assum `mems = _` SUBST_ALL_TAC >>
   asm_rewrite_tac[]
+QED
+
+Theorem ptr_endpoint_actual_protected_livesets:
+  ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
+  o1_ctx_shape C /\
+  EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  (!obs. MEM obs h ==> access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state) /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN /\ d <= LENGTH endpoint.po_stack /\
+  FLOOKUP (ptr_owner_view d endpoint).cf_state.vs_allocas aid = SOME (b,sz) /\
+  lo <= x /\ b <= x /\ x < b + sz /\ x NOTIN endpoint.po_taint.t_mem /\
+  MEM (Var v) endpoint.po_inst.inst_operands /\
+  (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) /\
+  FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
+  fn = (ptr_owner_view d endpoint).cf_fn /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  mems = (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm))) /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  EVERY fn_inst_wf C.ctx_functions ==>
+  (?w. w + 1 < LENGTH h /\
+    x IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+                                  (EL (SUC w) h).po_state) /\
+    x NOTIN (EL (SUC w) h).po_taint.t_mem /\
+    (!k. w < k /\ k + 1 < LENGTH h ==>
+      x NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
+                                       (EL (SUC k) h).po_state)) /\
+    (!t. w < t /\ t < LENGTH h ==>
+      ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
+          observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
+        MEM ((ptr_owner_view d (EL t h)).cf_state.vs_current_bb,
+             (ptr_owner_view d (EL t h)).cf_state.vs_inst_idx) xs) /\
+    (!k. w <= k /\ k < LENGTH h ==>
+      d <= LENGTH (EL k h).po_stack /\
+      FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+      ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
+    ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
+  dyn_floor C vs <= x
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_endpoint_actual_protected_livesets_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

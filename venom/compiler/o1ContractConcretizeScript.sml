@@ -11,6 +11,57 @@ Ancestors
   ptrStaticDiscipline concretizeStepContract concretizeStageSim
   concretizeStageStatic concretizeStageFramePtr concretizeStageTaint
   concretizeStageShape
+  concretizeStageRequests
+
+Theorem o1_static_stage_concretize_mem_loc_headroom:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 2 o1_fn_passes)
+      (o1_walk_view rpolicy 2) C C' /\
+    o1_pre 2 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 2 C vs /\
+    fmp_variant_room NONE C' vs ==>
+    ctx_sim_fuel (pass_fuel (EL 2 o1_fn_passes) C') D C C' vs vs /\
+    ctx_abort_rq D C C' vs vs /\
+    o1_inv D (SUC 2) C' vs
+Proof
+  `EL 2 o1_fn_passes = CFP_Simple VP_ConcretizeMemLoc` by EVAL_TAC >>
+  rpt strip_tac >>
+  gvs[o1_inv_def, o1_src_inv_def, o1_static_inv_def,
+      fmp_variant_room_def] >>
+  `ctx_inst_ids_distinct C` by fs[o1_ctx_shape_def] >>
+  `EVERY all_reachable C.ctx_functions /\
+   EVERY fn_defs_reach_uses C.ctx_functions` by
+    fs[listTheory.EVERY_MEM, make_ssa_input_ok_def] >>
+  drule_all concretize_stage_shape >> strip_tac >>
+  `EVERY ssa_form C'.ctx_functions` by
+    (irule concretize_stage_ssa_form >> metis_tac[]) >>
+  `ctx_has_dalloca C ==>
+   ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[] >>
+  `ctx_sim_fuel (pass_fuel (CFP_Simple VP_ConcretizeMemLoc) C') D C C' vs vs` by
+    (simp[pass_fuel_def] >>
+     irule concretize_stage_sim_fuel_headroom_static >> simp[] >> metis_tac[]) >>
+  `ctx_abort_rq D C C' vs vs` by
+    (irule concretize_stage_abort_rq_headroom_static >> simp[] >> metis_tac[]) >>
+  `mem_inv (static_mem_ok eom) C' vs` by
+    (irule concretize_stage_static_mem_static >> simp[] >> metis_tac[]) >>
+  `?P. EVERY (fn_static_ptr_ok P) C'.ctx_functions` by
+    (qpat_assum `ptr_discipline lo C vs`
+       (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
+     qexists_tac `P` >> irule concretize_stage_static_ptr_ok >>
+     qexistsl [`C`, `rpolicy`, `o1_walk_view rpolicy 2`] >>
+     fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     irule fn_ptr_ok_static >> res_tac) >>
+  `!stk PG G tn fn inst s.
+     frame_reachable vs C' stk PG G tn fn inst s ==>
+     access_ok eom G fn inst s /\ taint_ok fn tn inst s` by
+    (mp_tac concretize_stage_frame_ptr_ok_static >>
+     (impl_tac >- (simp[] >> metis_tac[])) >> simp[]) >>
+  `taint_within D C' vs` by
+    (irule concretize_stage_taint_within_static >> simp[] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
+QED
 
 (* ConcretizeMemLoc reads callee layouts (the walk view): the raw
    invariant becomes the static one. *)
@@ -20,38 +71,10 @@ Theorem o1_contract_concretize_mem_loc:
 Proof
   simp[concretize_step_contract_at] >>
   `EL 2 o1_fn_passes = CFP_Simple VP_ConcretizeMemLoc` by EVAL_TAC >>
-  simp[o1_run_contract_gas_def, o1_stage_contract_gas_def, fmp_variant_def,
-       fmp_variant_room_def, pass_fuel_def] >>
+  simp[o1_run_contract_gas_def, o1_stage_contract_gas_def, fmp_variant_def] >>
   rpt gen_tac >> strip_tac >>
   qexists_tac `vs'` >> simp[gas_variant_refl] >> strip_tac >>
-  gvs[o1_inv_def, o1_src_inv_def, o1_static_inv_def] >>
-  `ctx_inst_ids_distinct C` by fs[o1_ctx_shape_def] >>
-  `EVERY all_reachable C.ctx_functions /\
-   EVERY fn_defs_reach_uses C.ctx_functions` by
-    fs[listTheory.EVERY_MEM, make_ssa_input_ok_def] >>
-  drule_all concretize_stage_shape >> strip_tac >>
-  `EVERY ssa_form C'.ctx_functions` by
-    (irule concretize_stage_ssa_form >> metis_tac[]) >>
-  `ctx_has_dalloca C ==>
-   ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs'.vs_initial_fmp` by
-    metis_tac[] >>
-  `ctx_sim_fuel I D C C' vs' vs'` by
-    (irule concretize_stage_sim_fuel >> simp[] >> metis_tac[]) >>
-  `mem_inv (static_mem_ok eom) C' vs'` by
-    (irule concretize_stage_static_mem >> simp[] >> metis_tac[]) >>
-  `?P. EVERY (fn_static_ptr_ok P) C'.ctx_functions` by
-    (qpat_assum `ptr_discipline lo C vs'`
-       (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
-     qexists_tac `P` >> irule concretize_stage_static_ptr_ok >>
-     qexistsl [`C`, `rpolicy`, `o1_walk_view rpolicy 2`] >>
-     fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     irule fn_ptr_ok_static >> res_tac) >>
-  `!stk PG G tn fn inst s.
-     frame_reachable vs' C' stk PG G tn fn inst s ==>
-     access_ok eom G fn inst s /\ taint_ok fn tn inst s` by
-    (mp_tac (Q.INST [`vs` |-> `vs'`] concretize_stage_frame_ptr_ok) >>
-     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
-  `taint_within D C' vs'` by
-    (irule concretize_stage_taint_within >> simp[] >> metis_tac[]) >>
+  gvs[o1_run_state_ok_def] >>
+  mp_tac o1_static_stage_concretize_mem_loc_headroom >>
   simp[] >> metis_tac[]
 QED
