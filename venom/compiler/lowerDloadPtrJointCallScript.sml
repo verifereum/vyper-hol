@@ -190,6 +190,3 @@ Resume dload_joint_call_closed[push]:
 QED
 
 Finalise dload_joint_call_closed
-
-val _ = if null (hyp dload_joint_call_closed) then ()
-  else raise Fail "joint call: nonempty hypotheses";

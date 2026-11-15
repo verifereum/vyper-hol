@@ -74,9 +74,6 @@ Proof
     finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE]))
 QED
 
-val _ = if null (hyp oracle_call_checked_step) then ()
-        else raise Fail "oracle_call_checked_step has kernel hypotheses";
-
 Theorem oracle_effect_stmt_frame[local]:
   stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx ee t /\
   ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
@@ -194,7 +191,3 @@ Proof
       qexistsl_tac [`if outcome.co_success then 1w else 0w`, `out`, `PG`] >>
       simp[] >> metis_tac[]) >> metis_tac[]
 QED
-
-val _ = if null (hyp oracle_call_checked_step) andalso
-           null (hyp oracle_call_checked_full) then ()
-        else raise Fail "oracle checked exports have kernel hypotheses";

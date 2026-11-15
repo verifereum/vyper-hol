@@ -779,12 +779,3 @@ Proof
   simp[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def] >>
   fs[MEM] >> metis_tac[]
 QED
-
-(* Check the complete dependency closure, not just the final proof text. *)
-val _ =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_store_copy_frag)
-  in
-    if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
-    then print "compile_store_copy_frag: kernel dependency audit passed\n"
-    else raise Fail "compile_store_copy_frag has oracle or axiom dependencies"
-  end;

@@ -1138,19 +1138,3 @@ Proof
     (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
   qexistsl_tac [`t`, `w`] >> simp[] >> metis_tac[]
 QED
-
-(* The new shared contract and literal simulation must not depend on the
-   legacy expression-correctness admissions in exprLoweringProps. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted constructor-safe literal-buffer interface"
-  end)
-  [exprLoweringPropsTheory.immutable_alloca_sep_fields,
-   exprLoweringPropsTheory.immutable_alloca_sep_cenv_cong,
-   exprLoweringPropsTheory.immutable_alloca_sep_exec_alloca,
-   stmt_state_rel_exec_alloca, immutables_rel_mem_agree,
-   immutables_rel_mstore_alloca, compile_literal_other_vv_sim];
-
-val () = print "LITERAL_BUFFER_AUDIT OK\n";

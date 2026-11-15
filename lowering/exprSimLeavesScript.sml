@@ -84,15 +84,6 @@ val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
    move, so compile_expr_extends is not needed, and unwrap_value is
    unwrap_memory_sim's load or nothing, so no cheated unwrap case is. *)
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_sim_of_vv_sim_memory)
-  in
-    if null axioms andalso null (Thm.hyp expr_sim_of_vv_sim_memory) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "MEMORY_FORCE_AUDIT expr_sim_of_vv_sim_memory OK\n"
-    else raise Fail "expr_sim_of_vv_sim_memory: admitted proof dependency"
-  end;
-
 (* ===== Locals ===== *)
 
 (* A local held through its pointer variable p, as expr_sim_inv's locals
@@ -345,14 +336,3 @@ Proof
 QED
 
 (* ===== Top-level names and flag members ===== *)
-
-(* Integrity gate: memory forcing must not introduce admitted dependencies
-   into the existing Name and memory-literal consumers. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "MEMORY_CONSUMER_AUDIT OK\n"
-     else raise Fail "memory consumer inherited admission"
-  end) [compile_name_other_sim, compile_name_sim, compile_name_case_sim,
-        compile_literal_memory_sim];

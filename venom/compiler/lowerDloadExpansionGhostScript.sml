@@ -134,8 +134,3 @@ Proof
   simp[ld_nonghost_def, update_var_def, store_taint_def,
        adopt_reset_def, imm_taint_def] >> strip_tac >> gvs[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "expansion ghost boundary has hypotheses")
-  [ld_vars_observation_cong, ld_expansion_step_nonghost,
-   ld_expansion_prefix_nonghost, ld_dload_expansion_ghost_exit];

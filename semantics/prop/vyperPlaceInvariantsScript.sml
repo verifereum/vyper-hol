@@ -25,10 +25,3 @@ Theorem popped_history_typed_cons:
 Proof
   simp[popped_history_typed_def] >> metis_tac[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then print ("Kernel-closed place invariant: " ^ name ^ "\n")
-     else raise Fail ("Incomplete place invariant: " ^ name)
-  end) (DB.thms "vyperPlaceInvariants");

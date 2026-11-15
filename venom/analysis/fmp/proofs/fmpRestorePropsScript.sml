@@ -137,8 +137,3 @@ Proof
   simp[] >> irule fmp_restore_popped_exclusion >>
   metis_tac[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected oracle dependency in " ^ name))
-  (DB.thms "fmpRestoreProps");

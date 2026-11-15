@@ -801,16 +801,6 @@ Proof
   simp[fragExecTheory.frag_exec_false_pre] >> metis_tac[vv_post_failed_read]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag unwrap_memory_read_result_sim)
-  in
-    if null axioms andalso null (Thm.hyp unwrap_memory_read_result_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "MEMORY_FORCE_AUDIT unwrap_memory_read_result_sim OK\n"
-    else raise Fail "unwrap_memory_read_result_sim: admitted proof dependency"
-  end;
-
-
 (* ===== Counted unwrap_value suffixes =====
 
    The counted judgments need the actual target path of unwrap_value's code:

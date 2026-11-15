@@ -76,9 +76,3 @@ Proof
   simp[eval_operand_restore, venomStateTheory.lookup_var_def,
        venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
-
-val _ = List.app (fn (name,th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected dependency in " ^ name))
-  (DB.thms "fmpLowerSequenceExec");

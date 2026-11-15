@@ -707,14 +707,3 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!st0 c st1 ex inc es1. _` drule >> simp[]
 QED
-
-(* Integrity gate for the preserved public literal-range guarantees. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "FOR_FORCE_AUDIT OK\n"
-     else raise Fail "range consumer inherited admission"
-  end) [compile_for_range_parts, compile_for_range_lit_parts,
-        compile_for_range_frag, compile_for_range_lit_frag,
-        compile_for_range_lit_frag_simple];

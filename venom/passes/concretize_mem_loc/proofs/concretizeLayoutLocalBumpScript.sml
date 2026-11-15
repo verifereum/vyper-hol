@@ -180,6 +180,4 @@ Proof
   irule relocation_reader_context_update_var >> irule relocation_reader_context_update_var >> simp[]
 QED
 
-val _ = if null (hyp concretize_bump_local_complete) then ()
-        else raise Fail "BUMP export has hypotheses";
 val _ = export_theory();

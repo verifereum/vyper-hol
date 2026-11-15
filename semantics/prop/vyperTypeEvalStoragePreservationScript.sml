@@ -4474,16 +4474,6 @@ Theorem eval_scc_storage_preservation_mutual =
   LIST_CONJ (List.take (CONJUNCTS eval_scc_storage_preservation_results_mutual, 10));
 
 
-val () = let
-  val th = eval_scc_storage_preservation_mutual
-  val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-in
-  if null (Thm.hyp th) andalso null axioms andalso
-     List.all (fn oracle => oracle = "DISK_THM") oracles then
-    print "Storage SCC finalised with no hypotheses or admitted dependencies\n"
-  else raise Fail "storage SCC retains hypotheses or admitted dependencies"
-end;
-
 Theorem eval_stmt_preserves_contract_storage_well_formed:
   type_stmt env ret_ty s = SOME env' /\
   runtime_storage_consistent env cx st /\

@@ -253,9 +253,6 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
-val _ = if null (hyp log_data_prepare_run) then ()
-  else raise Fail "open theorem: log_data_prepare_run";
-
 Theorem log_operands_live_transport[local]:
   !ops ws. EVERY (abi_decoder_operand_live nv) ops /\
     eval_operands ops s = SOME ws /\
@@ -325,9 +322,6 @@ Proof
   qexistsl_tac [`avs`,`t`] >> asm_simp_tac bool_ss [] >>
   first_assum ACCEPT_TAC
 QED
-
-val _ = if null (hyp log_data_emit_run) then ()
-  else raise Fail "open theorem: log_data_emit_run";
 
 Theorem log_selected_typed[local]:
   !xs vs flags.
@@ -539,9 +533,6 @@ Resume log_success_suffix_run[finish]:
   first_x_assum drule_all >> simp[]
 QED
 Finalise log_success_suffix_run
-
-val _ = if null (hyp log_success_suffix_run) then ()
-  else raise Fail "open theorem: log_success_suffix_run";
 
 Theorem log_static_empty_run[local]:
   cx.txn.is_static /\

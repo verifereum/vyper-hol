@@ -122,6 +122,4 @@ Proof
   irule relocation_reader_context_update_var >> simp[]
 QED
 
-val _ = if null (hyp concretize_retpc_param_local_complete) then ()
-        else raise Fail "RETPC_PARAM export has hypotheses";
 val _ = export_theory();

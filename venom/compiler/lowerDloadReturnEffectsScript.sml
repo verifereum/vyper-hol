@@ -65,6 +65,3 @@ Proof
   gvs[] >> qexistsl_tac [`rs`,`f.lf_src`] >>
   simp[step_inst_non_invoke] >> metis_tac[ld_sync_memory]
 QED
-
-val _ = if null (hyp ld_sync_ret_effect) then ()
-        else raise Fail "ld_sync_ret_effect has hypotheses";

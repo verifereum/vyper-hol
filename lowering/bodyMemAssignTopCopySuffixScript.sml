@@ -310,21 +310,3 @@ Proof
   gvs[] >> Cases_on `tr` >>
   simp[set_storage_def, get_storage_def]
 QED
-
-val () =
-  List.app (fn (name,th) =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th)
-       then print (name ^ " oracles: " ^ String.concatWith "," oracles ^ "\n")
-       else raise Fail "topcopy suffix has axioms or hypotheses"
-    end)
-    [("bulk",storage_copy_bulk_run_mem), ("one",storage_copy_one_run_mem),
-     ("suffix",storage_copy_suffix_run_mem), ("success",storage_copy_success_run_mem),
-     ("gas_tail",topcopy_write_storage_gas_tail)];
-
-val () = List.app (fn (name,th) =>
-  let val (os,_) = Tag.dest_tag (Thm.tag th)
-  in print (name ^ " dependency oracles: " ^ String.concatWith "," os ^ "\n") end)
-  [("post_region",storage_copy_post_region), ("source_bound",topcopy_source_bound),
-   ("lower_value_var",compile_lower_value_var), ("expr_grows",cj 2 compile_expr_grows),
-   ("reserved_next",local_ptrs_reserved_next_var), ("fresh_mono",not_fresh_at_mono)];

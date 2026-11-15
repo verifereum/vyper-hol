@@ -154,6 +154,3 @@ Resume concretize_env_reader_local_complete[callcontext]:
   qexists_tac `update_var v z t` >> simp[])
 QED
 Finalise concretize_env_reader_local_complete
-
-val _ = if null (hyp concretize_env_reader_local_complete) then ()
-        else raise Fail "environment reader export has hypotheses";

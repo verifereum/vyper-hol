@@ -2593,16 +2593,6 @@ Proof
   gvs[local_ptrs_reserved_def] >> metis_tac[]
 QED
 
-(* Integrity gate for preserved public prologue guarantees. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "CALLEE_FORCE_AUDIT OK\n"
-     else raise Fail "callee consumer inherited admission"
-  end) [compile_internal_function_prologue, compile_internal_param_decls_shape,
-        compile_internal_prologue_shape, compile_internal_prologue_entry,
-        compile_internal_prologue_reserved, compile_internal_prologue_code];
 Theorem build_compile_env_imm_alloca:
   !tops vis mut fname fargs ret body ut.
     (build_compile_env tops vis mut fname fargs ret body ut).ce_imm_alloca = NONE

@@ -499,10 +499,11 @@ Resume frame_asm_group_observers[bitwise]:
   metis_tac[frame_asm_stack_observers, MEM]
 QED
 Resume frame_asm_group_observers[memory]:
-  markerLib.RESUME_TAC >> rpt strip_tac >>
+  markerLib.RESUME_TAC >>
   gvs[asm_step_memory_def, AllCaseEqs()] >>
   gvs[asm_pop_def, asm_push_val_def, asm_next_def, AllCaseEqs()] >>
-  metis_tac[frame_asm_memory_observers, frame_asm_stack_observers, MEM]
+  all_tac >>~- ([`a1.as_requests = a.as_requests`],
+    metis_tac[frame_asm_memory_observers, frame_asm_stack_observers, MEM])
 QED
 Resume frame_asm_group_observers[control]:
   markerLib.RESUME_TAC >> rpt strip_tac >> gvs[asm_step_control_def, asm_next_def, AllCaseEqs()] >>

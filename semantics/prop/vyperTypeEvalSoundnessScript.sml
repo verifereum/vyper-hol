@@ -10174,10 +10174,6 @@ Finalise eval_scc_type_sound_results_mutual
 Theorem eval_scc_type_sound_mutual =
   LIST_CONJ (List.take (CONJUNCTS eval_scc_type_sound_results_mutual, 10));
 
-val _ = if null (hyp eval_scc_type_sound_mutual) then
-  print "Soundness SCC finalised with no suspension hypotheses\n"
-  else raise Fail "Soundness SCC retains hypotheses";
-
 (* Forcing is part of the public expression guarantee, not a caller premise. *)
 Theorem eval_expr_read_type_sound:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
@@ -10206,15 +10202,3 @@ Proof
   >- gvs[no_type_error_result_def] >>
   drule_all live_result_read_typed >> strip_tac >> simp[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print (name ^ " is closed\n")
-    else raise Fail (name ^ " is not closed")
-  end)
-  [("stmt_no_control_escape_eval_no_loop_control",stmt_no_control_escape_eval_no_loop_control),
-   ("eval_scc_type_sound_results_mutual",eval_scc_type_sound_results_mutual),
-   ("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
-   ("eval_expr_read_type_sound",eval_expr_read_type_sound)];

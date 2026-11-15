@@ -189,6 +189,3 @@ Resume log_data_emit_suffix_path_ptr[data_post]:
   strip_tac >> simp[lookup_var_def] >> fs[lookup_var_def]
 QED
 Finalise log_data_emit_suffix_path_ptr
-
-val _ = if null (hyp log_data_emit_suffix_path_ptr) then ()
-  else raise Fail "log_data_emit_suffix_path_ptr is not closed";

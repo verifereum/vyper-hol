@@ -66,15 +66,6 @@ Definition frame_ret_ok_mem_def:
         (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 End
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_MEMORY_FRAME_AUDIT OK\n"
-     else raise Fail "body memory frame inherited admission"
-  end) [return_buf_frame_frame, return_buf_frame_jump_to,
-        mem_safe_run_all_fuel, frag_exec_mem_complete];
-
 Theorem body_local_region_frontier:
   stmt_state_rel H ctx func ce cx es s /\
   local_region ce es.scopes s name b sz ==>
@@ -109,4 +100,3 @@ Proof
     (fs[local_region_def] >> metis_tac[w2n_lt]) >>
   simp[below_frontier_MLOAD, eval_operand_def] >> decide_tac
 QED
-

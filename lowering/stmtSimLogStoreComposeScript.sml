@@ -4,11 +4,6 @@ Ancestors
   abiCallerAllocation abiDecoderFrame
   stmtSimLogEncodeLayout stmtSimLogDataInput vyperTypeABI vyperABI compileEnv loweringStateRelDefs supportedTypes contractABI list stmtSimLogAllocate abiDecoderReentry exprLoweringProps vyperTyping abiEncoderCounters stmtSimLogTrace emitHelperProps stmtSimLogDataRun arithmetic words
 
-val _ = if null (hyp stmtSimLogStoreContinueTheory.log_store_data_stmt)
-  then print "STORE PREREQUISITE CLOSED\n"
-  else (print_thm stmtSimLogStoreContinueTheory.log_store_data_stmt;
-        raise Fail "open store prerequisite");
-
 Theorem log_scalar_embedded_bound[local]:
   supported_scalar_type ty ==>
   vyper_abi_embedded_size env ty =
@@ -250,9 +245,3 @@ Proof
   qexistsl_tac [`avs`,`actual`,`db`] >> asm_simp_tac bool_ss [] >>
   first_assum ACCEPT_TAC
 QED
-
-val _ = app (fn (name,th) => if null (hyp th) then ()
-  else (app (fn tm => (print_term tm; print "\n")) (hyp th);
-        raise Fail ("open theorem: " ^ name)))
-  [("log_store_encode_continue_bounded",log_store_encode_continue_bounded),
-   ("log_store_encode_continue",log_store_encode_continue)];

@@ -1038,41 +1038,13 @@ Theorem invoke_enter_callee_marked:
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `codegen_context_obligations Inv ctx cplan` >>
-  `compute_operands inst = arg_ops /\ EVERY (\op. ~is_label_operand op) arg_ops` by
-    (irule invoke_compute_operands >> gvs[] >> metis_tac[]) >>
   drule_all invoke_callee_entry_facts >> strip_tac >>
-  `fn_has_retpc callee` by (first_x_assum irule >> metis_tac[]) >>
-  `invoke_layout_wf ctx inst` by
-    (fs[codegen_context_obligations_def, fmp_lowered_context_wf_def] >>
-     metis_tac[]) >>
-  drule_all invoke_callee_param_arity >> strip_tac >>
-  `eval_operands (REVERSE (compute_operands inst)) (frame_view fn ra vs) =
-     SOME (REVERSE args)` by
-    (simp[eval_operands_reverse] >>
-     drule_all invoke_operands_frame_values >> simp[]) >>
-  `EVERY (\op. ~is_label_operand op) (compute_operands inst) /\
-   LENGTH (compute_operands inst) <=
-     LENGTH (SND (emit_input_plan INVOKE (compute_operands inst) nl ps)).ps_stack` by
-    (qpat_x_assum `inst.inst_opcode = INVOKE` (fn th => fs[th]) >> gvs[]) >>
-  drule_all invoke_generated_frame_prefix_marked >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  suspend "call"
-QED
-
-Resume invoke_enter_callee_marked[call]:
-  `MEM callee ctx.ctx_functions /\ callee.fn_name = nm` by simp[] >>
-  drule_all invoke_indexed_callee_target >>
-  disch_then (qx_choosel_then [`j`, `off`, `pc`] strip_assume_tac) >>
-  `?ret_off. FLOOKUP lo ret_lbl = SOME ret_off /\ ret_off < dimword (:256) /\
-     FLOOKUP o2pc ret_off =
-       SOME (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3)` by
-    (irule invoke_return_label_target >> qexistsl [`nm`, `ops`, `post`] >>
-     simp[]) >>
+  `codegen_context_obligations (\_ _ _ _. F) ctx cplan` by
+    fs[codegen_context_obligations_def, codegen_memory_obligations_def] >>
+  drule_all invoke_enter_callee_plan >> strip_tac >>
   `asm_block_at prog mid.as_pc
      [AsmPushLabel ret_lbl; AsmPushLabel callee.fn_name; AsmOp "JUMP"]` by
     (irule invoke_packet_block >> metis_tac[]) >>
-  `mid.as_stack = REVERSE args ++ saved ++ rest` by gvs[] >>
-  qpat_x_assum `callee.fn_name = nm` (SUBST_ALL_TAC o SYM) >>
   `create_safe_prefix lo o2pc prog 3 mid` by
     (irule invoke_packet_create_safe >> goal_assum (drule_at Any)) >>
   `EVERY plan_admin_op (iops ++ rops)` by
@@ -1086,19 +1058,10 @@ Resume invoke_enter_callee_marked[call]:
   `create_safe_prefix lo o2pc prog
      (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3) st` by
     (irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_all invoke_call_entry >> strip_tac >>
-  drule_all invoke_call_packet >> strip_tac >>
-  `LENGTH args = LENGTH (compute_operands inst)` by
-    metis_tac[eval_operands_some_length] >>
-  `LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256)` by
-    (`LENGTH args + 1 < 18` by decide_tac >>
-     `18 < dimword (:256)` by simp[wordsTheory.dimword_def] >> decide_tac) >>
   qexistsl [`j`, `iops`, `prepared`, `rops`, `arranged`, `ret_lbl`, `ret_off`,
     `post`, `mid`, `saved`, `cas`, `pc`] >>
   gvs[] >> simp[asm_state_component_equality]
 QED
-
-Finalise invoke_enter_callee_marked
 
 (* The structural facts invoke_return_frame_numeric_exact needs about the
    arranged state. *)

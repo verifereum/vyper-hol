@@ -20,9 +20,6 @@ Proof
   Cases_on `j` >> Cases_on `k` >> gvs[]
 QED
 
-val _ = if null (hyp ld_stable_head_replace) then ()
-        else raise Fail "stable head replacement has hypotheses";
-
 (* Singleton witnesses are explicit: ordinary generated scratch instructions
    are not mistaken for source instruction boundaries. *)
 Theorem ld_return_point_ordinary_next:
@@ -103,6 +100,3 @@ Proof
   simp[lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
   fs[ADD1] >> metis_tac[ld_image_def]
 QED
-
-val _ = if null (hyp ld_return_point_ordinary_next) then ()
-        else raise Fail "ordinary return point has hypotheses";

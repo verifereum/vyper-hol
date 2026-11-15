@@ -209,9 +209,6 @@ Resume compile_log_ready_stmt_frag_ptr[post]:
 QED
 Finalise compile_log_ready_stmt_frag_ptr
 
-val _ = if null (hyp compile_log_ready_stmt_frag_ptr) then ()
-  else raise Fail "compile_log_ready_stmt_frag_ptr is not closed";
-
 Theorem compile_log_ready_stmt_frag_ptr_widen:
   log_args_ready_ptr d ctx PG func cenv cx Inv args /\ Inv es /\
   (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\

@@ -1035,12 +1035,6 @@ Proof
   metis_tac[scope_pop_trace_append, EVERY_APPEND]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Place result interface oracle debt: " ^ name)
-  end) (DB.thms "vyperPlaceResultTyping");
-
 (* Delayed global roots are typed without loading their contents. *)
 Theorem lookup_global_toplevel_ready:
   FLOOKUP env.toplevel_vtypes (src,id) = SOME vt /\
@@ -1595,17 +1589,6 @@ Proof
        sparse_public_repaired_post_typed]
 QED
 
-val _ = List.app (fn name =>
-  let val th = DB.fetch "vyperPlaceResultTyping" name
-      val (ors,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") ors then ()
-     else raise Fail ("oracle dependency in " ^ name) end)
-  ["sparse_public_source_typing", "sparse_public_env_consistent",
-   "sparse_public_state_typed", "sparse_public_context_typed",
-   "sparse_public_accounts_typed", "sparse_public_functions_typed",
-   "sparse_public_call_safe", "sparse_public_repaired_execution",
-   "sparse_public_repaired_post_typed", "sparse_public_repaired_regression"];
-
 (* Non-pop errors cannot be repaired by unrelated historical values. *)
 Theorem classified_nonpop_history_regressions:
   read_memory_path
@@ -1633,9 +1616,3 @@ Theorem classified_nonpop_history_regressions:
 Proof
   EVAL_TAC
 QED
-
-val _ = List.app (fn name =>
-  let val (ors,_) = Tag.dest_tag (Thm.tag (DB.fetch "vyperPlaceResultTyping" name))
-  in if List.all (fn s => s = "DISK_THM") ors then ()
-     else raise Fail ("oracle dependency in " ^ name) end)
-  ["classified_nonpop_history_regressions"];

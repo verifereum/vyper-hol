@@ -2415,7 +2415,8 @@ Resume asm_frame_call_abort_step[relation]:
      qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
      rewrite_tac[asm_frame_rel_def] >> strip_tac >>
      gvs[] >> simp[asm_next_def] >>
-     gvs[asm_evm_rel_def, asm_next_def]) >>
+     all_tac >>~- ([`asm_evm_rel _ _ _`],
+       gvs[asm_evm_rel_def, asm_next_def])) >>
   `frame_next s t` by (simp[frame_next_def]) >>
   simp[asm_frame_step_ok_def] >> metis_tac[]
 QED

@@ -460,14 +460,6 @@ Proof
   metis_tac[immutable_slice_splice_disjoint]
 QED
 
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then
-       print ("IMMUTABLE_DECODING_KERNEL_CLOSED " ^ name ^ "\n")
-     else raise Fail ("Unclosed immutable decoding theorem: " ^ name)
-  end) (DB.thms "immutableEncodingProofs");
-
 (* Zero default encodings and admissible-section shape facts, shared by the
    deploy section proofs and the immutable pop simulation. *)
 

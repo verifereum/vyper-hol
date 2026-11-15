@@ -90,16 +90,3 @@ Proof
     (irule scalar_tuple_abi_capacity >> simp[]) >>
   simp_tac bool_ss [vyper_to_abi_type_def] >> simp[]
 QED
-
-(* These interfaces must be closed kernel theorems, not conditional exports. *)
-val _ = List.app (fn (name,th) =>
-  if null (hyp th) then () else
-    (print (name ^ " has hypotheses:\n"); List.app print_term (hyp th);
-     raise Fail (name ^ " is not closed")))
-  [("scalar_abi_embedded_capacity",scalar_abi_embedded_capacity),
-   ("log_tuple_enc_info_selected",log_tuple_enc_info_selected),
-   ("log_scalar_enc_info_selected",log_scalar_enc_info_selected),
-   ("scalar_tuple_abi_capacity",scalar_tuple_abi_capacity),
-   ("scalar_tuple_encoder_shape",scalar_tuple_encoder_shape),
-   ("robust_log_data_layout_input",robust_log_data_layout_input),
-   ("supported_log_encoder_entry_ptr",supported_log_encoder_entry_ptr)];

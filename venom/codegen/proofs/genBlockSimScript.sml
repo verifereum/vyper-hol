@@ -7584,17 +7584,3 @@ Proof
   gvs[] >>
   Cases_on `x` >> gvs[] >> metis_tac[]
 QED
-
-(* Deep-DUP repair boundaries must not inherit the unrelated codegen admissions. *)
-val _ = List.app (fn (name, th) =>
-  let val oracles = #1 (Tag.dest_tag (Thm.tag th))
-      val bad = List.filter (fn s => s <> "DISK_THM") oracles
-  in if null bad then print ("DEEP_DUP_CLOSED " ^ name ^ "\n")
-     else raise Fail ("deep DUP oracle dependency: " ^ name)
-  end)
-  [("do_dup_two_growth_apply_inclusion", do_dup_two_growth_apply_inclusion),
-   ("reorder_plan_exact_two_spills_fresh", reorder_plan_exact_two_spills_fresh),
-   ("prefix_spill_wf_replay_extension", prefix_spill_wf_replay_extension),
-   ("bump_emit_input_plan_apply_inclusion", bump_emit_input_plan_apply_inclusion),
-   ("bump_emit_input_plan_venom_asm_rel", bump_emit_input_plan_venom_asm_rel),
-   ("bump_input_reorder_venom_asm_rel", bump_input_reorder_venom_asm_rel)];

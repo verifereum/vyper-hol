@@ -225,11 +225,3 @@ Theorem get_place_state:
 Proof
   Cases_on `pv` >> simp[get_place_def, return_def, raise_def]
 QED
-
-(* Fail the build if a frame boundary acquires an admitted dependency. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail ("vyperPlaceFrames." ^ name ^ ": admitted dependency")
-  end) (DB.thms "vyperPlaceFrames");

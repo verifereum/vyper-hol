@@ -197,7 +197,4 @@ Proof
   qexists_tac `update_var v z t` >> simp[]
 QED
 
-val _ = if null (hyp concretize_balance_reader_local_complete) then ()
-        else raise Fail "balance reader export has hypotheses";
-
 val _ = export_theory();

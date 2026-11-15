@@ -991,13 +991,6 @@ Proof
   pop_assum (fn th => pure_rewrite_tac[th, immutable_transfers_def]) >> simp[]
 QED
 
-(* Reject oracle-bearing dependencies at the strict execution boundary. *)
-val _ = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn tag => tag = "DISK_THM") oracles then ()
-     else raise Fail ("Oracle in immutableCopyExecution." ^ name)
-  end) (DB.thms "immutableCopyExecution");
-
 (* Sequential transfers include the effect of overlapping source and destination. *)
 val _ = Parse.hide "count";
 

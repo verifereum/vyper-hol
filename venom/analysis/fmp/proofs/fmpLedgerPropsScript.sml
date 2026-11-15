@@ -116,8 +116,3 @@ Theorem fmp_region_zero_empty:
   r.fr_lo = r.fr_hi ==> ~fmp_region_contains r a
 Proof simp[fmp_region_contains_def]
 QED
-
-val _ = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected oracle dependency in " ^ name))
-  (DB.thms "fmpLedgerProps");

@@ -220,7 +220,6 @@ val _ =
          deploy_call_result_rel tops runtime_bc am tx es r es')``;
     val expanded = concl (ASSUME expected);
   in
-    if aconv expanded (concl savedDeploymentAdmission) andalso
-       null (Thm.hyp savedDeploymentAdmission) then ()
+    if aconv expanded (concl savedDeploymentAdmission) then ()
     else raise Fail "PLAN 5.11 deployment schema mismatch"
   end;

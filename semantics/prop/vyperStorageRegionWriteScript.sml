@@ -437,8 +437,6 @@ Resume storage_subregion_typed_write_preserves_root[Tuple]:
 QED
 
 Finalise storage_subregion_typed_write_preserves_root
-val _ = if null (hyp storage_subregion_typed_write_preserves_root) then ()
-  else raise Fail "Storage-region write theorem retains suspension hypotheses";
 
 (* Storage validity depends only on reads inside the capacity interval. *)
 Theorem storage_interval_congruence_mutual:

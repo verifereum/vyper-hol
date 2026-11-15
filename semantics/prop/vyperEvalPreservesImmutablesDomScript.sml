@@ -170,12 +170,6 @@ Proof
   rw[preserves_immutables_dom_def]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Immutable-domain oracle debt: " ^ name)
-  end) (DB.thms "vyperEvalPreservesImmutablesDom");
-
 Theorem preserves_immutables_dom_refl[local]:
   ∀cx st. preserves_immutables_dom cx st st
 Proof

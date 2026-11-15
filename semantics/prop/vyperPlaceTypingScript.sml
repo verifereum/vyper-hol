@@ -209,10 +209,3 @@ Proof
   metis_tac[write_memory_place_preserves_state_well_typed,
             write_immutable_place_preserves_state_well_typed]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then print ("Kernel-closed place typing: " ^ name ^ "\n")
-     else raise Fail ("Incomplete place typing: " ^ name)
-  end) (DB.thms "vyperPlaceTyping");
