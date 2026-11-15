@@ -462,6 +462,180 @@ Proof
   simp[Once step_inst_def, decode_invoke_def, eval_operands_def]
 QED
 
+(* The return boundary is aligned only after exec_block has performed both
+   increments.  In particular the raw caller states need not coincide. *)
+Theorem crossed_returning_caller_boundary[local]:
+  ~MEM out outs /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state a rt)) = SOME qt ==>
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret
+      (merge_callee_state
+        ((update_var out w (a with vs_gas_readings := readings)) with
+          vs_inst_idx := SUC j)
+        (rt with vs_gas_readings := tail))) =
+    SOME ((update_var out w qt) with
+      <| vs_inst_idx := SUC j; vs_gas_readings := tail |>) /\
+  (((update_var out w qt) with
+      <| vs_inst_idx := SUC j; vs_gas_readings := tail |>) with
+        vs_inst_idx := SUC (SUC j)) =
+  (((update_var out w ((qt with vs_inst_idx := SUC j) with
+        vs_gas_readings := rest_readings)) with
+          vs_inst_idx := SUC (SUC j)) with vs_gas_readings := tail)
+Proof
+  strip_tac >> conj_tac
+  >- (`adopt_return_fmp ret
+        (merge_callee_state
+          ((update_var out w (a with vs_gas_readings := readings)) with
+            vs_inst_idx := SUC j)
+          (rt with vs_gas_readings := tail)) =
+        ((update_var out w
+          (adopt_return_fmp ret (merge_callee_state a rt))) with
+            <|vs_inst_idx := SUC j; vs_gas_readings := tail|>)` by
+        (Cases_on `ret.iret_adopt_fmp` >>
+         simp[adopt_return_fmp_def, merge_callee_state_def, update_var_def,
+              venom_state_component_equality]) >>
+      simp[venomExecProofsTheory.bind_outputs_idx, gas_bind_outputs,
+           dftCommutationTheory.bind_outputs_update_var]) >>
+  simp[update_var_def]
+QED
+
+Theorem crossed_returning_packet_constructor:
+  let q = (d,call.inst_id)::p;
+      e = (p,d,gas.inst_id);
+      bc = bb with bb_instructions := REPLICATE j pad ++ gas::call::rest;
+      bt = bb with bb_instructions := REPLICATE j pad ++ call::gas::rest;
+      br = bb with bb_instructions := REPLICATE (SUC (SUC j)) pad ++ rest;
+      aI = qt with vs_inst_idx := SUC j;
+      aR = (update_var out w0 (aI with vs_gas_readings := r0)) with
+        vs_inst_idx := SUC (SUC j);
+      Tc = run_blocks b C' callee' ct;
+      Oc = trace_gas (dftGasFromListTraceDefs$trace_blocks q d b C' callee' ct);
+      Tr = exec_block b C' br aR;
+      Or = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' br aR);
+      Mc = MAP (ALOOKUP Oc) Kc;
+      Mr = MAP (ALOOKUP Or) Kr;
+      T = exec_block b C' bt a;
+      obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt a);
+      K = e::(Kc ++ Kr);
+      S = (fn.fn_name,gas.inst_id)::(Sc ++ Sr);
+      M = MAP (ALOOKUP obs) K
+  in
+  a.vs_inst_idx = j /\ gas.inst_opcode = GAS /\
+  gas.inst_outputs = [out] /\ inst_wf gas /\
+  call.inst_opcode = INVOKE /\ inst_wf call /\
+  dft_gas_swap_pair gas call /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (gas::call::rest)) /\
+  fn.fn_name = fn'.fn_name /\
+  decode_invoke call = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  lookup_function nm C'.ctx_functions = SOME callee' /\
+  callee' = dft_fn callee /\ dft_fn_rel callee callee' /\
+  eval_operands ops a = SOME args /\
+  setup_callee callee args a = SOME cs /\
+  setup_callee callee' args a = SOME ct /\
+  (cs with vs_gas_readings := []) = (ct with vs_gas_readings := []) /\
+  Tc = IntRet ret rt /\
+  bind_outputs call.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state a rt)) = SOME qt /\
+  aI.vs_gas_readings = w0::r0 /\
+  terminates T /\ gas_count_block b C' bt a <= LENGTH a.vs_gas_readings /\
+  ALL_DISTINCT Kc /\ EVERY (later_region q d) Kc /\
+  LENGTH Kc = LENGTH Sc /\
+  PERM (MAP THE (FILTER IS_SOME Mc) ++ Uc) ct.vs_gas_readings /\
+  (!v u. Tc = IntRet v u ==> EVERY IS_SOME Mc /\ Uc = u.vs_gas_readings) /\
+  (!hc tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mc hc ==>
+    (!n. ?k. k <= LENGTH Kc /\
+      trace_gas (dftGasFromListTraceDefs$trace_blocks q d n C callee
+        (cs with vs_gas_readings := hc ++ tail)) = ZIP (TAKE k Kc,TAKE k hc) /\
+      gas_events_blocks n C callee (cs with vs_gas_readings := hc ++ tail) =
+        TAKE k Sc) /\
+    ((?n. terminates (run_blocks n C callee
+        (cs with vs_gas_readings := hc ++ tail))) ==>
+      terminates (run_blocks b C callee (cs with vs_gas_readings := hc ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (run_blocks b C callee
+          (cs with vs_gas_readings := hc ++ tail))) (restore_result [] Tc) /\
+      (!v u. Tc = IntRet v u ==>
+        gas_events_blocks b C callee (cs with vs_gas_readings := hc ++ tail) = Sc /\
+        residual_result tail Tc
+          (run_blocks b C callee (cs with vs_gas_readings := hc ++ tail))))) /\
+  ALL_DISTINCT Kr /\
+  EVERY (block_region p d (MAP (\i. i.inst_id) rest)) Kr /\
+  LENGTH Kr = LENGTH Sr /\
+  PERM (MAP THE (FILTER IS_SOME Mr) ++ Ur) aR.vs_gas_readings /\
+  (!u. Tr = OK u ==> EVERY IS_SOME Mr /\ Ur = u.vs_gas_readings) /\
+  (!v u. Tr = IntRet v u ==> EVERY IS_SOME Mr /\ Ur = u.vs_gas_readings) /\
+  (!hr tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mr hr ==>
+    (!n. ?k. k <= LENGTH Kr /\
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br
+        (aR with vs_gas_readings := hr ++ tail)) = ZIP (TAKE k Kr,TAKE k hr) /\
+      gas_events_block n C fn.fn_name br (aR with vs_gas_readings := hr ++ tail) =
+        TAKE k Sr) /\
+    ((?n. terminates (exec_block n C br
+        (aR with vs_gas_readings := hr ++ tail))) ==>
+      terminates (exec_block b C br (aR with vs_gas_readings := hr ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (exec_block b C br
+          (aR with vs_gas_readings := hr ++ tail))) (restore_result [] Tr) /\
+      (!u. Tr = OK u ==>
+        gas_events_block b C fn.fn_name br (aR with vs_gas_readings := hr ++ tail) = Sr /\
+        residual_result tail Tr
+          (exec_block b C br (aR with vs_gas_readings := hr ++ tail))) /\
+      (!v u. Tr = IntRet v u ==>
+        gas_events_block b C fn.fn_name br (aR with vs_gas_readings := hr ++ tail) = Sr /\
+        residual_result tail Tr
+          (exec_block b C br (aR with vs_gas_readings := hr ++ tail))))) ==>
+  ALL_DISTINCT K /\
+  EVERY (block_region p d (MAP (\i. i.inst_id) (gas::call::rest))) K /\
+  LENGTH K = LENGTH S /\
+  PERM (MAP THE (FILTER IS_SOME M) ++ Ur) a.vs_gas_readings /\
+  (!u. T = OK u ==> EVERY IS_SOME M /\ Ur = u.vs_gas_readings) /\
+  (!v u. T = IntRet v u ==> EVERY IS_SOME M /\ Ur = u.vs_gas_readings) /\
+  (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M g ==>
+    (!n. ?k. k <= LENGTH K /\
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bc
+        (a with vs_gas_readings := g ++ tail)) = ZIP (TAKE k K,TAKE k g) /\
+      gas_events_block n C fn.fn_name bc (a with vs_gas_readings := g ++ tail) =
+        TAKE k S) /\
+    ((?n. terminates (exec_block n C bc
+        (a with vs_gas_readings := g ++ tail))) ==>
+      terminates (exec_block b C bc (a with vs_gas_readings := g ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (exec_block b C bc
+          (a with vs_gas_readings := g ++ tail))) (restore_result [] T) /\
+      (!u. T = OK u ==>
+        gas_events_block b C fn.fn_name bc (a with vs_gas_readings := g ++ tail) = S /\
+        residual_result tail T
+          (exec_block b C bc (a with vs_gas_readings := g ++ tail))) /\
+      (!v u. T = IntRet v u ==>
+        gas_events_block b C fn.fn_name bc (a with vs_gas_readings := g ++ tail) = S /\
+        residual_result tail T
+          (exec_block b C bc (a with vs_gas_readings := g ++ tail)))))
+Proof
+  simp_tac pure_ss [LET_THM] >>
+  qabbrev_tac `q = (d,call.inst_id)::p` >>
+  qabbrev_tac `e = (p,d,gas.inst_id)` >>
+  qabbrev_tac `bc = bb with bb_instructions := REPLICATE j pad ++ gas::call::rest` >>
+  qabbrev_tac `bt = bb with bb_instructions := REPLICATE j pad ++ call::gas::rest` >>
+  qabbrev_tac `br = bb with bb_instructions := REPLICATE (SUC (SUC j)) pad ++ rest` >>
+  qabbrev_tac `aI = qt with vs_inst_idx := SUC j` >>
+  qabbrev_tac `aR = (update_var out w0 (aI with vs_gas_readings := r0)) with
+    vs_inst_idx := SUC (SUC j)` >>
+  qabbrev_tac `Tc = run_blocks b C' callee' ct` >>
+  qabbrev_tac `Oc = trace_gas (dftGasFromListTraceDefs$trace_blocks q d b C' callee' ct)` >>
+  qabbrev_tac `Tr = exec_block b C' br aR` >>
+  qabbrev_tac `obsr = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' br aR)` >>
+  qabbrev_tac `Mc = MAP (ALOOKUP Oc) Kc` >>
+  qabbrev_tac `Mr = MAP (ALOOKUP obsr) Kr` >>
+  qabbrev_tac `target = exec_block b C' bt a` >>
+  qabbrev_tac `obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt a)` >>
+  qabbrev_tac `keys = e::(Kc ++ Kr)` >>
+  qabbrev_tac `sites = (fn.fn_name,gas.inst_id)::(Sc ++ Sr)` >>
+  qabbrev_tac `slots = MAP (ALOOKUP obs) keys` >>
+  strip_tac >> cheat
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
