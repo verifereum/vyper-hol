@@ -312,8 +312,7 @@ Theorem comparison_terminal_summary[local]:
         es sa sb s0 ee v op z /\
       z.vs_current_bb = sh.cs_current_bb /\
       z.vs_inst_idx = LENGTH sh.cs_current_insts + LENGTH (emitted_insts sh sb))
-    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-      expr_exit res r /\ halt_exit H cx ee res r)
+    R
 Proof
   strip_tac >>
   `ee with gas_obs := [] = ee` by

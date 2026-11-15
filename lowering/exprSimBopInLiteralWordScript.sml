@@ -1053,7 +1053,7 @@ Resume literal_word_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def] >> metis_tac[]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume literal_word_args_sim[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -1149,7 +1149,7 @@ Resume literal_word_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def] >> metis_tac[]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume literal_word_args_sim[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
@@ -1412,7 +1412,7 @@ Resume literal_expr_sim[exit]:
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def] >> metis_tac[]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume literal_expr_sim[exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
