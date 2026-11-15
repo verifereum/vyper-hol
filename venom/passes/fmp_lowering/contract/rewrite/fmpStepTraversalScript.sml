@@ -1,7 +1,8 @@
 (* Occurrence-sensitive instruction ID transport through lowering. *)
 Theory fmpStepTraversal
 Ancestors
-  fmpStepIdTransport fmpStepRewrite fmpLowerDefs list venomInst arithmetic
+  fmpStepIdTransport fmpStepRewrite fmpStepRewriteSupply fmpStepRewriteOrigin
+  fmpLowerDefs list venomInst arithmetic
 
 Theorem fmp_lower_inst_id_transport:
   fmp_lower_inst infos ctx runner s inst = SOME (out,s') ==>

@@ -78,18 +78,14 @@ Theorem flag_step_closed:
   EVERY (\x. MEM x V) i.inst_outputs ==>
   EVERY (\x. MEM x V) (flag_step i vs)
 Proof
-  rpt strip_tac >> gvs[EVERY_MEM] >>
-  simp[flag_step_def] >>
-  Cases_on `write_effects i.inst_opcode = empty_effects` >> simp[] >>
-  Cases_on `i.inst_opcode` >>
-  simp[EVERY_MEM, MEM_FILTER] >>
-  TRY (rpt strip_tac >> first_x_assum irule >> simp[] >> NO_TAC) >>
-  Cases_on `i.inst_operands` >> simp[EVERY_MEM, MEM_FILTER] >>
-  TRY (rpt strip_tac >> first_x_assum irule >> simp[] >> NO_TAC) >>
-  Cases_on `h` >> simp[EVERY_MEM, MEM_FILTER] >>
-  TRY (rpt strip_tac >> first_x_assum irule >> simp[] >> NO_TAC) >>
-  Cases_on `t` >> simp[EVERY_MEM, MEM_FILTER] >>
-  Cases_on `MEM s vs` >> gvs[EVERY_MEM, MEM_FILTER] >> metis_tac[]
+  rpt strip_tac >> gvs[EVERY_MEM, flag_step_def] >>
+  Cases_on `write_effects i.inst_opcode = empty_effects` >> gvs[] >>
+  Cases_on `i.inst_opcode` >> gvs[MEM_FILTER] >>
+  Cases_on `i.inst_operands` >> gvs[MEM_FILTER] >>
+  rename1 `op::rest` >> Cases_on `op` >> gvs[MEM_FILTER] >>
+  rename1 `Var u` >> Cases_on `rest` >> gvs[MEM_FILTER] >>
+  Cases_on `MEM u vs` >> gvs[MEM_FILTER] >>
+  metis_tac[]
 QED
 
 Theorem flag_step_preserves_disjoint:
@@ -100,11 +96,11 @@ Proof
   rpt strip_tac >>
   `~MEM x i.inst_outputs` by (gvs[EVERY_MEM] >> metis_tac[]) >>
   simp[flag_step_def] >>
-  Cases_on `i.inst_opcode` >> simp[MEM_FILTER] >>
-  Cases_on `i.inst_operands` >> simp[MEM_FILTER] >>
-  Cases_on `h` >> simp[MEM_FILTER] >>
-  Cases_on `t` >> simp[MEM_FILTER] >>
-  Cases_on `MEM s vs` >> gvs[MEM_FILTER, EVERY_MEM] >> metis_tac[]
+  Cases_on `i.inst_opcode` >> gvs[MEM_FILTER] >>
+  Cases_on `i.inst_operands` >> gvs[MEM_FILTER] >>
+  rename1 `op::rest` >> Cases_on `op` >> gvs[MEM_FILTER] >>
+  rename1 `Var u` >> Cases_on `rest` >> gvs[MEM_FILTER] >>
+  Cases_on `MEM u vs` >> gvs[MEM_FILTER, MEM_APPEND]
 QED
 
 Theorem flag_path_pure_prefix:
