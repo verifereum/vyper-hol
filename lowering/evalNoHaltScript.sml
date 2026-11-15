@@ -404,14 +404,6 @@ Proof
   simp[get_module_code_def]
 QED
 
-Theorem eval_exprs_nil_finally[local]:
-  finally (do set_scopes sc; eval_exprs cx [] od) (set_scopes prev) s =
-  (INL [], s with scopes := prev)
-Proof
-  simp[finally_def, ignore_bind_def, bind_def, set_scopes_def, return_def,
-       Once evaluate_def]
-QED
-
 Theorem order_custom_error_args_exprs[local]:
   order_custom_error_args params err = SOME es ==> es = custom_error_exprs err
 Proof
