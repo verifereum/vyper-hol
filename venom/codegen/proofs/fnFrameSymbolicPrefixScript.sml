@@ -4,6 +4,7 @@ Ancestors
   fnFramePrefixDriver fnFramePrefix fnFramePrefixEntry fnFramePrefixStack
   codegenLabelDisciplined codegenEntrySim codegenEntryRel codegenSymRel
   symFrameBoundary symFrameInst symFrameInvoke symFrameControl
+  fnEntryPlan fnEntryStep fnBlockBodyHelpers stackOpSim fnFrameBoundaryEntryParams fnEntryParams
   asmDataEnv asmSymBridge asmSymSem asmSem
   fnBlockBodySteps fnFrameBoundaryInvoke frameRel contextCodegenRel
   stackPlanTypes stackPlanGen planExec unitShapeDefs
@@ -262,39 +263,98 @@ Proof
   fs[codegen_asm_entry_rel_def]
 QED
 
-Theorem active_frame_symbolic_return_progress:
-  joint_config_reachable vs0 unit.cu_context
-    (JointConfig stk PG G tn fn inst s oms om hs h) /\
-  frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn saved
-    ra rest mem0 sentry ret srest labs0 /\
-  active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast ra rest mem0
-    ret srest labs0 ss /\
-  ~in_revert_forward fn s /\
-  env = asm_data_env prog vs0.vs_code /\
+Theorem entry_frame_symbolic_plan_next:
+  entry_frame_symbolic_plan env rpolicy unit cpl prog fn entry s ast
+    ra pc_ret rest mem0 ret srest labs0 ss /\
+  s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
+  ?post.
+    step_inst fuel unit.cu_context
+      (EL s.vs_inst_idx (get_params (HD fn.fn_blocks).bb_instructions)) s = OK post /\
+    entry_frame_symbolic_plan env rpolicy unit cpl prog fn entry
+      (post with vs_inst_idx := SUC s.vs_inst_idx) ast
+      ra pc_ret rest mem0 ret srest labs0 ss
+Proof
+  rw[entry_frame_symbolic_plan_def] >>
+  drule_all entry_frame_plan_next >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  qexists `post` >> simp[]
+QED
+
+Theorem entry_frame_symbolic_plan_ready:
+  entry_frame_symbolic_plan env rpolicy unit cpl prog fn entry s ast
+    ra pc_ret rest mem0 ret srest labs0 ss /\
   focus_s7_symbolic_context unit prog /\
-  focus_s7_symbolic_guard prog cpl fn inst s /\
-  joint_transition unit.cu_context
-    (JointConfig stk PG G tn fn inst s oms om hs h)
-    (SOME (OriginResume fuel fn inst s retv send post))
-    (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+  s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
   ?n ast1 ss1.
+    0 < n /\
     asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
       prog n ast = AsmOK ast1 /\
     sym_steps prog env n ss = SymOK ss1 /\
-    normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
-      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast1 ss1 /\
-    (0 < n \/
-     (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
-      stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
-      t.vs_inst_idx = SUC s.vs_inst_idx /\
-      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-        LENGTH bb.bb_instructions - t.vs_inst_idx <
-          LENGTH bb.bb_instructions - s.vs_inst_idx))
+    active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast1
+      ra rest mem0 ret srest labs0 ss1
 Proof
-  simp[joint_transition_return] >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `frame_stack_symbolic_plan _ _ _ _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [frame_stack_symbolic_plan_cases]) >>
-  gvs[] >> FAIL_TAC "return snapshot inversion"
+  pure_rewrite_tac [entry_frame_symbolic_plan_def, focus_s7_symbolic_context_def] >>
+  strip_tac >>
+  qpat_x_assum `entry_frame_plan _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [entry_frame_plan_def]) >>
+  `s.vs_inst_idx = k` by fs[] >>
+  `s = entry_bind_pairs
+    (entry_param_pairs entry (get_params (HD fn.fn_blocks).bb_instructions)) entry
+      with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by fs[] >>
+  `codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn` by
+    metis_tac[body_fn_shape] >>
+  drule_all region_fn_plan >> strip_tac >>
+  drule_all entry_block_plan >> strip_tac >>
+  `!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)` by
+    metis_tac[entry_step_spill_bound] >>
+  `asm_block_at prog ast.as_pc
+     (execute_plan cpl.cp_initial_fmp
+       (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
+   asm_block_at prog ast.as_pc
+     (execute_plan cpl.cp_initial_fmp
+       (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))` by
+    (qpat_x_assum `asm_block_at _ _ (execute_plan _ r.sr_plan)` mp_tac >>
+     qpat_assum `r.sr_plan = _` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+     rpt strip_tac >> fs[]) >>
+  `ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  `?ast1 ss1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan cpl.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) ast = AsmOK ast1 /\
+    ast1.as_pc = ast.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+    fn_frame_inv unit.cu_context cpl (SND (compute_label_offsets prog))
+      fn ra rest ast.as_memory ps1 s ast1 /\
+    sym_steps prog env (LENGTH (execute_plan cpl.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) ss = SymOK ss1 /\
+    sym_frame_inv prog env unit.cu_context cpl fn ret srest
+      ss.sym_mem_labels ps1 ast1 ss1` by
+    (irule sym_entry_prefix_asm >> simp[] >>
+     conj_tac >-
+       (goal_assum (drule_at Any) >> simp[] >>
+        qexistsl [`cleanup_caller_height (LENGTH unit.cu_context.ctx_functions)
+          unit.cu_context (fcg_analyze unit.cu_context) fn.fn_name`,
+          `cleanup_growth_table unit.cu_context (fcg_analyze unit.cu_context)`,
+          `lbl_ctr`, `r.sr_spill_base`] >> simp[]) >>
+     qexists `entry` >> simp[]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    normalize_operand (dfg_build_function fn) [] at = at` by
+    (rpt strip_tac >> irule entry_plan_normalize >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `codegen_context_obligations _ _ _`) codegen_invoke_targets_retpc >>
+  simp[] >> strip_tac >>
+  `!l. FLOOKUP s.vs_labels l =
+    OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)` by
+    gvs[entry_bind_pairs_normal] >>
+  qexistsl [`LENGTH (execute_plan cpl.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))`, `ast1`, `ss1`] >>
+  simp[execute_plan_def, exec_stack_op_def] >>
+  simp[active_frame_symbolic_plan_def] >>
+  irule_at Any entry_body_plan >> simp[] >>
+  qexistsl [`ps_end`, `ps_after`, `ps1`, `pc_ret`, `ast.as_pc`,
+    `param_ops`, `lbl_ctr`, `i`, `body_ops`] >>
+  gvs[entry_bind_pairs_normal] >>
+  fs[fn_entry_state_rel_def] >> metis_tac[]
 QED
 
 Theorem normal_frame_symbolic_joint_progress:
