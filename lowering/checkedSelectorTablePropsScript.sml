@@ -145,7 +145,7 @@ Proof
   AP_TERM_TAC >> irule MAP_CONG >> simp[pairTheory.FORALL_PROD]
 QED
 
-Theorem abi_signature_partition[local]:
+Theorem abi_signature_partition:
   PERM (FLAT (MAP abi_decl_signatures (FILTER explicit_external_decl tops)) ++
         FLAT (MAP abi_decl_signatures (FILTER (IS_SOME o public_getter) tops)))
        (abi_external_signatures tops)
