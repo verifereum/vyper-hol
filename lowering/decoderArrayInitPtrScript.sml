@@ -121,12 +121,6 @@ Resume calldata_count_guard_endpoint_ptr_origin_core_joint[guard_ghost]:
   drule_all emit_calldata_load_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`H`, `G`] mp_tac) >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  `?vars. s1 = s with vs_vars := vars` by
-    (qpat_assum `emit_op CALLDATALOAD _ _ = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     qpat_x_assum `run_inst_seq (emitted_insts sa c1) s = _` mp_tac >>
-     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       exec_read1_def, AllCaseEqs(), update_var_def] >> metis_tac[]) >>
   rename1 `op_taint u1 cnt = {}` >>
   rename1 `op_prov H1 cnt = NONE` >>
   `?b. eval_operand cnt s1 = SOME b` by
@@ -587,12 +581,6 @@ Proof
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
   drule_all emit_calldata_load_endpoint_ptr_origin_core_joint >>
   disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  `?vars. s1 = s with vs_vars := vars` by
-    (qpat_assum `emit_op CALLDATALOAD _ _ = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = _` mp_tac >>
-     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       exec_read1_def, AllCaseEqs(), update_var_def] >> metis_tac[]) >>
   `lookup_var root s1 = SOME (n2w d) /\ ptr_covers HG u root s1 totalbytes` by
     (conj_tac >- metis_tac[] >> irule ptr_covers_frame >> metis_tac[]) >>
   `ptr_covers HG u root s1 32` by
