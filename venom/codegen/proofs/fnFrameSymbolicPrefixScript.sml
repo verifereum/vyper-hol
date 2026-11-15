@@ -951,6 +951,62 @@ Proof
   fs[fn_return_state_rel_def, shared_state_rel_def] >> metis_tac[]
 QED
 
+Theorem active_frame_symbolic_return_progress:
+  joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn saved
+    ra rest mem0 sentry ret srest labs0 /\
+  active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast ra rest mem0
+    ret srest labs0 ss /\
+  ~in_revert_forward fn s /\
+  env = asm_data_env prog vs0.vs_code /\
+  focus_s7_symbolic_context unit prog /\
+  focus_s7_symbolic_guard prog cpl fn inst s /\
+  joint_transition unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h)
+    (SOME (OriginResume fuel fn inst s retv send post))
+    (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+  ?n ast1 ss1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
+      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast1 ss1 /\
+    (0 < n \/
+     (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+      stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\
+      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        LENGTH bb.bb_instructions - t.vs_inst_idx <
+          LENGTH bb.bb_instructions - s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `frame_history vs0 unit.cu_context stk PG G tn fn inst s
+    (MAP origin_observations hs) (origin_observations h)` by
+    (fs[joint_config_reachable_def] >>
+     drule joint_origin_history_projection >> simp[]) >>
+  qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
+  simp[joint_transition_return] >> rpt strip_tac >> gvs[] >>
+  `inst.inst_opcode = RET` by
+    (qpat_assum `active_frame_symbolic_plan _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [active_frame_symbolic_plan_def]) >>
+     drule_all body_plan_active_inst >> strip_tac >>
+     drule_all body_plan_inv_inst >> strip_tac >>
+     metis_tac[codegen_ready_intret_opcode]) >>
+  drule_all active_frame_symbolic_ret_boundary >>
+  disch_then (qx_choosel_then [`nr`, `asr`, `ssr`] strip_assume_tac) >>
+  drule_all frame_stack_symbolic_plan_pop >>
+  disch_then (qx_choosel_then [`nc`, `fin`, `sfin`, `caller_entry`, `caller_ra`,
+    `caller_rest`, `caller_mem0`, `caller_sentry`, `caller_ret`, `caller_srest`,
+    `caller_labs0`] strip_assume_tac) >>
+  qexistsl_tac [`nr + nc`, `fin`, `sfin`] >>
+  rpt conj_tac
+  >- (irule blockSimHelpersTheory.asm_steps_compose_ok >> qexists_tac `asr` >> simp[]) 
+  >- (irule sym_steps_compose >> qexists_tac `ssr` >> simp[])
+  >- (simp[normal_frame_symbolic_plan_def] >> metis_tac[]) >>
+  decide_tac
+QED
+
 Theorem body_plan_symbolic_call_prepare:
   body_plan_inv rpolicy unit cpl prog unit.cu_context
     (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
