@@ -357,7 +357,7 @@ Proof
           simp[gas_summary_at_def] >>
           qexistsl_tac [`INR (Error (RevertData bs))`, `es_end`,
                         `Abort Revert_abort w'`] >>
-          simp[exit_result_def, expr_exit_def] >>
+          simp[exit_result_def, expr_exit_def, halt_exit_def] >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                  |> REWRITE_RULE [APPEND_NIL]) >>
           qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >>
@@ -371,8 +371,8 @@ Proof
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       qpat_x_assum `expr_exit _ _` mp_tac >>
-      Cases_on `r` >> Cases_on `y` >> simp[expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
+      Cases_on `r` >> Cases_on `y` >> gvs[expr_exit_def, halt_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def, halt_exit_def]) >>
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   rewrite_tac[eval_raw_revert_action, ignore_bind_bind_unit] >>

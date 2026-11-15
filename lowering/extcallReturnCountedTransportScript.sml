@@ -19,7 +19,8 @@ Proof
     metis_tac[return_observer_context_reachable] >>
   simp[fmp_room_def] >> strip_tac >>
   `EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts func)` by
-    (fs[EXISTS_MEM] >> metis_tac[]) >>
+    (fs[EXISTS_MEM, ptrDisciplineTheory.ctx_has_dalloca_def,
+        return_observer_context_def] >> metis_tac[]) >>
   fs[fmp_room_def] >> decide_tac
 QED
 

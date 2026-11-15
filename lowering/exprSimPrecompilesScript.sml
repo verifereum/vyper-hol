@@ -165,8 +165,7 @@ Proof
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       simp[write_memory_with_expansion_def]) >>
   conj_tac
-  >- (irule fmp_room_fields >> qexists_tac `s` >>
-      simp[write_memory_with_expansion_def]) >>
+  >- (irule fmp_room_write_memory >> fs[stmt_state_rel_def]) >>
   gvs[write_memory_with_expansion_def, immutable_alloca_sep_def,
       local_region_def, lookup_var_def] >> metis_tac[]
 QED
@@ -415,7 +414,7 @@ Theorem lower_typed_args_nil_sim:
          typed_args_post H ctx func cenv cx es sa s0 ee [] [] vs t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -514,7 +513,7 @@ Theorem lower_typed_args_sim:
          typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -630,7 +629,7 @@ Resume lower_typed_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume lower_typed_args_sim[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -690,7 +689,7 @@ Resume lower_typed_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume lower_typed_args_sim[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
@@ -814,17 +813,6 @@ Proof
   strip_tac >> gvs[] >>
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
        same_blocks_def, mk_inst_def, is_terminator_def]
-QED
-
-Theorem ecrecover_run_frag[local]:
-  compile_ecrecover h v r sig sa = (op,sb) /\
-  (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-       Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-  frag_exec ctx sa sb P Q R
-Proof
-  strip_tac >> drule ecrecover_code_shape >> strip_tac >>
-  irule frag_exec_run_inst_seq >>
-  gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[]
 QED
 
 (* A scratch write frames every earlier allocation, including reused ones. *)
@@ -2518,28 +2506,6 @@ Proof
   gvs[expr_sim_pre_def]
 QED
 
-Theorem eval_expr_ecrecover_cases[local]:
-  LENGTH args = 4 /\
-  eval_expr cx (Builtin ann ECRecover args) es = (res,es') ==>
-  (?exc. eval_exprs cx args es = (INR exc,es') /\ res = INR exc) \/
-  ?vs es1. eval_exprs cx args es = (INL vs,es1) /\
-    (case builtin_result cx es1.accounts ann ECRecover (MAP expr_type args) vs of
-       INR exc => res = INR exc /\ es' = es1
-     | INL w => (do precompile_call_success ECRecover; return (Value w) od) es1 = (res,es'))
-Proof
-  strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
-  Cases_on `eval_exprs cx args es` >>
-  rename1 `eval_exprs cx args es = (rr, es1)` >>
-  Cases_on `rr` >>
-  simp[bind_def, return_def, get_accounts_def, lift_sum_def,
-       builtin_result_def, AllCaseEqs(), ignore_bind_def] >>
-  rpt strip_tac >> gvs[bind_def, AllCaseEqs()] >>
-  Cases_on `evaluate_builtin cx es1.accounts ann ECRecover (MAP expr_type args) x` >>
-  gvs[return_def, raise_def, ignore_bind_def, bind_def] >> metis_tac[]
-QED
-
 Theorem ecrecover_source_outcome_step:
   precompile_call_success ECRecover es =
     case es.outcomes of
@@ -2829,23 +2795,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ecrecover_oracle_failure_frag[local]:
-  compile_ecrecover h v r sig sa = (op,sb) /\
-  ~(?co rest. s.vs_outcomes = co::rest /\ co.co_success) /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  (!i. MEM i (emitted_insts sa sb) ==> MEM i (fn_insts func)) /\
-  eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
-  eval_operand r s = SOME wr /\ eval_operand sig s = SOME ws /\
-  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sa x) ==>
-  frag_exec ctx sa sb (\t. t = s) Q
-    (expr_exit (INR (Error (RuntimeError "precompile failed"))))
-Proof
-  strip_tac >> drule ecrecover_code_shape >> strip_tac >>
-  irule hash_abort_frag >> simp[] >>
-  gvs[MEM] >> drule_all (SRULE [MEM] compile_ecrecover_oracle_failure) >> simp[]
-QED
-
 Theorem lower_value_ecrecover:
   lower_value compile_expr cenv ty (Builtin ann ECRecover [a;b;c;d]) sa = (op,sb) ==>
   ?h v r sig sm. lower_word_args cenv (\e. ty) [a;b;c;d] sa = ([h;v;r;sig],sm) /\
@@ -2988,46 +2937,6 @@ Proof
   simp[Abbr `addr`] >> irule evaluate_ecrecover_typed >> simp[]
 QED
 
-Theorem ecrecover_expr_tail[local]:
-  compile_ecrecover h v r sig sm = (op,sb) /\
-  t.vs_outcomes = co::rest /\ co.co_success /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
-  (!i. MEM i (emitted_insts sm sb) ==> MEM i (fn_insts func)) /\
-  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
-  storage_well_formed_on cx es' (FST H) /\
-  eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
-  eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
-  is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV AddressT) /\
-  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
-  frag_exec ctx sm sb (\s. s = t)
-    (\u. expr_post H ctx func cenv cx e es sa sb s0 (es' with outcomes := SOME rest)
-      (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
-        NONE => 0w | SOME a => a)) op u) R
-Proof
-  strip_tac >> irule ecrecover_run_frag >> reverse conj_tac
-  >- (goal_assum (drule_at Any)) >>
-  rpt strip_tac >> gvs[] >> drule_all (SRULE [MEM] compile_ecrecover_run) >>
-  strip_tac >> rename1 `run_inst_seq _ input = OK output` >>
-  goal_assum (drule_at Any) >>
-  `~expr_has_effect e ==> pure_frame cenv func es sa s0 output` by
-    (strip_tac >> match_mp_tac pure_frame_trans >>
-     qexistsl_tac [`es'`, `sm`, `input`] >> fs[wb_frame_def]) >>
-  `storage_well_formed_on cx (es' with outcomes := SOME rest) (FST H)` by
-    (`(es' with outcomes := SOME rest).accounts = es'.accounts /\
-      (es' with outcomes := SOME rest).tStorage = es'.tStorage` by simp[] >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
-  irule expr_post_typed_stack_intro >> simp[stmt_state_rel_inst_idx] >>
-  irule wb_frame_trans >> conj_tac >- simp[] >>
-  conj_tac >- (qexistsl_tac [`es'`, `sm`, `input`] >>
-      gvs[wb_frame_def, lookup_var_def] >> metis_tac[]) >>
-  qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]
-QED
-
 Theorem ecrecover_read_cases:
   LENGTH args = 4 /\
   (do r <- eval_expr cx (Builtin ann ECRecover args); read_result cx r od) es = (res,es') ==>
@@ -3055,9 +2964,11 @@ QED
 Theorem eval_exprs_suffix:
   gas_outcome F tops (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
     (\H rr ee t. ?vs. rr = INL vs /\ P H vs ee t)
-    (\H rr ee r. wb_args_exit rr r) /\
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r) /\
   (!vs. storage_trace_frame (k vs)) /\
-  (!H exc ee r. wb_args_exit (INR exc) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. wb_args_exit (INR exc) r /\
+     halt_exit H cx ee (INR exc : value list + exception) r ==>
+     R H (INR exc) ee r) /\
   (!gs vs ee t.
      eval_exprs cx args (es with gas_obs := gs) = (INL vs, ee) /\
      ee.gas_obs = [] /\ ~t.vs_halted /\
@@ -3123,7 +3034,7 @@ Proof
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       BETA_TAC >> rpt strip_tac >>
       qpat_x_assum `!H exc ee r. _ ==> R _ _ _ _` irule >>
-      gvs[wb_args_exit_def]) >>
+      gvs[wb_args_exit_def, halt_exit_def] >> metis_tac[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qabbrev_tac `a = eval_exprs cx args` >>
   `ignore_bind (bind a k) (return ()) =
@@ -3313,7 +3224,7 @@ Proof
   drule_then (fn th => rewrite_tac[th]) eval_expr_ecrecover_read_action >>
   irule eval_exprs_suffix >> rpt conj_tac
   >~ [`storage_trace_frame _`] >- simp[ecrecover_continuation_frame]
-  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def] >>
+  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def, halt_exit_def] >>
   qexists_tac `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee args
                  [h;v;r;sig] vs t /\ t.vs_current_bb = sm.cs_current_bb /\
                  t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
@@ -3356,7 +3267,8 @@ Proof
       qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`, `ee`,
                     `Abort a u`] >>
       asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
-        expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]) >>
+        expr_exit_def, halt_exit_def, ignore_bind_def, bind_def,
+        ecrecover_source_outcome_step]) >>
   rename1 `t.vs_outcomes = co::rest` >> Cases_on `co.co_success`
   >- (`~EXISTS expr_has_effect [ah;av;ar;asig] ==>
         pure_frame cenv func es sa s0 t` by
@@ -3393,7 +3305,8 @@ Proof
   qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`,
                 `ee with outcomes := SOME rest`, `Abort a u`] >>
   asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
-    expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]
+    expr_exit_def, halt_exit_def, ignore_bind_def, bind_def,
+    ecrecover_source_outcome_step]
 QED
 
 Theorem compile_ecrecover_call_case:

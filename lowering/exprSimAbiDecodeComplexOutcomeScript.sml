@@ -99,6 +99,9 @@ Proof
      strip_tac >> gen_tac >> disch_tac >> first_x_assum drule >>
      rpt strip_tac >> simp[]) >>
   drule_all abi_bytes_sequence_static >> strip_tac >>
+  `actual.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH actual.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
   `decode_site_resources ctx func actual` by
     (irule decode_site_resources_fields >> qexists_tac `s` >>
      fs[abi_decoder_address_frame_def, venom_state_component_equality]) >>
