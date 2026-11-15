@@ -75,9 +75,9 @@ End
 Theorem intret_q_intro:
   r = IntRet ir (return_unlock_state cenv s) /\
   LENGTH ir.iret_values = cenv.ce_returns_count /\
-  result_rel func ret_tv cenv cx (INR (ReturnException v), es)
+  result_rel H func ret_tv cenv cx (INR (ReturnException v), es)
     (IntRet ir s) ==>
-  intret_q func cenv cx ret_tv v es r
+  intret_q H func cenv cx ret_tv v es r
 Proof
   rw[intret_q_def] >>
   qexistsl_tac [`s`, `(return_unlock_state cenv s).vs_inst_idx`] >>
@@ -313,10 +313,10 @@ QED
    words, at whatever instruction index RET runs. *)
 Theorem intret_q_inactive:
   ~(FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-  (intret_q func cenv cx ret_tv v es r <=>
+  (intret_q H func cenv cx ret_tv v es r <=>
    ?ir s. r = IntRet ir s /\
           LENGTH ir.iret_values = cenv.ce_returns_count /\
-          result_rel func ret_tv cenv cx (INR (ReturnException v), es)
+          result_rel H func ret_tv cenv cx (INR (ReturnException v), es)
             (IntRet ir s))
 Proof
   strip_tac >>
