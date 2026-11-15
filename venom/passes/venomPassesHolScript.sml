@@ -46,7 +46,7 @@ Ancestors
   (* interprocedural *)
   functionInliner
   (* configured pipeline runner structural guarantees *)
-  venomPipelineRunnerProps venomPipelineData
+  venomPipelineRunnerProps venomPipelineData o1PreDftStaticMem
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasMaskRequests dftGasPrefixProvider
