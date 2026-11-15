@@ -676,8 +676,8 @@ Proof
   simp[blueprint_test_expr_def, evaluate_def, blueprint_nested_deployment,
        blueprint_literal_offset_def, subst_consts_expr_def,
        origin_fold_value_def, is_int_literal_def,
-       Q.INST [`salted` |-> `F`] blueprint_empty_source_check,
-       Q.INST [`salted` |-> `T`] blueprint_empty_source_check,
+       SRULE [] (Q.INST [`salted` |-> `F`] blueprint_empty_source_check),
+       SRULE [] (Q.INST [`salted` |-> `T`] blueprint_empty_source_check),
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.read_result_def,
        vyperStateTheory.read_results_def, vyperValueOperationTheory.evaluate_literal_def] >>
