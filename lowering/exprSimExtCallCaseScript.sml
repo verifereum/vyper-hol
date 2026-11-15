@@ -30,7 +30,7 @@
  *)
 
 Theory exprSimExtCallCase
-Ancestors
+Ancestors stmtSimProps[qualified,ignore_grammar]
   list rich_list loweringPosts supportedExprTraverse exprSimHypsDefs exprSimHyps vyperAST
   vyperInterpreter vyperState exprSimDefs
   extCallOracleStep rawCallMemoryFramePtr vyperCallOutcomeFrame vyperCallOutcome exprBopSimProps
@@ -44,6 +44,7 @@ Ancestors
   extcallReturnInterface extcallReturnDefaultTypes
   exprSimAbiEncodeArgsMaterializePath exprSimMemorySource
   exprLowering compileEnv abiEncodeMaterialize context aggregateEvaluatedLayout
+  abiEncodeArgsCase
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -1678,8 +1679,544 @@ Proof
        metis_tac[DROP_LENGTH_NIL] >>
      simp[DROP_APPEND, GSYM MAP_DROP] >>
      disch_then (mp_tac o Q.AP_TERM `HD`) >> simp[]) >>
-  FAIL_TAC "keyword head"
+  `ci_mono ca cs'` by
+    (qpat_assum `compile_ext_call_kwarg _ _ _ _ _ ca = _` (fn eq =>
+       mp_tac (REWRITE_RULE [eq]
+         (Q.SPECL [`compile_expr`, `ce`, `rt`, `tag`, `h`, `ca`]
+           exprLoweringPropsTheory.ci_mono_compile_ext_call_kwarg))) >>
+     simp[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono]) >>
+  `ci_mono cs' cb` by
+    (qpat_assum `compile_ext_call_kwargs _ _ _ _ _ cs' = _` (fn eq =>
+       mp_tac (REWRITE_RULE [eq]
+         (Q.SPECL [`tags`, `ys`, `compile_expr`, `ce`, `rt`, `cs'`]
+           exprLoweringPropsTheory.ci_mono_compile_ext_call_kwargs))) >>
+     simp[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono]) >>
+  `fn_has_code ca cs' func /\ fn_has_code cs' cb func` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[fragExecTheory.fn_has_code_split]) >>
+  qpat_x_assum `exprs_case _ _ _ _ _ (h::ys)` mp_tac >>
+  rewrite_tac[exprs_case_def] >> strip_tac >>
+  `nocalls ==> int_calls_expr h = []` by
+    (strip_tac >> qpat_x_assum `nocalls ==> _` mp_tac >>
+     simp[vyperTypeCallGraphTheory.int_calls_expr_def] >> strip_tac >>
+     irule exprSimHypsTheory.int_calls_exprs_mem >>
+     qexists_tac `args` >> simp[] >>
+     `MEM h (DROP (1 + LENGTH ats) args)` by simp[] >>
+     metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  `expr_sim ctx func ce cx (expr_type h) h ea /\
+   expr_vv_sim ctx func ce cx (expr_type h) h ea` by
+    (conj_tac
+     >- (qpat_x_assum `expr_sim_case _ _ _ _ _ h` mp_tac >>
+         rewrite_tac[expr_sim_case_def] >> disch_then irule >>
+         simp[] >> qexists_tac `env` >> simp[]) >>
+     qpat_x_assum `expr_vv_case _ _ _ _ _ h` mp_tac >>
+     rewrite_tac[expr_vv_case_def] >> disch_then irule >>
+     simp[] >> qexists_tac `env` >> simp[]) >>
+  reverse (Cases_on `tag = EKDefault /\ ~is_word_type rt`)
+  >- (qpat_x_assum `compile_ext_call_kwarg _ _ _ _ _ ca = _` mp_tac >>
+      simp[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      `lower_value compile_expr ce (expr_type h) h ca = (op,cs')` by
+        (Cases_on `tag` >> gvs[vyperTypeSystemTheory.ext_call_kw_type_def]) >>
+      `gas_outcome F (cx_tops cx) (ctx,func) cx st0
+        (bind (eval_expr cx h) (read_result cx)) (ea,r0)
+        (\H res ee t. ?v. res = INL v /\
+          expr_post H ctx func ce cx h ea ca cs' r0 ee v op t /\
+          t.vs_current_bb = cs'.cs_current_bb /\
+          t.vs_inst_idx = LENGTH cs'.cs_current_insts)
+        (\H res ee r. expr_exit res r)` by
+        (irule exprSimWordArgsTheory.expr_sim_apply >> simp[] >>
+         conj_tac
+         >- (irule exprSimSourceTheory.expr_body_pre_gas_admissible >>
+             qexistsl_tac [`ce`, `env`] >> simp[]) >>
+         qexists_tac `expr_type h` >> simp[]) >>
+      pure_once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+      pure_once_rewrite_tac[bind_assoc] >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      simp[bind_return] >>
+      irule aggregateCountedOutcomeTheory.counted_outcome_bind_exec >>
+      qpat_assum `gas_outcome _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      simp[expr_exit_def, storage_trace_frame_bind,
+           storage_trace_frame_return, evaluate_storage_trace_frame] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          pure_once_rewrite_tac[ignore_bind_def] >>
+          pure_once_rewrite_tac[bind_assoc] >>
+          CONV_TAC (DEPTH_CONV BETA_CONV) >>
+          irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+          goal_assum (drule_at Any) >> simp[GSYM bind_assoc, GSYM ignore_bind_def]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          pure_once_rewrite_tac[ignore_bind_def] >>
+          pure_once_rewrite_tac[bind_assoc] >>
+          CONV_TAC (DEPTH_CONV BETA_CONV) >>
+          irule gasExemptCertTheory.gas_exempt_cert_error_value >>
+          simp[GSYM ignore_bind_def]) >>
+      conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_INL] >>
+          simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+      rpt gen_tac >> strip_tac >>
+      reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+      >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+          irule gas_bad_storage_at_initial >>
+          simp[storage_trace_frame_bind, storage_trace_frame_return,
+               evaluate_storage_trace_frame]) >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+         mid.storage_trace` by fs[storage_trace_domain_def] >>
+      `expr_post (storage_trace_horizon mid.storage_trace) ctx func ce cx h
+         ea ca cs' r0 (mid with gas_obs := []) v op t /\
+       t.vs_current_bb = cs'.cs_current_bb /\
+       t.vs_inst_idx = LENGTH cs'.cs_current_insts` by
+        (first_x_assum (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+      pure_once_rewrite_tac[bind_assoc] >> simp[bind_return] >>
+      `?gs. bind (eval_expr cx h) (read_result cx)
+         (ea with gas_obs := gs) = (INL v,mid with gas_obs := [])` by
+        (qpat_assum `gas_marked_exec _ _ _ _ _ _ mid _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[gas_marked_exec_def] >>
+         metis_tac[]) >>
+      `expr_sim_inv ce cx env (mid with gas_obs := [])` by
+        (`expr_body_pre ce cx env h (ea with gas_obs := gs)` by simp[] >>
+         qpat_assum `bind (eval_expr cx h) _ (ea with gas_obs := gs) = _` mp_tac >>
+         qpat_assum `expr_body_pre ce cx env h (ea with gas_obs := gs)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         metis_tac[exprSimSourceTheory.expr_body_pre_eval]) >>
+      `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+        stmt_state_rel H ctx func ce cx (mid with gas_obs := []) t /\
+        storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
+        (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_start_gas_obs] >>
+         metis_tac[]) >>
+      `~t.vs_halted` by
+        (qpat_assum `gas_marked_exec _ _ _ _ _ _ mid _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+         drule fragGasModeTheory.gas_marked_path_exec >>
+         metis_tac[fragGasPathTheory.gas_path_normal]) >>
+      `local_ptrs_reserved ce cs'` by
+        (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+         qexists_tac `ca` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+      `gas_admissible (bind (eval_exprs cx ys) (\kw. kont (v::kw)))
+         expr_vv_res_ok (mid with gas_obs := [])` by
+        (qpat_assum `gas_admissible (bind (eval_exprs cx (h::ys)) kont) _ ea` mp_tac >>
+         qpat_assum `gas_marked_exec _ _ _ _ _ _ mid _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         pure_once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+         pure_once_rewrite_tac[bind_assoc] >>
+         CONV_TAC (DEPTH_CONV BETA_CONV) >> simp[bind_return] >>
+         simp[gas_marked_exec_def] >> rpt strip_tac >>
+         drule stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+         disch_then (qspecl_then [`gas_explicit marks r0.vs_gas_readings`,
+           `v`, `mid`] mp_tac) >> simp[bind_assoc, bind_return]) >>
+      `exprs_case nocalls ctx func ce cx ys` by
+        (qpat_x_assum `(?(s:evaluation_state) tv t s1 v t1. _) ==> _` irule >>
+         qpat_assum `bind (eval_expr cx h) _ (ea with gas_obs := gs) = _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
+      qpat_x_assum `!ks done_opts' ca' cb' ea' r0' kont' vo' go' def'. _` irule >>
+      simp[] >>
+      qexistsl_tac [`cs'`, `cb`, `default_opt`, `done_opts ++ [tag]`, `gas_op`, `tags`, `value_op`] >>
+      simp[] >> rpt gen_tac >> strip_tac >>
+      `wb_frame ce ea (mid with gas_obs := []) ca r0 t /\
+       pure_frame ce func ea ca r0 t` by
+        (qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         qpat_assum `~expr_has_effect h` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         rw[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+      `mid with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+       ea with <|gas_obs := []; outcomes := NONE; storage_trace := []|>` by
+        (qpat_assum `bind (eval_expr cx h) _ (ea with gas_obs := gs) = _` mp_tac >>
+         qpat_assum `~expr_has_effect h` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+         imp_res_tac vyperStateTheory.read_result_state >> gvs[] >>
+         drule_all bodyIntCallJointPureSourceTheory.effect_free_eval_expr_frame >> simp[]) >>
+      `!H. valid_horizon cx st0 H ee.storage_trace ==>
+           valid_horizon cx st0 H ea.storage_trace` by
+        (gen_tac >> strip_tac >>
+         `valid_horizon cx st0 H mid.storage_trace` by metis_tac[] >>
+         qpat_assum `gas_marked_exec _ _ _ _ _ _ mid _` mp_tac >>
+         qpat_assum `valid_horizon _ _ H mid.storage_trace` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         drule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+         simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
+              vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+         metis_tac[]) >>
+      `MAP FDOM ea.scopes = MAP FDOM mid.scopes` by
+        (qpat_assum `mid with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         disch_then (mp_tac o AP_TERM ``\s:evaluation_state. MAP FDOM s.scopes``) >> simp[]) >>
+      `pure_frame ce func ea ca r0 t'` by
+        (irule exprSimPropsTheory.pure_frame_trans >> simp[] >>
+         qexistsl_tac [`mid with gas_obs := []`, `cs'`, `t`] >>
+         fs[wb_frame_def, exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
+      `wb_frame ce ea ee ca r0 t'` by
+        (irule (INST_TYPE [``:'a`` |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >>
+         simp[] >> conj_tac
+         >- (qexistsl_tac [`mid with gas_obs := []`, `cs'`, `t`] >>
+             fs[exprLoweringPropsTheory.ci_mono_def]) >>
+         qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >> metis_tac[]) >>
+      `is_word_type (expr_type h)` by
+        (Cases_on `tag` >> fs[vyperTypeSystemTheory.ext_call_kw_type_def, is_word_type_def]) >>
+      `safe_operand cs' op` by
+        (drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >>
+         simp[exprSafeOperandTheory.safe_operand_def]) >>
+      `safe_operand cb op` by
+        (irule exprSafeOperandTheory.safe_operand_mono >>
+         qexists_tac `cs'` >> simp[]) >>
+      `expr_val_rel cx (expr_type h) v op t` by
+        (qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         qpat_assum `is_word_type (expr_type h)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[expr_post_def]) >>
+      `?w. eval_operand op t = SOME w /\ eval_operand op t' = SOME w` by
+        (fs[expr_val_rel_def] >>
+         irule abiEncodeArgsSimTheory.abi_args_operand_kept >>
+         conj_tac >- fs[exprSafeOperandTheory.safe_operand_def] >>
+         qexistsl_tac [`ce`, `mid with gas_obs := []`, `ee`, `t`, `cs'`] >>
+         fs[exprSafeOperandTheory.safe_operand_def]) >>
+      `?tv. evaluate_type (get_tenv cx) (expr_type h) = SOME tv /\
+            value_has_type tv v` by
+        (`expr_body_pre ce cx env h (ea with gas_obs := gs)` by simp[] >>
+         qpat_assum `bind (eval_expr cx h) _ (ea with gas_obs := gs) = _` mp_tac >>
+         qpat_assum `expr_body_pre ce cx env h (ea with gas_obs := gs)` mp_tac >>
+         qpat_assum `is_word_type (expr_type h)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         metis_tac[exprSimSourceTheory.expr_body_pre_word_value]) >>
+      qpat_x_assum `!kw ee t. _` (qspec_then `v::kw` irule) >>
+      simp[] >> Cases_on `tag` >>
+      gvs[ext_call_kwarg_def, vyperTypeSystemTheory.ext_call_kw_type_def,
+          exprLoweringPropsTheory.ci_mono_def]
+      >- (reverse conj_tac >- metis_tac[] >>
+          fs[expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
+             vyperTypingTheory.value_has_type_def, valueEncodingTheory.typed_val_to_w256_def] >>
+          Cases_on `v` >> gvs[vyperValueTheory.dest_NumV_def,
+            vyperTypingTheory.value_has_type_def,
+            valueEncodingTheory.typed_val_to_w256_def] >>
+          `~(i < 0)` by intLib.COOPER_TAC >>
+          simp[valueEncodingTheory.val_to_w256_def,
+               integer_wordTheory.i2w_def, wordsTheory.dimword_def])
+      >- (reverse conj_tac >- metis_tac[] >>
+          fs[expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
+             vyperTypingTheory.value_has_type_def, valueEncodingTheory.typed_val_to_w256_def] >>
+          Cases_on `v` >> gvs[vyperValueTheory.dest_NumV_def,
+            vyperTypingTheory.value_has_type_def,
+            valueEncodingTheory.typed_val_to_w256_def] >>
+          `~(i < 0)` by intLib.COOPER_TAC >>
+          simp[valueEncodingTheory.val_to_w256_def,
+               integer_wordTheory.i2w_def, wordsTheory.dimword_def]) >>
+      conj_tac >- metis_tac[] >>
+      simp[extcall_default_ready_def] >>
+      conj_tac >- (strip_tac >> fs[is_word_type_def]) >>
+      `expr_val_rel cx (expr_type h) v op t'` by
+        (fs[expr_val_rel_def] >> gvs[]) >>
+      simp[] >>
+      metis_tac[stmtSimDeclStoreTheory.typed_word_store]) >>
+  gvs[] >>
+  qpat_x_assum `compile_ext_call_kwarg _ _ _ _ _ ca = _` mp_tac >>
+  simp[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[comp_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
+  fs[vyperTypeSystemTheory.ext_call_kw_type_def] >>
+  rename1 `compile_expr ce rt h ca = (head_vv,sm)` >>
+  `ci_mono ca sm /\ ci_mono sm cs'` by
+    (conj_tac
+     >- (drule (cj 1 exprLoweringPropsTheory.compile_expr_grows) >>
+         simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     qspecl_then [`ce`, `lowered_value_type ce h`, `head_vv`, `sm`]
+       mp_tac exprLoweringPropsTheory.ci_mono_compile_materialize_vv >> simp[]) >>
+  `fn_has_code ca sm func /\ fn_has_code sm cs' func` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx h) (ea,r0)
+     (\H res ee t. ?raw. res = INL raw /\
+       vv_post H ctx func ce cx h ea ca sm r0 ee raw head_vv t /\
+       t.vs_current_bb = sm.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sm.cs_current_insts)
+     (\H res ee r. expr_exit res r)` by
+    (qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_vv_sim_def] >> disch_then irule >> simp[] >>
+     irule exprSimHypsTheory.expr_body_pre_vv_gas_admissible >>
+     qexistsl_tac [`ce`, `env`] >> simp[]) >>
+  pure_once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  irule exprSimSubscriptMapTheory.gas_outcome_bind_result_exec >>
+  qpat_assum `gas_outcome _ _ _ _ _ (eval_expr cx h) _ _ _` (irule_at Any) >>
+  simp[expr_exit_def, stmtSimPropsTheory.expr_exit_INR_type,
+       storage_trace_frame_bind, storage_trace_frame_return,
+       evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+  conj_tac
+  >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_INL] >>
+      strip_tac >> (gvs [stmtSimPropsTheory.expr_exit_INR_type])) >>
+  reverse conj_tac >- (rpt strip_tac >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[storage_trace_frame_bind, storage_trace_frame_return,
+           evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  `vv_post (storage_trace_horizon mid.storage_trace) ctx func ce cx h
+     ea ca sm r0 (mid with gas_obs := []) v head_vv t /\
+   t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (first_x_assum (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+  `?value. read_result cx v (mid with gas_obs := []) =
+      (INL value,mid with gas_obs := [])` by
+    (qpat_assum `vv_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _`
+       mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rewrite_tac[vv_post_def] >> strip_tac >>
+     qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `head_vv`
+     >- (simp[vv_holds_def] >> metis_tac[]) >>
+     rename1 `LocatedValue tag p` >>
+     Cases_on `p.ptr_location` >>
+     simp[vv_holds_def, storage_holds_def, immutable_holds_def] >>
+     metis_tac[]) >>
+  `?gs. eval_expr cx h (ea with gas_obs := gs) =
+      (INL v,mid with gas_obs := [])` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     qexists_tac `gas_explicit marks r0.vs_gas_readings` >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `?tvt. evaluate_type (get_tenv cx) (expr_type h) = SOME tvt /\
+     eval_result_typed (env,cx,mid with gas_obs := []) v (Type (expr_type h)) /\
+     (!w. read_result cx v (mid with gas_obs := []) =
+           (INL w,mid with gas_obs := []) ==> value_has_type tvt w)` by
+    (irule exprSimSourceTheory.expr_body_pre_runtime_typed >>
+     qexistsl_tac [`ce`, `ea with gas_obs := gs`] >> simp[]) >>
+  `post_value_type ce h = expr_type h` by
+    (qpat_assum `~expr_has_effect h` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `h` >> simp[expr_has_effect_thm] >>
+     rename1 `Call _ kind _ _` >> Cases_on `kind` >>
+     simp[expr_has_effect_thm]) >>
+  `?dv. evaluate_type (get_tenv cx) (lowered_value_type ce h) = SOME dv /\
+     value_has_type dv value` by
+    (irule expr_body_pre_read_lowered_typed >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     qexists_tac `env` >> simp[]) >>
+  `mid with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+     ea with <|gas_obs := []; outcomes := NONE; storage_trace := []|>` by
+    (drule_all effect_free_eval_expr_frame >> simp[]) >>
+  `MAP FDOM ea.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
+    (qpat_assum `mid with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _`
+       (mp_tac o AP_TERM ``\z. z.scopes``) >> simp[]) >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type h) = SOME tvt /\
+         ~is_word_type (expr_type h) ==>
+         type_memory_bytes ce (expr_type h) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64` by
+    metis_tac[expr_body_pre_copy_ok] >>
+  `!x. vv_operand head_vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[cj 1 exprOperandVarTheory.compiler_compile_var] >>
+  `arg_type_fits (lowered_value_type ce h) (expr_type h)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `lowered_value_type ce h = rt \/
+   is_bytestring_type (lowered_value_type ce h) /\ is_bytestring_type rt` by
+    metis_tac[abiEncodeMaterializeTheory.materialize_post_lowered_classify] >>
+  `expr_sim_inv ce cx env (mid with gas_obs := []) /\
+   MAP FDOM (ea with gas_obs := gs).scopes = MAP FDOM (mid with gas_obs := []).scopes /\
+   (?tv. evaluate_type (get_tenv cx) (lowered_value_type ce h) = SOME tv /\
+         value_has_type tv value /\ val_wf tv value /\
+         type_memory_bytes ce (lowered_value_type ce h) = type_memory_size tv /\
+         type_memory_size tv < 2 ** 64 /\
+         type_memory_size tv + 64 < dimword (:256))` by
+    (`expr_body_pre ce cx env h (ea with gas_obs := gs)` by simp[] >>
+     `bind (eval_expr cx h) (\r. read_result cx r) (ea with gas_obs := gs) =
+       (INL value,mid with gas_obs := [])` by simp[bind_def] >>
+     drule_all abiEncodeArgsCaseTheory.abi_args_success_ready >> simp[]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) ea.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (eval_expr cx h) _ _ _ mid _` mp_tac >>
+     qpat_assum `valid_horizon _ _ (storage_trace_horizon _) mid.storage_trace` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func ce cx ea r0` by
+    metis_tac[] >>
+  `ca.cs_next_var <= sm.cs_next_var /\ ca.cs_next_id <= sm.cs_next_id` by
+    fs[exprLoweringPropsTheory.ci_mono_def] >>
+  `local_ptrs_reserved ce sm` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `~t.vs_halted` by
+    (qpat_assum `gas_marked_exec _ _ (eval_expr cx h) _ _ _ mid _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+     metis_tac[fragGasPathTheory.gas_path_normal]) >>
+  `rt <> NoneT` by
+    (qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+     metis_tac[MEM_APPEND, MEM]) >>
+  `value_has_type tvt value /\ val_wf tvt value` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       vv_post H ctx func ce cx h ea ca sm r0 (mid with gas_obs := []) v head_vv t` by
+    metis_tac[] >>
+  `?u. gas_marked_exec F (ctx,func) (read_result cx v)
+         (mid with gas_obs := [],t) [] (INL value) (mid with gas_obs := []) (OK u) /\
+       (!H. valid_horizon cx st0 H mid.storage_trace ==>
+          materialize_owned_post H ctx func ce cx h ea ca sm cs' r0
+            (mid with gas_obs := []) value op tv u) /\
+       extcall_default_ready cx rt T op (lowered_value_type ce h) (SOME value) u /\
+       ~u.vs_halted /\ u.vs_current_bb = cs'.cs_current_bb /\
+       u.vs_inst_idx = LENGTH cs'.cs_current_insts` by
+    (irule extcall_request_default_materialize_marked >>
+     simp[] >> conj_tac
+     >- (rpt strip_tac >> gvs[]) >>
+     conj_tac >- (qexists_tac `head_vv` >> gvs[]) >>
+     conj_tac >- (qexists_tac `tvt` >> gvs[]) >>
+     conj_tac >- (qexistsl_tac [`env`, `ea`] >> simp[]) >>
+     qexists_tac `storage_trace_horizon mid.storage_trace` >> simp[]) >>
+  irule aggregateCountedOutcomeTheory.counted_outcome_prefix >>
+  goal_assum (drule_at Any) >> simp[] >>
+  (conj_tac
+  >- (rpt strip_tac >>
+      pure_once_rewrite_tac[ignore_bind_def] >>
+      pure_once_rewrite_tac[bind_assoc] >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      irule (Q.INST [`left` |-> `[]`] (SPEC_ALL gasExemptCertTheory.gas_exempt_cert_bind_value) |> SIMP_RULE list_ss []) >>
+      goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def])) >>
+  pure_once_rewrite_tac[bind_assoc] >> simp[bind_return] >>
+  `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+       stmt_state_rel H ctx func ce cx (mid with gas_obs := []) u /\
+       storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
+    (rpt strip_tac >>
+     `vv_post H ctx func ce cx h ea ca sm r0 (mid with gas_obs := []) v head_vv t` by gvs[] >>
+     `materialize_owned_post H ctx func ce cx h ea ca sm cs' r0
+        (mid with gas_obs := []) value op tv u` by gvs[] >>
+     fs[materialize_owned_post_def, vv_post_def]) >>
+  `local_ptrs_reserved ce cs'` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `ca` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `exprs_case nocalls ctx func ce cx ys` by
+    (qpat_x_assum `(?(s:evaluation_state) tv t s1 v t1. _) ==> _` irule >>
+     metis_tac[]) >>
+  `gas_admissible (bind (eval_exprs cx ys) (\kw. kont (value::kw)))
+      expr_vv_res_ok (mid with gas_obs := [])` by
+    (qpat_assum `gas_admissible (bind (eval_exprs cx (h::ys)) kont) _ ea` mp_tac >>
+     qpat_assum `gas_marked_exec _ _ (eval_expr cx h) _ _ _ mid _` mp_tac >>
+     qpat_assum `read_result cx v (mid with gas_obs := []) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     pure_once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+     pure_once_rewrite_tac[bind_assoc] >>
+     pure_once_rewrite_tac[bind_assoc] >>
+     CONV_TAC (DEPTH_CONV BETA_CONV) >>
+     simp[gas_marked_exec_def] >> rpt strip_tac >>
+     drule stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+     disch_then (qspecl_then [`gas_explicit marks r0.vs_gas_readings`,
+       `v`, `mid`] mp_tac) >> simp[] >> strip_tac >>
+     drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[] >> strip_tac >>
+     qpat_x_assum `gas_admissible (bind (read_result cx v) _) _ mid` mp_tac >>
+     simp[bind_assoc, bind_return] >>
+     simp[gasContextTheory.gas_admissible_def, bind_def]) >>
+  suspend "default_first"
 QED
+
+Resume extcall_request_keywords_counted_horizon[default_first]:
+     markerLib.RESUME_TAC >>
+     qpat_x_assum `!ks done_opts' ca' cb' ea' r0' kont' vo' go' def'. _` irule >>
+     simp[] >>
+     qexistsl_tac [`cs'`, `cb`, `default_opt`, `done_opts ++ [EKDefault]`,
+       `gas_op`, `tags`, `value_op`] >> simp[] >>
+     rpt strip_tac >>
+     `valid_horizon cx st0 H0 mid.storage_trace` by metis_tac[] >>
+     `valid_horizon cx st0 H0 ea.storage_trace` by
+       (qpat_assum `gas_marked_exec _ _ (eval_expr cx h) _ _ _ mid _` mp_tac >>
+        qpat_assum `valid_horizon cx st0 H0 mid.storage_trace` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+        drule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+     `materialize_owned_post (storage_trace_horizon mid.storage_trace)
+        ctx func ce cx h ea ca sm cs' r0 (mid with gas_obs := []) value op tv u` by metis_tac[] >>
+     `wb_frame ce ea (mid with gas_obs := []) ca r0 u /\
+      pure_frame ce func ea ca r0 u` by fs[materialize_owned_post_def] >>
+     `pure_frame ce func ea ca r0 t'` by
+       (irule exprSimPropsTheory.pure_frame_trans >> simp[] >>
+        qexistsl_tac [`mid with gas_obs := []`, `cs'`, `u`] >>
+        fs[wb_frame_def, exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
+     `wb_frame ce ea ee ca r0 t'` by
+       (irule (INST_TYPE [``:'a`` |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >>
+        simp[] >> conj_tac
+        >- (qexistsl_tac [`mid with gas_obs := []`, `cs'`, `u`] >>
+            fs[exprLoweringPropsTheory.ci_mono_def]) >>
+        qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >> metis_tac[]) >>
+     `safe_operand cs' op` by
+       (pure_rewrite_tac[exprSafeOperandTheory.safe_operand_def] >> conj_tac
+        >- metis_tac[exprOperandVarTheory.compiler_materialize_vv_var] >>
+        qpat_assum `compile_materialize_vv _ _ _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        Cases_on `compile_alloc_buffer (type_memory_bytes ce (lowered_value_type ce h)) sm` >>
+        rename1 `compile_alloc_buffer _ sm = (buf,sc)` >>
+        Cases_on `unwrap_value ce head_vv sc` >>
+        rename1 `unwrap_value ce head_vv sc = (src,su)` >>
+        Cases_on `compile_store_memory ce src buf.buf_operand
+          (lowered_value_type ce h) (lowered_value_type ce h) su` >>
+        simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+        rpt strip_tac >> gvs[] >>
+        drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
+     `extcall_default_ready cx rt T op (lowered_value_type ce h) (SOME value) t'` by
+       (`!w. eval_operand op u = SOME w ==> eval_operand op t' = SOME w` by
+          (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
+           fs[exprSafeOperandTheory.safe_operand_def] >>
+           qexistsl_tac [`cs'`, `u`] >> fs[wb_frame_def]) >>
+        `!w. eval_operand op u = SOME w ==>
+          mem_bytes_at (w2n w) (val_footprint tv value) t'.vs_memory =
+          mem_bytes_at (w2n w) (val_footprint tv value) u.vs_memory` by
+          (rpt strip_tac >>
+           `expr_val_at ce cx (lowered_value_type ce h) ca cs'
+              (mid with gas_obs := []) value op u` by
+             metis_tac[materialize_owned_post_def] >>
+           `~is_word_type (lowered_value_type ce h)` by
+             metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
+           irule bodyFullExtCallRequestSnapshotWordTheory.extcall_capture_expr_val_bytes_frame >>
+           qexistsl_tac [`ce`, `cs'`, `cx`, `mid with gas_obs := []`, `ee`,
+             `func`, `op`, `ca`, `cs'`, `lowered_value_type ce h`] >>
+           simp[] >> fs[loweringPostsTheory.pure_frame_def]) >>
+        `~is_word_type (lowered_value_type ce h)` by
+          metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
+        qpat_x_assum `extcall_default_ready _ _ _ _ _ _ u` mp_tac >>
+        simp[extcall_default_ready_def] >> rpt strip_tac >>
+        `expr_val_rel cx (lowered_value_type ce h) value op t'` by
+          (irule exprSimPropsTheory.expr_val_rel_footprint_agree >> simp[] >>
+           qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]) >>
+        qexistsl_tac [`rtv`, `w`] >> simp[] >>
+        `stmt_state_rel H0 ctx func ce cx ee t'` by metis_tac[] >>
+        `alloca_next_valid t'` by fs[exprLoweringPropsTheory.stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+        `?mw. eval_operand op u = SOME mw /\
+          FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n mw,type_memory_size tv)` by
+          metis_tac[materialize_owned_post_def] >>
+        `FLOOKUP t'.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size tv)` by
+          (fs[wb_frame_def] >> metis_tac[]) >>
+        `val_footprint tv value <= type_memory_size tv` by
+          metis_tac[exprSimPropsTheory.val_footprint_le] >>
+        `w2n w + type_memory_size tv <= t'.vs_alloca_next` by
+          metis_tac[venomMemDefsTheory.alloca_next_valid_def] >>
+        `w2n w + val_footprint tv value <= t'.vs_alloca_next` by decide_tac >>
+        metis_tac[]) >>
+     `safe_operand cb op` by
+       (irule exprSafeOperandTheory.safe_operand_mono >> qexists_tac `cs'` >> simp[]) >>
+     `!H. valid_horizon cx st0 H ee.storage_trace ==>
+          valid_horizon cx st0 H ea.storage_trace` by
+       (gen_tac >> strip_tac >>
+        `valid_horizon cx st0 H mid.storage_trace` by metis_tac[] >>
+        qpat_assum `gas_marked_exec _ _ (eval_expr cx h) _ _ _ mid _` mp_tac >>
+        qpat_assum `valid_horizon _ _ H mid.storage_trace` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+        drule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+     qpat_x_assum `!kw ee t. _` (qspec_then `value::kw` irule) >>
+     simp[ext_call_kwarg_def, exprLoweringPropsTheory.ci_mono_def] >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]
+QED
+
+Finalise extcall_request_keywords_counted_horizon
 
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
