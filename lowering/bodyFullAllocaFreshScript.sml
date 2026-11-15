@@ -13,7 +13,7 @@
  *)
 Theory bodyFullAllocaFresh
 Ancestors
-  bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr
+  bodyFullUnwrapRun bodyFullGhostFrame exprSimAlloc allocationPtr exprPtrUnwrapAllocation
   bodyPtrIfExpAllocLocals bodyPtrStructLitMonotoneRepresentation
   ptrSafetyTransport fragExecPtr fragGasSeqPtr fragExecMem instMemFrontier
   decoderGhostFramePtr abiBuiltinAllocation emitHelperProps exprLoweringProps
@@ -145,7 +145,9 @@ Proof
          (step_prov PG G ins t) (step_taint ins s t tn)` by
     (gen_tac >> simp[inst_seq_ptr_def] >>
      irule ptr_inst_ok_lower_bound_transport >> simp[] >>
-     qexists_tac `0` >> simp[Abbr `ins`, ptr_inst_ok_alloca]) >>
+     qexists_tac `0` >> simp[Abbr `ins`] >>
+     irule unwrap_alloc_ptr_check >> simp[allocas_from_def] >>
+     qexists_tac `t` >> simp[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
               ~is_terminator i.inst_opcode) [ins]` by
     simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
