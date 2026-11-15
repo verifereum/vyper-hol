@@ -225,7 +225,11 @@ Resume cond_jump_expr_post_frag[path]:
   `~t.vs_halted` by
     (fs[gas_marked_path_def] >> metis_tac[gas_path_normal]) >>
   `eval_operand op t = SOME (if b then 1w else 0w)` by
-    (drule_all if_condition_operand >> Cases_on `b` >>
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       if_condition_operand) >> Cases_on `b` >>
      simp[valueEncodingTheory.val_to_w256_def]) >>
   drule emit_inst_extends >> strip_tac >>
   `fn_has_code s3 s4 func` by

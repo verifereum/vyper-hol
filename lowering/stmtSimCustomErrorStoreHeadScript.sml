@@ -144,7 +144,8 @@ Resume custom_error_store_head_path[store]:
   `!name lo sz. local_region ce mid.scopes r name lo sz ==>
     lo+sz <= b \/ b+type_memory_size tv <= lo` by
     (rpt strip_tac >> irule (SRULE [] (Q.INST [`off` |-> `0`]
-       (SPEC_ALL aggregate_alloca_slice_excludes_local))) >>
+       (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         aggregate_alloca_slice_excludes_local)))) >>
      goal_assum (drule_at Any) >> simp[] >>
      qexistsl_tac [`H0`,`asz`,`ctx`,`cx`,`func`,`inst`,`x`] >> simp[]) >>
   `immutable_metadata_frame es mid` by
@@ -230,7 +231,8 @@ Resume custom_error_store_head_path[buffer]:
     (rpt strip_tac >>
      drule_at (Pat `local_region _ _ _ _ _ _`)
        (Q.INST [`off` |-> `0`, `n` |-> `asz`]
-          (SPEC_ALL aggregate_alloca_slice_excludes_local)) >>
+          (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         aggregate_alloca_slice_excludes_local))) >>
      simp[] >> disch_then irule >> simp[] >>
      metis_tac[expr_body_pre_def]) >>
   `mem_bytes_at b asz r.vs_memory = mem_bytes_at b asz s0.vs_memory` by
@@ -242,7 +244,8 @@ Resume custom_error_store_head_path[buffer]:
      rpt strip_tac >>
      drule_at (Pat `local_region _ _ _ _ _ _`)
        (Q.INST [`off` |-> `0`, `n` |-> `asz`]
-          (SPEC_ALL aggregate_alloca_slice_excludes_local)) >>
+          (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+         aggregate_alloca_slice_excludes_local))) >>
      simp[] >> disch_then irule >> simp[] >>
      metis_tac[expr_body_pre_def]) >>
   `mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` by

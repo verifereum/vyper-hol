@@ -332,7 +332,8 @@ QED
 Resume compile_assign_tuple_locals_memory_stmt_frag_mem[cont]:
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
-  qpat_x_assum `?gs. _` (qx_choose_then `gs` assume_tac) >>
+  rename1 `bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gs) = (INL v, ee)` >>
   RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   `value_has_type (TupleTV tvs) v` by
     (qpat_x_assum `!gs v es1. _ ==> value_has_type (TupleTV _) _`

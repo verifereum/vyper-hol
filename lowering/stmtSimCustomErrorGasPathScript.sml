@@ -32,11 +32,11 @@ Theorem custom_error_args_revert_outcome:
 Proof
   strip_tac >>
   `!vs. storage_trace_frame
-     (\ee. (do data <- lift_option
+     (do data <- lift_option
        (build_custom_error_data (get_tenv cx) (SND id) (MAP SND params) vs)
        "custom error encoding";
        (raise (Error (RevertData data)) : evaluation_state -> unit evaluation_result)
-       od) ee)` by
+       od)` by
     (gen_tac >>
      Cases_on `build_custom_error_data (get_tenv cx) (SND id) (MAP SND params) vs` >>
      simp[lift_option_def, bind_def, return_def, raise_def,

@@ -243,13 +243,15 @@ Proof
       `!regions. storage_well_formed_on cx (es with gas_obs := []) regions =
          storage_well_formed_on cx es regions` by
         (gen_tac >> irule storage_well_formed_on_backends >> simp[]) >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
-      rewrite_tac[gas_summary_at_def] >>
-      qexistsl_tac [`INL []`, `es`, `OK s0`] >>
-      fs[gas_marked_exec_def, evaluate_def, return_def,
-         gas_marked_path_def, gas_path_mem_rules, val_in_memory_def,
-         locals_kept_def, stmt_state_rel_def, state_rel_gas_obs,
-         immutable_alloca_sep_def] >> metis_tac[]) >>
+      irule exprSimAggregateLoopsTheory.aggregate_tuple_nil_outcome >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qx_gen_tac `H` >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H` mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac >>
+      fs[val_in_memory_def, locals_kept_def, stmt_state_rel_def,
+         state_rel_gas_obs, immutable_alloca_sep_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> qpat_x_assum `tys = _` SUBST_ALL_TAC >>
   Cases_on `compile_expr ce (expr_type h) h sa` >>
   rename1 `compile_expr ce (expr_type h) h sa = (vv,sm)` >>
