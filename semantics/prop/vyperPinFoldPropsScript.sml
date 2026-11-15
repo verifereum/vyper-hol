@@ -525,6 +525,47 @@ Proof
 QED
 
 
+Theorem origin_fold_tree_exact_mutual[local]:
+  (!e. pin_literal_tree (origin_fold_value e) ==> !v.
+    eval_pure_expr cx st e = SOME (Value v) ==>
+    eval_expr cx e st = (INL (Value v), st)) /\
+  (!es. pin_literal_trees (origin_fold_values es) ==> !vs.
+    eval_pure_exprs cx st es = SOME vs ==>
+    EVERY2 (\e v. eval_expr cx e st = (INL (Value v), st)) es vs /\
+    eval_exprs cx es st = (INL vs, st))
+Proof
+  ho_match_mp_tac origin_fold_value_ind >>
+  rpt conj_tac >> rpt gen_tac
+  >- (simp[origin_fold_value_def] >> rpt strip_tac >>
+      drule origin_fold_builtin_tree >> strip_tac >> gvs[] >>
+      drule pin_fold_builtin_tree_provenance >> strip_tac >>
+      `?vs. eval_pure_exprs cx st es = SOME vs` by
+        metis_tac[cj 2 origin_fold_value_tree_pure_mutual,
+                  pin_literal_trees_pure] >>
+      first_x_assum drule >> disch_then drule >> strip_tac >>
+      Cases_on `b = Len`
+      >- (gvs[] >> Cases_on `es` >>
+          gvs[eval_pure_expr_def] >> Cases_on `t` >>
+          gvs[eval_pure_expr_def] >>
+          gvs[origin_fold_value_def, pin_literal_tree_def] >>
+          drule (cj 1 origin_fold_value_tree_pure_mutual) >>
+          disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+          gvs[read_result_def, return_def] >>
+          irule pin_len_exact >>
+          simp[eval_pure_expr_def]) >>
+      irule pin_closed_builtin_exact >> metis_tac[])
+  >- metis_tac[pin_nullary_type_builtin_exact]
+  >- metis_tac[pin_nullary_type_builtin_exact]
+  >- metis_tac[pin_nullary_type_builtin_exact] >>
+  simp[origin_fold_value_def, pin_literal_tree_def, eval_pure_expr_def,
+       vyperInterpreterTheory.evaluate_def, return_def] >>
+  rpt strip_tac >>
+  drule (cj 1 origin_fold_value_tree_pure_mutual) >>
+  disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+  gvs[read_result_def, return_def, AllCaseEqs()] >>
+  gvs[bind_def, read_result_def, return_def]
+QED
+
 Theorem origin_fold_value_literal_sound:
   origin_fold_value e = Literal ty l ==>
   eval_expr cx e st = (INL (Value (evaluate_literal l)), st)
@@ -534,5 +575,6 @@ Proof
   drule (CONJUNCT1 origin_fold_value_tree_pure_mutual) >>
   disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
   gvs[eval_pure_expr_def] >>
-  irule eval_pure_expr_to_eval_expr_some >> simp[]
+  irule (cj 1 origin_fold_tree_exact_mutual) >>
+  simp[pin_literal_tree_def]
 QED
