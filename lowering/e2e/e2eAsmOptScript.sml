@@ -26,7 +26,7 @@ Ancestors
   memSafeRun lowerDloadDefs
   frameRel codegenRel asmOptNonemptyFinalizer o1SymStaticData o1SymStaticPipeline
   venomPipelineDriverProps venomCompilerWf venomWf o1LabelFlowCompose
-  runtimeSymSrcUnit o1CodeEndOffset
+  o1CodeEndOffset
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)

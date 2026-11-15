@@ -4,7 +4,7 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
-  e2eDeployDefs ctorDeployDefs
+  ctorDeployPhases e2eDeployDefs ctorDeployDefs
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
   ctorDeployLowering ctorDeployMemory ctorDeployDload ctorDeployDead
   ctorDeployFrame
@@ -13,22 +13,6 @@ Ancestors
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
   codegenAsmOpt e2eAsmOpt e2eDeployAsmOpt deployOutcomesFreeUnit asmOptCodeDeploy
   deploySymSrcUnit
-
-(* A successful compilation exposes the deployment unit's phases. *)
-Theorem compile_vyper_deploy_phases:
-  compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) ==>
-  ?rpolicy dunit dout prog cplan.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan)
-Proof
-  simp[compile_vyper_def, deploy_phases_def] >> strip_tac >>
-  drule compile_vyper_with_success_phases >> strip_tac >>
-  gvs[finalize_codegen_identity, o1PipelineCorrectTheory.o1_pipeline_def,
-      AllCaseEqs()] >>
-  qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
-    (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
-  goal_assum $ drule_at Any >> gvs[]
-QED
 
 (* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
  * Proved from the deployment pieces

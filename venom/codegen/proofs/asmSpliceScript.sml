@@ -195,7 +195,7 @@ Definition sym_steps_ok_def:
 End
 
 (* n allowed steps to a, then a bounded run from a. *)
-Theorem sym_steps_ok_within:
+Theorem sym_steps_ok_within[local]:
   ∀n ss a m.
     sym_steps p env n ss = SymOK a ∧ sym_steps_ok P Q p env n ss ∧
     sym_run_within P Q p env m a ⇒
@@ -207,7 +207,7 @@ Proof
 QED
 
 (* n allowed steps to a terminal result are a bounded run. *)
-Theorem sym_steps_ok_terminal:
+Theorem sym_steps_ok_terminal[local]:
   ∀n ss.
     sym_terminal (sym_steps p env n ss) ∧ sym_steps_ok P Q p env n ss ⇒
     sym_run_within P Q p env n ss
@@ -247,7 +247,7 @@ Proof
   Cases_on `n` >> simp[sym_steps_ok_def]
 QED
 
-Theorem sym_steps_ok_mono:
+Theorem sym_steps_ok_mono[local]:
   ∀n ss.
     (∀i stk. P1 i stk ∧ ¬Q1 i ⇒ P2 i stk ∧ ¬Q2 i) ∧
     sym_steps_ok P1 Q1 p env n ss ⇒ sym_steps_ok P2 Q2 p env n ss

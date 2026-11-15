@@ -8,11 +8,8 @@
  * bound between the two sides, as asmSymBridge moves terminal runs.
  *
  * TOP-LEVEL:
- *   sym_gas_ok                  - asm_inst_gas_ok on a symbolic stack
- *   sym_within_ok_gas           - the finalizer keeps sym_gas_ok bounds
- *   asm_run_bounded_sym_within  - a bounded concrete run is a bounded
- *                                 symbolic one
- *   sym_within_asm_run_bounded  - and back
+ *   sym_gas_ok             - asm_inst_gas_ok on a symbolic stack
+ *   asm_refines_run_bounded - refinement preserves the concrete run bound
  *)
 
 Theory asmSymWithin
@@ -39,7 +36,7 @@ Proof
   Cases_on `h` >> Cases_on `h'` >> gvs[sval_val_def, sval_word_def]
 QED
 
-Theorem sym_within_ok_gas:
+Theorem sym_within_ok_gas[local]:
   sym_within_ok (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
 Proof
   simp[sym_within_ok_def, sym_gas_ok_def] >> rpt strip_tac
@@ -145,7 +142,7 @@ QED
 
 (* A step that neither errs nor misuses a label reads every memory operand
    as a word, so its memory ranges are the concrete step's. *)
-Theorem sym_step_mem_ranges:
+Theorem sym_step_mem_ranges[local]:
   LIST_REL (λsv w. sval_conc lo sv = SOME w) ss.sym_stack cstk ∧
   (∀e. sym_step p env inst ss ≠ SymError e) ∧
   (∀m. sym_step p env inst ss ≠ SymBad m) ⇒
@@ -199,7 +196,7 @@ Proof
   qspec_then `stk2` strip_assume_tac list_cases3 >> gvs[]
 QED
 
-Theorem sym_gas_ok_conc:
+Theorem sym_gas_ok_conc[local]:
   asm_sym_rel p env cs ss ∧
   (∀e. sym_step p env inst ss ≠ SymError e) ∧
   (∀m. sym_step p env inst ss ≠ SymBad m) ⇒
@@ -287,9 +284,9 @@ Proof
   simp[LIST_REL_EL_EQN, sval_conc_def]
 QED
 
-(* TOP-LEVEL: a bounded concrete run of a label-disciplined program is a
+(* A bounded concrete run of a label-disciplined program is a
    bounded symbolic run, with the same step count. *)
-Theorem asm_run_bounded_sym_within:
+Theorem asm_run_bounded_sym_within[local]:
   label_disciplined env p s ∧ s.as_pc = 0 ∧
   asm_data_env_ok p env s.as_code ∧
   asm_run_bounded (SND (compute_label_offsets p)) (build_offset_to_pc p)
@@ -301,8 +298,8 @@ Proof
   simp[] >> qexists_tac `s` >> simp[asm_sym_rel_init_start]
 QED
 
-(* TOP-LEVEL: a bounded symbolic run is a bounded concrete one. *)
-Theorem sym_within_asm_run_bounded:
+(* A bounded symbolic run is a bounded concrete one. *)
+Theorem sym_within_asm_run_bounded[local]:
   asm_static_wf p ∧ s.as_pc = 0 ∧ asm_data_env_ok p env s.as_code ∧
   sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
     p env k (sym_init s) ⇒

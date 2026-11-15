@@ -8,15 +8,17 @@
  *)
 Theory e2eGasSufficientTop
 Ancestors
-  e2eGasSufficient e2eCorrectness e2eDefs e2eProducers e2eEntry
+  e2eGasSufficient e2eDefs e2eProducers e2eEntry
   unitTransformDefs ptrDiscipline lowerDloadDefs e2eComposition
   o1PipelineCorrect o1PassContract o1CodeEndOffset o1LabelFlowCompose contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness frameGas frameStep venomRunBounded asmOptimizer callTrace
-  e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
+  e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployInitcode ctorDeployEntry ctorDeployDead
   ctorDeployCallFree o1OpcodeAbsence deployFrameReplay
+  runtimeSymSrcUnit deploySymSrcUnit deployOutcomesFreeUnit
+  ctorDeployShape ctorDeployDefsReach
   e2eAsmOpt e2eDeployAsmOpt codegenAsmOpt codegenGasAsmOpt codegenAsmProgOk
   vfmExecution vfmContext list rich_list pair
 
@@ -140,12 +142,16 @@ Proof
         terminates (run_context fuel unit.cu_context vi)` by
     (gen_tac >> strip_tac >>
      `initial_venom_state_rel tops am tx vi` by
-       (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >>
-        simp[]) >>
+       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
+        disch_then SUBST_ALL_TAC >>
+        gvs[initial_venom_state_rel_def,
+            vyperLoweringCorrectTheory.venom_env_rel_def]) >>
      `vi.vs_outcomes = vs.vs_outcomes` by
-       (irule gas_variant_outcomes >> simp[]) >>
+       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
+        disch_then SUBST1_TAC >> simp[]) >>
      `vi.vs_call_ctx = vs.vs_call_ctx` by
-       (irule gas_variant_call_ctx >> simp[]) >>
+       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
+        disch_then SUBST1_TAC >> simp[]) >>
      `valid_vyper_call tops tx vi.vs_call_ctx.cc_calldata ret /\
       call_outcomes_ok am tx vi.vs_outcomes /\
       !marks. ~source_exempt tops
@@ -195,7 +201,7 @@ QED
 
 (* The constructor's call-free entry never reads vs_outcomes, so replacing
    those outcomes preserves termination at the same fuel. *)
-Theorem deploy_unit_run_outcomes_free:
+Theorem deploy_unit_run_outcomes_free[local]:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx
    fuel vs os.
     deploy_phases policy tops (deploy_bc, runtime_bc)

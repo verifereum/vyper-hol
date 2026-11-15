@@ -34,7 +34,7 @@
  *)
 Theory e2eGasSufficient
 Ancestors
-  e2eCorrectness asmOptCodeRuntime e2eAsmOpt e2eDefs e2eProducers e2eEntry unitTransformDefs
+  e2eDefs e2eProducers e2eEntry unitTransformDefs
   ptrDiscipline lowerDloadDefs e2eComposition
   o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
@@ -42,8 +42,8 @@ Ancestors
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv o1OpcodeAbsence
   loweringRuntimeNoCreate venomPipelineDriverProps
-  asmOptimizer callTrace
-  e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
+  callTrace
+  ctorDeployPhases e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployMemory ctorDeployDload ctorDeployDead
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
@@ -259,20 +259,23 @@ Proof
         terminates (run_context fuel unit.cu_context vi)` by
     (gen_tac >> strip_tac >>
      `initial_venom_state_rel tops am tx vi` by
-       (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >>
-        simp[]) >>
+       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
+        disch_then SUBST_ALL_TAC >>
+        gvs[initial_venom_state_rel_def,
+            vyperLoweringCorrectTheory.venom_env_rel_def]) >>
      `vi.vs_outcomes = vs.vs_outcomes` by
-       (irule gas_variant_outcomes >> simp[]) >>
+       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
+        disch_then SUBST1_TAC >> simp[]) >>
      `vi.vs_call_ctx = vs.vs_call_ctx` by
-       (irule gas_variant_call_ctx >> simp[]) >>
+       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
+        disch_then SUBST1_TAC >> simp[]) >>
      `valid_vyper_call tops tx vi.vs_call_ctx.cc_calldata ret /\
       call_outcomes_ok am tx vi.vs_outcomes /\
       !marks. ~source_exempt tops
         (call_external (SOME vi.vs_outcomes)
            (gas_explicit marks vi.vs_gas_readings) am tx)` by fs[gas_source_exempt_def] >>
      `code_layout_valid vi` by
-       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
-        fs[o1_run_state_ok_def]) >>
+       (drule_all gas_variant_run_state_ok >> simp[o1_run_state_ok_def]) >>
      drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
      `mem_inv dload_offset_ok unit.cu_context vi` by
        (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
@@ -378,8 +381,7 @@ Proof
         (load_contract NONE (gas_explicit marks vi.vs_gas_readings) am tx
            [(NONE, tops)] [])` by fs[deploy_gas_source_exempt_def] >>
      `code_layout_valid vi` by
-       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
-        fs[o1_run_state_ok_def]) >>
+       (drule_all gas_variant_run_state_ok >> simp[o1_run_state_ok_def]) >>
      `gas_variant vi (deploy_entry_state prog cplan tops (add_frame_gas g' es))`
        by fs[Abbr`vs`] >>
      drule_all deploy_unit_memory_ok >> strip_tac >>
