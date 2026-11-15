@@ -1,5 +1,7 @@
 Theory actualIndexInitPtr
 Ancestors actualDecoderAllocationPtr decoderIndexInitCorePtr abiDecoderIndexInit
+  actualAllocExec allocationPtr loweringHalt loweringStateRelDefs allocaFootprint
+  entryDecoderHistoryFrame fragGasSeqPtr calldataDynInit ghostPcTransportPtr
   abiDecoderAllocation abiDecoderContract emitHelperProps exprLowering
   venomState venomExecSemantics venomMemDefs venomInst compileEnv fragExec bodyPtrDefs
   finite_map words arithmetic list rich_list context exprLoweringProps instIdxIndep
@@ -70,4 +72,80 @@ Proof
      strip_tac >> gvs[eval_operand_def, lookup_var_def, mstore_def,
        write_memory_with_expansion_def, update_var_def, FLOOKUP_UPDATE]) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem actual_index_init_success_joint:
+  abi_decode_index_init sa = (Var index,sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel H0 ctx func cenv cx es s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u p.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u)) /\
+    eval_operand (Var index) t = SOME (n2w p) /\ p+32 < dimword (:256) /\
+    mload p t = 0w /\ ptr_covers HG u index t 32 /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem = tn.t_mem DIFF {a | p <= a /\ a < p+32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decode_index_init_trace >> strip_tac >>
+  `cs_extends sa allocation_st /\ cs_extends allocation_st sb` by
+    (conj_tac >- metis_tac[compile_alloc_buffer_extends] >>
+     drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >>
+     irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
+  drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (irule actual_alloc_buffer_site >> goal_assum (drule_at Any) >> simp[]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[]) >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  `?b cap. abi_decoder_budget sa.cs_next_id (sa.cs_next_id+1) b cap s` by
+    (irule actual_slot_singleton_budget >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+     >- (disj1_tac >> simp[] >>
+         drule_all stmt_state_rel_alloca_fresh_bound >> simp[]) >>
+     rename1 `FLOOKUP s.vs_allocas sa.cs_next_id = SOME site` >>
+     PairCases_on `site` >>
+     `site1 = 32` by
+       (drule_all stmt_state_rel_alloca_site_bound >> simp[]) >>
+     disj2_tac >> qexists_tac `site0` >> simp[] >>
+     fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `sa.cs_next_id IN abi_decoder_ids sa.cs_next_id (sa.cs_next_id+1)` by
+    simp[abi_decoder_ids_def] >>
+  drule_all abi_decode_index_init_endpoint_sequence_ptr_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  `q = index` by fs[] >>
+  qpat_x_assum `q = index` SUBST_ALL_TAC >>
+  `p+32 < dimword (:256)` by
+    (drule abi_decoder_budget_word_bound >> decide_tac) >>
+  `ptr_covers HG u index t 32` by
+    metis_tac[ptr_covers_inst_idx] >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  `isPREFIX sa.cs_current_insts sb.cs_current_insts` by
+    fs[inst_extends_def, IS_PREFIX_APPEND] >>
+  drule_all entry_straight_line_code_slice >> strip_tac >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  `s.vs_inst_idx+LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    fs[inst_extends_def, IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND] >>
+  drule abi_decode_index_init_opcodes >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (drule calldata_index_init_instructions >> simp[mk_inst_def]) >>
+  qexistsl_tac [`HG`,`u`,`p`] >> asm_rewrite_tac[] >>
+  rpt gen_tac >>
+  mp_tac (run_inst_seq_gas_origin_ptr_path |> SPEC_ALL |> Q.INST
+    [`code` |-> `emitted_insts sa sb`, `s` |-> `s`, `t` |-> `t`,
+     `G` |-> `G`, `tn` |-> `tn`, `G'` |-> `HG`, `tn'` |-> `u`,
+     `ctx` |-> `ctx`, `func` |-> `func`, `bb` |-> `bb`,
+     `D` |-> `D`, `lo` |-> `lo`, `explicit` |-> `explicit`, `PG` |-> `PG`]) >>
+  (impl_tac >- simp[]) >> simp[]
 QED
