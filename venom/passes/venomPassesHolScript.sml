@@ -13,6 +13,7 @@ Ancestors
   removeUnused
   concretizeMemLoc
   (* FmpLowering stage proof *)
+  ctxSealAgree
   fmpStageReclaimSound
   fmpStageOpSteps
   fmpStageFmpSteps
