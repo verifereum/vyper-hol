@@ -17,11 +17,11 @@ Theorem ptr_paired_read_range_masked_bytes:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\ a.po_inst.inst_opcode <> ASSIGN /\
   mem_read_ops a.po_inst = SOME ops /\ inst_read_op a.po_inst = SOME ops.iao_ofst /\
   MEM ops.iao_ofst a.po_inst.inst_operands /\
@@ -35,9 +35,10 @@ Theorem ptr_paired_read_range_masked_bytes:
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `n <> 0` by decide_tac >>
-  drule_all ptr_paired_read_range_classification >> strip_tac
+  drule_all ptr_paired_read_range_classification >>
+  disch_then (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
   >- (gvs[] >>
-      `j + w2n x < lo` by decide_tac >>
+      `j + w2n x < lo \/ dyn_floor C vs <= j + w2n x` by decide_tac >>
       drule ptr_paired_fixed_read_recovery >>
       disch_then (qspec_then `j + w2n x` mp_tac) >> simp[] >> metis_tac[]) >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
@@ -73,8 +74,6 @@ QED
 Resume ptr_paired_read_range_masked_bytes[recovery]:
   `vs.vs_allocas = FEMPTY` by
     fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, EVERY_MEM,
@@ -89,8 +88,11 @@ Resume ptr_paired_read_range_masked_bytes[recovery]:
   `allocas_from lo (ptr_owner_view d a).cf_state` by
     (drule_all ptr_reachable_owner_allocas_from >> simp[]) >>
   `lo <= b` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `b + sz <= dyn_floor C vs` by
+    (drule_all ptr_reachable_owner_below_dyn_floor >> simp[]) >>
   qabbrev_tac `k = w2n x - b + j` >>
-  `b+k = j+w2n x /\ p+k = j+(p+w2n x)-b /\ k < sz /\ lo <= b+k` by
+  `b+k = j+w2n x /\ p+k = j+(p+w2n x)-b /\ k < sz /\ lo <= b+k /\
+   ~(dyn_floor C vs <= b+k)` by
     (simp[Abbr `k`] >> decide_tac) >>
   `read_byte (b+k) a.po_state.vs_memory = read_byte (p+k) at.po_state.vs_memory`
     suffices_by simp[] >>
@@ -111,11 +113,11 @@ Theorem ptr_paired_mload_masked_bytes:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt /\
   a.po_inst.inst_operands = [op] /\
   eval_operand op a.po_state = SOME x /\ eval_operand op at.po_state = SOME y ==>
@@ -132,5 +134,6 @@ Proof
     (SPEC_ALL ptr_paired_read_range_masked_bytes) |> SIMP_RULE (srw_ss()) [ADD_COMM]) >>
   rpt (goal_assum (drule_at Any)) >>
   simp[mem_read_ops_def, inst_read_op_def, source_memory_read_ranges_def] >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt conj_tac >> metis_tac[]
 QED

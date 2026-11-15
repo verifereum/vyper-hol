@@ -47,11 +47,13 @@ Proof
   drule ld_normal_data_companions >> strip_tac >>
   `cs.vs_alloca_next = t.vs_alloca_next /\ ss.vs_alloca_next = s.vs_alloca_next /\
    cs.vs_allocas = FEMPTY /\ ss.vs_allocas = FEMPTY /\
-   cs.vs_memory = t.vs_memory /\ ss.vs_memory = s.vs_memory` by
+   cs.vs_memory = t.vs_memory /\ ss.vs_memory = s.vs_memory /\
+   ss.vs_initial_fmp = s.vs_initial_fmp` by
     (qpat_assum `setup_callee callee args t = _` mp_tac >>
      qpat_assum `setup_callee child sargs s = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  `dyn_floor CS ss = dyn_floor CS s` by simp[dyn_floor_def] >>
   `ld_frame_bound cs.vs_alloca_next FEMPTY (MAP (ld_op_prov BH) ops) FEMPTY` by
     (asm_rewrite_tac [] >> irule ld_frame_bound_call >> goal_assum (drule_at Any)) >>
   `ss.vs_gas_readings = cs.vs_gas_readings /\

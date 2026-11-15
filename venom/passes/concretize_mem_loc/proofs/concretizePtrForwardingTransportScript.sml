@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem ptr_paired_prefix_forwarding:
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   a.po_inst.inst_opcode <> NOP /\ in_revert_forward a.po_fn a.po_state ==>

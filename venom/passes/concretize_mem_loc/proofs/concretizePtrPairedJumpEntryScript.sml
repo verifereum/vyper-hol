@@ -18,7 +18,6 @@ Theorem ptr_owned_jnz_scalar:
   ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   opaque_use_ok a.po_fn /\ MEM a.po_inst.inst_opcode [JNZ; DJMP] /\
   MEM cond a.po_inst.inst_operands ==>
   ptr_nonopaque_operand a.po_fn cond /\ op_prov TG cond = NONE /\
@@ -219,7 +218,6 @@ Theorem ptr_paired_jump_entry:
   a.po_inst.inst_opcode = JMP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
@@ -275,7 +273,6 @@ Theorem ptr_paired_jnz_entry:
   op_prov TG cond = NONE /\ op_taint a.po_taint cond = {} /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>
@@ -334,7 +331,6 @@ QED
 Theorem ptr_paired_jump_entry_overlay:
   ptr_paired_prefix R lp positions lo vs0 C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   a.po_inst.inst_opcode = JMP /\
   step_inst fuel C a.po_inst a.po_state = OK sj /\
   enters_block a.po_fn sj se /\
@@ -369,7 +365,6 @@ Theorem ptr_paired_djmp_entry:
   opaque_use_ok a.po_fn /\ a.po_inst.inst_opcode = DJMP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   fn_inst_wf a.po_fn /\ retpc_shape_ok a.po_fn /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   EVERY bb_well_formed a.po_fn.fn_blocks /\
   ALL_DISTINCT (fn_labels a.po_fn) /\ ALL_DISTINCT (fn_labels at.po_fn) /\
   (!inst. MEM inst (fn_insts a.po_fn) /\ inst.inst_opcode = ALLOCA ==>

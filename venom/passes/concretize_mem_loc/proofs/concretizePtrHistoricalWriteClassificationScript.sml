@@ -18,7 +18,7 @@ Theorem ptr_historical_write_classification:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_stage_placements C' positions /\
   ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
   j < LENGTH h /\ EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -29,7 +29,7 @@ Theorem ptr_historical_write_classification:
   taint_ok fn (EL j h).po_taint (EL j h).po_inst (EL j h).po_state /\
   ~in_revert_forward fn (EL j h).po_state /\ len <> 0 ==>
   (op_prov TGj ops.iao_ofst = NONE /\ op_taint (EL j h).po_taint ops.iao_ofst = {} /\
-    w2n d + len <= lo) \/
+    (w2n d + len <= lo \/ dyn_floor C vs <= w2n d)) \/
   (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (token,bid) /\
     FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
@@ -38,32 +38,39 @@ Proof
   strip_tac >>
   `op_taint (EL j h).po_taint ops.iao_ofst = {}` by
     (drule_all ptr_write_offset_untainted >> simp[]) >>
-  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1PassContractTheory.o1_ctx_shape_def, o1PassContractTheory.o1_fn_shape_def,
+        venomWfTheory.fn_inst_wf_def, fn_insts_def,
+        o1PassContractTheory.fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
   drule ptr_structural_transcript_ownership >> disch_then (qspec_then `j` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
   drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   Cases_on `op_prov (EL j h).po_prov ops.iao_ofst = NONE /\ w2n d + len <= lo`
   >- (disj1_tac >> simp[] >>
       Cases_on `ops.iao_ofst` >> gvs[op_prov_def] >>
+      Cases_on `FLOOKUP TGj s` >> simp[] >>
       fs[ptr_ledger_erases_def] >>
-      Cases_on `FLOOKUP TGj s` >> gvs[] >>
-      metis_tac[flookup_thm]) >>
-  disj2_tac >>
-  qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
-  simp[access_ok_def] >> strip_tac >>
-  qpat_x_assum `!off len. MEM _ (source_memory_write_ranges _ _) /\ _ ==> _`
-    (qspecl_then [`w2n d`,`len`] mp_tac) >>
-  simp[mem_write_ops_def] >>
-  (impl_tac >- (strip_tac >> gvs[] >> decide_tac)) >> strip_tac >>
-  rename1 `FLOOKUP (EL j h).po_prov dv = SOME (db,sb)` >>
-  `?token bid. FLOOKUP TGj dv = SOME (token,bid)` by
-    (fs[ptr_ledger_erases_def] >>
-     Cases_on `FLOOKUP TGj dv` >> gvs[] >> PairCases_on `x` >> metis_tac[]) >>
-  `?pb.
-    FLOOKUP positions (Allocation bid) = SOME (pb,sb)` by
+      qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `s` mp_tac) >>
+      simp[ptr_owner_erases_def] >> metis_tac[flookup_thm]) >>
+  `?dv db sb. ops.iao_ofst = Var dv /\ FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
+              db <= w2n d /\ w2n d + len <= db + sb` by
+    (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+     simp[access_ok_def] >> strip_tac >>
+     qpat_x_assum `!off len. MEM _ (source_memory_write_ranges _ _) /\ _ ==> _`
+       (qspecl_then [`w2n d`,`len`] mp_tac) >>
+     impl_tac
+     >- (conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         strip_tac >> fs[] >> decide_tac) >>
+     strip_tac >> gvs[]) >>
+  `ptr_owner_erases (dyn_floor C vs) bj (FLOOKUP TGj dv) (SOME (db,sb))` by
+    (fs[ptr_ledger_erases_def] >> metis_tac[]) >>
+  Cases_on `FLOOKUP TGj dv`
+  >- (disj1_tac >> fs[ptr_owner_erases_def, op_prov_def] >> decide_tac) >>
+  disj2_tac >> rename1 `FLOOKUP TGj dv = SOME owner` >> PairCases_on `owner` >>
+  `?pb. FLOOKUP positions (Allocation owner1) = SOME (pb,sb)` by
     (`j <= j` by simp[] >>
      drule_all ptr_transcript_historical_placement >> metis_tac[]) >>
   drule_all ptr_stage_placements_strict_bound >> strip_tac >>
-  metis_tac[]
+  qexistsl [`dv`,`owner0`,`owner1`,`db`,`sb`,`pb`] >> simp[]
 QED

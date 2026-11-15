@@ -441,3 +441,65 @@ Proof
   Cases_on `oldpc` >> Cases_on `newpc` >>
   simp[callLayoutDefsTheory.OPTION_TO_LIST_def] >> rpt strip_tac >> gvs[]
 QED
+
+Theorem fmp_make_root_layout_no_user_params[local]:
+  split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
+  fmp_make_root_layout ctx fn info runner s = SOME (FmpRootLayout n root newpc s') ==>
+  FILTER (\i. i.inst_opcode = PARAM) (OPTION_TO_LIST root) = [] /\
+  FILTER (\i. i.inst_opcode = PARAM) (OPTION_TO_LIST newpc) = [] /\
+  FILTER (\i. i.inst_opcode = PARAM) (OPTION_TO_LIST oldpc) = []
+Proof
+  strip_tac >>
+  `!i. oldpc = SOME i ==> i.inst_opcode = RETPC_PARAM` by
+    metis_tac[split_fmp_entry_retpc_opcode] >>
+  Cases_on `oldpc` >>
+  gvs[fmp_make_root_layout_def, AllCaseEqs(),
+      callLayoutDefsTheory.OPTION_TO_LIST_def, mk_inst_def, set_param_index_def]
+QED
+
+Theorem fmp_install_checked_root_user_params[local]:
+  split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
+  analyze_fmp_reclaims infos ctx fn = SOME plan /\
+  fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
+    SOME (FmpBlocksResult blocks leftover s2) /\
+  fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) ==>
+  fn_user_param_insts (fn with fn_blocks := out) = fn_user_param_insts fn
+Proof
+  strip_tac >>
+  drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
+  drule_all fmp_make_root_layout_no_user_params >> strip_tac >>
+  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
+  `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
+    (Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  drule_all fmp_install_root_exact_prefix >> strip_tac >> gvs[] >>
+  drule fmpStepRewriteTheory.fmp_lower_blocks_retained_opcodes >>
+  disch_then (qspec_then `PARAM` mp_tac) >> simp[] >>
+  drule split_fmp_entry_reconstruct >> strip_tac >>
+  Cases_on `fn_is_context_entry ctx fn` >>
+  simp[callLayoutDefsTheory.fn_user_param_insts_def,
+       callLayoutDefsTheory.fn_entry_insts_def, entry_block_def, FILTER_APPEND]
+QED
+
+(* Why it holds (intuition): a function with a signature comes back
+   unchanged and a sealed one keeps its blocks; otherwise the input entry
+   splits as user PARAMs ++ optional retpc ++ a PARAM-free suffix, and the
+   output entry is those user PARAMs, then the root (INITIAL_FMP or
+   FMP_PARAM) and the retpc (RETPC_PARAM), then the lowered suffix, which
+   has no PARAM. *)
+Theorem fmp_lower_function_user_param_count:
+  fmp_lower_function ctx s fn = SOME (fn',s') ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  simp[fmp_lower_function_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule fmp_checked_seal_some >> strip_tac >>
+  gvs[fmp_seal_def, callLayoutDefsTheory.fn_user_param_insts_def,
+      callLayoutDefsTheory.fn_entry_insts_def, entry_block_def] >>
+  Cases_on `root_layout` >> gvs[] >>
+  `?users oldpc suffix. split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix)` by
+    (gvs[fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all fmp_install_checked_root_user_params >>
+  simp[callLayoutDefsTheory.fn_user_param_insts_def,
+       callLayoutDefsTheory.fn_entry_insts_def, entry_block_def]
+QED

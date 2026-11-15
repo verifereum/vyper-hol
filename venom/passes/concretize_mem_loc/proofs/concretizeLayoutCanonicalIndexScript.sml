@@ -79,7 +79,8 @@ Theorem layout_canonical_trace_advance:
   layout_phase_canonical es g /\
   layout_ordinary_trace vs0 C q0 es qs q g s /\ ~g.lop_pending /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
-  inst.inst_opcode <> DALLOCA /\ g.lop_cursor < LENGTH es /\
+  (inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
+  g.lop_cursor < LENGTH es /\
   EL g.lop_cursor es = SOME (OriginOrdinary fuel post) ==>
   ?k. k.lop_origin = g.lop_origin /\ k.lop_pending /\
     k.lop_cursor = SUC g.lop_cursor /\ k.lop_bound = SUC g.lop_bound /\

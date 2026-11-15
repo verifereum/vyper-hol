@@ -158,19 +158,20 @@ QED
 (* o1_stage_contract_gas with the abort companion under the same choice of
    input oracle. *)
 Definition o1_stage_rq_contract_gas_def:
-  o1_stage_rq_contract_gas rpolicy D pass view pre I I' <=>
+  o1_stage_rq_contract_gas rpolicy D fo pass view pre I I' <=>
     !C C' vs'.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs' ==>
-      ?vs. gas_variant vs vs' /\
-           (I C vs ==> ctx_sim D C C' vs vs' /\ ctx_abort_rq D C C' vs vs' /\
+      ?vs. fmp_variant fo vs vs' /\
+           (I C vs /\ fmp_variant_room fo C' vs' ==> ctx_sim_fuel (pass_fuel pass C') D C C' vs vs' /\ ctx_abort_rq D C C' vs vs' /\
                        I' C' vs')
 End
 
 (* The companion of the k-th run of the walk. *)
 Definition o1_run_rq_contract_gas_def:
-  o1_run_rq_contract_gas rpolicy D k <=>
-    o1_stage_rq_contract_gas rpolicy D (EL k o1_fn_passes)
+  o1_run_rq_contract_gas rpolicy D fmp k <=>
+    o1_stage_rq_contract_gas rpolicy D (if k = 3 then SOME fmp else NONE)
+      (EL k o1_fn_passes)
       (o1_walk_view rpolicy k) (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End
 
@@ -182,8 +183,8 @@ Theorem o1_stage_contract_rq_lift:
      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
      o1_ctx_shape C /\ o1_run_state_ok vs /\ Inv C vs ==>
      ctx_abort_rq D C C' vs vs) ==>
-  o1_stage_rq_contract_gas rpolicy D pass view pre Inv Inv'
+  o1_stage_rq_contract_gas rpolicy D NONE pass view pre Inv Inv'
 Proof
   rw[o1_stage_contract_def, o1_stage_rq_contract_gas_def] >>
-  qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[ctx_sim_fuel_imp_ctx_sim]
+  qexists_tac `vs'` >> simp[fmp_variant_def, gas_variant_refl] >> metis_tac[]
 QED

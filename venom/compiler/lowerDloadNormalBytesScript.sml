@@ -66,6 +66,9 @@ Proof
      qpat_assum `t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = t0`
        (SUBST1_TAC o SYM) >> simp[]) >>
   drule ld_normal_data_envelope >> disch_then assume_tac >>
+  `dyn_floor CS z = dyn_floor CS s` by
+    (qpat_assum `z with vs_memory := _ = s` (SUBST1_TAC o SYM) >>
+     simp[dyn_floor_def]) >>
   qexists_tac `z` >> asm_rewrite_tac[] >>
   irule ld_normal_data_assemble >> asm_rewrite_tac[] >>
   rpt conj_tac

@@ -21,7 +21,7 @@ Proof
   metis_tac[IS_SOME_EXISTS]
 QED
 
-Theorem ptr_paired_write_intervals[local]:
+Theorem ptr_paired_write_intervals:
   mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
   eval_operand ops.iao_ofst s = SOME x /\ eval_operand ops.iao_ofst t = SOME y /\
   eval_operand sizeop s = SOME z /\ eval_operand sizeop t = SOME z /\

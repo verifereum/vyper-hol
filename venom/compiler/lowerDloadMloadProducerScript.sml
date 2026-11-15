@@ -45,12 +45,17 @@ Theorem ld_mload_live_backward:
   i.inst_outputs = [out] /\
   ld_owned_vars V E AG AH tn un s t /\
   (!v. op = Var v ==> v IN V) /\ op_taint tn op = {} /\
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)) /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)) /\
   (!a. a < lo ==> R a a) /\
+  (!a. fl <= a /\ a < dimword (:256) ==> R a a) /\
   (!a b. ld_site_bytes E live a b ==> R a b) /\
   ld_byte_rel R tn.t_mem un.t_mem
     (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
@@ -100,7 +105,7 @@ Theorem ld_mload_certificate_backward:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
@@ -128,7 +133,7 @@ Theorem ld_mload_certificate_backward:
       owner IN live /\ other IN live /\ owner <> other /\
       ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
       (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     (!v. op_taint (step_taint i s s' tn) (Var v) SUBSET count 32) /\
@@ -152,7 +157,7 @@ Proof
     (rpt strip_tac >> simp[] >>
      irule ld_retpc_observable_operand >> simp[] >> qexists_tac `i` >>
      simp[] >> metis_tac[MEM]) >>
-  `access_ok lo (ld_erase AG) fn i s` by metis_tac[ld_annotated_access_ok] >>
+  drule_all ld_annotated_access_ok >> strip_tac >>
   `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
   `op_taint tn op = {}` by
     (irule ld_taint_operand_clean >> qexistsl_tac [`fn`,`i`,`s`] >> simp[]) >>
@@ -174,8 +179,9 @@ Proof
     (irule ld_mload_live_backward >> simp[] >>
      conj_tac >- metis_tac[] >>
      conj_tac >- (fs[] >> metis_tac[]) >>
-     qexistsl_tac [`\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b`,
-                    `fn`, `live`, `lo`] >> simp[] >> rpt conj_tac >> fs[]) >>
+     qexistsl_tac [`G`,
+                    `\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b`,
+                    `dyn_floor CS s`, `fn`, `live`, `lo`] >> simp[] >> rpt conj_tac >> fs[]) >>
   qexists_tac `s'` >>
   `?w. s' = update_var out w s` by metis_tac[ld_mload_update] >>
   `?w. t' = update_var out w t` by metis_tac[ld_mload_update] >>
@@ -195,7 +201,7 @@ Proof
   `t' with vs_vars := t.vs_vars = t` by simp[ld_update_var_restore] >>
   `ld_frame_embedding E L H s' t'` by metis_tac[ld_frame_embedding_vars_transport] >>
   `ld_alloc_account keys d A s' t'` by metis_tac[ld_alloc_account_vars_transport] >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t')` by
     metis_tac[ld_byte_rel_vars_transport] >>
   `(step_taint i s s' tn).t_mem = tn.t_mem /\

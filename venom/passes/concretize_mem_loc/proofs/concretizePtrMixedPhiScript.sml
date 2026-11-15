@@ -1,5 +1,5 @@
 Theory concretizePtrMixedPhi
-Ancestors passTransform
+Ancestors passTransform o1FrameLockstep frameCfgBoundary
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueSelection
   concretizePtrValueTransport ptrDiscipline unitShapeDefs
   venomExecSemantics venomState finite_map list
@@ -117,6 +117,61 @@ Proof
   >- (irule ptr_eval_phis_filter_prefix >> fs[bb_well_formed_def] >>
       rpt strip_tac >> simp[] >> metis_tac[]) >>
   simp[block_map_transform_def, ptr_positions_eval_phis_map]
+QED
+
+Theorem ptr_positions_phi_read_map[local]:
+  !insts prev v.
+  phi_read prev v (MAP (concretize_inst_with_positions p) insts) =
+    phi_read prev v insts
+Proof
+  Induct >> simp[phi_read_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[concretize_positions_phi, phi_read_def]
+QED
+
+(* Clearing allocations and NOPs cannot expose another leading PHI in a
+   well-formed block. The selected incoming operand is therefore unchanged. *)
+Theorem ptr_positions_block_phi_eff:
+  bb_well_formed bb ==>
+  phi_eff prev v (clear_nops_block
+    (block_map_transform (concretize_inst_with_positions p) bb)).bb_instructions =
+    phi_eff prev v bb.bb_instructions
+Proof
+  strip_tac >>
+  `phi_read prev v (clear_nops_block
+    (block_map_transform (concretize_inst_with_positions p) bb)).bb_instructions =
+    phi_read prev v bb.bb_instructions` suffices_by simp[phi_eff_def] >>
+  drule concretize_positions_map_block_wf >>
+  disch_then (qspec_then `p` assume_tac) >>
+  simp[clear_nops_block_def] >> irule EQ_TRANS >>
+  qexists_tac `phi_read prev v
+    (block_map_transform (concretize_inst_with_positions p) bb).bb_instructions` >>
+  conj_tac
+  >- (irule phi_read_filter_prefix >> fs[bb_well_formed_def] >>
+      rpt strip_tac >> simp[] >> metis_tac[]) >>
+  simp[block_map_transform_def, ptr_positions_phi_read_map]
+QED
+
+Theorem ptr_positions_enters_phi_eff:
+  g.fn_blocks = (concretize_function_with_positions p f).fn_blocks /\
+  EVERY bb_well_formed f.fn_blocks /\
+  enters_block f s s1 /\ enters_block g t t1 /\
+  s1.vs_current_bb = t1.vs_current_bb /\ s1.vs_prev_bb = t1.vs_prev_bb ==>
+  !v. phi_eff s.vs_prev_bb v (block_insts f s.vs_current_bb) =
+    phi_eff t.vs_prev_bb v (block_insts g t.vs_current_bb)
+Proof
+  strip_tac >>
+  `s.vs_current_bb = t.vs_current_bb /\ s.vs_prev_bb = t.vs_prev_bb` by
+    metis_tac[enters_block_control_labels] >>
+  qpat_x_assum `enters_block f s s1` mp_tac >>
+  simp[enters_block_def] >> strip_tac >>
+  `MEM bb f.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb_well_formed bb` by fs[EVERY_MEM] >>
+  `lookup_block t.vs_current_bb g.fn_blocks = SOME
+    (clear_nops_block (block_map_transform (concretize_inst_with_positions p) bb))` by
+    (qpat_x_assum `g.fn_blocks = _` SUBST1_TAC >>
+     simp[concretize_positions_blocks, lookup_block_map,
+          concretize_positions_block_label] >> metis_tac[]) >>
+  simp[block_insts_def] >> metis_tac[ptr_positions_block_phi_eff]
 QED
 
 Theorem ptr_mixed_eval_phis_production_block:

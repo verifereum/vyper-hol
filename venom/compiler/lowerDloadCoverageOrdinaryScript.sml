@@ -33,7 +33,7 @@ Theorem ld_ordinary_segment_coverage:
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET]) ins /\
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET; DALLOCA]) ins /\
   lower_dload_function_supply fa fn = (gn,fb) /\
   lower_dload_block_supply a bb = (gb,b) /\
   lower_dload_insts_supply a pre = (p,a1) /\
@@ -196,7 +196,7 @@ Theorem ld_configured_ordinary_segment_coverage:
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET]) ins /\
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET; DALLOCA]) ins /\
   lower_dload_function_supply fa fn = (gn,fb) /\
   lower_dload_block_supply a bb = (gb,b) /\
   lower_dload_insts_supply a pre = (p,a1) /\

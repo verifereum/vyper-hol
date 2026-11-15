@@ -97,7 +97,7 @@ Theorem ptr_log_scalar_evaluations[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ opaque_use_ok fn /\
   inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc::rest /\
   REVERSE rest = addr::szop::topics /\ taint_ok fn tn inst src /\
-  ptr_ledger_erases births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_ledger_erases dyn births TG G /\ FDOM G SUBSET fn_pv P fn /\
   ptr_mixed_vars births positions TG tn fn ft src tgt /\
   src.vs_labels = tgt.vs_labels ==>
   EVERY (\op. eval_operand op src = eval_operand op tgt) (szop::topics) /\
@@ -132,7 +132,7 @@ Theorem ptr_hash_log_read_transport[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
   opaque_use_ok fn /\ MEM inst.inst_opcode [SHA3; LOG] /\
   taint_ok fn tn inst src /\
-  ptr_ledger_erases births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_ledger_erases dyn births TG G /\ FDOM G SUBSET fn_pv P fn /\
   ptr_mixed_vars births positions TG tn fn ft src tgt /\
   src.vs_labels = tgt.vs_labels /\
   MEM (off,n) (source_memory_read_ranges inst tgt) ==>
@@ -220,10 +220,11 @@ Theorem ptr_paired_hash_log_payload[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   active_inst a.po_fn a.po_inst a.po_state /\
   ALL_DISTINCT (fn_labels a.po_fn) /\
   taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
@@ -255,7 +256,7 @@ Theorem ptr_paired_hash_log_endpoint[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\
   MEM a.po_inst.inst_opcode [SHA3; LOG] ==>
   active_inst a.po_fn a.po_inst a.po_state /\
   MEM a.po_inst (fn_insts a.po_fn) /\ inst_wf a.po_inst /\
@@ -264,7 +265,7 @@ Theorem ptr_paired_hash_log_endpoint[local]:
   ~in_revert_forward a.po_fn a.po_state /\
   ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
     a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels /\
-  ptr_ledger_erases births TG a.po_prov /\
+  ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
   ?P. fn_ptr_ok P a.po_fn /\ FDOM a.po_prov SUBSET fn_pv P a.po_fn
 Proof
   strip_tac >>
@@ -290,9 +291,6 @@ Proof
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   `~in_revert_forward a.po_fn a.po_state` by
     (drule_all ptr_hash_log_nonrevert >> simp[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
     (fs[ptr_paired_sample_def] >>
@@ -304,6 +302,8 @@ Proof
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
      metis_tac[]) >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
+  asm_rewrite_tac[] >>
   drule_all ptr_frame_current_static >> strip_tac >>
   qexists_tac `P` >> conj_tac >- fs[EVERY_MEM] >>
   fs[ptr_static_support_def, pred_setTheory.SUBSET_DEF, FLOOKUP_DEF] >>
@@ -319,10 +319,11 @@ Theorem ptr_paired_hash_log_read_inputs[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [SHA3; LOG] /\
   MEM (off,n) (source_memory_read_ranges a.po_inst at.po_state) ==>
   ?ops x y. mem_read_ops a.po_inst = SOME ops /\
@@ -348,7 +349,7 @@ QED
 Theorem ptr_sha3_size_evaluation[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ opaque_use_ok fn /\
   inst.inst_opcode = SHA3 /\ inst.inst_operands = [addr;szop] /\
-  taint_ok fn tn inst src /\ ptr_ledger_erases births TG G /\
+  taint_ok fn tn inst src /\ ptr_ledger_erases dyn births TG G /\
   FDOM G SUBSET fn_pv P fn /\
   ptr_mixed_vars births positions TG tn fn ft src tgt /\
   src.vs_labels = tgt.vs_labels ==>
@@ -493,10 +494,11 @@ Theorem ptr_paired_hash_log_execution[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [SHA3; LOG] /\
   (!out. MEM out a.po_inst.inst_outputs ==> ~retpc_var a.po_fn out) /\
   step_inst fuel C' a.po_inst at.po_state = OK postt ==>
@@ -597,10 +599,11 @@ Theorem ptr_paired_prefix_hash_log[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [SHA3; LOG] /\
   ptr_chrono_step C' at zt ==>
   ?z TG'.
@@ -709,10 +712,11 @@ Theorem ptr_paired_hash_log_prefix_normalize:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\

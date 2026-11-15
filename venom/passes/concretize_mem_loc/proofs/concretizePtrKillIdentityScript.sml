@@ -49,8 +49,8 @@ Theorem ptr_covered_base_write_site:
     ?off. MEM (Ptr (Allocation bid) off) (bp_get_ptrs bp u)) /\
   MEM inst (fn_insts fn) /\ mem_write_ops inst = SOME ops /\
   ops.iao_ofst = Var v /\ find_base_allocas bp (Var v) = [Allocation aid] /\
-  v IN pointer_derived_vars fn (ptr_frame_site_roots fn A PG site) /\
-  (!r. r IN ptr_frame_site_roots fn A PG site ==>
+  v IN pointer_derived_vars fn (ptr_frame_site_roots dyn fn A PG site) /\
+  (!r. r IN ptr_frame_site_roots dyn fn A PG site ==>
     (?bid. FLOOKUP A bid = SOME site /\ r IN ptr_bp_alloc_roots fn bid) \/
     r IN (ptr_roots P fn DIFF alloca_roots fn)) ==>
   FLOOKUP A aid = SOME site
@@ -59,7 +59,7 @@ Proof
   `v IN (pointer_derived_vars fn (alloca_roots fn) DIFF
          pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn))` by
     metis_tac[ptr_base_write_pure_local] >>
-  `?r. r IN ptr_frame_site_roots fn A PG site /\
+  `?r. r IN ptr_frame_site_roots dyn fn A PG site /\
        v IN pointer_derived_vars fn {r}` by
     metis_tac[ptr_derived_root_witness, ptr_frame_site_roots_finite] >>
   qpat_x_assum `!r. _` drule >> strip_tac
@@ -82,7 +82,7 @@ Theorem ptr_reachable_base_write_identity:
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
   EVERY fn_inst_wf ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs /\
   wf_function fn /\ all_reachable fn /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
   MEM inst (fn_insts fn) /\ mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
@@ -101,7 +101,8 @@ Proof
     metis_tac[ptr_reachable_pure_local_totality] >>
   qexists `site` >> simp[] >>
   `ptr_site_supported
-    (pointer_derived_vars fn (ptr_frame_site_roots fn s.vs_allocas PG site)) G site` by
+    (pointer_derived_vars fn
+      (ptr_frame_site_roots (dyn_floor ctx vs) fn s.vs_allocas PG site)) G site` by
     metis_tac[ptr_frame_current_table_support] >>
   `!bid u. u IN pointer_derived_vars fn (ptr_bp_alloc_roots fn bid) ==>
     ?off. MEM (Ptr (Allocation bid) off)
@@ -109,11 +110,13 @@ Proof
     (rpt strip_tac >> irule ptr_bp_production_coverage >>
      goal_assum (drule_at Any) >> simp[] >>
      metis_tac[bp_scan_production_complete]) >>
-  `!r. r IN ptr_frame_site_roots fn s.vs_allocas PG site ==>
+  `!r. r IN ptr_frame_site_roots (dyn_floor ctx vs) fn s.vs_allocas PG site ==>
     (?bid. FLOOKUP s.vs_allocas bid = SOME site /\ r IN ptr_bp_alloc_roots fn bid) \/
     r IN (ptr_roots P fn DIFF alloca_roots fn)` by
     metis_tac[ptr_frame_current_root_cover] >>
   irule ptr_covered_base_write_site >>
+  qexistsl [`P`, `PG`, `bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn`,
+            `dyn_floor ctx vs`] >>
   fs[ptr_site_supported_def] >> metis_tac[]
 QED
 
@@ -130,7 +133,7 @@ Theorem ptr_reachable_successful_kill_identity:
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
   EVERY fn_inst_wf ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs /\
   wf_function fn /\ all_reachable fn /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
   MEM inst (fn_insts fn) /\

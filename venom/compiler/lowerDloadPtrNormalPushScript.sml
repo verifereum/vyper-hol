@@ -4,9 +4,9 @@ Ancestors lowerDloadPtrInvoke lowerDloadPtrAggregate lowerDloadPtrSupport pred_s
 
 (* Interface probe for the active set delivered by actual invoke. *)
 Theorem dload_invoke_active_set_probe[local]:
-  dload_boundary_core lo fs {a | ~retpc_var callee a} Ws
+  dload_boundary_core fl lo fs {a | ~retpc_var callee a} Ws
     PG PH G H tn un s t cs ds ==>
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars callee) DIFF {a | retpc_var callee a}) Ws
     PG PH G H tn un s t cs ds
 Proof
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem dload_normal_invoke_call:
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars caller) DIFF {a | retpc_var caller a})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {a | retpc_var c.cf_fn a}) cs)
     PG PH G H tn un s t cs ds /\
@@ -109,7 +109,7 @@ Theorem dload_normal_invoke_call:
       (tn with t_var := FEMPTY) callee i u /\
     (!a. a IN set (fn_ir_vars callee) ==>
       (lookup_var a u = NONE <=> lookup_var a t1 = NONE)) /\
-    dload_boundary_core lo (fr::fs)
+    dload_boundary_core fl lo (fr::fs)
       (set (fn_ir_vars callee) DIFF {a | retpc_var callee a})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {a | retpc_var c.cf_fn a}) (c::cs))
       (MAP (op_prov G) ops) (MAP (op_prov H) ops) FEMPTY FEMPTY
@@ -168,9 +168,9 @@ Resume dload_normal_invoke_call[stack]:
 QED
 
 Resume dload_normal_invoke_call[saved]:
-  qpat_assum `dload_boundary_core lo fs _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `dload_boundary_core fl lo fs _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any strip_assume_tac dload_boundary_layout) >>
-  qpat_assum `dload_boundary_core lo fs _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `dload_boundary_core fl lo fs _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any strip_assume_tac dload_boundary_environment) >>
   Cases >- (simp[] >> qexists_tac `qc` >> simp[]) >>
   simp[] >> strip_tac >>

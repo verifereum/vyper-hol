@@ -91,6 +91,109 @@ QED
 (* Conditional integration only: the universal step premise is not discharged.
    A history that runs a revert forwarding's RETURNDATACOPY leaves the paired
    prefix there and stays inside the forwarding window up to its REVERT. *)
+Theorem ptr_paired_history_safe_append[local]:
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\
+  ~in_revert_forward a.po_fn a.po_state ==>
+  EVERY (\n. ~in_revert_forward (EL n (h ++ delta)).po_fn
+    (EL n (h ++ delta)).po_state) (done ++ [LENGTH h - 1])
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_samples >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  `0 < LENGTH h` by (Cases_on `h` >> gvs[]) >>
+  `EL (LENGTH h - 1) h = a` by
+    (qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
+  simp[EVERY_APPEND] >> conj_tac
+  >- (fs[ptr_paired_samples_def, ptr_sample_list_def, EVERY_MEM] >>
+      qx_gen_tac `n` >> strip_tac >>
+      `n < LENGTH h` by metis_tac[] >>
+      simp[EL_APPEND_EQN] >> metis_tac[]) >>
+  simp[EL_APPEND_EQN]
+QED
+
+Theorem ptr_paired_history_coverage_safe:
+  C.ctx_entry = Ct.ctx_entry /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions Ct.ctx_functions /\
+  ptr_stage_placements Ct positions /\ vs.vs_vars = FEMPTY /\
+  EVERY (\f. first_block_no_phi f /\ fn_inst_wf f /\
+    EVERY bb_well_formed f.fn_blocks /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) Ct.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  (!h a ht at done tokens registry births PT TG saved entries H calls ws zt.
+    ptr_paired_prefix R lp positions lo vs C Ct
+      h a ht at done tokens registry births PT TG saved entries H calls ws /\
+    a.po_inst.inst_opcode <> NOP /\
+    at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+    ~in_revert_forward a.po_fn a.po_state /\
+    ptr_chrono_step Ct at zt ==>
+    ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+      delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+      ptr_paired_prefix R lp positions lo vs C Ct
+        (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+        tokens' registry' births' PT' TG' saved' entries'
+        (H ++ snapshots) calls' ws' /\
+      z.po_inst.inst_opcode <> NOP /\
+      zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst) ==>
+  !ht at. ptr_chrono_history vs Ct ht at ==>
+    (?h a done tokens registry births PT TG saved entries H calls ws.
+      ptr_paired_prefix R lp positions lo vs C Ct
+        h a ht at done tokens registry births PT TG saved entries H calls ws /\
+      EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\
+      a.po_inst.inst_opcode <> NOP /\
+      at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) \/
+    (?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+      revert_forward_pair bb i j /\
+      i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
+Proof
+  disch_tac >> rpt gen_tac >> pop_assum mp_tac >>
+  once_rewrite_tac[AND_IMP_INTRO] >>
+  once_rewrite_tac[CONJ_COMM] >> pure_once_rewrite_tac[GSYM AND_IMP_INTRO] >>
+  Induct_on `ptr_chrono_history vs Ct ht at` >>
+  rpt strip_tac
+  >- (disj1_tac >>
+      `ptr_chrono_history vs Ct
+         [ptr_observe [] [] FEMPTY entry_taint fn inst s1]
+         (ptr_observe [] [] FEMPTY entry_taint fn inst s1)` by
+        metis_tac[ptr_chrono_history_rules] >>
+      `(ptr_observe [] [] FEMPTY entry_taint fn inst s1).po_stack = []` by
+        simp[ptr_observe_def] >>
+      drule_all ptr_paired_context_root >>
+      disch_then (qspec_then `lo` strip_assume_tac) >>
+      fs[ptr_observe_def] >>
+      qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (irule_at Any) >> simp[]) >>
+  qpat_x_assum `_ ==> _ \/ _` mp_tac >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac
+  >- (Cases_on `in_revert_forward a.po_fn a.po_state`
+      >- (disj2_tac >>
+          `EVERY fn_inst_wf C.ctx_functions` by
+            (fs[EVERY_MEM] >> metis_tac[]) >>
+          drule_all ptr_paired_history_forwarding_transport >> strip_tac >>
+          metis_tac[ptr_paired_history_window_step]) >>
+      disj1_tac >>
+      qpat_x_assum `!h a ht at done tokens registry births PT TG saved entries H calls ws zt. _`
+        (drule_all_then strip_assume_tac) >>
+      `EVERY (\n. ~in_revert_forward (EL n (h ++ delta)).po_fn
+        (EL n (h ++ delta)).po_state) (done ++ [LENGTH h - 1])` by
+        (irule ptr_paired_history_safe_append >>
+         rpt (goal_assum (drule_at Any)) >> simp[]) >>
+      qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ _) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (irule_at Any) >> simp[]) >>
+  disj2_tac >>
+  `?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
+    revert_forward_pair bb i j /\ i < at.po_state.vs_inst_idx /\
+    at.po_state.vs_inst_idx <= j` by metis_tac[] >>
+  drule ptr_paired_history_window_step >>
+  disch_then drule >> disch_then drule >> simp[] >> metis_tac[]
+QED
+
 Theorem ptr_paired_history_coverage:
   C.ctx_entry = Ct.ctx_entry /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions Ct.ctx_functions /\
@@ -126,40 +229,10 @@ Theorem ptr_paired_history_coverage:
       revert_forward_pair bb i j /\
       i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j)
 Proof
-  disch_tac >> rpt gen_tac >> pop_assum mp_tac >>
-  once_rewrite_tac[AND_IMP_INTRO] >>
-  once_rewrite_tac[CONJ_COMM] >> pure_once_rewrite_tac[GSYM AND_IMP_INTRO] >>
-  Induct_on `ptr_chrono_history vs Ct ht at` >>
-  rpt strip_tac
-  >- (disj1_tac >>
-      `ptr_chrono_history vs Ct
-         [ptr_observe [] [] FEMPTY entry_taint fn inst s1]
-         (ptr_observe [] [] FEMPTY entry_taint fn inst s1)` by
-        metis_tac[ptr_chrono_history_rules] >>
-      `(ptr_observe [] [] FEMPTY entry_taint fn inst s1).po_stack = []` by
-        simp[ptr_observe_def] >>
-      drule_all ptr_paired_context_root >>
-      disch_then (qspec_then `lo` strip_assume_tac) >>
-      fs[ptr_observe_def] >>
-      qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (irule_at Any) >> simp[]) >>
-  qpat_x_assum `_ ==> _ \/ _` mp_tac >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac
-  >- (Cases_on `in_revert_forward a.po_fn a.po_state`
-      >- (disj2_tac >>
-          `EVERY fn_inst_wf C.ctx_functions` by
-            (fs[EVERY_MEM] >> metis_tac[]) >>
-          drule_all ptr_paired_history_forwarding_transport >> strip_tac >>
-          metis_tac[ptr_paired_history_window_step]) >>
-      disj1_tac >>
-      qpat_x_assum `!h a ht at done tokens registry births PT TG saved entries H calls ws zt. _`
-        (drule_all_then strip_assume_tac) >>
-      qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ _) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (irule_at Any) >> simp[]) >>
-  disj2_tac >>
-  `?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
-    revert_forward_pair bb i j /\ i < at.po_state.vs_inst_idx /\
-    at.po_state.vs_inst_idx <= j` by metis_tac[] >>
-  drule ptr_paired_history_window_step >>
-  disch_then drule >> disch_then drule >> simp[] >> metis_tac[]
+  disch_then (mp_tac o MATCH_MP ptr_paired_history_coverage_safe) >>
+  disch_tac >> rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!ht at. ptr_chrono_history _ _ _ _ ==> _`
+    (drule_then strip_assume_tac)
+  >- (disj1_tac >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  disj2_tac >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED

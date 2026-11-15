@@ -284,7 +284,9 @@ Theorem concretize_delegate_local_complete:
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -292,6 +294,7 @@ Theorem concretize_delegate_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -317,7 +320,6 @@ Theorem concretize_delegate_local_complete:
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       concretize_local_obs post tpost /\
     concretize_supplement D (step_taint inst s post tn) post tpost /\
-    step_prov PG G inst post = SND o_f (origin_set rv inst.inst_outputs NONE) /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
@@ -384,7 +386,6 @@ Proof
      qexistsl_tac [`off`,`ro`] >> fs[] >> metis_tac[]) >>
   qexists_tac `tpost` >> asm_rewrite_tac[] >>
   conj_tac >- suspend "step" >>
-  conj_tac >- suspend "prov" >>
   `post.vs_returndata = tpost.vs_returndata` by
     (fs[local_rel_def, concretize_local_obs_def, dead_result_rel_def] >>
      irule listTheory.LIST_EQ >> simp[]) >>
@@ -451,15 +452,5 @@ Resume concretize_delegate_local_complete[step]:
   qpat_x_assum `!op. MEM op _ ==> _` mp_tac >> simp[MEM] >> strip_tac >>
   pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[venomInstTheory.opcode_case_def] >> fs[] >> simp[]
-QED
-Resume concretize_delegate_local_complete[prov]:
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >>
-     metis_tac[resolved_frame_erasure]) >>
-  drule delegate_success_envelope >> strip_tac >>
-  qpat_x_assum `SND o_f rv = G` (SUBST_ALL_TAC o SYM) >>
-  simp[step_prov_def, out_prov_def, set_prov_def, origin_set_def,
-       fmap_eq_flookup, FLOOKUP_o_f, FLOOKUP_DRESTRICT] >>
-  rpt gen_tac >> Cases_on `x = out` >> simp[]
 QED
 Finalise concretize_delegate_local_complete

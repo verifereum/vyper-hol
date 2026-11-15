@@ -8,7 +8,7 @@ Theorem ptr_transcript_tagged_domain_support:
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions ==>
+  ptr_discipline lo C vs ==>
   !u. u IN FDOM TGj ==> u IN fn_pv P (EL j h).po_fn
 Proof
   strip_tac >>

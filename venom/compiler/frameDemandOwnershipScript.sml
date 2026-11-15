@@ -136,10 +136,34 @@ Proof
   qexists_tac `t` >> simp[] >> metis_tac[activation_cache_depth]
 QED
 
+(* With DALLOCA every live cache, saved frames included, lies below the
+   initial free memory pointer. *)
+Theorem joint_config_cache_below:
+  joint_config_reachable vs0 ctx
+    (JointConfig stk PG G tn current inst s oms om hs h) /\
+  ptr_discipline lo ctx vs0 /\ ctx_has_dalloca ctx /\
+  activation_cache (JointConfig stk PG G tn current inst s oms om hs h)
+    d owner aid (b,sz) ==>
+  b + sz <= w2n vs0.vs_initial_fmp
+Proof
+  strip_tac >> fs[joint_config_reachable_def] >>
+  drule joint_origin_history_erasure >> strip_tac >>
+  drule origin_frame_erasure >> strip_tac >>
+  drule_then (qspec_then `lo` mp_tac) frame_reachable_caches_below >>
+  simp[] >> strip_tac >>
+  drule frame_reachable_initial_fmp >> strip_tac >>
+  gvs[activation_cache_def]
+  >- (first_x_assum (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`SUC (LENGTH stk - SUC d)`,`aid`,`b`,`sz`] mp_tac) >>
+  simp[EL_MAP]
+QED
+
 Theorem joint_provenance_activation_owner:
   joint_config_reachable vs0 ctx
     (JointConfig stk PG G tn current inst s oms om hs h) /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP G v = SOME site ==>
+  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP G v = SOME site ==>
   ?d owner aid. activation_cache
     (JointConfig stk PG G tn current inst s oms om hs h) d owner aid site
 Proof
@@ -172,7 +196,8 @@ Proof
      Cases_on `j` >> gvs[EVERY_EL] >>
      rename1 `SUC k <= LENGTH qs` >> `k < LENGTH qs` by decide_tac >> metis_tac[]) >>
   `?d owner aid. activation_cache (EL j (q0::qs)) d owner aid site` by
-    (gvs[] >> metis_tac[joint_provenance_activation_owner]) >>
+    (gvs[] >> irule joint_provenance_activation_owner >> simp[] >>
+     metis_tac[]) >>
   drule_all joint_cache_birth >> strip_tac >>
   qexistsl_tac [`d`,`owner`,`aid`,`t`] >> simp[]
 QED

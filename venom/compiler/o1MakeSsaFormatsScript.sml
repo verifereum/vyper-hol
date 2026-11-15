@@ -696,7 +696,7 @@ Proof
 QED
 
 Theorem make_ssa_current_fn_entry_no_phi:
-  make_ssa_current_fn s fn = (fn',s') /\ wf_function fn /\
+  make_ssa_current_fn s fn = (fn',s') /\ ALL_DISTINCT (fn_labels fn) /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
   fn_entry_label fn = SOME entry ==>
   EVERY (\bb. EVERY (\i. bb.bb_label = entry ==> i.inst_opcode <> PHI)
@@ -710,13 +710,12 @@ Proof
       `MEM d (fn_labels fn)` by metis_tac[current_frontier_key] >>
       drule_all current_frontier_not_entry >> simp[]) >>
   Cases_on `fn.fn_blocks` >>
-  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def] >>
-  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
-  gvs[fn_labels_def, EVERY_MEM, MEM_MAP] >> metis_tac[]
+  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def,
+      fn_labels_def, EVERY_MEM, MEM_MAP] >> metis_tac[]
 QED
 
 Theorem make_ssa_current_fn_first_block_no_phi:
-  make_ssa_current_fn s fn = (fn',s') /\ wf_function fn /\
+  make_ssa_current_fn s fn = (fn',s') /\ ALL_DISTINCT (fn_labels fn) /\
   first_block_no_preds fn /\ first_block_no_phi fn ==>
   first_block_no_phi fn'
 Proof

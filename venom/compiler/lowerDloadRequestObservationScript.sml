@@ -185,6 +185,8 @@ Proof
           (s.vs_transient s.vs_call_ctx.cc_address)` by
         (qpat_x_assum `taint_within D CS vs0` mp_tac >>
          rewrite_tac[taint_within_def] >> strip_tac >>
+         qpat_x_assum `?stk PG G. frame_reachable _ _ _ _ _ _ _ _ _ /\ _`
+           strip_assume_tac >>
          first_x_assum (drule_all_then assume_tac) >> simp[]) >>
       suspend "transport") >>
   `tn.t_stor = {} /\ tn.t_trans = {}` by (fs[MEM] >> metis_tac[]) >>

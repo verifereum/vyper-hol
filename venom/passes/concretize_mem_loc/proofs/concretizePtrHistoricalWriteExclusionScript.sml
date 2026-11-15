@@ -83,16 +83,16 @@ Proof
   gvs[]
 QED
 
-Theorem ptr_paired_historical_event:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+Theorem ptr_paired_historical_event_memory:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -123,11 +123,11 @@ Theorem ptr_paired_historical_event:
       (lp (EL (EL q done) h).po_fn) (EL (EL q done) h).po_inst
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule ptr_paired_prefix_samples >> strip_tac >>
+  drule ptr_paired_memory_samples >> strip_tac >>
   `q < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
-  drule_all ptr_paired_prefix_alignment >> strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_paired_prefix_placements >> strip_tac >>
+  drule_all ptr_paired_memory_alignment >> strip_tac >>
+  drule ptr_paired_memory_transcript >> strip_tac >>
+  drule ptr_paired_memory_placements >> strip_tac >>
   `SUC q < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   `EL q (done ++ [LENGTH h - 1]) = EL q done` by
     simp[EL_APPEND_EQN] >>
@@ -174,6 +174,49 @@ Proof
   `(EL q ht).po_inst = concretize_inst_with_positions (lp aa.po_fn) aa.po_inst` by
     (irule ptr_departed_cursor_instruction >> simp[]) >>
   simp[ptr_snapshot_step_def]
+QED
+
+Theorem ptr_paired_historical_event:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  ~in_revert_forward (EL (EL q done) h).po_fn (EL (EL q done) h).po_state /\
+  q < LENGTH done ==>
+  ?tsj rj bj PTj TGj sj ej next.
+    EL (EL q done) H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+    next = EL (SUC (EL q done)) H /\
+    SUC (EL q done) < LENGTH h /\ SUC q < LENGTH ht /\
+    ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+      births PT TG saved entries H /\ ptr_stage_placements C' positions /\
+    ptr_snapshot_step C (TAKE (SUC (EL q done)) h)
+      (EL (EL q done) h) (EL (SUC (EL q done)) h)
+      (tsj,rj,bj,PTj,TGj,sj,ej) next /\
+    ptr_mixed_vars bj positions TGj (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_fn (EL q ht).po_fn
+      (EL (EL q done) h).po_state (EL q ht).po_state /\
+    ptr_history_content (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_state (EL q ht).po_state /\
+    ptr_observation_reachable vs C (EL (EL q done) h) /\
+    access_ok lo (EL (EL q done) h).po_prov (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_inst (EL (EL q done) h).po_state /\
+    taint_ok (EL (EL q done) h).po_fn (EL (EL q done) h).po_taint
+      (EL (EL q done) h).po_inst (EL (EL q done) h).po_state /\
+    ~in_revert_forward (EL (EL q done) h).po_fn (EL (EL q done) h).po_state /\
+    (EL q ht).po_inst = concretize_inst_with_positions
+      (lp (EL (EL q done) h).po_fn) (EL (EL q done) h).po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_historical_event_memory >> simp[]
 QED
 
 Theorem ptr_ordinary_write_descriptor:
@@ -297,7 +340,8 @@ Theorem ptr_historical_ordinary_assembly[local]:
   ~is_terminator (EL j h).po_inst.inst_opcode /\
   (EL j h).po_inst.inst_opcode <> INVOKE /\
   (?fuel post. step_inst fuel C (EL j h).po_inst (EL j h).po_state = OK post) /\
-  LENGTH (EL (SUC j) h).po_state.vs_returndata = LENGTH postt.vs_returndata ==>
+  LENGTH (EL (SUC j) h).po_state.vs_returndata = LENGTH postt.vs_returndata /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) ==>
   pa+k NOTIN range_bytes (step_writes (EL j h).po_inst t postt)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -307,7 +351,7 @@ Proof
      births PT TG saved entries H /\
    EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-   EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions`
+   ptr_discipline lo C vs`
     by fs[ptr_demand_interval_def] >>
   `!u. u IN FDOM TGj ==> u IN fn_pv P (EL j h).po_fn` by
     (rpt strip_tac >> irule ptr_transcript_tagged_domain_support >> simp[] >>
@@ -320,7 +364,7 @@ Proof
       (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+   o1_run_state_ok vs /\ ptr_discipline lo C vs /\
    access_ok lo (EL j h).po_prov (EL j h).po_fn
       (EL j h).po_inst (EL j h).po_state /\
    ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
@@ -335,9 +379,9 @@ Proof
   drule_all ptr_demand_ordinary_write_exclusion >> simp[]
 QED
 
-Theorem ptr_paired_historical_owned_write_exclusion:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+Theorem ptr_paired_historical_owned_write_exclusion_memory:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H ws /\
   ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w /\
@@ -347,11 +391,11 @@ Theorem ptr_paired_historical_owned_write_exclusion:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
   w < EL q done /\ q < LENGTH done ==>
   pa+k NOTIN range_bytes
@@ -361,7 +405,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~in_revert_forward (EL (EL q done) h).po_fn
       (EL (EL q done) h).po_state` by
-    (drule ptr_paired_prefix_transcript >> strip_tac >>
+    (drule ptr_paired_memory_transcript >> strip_tac >>
      drule ptr_structural_transcript_erasure >> strip_tac >>
      drule ptr_structural_trace_embedding >>
      simp[ptr_event_embedding_def, EVERY_MEM] >> strip_tac >>
@@ -370,7 +414,7 @@ Proof
      fs[ptr_demand_interval_def] >>
      qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
        (qspec_then `EL q done` mp_tac) >> simp[]) >>
-  drule_all ptr_paired_historical_event >> strip_tac >>
+  drule_all ptr_paired_historical_event_memory >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_mixed_vars bj positions TGj aa.po_taint
     aa.po_fn tat.po_fn aa.po_state tat.po_state` >>
   `MEM aa.po_fn C.ctx_functions` by
@@ -395,7 +439,7 @@ Proof
 
   `(EL (SUC (EL q done)) h).po_state.vs_returndata =
     (EL (SUC q) ht).po_state.vs_returndata` by
-    (drule ptr_paired_prefix_samples >> strip_tac >>
+    (drule ptr_paired_memory_samples >> strip_tac >>
      drule ptr_structural_transcript_erasure >> strip_tac >>
      drule_all ptr_paired_samples_post_returndata >> simp[]) >>
   spose_not_then assume_tac >>
@@ -430,6 +474,33 @@ Proof
   irule ptr_historical_ordinary_assembly >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   metis_tac[]
+QED
+
+Theorem ptr_paired_historical_owned_write_exclusion:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  w < EL q done /\ q < LENGTH done ==>
+  pa+k NOTIN range_bytes
+    (step_writes (EL q ht).po_inst (EL q ht).po_state
+      (EL (SUC q) ht).po_state)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_historical_owned_write_exclusion_memory >> simp[]
 QED
 
 Theorem ptr_structural_trace_actual_writer_retained:

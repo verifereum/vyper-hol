@@ -166,7 +166,6 @@ Theorem ptr_extcodecopy_prefix_execution[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  ~ctx_has_dalloca C /\
   a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
@@ -244,8 +243,6 @@ Resume ptr_extcodecopy_prefix_execution[operands]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
@@ -261,7 +258,7 @@ Theorem ptr_extcodecopy_transcript_successor[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  ~ctx_has_dalloca C /\ a.po_inst.inst_opcode = EXTCODECOPY /\
+  a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
   ?z bytes (dst:256 word) (dt:256 word) (sz:256 word).
@@ -347,7 +344,7 @@ Theorem ptr_extcodecopy_write_certificate[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   a.po_inst.inst_opcode = EXTCODECOPY /\ at.po_inst = a.po_inst /\
   ptr_chrono_step C' at zt /\
   ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
@@ -419,19 +416,26 @@ Proof
     (qpat_x_assum `range_bytes _ <> {}` mp_tac >>
      simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
   `sz <> 0w` by (strip_tac >> gvs[]) >>
+  `dyn_floor C a.po_state = dyn_floor C vs` by
+    (drule frameAllocationOwnershipTheory.frame_reachable_initial_fmp >>
+     simp[dyn_floor_def]) >>
   qabbrev_tac `ops = <|iao_ofst := dop; iao_size := SOME nop; iao_max_size := SOME nop|>` >>
-  `(op_prov TG ops.iao_ofst = NONE /\
+  Q.SUBGOAL_THEN `(op_prov TG ops.iao_ofst = NONE /\
     op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\
-      w2n dst + w2n sz <= lo) \/
+      (w2n dst + w2n sz <= lo \/ dyn_floor C vs <= w2n dst)) \/
    (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n dst /\
-    w2n dst + w2n sz <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification)) >>
+    w2n dst + w2n sz <= db+sb /\ pb+sb < dimword(:256))`
+    (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
+  >- (irule ptr_historical_write_classification >>
      simp[Abbr `ops`] >>
+     conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
+     conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[])
-  >- suspend "fixed" >>
+  >- (qpat_x_assum `w2n dst + w2n sz <= lo \/ _` (assume_tac o REWRITE_RULE [DISJ_EQ_IMP]) >>
+      suspend "fixed") >>
   suspend "owned"
 QED
 
@@ -463,7 +467,8 @@ Resume ptr_extcodecopy_write_certificate[fixed]:
   qexists_tac `\x:num. x` >>
   simp[ptr_paired_write_def, EL_APPEND_EQN] >>
   reverse conj_tac
-  >- (simp[ptr_paired_write_owner_def] >> rpt strip_tac >> disj1_tac >> decide_tac) >>
+  >- (simp[ptr_paired_write_owner_def] >> rpt strip_tac >>
+      `x < lo \/ dyn_floor C vs <= x` by (fs[] >> decide_tac) >> fs[]) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def, ptr_bytes_agree_def] >>
   rpt strip_tac >>
   `x = w2n dst + (x-w2n dst) /\ x-w2n dst < w2n sz` by decide_tac >>
@@ -474,13 +479,14 @@ QED
 Resume ptr_extcodecopy_write_certificate[owned]:
   fs[Abbr `ops`] >>
   `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
+        EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
   `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
     (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
-     first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
+     simp[ptr_ledger_erases_def, ptr_owner_erases_def] >>
+     disch_then (qspec_then `dv` mp_tac o CONJUNCT1) >> gvs[]) >>
   `dt = dst - n2w db + n2w pb` by
     gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
   `w2n dt = pb + (w2n dst - db)` by
@@ -490,7 +496,7 @@ Resume ptr_extcodecopy_write_certificate[owned]:
   simp[ptr_paired_write_def, EL_APPEND_EQN] >>
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def] >> rpt strip_tac >>
-      disj2_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def] >>
   simp[ptr_bytes_agree_def] >> rpt strip_tac >>
   `x = w2n dst + (x-w2n dst) /\ x-w2n dst < w2n sz /\
@@ -505,7 +511,7 @@ Theorem ptr_extcodecopy_prefix_step[local]:
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY (\f. ALL_DISTINCT (fn_labels f) /\
     (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
@@ -612,7 +618,7 @@ Theorem ptr_paired_extcodecopy_prefix_normalize:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\

@@ -11,7 +11,6 @@ Theorem ptr_transcript_birth_retained:
   !j R vs0 C Ct h a ht at done tokens registry births PT TG saved entries H
     i tsi ri bi PTi TGi si ei tsj rj bj PTj TGj sj ej key site.
   ptr_structural_transcript R vs0 C Ct h a ht at done tokens registry births PT TG saved entries H /\
-  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   i <= j /\ j < LENGTH h /\
   EL i H = (tsi,ri,bi,PTi,TGi,si,ei) /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
@@ -68,7 +67,7 @@ Theorem ptr_transcript_historical_placement:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_stage_placements C' positions /\
   ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
   i <= j /\ j < LENGTH h /\
@@ -92,12 +91,15 @@ Proof
   strip_tac >> `i < LENGTH h` by decide_tac >>
   drule ptr_structural_transcript_ownership >> disch_then (qspec_then `i` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
-  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def,
+       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
   `FLOOKUP bi (token,aid) = SOME (b,sz)` by
     (drule_all ptr_source_ownership_prov_erases >>
      simp[ptr_ledger_erases_def] >> strip_tac >>
-     qpat_x_assum `!v. FLOOKUP _ v = _` (qspec_then `v` mp_tac) >> simp[]) >>
+     qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
+     gvs[ptr_owner_erases_def]) >>
   `FLOOKUP bj (token,aid) = SOME (b,sz)` by
     (drule_all ptr_transcript_birth_retained >> simp[]) >>
   drule_all ptr_stage_placements_live_owner >> strip_tac >>

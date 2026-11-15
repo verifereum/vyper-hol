@@ -7,6 +7,7 @@ Theory ctorDeployDload
 Ancestors
   ctorDeployDefs o1PassContract gasSummary unitMemInv lowerDloadDefs
   ctorDeployMemoryFrontier ctorDeployMemoryRunMem ctorDeployImmBudget
+  ctorDeployMemoryRunPtrPrefixInit
 
 Theorem deploy_unit_dload_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
@@ -29,5 +30,6 @@ Proof
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   conj_tac
   >- (irule lowered_unit_dload_offset_ok >> metis_tac[]) >>
+  drule_all deploy_prefix_no_dalloca >> strip_tac >>
   irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
 QED

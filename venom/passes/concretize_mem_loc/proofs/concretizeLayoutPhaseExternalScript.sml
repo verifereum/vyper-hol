@@ -12,7 +12,9 @@ Theorem layout_external_trace_step:
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -41,7 +43,8 @@ Proof
   `joint_trace vs0 C q0 es qs q /\
    EL g.lop_cursor (q0::qs) = g.lop_config /\
    resolved_config_ok g.lop_config g.lop_ids g.lop_anns /\
-   lifetime_ok g.lop_bound g.lop_ids g.lop_config` by
+   lifetime_ok g.lop_bound g.lop_ids g.lop_config /\
+   (~ctx_has_dalloca C ==> resolved_complete g.lop_config g.lop_anns)` by
     fs[layout_ordinary_trace_def] >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>

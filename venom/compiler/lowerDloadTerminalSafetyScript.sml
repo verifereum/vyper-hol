@@ -14,14 +14,31 @@ Proof
     AllCaseEqs(), update_var_def, write_memory_with_expansion_def]
 QED
 
+Theorem ld_terminal_step_fmp[local]:
+  (inst.inst_opcode = ASSIGN \/ inst.inst_opcode = RETURNDATACOPY) /\
+  step_inst fuel ctx inst s = OK t ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def,
+    AllCaseEqs(), update_var_def, write_memory_with_expansion_def]
+QED
+
 Theorem ld_forward_suffix_raw:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   revert_forward_pair bb i j /\ i <= s.vs_inst_idx /\ s.vs_inst_idx <= j /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
-  s.vs_alloca_next < dimword (:256) ==>
+  s.vs_alloca_next < dimword (:256) /\
+  w2n s.vs_initial_fmp <= w2n s.vs_fmp ==>
   raw_mem_ok ctx fn inst s
 Proof
-  strip_tac >> simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >>
+  strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by
+    (Cases_on `s.vs_inst_idx = i` >- gvs[revert_forward_pair_def] >>
+     Cases_on `s.vs_inst_idx = j` >- gvs[revert_forward_pair_def] >>
+     gvs[revert_forward_pair_def] >>
+     first_x_assum (qspecl_then [`s.vs_inst_idx`, `inst`] mp_tac) >>
+     simp[]) >>
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def] >>
   Cases_on `s.vs_inst_idx = i`
   >- (disj2_tac >>
       simp[revert_forward_at_def] >> metis_tac[]) >>
@@ -47,6 +64,23 @@ Proof
   >- (`inst.inst_opcode = REVERT` by gvs[revert_forward_pair_def] >>
       drule step_revert_no_normal >> metis_tac[]) >>
   irule ld_terminal_step_frontier >> goal_assum (drule_at Any) >>
+  Cases_on `s.vs_inst_idx = i`
+  >- (gvs[revert_forward_pair_def]) >>
+  disj1_tac >> gvs[revert_forward_pair_def] >> first_x_assum irule >>
+  qexists_tac `s.vs_inst_idx` >> simp[] >> decide_tac
+QED
+
+Theorem ld_forward_suffix_step_fmp[local]:
+  revert_forward_pair bb i j /\ i <= s.vs_inst_idx /\ s.vs_inst_idx <= j /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst fuel ctx inst s = OK t ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >>
+  Cases_on `s.vs_inst_idx = j`
+  >- (`inst.inst_opcode = REVERT` by gvs[revert_forward_pair_def] >>
+      drule step_revert_no_normal >> metis_tac[]) >>
+  irule ld_terminal_step_fmp >> goal_assum (drule_at Any) >>
   Cases_on `s.vs_inst_idx = i`
   >- (gvs[revert_forward_pair_def]) >>
   disj1_tac >> gvs[revert_forward_pair_def] >> first_x_assum irule >>
@@ -89,6 +123,19 @@ Proof
   drule_all ld_forward_suffix_step_frontier >> simp[]
 QED
 
+Theorem ld_forward_suffix_prefix_fmp[local]:
+  revert_forward_pair bb i j ==> !s t.
+  RTC (\x y. i <= x.vs_inst_idx /\ x.vs_inst_idx <= j /\
+       ?inst u. get_instruction bb x.vs_inst_idx = SOME inst /\
+         step_inst fuel ctx inst x = OK u /\
+         y = u with vs_inst_idx := SUC x.vs_inst_idx) s t ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> simp[] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all ld_forward_suffix_step_fmp >> simp[]
+QED
+
 Theorem ld_invoke_no_return:
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
   lookup_function nm ctx.ctx_functions = SOME callee /\
@@ -104,6 +151,7 @@ QED
 
 Theorem ld_forward_prefix_raw:
   revert_forward_pair bb i j /\ s.vs_alloca_next < dimword (:256) /\
+  w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
   RTC (\x y. i <= x.vs_inst_idx /\ x.vs_inst_idx <= j /\
        ?cur u. get_instruction bb x.vs_inst_idx = SOME cur /\
          step_inst fuel ctx cur x = OK u /\
@@ -114,6 +162,7 @@ Theorem ld_forward_prefix_raw:
   raw_mem_ok ctx fn inst t
 Proof
   strip_tac >> drule_all ld_forward_suffix_prefix_frontier >> strip_tac >>
-  irule ld_forward_suffix_raw >> conj_tac >- simp[] >>
+  drule_all ld_forward_suffix_prefix_fmp >> strip_tac >>
+  irule ld_forward_suffix_raw >> conj_tac >- simp[] >> conj_tac >- simp[] >>
   qexistsl_tac [`bb`, `i`, `j`] >> simp[]
 QED

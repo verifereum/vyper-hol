@@ -66,6 +66,7 @@ Definition layout_ordinary_trace_def:
     EL g.lop_cursor (q0::qs) = g.lop_config /\
     resolved_config_ok g.lop_config g.lop_ids g.lop_anns /\
     lifetime_ok g.lop_bound g.lop_ids g.lop_config /\
+    (~ctx_has_dalloca C ==> resolved_complete g.lop_config g.lop_anns) /\
     (g.lop_pending ==>
       ?c fuel. g.lop_cursor = SUC c /\ c < LENGTH es /\
         EL c es = SOME (OriginOrdinary fuel s) /\
@@ -346,7 +347,9 @@ Theorem layout_returncopy_pending_adapter:
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
@@ -381,6 +384,8 @@ Proof
   qpat_x_assum `layout_ordinary_trace _ _ _ _ _ _ g s` mp_tac >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ g s t` mp_tac >>
   simp[layout_ordinary_trace_def, layout_ordinary_state_def] >> rpt strip_tac >>
+  `~ctx_has_dalloca C ==>
+   resolved_complete (EL g.lop_cursor (q0::qs)) ((rp,rv)::anns)` by fs[] >>
   drule_all concretize_returncopy_local_complete >> strip_tac >>
   `post.vs_initial_fmp = tpost.vs_initial_fmp` by
     metis_tac[step_inst_initial_fmp, step_inst_base_initial_fmp] >>

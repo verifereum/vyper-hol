@@ -7,7 +7,8 @@ Ancestors concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
 Theorem layout_ordinary_success_phase:
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
-  inst.inst_opcode <> DALLOCA /\ g.lop_cursor < LENGTH es /\
+  (inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
+  g.lop_cursor < LENGTH es /\
   EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
   g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
   post.vs_inst_idx = s.vs_inst_idx /\

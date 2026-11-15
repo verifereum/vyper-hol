@@ -13,11 +13,11 @@ Theorem ptr_paired_mcopy_postwrite_bytes:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = MCOPY /\ ptr_chrono_step C' at zt ==>
   ?dop sop nop d r dt rt n.
     a.po_inst.inst_operands = [dop;sop;nop] /\ at.po_inst = a.po_inst /\
@@ -43,7 +43,7 @@ Proof
      simp[mem_read_ops_def, inst_read_op_def] >>
      conj_tac >- (qexists `w2n n` >> simp[]) >>
      goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> fs[]) >>
   suspend "content"
 QED
 

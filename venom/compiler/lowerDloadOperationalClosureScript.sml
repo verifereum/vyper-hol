@@ -292,6 +292,8 @@ Proof
   strip_tac >>
   drule ld_annotated_erasure >> strip_tac >>
   drule_all ld_frame_reachable_prefix >> strip_tac >>
+  drule_all ld_stack_origin_erased >>
+  qpat_x_assum `ld_stack_origin _ _ _ _ _` kall_tac >> strip_tac >>
   gvs[MAP] >>
   `s0 = cs` by
     (irule ld_stack_origin_setup_eq >>
@@ -333,6 +335,8 @@ Theorem ld_annotated_return_pop:
 Proof
   strip_tac >> drule ld_annotated_erasure >> strip_tac >>
   drule_all ld_frame_reachable_prefix >> strip_tac >>
+  drule_all ld_stack_origin_erased >>
+  qpat_x_assum `ld_stack_origin _ _ _ _ _` kall_tac >> strip_tac >>
   fs[MAP, ld_stack_origin_cons, ld_erase_frame_def] >>
   drule_all ld_annotated_call_pop >> strip_tac >>
   qexists_tac `fuelS` >> asm_rewrite_tac[]
@@ -358,6 +362,8 @@ Theorem ld_annotated_prefix_at_origin:
 Proof
   strip_tac >> drule ld_annotated_erasure >> strip_tac >>
   drule_all ld_frame_reachable_prefix >> strip_tac >>
+  drule_all ld_stack_origin_erased >>
+  qpat_x_assum `ld_stack_origin _ _ _ _ _` kall_tac >> strip_tac >>
   metis_tac[ld_stack_origin_unique]
 QED
 

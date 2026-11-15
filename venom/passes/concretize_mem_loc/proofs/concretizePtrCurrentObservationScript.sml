@@ -9,9 +9,41 @@ Ancestors
   concretizePtrPairedFields concretizePtrSharedFields
   concretizeStepStructure concretizeMemLocDefs
   venomExecProofs passSimulationDefs passSharedDefs unitLabelMapIdentity concretizePtrOpaqueRetpc
+  lowerDloadDefs lowerDloadDynHeadroom frameRawEndpoints frameRawProjection
+  unitTransformDefs concretizePtrRequestHistory concretizePtrTaintContent
   ptrDiscipline unitMemInv unitShapeDefs venomWf o1PassContract
   contextCodegenRel codegenRel memLocDefs pointerConfinedDefs
   venomInst list finite_map pred_set words arithmetic
+
+(* A source range at or above the dynamic floor lies in the dynamic region
+   [initial_fmp, fmp): the alloca frontier, with the DLOAD headroom still to
+   come, stays at or below the floor, so of the raw frontier check's cases
+   only the dynamic-region one is left. *)
+Theorem ptr_frame_dyn_range_in_fmp_region:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_function C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ mem_inv dload_headroom_ok C vs /\
+  ~in_revert_forward fn s /\
+  MEM (off,len)
+    (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s) /\
+  dyn_floor C vs <= off ==>
+  len = 0 \/ (w2n s.vs_initial_fmp <= off /\ off + len <= w2n s.vs_fmp)
+Proof
+  strip_tac >>
+  `raw_mem_ok C fn inst s` by (drule_all (Q.INST [`M` |-> `raw_mem_ok`] frame_reachable_mem_inv) >> simp[]) >>
+  `raw_reachable vs C fn inst s` by
+    metis_tac[frameRawProjectionTheory.frame_reachable_raw] >>
+  `s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
+    metis_tac[ld_raw_dyn_headroom] >>
+  `inst_mem_below_frontier inst s` by
+    (fs[raw_mem_ok_def, inst_mem_ok_in_fn_def, in_revert_forward_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `inst_mem_below_frontier _ _` mp_tac >>
+  rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
+  disch_then (qspec_then `(off,len)` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  simp[] >> decide_tac
+QED
 
 Theorem ptr_paired_current_static_bound:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -20,7 +52,8 @@ Theorem ptr_paired_current_static_bound:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
+  (ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs) /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME eom /\
@@ -34,7 +67,8 @@ Theorem ptr_paired_current_static_bound:
   (!off len.
     MEM (off,len) (source_memory_read_ranges at.po_inst at.po_state ++
                   source_memory_write_ranges at.po_inst at.po_state) ==>
-    len = 0 \/ off + len <= eom)
+    len = 0 \/ off + len <= eom \/
+    (w2n at.po_state.vs_initial_fmp <= off /\ off + len <= w2n at.po_state.vs_fmp))
 Proof
   strip_tac >> Cases_on `in_revert_forward a.po_fn a.po_state`
   >- (disj1_tac >> drule_all ptr_paired_prefix_forwarding >> simp[]) >>
@@ -67,8 +101,13 @@ Proof
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
     (fs[ptr_paired_sample_def] >>
      metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `a.po_state.vs_initial_fmp = at.po_state.vs_initial_fmp /\
+   a.po_state.vs_fmp = at.po_state.vs_fmp` by
+    (fs[ptr_paired_sample_def] >> drule ptr_history_content_control >>
+     simp[ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
   drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   suspend "range_supply"
 QED
@@ -139,7 +178,28 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
       (mem_write_ops a.po_inst = SOME ops /\
        MEM (w2n x,len) (source_memory_write_ranges a.po_inst a.po_state)))`
     assume_tac >- metis_tac[] >>
-  drule_all ptr_paired_current_range_static_bound >> simp[]
+  drule_all ptr_paired_current_range_static_bound >>
+  disch_then (DISJ_CASES_THEN2 (fn th => simp[th])
+    (DISJ_CASES_THEN2 (fn th => simp[th]) strip_assume_tac)) >>
+  gvs[] >>
+  `ctx_has_dalloca C` by
+    (spose_not_then assume_tac >>
+     `w2n x < dimword(:256)` by rewrite_tac[wordsTheory.w2n_lt] >>
+     `dimword(:256) <= w2n x` by
+       (qpat_x_assum `dyn_floor C vs <= w2n x` mp_tac >>
+        qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th, dyn_floor_def])) >>
+     `F` suffices_by rewrite_tac[] >> decide_tac) >>
+  `mem_inv dload_headroom_ok C vs` by
+    (qpat_x_assum `ctx_has_dalloca C ==> _` irule >> first_assum ACCEPT_TAC) >>
+  `EVERY wf_function C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state ++
+     source_memory_write_ranges a.po_inst a.po_state)` by
+    (simp[MEM_APPEND] >> metis_tac[]) >>
+  drule_all ptr_frame_dyn_range_in_fmp_region >>
+  qpat_x_assum `a.po_state.vs_initial_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `a.po_state.vs_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  decide_tac
 QED
 
 Finalise ptr_paired_current_static_bound

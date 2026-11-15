@@ -59,12 +59,17 @@ Proof
   simp[chain_facts_def] >> metis_tac[fn_chain_step]
 QED
 
-Theorem chain_facts_suffix:
+Theorem chain_facts_suffix_from:
   chain_facts R rpolicy passes unit order chains i /\ k <= LENGTH passes ==>
-  fn_steps rpolicy (DROP k passes) (EL k (FST (EL i chains)))
-    (LAST (FST (EL i chains)))
+  fn_steps_from (\m h. o1_fn_shape unit.cu_context h /\ R m h) rpolicy k
+    (DROP k passes) (EL k (FST (EL i chains))) (LAST (FST (EL i chains)))
 Proof
-  simp[chain_facts_def] >> metis_tac[fn_chain_fn_steps]
+  strip_tac >> drule chain_facts_length >> strip_tac >>
+  gvs[chain_facts_def, EVERY_EL] >>
+  qspecl_then [`passes`,`s0`,`FST (EL i chains)`,`SND (EL i chains)`,`k`,`0`]
+    mp_tac (Q.INST [`R` |-> `\m h. o1_fn_shape unit.cu_context h /\ R m h`]
+              fn_chain_fn_steps_from) >>
+  simp[]
 QED
 
 Theorem chain_facts_invoke_targets:
@@ -246,11 +251,17 @@ Theorem chain_facts_walk_view:
   (!i. i < LENGTH chains ==> chain_facts R rpolicy passes unit names chains i) /\
   callee_first names unit.cu_context.ctx_functions /\
   i < LENGTH chains /\ k < LENGTH passes ==>
-  walk_view rpolicy (DROP (SUC k) passes)
+  walk_view R rpolicy (SUC k) (DROP (SUC k) passes)
     (stage_ctx unit.cu_context chains (SUC k))
     (EL k (FST (EL i chains))) (EL k (SND (EL i chains)))
 Proof
-  strip_tac >> simp[walk_view_def, stage_ctx_def] >>
+  strip_tac >>
+  `!h. o1_fn_shape (stage_ctx unit.cu_context chains (SUC k)) h <=>
+       o1_fn_shape unit.cu_context h` by
+    (gen_tac >> irule o1_fn_shape_ctx_eq >> simp[stage_ctx_def] >>
+     `SUC k <= LENGTH passes` by simp[] >>
+     drule_all stage_ctx_names >> simp[stage_ctx_def]) >>
+  simp[walk_view_def] >> simp[stage_ctx_def] >>
   qx_gen_tac `n` >> qx_gen_tac `g` >> strip_tac >>
   `ALL_DISTINCT (ctx_fn_names unit.cu_context)` by
     gvs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def] >>
@@ -270,7 +281,9 @@ Proof
         (qspec_then `i` mp_tac) >> simp[chain_facts_def] >>
       rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >>
       simp[] >> metis_tac[]) >>
-  gvs[] >> irule chain_facts_suffix >> metis_tac[]
+  gvs[] >> irule fn_steps_from_mono >>
+  qexists_tac `\m h. o1_fn_shape unit.cu_context h /\ R m h` >>
+  simp[] >> irule chain_facts_suffix_from >> metis_tac[]
 QED
 
 Theorem chain_facts_stages:
@@ -282,7 +295,8 @@ Theorem chain_facts_stages:
     (stage_ctx unit.cu_context chains k)
     (stage_ctx unit.cu_context chains (SUC k)) /\
   (callee_first names unit.cu_context.ctx_functions ==>
-   ctx_pass_stage rpolicy (EL k passes) (walk_view rpolicy (DROP (SUC k) passes))
+   ctx_pass_stage rpolicy (EL k passes)
+     (walk_view R rpolicy (SUC k) (DROP (SUC k) passes))
      (stage_ctx unit.cu_context chains k)
      (stage_ctx unit.cu_context chains (SUC k)))
 Proof
@@ -315,7 +329,7 @@ Resume chain_facts_stages[walk_stage]:
   qexistsl_tac [`EL k (SND (EL i chains))`,`s`,`out`] >> simp[] >>
   `ctx_fn_names (stage_ctx unit.cu_context chains k) =
      ctx_fn_names unit.cu_context` by (irule stage_ctx_names >> metis_tac[]) >>
-  `walk_view rpolicy (DROP (SUC k) passes)
+  `walk_view R rpolicy (SUC k) (DROP (SUC k) passes)
      (stage_ctx unit.cu_context chains (SUC k))
      (EL k (FST (EL i chains))) (EL k (SND (EL i chains)))` by
     (irule chain_facts_walk_view >> metis_tac[]) >>

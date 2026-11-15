@@ -14,6 +14,17 @@ Proof
   fs[mem_inv_raw_reachable] >> metis_tac[]
 QED
 
+(* Under DALLOCA the source frontier stays at or below the dynamic floor. *)
+Theorem ld_annotated_frontier_floor:
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
+  ld_annotated_reachable vs0 C astk k L AP AG tn fn i s ==>
+  s.vs_alloca_next <= dyn_floor C s
+Proof
+  strip_tac >> drule_all ld_annotated_headroom >>
+  simp[dload_headroom_ok_def, dyn_floor_def, ctx_has_dalloca_def] >>
+  rw[] >> fs[]
+QED
+
 Theorem ld_observed_site_endpoints:
   o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
   ld_annotated_reachable vs0 C astk k L AP AG tn fn i s /\

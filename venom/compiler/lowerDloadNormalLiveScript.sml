@@ -17,7 +17,7 @@ Proof
      owner IN survivors` by
     (rpt strip_tac >> first_x_assum irule >>
      simp[ld_live_def,ld_selected_def] >> metis_tac[]) >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E survivors a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E survivors a b)
      tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t)` by
     (irule ld_byte_rel_restrict >>
      drule ld_normal_data_memory >> disch_then (irule_at Any) >>

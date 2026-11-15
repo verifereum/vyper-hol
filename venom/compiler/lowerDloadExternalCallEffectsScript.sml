@@ -11,6 +11,9 @@ Theorem ld_exec_ext_call_effect:
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   (inst.inst_opcode = CALL ==> st = s.vs_call_ctx.cc_static) /\
   (inst.inst_opcode = STATICCALL ==> st) /\
@@ -18,7 +21,8 @@ Theorem ld_exec_ext_call_effect:
   exec_ext_call inst t gt addr value at az rt rz st = OK ts /\
   (w2n rz = 0 \/ (w2n ro = w2n rt /\ w2n ro + w2n rz <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz)) ==>
+     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz) \/
+   (w2n ro = w2n rt /\ fl <= w2n ro)) ==>
   ?ss w out tn'.
     exec_ext_call inst s gs addr value ao az ro rz st = OK ss /\
     inst.inst_outputs = [out] /\
@@ -30,6 +34,7 @@ Theorem ld_exec_ext_call_effect:
       t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
         ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |> /\
     ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+    ld_dyn_agree fl tn'.t_mem ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
     ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
@@ -58,14 +63,16 @@ Proof
     t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
       ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>` >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[ld_nonghost_def] >>
-  `w = w' /\ ld_memory lo A mask ss0 ts0 /\ ld_nonghost mask ss0 ts0 /\
+  `w = w' /\ ld_memory lo A mask ss0 ts0 /\
+   ld_dyn_agree fl mask.t_mem ss0.vs_memory ts0.vs_memory /\
+   ld_nonghost mask ss0 ts0 /\
    ss0.vs_allocas = s.vs_allocas /\ ts0.vs_allocas = t.vs_allocas /\
    ss0.vs_alloca_next = s.vs_alloca_next /\ ts0.vs_alloca_next = t.vs_alloca_next /\
    ss0.vs_current_bb = s.vs_current_bb /\ ts0.vs_current_bb = t.vs_current_bb /\
    ss0.vs_prev_bb = s.vs_prev_bb /\ ts0.vs_prev_bb = t.vs_prev_bb /\
    ss0.vs_inst_idx = s.vs_inst_idx /\ ts0.vs_inst_idx = t.vs_inst_idx` by
     (irule ld_consume_call_effect >>
-     conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+     rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >>
      qpat_assum `consume_call_outcome rq _ _ s = _` (irule_at Any) >>
      qpat_assum `consume_call_outcome _ _ _ t = _` (irule_at Any) >>
      qexistsl_tac [`TAKE (w2n rz) ss0.vs_returndata`, `tn`, `inst`] >>
@@ -74,9 +81,10 @@ Proof
        (simp[LENGTH_TAKE_EQ]) >>
      qpat_x_assum `w2n rz = 0 \/ _` strip_assume_tac
      >- gvs[]
-     >- (disj2_tac >> disj1_tac >> decide_tac) >>
-     disj2_tac >> disj2_tac >>
-     qexistsl_tac [`k`, `b`, `c`, `sz`, `delta`] >> simp[] >> decide_tac) >>
+     >- (disj2_tac >> disj1_tac >> decide_tac)
+     >- (disj2_tac >> disj2_tac >> disj1_tac >>
+         qexistsl_tac [`k`, `b`, `c`, `sz`, `delta`] >> simp[] >> decide_tac) >>
+     disj2_tac >> disj2_tac >> disj2_tac >> simp[]) >>
   `ld_memory lo A (mask with t_var := mask.t_var)
      (update_var out w ss0) (update_var out w' ts0)` by
     (irule ld_memory_update_var >> simp[]) >>

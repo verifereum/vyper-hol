@@ -9,15 +9,15 @@ Ancestors
 Libs
   lowerDloadReturnPackageLib
 
-Theorem ld_return_point_terminal:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_return_point_terminal_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
   get_instruction bb t.vs_inst_idx = SOME ti /\
   step_inst_base ti t = IntRet rt u ==>
   ^ld_probe_terminal lo P C C' vs0 stk fn cs fs f0 A0 Sigma names rt u
 Proof
   strip_tac >>
-  drule_all ld_point_alignment >> strip_tac >>
+  drule_all ld_point_alignment_static >> strip_tac >>
   qpat_x_assum `^ld_probe_point _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `ti = EL h X` by metis_tac[optionTheory.SOME_11] >>
   `o1_ctx_shape C` by fs[] >>
@@ -41,24 +41,36 @@ Proof
     (drule ld_sync_source >> strip_tac >>
      drule_all ld_frame_reachable_certificate >> simp[]) >>
   `MEM inst (fn_insts fn)` by metis_tac[ld_active_inst_member] >>
-  `no_raw_fmp_ops fn` by fs[fmp_free_ctx_def, EVERY_MEM] >>
+  `pre_fmp_opcode inst.inst_opcode` by
+    (fs[fmp_free_ctx_def, o1PassContractTheory.pre_fmp_ops_def, EVERY_MEM] >>
+     metis_tac[]) >>
   `inst.inst_opcode = RET` by
-    (`~is_raw_fmp_opcode inst.inst_opcode` by
-       fs[no_raw_fmp_ops_def, EVERY_MEM] >>
-     drule step_inst_base_intret_opcodes >> strip_tac >>
-     gvs[is_raw_fmp_opcode_def]) >>
+    (drule step_inst_base_intret_opcodes >> strip_tac >>
+     gvs[o1PassContractTheory.pre_fmp_opcode_def]) >>
   `ptr_discipline lo C vs0` by fs[] >>
   drule_all ld_sync_ret_effect >> strip_tac >>
   irule ld_return_terminal_package >> goal_assum (drule_at Any) >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
 
-Theorem ld_return_terminating_S:
+Theorem ld_return_point_terminal:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
+  get_instruction bb t.vs_inst_idx = SOME ti /\
+  step_inst_base ti t = IntRet rt u ==>
+  ^ld_probe_terminal lo P C C' vs0 stk fn cs fs f0 A0 Sigma names rt u
+Proof
+  strip_tac >> irule ld_return_point_terminal_static >>
+  simp[] >> rpt conj_tac >> gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+
+
+Theorem ld_return_terminating_S_static:
   is_terminator ti.inst_opcode /\ step_inst_base ti t = z /\
   ((?u. z = OK u) \/ (?rt u. z = IntRet rt u)) ==>
-  ^ld_probe_S ^ld_covered_ambient ^ld_probe_point ^ld_probe_terminal k ctx ti t z
+  ^ld_probe_S ^ld_covered_ambient_static ^ld_probe_point ^ld_probe_terminal k ctx ti t z
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
   qabbrev_tac `Point = ^ld_probe_point` >>
   qabbrev_tac `Terminal = ^ld_probe_terminal` >>
   strip_tac >> simp[NoAsms] >> rpt gen_tac >> strip_tac >>
@@ -75,8 +87,24 @@ Proof
       `step_inst_base ti t = OK u` by metis_tac[] >>
       qpat_x_assum `Abbrev (Terminal = _)` kall_tac >>
       qunabbrev_tac `Ambient` >> qunabbrev_tac `Point` >>
-      drule_all ld_return_point_branch_entry >> simp[]) >>
+      drule_all ld_return_point_branch_entry_static >> simp[]) >>
   `step_inst_base ti t = IntRet rt u` by metis_tac[] >>
   qunabbrev_tac `Ambient` >> qunabbrev_tac `Point` >> qunabbrev_tac `Terminal` >>
-  drule_all ld_return_point_terminal >> simp[]
+  drule_all ld_return_point_terminal_static >> simp[]
+QED
+
+Theorem ld_return_terminating_S:
+  is_terminator ti.inst_opcode /\ step_inst_base ti t = z /\
+  ((?u. z = OK u) \/ (?rt u. z = IntRet rt u)) ==>
+  ^ld_probe_S ^ld_covered_ambient ^ld_probe_point ^ld_probe_terminal k ctx ti t z
+Proof
+  disch_tac >>
+  mp_tac (Q.INST [`ti` |-> `ti`, `t` |-> `t`, `z` |-> `z`]
+    ld_return_terminating_S_static) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  simp[NoAsms] >> disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[o1_run_state_ok_def] >>
+  (reverse conj_tac >- gvs[o1_run_state_ok_def]) >>
+  goal_assum (drule_at (Pat `ld_sync`)) >> simp[] >>
+  qexistsl_tac [`X`, `p`, `h`] >> simp[] >> metis_tac[]
 QED

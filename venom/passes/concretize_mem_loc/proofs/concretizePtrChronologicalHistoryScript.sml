@@ -148,6 +148,41 @@ Proof
   drule step_inst_base_intret_opcodes >> strip_tac >> gvs[is_terminator_def]
 QED
 
+(* A chronological successor advances the instruction cursor after the
+   successful step. The four memory/persistent masks ignore that cursor. *)
+Theorem ptr_dalloca_chrono_ordinary_taint_fields:
+  !C a z. ptr_chrono_step C a z ==>
+  ~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE ==>
+  z.po_taint.t_mem =
+    (step_taint a.po_inst a.po_state z.po_state a.po_taint).t_mem /\
+  z.po_taint.t_stor =
+    (step_taint a.po_inst a.po_state z.po_state a.po_taint).t_stor /\
+  z.po_taint.t_trans =
+    (step_taint a.po_inst a.po_state z.po_state a.po_taint).t_trans /\
+  z.po_taint.t_imm =
+    (step_taint a.po_inst a.po_state z.po_state a.po_taint).t_imm
+Proof
+  ho_match_mp_tac ptr_chrono_step_ind >> rpt conj_tac
+  >- simp[ptr_observe_def, step_taint_def, mem_taint_def,
+          new_site_bytes_def, step_writes_def] >>
+  simp[ptr_observe_def] >> rpt strip_tac >> gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >> gvs[is_terminator_def]
+QED
+
+(* Block, call and return transitions change only the variable taint map. *)
+Theorem ptr_chrono_control_taint_fields:
+  !C a z. ptr_chrono_step C a z ==>
+  (is_terminator a.po_inst.inst_opcode \/ a.po_inst.inst_opcode = INVOKE) ==>
+  z.po_taint.t_mem = a.po_taint.t_mem /\
+  z.po_taint.t_stor = a.po_taint.t_stor /\
+  z.po_taint.t_trans = a.po_taint.t_trans /\
+  z.po_taint.t_imm = a.po_taint.t_imm
+Proof
+  ho_match_mp_tac ptr_chrono_step_ind >> rpt conj_tac >>
+  simp[ptr_observe_def, entry_taint_vars_def] >> rpt strip_tac >>
+  rpt CASE_TAC >> simp[]
+QED
+
 Theorem ptr_write_size_ordinary:
   inst_write_size inst = SOME n ==>
   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE

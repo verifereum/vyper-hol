@@ -1,6 +1,6 @@
 Theory lowerDloadPtrCompare
 Ancestors
-  lowerDloadPtrRel words
+  lowerDloadPtrRel ptrDiscipline words
 
 (* Inclusive endpoint comparisons use positive site identity, not equality
    of numeric provenance alone. *)
@@ -33,9 +33,9 @@ Proof
 QED
 
 Theorem dload_value_word_pointer_comparisons:
-  dload_live_layout lo sf tf fs /\ 0 < n /\
-  dload_value_word fs mask (SOME (b,n)) (SOME (c,m)) x x' /\
-  dload_value_word fs mask' (SOME (b,n)) (SOME (d,k)) y y' /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\ 0 < n /\
+  dload_value_word fl fs {} (SOME (b,n)) (SOME (c,m)) x x' /\
+  dload_value_word fl fs {} (SOME (b,n)) (SOME (d,k)) y y' /\
   b <= w2n x /\ w2n x <= b+n /\
   b <= w2n y /\ w2n y <= b+n ==>
   c = d /\ m = n /\ k = n /\
@@ -45,6 +45,23 @@ Theorem dload_value_word_pointer_comparisons:
   (w2n x < w2n y <=> w2n x' < w2n y') /\
   (w2n y < w2n x <=> w2n y' < w2n x')
 Proof
-  simp[dload_value_word_def] >>
-  metis_tac[dload_pointer_word_comparisons]
+  strip_tac >>
+  `!q z z'. dload_value_word fl fs {} (SOME (b,n)) q z z' ==>
+     (?c. q = SOME (c,n) /\ dload_pointer_word fs (b,n) (c,n) z z' /\
+          b + n <= fl) \/
+     (q = SOME (b,n) /\ fl <= b /\ z = z')` by
+    (rpt strip_tac >>
+     drule_at (Pos last) dload_value_word_site_cases >>
+     disch_then drule_all >> strip_tac >> gvs[] >>
+     gvs[word_agree_except_bits, fcpTheory.CART_EQ]) >>
+  Cases_on `fl <= b`
+  >- (`~(b + n <= fl)` by decide_tac >>
+      `SOME (c,m) = SOME (b,n) /\ x = x' /\ SOME (d,k) = SOME (b,n) /\ y = y'` by
+        metis_tac[] >>
+      gvs[]) >>
+  `?c'. SOME (c,m) = SOME (c',n) /\ dload_pointer_word fs (b,n) (c',n) x x'` by
+    metis_tac[] >>
+  `?d'. SOME (d,k) = SOME (d',n) /\ dload_pointer_word fs (b,n) (d',n) y y'` by
+    metis_tac[] >>
+  gvs[] >> metis_tac[dload_pointer_word_comparisons]
 QED

@@ -22,7 +22,7 @@ Theorem ld_mstore_certificate_backward:
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
   op_taint tn value SUBSET count 32 /\ op_taint un value SUBSET count 32 /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   ld_frame_embedding E L H s t /\ ld_alloc_account keys d A s t /\
   (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
@@ -35,13 +35,15 @@ Theorem ld_mstore_certificate_backward:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     lo <= bs /\ lo <= bt /\ bs+sz <= s.vs_alloca_next /\ bt+sz <= t.vs_alloca_next) /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz <= f \/ ?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(bt,sz)) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
   un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\ un.t_imm SUBSET tn.t_imm /\
   step_inst fuel CT i t = OK t' ==>
   ?s'. step_inst fuel CS i s = OK s' /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)

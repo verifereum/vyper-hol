@@ -43,7 +43,7 @@ Theorem reachable_sub_scalar_agreement[local]:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  resolved_frame_ok birth cache PG G om rp rv ids frames /\
+  resolved_frame_ok dyn birth cache PG G om rp rv ids frames /\
   o1_fn_shape ctx fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\ inst.inst_opcode = SUB /\
   inst.inst_operands = [a; Var w] /\ s.vs_labels = t.vs_labels /\

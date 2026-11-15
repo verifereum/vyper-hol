@@ -27,7 +27,7 @@ Theorem dload_normal_unchanged_successor:
       dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
         c.cf_inst [c.cf_inst] 0)) /\
   frame_reachable vs C cs PG G2 tn2 f i2 s2 /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G2 H2 tn2 un2 s2 t2 cs ds /\
@@ -38,7 +38,7 @@ Theorem dload_normal_unchanged_successor:
   s2.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -120,7 +120,7 @@ Theorem dload_normal_changed_head_successor:
       dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
         c.cf_inst [c.cf_inst] 0)) /\
   frame_reachable vs C cs PG G2 tn2 f i2 s2 /\
-  dload_boundary_core lo (r1::rs)
+  dload_boundary_core fl lo (r1::rs)
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G2 H2 tn2 un2 s2 t2 cs ds /\
@@ -131,7 +131,7 @@ Theorem dload_normal_changed_head_successor:
   s2.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\

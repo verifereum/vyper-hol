@@ -34,12 +34,15 @@ Theorem concretize_mstore8_execution_geometry:
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -72,14 +75,15 @@ Proof
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def, exec_write2_def] >> metis_tac[]) >>
   `eval_operand opv t = SOME value` by suspend "value" >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+1 <= lo /\ w2n dstT = w2n dst) \/
-     (?d owner aid b sz.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
-       w2n dst+1 <= b+sz /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    suspend "address" >>
+  Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+1 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b sz.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
+         w2n dst+1 <= b+sz /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (qx_choose_then `dstT` (CONJUNCTS_THEN2 assume_tac assume_tac))
+  >- suspend "address" >>
   `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+1 ==>
       w2n dstT <= z /\ z < w2n dstT+1 /\ a-w2n dst = z-w2n dstT) /\
@@ -121,6 +125,7 @@ Resume concretize_mstore8_execution_geometry[address]:
       simp[source_memory_write_ranges_def, fixed_source_write_range_def,
            mem_write_ops_def]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
@@ -136,7 +141,12 @@ Resume concretize_mstore8_execution_geometry[memory]:
       a IN joint_writes (EL c (q0::qs)) (EL c es) /\
       relocation_pair lo (concretize_positions C') (EL c (q0::qs)) a z /\
       a-w2n dst = z-w2n dstT)` by
-    (irule joint_store_write_correspondence >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (`!i. i < 1 ==> relocation_pair lo (concretize_positions C')
+        (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
+       (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+        irule (Q.INST [`len:num` |-> `1`] access_geometry_relocation_pairs) >>
+        metis_tac[]) >>
+     irule joint_store_write_correspondence >> asm_rewrite_tac[] >> metis_tac[]) >>
   `joint_writes (EL c (q0::qs)) (EL c es) =
     range_bytes [(w2n dst,1)] /\ step_writes inst t t = [(w2n dstT,1)]` by
     (`step_writes inst s post = [(w2n dst,1)] /\
@@ -175,12 +185,15 @@ Theorem concretize_mstore8_local_complete:
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

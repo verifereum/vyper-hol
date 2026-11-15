@@ -24,6 +24,9 @@ Proof
   `post.vs_allocas = s.vs_allocas` by
     (gvs[step_inst_non_invoke] >> metis_tac[step_inst_base_preserves_allocas]) >>
   `s1.vs_allocas = s.vs_allocas` by metis_tac[enters_block_allocas] >>
+  `s1.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[ctxLookupAgreeHelpersTheory.enters_block_initial_fmp,
+              ctxLookupAgreeHelpersTheory.step_inst_initial_fmp] >>
   simp[] >> metis_tac[resolved_frame_entry]
 QED
 
@@ -88,6 +91,12 @@ Proof
      fs[venom_state_component_equality]) >>
   drule_all layout_run_block_annotations >> strip_tac >>
   drule_all lifetime_transition >> simp[lifetime_step_def] >> strip_tac >>
+  `~ctx_has_dalloca C ==>
+   resolved_complete (JointConfig stk PG G' tn' fn inst' sentry oms om' hs h')
+     ((rp,resolved_entry fn post rv)::saved)` by
+    (strip_tac >> drule_at (Pat `joint_transition _ _ _ _`)
+       frameResolvedCoherentTheory.resolved_complete_block >>
+     disch_then drule >> fs[]) >>
   `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
   qexistsl [`tentry`, `a with <|lop_pending := F;
     lop_cursor := SUC a.lop_cursor; lop_bound := SUC a.lop_bound;

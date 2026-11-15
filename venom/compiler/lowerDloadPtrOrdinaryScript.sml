@@ -59,11 +59,11 @@ Theorem dload_boundary_core_assign_tracked:
   (!out w. MEM out i.inst_outputs /\ out IN V /\
     MEM (Var w) i.inst_operands ==> w IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
@@ -79,10 +79,10 @@ Proof
   Cases_on `eval_operand op s` >- gvs[] >>
   rename1 `eval_operand op t = SOME b` >>
   rename1 `eval_operand op s = SOME a` >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `out IN V ==> op_taint tn op = op_taint un op /\
-    dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
+    dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
     (strip_tac >>
      `!w. op = Var w ==> w IN V` by metis_tac[MEM] >>
      conj_tac >- (Cases_on `op` >> gvs[op_taint_def, dload_vars_match_def]) >>
@@ -96,7 +96,7 @@ Proof
   conj_tac >- (rpt strip_tac >>
     irule update_var_definedness >> qexists `U` >> simp[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V
+  `dload_vars_match fl fs V
     (set_prov G [out] (op_prov G op)) (set_prov H [out] (op_prov H op))
     (tn with t_var := set_var_taint tn.t_var [out] (op_taint tn op))
     (un with t_var := set_var_taint un.t_var [out] (op_taint un op))
@@ -112,11 +112,11 @@ Theorem dload_boundary_core_assign:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
@@ -139,13 +139,13 @@ Theorem dload_boundary_core_assign_tracked_index:
   (!out w. MEM out i.inst_outputs /\ out IN V /\
     MEM (Var w) i.inst_operands ==> w IN V) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)
@@ -165,13 +165,13 @@ Theorem dload_boundary_core_assign_index:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)
@@ -206,8 +206,8 @@ Theorem compare_operand_results[local]:
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
   access_ok lo G f i s /\ taint_ok f tn i s /\
   i.inst_operands = [a;b] /\
-  dload_live_layout lo sf tf fs /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) [a;b] ==> v IN V) /\
   eval_operand a s = SOME x /\ eval_operand a t = SOME x' /\
   eval_operand b s = SOME y /\ eval_operand b t = SOME y' ==>
@@ -218,10 +218,10 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `op_taint tn a = {} /\ op_taint tn b = {}` by
     (gvs[taint_ok_def] >> metis_tac[MEM]) >>
-  `dload_value_word fs (op_taint tn a) (op_prov G a) (op_prov H a) x x'` by
+  `dload_value_word fl fs (op_taint tn a) (op_prov G a) (op_prov H a) x x'` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
-  `dload_value_word fs (op_taint tn b) (op_prov G b) (op_prov H b) y y'` by
+  `dload_value_word fl fs (op_taint tn b) (op_prov G b) (op_prov H b) y y'` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
   Cases_on `op_prov G a = NONE /\ op_prov G b = NONE`
@@ -238,18 +238,17 @@ Proof
   qpat_x_assum `u IN FDOM G \/ w IN FDOM G ==> _` mp_tac >>
   simp[] >> strip_tac >>
   gvs[op_prov_def] >>
-  Cases_on `FLOOKUP H u` >> Cases_on `FLOOKUP H w` >>
-  gvs[dload_value_word_def] >>
-  qpat_x_assum `~in_revert_forward _ _ ==> _` kall_tac >>
-  rename1 `dload_pointer_word fs (b,sz) qx x x'` >>
-  Cases_on `qx` >>
-  rename1 `dload_pointer_word fs (b,sz) qy y y'` >>
-  Cases_on `qy` >>
-  qpat_assum `dload_pointer_word _ _ _ x x'`
-    (mp_then (Pat `dload_pointer_word _ _ _ x x'`) mp_tac
-      dload_pointer_word_comparisons) >>
-  disch_then (drule_at (Pat `dload_pointer_word _ _ _ y y'`)) >>
-  disch_then drule >> simp[]
+  `dload_value_word fl fs {} (SOME (b,sz)) (FLOOKUP H u) x x' /\
+   dload_value_word fl fs {} (SOME (b,sz)) (FLOOKUP H w) y y'` by
+    metis_tac[] >>
+  `?qx qy. FLOOKUP H u = SOME qx /\ FLOOKUP H w = SOME qy` by
+    (Cases_on `FLOOKUP H u` >> Cases_on `FLOOKUP H w` >>
+     gvs[dload_value_word_def]) >>
+  gvs[] >> PairCases_on `qx` >> PairCases_on `qy` >>
+  mp_tac (Q.INST [`c` |-> `qx0`, `m` |-> `qx1`, `d` |-> `qy0`,
+                  `k` |-> `qy1`, `n` |-> `sz`]
+            dload_value_word_pointer_comparisons) >>
+  impl_tac >- simp[] >> strip_tac >> gvs[]
 QED
 
 Theorem compare_step_success[local]:
@@ -290,11 +289,11 @@ Theorem dload_boundary_core_compare:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
@@ -316,10 +315,12 @@ Proof
   Cases_on `eval_operand b s` >- gvs[] >>
   rename1 `eval_operand a s = SOME xs` >>
   rename1 `eval_operand b s = SOME ys` >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs` by
     metis_tac[dload_boundary_layout] >>
+  `t.vs_alloca_next <= fl` by
+    gvs[dload_boundary_core_def, dload_memory_match_def] >>
   `((xs = ys <=> x = y) /\
     (w2n xs < w2n ys <=> w2n x < w2n y) /\
     (w2n ys < w2n xs <=> w2n y < w2n x))` by
@@ -343,7 +344,7 @@ Proof
      un with t_var := set_var_taint un.t_var [out] {}` by
     (irule compare_ghost_updates >> metis_tac[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
     (s with <|vs_vars := (update_var out z s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
@@ -361,13 +362,13 @@ Theorem dload_boundary_core_compare_index:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)

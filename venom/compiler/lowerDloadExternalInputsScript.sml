@@ -104,11 +104,13 @@ Proof
         simp[ld_owned_selection_def] >> metis_tac[]) >> metis_tac[]) >>
   `!j. j < n ==>
     ((w2n p+j = w2n q+j /\ w2n p+j < lo) \/
+      (w2n p+j = w2n q+j /\ dyn_floor CS s <= w2n p+j /\ w2n p+j < dimword (:256)) \/
       ld_site_bytes E live (w2n p+j) (w2n q+j))` by
-    (mp_tac ld_owned_read_range_geometry >> asm_rewrite_tac[] >>
-     impl_tac >- (metis_tac[ld_annotated_access_ok]) >> simp[]) >>
+    (drule_all ld_annotated_access_ok >> strip_tac >>
+     mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`] ld_owned_read_range_geometry) >>
+     asm_rewrite_tac[] >> impl_tac >- metis_tac[] >> simp[]) >>
   irule ld_byte_rel_clean_read_memory >>
-  qexistsl_tac [`(\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)`,
+  qexistsl_tac [`(\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)`,
     `tn.t_mem`,`un.t_mem`] >> simp[] >>
   conj_tac >- (gvs[arithmeticTheory.ADD_COMM]) >>
   drule ld_normal_data_memory >> simp[]

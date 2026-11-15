@@ -1,5 +1,5 @@
 Theory concretizePtrFixedReadRecovery
-Ancestors concretizePtrOwnerFloor concretizePtrFixedReadAudit concretizePtrFixedWriteReflection
+Ancestors o1PassContract unitTransformDefs concretizePtrOwnerFloor concretizePtrFixedReadAudit concretizePtrFixedWriteReflection
   concretizePtrRevertHistory concretizePtrActualWrites
   concretizePtrActiveWriteOwner concretizePtrHistoryOrigin
   concretizePtrOwnedReadAudit concretizePtrActualByteFrame
@@ -22,7 +22,7 @@ Theorem ptr_retained_ordinary_write_ledger[local]:
     (EL (SUC w) h).po_state) <> {} ==>
   ?rho. ptr_ledger_write_pair C Ct rho (EL w h) (EL (SUC w) h)
       (EL q ht) (EL (SUC q) ht) /\
-    ptr_paired_write_owner lo positions rho
+    ptr_paired_write_owner (dyn_floor C (EL w h).po_state) lo positions rho
       (range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
         (EL (SUC w) h).po_state)) (EL (SUC w) H)
 Proof
@@ -44,12 +44,12 @@ Theorem ptr_paired_fixed_read_recovery:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
-  x < lo /\ x NOTIN endpoint.po_taint.t_mem /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (x < lo \/ dyn_floor C vs <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
   ~in_revert_forward endpoint.po_fn endpoint.po_state /\
   endpoint.po_inst.inst_opcode <> ASSIGN ==>
   read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
@@ -120,20 +120,35 @@ Resume ptr_paired_fixed_read_recovery[writer]:
   qabbrev_tac `snap = EL (SUC w) H` >> PairCases_on `snap` >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
   drule ptr_source_ownership_caches >> strip_tac >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   drule_all ptr_source_birth_caches_slices >> strip_tac >>
   drule ptr_source_birth_caches_activations >> strip_tac >>
   drule ptr_source_activations_length >> strip_tac >>
+  `ptr_observation_reachable vs C (EL (SUC w) h)` by
+    (qpat_assum `ptr_chrono_history vs C h endpoint`
+       (mp_tac o MATCH_MP ptr_chrono_history_reachable) >>
+     simp[EVERY_EL] >> strip_tac >> first_x_assum irule >> simp[]) >>
   `!d. d <= LENGTH (EL (SUC w) h).po_stack ==>
     allocas_from lo (ptr_owner_view d (EL (SUC w) h)).cf_state` by
-    (`ptr_observation_reachable vs C (EL (SUC w) h)` by
-       (qpat_assum `ptr_chrono_history vs C h endpoint`
-          (mp_tac o MATCH_MP ptr_chrono_history_reachable) >>
-        simp[EVERY_EL] >> strip_tac >> first_x_assum irule >> simp[]) >>
-     metis_tac[ptr_reachable_owner_allocas_from]) >>
+    metis_tac[ptr_reachable_owner_allocas_from] >>
+  `dyn_floor C (EL w h).po_state = dyn_floor C vs` by
+    (`(EL w h).po_state.vs_initial_fmp = vs.vs_initial_fmp` by
+       (fs[ptr_observation_reachable_def] >>
+        metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp]) >>
+     fs[dyn_floor_def]) >>
+  `vs.vs_allocas = FEMPTY` by fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `EVERY wf_function C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `rho' x = x` by
-    (drule_all ptr_paired_write_owner_fixed >> simp[]) >>
+    (`x < lo \/ (dyn_floor C (EL w h).po_state <= x /\
+       !d aid b0 sz. d <= LENGTH (EL (SUC w) h).po_stack /\
+         FLOOKUP (ptr_owner_view d (EL (SUC w) h)).cf_state.vs_allocas aid = SOME (b0,sz) ==>
+         b0 + sz <= dyn_floor C (EL w h).po_state)` by
+      (qpat_x_assum `dyn_floor C (EL w h).po_state = _` (fn th => rewrite_tac[th]) >>
+       Cases_on `x < lo` >> simp[] >>
+       `dyn_floor C vs <= x` by (qpat_x_assum `x < lo \/ _` mp_tac >> simp[]) >>
+       simp[] >>
+       rpt strip_tac >> metis_tac[ptr_reachable_owner_below_dyn_floor]) >>
+     metis_tac[ptr_paired_write_owner_fixed]) >>
   `read_byte x (EL (SUC w) h).po_state.vs_memory =
    read_byte x (EL (SUC q) ht).po_state.vs_memory` by
     (qpat_x_assum `ptr_ledger_write_pair _ _ _ _ _ _ _` mp_tac >>
