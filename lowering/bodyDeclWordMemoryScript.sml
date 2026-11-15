@@ -86,7 +86,6 @@ Proof
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  pop_assum (qx_choose_then `H0` assume_tac) >>
   drule stmt_env_annassign >> strip_tac >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>
   qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
@@ -124,7 +123,8 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func c cx es salloc` by
     (mp_tac (Q.SPECL [`cx`, `st0`, `es.storage_trace`, `ctx`, `func`, `c`,
-        `es`, `s0`, `salloc`, `H0`] stmt_state_rel_lift_family) >>
+        `es`, `s0`, `salloc`, `H0`]
+       (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_lift_family)) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   qabbrev_tac `p = STRING #"%" (toString sa.cs_next_var)` >>

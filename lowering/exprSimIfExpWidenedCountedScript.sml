@@ -97,7 +97,9 @@ Theorem literal_alloc_buffer_counted:
       regions_disjoint (w2n w) sz b len) /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
     ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sm.cs_current_insts
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all literal_alloc_buffer_run >>
   strip_tac >>
@@ -147,7 +149,9 @@ Proof
      irule (cj 1 gas_path_rules) >> simp[]) >>
   `t.vs_labels = s.vs_labels /\
    contract_storage t = contract_storage s /\
-   contract_transient t = contract_transient s` by
+   contract_transient t = contract_transient s /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `step_inst_base _ _ = OK t` mp_tac >>
      simp[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
        eval_operand_def, venomExecSemanticsTheory.exec_alloca_def] >>
@@ -158,6 +162,50 @@ Proof
   gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
       local_region_def, contract_storage_def, contract_transient_def] >>
   conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem unwrap_value_physical_path_fields:
+  (post_value_type ce e <> expr_type e ==>
+    ((?t op. vv = StackValue t op) \/
+     (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory /\
+       ~is_word_type t))) /\
+  unwrap_value ce vv sm = (op,sb) /\
+  local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+    ~is_word_type (post_value_type ce e) ==>
+    type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64) /\
+  read_result cx tv ee = (INL v,ee) /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >> dxrule_all vv_post_read_result >> strip_tac >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[] >> drule_all (SRULE [] unwrap_value_path_fields) >>
+      simp[gas_marked_path_def]) >>
+  first_x_assum (drule_at Any) >> strip_tac >>
+  gvs[unwrap_value_def, comp_return_def] >>
+  qexists_tac `s` >>
+  simp[gas_marked_path_def, cj 1 gas_path_rules] >>
+  gvs[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def,
+      expr_val_at_def, expr_val_own_def, expr_val_rel_def,
+      read_result_def, return_def]
+  >- (first_assum MATCH_ACCEPT_TAC)
+  >- (first_assum MATCH_ACCEPT_TAC) >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[is_bytestring_word_type] >>
+  simp[] >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem unwrap_value_physical_path:
@@ -184,22 +232,8 @@ Theorem unwrap_value_physical_path:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  strip_tac >> dxrule_all vv_post_read_result >> strip_tac >>
-  Cases_on `post_value_type ce e = expr_type e`
-  >- (gvs[] >> drule_all (SRULE [] unwrap_value_path) >>
-      simp[gas_marked_path_def]) >>
-  first_x_assum (drule_at Any) >> strip_tac >>
-  gvs[unwrap_value_def, comp_return_def] >>
-  qexists_tac `s` >>
-  simp[gas_marked_path_def, cj 1 gas_path_rules] >>
-  gvs[vv_post_def, expr_post_def, vv_holds_def, vv_at_def, vv_own_def,
-      expr_val_at_def, expr_val_own_def, expr_val_rel_def,
-      read_result_def, return_def]
-  >- (first_assum MATCH_ACCEPT_TAC)
-  >- (first_assum MATCH_ACCEPT_TAC) >>
-  `~is_word_type (post_value_type ce e)` by
-    metis_tac[is_bytestring_word_type] >>
-  simp[] >> first_assum MATCH_ACCEPT_TAC
+  strip_tac >> drule_all unwrap_value_physical_path_fields >>
+  strip_tac >> qexists_tac `u` >> simp[]
 QED
 
 Theorem compile_changed_physical_unwrap_shape:

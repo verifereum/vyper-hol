@@ -2611,7 +2611,7 @@ Resume ifexp_arm_outcome[exception]:
 QED
 Finalise ifexp_arm_outcome[local]
 
-Theorem ifexp_root_outcome_suffix[local]:
+Theorem ifexp_root_outcome_suffix:
   gas_outcome F tops (ctx,func) cx st0 source (es,s0) Q R /\
   storage_trace_frame source /\
   (!res ee u.

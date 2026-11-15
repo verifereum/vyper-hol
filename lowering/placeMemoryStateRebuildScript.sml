@@ -225,19 +225,12 @@ Resume memory_place_write_stmt_state[state]:
      >- (qpat_assum `ff = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
      qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
      simp[stmt_state_rel_def]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
+  irule stmt_state_rel_allocas_frame >>
+  qpat_assum `stmt_state_rel H ctx func cenv cx ee r` (irule_at Any) >>
+  simp[] >>
   qpat_x_assum `_ = r` mp_tac >>
-  qpat_x_assum `state_rel _ _ _ _ ff t` mp_tac >>
-  qpat_x_assum `immutable_alloca_sep _ _ _ ff t` mp_tac >>
-  qpat_x_assum `immutable_base_zero cenv t` mp_tac >>
-  qpat_x_assum `LENGTH r.vs_memory <= LENGTH t.vs_memory` mp_tac >>
   rpt (first_x_assum kall_tac) >>
-  simp[stmt_state_rel_def, venom_state_component_equality] >>
-  rpt strip_tac >>
-  gvs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.allocas_non_overlapping_def,
-      venomMemDefsTheory.alloca_next_valid_def,
-      alloca_room_def, pending_alloca_size_def, fmp_room_def] >>
-  metis_tac[]
+  simp[venom_state_component_equality]
 QED
 Resume memory_place_write_stmt_state[base]:
   `immutable_base_zero cenv s /\ immutable_base_zero cenv r` by

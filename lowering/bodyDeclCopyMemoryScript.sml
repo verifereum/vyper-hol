@@ -14,7 +14,7 @@ Ancestors
   venomInst venomState exprLowering stmtLowering context compileEnv vyperInterpreter
   gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs
   vyperState list rich_list finite_map
-Libs monadsyntax
+Libs monadsyntax horizonTypeLib
 
 Theorem declare_local_memory_types_mem:
   !cenv id vtyp sa c st.
@@ -170,7 +170,8 @@ Proof
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   (* The declaration's stores at one horizon. *)
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s ==>
        ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
          t.vs_current_bb = sf.cs_current_bb /\
          t.vs_inst_idx = LENGTH sf.cs_current_insts /\
@@ -188,14 +189,16 @@ Proof
     (rpt strip_tac >>
      Cases_on `loc = SOME LocMemory`
      >- (gvs[] >>
-         drule annassign_memory_assign_body_path >>
-         disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
+         drule (horizonTypeLib.at_horizon_named "H"
+           (INST_TYPE [alpha |-> ``:256``] annassign_memory_assign_body_path)) >>
+         disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
            `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
          simp[]) >>
      `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
        gvs[compile_assign_value_def] >>
-     drule annassign_memory_store_body_path >>
-     disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
+     drule (horizonTypeLib.at_horizon_named "H"
+       (INST_TYPE [alpha |-> ``:256``] annassign_memory_store_body_path)) >>
+     disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
        `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
      simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -213,7 +216,9 @@ Proof
                   FLOOKUP t.vs_allocas aid = SOME b) /\
          t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
          t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
-    metis_tac[] >>
+    (rpt strip_tac >>
+     qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ ==> _` irule >>
+     simp[]) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> ?t. _`
     (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
@@ -227,7 +232,7 @@ Proof
        `ee with scopes :=
           (sc |+ (id, <|assignable := a; type := tyv; value := v;
                         popped := []|>)) :: rest`, `s`, `t0`, `H0`]
-       stmt_state_rel_lift_family) >>
+       (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_lift_family)) >>
      impl_tac
      >- (rpt conj_tac
          >- (rpt strip_tac >>
@@ -275,7 +280,6 @@ Proof
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  pop_assum (qx_choose_then `H0` assume_tac) >>
   drule stmt_env_annassign >> strip_tac >>
   rename1 `declare_local cenv id (expr_type e) sa = (c, st)` >>
   qpat_x_assum `!st0 c st1. _ ==> expr_sim_mem _ _ _ _ _ _ _` drule >>
@@ -323,7 +327,8 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func c cx es salloc` by
     (mp_tac (Q.SPECL [`cx`, `st0`, `es.storage_trace`, `ctx`, `func`, `c`,
-        `es`, `s0`, `salloc`, `H0`] stmt_state_rel_lift_family) >>
+        `es`, `s0`, `salloc`, `H0`]
+       (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_lift_family)) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   qabbrev_tac `p = STRING #"%" (toString sa.cs_next_var)` >>
@@ -388,13 +393,13 @@ Proof
    FLOOKUP t.vs_allocas st.cs_next_id =
      SOME (w2n w, type_memory_bytes cenv (expr_type e)) /\
    salloc.vs_alloca_next <= t.vs_alloca_next` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def] >> metis_tac[]) >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> metis_tac[]) >>
   `return_buf_frame d c sB t` by
     (irule return_buf_frame_frame >>
      qexistsl_tac [`c`, `salloc`, `sA`] >>
-     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def] >> strip_tac >> simp[] >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> simp[] >>
      metis_tac[cj 2 compile_expr_grows]) >>
   `not_local_ptr c ee.scopes p` by
     (irule local_ptrs_reserved_not_live >> simp[] >> metis_tac[]) >>
