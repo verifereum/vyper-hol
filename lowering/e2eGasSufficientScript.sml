@@ -26,7 +26,7 @@
  * so there is no RETURNDATACOPY exemption: with enough gas the creation
  * frame does not end in OutOfGas, unless the code it deposits is longer than
  * max_code_size, which the EVM rejects with OutOfGas at any gas.  Its
- * identity case is composed from S1b-d (deploy_unit_run_bounded), S6b and
+ * identity case is composed from S1b-d (uniform fuel, run_context_uniform_fuel), S6b and
  * S7g-d (deploy_frame_gas_sufficient).
  *
  * The call theorem, S1b and S6b rely on the lowering's bounded ABI decoder
@@ -43,10 +43,11 @@ Ancestors
   venomRunBounded unitMemInv o1OpcodeAbsence
   loweringRuntimeNoCreate venomPipelineDriverProps
   asmOptimizer callTrace
-  e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
+  e2eDeployCorrectness e2eDeployAtMarks e2eDeployDefs ctorDeployDefs ctorDeployBodyJoint
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployDead ctorDeployRunBounded ctorDeployImmBudget
   ctorDeployMemoryFrontier deployUnitExecution deployUnitExitSafe
+  ctorDeployLoweringSource
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
 val _ = Parse.hide "tops";
@@ -334,7 +335,7 @@ Proof
     (drule gas_variant_outcomes >>
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `deploy_unit_execution_correct tops runtime_bc am tx dunit vi` by
-    (irule deploy_unit_execution_correct >> metis_tac[]) >>
+    (irule deploy_unit_execution_correct_joint >> metis_tac[]) >>
   pop_assum (qx_choose_then `marks` assume_tac o
              REWRITE_RULE [deploy_unit_execution_correct_def]) >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`, `[]`]
@@ -498,7 +499,7 @@ Proof
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
       (load_contract NONE gobs am tx [(NONE, tops)] [])` by fs[] >>
-  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `gobs`,
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `NONE`, `gobs`,
                `load_contract NONE gobs am tx [(NONE, tops)] []`,
                `run_context efuel dunit.cu_context vs_in`,
                `run_context vfuel dout.po_unit.cu_context vs`] mp_tac
