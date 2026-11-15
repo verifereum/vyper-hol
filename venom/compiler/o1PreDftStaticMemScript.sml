@@ -89,7 +89,7 @@ Resume o1_static_mem_before_dft_transport[sealed]:
   `mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
      (stage 6) vs` by (drule_all simplify_cfg_stage_mem_inv_rf >> simp[]) >>
   `mem_inv (\ctx fn inst s. gas_cut n vs s ==> static_mem_ok eom ctx fn inst s)
-     (stage 7) vs` by (drule_all sue_stage_mem_inv >> simp[]) >>
+     (stage 7) vs` by (drule_all sue_stage_mem_inv_rf >> simp[]) >>
   conj_tac >- (
     `max_live_eom (stage 4) = max_live_eom (stage 3)` by
       (irule ctx_pass_stage_max_live_eom >>
