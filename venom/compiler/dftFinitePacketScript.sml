@@ -1619,6 +1619,36 @@ Proof
   gvs[MEM_ZIP] >> metis_tac[]
 QED
 
+Theorem dft_packet_current_gas_copies_none:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused ==>
+  !a e rows keyrows v.
+    FLOOKUP ms_tab (a,e) = SOME rows /\
+    FLOOKUP ks_tab (a,e) = SOME keyrows /\
+    MEM ((p,d,inst.inst_id),v) (ZIP (FLAT keyrows,FLAT rows)) ==>
+    v = NONE
+Proof
+  strip_tac >> drule dft_packet_gas_fresh >> disch_tac >>
+  drule dft_packet_retained_pair_root >>
+  disch_then (qspecl_then
+    [`\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+      (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))`,
+     `\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+      (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))`] mp_tac) >>
+  simp[] >> disch_tac >>
+  qpat_x_assum `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `PERM _ obs'` mp_tac >>
+  qpat_x_assum `AM = _` mp_tac >> qpat_x_assum `AK = _` mp_tac >>
+  qpat_x_assum `(j,obs) = _` mp_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `~MEM _ (MAP FST obs)` mp_tac >>
+  qpat_x_assum `!a e rows keyrows kv. _ ==> MEM kv _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+  metis_tac[dft_packet_fresh_pair_none]
+QED
+
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
     (root_entry:venom_state) packet
