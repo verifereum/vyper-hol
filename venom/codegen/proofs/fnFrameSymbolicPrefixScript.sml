@@ -167,6 +167,49 @@ Proof
   cheat
 QED
 
+Theorem active_frame_symbolic_call_progress:
+  joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn saved
+    ra rest mem0 sentry ret srest labs0 /\
+  active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast ra rest mem0
+    ret srest labs0 ss /\
+  ~in_revert_forward fn s /\ env = asm_data_env prog vs0.vs_code /\
+  focus_s7_symbolic_context unit prog /\ focus_s7_symbolic_guard prog cpl fn inst s /\
+  joint_transition unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) NONE
+    (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+  ?n ast1 ss1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
+      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast1 ss1 /\
+    (0 < n \/
+     (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+      stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\
+      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        LENGTH bb.bb_instructions - t.vs_inst_idx <
+          LENGTH bb.bb_instructions - s.vs_inst_idx))
+Proof
+  rpt strip_tac >>
+  gvs[joint_transition_call_iff, decode_invoke_def, AllCaseEqs(),
+      active_frame_symbolic_plan_def, focus_s7_symbolic_context_def] >>
+  drule_all body_plan_active_inst >> strip_tac >>
+  drule_all body_plan_inv_inst >> strip_tac >>
+  drule body_plan_inv_facts >> strip_tac >>
+  drule_all fnBlockBodyTheory.body_operands_le_16 >> strip_tac >>
+  drule_all fnBlockBodyClassesTheory.body_plan_call_entry >> strip_tac >>
+  drule_all body_plan_inv_static >> strip_tac >>
+  drule_all body_plan_inv_step >> strip_tac >>
+  fs[] >>
+  `unit_shape_ok unit /\ dfg = dfg_build_function fn` by
+    gvs[body_plan_inv_def] >>
+  drule_at (Pat `MEM inst (fn_insts fn)`) sym_invoke_selected_entry_facts >>
+  FAIL_TAC "entry facts matching"
+QED
+
 Theorem normal_frame_symbolic_joint_progress:
   joint_config_reachable vs0 unit.cu_context
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
