@@ -173,6 +173,7 @@ Theorem normal_frame_symbolic_joint_progress:
   normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
     (JointConfig stk PG G tn fn inst s oms om hs h) ast ss /\
   ~in_revert_forward fn s /\
+  env = asm_data_env prog vs0.vs_code /\
   focus_s7_symbolic_context unit prog /\
   focus_s7_symbolic_guard prog cpl fn inst s /\
   joint_transition unit.cu_context
@@ -216,13 +217,31 @@ Proof
   cheat
 QED
 
+Theorem frame_stack_symbolic_plan_projection:
+  !env rpolicy unit cpl prog vs0 es0 stk fn saved ra rest mem0 sentry ret srest labs0.
+    frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn saved
+      ra rest mem0 sentry ret srest labs0 ==>
+    !tail. initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0 ==>
+      frame_stack_plan rpolicy unit cpl prog vs0 es0 stk fn saved ra rest mem0
+Proof
+  ho_match_mp_tac frame_stack_symbolic_plan_ind >> conj_tac
+  >- (rpt strip_tac >> irule frame_stack_plan_entry >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  irule frame_stack_plan_call >> metis_tac[]
+QED
+
 Theorem normal_frame_symbolic_identity_projection:
   initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0 /\
   normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0 q ast ss ==>
   normal_frame_plan rpolicy unit cpl prog vs0 es0 q ast /\
   asm_sym_rel prog env ast ss
 Proof
-  cheat
+  Cases_on `q` >>
+  simp[normal_frame_symbolic_plan_def] >> rpt strip_tac >>
+  drule_all frame_stack_symbolic_plan_projection >> strip_tac >>
+  gvs[active_frame_symbolic_plan_def, entry_frame_symbolic_plan_def,
+      sym_frame_inv_def, normal_frame_plan_def, active_frame_plan_def] >>
+  metis_tac[]
 QED
 
 
