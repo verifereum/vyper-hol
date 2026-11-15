@@ -1139,7 +1139,7 @@ QED
 Resume concat_args_sim[head_exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
   `expr_exit res r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
      simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>

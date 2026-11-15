@@ -904,7 +904,7 @@ Theorem literal_word_args_nil_sim:
          (~EXISTS expr_has_effect [] ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -936,7 +936,7 @@ Theorem literal_word_args_sim:
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -1053,7 +1053,7 @@ Resume literal_word_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume literal_word_args_sim[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -1149,7 +1149,7 @@ Resume literal_word_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume literal_word_args_sim[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
@@ -1255,7 +1255,8 @@ Theorem literal_typed_continuation_summary:
         (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
         es sa sb s0 fin w op s /\
       s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==> expr_exit res r)
+    (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res r /\ halt_exit H cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace ==>
@@ -1411,7 +1412,7 @@ Resume literal_expr_sim[exit]:
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume literal_expr_sim[exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
