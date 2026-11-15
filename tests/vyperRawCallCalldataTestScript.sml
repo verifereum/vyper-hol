@@ -125,7 +125,7 @@ val abi_encode_json =
 val decoded_abi_encode =
   decode_named_call "_abi_encode" abi_encode_json;
 val translated_abi_encode = rhs (concl (EVAL
-  ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^decoded_abi_encode``));
+  ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^decoded_abi_encode``));
 val expected_abi_encode =
   ``TypeBuiltin (BaseT (BytesT (Dynamic 36)))
       (AbiEncode T (SOME [40w; 43w; 85w; 74w]))
