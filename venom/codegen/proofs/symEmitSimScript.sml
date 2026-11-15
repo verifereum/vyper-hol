@@ -52,7 +52,7 @@ QED
 
 Theorem sym_step_add_data_left:
   ss.sym_stack = Lab l d :: Val w :: tail /\
-  sym_data_label p env l /\ sym_delta_ok (d + w2n w) ==>
+  sym_data_label p env l ==>
   sym_step p env (AsmOp "ADD") ss = SymOK
     (ss with <| sym_base := asm_next ss.sym_base;
                 sym_stack := Lab l (d + w2n w) :: tail |>)
@@ -63,7 +63,7 @@ QED
 
 Theorem sym_step_add_data_right:
   ss.sym_stack = Val w :: Lab l d :: tail /\
-  sym_data_label p env l /\ sym_delta_ok (d + w2n w) ==>
+  sym_data_label p env l ==>
   sym_step p env (AsmOp "ADD") ss = SymOK
     (ss with <| sym_base := asm_next ss.sym_base;
                 sym_stack := Lab l (d + w2n w) :: tail |>)
@@ -96,7 +96,7 @@ QED
 
 Theorem sym_step_codecopy_data:
   ss.sym_stack = Val dst :: Lab l d :: Val sz :: tail /\
-  sym_data_label p env l /\
+  sym_data_label p env l /\ sym_delta_ok d /\
   (!b. b IN FDOM ss.sym_mem_labels ==>
        ~in_mem_range (w2n dst) (w2n sz) b) /\
   asm_copy_to_mem (DROP d (env ' l))
@@ -1661,7 +1661,7 @@ QED
 
 Theorem sym_codecopy_data_safe:
   ss.sym_stack = Val dst :: Lab l d :: Val sz :: tail /\
-  sym_data_label p env l ==>
+  sym_data_label p env l /\ sym_delta_ok d ==>
   !msg. sym_step p env (AsmOp "CODECOPY") ss <> SymBad msg
 Proof
   strip_tac >> simp[sym_step_def, sym_step_op_def, sym_codecopy_def] >>
@@ -1680,6 +1680,7 @@ Proof
   strip_tac >>
   `mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) =
     ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
+  Cases_on `sym_delta_ok d` >>
   gvs[sym_step_def, sym_step_op_def, sym_codecopy_def, asm_copy_to_mem_def,
       sym_lift_def, asm_next_def]
 QED
@@ -1796,9 +1797,13 @@ Theorem sym_codecopy_prepared_safe:
   context_source_memory_writes_disjoint cplan inst vs /\
   sym_data_label p env "code_end" /\
   (MEM (Label "runtime_begin") inst.inst_operands ==>
-    sym_data_label p env "runtime_begin") ==>
+    sym_data_label p env "runtime_begin") /\
+  (!x w off. src = Var x /\ code_end_var fn x /\
+    eval_operand src vs = SOME w /\
+    FLOOKUP (SND (compute_label_offsets p)) "code_end" = SOME off ==>
+    w2n (w - n2w off) < dimword (:256) DIV 2) ==>
   ?dw l d nw tail. ss.sym_stack = Val dw :: Lab l d :: Val nw :: tail /\
-    sym_data_label p env l /\
+    sym_data_label p env l /\ sym_delta_ok d /\
     (!b. b IN FDOM ss.sym_mem_labels ==>
       ~in_mem_range (w2n dw) (w2n nw) b)
 Proof
@@ -1813,6 +1818,9 @@ Proof
       ordinary_prepared_source_evaluation) >> simp[] >>
      disch_then irule >> gvs[MEM] >> metis_tac[]) >>
   drule_all asm_sym_codecopy_values >> strip_tac >>
+  `sval_conc (SND (compute_label_offsets p)) sw = eval_operand src vs` by
+    gvs[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_CONS1,
+        venomStateTheory.eval_operands_def, AllCaseEqs()] >>
   `!b. b IN FDOM ss.sym_mem_labels ==>
     ~in_mem_range (w2n dw) (w2n nw) b` by
     (rpt strip_tac >>
@@ -1822,7 +1830,18 @@ Proof
   gvs[] >> drule_all codecopy_source_flow >> strip_tac >>
   gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1,
       op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def] >>
-  gvs[code_end_var_not_retpc_var]
+  gvs[code_end_var_not_retpc_var] >>
+  simp[sym_delta_ok_def, wordsTheory.dimword_def] >>
+  fs[asmSymBridgeTheory.sval_conc_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP (SND (compute_label_offsets p)) "code_end"` >- gvs[] >>
+  rename1 `FLOOKUP (SND (compute_label_offsets p)) "code_end" = SOME off` >>
+  gvs[] >>
+  qpat_x_assum `!w. eval_operand (Var x) vs = SOME w ==> _`
+    (qspec_then `n2w (d + off)` mp_tac) >>
+  impl_tac >- metis_tac[] >>
+  simp[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_COMM,
+       wordsTheory.WORD_ADD_SUB, arithmeticTheory.LESS_MOD,
+       wordsTheory.dimword_def]
 QED
 
 Theorem sym_codecopy_data_replay:
@@ -1831,7 +1850,7 @@ Theorem sym_codecopy_data_replay:
   asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
     (AsmOp "CODECOPY") cs = AsmOK cs' /\
   ss.sym_stack = Val dst :: Lab l d :: Val sz :: tail /\
-  sym_data_label p env l /\
+  sym_data_label p env l /\ sym_delta_ok d /\
   (!b. b IN FDOM ss.sym_mem_labels ==>
     ~in_mem_range (w2n dst) (w2n sz) b) ==>
   ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
@@ -1867,6 +1886,10 @@ Theorem sym_codecopy_source_emit:
   sym_data_label p env "code_end" /\
   (MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label p env "runtime_begin") /\
+  (!x w off. src = Var x /\ code_end_var fn x /\
+    eval_operand src vs = SOME w /\
+    FLOOKUP (SND (compute_label_offsets p)) "code_end" = SOME off ==>
+    w2n (w - n2w off) < dimword (:256) DIV 2) /\
   qs = ps with ps_stack := stack_pop 3 ps.ps_stack /\
   asm_block_at p cs.as_pc [AsmOp "CODECOPY"] /\
   asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
@@ -1928,9 +1951,8 @@ Theorem sym_code_end_add_prepared_safe:
   EVERY (\at. at <> dead_stack_marker) selected /\
   (!at. MEM at selected ==>
     eval_operand at (frame_view fn ra vs with vs_memory := m) =
-    operand_val (frame_view fn ra vs with vs_memory := m) lo at) /\
-  (!w. eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) ==>
-  ?w tail. sym_delta_ok (w2n w) /\
+    operand_val (frame_view fn ra vs with vs_memory := m) lo at) ==>
+  ?w tail.
     (ss.sym_stack = Lab "code_end" 0 :: Val w :: tail \/
      ss.sym_stack = Val w :: Lab "code_end" 0 :: tail)
 Proof
@@ -1938,21 +1960,13 @@ Proof
   `label_positions_ok inst` by
     metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
               unitShapeDefsTheory.inst_shape_ok_def] >>
-  `eval_operands (REVERSE selected) vs = SOME (TAKE (LENGTH selected) cs.as_stack)` by
-    (irule ordinary_prepared_source_evaluation >> simp[] >>
-     qexistsl [`fn`, `inst`, `lo`, `m`, `ps`, `ra`, `residual`] >>
-     fs[MEM] >> metis_tac[MEM]) >>
-  drule_all sym_code_end_add_prepared_layout >> strip_tac >>
-  `eval_operand op vs = SOME w` by
-    (irule asm_sym_code_end_add_value >>
-     qexistsl [`cs`, `env`, `p`, `ss`, `tail`] >> gvs[]) >>
-  metis_tac[sym_delta_ok_def]
+  drule_all sym_code_end_add_prepared_layout >> metis_tac[]
 QED
 
 Theorem sym_code_end_add_run:
   (ss.sym_stack = Lab "code_end" 0 :: Val w :: tail \/
    ss.sym_stack = Val w :: Lab "code_end" 0 :: tail) /\
-  sym_delta_ok (w2n w) /\ sym_data_label p env "code_end" /\
+  sym_data_label p env "code_end" /\
   asm_block_at p ss.sym_base.as_pc [AsmOp "ADD"] ==>
   sym_steps p env 1 ss = SymOK
     (ss with <|sym_base := asm_next ss.sym_base;
@@ -1964,7 +1978,7 @@ Proof
 QED
 
 Theorem sym_code_end_add_result_kinds:
-  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  d < dimword (:256) /\ retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"] /\
   inst.inst_outputs = [x] /\
   sym_kinds_ok cplan fn ret srest ps ss /\
@@ -2003,7 +2017,6 @@ Theorem sym_code_end_add_source_emit:
   (!at. MEM at selected ==>
     eval_operand at (frame_view fn ra vs with vs_memory := m) =
     operand_val (frame_view fn ra vs with vs_memory := m) lo at) /\
-  (!w. eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) /\
   sym_data_label p env "code_end" /\
   qs = ps with ps_stack := stack_push (Var x) (stack_pop 2 ps.ps_stack) /\
   asm_block_at p ss.sym_base.as_pc [AsmOp "ADD"] /\
@@ -2025,7 +2038,7 @@ Proof
   irule sym_code_end_add_result_kinds >>
   conj_tac >- gvs[unitShapeDefsTheory.fn_shape_ok_def] >>
   qexistsl [`w2n w`, `inst`, `op`, `ps`, `residual`, `selected`, `ss`, `x`] >>
-  simp[Abbr `final`] >>
+  simp[Abbr `final`, wordsTheory.w2n_lt] >>
   gvs[unitShapeDefsTheory.fn_shape_ok_def, LENGTH]
 QED
 
@@ -2131,9 +2144,11 @@ Theorem sym_named_source_emit:
   sym_data_label p env "code_end" /\
   (MEM (Label "runtime_begin") inst.inst_operands ==>
     sym_data_label p env "runtime_begin") /\
-  (!op w. inst.inst_opcode = ADD /\
-    inst.inst_operands = [op; Label "code_end"] /\
-    eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) ==>
+  (!dst x sz w off. inst.inst_opcode = CODECOPY /\
+    inst.inst_operands = [dst; Var x; sz] /\ code_end_var fn x /\
+    eval_operand (Var x) vs = SOME w /\
+    FLOOKUP (SND (compute_label_offsets p)) "code_end" = SOME off ==>
+    w2n (w - n2w off) < dimword (:256) DIV 2) ==>
   ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
     ss'.sym_mem_labels = ss.sym_mem_labels /\
     sym_kinds_ok cplan fn ret srest qs ss'
@@ -2156,7 +2171,9 @@ Resume sym_named_source_emit[codecopy]:
   disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
   disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `_.inst_opcode = CODECOPY`)) >>
-  simp[EVERY_MEM, MEM] >> metis_tac[]
+  simp[EVERY_MEM, MEM] >>
+  disch_then (qspecl_then [`env`, `ctx`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> simp[]
 QED
 
 Resume sym_named_source_emit[code_end_add]:

@@ -245,6 +245,12 @@ Definition active_inst_def:
          EL vs.vs_inst_idx bb.bb_instructions = inst
 End
 
+Theorem active_inst_outcomes_replace[simp]:
+  active_inst fn inst (s with vs_outcomes := os) = active_inst fn inst s
+Proof
+  simp[active_inst_def]
+QED
+
 (* run_blocks evaluates the PHI prefix before exposing an instruction. *)
 Definition enters_block_def:
   enters_block fn s s1 <=>

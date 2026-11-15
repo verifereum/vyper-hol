@@ -89,15 +89,6 @@ Theorem stack_params_rel_def = codegenEntryRelTheory.stack_params_rel_def
 
 Theorem initial_state_rel_def = codegenEntryRelTheory.initial_state_rel_def
 
-Theorem initial_state_rel_entry_clauses[local]:
-  ∀cp prog off fn vs es ctxt rb rest.
-    initial_state_rel cp prog off fn vs es /\
-    es.contexts = (ctxt, rb) :: rest ==>
-    context_memory_rel cp vs.vs_memory (buffer_to_list ctxt.memory) /\
-    ctxt.pc = asm_pc_to_offset prog off
-Proof
-  rpt strip_tac >> gvs[initial_state_rel_def]
-QED
 
 (* ===== Return Value Correspondence ===== *)
 
@@ -122,7 +113,7 @@ End
 (* Terminal state composition: venom_asm_terminal_rel + asm_evm_rel → final_state_rel.
    After asm execution ends at a terminal, the asm state relates to both Venom (terminal_rel)
    and EVM (evm_rel). Composing these gives the end-to-end final_state_rel. *)
-Theorem terminal_asm_evm_final[local]:
+Theorem terminal_asm_evm_final:
   !prog vs' as' es'.
     venom_asm_terminal_rel vs' as' /\
     asm_evm_rel prog as' es' ==>
@@ -137,12 +128,6 @@ QED
    context codegen is exposed through [codegen_assembly] and the selected
    region is located by [ops_contain_at]. *)
 
-(* Prefix of a list is an asm_block_at position 0 *)
-Theorem asm_block_at_prefix[local]:
-  !xs ys. asm_block_at (xs ++ ys) 0 xs
-Proof
-  Induct >> simp[asm_block_at_def, EL_APPEND1]
-QED
 
 (* Bridge from a positioned context-region entry to an assembly state. *)
 Theorem initial_state_bridge[local]:
@@ -217,7 +202,7 @@ Finalise initial_state_bridge
 (* run_blocks never returns OK — it always terminates with
    Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
    step either recurses (smaller fuel) or passes through non-OK. *)
-Theorem run_blocks_never_ok[local]:
+Theorem run_blocks_never_ok:
   !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
 Proof
   Induct >- simp[Once run_blocks_def] >>
@@ -226,7 +211,7 @@ Proof
 QED
 
 (* run_function never returns OK — unfolds to run_blocks. *)
-Theorem run_function_never_ok[local]:
+Theorem run_function_never_ok:
   !fuel ctx fn vs vs1. run_function fuel ctx fn vs <> OK vs1
 Proof
   simp[run_function_def] >>
@@ -235,7 +220,7 @@ QED
 
 (* run_context also never returns OK — it either dispatches to
    run_function (which never returns OK) or returns Error. *)
-Theorem run_context_never_ok[local]:
+Theorem run_context_never_ok:
   !fuel ctx vs vs1. run_context fuel ctx vs <> OK vs1
 Proof
   rpt gen_tac >> simp[Once run_context_def] >>
