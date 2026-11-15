@@ -230,6 +230,7 @@ Resume memory_place_write_stmt_state[state]:
   qpat_x_assum `state_rel _ _ _ _ ff t` mp_tac >>
   qpat_x_assum `immutable_alloca_sep _ _ _ ff t` mp_tac >>
   qpat_x_assum `immutable_base_zero cenv t` mp_tac >>
+  qpat_x_assum `LENGTH r.vs_memory <= LENGTH t.vs_memory` mp_tac >>
   rpt (first_x_assum kall_tac) >>
   simp[stmt_state_rel_def, venom_state_component_equality] >>
   rpt strip_tac >>
