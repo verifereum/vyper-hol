@@ -173,7 +173,7 @@ Theorem rb_package_group[local]:
 Proof
   rpt gen_tac >> PairCases_on `f` >>
   `rb_external_package_ok (set_external_package_target target
-    (package_external_fn tops' trans keys (f0,f1,f2,f3,f4,f5,f6,f7)))` by
+    (package_external_fn tops trans keys (f0,f1,f2,f3,f4,f5,f6,f7)))` by
     simp[rb_package_external] >>
   simp_tac std_ss [package_external_group_def, LET_THM] >>
   IF_CASES_TAC
