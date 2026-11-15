@@ -5,7 +5,7 @@ Ancestors
 (* Keep the original starting watermark: the fresh normalization buffer is
    disjoint from each old allocation whose bytes the caller must frame. *)
 Theorem assign_place_normalize_framed_path:
-  !ctx func cenv cx es ty sty stv dtv v val_op sa sm sb buf s sw.
+  !H ctx func cenv cx es ty sty stv dtv v val_op sa sm sb buf s sw.
     compile_alloc_buffer (type_memory_bytes cenv ty) sa = (buf, sm) /\
     compile_store_memory_typed cenv buf.buf_operand ty val_op sty sm = ((), sb) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv ty))]
@@ -24,7 +24,7 @@ Theorem assign_place_normalize_framed_path:
        ALL_DISTINCT (MAP FST fields) /\
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
          sz = type_memory_size tv) fields) /\
-    stmt_state_rel ctx func cenv cx es s /\ eval_operand val_op s = SOME sw /\
+    stmt_state_rel H ctx func cenv cx es s /\ eval_operand val_op s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory /\
     w2n sw + type_memory_size stv < dimword (:256) /\
     ((?aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) /\
@@ -34,7 +34,7 @@ Theorem assign_place_normalize_framed_path:
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?u w. gas_marked_path F ctx func s 0 (OK u) /\
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       w2n w + type_memory_size dtv < dimword (:256) /\
       val_in_memory dtv v (w2n w) u.vs_memory /\

@@ -48,7 +48,7 @@ Proof
   Cases_on `tr` >> simp[vyperStorageBackendTheory.set_storage_def]
 QED
 
-Theorem eval_pop_storage_static[local]:
+Theorem eval_pop_storage_static:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT et (Dynamic n)), name) /\
   lookup_var_slot_from_layout cx tr src name = SOME slot /\
@@ -496,7 +496,7 @@ Proof
   strip_tac >> fs storage_pop_run_simps
 QED
 
-Theorem dynarray_pop_storage_run_static[local]:
+Theorem dynarray_pop_storage_run_static:
   ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\ s.vs_call_ctx.cc_static /\
   (if tr then tload slot s else sload slot s) <> 0w ==>
   ?u. run_inst_seq

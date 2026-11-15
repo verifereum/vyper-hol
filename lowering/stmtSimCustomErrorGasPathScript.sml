@@ -18,7 +18,8 @@ Theorem custom_error_args_revert_outcome:
     (stmt_res_ok lctx) es /\
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0) Q
     (\H res ee exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit) /\
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit H cx ee res exit) /\
   (!marks res mid r.
     gas_marked_exec memory (ctx,func) (eval_exprs cx args) (es,s0) marks res mid (OK r) /\
     storage_trace_domain cx st0 mid.storage_trace /\
@@ -28,7 +29,8 @@ Theorem custom_error_args_revert_outcome:
   gas_outcome memory (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Raise (RaiseCustomError (CustomError id positional kwargs))))
     (es,s0) (\H res ee r. F)
-    (\H res ee exit. stmt_res_ok lctx res /\ stmt_exit (RetQ H) ee res exit)
+    (\H res ee exit. stmt_res_ok lctx res /\ stmt_exit (RetQ H) ee res exit /\
+      halt_exit H cx ee res exit)
 Proof
   strip_tac >>
   `!vs. storage_trace_frame
@@ -60,31 +62,40 @@ Proof
           strip_tac >> gvs[] >>
           drule_all eval_raise_custom_error_bind >> disch_tac >>
           qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+          rewrite_tac[gas_summary_at_def] >>
           Cases_on `build_custom_error_data (get_tenv cx) (SND id) (MAP SND params) vs` >>
           gvs[gas_marked_exec_def] >>
           simp[bind_def, lift_option_def, raise_def, return_def,
-               stmt_res_ok_def, stmt_exit_def, expr_exit_def] >>
+               stmt_res_ok_def, stmt_exit_def, expr_exit_def, halt_exit_def] >>
           qrefinel [`_`,`es_end`,`Abort Revert_abort t'`] >>
           simp[expr_exit_def, fragExecTheory.exit_result_def] >>
           drule gas_marked_path_from_mem >>
           disch_then (qspec_then `memory` assume_tac) >>
           drule_all gas_marked_path_then >> simp[]) >>
       rename1 `exit_result exit` >>
+      RULE_ASSUM_TAC BETA_RULE >>
       `?exc. res = INR exc /\
-         expr_exit (INR exc : eval_result + exception) exit` by metis_tac[] >>
+         expr_exit (INR exc : eval_result + exception) exit /\
+         halt_exit H0 cx (es_end with gas_obs := []) res exit` by
+        (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+           (qspec_then `H0` mp_tac) >> simp[]) >>
       gvs[] >> drule_all eval_raise_custom_error_bind >> disch_tac >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`INR exc`,`es_end`,`exit`] >>
       simp[] >>
       conj_tac
       >- (asm_rewrite_tac[] >> irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >>
+      disj2_tac >> gen_tac >> disch_tac >>
       conj_tac
       >- (gvs[gas_admissible_def, gas_marked_exec_def] >>
           qpat_x_assum `!gs res es'. _` (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
           qpat_assum `!tail. eval_exprs _ _ _ = _` (mp_tac o Q.SPEC `[]`) >>
           pure_rewrite_tac [APPEND_NIL] >> disch_tac >> simp[bind_def]) >>
-      metis_tac[custom_error_argument_exception_exit]) >>
+      conj_tac
+      >- metis_tac[custom_error_argument_exception_exit] >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> halt_exit _ _ _ _ _`
+        (qspec_then `H` mp_tac) >> simp[halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   drule_all raise_custom_error_args_exempt >>
   metis_tac[]

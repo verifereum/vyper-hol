@@ -82,3 +82,38 @@ Proof
   irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >>
   qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]
 QED
+
+Theorem memory_vv_post_readonly_tail:
+  vv_post H ctx func cenv cx e es sa sc s0 ee r (LocatedValue ann p) s /\
+  post_value_type cenv e = expr_type e /\ p.ptr_location = LocMemory /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sc.cs_next_var /\
+  sc.cs_next_id <= sd.cs_next_id /\
+  eval_operand p.ptr_operand z = eval_operand p.ptr_operand s /\
+  (!x w. not_fresh_at sc x /\ lookup_var x s = SOME w ==> lookup_var x z = SOME w) /\
+  (!name b sz. local_region cenv ee.scopes s name b sz <=>
+               local_region cenv ee.scopes z name b sz) /\
+  z.vs_allocas = s.vs_allocas /\ z.vs_memory = s.vs_memory /\
+  contract_storage z = contract_storage s /\ contract_transient z = contract_transient s /\
+  stmt_state_rel H ctx func cenv cx ee z ==>
+  vv_post H ctx func cenv cx e es sa sd s0 ee r (LocatedValue ann p) z
+Proof
+  strip_tac >>
+  `wb_frame cenv es ee sa s0 s` by
+    (gvs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame cenv es ee sa s0 z` by
+    (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `vv_holds cenv cx (expr_type e) r (LocatedValue ann p) ee z` by
+    (irule vv_holds_vars_frame >> qexists_tac `s` >>
+     gvs[vv_post_def, contextTheory.vv_operand_def]) >>
+  `vv_at cenv cx (expr_type e) sa sd ee r (LocatedValue ann p) z` by
+    (irule vv_at_vars_frame >> qexistsl_tac [`s`,`sc`] >>
+     gvs[vv_post_def, contextTheory.vv_operand_def]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 s` by fs[vv_post_def] >>
+     `pure_frame cenv func es sa s0 z <=> pure_frame cenv func es sa s0 s` by
+       (irule pure_frame_state_cong >> fs[]) >>
+     fs[]) >>
+  irule vv_post_frame_intro >> simp[vv_storage_live_def] >> fs[vv_post_def]
+QED
+
