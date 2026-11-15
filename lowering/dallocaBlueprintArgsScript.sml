@@ -112,6 +112,15 @@ Proof
   asm_simp_tac bool_ss [eval_operand_def, w2n_n2w, arithmeticTheory.LESS_MOD]
 QED
 
+Theorem window_strong_result_enc_cong[local]:
+  enc at av = enc bt bv /\
+  window_strong_result ctx func st st' out at av d s t ==>
+  window_strong_result ctx func st st' out bt bv d s t
+Proof
+  strip_tac >> gvs[window_strong_result_def, abi_encoder_window_result_def] >>
+  metis_tac[]
+QED
+
 (* Equal representative bytes retain the canonical encoder result. *)
 Theorem create_blueprint_encoded_args_representative_prefix:
   compile_abi_encode_to_buf dst src
@@ -143,7 +152,23 @@ Theorem create_blueprint_encoded_args_representative_prefix:
     w2n (n2w (LENGTH (enc (vyper_to_abi_type tenv
       (TupleT (MAP (lowered_value_type ce) args))) av)) : bytes32) < 2 ** 64
 Proof
-  FAIL_TAC "representative window transport proof pending"
+  strip_tac >> drule_all create_blueprint_encoded_check_operand >> strip_tac >>
+  drule_all create_ctor_encoding_bound >> strip_tac >>
+  drule_all abi_props_vyper_typed >> strip_tac >>
+  `LENGTH (enc (vyper_to_abi_type tenv
+     (TupleT (MAP (lowered_value_type ce) args))) av) < 2 ** 64` by
+    metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS] >>
+  `LENGTH (enc (vyper_to_abi_type tenv
+     (TupleT (MAP (lowered_value_type ce) args))) av) < dimword (:256)` by
+    (fs[dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
+  drule_all compile_abi_encode_to_buf_window_strong_run >>
+  disch_then (qx_choose_then `s2` assume_tac) >>
+  drule_all window_strong_result_enc_cong >> strip_tac >>
+  drule window_strong_result_public >> strip_tac >>
+  drule abi_encoder_window_result_output >> strip_tac >>
+  drule_all abi_encoder_window_result_vars >> strip_tac >>
+  qexists_tac `s2` >>
+  asm_simp_tac bool_ss [eval_operand_def, w2n_n2w, arithmeticTheory.LESS_MOD]
 QED
 
 Theorem create_blueprint_raw_args_prefix:
