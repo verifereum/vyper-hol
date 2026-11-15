@@ -1054,7 +1054,7 @@ Resume concat_args_sim[head_normal]:
                `ctx`, `func`, `cenv`, `cx`, `e`, `args`, `es`, `sa`, `s1`, `sb`,
                `s0`, `es_end with gas_obs := []`, `v`, `op`, `t`, `B`, `bsz`,
                `ow`, `k`, `P`, `binst`, `oinst`, `dv`, `ov`, `tv`]
-    mp_tac (Q.GEN `H` concat_head_arm) >>
+    mp_tac (Q.GEN `H` (SIMP_RULE bool_ss [LET_THM] concat_head_arm)) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
