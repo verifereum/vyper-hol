@@ -99,8 +99,10 @@ Proof
     metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
   `storage_well_formed_on cx fin (FST H)` by
     (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends,
-               evaluation_state_accfupds]) >>
+     `storage_well_formed_on cx fin (FST H) <=>
+      storage_well_formed_on cx ee (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     fs[]) >>
   `alloca_frame ce ee su s ce fin q` by
     (irule immutable_assign_suffix_alloca_frame >>
      goal_assum (drule_at Any) >> metis_tac[]) >>

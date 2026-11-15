@@ -3,7 +3,7 @@ Theory tuplePlaceStore
 Ancestors
   tuplePlaceSnapshot assignRelayoutFrame placeStore placeStoreStorage
   exprLoweringProps compileEnv loweringStateRelDefs loweringPosts venomState venomExecSemantics
-  valueEncoding valueEncodingProofs
+  valueEncoding valueEncodingProofs vyperStoragePlaceObserved
 
 Theorem tuple_place_local_relayout_snapshot:
   compile_store_memory cenv src (Var p) dty sty sa = ((),sb) /\
@@ -60,7 +60,7 @@ Theorem tuple_place_word_slot_snapshot:
   eval_operand src s = SOME (typed_val_to_w256 tv v) /\
   stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx (StoragePlace tr k tv) v ee = (INL (),ff) /\
-  storage_place_region cx (StoragePlace tr k tv) /\
+  storage_place_observed H (StoragePlace tr k tv) /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
@@ -71,7 +71,8 @@ Theorem tuple_place_word_slot_snapshot:
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >> drule_all place_store_word_backend_state >> strip_tac >>
-  drule_all place_store_emit_slot_path >> strip_tac >>
+  drule_all place_store_emit_slot_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists `((if tr then tstore else sstore) k (typed_val_to_w256 tv v) s)
     with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   Cases_on `tr` >> gvs[stmt_state_rel_inst_idx, tstore_def, sstore_def,
@@ -155,8 +156,7 @@ Proof
   `regions_disjoint (w2n sw) (type_memory_size stv)
      (w2n w) (type_memory_size dtv)` by
     (irule place_store_alloc_source_disjoint >>
-     qexistsl_tac [`s`, `sa`] >> simp[Once arithmeticTheory.ADD_COMM] >>
-     rpt strip_tac >> qpat_x_assum `!aid b sz. _` drule_all >> simp[arithmeticTheory.ADD_COMM]) >>
+     qexistsl_tac [`s`, `sa`] >> asm_rewrite_tac[] >> metis_tac[]) >>
   `val_in_memory stv v (w2n sw) u.vs_memory` by simp[] >>
   `w2n sw + type_memory_size stv <= w2n w \/
    w2n w + type_memory_size dtv <= w2n sw` by
@@ -165,7 +165,7 @@ Proof
     place_store_memory_typed_path >>
   disch_then (qspecl_then [`get_tenv cx`, `dtv`, `stv`, `v`] mp_tac) >>
   disch_then (qspecl_then [`ctx`, `func`, `u`, `w`, `sw`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
   `exprSimStorageCopy$copy_static t = exprSimStorageCopy$copy_static u` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _;
        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u` mp_tac >>
@@ -175,13 +175,6 @@ Proof
        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u` mp_tac >>
      simp[venom_state_component_equality]) >>
   `stmt_state_rel H0 ctx func cenv cx es t` by suspend "state" >>
-  `!H. stmt_state_rel H ctx func cenv cx es s ==>
-       stmt_state_rel H ctx func cenv cx es t` by
-    (qpat_assum `t with <|vs_vars := _; vs_memory := _;
-       vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u`
-       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexists_tac `H0` >> fs[]) >>
   `!aid b len a n. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
      aid < sa.cs_next_id /\ b <= a /\ a + n <= b + len ==>
      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory` by
@@ -220,6 +213,14 @@ Resume tuple_place_normalize_frame[post]:
     (rpt strip_tac >>
      `not_fresh_at sm x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
      metis_tac[]) >>
-  asm_rewrite_tac[] >> simp[eval_operand_def] >> metis_tac[eval_operand_def]
+  qpat_assum `t with <|vs_vars := _; vs_memory := _;
+      vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u`
+    (strip_assume_tac o SRULE [venom_state_component_equality]) >>
+  fs[eval_operand_def] >> rpt strip_tac >>
+  FIRST [
+    irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+      conj_tac >- (qexists_tac `H0` >> asm_rewrite_tac[]) >>
+      qexists_tac `s` >> fs[],
+    qpat_assum `!aid b len a n. _` drule_all >> simp[]]
 QED
 Finalise tuple_place_normalize_frame
