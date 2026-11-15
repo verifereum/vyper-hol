@@ -1,7 +1,7 @@
 (* The call-budget producer is an explicit hypothesis until its proof lands. *)
 Theory loweringRuntimeAllocationHistory
 Ancestors
-  loweringCallBudgetHistory vyperLoweringCorrect
+  loweringCallBudgetHistory loweringJointPrefixHistory vyperLoweringCorrect
   ptrDiscipline contextRawReachable sourceCallCount compileVyper
   vyperCompiler e2eDefs lowerDloadDefs o1PassContract
   list arithmetic
