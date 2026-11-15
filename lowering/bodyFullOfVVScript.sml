@@ -61,7 +61,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -78,8 +78,10 @@ Proof
   >- (irule gas_outcome_full_post_source >>
       first_assum (irule_at Any) >> simp[Abbr `childR`] >>
       rpt strip_tac >> Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
-      Cases_on `r` >> Cases_on `y` >> fs[exprSimDefsTheory.expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]) >>
+      Cases_on `r` >> Cases_on `y` >>
+      fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+      FIRST [first_assum ACCEPT_TAC,
+        rename1 `Error err` >> Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]]) >>
   suspend "read"
 QED
 

@@ -77,7 +77,7 @@ Theorem alloc_buffer_origin_ptr_path_exact:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.
@@ -209,7 +209,7 @@ Theorem alloc_buffer_origin_ptr_path:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.

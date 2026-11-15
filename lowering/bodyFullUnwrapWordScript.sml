@@ -180,7 +180,7 @@ Theorem unwrap_memory_word_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -220,6 +220,11 @@ Theorem unwrap_memory_word_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -351,7 +356,7 @@ Theorem unwrap_slot_word_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -391,6 +396,11 @@ Theorem unwrap_slot_word_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -523,7 +533,7 @@ Theorem unwrap_code_word_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
@@ -563,6 +573,11 @@ Theorem unwrap_code_word_origin_ptr:
        ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
     (~is_word_type (post_value_type cenv e) ==>
      vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
        (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
     expr_store_bound cx (post_value_type cenv e) v op z /\
     z.vs_current_bb = sc.cs_current_bb /\
@@ -872,7 +887,7 @@ Theorem unwrap_word_value_origin_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
     ~is_word_type (post_value_type cenv e) ==>
