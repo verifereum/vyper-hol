@@ -53,19 +53,21 @@ folding disagrees, the translation follows the semantics; see Validation.
 
 ## Translation
 
-Constant evaluation happens on the translated expression, after `translate_expr`
-has given every name and operator its meaning, so the evaluator sees exactly
-what the interpreter would run.
+The frontend resolves constant values together with their source literal origins.
+The origin records preserve distinctions that the translated expression alone
+cannot recover, including Bytes versus HexBytes and the spelling of Hex values.
 
 1. Constants are evaluated in passes over every module, imported modules
-   first (`annotated_constants`). Each pass evaluates the initializers not yet
-   evaluated, using the constants evaluated so far, and records the value of
-   each one that evaluates under its `(module, name)` key. Passes repeat until
-   one evaluates nothing new, since a constant may refer to one declared after
-   it. Initializers that never evaluate (arrays, decimals, calls) stay
-   top-level names for the semantics to evaluate at runtime.
-2. A reference to an evaluated constant, bare or through a module, translates
-   to its value as a literal of the type the compiler gives the reference,
+   first (`evaluated_origin_constants`, `imported_origin_constants` and
+   `module_origin_constants`). Each pass records resolved literal values and
+   closed array literal trees (`pin_literal_tree`) together with their origins,
+   under `(module, name)` keys. Passes repeat until no new entries appear,
+   allowing forward references. `scalar_origin_constants` projects only Literal
+   entries into the ordinary scalar table. Producer translation also resolves
+   containers through the origin table; unresolved initializers keep their
+   original expressions.
+2. A reference to an evaluated scalar constant, bare or through a module,
+   translates to its value as a literal of the type the compiler gives the reference,
    which is the type its position expects (`top_level_ref`): with
    `B: constant(Bytes[5]) = b"abc"`, the reference `B` in
    `A: constant(Bytes[10]) = B` is a `Bytes[10]`.
@@ -73,10 +75,13 @@ what the interpreter would run.
    bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
    endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
-   tuple indices and `method_id` (`fold_pin_constant` / `pin_fold_value`). Exponents use
-   `pin_fold_expr`, which preserves operations the compiler does not fold,
-   including unsafe arithmetic. Boolean operators fold their literal children
-   before translation to conditional expressions.
+   tuple indices and `method_id` (`fold_pin_constant` / `pin_fold_value`).
+   Exponents use `exponent_operand` through `fold_pin_constant` and
+   `origin_fold_value`. This query preserves source refusals and operations
+   the compiler does not fold, including unsafe arithmetic; callers keep the
+   original operand when it does not yield a Literal. Reapplying the raw
+   `pin_fold_expr` could erase those refusals. Boolean operators fold their
+   literal children before translation to conditional expressions.
 4. A position whose value must be known at compile time but does not
    evaluate is rejected, never given a default: a declaration with such an
    annotation bound or `range` bound fails validation (`bound_resolved`,

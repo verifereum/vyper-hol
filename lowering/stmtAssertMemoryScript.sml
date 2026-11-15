@@ -121,7 +121,8 @@ Proof
   mp_tac eval_assert_bind >> (impl_tac >- simp[Abbr `ak`]) >>
   disch_then (fn th => rewrite_tac[th]) >>
   irule forced_then_outcome >> BETA_TAC >> rpt conj_tac
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type])
   >- (rpt gen_tac >> rw[] >>
       simp[vyperStorageTraceTheory.storage_trace_frame_return,
            vyperStorageTraceTheory.storage_trace_frame_raise]) >>
@@ -196,7 +197,7 @@ Resume compile_assert_frag_mem[false]:
       (if ak = AssertBare then "" else "UNREACHABLE"))`, `ee`, `Abort a u`] >>
   simp[raise_def, gas_marked_path_def] >>
   conj_tac >- metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
-  simp[exit_result_def, stmt_exit_def] >> fs[Abbr `ak`])
+  simp[exit_result_def, stmt_exit_def, halt_exit_def] >> fs[Abbr `ak`])
 QED
 
 Finalise compile_assert_frag_mem

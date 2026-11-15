@@ -273,6 +273,10 @@ QED
 
 val () = cv_auto_trans layout_import_map_def;
 
+val () = cv_auto_trans scalar_origin_constants_def;
+val () = cv_auto_trans module_origin_constants_def;
+val () = cv_auto_trans imported_origin_constants_def;
+val () = cv_auto_trans evaluated_origin_constants_def;
 val () = cv_auto_trans translate_annotated_ast_canonical_def;
 
 (* Register each mutually recursive nominal-resolution family together. *)
