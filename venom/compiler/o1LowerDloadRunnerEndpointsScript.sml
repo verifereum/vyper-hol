@@ -172,7 +172,12 @@ Theorem ld_runner_abort_step_revert_empty[local]:
   ?t1. step_inst fuel C' inst t = Abort Revert_abort t1 /\
        t1.vs_returndata = []
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode = REVERT`
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
+  Cases_on `inst.inst_opcode = REVERT`
   >- (drule_all ld_joint_revert_empty >> simp[]) >>
   `inst.inst_opcode <> INVALID` by
     (strip_tac >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
@@ -210,7 +215,12 @@ Theorem ld_runner_abort_endpoint_revert_empty:
       (Abort Revert_abort s1) r' /\
     ?t1. r' = Abort Revert_abort t1 /\ t1.vs_returndata = []
 Proof
-  strip_tac >> drule_all ld_runner_abort_endpoint >>
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
+  drule_all ld_runner_abort_endpoint >>
   disch_then (qx_choosel_then [`packet_fn`,`packet_bb`,`packet_res`]
     strip_assume_tac) >>
   qexistsl_tac [`packet_fn`,`packet_bb`,`packet_res`] >> simp[] >>
@@ -241,7 +251,12 @@ Theorem ld_runner_forward_abort_endpoint_revert_empty:
       (Abort Revert_abort s1) r' /\
     ?t1. r' = Abort Revert_abort t1 /\ t1.vs_returndata = []
 Proof
-  strip_tac >> drule_all ld_runner_forward_abort_endpoint >>
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
+  drule_all ld_runner_forward_abort_endpoint >>
   disch_then (qx_choosel_then [`packet_fn`,`packet_bb`,`packet_res`]
     strip_assume_tac) >>
   qexistsl_tac [`packet_fn`,`packet_bb`,`packet_res`] >> simp[] >>

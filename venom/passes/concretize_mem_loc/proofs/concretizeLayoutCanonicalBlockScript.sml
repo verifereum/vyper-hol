@@ -1455,6 +1455,8 @@ Proof
     (irule layout_canonical_block_witness_retained >> metis_tac[]) >>
   `step_inst_base i s = OK post` by gvs[finite_step_iff, step_inst_non_invoke] >>
   drule_all layout_canonical_base_nonterm_pending >> strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    metis_tac[layout_cut_safe_whole_run] >>
   drule_all layout_canonical_ordinary_environment >> strip_tac >>
   `j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode` by
     (gvs[] >> metis_tac[concretize_positions_nonterminator,
@@ -1536,8 +1538,9 @@ Resume layout_canonical_prefix_next_ordinary[nop]:
      fs[layout_canonical_step_witness_def] >> metis_tac[]) >>
   drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     layout_canonical_nop_success >>
-  simp[] >> disch_then (qspecl_then [`path`, `fn`, `P`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> disch_then (qspecl_then
+    [`path`, `SUC (LENGTH vs0.vs_gas_readings)`, `fn`, `P`] mp_tac) >>
+  impl_tac >- metis_tac[layout_cut_safe_whole_run] >> strip_tac >>
   `k.lop_config = qn /\ k.lop_cursor = SUC n` by
     gvs[layout_canonical_block_witness_def, layout_paired_ordinary_def,
       layout_aligned_entry_def, layout_ordinary_entry_def, layout_ordinary_trace_def] >>
