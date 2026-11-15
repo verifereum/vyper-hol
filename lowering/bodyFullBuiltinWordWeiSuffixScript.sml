@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinWordWeiSuffix
 Ancestors
   bodyPtrWordBuiltinsScaling bodyPtrWordBuiltinsScalingSteps
-  bodyPtrWordBuiltinsScalarSequence ptrDiscipline venomInst
+  bodyPtrWordBuiltinsScalarSequence ptrDiscipline ptrSafeRun venomInst
   instSeqPtrLo bodyFullGhostFrame freshWrites
   exprSimWordBuiltins fragGasSeqPtr fragGasEmitCtrl bodySimFull
   finite_map pred_set list fragExec fragExecMem unitTransformDefs memSafeRun contextCodegenRel codegenRel
@@ -30,6 +30,32 @@ Proof
       simp[word_scale_delta_out_taint]) >>
   `MEM i.inst_opcode [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL]` by fs[MEM] >>
   metis_tac[bodyPtrWordBuiltinsAbsSequenceTheory.word_abs_ghost_step]
+QED
+
+Theorem as_wei_value_inst_ok[local]:
+  MEM inst.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT] /\
+  (!arg. MEM arg inst.inst_operands ==>
+    op_taint tn arg = {} /\ op_prov G arg = NONE) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ptr_inst_ok D lo 0 ctx fn G tn inst s
+Proof
+  strip_tac >>
+  `!arg. MEM arg inst.inst_operands ==> op_taint tn arg = {}` by metis_tac[] >>
+  `!u v. inst.inst_operands = [Var u; Var v] ==>
+     u NOTIN FDOM G /\ v NOTIN FDOM G` by
+    (rpt strip_tac >>
+     qpat_assum `!arg. _ ==> _ /\ _` (qspec_then `Var u` mp_tac) >>
+     qpat_assum `!arg. _ ==> _ /\ _` (qspec_then `Var v` mp_tac) >>
+     gvs[op_prov_def, FLOOKUP_DEF]) >>
+  gvs[MEM, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs,
+    venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds,
+    combinTheory.K_THM] >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
+  simp[exec_pure1_def, exec_pure2_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem as_wei_value_prefix_ghosts:
@@ -71,25 +97,34 @@ Proof
       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
       tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
       (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
-         op_taint tn' (Var x) = op_taint tn (Var x)))` by
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+      allocas_from 0 t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t))` by
     (irule (word_scalar_sequence |> Q.INST
       [`P` |-> `\B H th u.
          (!x. x IN B ==> FLOOKUP H x = NONE /\ op_taint th (Var x) = {}) /\
          th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
          th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
          (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-           op_taint th (Var x) = op_taint tn (Var x))`] |> BETA_RULE) >>
+           op_taint th (Var x) = op_taint tn (Var x)) /\
+         allocas_from 0 u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u)`] |> BETA_RULE) >>
      simp[] >> conj_tac
+     >- (simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >> conj_tac
      >- (rpt gen_tac >> strip_tac >>
          `MEM i (emitted_insts sa sb)` by metis_tac[] >>
          `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]` by
            (fs[EVERY_MEM] >> metis_tac[]) >>
+         `fresh_write_op i.inst_opcode` by fs[fresh_write_op_def, MEM] >>
+         `v' = u with vs_vars := v'.vs_vars` by
+           (drule_all step_fresh_write_op >> simp[]) >>
          conj_tac
          >- (gen_tac >> disch_tac >>
              irule (word_scale_scalar_transfer |> SIMP_RULE (srw_ss()) [IN_UNION]) >>
              (conj_tac >- fs[MEM]) >> qexists_tac `B` >> simp[]) >>
          drule_all as_wei_value_step_exterior >>
          disch_then (qspec_then `th` SUBST1_TAC) >> simp[] >>
+         reverse conj_tac
+         >- (qpat_x_assum `v' = u with vs_vars := _` SUBST1_TAC >>
+             fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
          gen_tac >> strip_tac >>
          `~MEM x i.inst_outputs` by
            (drule word_scale_outputs_fresh >>
@@ -99,12 +134,14 @@ Proof
          gvs[op_taint_def, set_var_taint_def, FLOOKUP_DRESTRICT] >>
          Cases_on `t` >> gvs[set_var_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]) >>
      conj_tac
-     >- (rpt strip_tac >> irule word_scale_inst_ok >>
-         simp[allocas_from_def] >> fs[EVERY_MEM] >>
-         rpt strip_tac >> Cases_on `arg` >>
+     >- (rpt strip_tac >>
+         `MEM i.inst_opcode [MUL; Div; EQ; ISZERO; OR; ASSERT]` by
+           (fs[EVERY_MEM] >> metis_tac[]) >>
+         irule as_wei_value_inst_ok >> simp[] >>
+         gen_tac >> disch_tac >> Cases_on `arg` >>
          gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
      conj_tac >- (Cases_on `v` >> gvs[op_prov_def]) >>
-     fs[EVERY_MEM]) >>
+     simp[allocas_from_def] >> fs[EVERY_MEM] >> metis_tac[]) >>
   qexistsl_tac [`G'`, `tn'`] >> conj_tac
   >- (gen_tac >> irule inst_seq_ptr_zero_to_lo >> simp[] >>
       qexists_tac `<|d_stor := K (K {}); d_trans := K (K {});
@@ -361,7 +398,7 @@ Proof
      >- (qpat_x_assum `u = s with vs_vars := _` SUBST1_TAC >>
          simp[] >> metis_tac[]) >>
      conj_tac >- metis_tac[] >>
-     irule word_scale_inst_ok >> simp[] >>
+     irule as_wei_value_inst_ok >> simp[] >>
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `!x. x IN _ UNION _ ==> _` mp_tac >>
@@ -369,7 +406,10 @@ Proof
          qpat_x_assum `MEM arg _` mp_tac >>
          simp[mk_inst_def] >> strip_tac >> simp[op_prov_def]) >>
      qpat_x_assum `u = s with vs_vars := _` SUBST1_TAC >>
-     simp[allocas_from_def] >> metis_tac[allocas_from_def]) >>
+     qpat_x_assum `allocas_from lo s` mp_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) _ (OK _,_,_)`
     (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
   simp[] >> disch_then irule >> metis_tac[]

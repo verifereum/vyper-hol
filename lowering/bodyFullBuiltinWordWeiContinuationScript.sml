@@ -188,7 +188,9 @@ Proof
             (qpat_x_assum `EL _ (DROP _ _) = _` mp_tac >> simp[EL_APPEND_EQN]) >>
           `MEM inst (emitted_insts s1 sb)` by metis_tac[EL_MEM] >>
           fs[EVERY_MEM] >> metis_tac[]) >>
-      qpat_assum `ss' = t with vs_vars := _` (fn th => rewrite_tac[Once th]) >> simp[]) >>
+      qpat_assum `ss' = t with vs_vars := _` (fn th => rewrite_tac[Once th]) >>
+      simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
+      metis_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
   first_x_assum drule >> strip_tac >>
   drule_all (as_wei_value_abort_full |> Q.INST [`es'` |-> `mid`, `es` |-> `mid`] |> SIMP_RULE (srw_ss()) []) >>
   disch_then (qspecl_then [`mid`, `explicit`, `d`, `cx`, `PG`] strip_assume_tac) >>
@@ -205,5 +207,5 @@ Proof
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   simp[] >> rpt strip_tac >>
-  simp[expr_exit_def, exit_result_def] >> metis_tac[]
+  simp[expr_exit_def, exit_result_def, exprSimDefsTheory.halt_exit_def] >> metis_tac[]
 QED
