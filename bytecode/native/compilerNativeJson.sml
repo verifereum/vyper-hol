@@ -13,7 +13,10 @@
  * Usage: bytecode_parity_json.exe DIR [NAME ...]
  * Without names, every <name>.json in DIR with a <name>.hex runs.  Each
  * fixture prints PASS, FAIL (bytes differ, or the compiler failed), or REJECT
- * (the frontend rejected the program, or it has several modules).  Exits
+ * (the frontend could not decode or rejected the program, or it has several
+ * modules).  A
+ * fixture that reached the compiler also prints sp=T or sp=F: whether the
+ * program is in supported_program and supported_program_deploy.  Exits
  * non-zero unless every fixture passes.  With NATIVE_PARITY_DUMP=<dir> set, the
  * native bytes of each compiled fixture are written to <dir>/<name>.hex.
  *)
@@ -87,8 +90,10 @@ structure compilerNativeJson = struct
   (* The toplevels of the program's one module, as memoryStoreWitnessLib.program. *)
   fun program path = let
     val json = jsonDocumentLib.parse_file path
-    val annotated_ast = JSONDecode.decode AST.annotated_ast json
-    val layout = JSONDecode.decode AST.storage_layout json
+    val (annotated_ast, layout) =
+      (JSONDecode.decode AST.annotated_ast json, JSONDecode.decode AST.storage_layout json)
+      handle JSONDecode.JSONError (e, _) =>
+        raise Reject ("frontend could not decode the JSON: " ^ General.exnMessage e)
     val translated =
       case RunTestML.translate_annotated_ast (JsonImportCV.encode annotated_ast) of
         RunTestML.Pair (RunTestML.Num 1, result) => result
@@ -113,8 +118,12 @@ structure compilerNativeJson = struct
 
   fun run_one dir name = let
     val t0 = Time.now ()
+    val supported = ref ""
     val outcome =
-      (case compilerNativeML.compile (program (OS.Path.concat (dir, name ^ ".json"))) of
+      (case (fn tops => (supported := (if compilerNativeML.supported tops
+                                       then " sp=T" else " sp=F");
+                         compilerNativeML.compile tops))
+              (program (OS.Path.concat (dir, name ^ ".json"))) of
          NONE => ("FAIL", "compiler returned NONE")
        | SOME (deploy, runtime) => let
            val (d, r) = P.oracle (OS.Path.concat (dir, name ^ ".hex"))
@@ -131,6 +140,7 @@ structure compilerNativeJson = struct
     val dt = Time.toReal (Time.- (Time.now (), t0))
   in
     print (#1 outcome ^ " " ^ name ^ " " ^ Real.fmt (StringCvt.FIX (SOME 3)) dt ^ "s" ^
+           !supported ^
            (if #2 outcome = "" then "" else ": " ^ #2 outcome) ^ "\n");
     #1 outcome
   end

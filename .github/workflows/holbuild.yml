@@ -230,6 +230,78 @@ jobs:
           retention-days: 1
           overwrite: true
 
+  export-parity:
+    # Compiles every contract of the Vyper test exports natively and compares
+    # the bytes with the patched pinned Vyper's (tools/native_export_parity.py).
+    if: ${{ !cancelled() && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    needs: export-vyper-tests
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 120
+    # The cache login is a secret of the bazel-cache environment, which every
+    # branch of this repository may deploy to.
+    environment: bazel-cache
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11.17'
+
+      - name: Download Vyper test exports
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: vyper-test-exports-${{ github.sha }}
+          path: tests/vyper-test-exports
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build native JSON bytecode parity runner
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python3 tools/build_native_json_parity.py
+
+      - name: Install patched pinned Vyper
+        run: |
+          python -m pip install uv==0.10.11
+          pin=$(tr -d '[:space:]' < VYPER_PIN)
+          git clone https://github.com/vyperlang/vyper.git vyper-src
+          git -C vyper-src checkout --detach "$pin"
+          sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-patched" \
+            --vyper-repo vyper-src
+
+      - name: Check native bytecode parity on the exported contracts
+        run: |
+          PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -P -s \
+            tools/native_export_parity.py tests/vyper-test-exports "$RUNNER_TEMP/export-parity" \
+            --report export-parity-report.txt
+
+      - name: Summarize the per-contract report
+        if: ${{ !cancelled() && hashFiles('export-parity-report.txt') != '' }}
+        run: |
+          {
+            echo '```text'
+            grep -v -E '^(match|outside|rejected) ' export-parity-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the per-contract report
+        if: ${{ !cancelled() && hashFiles('export-parity-report.txt') != '' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: export-parity-report-${{ github.sha }}
+          path: export-parity-report.txt
+          retention-days: 30
+
   vyper-tests:
     # tested, skipped on other events than push, would skip this job through
     # the implicit success(); the result checks stand in for it.
@@ -308,12 +380,12 @@ jobs:
   holbuild-success:
     if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-26.04-arm
-    needs: [build, native-parity, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
+    needs: [build, native-parity, tested, test-deps, python-o1-oracle, export-vyper-tests, export-parity, vyper-tests]
     steps:
       - name: Check all jobs succeeded
         env:
           BUILD_RESULTS: ${{ needs.build.result }} ${{ needs.native-parity.result }}
-          TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.vyper-tests.result }}
+          TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.export-parity.result }} ${{ needs.vyper-tests.result }}
           MERGE_GROUP_PASSED: ${{ needs.tested.outputs.merge-group-passed }}
         run: |
           for result in $BUILD_RESULTS; do

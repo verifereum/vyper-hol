@@ -129,6 +129,14 @@ bytecode/python-o1-bytecode-fixtures --update \
   --vyper-repo /path/to/vyper
 ```
 
+To keep that compiler for other checks (`tools/native_export_parity.py`,
+`tools/bytecode_fuzz.py`), install it into `DIR/venv` instead:
+
+```sh
+bytecode/python-o1-bytecode-fixtures --install DIR \
+  --vyper-repo /path/to/vyper
+```
+
 ## HOL comparison
 
 The native runner (`native/README.md`) compiles each fixture's program with
