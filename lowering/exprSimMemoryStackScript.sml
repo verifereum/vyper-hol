@@ -18,7 +18,7 @@ Theorem expr_stack_outcome_mem:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\H res ee r. expr_exit res r) ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
   gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_expr cx e) (es,s0)
     (\H res ee u. ?tv. res = INL tv /\
       vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
@@ -26,7 +26,7 @@ Theorem expr_stack_outcome_mem:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rw[gas_outcome_def] >> qexists_tac `marks`
   >- (disj1_tac >>
@@ -54,7 +54,8 @@ Proof
           conj_tac >- first_assum ACCEPT_TAC >>
           irule vv_store_bound_stack_value >> conj_tac >>
           first_assum ACCEPT_TAC) >>
-      disj2_tac >> simp[expr_exit_success_map] >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> simp[expr_exit_success_map] >>
+      Cases_on `res` >> gvs[halt_exit_def] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED
