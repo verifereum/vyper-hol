@@ -137,7 +137,7 @@ Proof
     (gvs[active_inst_def, supply_norm_inv_def, wf_function_def, fn_labels_def] >>
      imp_res_tac MEM_lookup_block >> gvs[]) >>
   qexists_tac `(rs,cur)` >> simp[cfg_norm_joint_cursors_def] >>
-  gvs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def]
+  gvs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def]
 QED
 
 (* Stronger than the generic ML goal only in explicitly retaining the
