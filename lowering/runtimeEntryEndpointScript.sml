@@ -111,7 +111,7 @@ Proof
   qexistsl_tac [`lbl`, `cenv0`, `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`,
                 `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`, `st'`, `func`, `s0`,
                 `G0`, `tn0`] >>
-  simp[] >> first_assum ACCEPT_TAC
+  fs[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem runtime_entry_endpoint_body_projection:
@@ -169,9 +169,9 @@ Theorem runtime_entry_endpoint_body_projection:
                           vs_inst_idx := 0 |>, FEMPTY, entry_taint)
               [] (OK s0, G0, tn0)
 Proof
-  rw[runtime_entry_endpoint_def] >>
+  pure_rewrite_tac[runtime_entry_endpoint_def] >> strip_tac >>
   qexistsl_tac [`lbl`, `cenv0`, `pos_args`, `min_cds`, `is_payable`,
     `nkey`, `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`, `st'`, `func`,
     `s0`, `G0`, `tn0`] >>
-  fs[runtime_entry_body_start_def]
+  fs[runtime_entry_body_start_def] >> first_assum ACCEPT_TAC
 QED
