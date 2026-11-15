@@ -43,33 +43,33 @@ Theorem prefix_member_setup_complete_shift:
   ctor_actual_scratch fn ids scratch_base N s /\ scratch_base+N <= s.vs_alloca_next ==>
   ?t H qt child_dst.
     run_inst_seq (emitted_insts st middle) s = OK t /\
-    let prepared = t with vs_inst_idx := LENGTH middle.cs_current_insts in
-    SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
+        SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
     op_taint qt (FST ops) = {} /\ op_taint qt (SND ops) = {} /\
-    eval_operand (FST ops) prepared = SOME (n2w (sb + if dyn then payload_off else ao)) /\
-    eval_operand (SND ops) prepared = SOME (n2w (d+vo)) /\
+    eval_operand (FST ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (sb + if dyn then payload_off else ao)) /\
+    eval_operand (SND ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (d+vo)) /\
     abi_decoder_operand_live middle.cs_next_var (FST ops) /\
     abi_decoder_operand_live middle.cs_next_var (SND ops) /\
-    fresh_vars_wrt limit_st prepared /\
-    abi_decoder_address_frame st.cs_next_var s prepared /\ inst_extends st middle /\
-    prepared.vs_allocas = s.vs_allocas /\ prepared.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
-    prepared.vs_current_bb = middle.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\ ~prepared.vs_halted /\
-    prepared.vs_memory = s.vs_memory /\ prepared.vs_data_section = s.vs_data_section /\
-    prepared.vs_call_ctx = s.vs_call_ctx /\ prepared.vs_labels = s.vs_labels /\
-    (!v. not_fresh_at st v ==> lookup_var v prepared = lookup_var v s) /\
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    abi_decoder_address_frame st.cs_next_var s (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ inst_extends st middle /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_allocas = s.vs_allocas /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next = s.vs_alloca_next /\
+    allocas_from lo (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ lo <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_current_bb = middle.cs_current_bb /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_inst_idx = LENGTH middle.cs_current_insts /\ ~(t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_halted /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_memory = s.vs_memory /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_data_section = s.vs_data_section /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_call_ctx = s.vs_call_ctx /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_labels = s.vs_labels /\
+    (!v. not_fresh_at st v ==> lookup_var v (t with vs_inst_idx := LENGTH middle.cs_current_insts) = lookup_var v s) /\
     qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
     qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     (!v. not_fresh_at st v ==>
        FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt prepared) ==>
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt (t with vs_inst_idx := LENGTH middle.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
-    alloca_inv prepared /\ alloca_frontier_inv_from k ctx fn site prepared /\
-    ctor_actual_scratch fn ids scratch_base N prepared /\
-    scratch_base+N <= prepared.vs_alloca_next /\
-    prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
-    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings
+    alloca_inv (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ alloca_frontier_inv_from k ctx fn site (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    ctor_actual_scratch fn ids scratch_base N (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    scratch_base+N <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_outcomes = s.vs_outcomes /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_tx_ctx = s.vs_tx_ctx /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_block_ctx = s.vs_block_ctx /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_gas_readings = s.vs_gas_readings /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -162,37 +162,37 @@ Theorem prefix_canonical_member_setup_complete_shift:
   ctor_actual_scratch fn ids scratch_base N s /\ scratch_base+N <= s.vs_alloca_next ==>
   ?t H qt child_dst.
     run_inst_seq (emitted_insts st middle) s = OK t /\
-    let prepared = t with vs_inst_idx := LENGTH middle.cs_current_insts in
-    SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
+        SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
     op_taint qt (FST ops) = {} /\ op_taint qt (SND ops) = {} /\
-    eval_operand (FST ops) prepared = SOME (n2w (sb +
+    eval_operand (FST ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (sb +
       if type_to_abi_dec_info sf ce ty = DecComplex T [] then
         SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))
       else abi_tuple_child_offset (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))
         (preavs ++ av::avs) (LENGTH pretys))) /\
-    eval_operand (SND ops) prepared = SOME (n2w (d + SUM (MAP (type_memory_bytes ce) pretys))) /\
+    eval_operand (SND ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (d + SUM (MAP (type_memory_bytes ce) pretys))) /\
     abi_decoder_operand_live middle.cs_next_var (FST ops) /\
     abi_decoder_operand_live middle.cs_next_var (SND ops) /\
-    fresh_vars_wrt limit_st prepared /\
-    abi_decoder_address_frame st.cs_next_var s prepared /\ inst_extends st middle /\
-    prepared.vs_allocas = s.vs_allocas /\ prepared.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
-    prepared.vs_current_bb = middle.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\ ~prepared.vs_halted /\
-    prepared.vs_memory = s.vs_memory /\ prepared.vs_data_section = s.vs_data_section /\
-    prepared.vs_call_ctx = s.vs_call_ctx /\ prepared.vs_labels = s.vs_labels /\
-    (!x. not_fresh_at st x ==> lookup_var x prepared = lookup_var x s) /\
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    abi_decoder_address_frame st.cs_next_var s (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ inst_extends st middle /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_allocas = s.vs_allocas /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next = s.vs_alloca_next /\
+    allocas_from lo (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ lo <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_current_bb = middle.cs_current_bb /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_inst_idx = LENGTH middle.cs_current_insts /\ ~(t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_halted /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_memory = s.vs_memory /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_data_section = s.vs_data_section /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_call_ctx = s.vs_call_ctx /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_labels = s.vs_labels /\
+    (!x. not_fresh_at st x ==> lookup_var x (t with vs_inst_idx := LENGTH middle.cs_current_insts) = lookup_var x s) /\
     qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
     qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==>
        FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt prepared) ==>
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt (t with vs_inst_idx := LENGTH middle.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
-    alloca_inv prepared /\ alloca_frontier_inv_from k ctx fn site prepared /\
-    ctor_actual_scratch fn ids scratch_base N prepared /\
-    scratch_base+N <= prepared.vs_alloca_next /\
-    prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
-    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings
+    alloca_inv (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ alloca_frontier_inv_from k ctx fn site (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    ctor_actual_scratch fn ids scratch_base N (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    scratch_base+N <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_outcomes = s.vs_outcomes /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_tx_ctx = s.vs_tx_ctx /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_block_ctx = s.vs_block_ctx /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_gas_readings = s.vs_gas_readings /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   drule_all prefix_canonical_member_setup_inputs >> strip_tac >>

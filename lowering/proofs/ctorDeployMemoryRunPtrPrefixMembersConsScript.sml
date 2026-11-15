@@ -154,7 +154,6 @@ Proof
   drule_all prefix_member_setup_zero_base_reentry >> strip_tac >>
   drule_all prefix_member_setup_pair_floor >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
-  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>
   `fn_has_code middle end_st func` by
     (mp_tac (Q.SPECL [`middle`,`end_st`,`final`,`func`] fn_has_code_split) >> simp[]) >>

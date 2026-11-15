@@ -24,26 +24,26 @@ Theorem prefix_member_setup_pair_floor:
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?H qt child_dst.
-    let prepared = t with vs_inst_idx := LENGTH middle.cs_current_insts in
-    SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
+        SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
     op_taint qt (FST ops) = {} /\ op_taint qt (SND ops) = {} /\
-    eval_operand (FST ops) prepared = SOME (n2w (sb + if dyn then payload_off else ao)) /\
-    eval_operand (SND ops) prepared = SOME (n2w (d+vo)) /\
+    eval_operand (FST ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (sb + if dyn then payload_off else ao)) /\
+    eval_operand (SND ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (d+vo)) /\
     abi_decoder_operand_live middle.cs_next_var (FST ops) /\
     abi_decoder_operand_live middle.cs_next_var (SND ops) /\
-    fresh_vars_wrt limit_st prepared /\
-    abi_decoder_address_frame st.cs_next_var s prepared /\ inst_extends st middle /\
-    prepared.vs_allocas = s.vs_allocas /\
-    prepared.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
-    prepared.vs_current_bb = middle.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    abi_decoder_address_frame st.cs_next_var s (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ inst_extends st middle /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_allocas = s.vs_allocas /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next = s.vs_alloca_next /\
+    allocas_from lo (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ lo <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_current_bb = middle.cs_current_bb /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_inst_idx = LENGTH middle.cs_current_insts /\
     qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
     qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     (!v. not_fresh_at st v ==>
        FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt prepared) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt (t with vs_inst_idx := LENGTH middle.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   drule_all prefix_member_setup_pair >>
@@ -61,6 +61,8 @@ Proof
    lo <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next` by
     (irule prefix_allocation_floor_frame >> qexists `s` >> simp[]) >>
   qexistsl [`H`,`qt`,`child_dst`] >>
+  qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (fn th => pure_rewrite_tac[th, AND_CLAUSES, FORALL_SIMP]) >>
   fs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def,
      allocas_from_def] >> metis_tac[]
 QED

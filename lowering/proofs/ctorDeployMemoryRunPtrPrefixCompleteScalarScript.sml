@@ -1,19 +1,44 @@
 (* Canonical scalar execution producer at a single operational witness. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteScalar
 Ancestors
-  loweringStateRelDefs valueEncodingDefs
-  compileEnv valueEncoding
+  loweringStateRelDefs
+  valueEncodingDefs
+  compileEnv
+  valueEncoding
   ctorDeployMemoryRunPtrPrefixChildShift
-  ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
-  ctorAbiActualWordRun ctorAbiActualWorld ctorAbiActualObservations
-  ctorDeployLoweringEntryCompleteScalar ctorDeployLoweringEntryRegistration
-  abiDecoderReentryPointer abiDecoderReentry abiDecoderContract
-  abiEncoderRegisteredEffect ctorAbiActualFrame fragExec
-  ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixScalarClamps
-  exprLoweringProps arithmetic abiEncoder emitHelper venomInst ctorAbiActualAlloc
-  abiDecoderClampedWord ptrDiscipline allocaBudgetProps
-  ctorDeployLoweringEntryAllocation venomMemDefs
-  venomState venomExecSemantics words list
+  ctorDeployMemoryRunPtrPrefixScalarPackage
+  ctorDeployMemoryRunPtrPrefixScalarBool
+  ctorAbiActualWordRun
+  ctorAbiActualWorld
+  ctorAbiActualObservations
+  ctorDeployLoweringEntryCompleteScalar
+  ctorDeployLoweringEntryRegistration
+  abiDecoderReentryPointer
+  abiDecoderReentry
+  abiDecoderContract
+  abiEncoderRegisteredEffect
+  ctorAbiActualFrame
+  fragExec
+  ctorDeployMemoryRunPtrPrefixCanonical
+  ctorDeployMemoryRunPtrPrefixScalarClamps
+  exprLoweringProps
+  arithmetic
+  abiEncoder
+  emitHelper
+  venomInst
+  ctorAbiActualAlloc
+  abiDecoderClampedWord
+  ptrDiscipline
+  allocaBudgetProps
+  ctorDeployLoweringEntryAllocation
+  venomMemDefs
+  venomState
+  venomExecSemantics
+  words
+  list
+  ctorDeployMemoryRunPtrPrefixWord
+  fragGasSeqPtr
+  fragGasOriginPtrLoop
 
 Theorem prefix_scalar_complete_execution:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
@@ -57,6 +82,60 @@ Proof
   metis_tac[]
 QED
 
+Theorem prefix_decoder_noclamp_inst_seq_ptr:
+  !st st' src dst hi x s a w b sz G tn D lo ctx fn PG.
+    compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord NoClamp) st =
+      ((),st') /\ x = "%" ++ toString st.cs_next_var /\ x <> dst /\
+    eval_operand src s = SOME w /\ eval_operand (Var dst) s = SOME a /\
+    FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a + 32 <= b+sz /\
+    op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
+    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    inst_seq_ptr D lo ctx fn PG G tn (emitted_insts st st') s
+      (DRESTRICT G (COMPL {x}))
+      (step_taint (mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] [])
+         ((update_var x (word_of_bytes T (0w:bytes32)
+            (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s)
+          with vs_inst_idx := s.vs_inst_idx+1)
+         ((mstore (w2n a) (word_of_bytes T (0w:bytes32)
+            (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)))
+            (update_var x (word_of_bytes T (0w:bytes32)
+              (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s))
+          with vs_inst_idx := s.vs_inst_idx+1)
+         (step_taint (mk_inst st.cs_next_id DLOAD [src] [x]) s
+            (update_var x (word_of_bytes T (0w:bytes32)
+              (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s)
+            tn))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule prefix_decoder_noclamp_code >> strip_tac >>
+  qabbrev_tac `v = word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))` >>
+  qabbrev_tac `i = mk_inst st.cs_next_id DLOAD [src] [x]` >>
+  qabbrev_tac `j = mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] []` >>
+  qabbrev_tac `l = update_var x v s` >>
+  qabbrev_tac `t = mstore (w2n a) v l` >>
+  qabbrev_tac `H = DRESTRICT G (COMPL {x})` >>
+  qabbrev_tac `q = step_taint i s l tn` >>
+  qabbrev_tac `r = step_taint j (l with vs_inst_idx := s.vs_inst_idx+1)
+    (t with vs_inst_idx := s.vs_inst_idx+1) q` >>
+  mp_tac (Q.INST [`src` |-> `src`, `s` |-> `s`, `a` |-> `w`,
+    `dst` |-> `dst`, `p` |-> `a`, `x` |-> `x`, `b` |-> `b`, `sz` |-> `sz`,
+    `G` |-> `G`, `tn` |-> `tn`, `lo` |-> `lo`, `ctx` |-> `ctx`,
+    `fn` |-> `fn`, `PG` |-> `PG`, `D` |-> `D`, `iid` |-> `st.cs_next_id`]
+    prefix_canonical_noclamp_certificate) >>
+  simp[LET_THM] >> strip_tac >>
+  `emitted_insts st st' = [i;j]` by simp[Abbr `i`, Abbr `j`] >>
+  qpat_assum `emitted_insts st st' = [i;j]` (fn th => once_rewrite_tac[th]) >>
+  qspecl_then [`[i;j]`,`s`,`\n. if n=0 then s else if n=1 then l else t`,
+    `\n. if n=0 then G else H`, `\n. if n=0 then tn else if n=1 then q else r`]
+    (MATCH_MP_TAC o SRULE [] o Q.SPEC `[]` o Q.GEN `ys`)
+    prefix_trace_inst_seq_ptr >>
+  simp[Abbr `i`, Abbr `j`, mk_inst_def, inst_seq_ptr_def] >>
+  qx_gen_tac `k` >> strip_tac >>
+  qpat_x_assum `!fuel n. _` (qspecl_then [`0`,`k`] mp_tac) >>
+  simp[Abbr `l`, Abbr `t`, Abbr `q`, Abbr `r`, Abbr `H`, mk_inst_def]
+QED
+
 Theorem prefix_scalar_noclamp_ghost:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
@@ -76,7 +155,8 @@ Theorem prefix_scalar_noclamp_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >>
   drule prefix_canonical_noclamp_shape >> strip_tac >>
@@ -107,6 +187,10 @@ Proof
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st st') s = OK endpoint` >>
   `t = endpoint` by metis_tac[exec_result_11] >>
   qmatch_asmsub_abbrev_tac `ghost.t_mem = _` >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s
+          (DRESTRICT G (COMPL {x})) ghost` by
+    (gen_tac >> qunabbrev_tac `ghost` >>
+     metis_tac[prefix_decoder_noclamp_inst_seq_ptr]) >>
   qexistsl [`DRESTRICT G (COMPL {x})`,`ghost`] >>
   `w2n (n2w d:bytes32) = d` by simp[w2n_n2w] >>
   `LENGTH st'.cs_current_insts = s.vs_inst_idx + 2` by
@@ -117,7 +201,7 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
-  reverse conj_tac >- metis_tac[] >>
+  reverse conj_tac >- (conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC) >>
   gen_tac >> disch_tac >>
   `v <> x` by
     (qpat_x_assum `not_fresh_at st v` mp_tac >>
@@ -145,7 +229,8 @@ Theorem prefix_scalar_complete_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >> Cases_on `clamp`
   >- (irule prefix_scalar_noclamp_ghost >> goal_assum (drule_at Any) >> metis_tac[])
@@ -229,35 +314,35 @@ Theorem prefix_scalar_complete_shift:
   scratch_base+N <= initial.vs_alloca_next ==>
   ?actual H qt.
     run_inst_seq (emitted_insts st st') initial = OK actual /\
-    let final = actual with vs_inst_idx := LENGTH st'.cs_current_insts in
-    val_in_memory tv v d final.vs_memory /\ fresh_vars_wrt limit_st final /\
-    abi_decode_frame d 32 initial final /\
-    abi_decode_sim ctx func initial final /\
-    ~final.vs_halted /\ final.vs_current_bb = st'.cs_current_bb /\
-    final.vs_inst_idx = LENGTH st'.cs_current_insts /\
-    final.vs_data_section = initial.vs_data_section /\
-    final.vs_call_ctx = initial.vs_call_ctx /\ final.vs_labels = initial.vs_labels /\
-    final.vs_outcomes = initial.vs_outcomes /\
-    final.vs_tx_ctx = initial.vs_tx_ctx /\ final.vs_block_ctx = initial.vs_block_ctx /\
-    final.vs_gas_readings = initial.vs_gas_readings /\
-    final.vs_allocas = initial.vs_allocas /\
-    final.vs_alloca_next = initial.vs_alloca_next /\
-    allocas_from lo final /\ lo <= final.vs_alloca_next /\
-    alloca_inv final /\ alloca_frontier_inv_from k ctx func site' final /\
-    ctor_actual_scratch func ids scratch_base N final /\
-    scratch_base+N <= final.vs_alloca_next /\
-    (!a. a < lo ==> read_byte a final.vs_memory = read_byte a initial.vs_memory) /\
+        val_in_memory tv v d (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_memory /\ fresh_vars_wrt limit_st (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    abi_decode_frame d 32 initial (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    abi_decode_sim ctx func initial (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    ~(actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_halted /\ (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_current_bb = st'.cs_current_bb /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_inst_idx = LENGTH st'.cs_current_insts /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_data_section = initial.vs_data_section /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_call_ctx = initial.vs_call_ctx /\ (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_labels = initial.vs_labels /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_outcomes = initial.vs_outcomes /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_tx_ctx = initial.vs_tx_ctx /\ (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_block_ctx = initial.vs_block_ctx /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_gas_readings = initial.vs_gas_readings /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_allocas = initial.vs_allocas /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next = initial.vs_alloca_next /\
+    allocas_from lo (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\ lo <= (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next /\
+    alloca_inv (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\ alloca_frontier_inv_from k ctx func site' (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    ctor_actual_scratch func ids scratch_base N (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    scratch_base+N <= (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next /\
+    (!a. a < lo ==> read_byte a (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_memory = read_byte a initial.vs_memory) /\
     qt.t_mem = tn.t_mem DIFF range_bytes [(d,32)] /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!x. not_fresh_at st x ==> lookup_var x final = lookup_var x initial /\
+    (!x. not_fresh_at st x ==> lookup_var x (actual with vs_inst_idx := LENGTH st'.cs_current_insts) = lookup_var x initial /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
     abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
-      [(d,32)] initial final /\
+      [(d,32)] initial (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
     (?B. FINITE B /\ B SUBSET range_bytes [(d,32)] /\ DISJOINT B qt.t_mem /\
-      (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 final.vs_memory) ==>
+      (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_memory) ==>
         val_in_memory tv v d mem)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt final) ==>
-     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt (actual with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+    (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') initial H qt)
 Proof
   strip_tac >>
   drule_all prefix_scalar_complete_execution >>

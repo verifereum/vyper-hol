@@ -72,36 +72,36 @@ Theorem prefix_scalar_complete_shift_code:
   scratch_base+N <= initial.vs_alloca_next ==>
   ?actual H qt.
     run_inst_seq (emitted_insts st st') initial = OK actual /\
-    let final = actual with vs_inst_idx := LENGTH st'.cs_current_insts in
-    val_in_memory tv v d final.vs_memory /\ fresh_vars_wrt limit_st final /\
-    abi_decode_frame d 32 initial final /\
-    abi_decode_sim ctx func initial final /\
-    ~final.vs_halted /\ final.vs_current_bb = st'.cs_current_bb /\
-    final.vs_inst_idx = LENGTH st'.cs_current_insts /\
-    final.vs_data_section = initial.vs_data_section /\
-    final.vs_call_ctx = initial.vs_call_ctx /\ final.vs_labels = initial.vs_labels /\
-    final.vs_outcomes = initial.vs_outcomes /\
-    final.vs_tx_ctx = initial.vs_tx_ctx /\ final.vs_block_ctx = initial.vs_block_ctx /\
-    final.vs_gas_readings = initial.vs_gas_readings /\
-    final.vs_code = initial.vs_code /\
-    final.vs_allocas = initial.vs_allocas /\
-    final.vs_alloca_next = initial.vs_alloca_next /\
-    allocas_from lo final /\ lo <= final.vs_alloca_next /\
-    alloca_inv final /\ alloca_frontier_inv_from k ctx func site' final /\
-    ctor_actual_scratch func ids scratch_base N final /\
-    scratch_base+N <= final.vs_alloca_next /\
-    (!a. a < lo ==> read_byte a final.vs_memory = read_byte a initial.vs_memory) /\
+        val_in_memory tv v d (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_memory /\ fresh_vars_wrt limit_st (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    abi_decode_frame d 32 initial (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    abi_decode_sim ctx func initial (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    ~(actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_halted /\ (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_current_bb = st'.cs_current_bb /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_inst_idx = LENGTH st'.cs_current_insts /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_data_section = initial.vs_data_section /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_call_ctx = initial.vs_call_ctx /\ (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_labels = initial.vs_labels /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_outcomes = initial.vs_outcomes /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_tx_ctx = initial.vs_tx_ctx /\ (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_block_ctx = initial.vs_block_ctx /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_gas_readings = initial.vs_gas_readings /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_code = initial.vs_code /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_allocas = initial.vs_allocas /\
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next = initial.vs_alloca_next /\
+    allocas_from lo (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\ lo <= (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next /\
+    alloca_inv (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\ alloca_frontier_inv_from k ctx func site' (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    ctor_actual_scratch func ids scratch_base N (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+    scratch_base+N <= (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next /\
+    (!a. a < lo ==> read_byte a (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_memory = read_byte a initial.vs_memory) /\
     qt.t_mem = tn.t_mem DIFF range_bytes [(d,32)] /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!x. not_fresh_at st x ==> lookup_var x final = lookup_var x initial /\
+    (!x. not_fresh_at st x ==> lookup_var x (actual with vs_inst_idx := LENGTH st'.cs_current_insts) = lookup_var x initial /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
     abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
-      [(d,32)] initial final /\
+      [(d,32)] initial (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
     (?B. FINITE B /\ B SUBSET range_bytes [(d,32)] /\ DISJOINT B qt.t_mem /\
-      (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 final.vs_memory) ==>
+      (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_memory) ==>
         val_in_memory tv v d mem)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt final) ==>
-     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt (actual with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+    (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') initial H qt)
 Proof
   strip_tac >> drule_all prefix_scalar_complete_shift >>
   disch_then (qspecl_then [`site'`,`PG`,`D`] mp_tac) >>
@@ -136,38 +136,38 @@ Theorem prefix_canonical_member_setup_complete_shift_code:
   ctor_actual_scratch fn ids scratch_base N s /\ scratch_base+N <= s.vs_alloca_next ==>
   ?t H qt child_dst.
     run_inst_seq (emitted_insts st middle) s = OK t /\
-    let prepared = t with vs_inst_idx := LENGTH middle.cs_current_insts in
-    SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
+        SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
     op_taint qt (FST ops) = {} /\ op_taint qt (SND ops) = {} /\
-    eval_operand (FST ops) prepared = SOME (n2w (sb +
+    eval_operand (FST ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (sb +
       if type_to_abi_dec_info sf ce ty = DecComplex T [] then
         SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))
       else abi_tuple_child_offset (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))
         (preavs ++ av::avs) (LENGTH pretys))) /\
-    eval_operand (SND ops) prepared = SOME (n2w (d + SUM (MAP (type_memory_bytes ce) pretys))) /\
+    eval_operand (SND ops) (t with vs_inst_idx := LENGTH middle.cs_current_insts) = SOME (n2w (d + SUM (MAP (type_memory_bytes ce) pretys))) /\
     abi_decoder_operand_live middle.cs_next_var (FST ops) /\
     abi_decoder_operand_live middle.cs_next_var (SND ops) /\
-    fresh_vars_wrt limit_st prepared /\
-    abi_decoder_address_frame st.cs_next_var s prepared /\ inst_extends st middle /\
-    prepared.vs_allocas = s.vs_allocas /\ prepared.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
-    prepared.vs_current_bb = middle.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\ ~prepared.vs_halted /\
-    prepared.vs_memory = s.vs_memory /\ prepared.vs_data_section = s.vs_data_section /\
-    prepared.vs_call_ctx = s.vs_call_ctx /\ prepared.vs_labels = s.vs_labels /\
-    (!x. not_fresh_at st x ==> lookup_var x prepared = lookup_var x s) /\
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    abi_decoder_address_frame st.cs_next_var s (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ inst_extends st middle /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_allocas = s.vs_allocas /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next = s.vs_alloca_next /\
+    allocas_from lo (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ lo <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_current_bb = middle.cs_current_bb /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_inst_idx = LENGTH middle.cs_current_insts /\ ~(t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_halted /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_memory = s.vs_memory /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_data_section = s.vs_data_section /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_call_ctx = s.vs_call_ctx /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_labels = s.vs_labels /\
+    (!x. not_fresh_at st x ==> lookup_var x (t with vs_inst_idx := LENGTH middle.cs_current_insts) = lookup_var x s) /\
     qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
     qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==>
        FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt prepared) ==>
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt (t with vs_inst_idx := LENGTH middle.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
-    alloca_inv prepared /\ alloca_frontier_inv_from k ctx fn site prepared /\
-    ctor_actual_scratch fn ids scratch_base N prepared /\
-    scratch_base+N <= prepared.vs_alloca_next /\
-    prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
-    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings /\
-    prepared.vs_code = s.vs_code
+    alloca_inv (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\ alloca_frontier_inv_from k ctx fn site (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    ctor_actual_scratch fn ids scratch_base N (t with vs_inst_idx := LENGTH middle.cs_current_insts) /\
+    scratch_base+N <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_outcomes = s.vs_outcomes /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_tx_ctx = s.vs_tx_ctx /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_block_ctx = s.vs_block_ctx /\ (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_gas_readings = s.vs_gas_readings /\
+    (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_code = s.vs_code /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >> drule_all prefix_canonical_member_setup_complete_shift >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[LET_THM] >> strip_tac >>
@@ -640,7 +640,6 @@ Proof
     (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
   drule_all prefix_canonical_member_setup_complete_shift_code >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
-  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>
   `abi_decode_sim ctx func initial prepared /\
    abi_encoder_registered_effect {} [] initial prepared` by

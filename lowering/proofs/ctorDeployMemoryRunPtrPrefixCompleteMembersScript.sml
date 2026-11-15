@@ -210,7 +210,6 @@ Proof
     (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
   drule_all prefix_canonical_member_setup_complete_shift >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
-  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>
   `abi_decode_sim ctx func initial prepared /\
    abi_encoder_registered_effect {} [] initial prepared` by
