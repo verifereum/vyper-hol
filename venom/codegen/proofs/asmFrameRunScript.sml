@@ -94,6 +94,28 @@ Proof
   DISJ2_TAC >> metis_tac[]
 QED
 
+Theorem asm_frame_terminal_gas_readings:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  (asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmHalt b \/
+   asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmRevert b \/
+   asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmFault b) ==>
+  b.as_gas_readings = []
+Proof
+  strip_tac >>
+  `frame_last es` by (drule_all asm_frame_step >> simp[] >> metis_tac[]) >>
+  `gas_readings es = []` by
+    (Cases_on `step es` >> rename1 `step es = (result,succ)` >>
+     Cases_on `result` >> gvs[frame_last_def] >>
+     drule frameObsStepTheory.frame_obs_terminal >> simp[]) >>
+  `b.as_gas_readings = a.as_gas_readings` by
+    (irule asm_step_terminal_gas_readings >> metis_tac[]) >>
+  gvs[asm_frame_rel_def]
+QED
+
 (* Carry the real frame simulation through an arbitrary unread suffix. *)
 Theorem asm_frame_step_tail:
   asm_frame_prog_ok prog /\ asm_frame_rel_tail tail prog data es0 a es /\
