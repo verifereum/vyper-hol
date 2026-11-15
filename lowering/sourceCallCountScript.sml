@@ -2023,7 +2023,7 @@ Theorem source_replay_cut_bind[local]:
           (f (s with outcomes := SOME os)) =
         (\(r,s). (r,erase_storage_trace s))
           (f (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
-        (!v u. f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (INL v,u) ==>
+        (!re u. f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,u) ==>
           u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))) /\
     (!v s os r t.
       g v (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) ==>
@@ -2046,7 +2046,7 @@ Theorem source_replay_cut_bind[local]:
           (g v (s with outcomes := SOME os)) =
         (\(r,s). (r,erase_storage_trace s))
           (g v (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
-        (!w u. g v (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (INL w,u) ==>
+        (!re u. g v (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,u) ==>
           u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))) /\
     (!v. outcomes_suffix (g v)) /\
     (!a b s t.
@@ -2058,7 +2058,7 @@ Theorem source_replay_cut_bind[local]:
       s.outcomes = SOME [] /\ accounts_runtime_well_typed s.accounts /\
       g v s = (r,t) ==>
       r <> INR (Error (RuntimeError "create outcome accounts")) /\
-      (ISL r ==> t.outcomes = SOME [] /\ accounts_runtime_well_typed t.accounts)) ==>
+      t.outcomes = SOME [] /\ accounts_runtime_well_typed t.accounts) ==>
     !s os r t.
       bind f g (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) ==>
       ((?pre. t.outcomes = SOME (pre ++ [probe_failed_outcome]) /\
@@ -2080,7 +2080,7 @@ Theorem source_replay_cut_bind[local]:
           (bind f g (s with outcomes := SOME os)) =
         (\(r,s). (r,erase_storage_trace s))
           (bind f g (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
-        (!v u. bind f g (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (INL v,u) ==>
+        (!re u. bind f g (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,u) ==>
           u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -2129,11 +2129,9 @@ Resume source_replay_cut_bind[create]:
       first_x_assum drule >> simp[]) >>
   rpt gen_tac >>
   Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
-  rename1 `f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,se)` >>
-  Cases_on `re` >> gvs[vyperStateTheory.bind_def] >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  first_x_assum drule >> simp[] >> strip_tac >>
-  first_x_assum drule >> simp[]
+  rename1 `f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (rx,sx)` >>
+  Cases_on `rx` >> gvs[vyperStateTheory.bind_def] >>
+  metis_tac[]
 QED
 Finalise source_replay_cut_bind[local]
 
