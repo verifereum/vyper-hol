@@ -47,7 +47,7 @@ Proof
   simp[ricf_heterogeneous_source_ledger_def, EVERY_MEM] >> rpt strip_tac
   >- (irule occ_frame_reachable_next >> metis_tac[]) >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`ctxP`, `logP`] >>
   Cases_on `inst.inst_opcode = ALLOCA`
@@ -96,7 +96,7 @@ Proof
   drule_all ricf_source_ledger_activate >> strip_tac >>
   `(ricf_event_copy e (EL b fn.fn_blocks)).inst_opcode = MCOPY` by
     (`ssa_form fn` by
-       (drule occ_frame_reachable_annotation >>
+       (drule occ_frame_reachable_annotation_static >>
         fs[EVERY_MEM, venomWfTheory.wf_ssa_def]) >>
      drule_all ricf_located_event_source_descriptor >> strip_tac >>
      drule ricf_located_event_validation >> strip_tac >>

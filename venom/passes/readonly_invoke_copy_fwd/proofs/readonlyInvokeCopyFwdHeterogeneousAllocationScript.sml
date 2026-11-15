@@ -93,8 +93,8 @@ Proof
     (qpat_assum `ricf_translation_origin _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [ricf_translation_origin_def]) >>
      gvs[] >> metis_tac[ricf_translation_positive]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   fs[occurrence_annotation_ok_def] >>
   `FLOOKUP B (a,aid) = SOME (b,z)` by fs[occurrence_allocas_ok_def] >>
   fs[ricf_translation_origin_def] >> gvs[] >>
