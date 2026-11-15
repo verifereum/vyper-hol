@@ -305,9 +305,11 @@ Resume aug_place_rhs_operator_write_mem[callback]:
   `eval_operand y t = SOME (val_to_w256 v)` by
     (drule_all expr_post_word_operand >> simp[]) >>
   `eval_operand x t = SOME (val_to_w256 cur) /\ eval_operand dst t = SOME w` by
-    (conj_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
-     qexistsl_tac [`s1`, `s0`] >> rpt conj_tac >>
-     FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+    (conj_tac
+     >- (match_mp_tac (Q.SPECL [`x`, `s1`, `s0`, `t`, `val_to_w256 cur`]
+                       exprBopSimPropsTheory.eval_operand_frame) >> simp[]) >>
+     match_mp_tac (Q.SPECL [`dst`, `s1`, `s0`, `t`, `w`]
+                    exprBopSimPropsTheory.eval_operand_frame) >> simp[]) >>
   `place_ptr_rel cenv cx t (PlaceR p) w (SOME loc) (Type ty)` by
     (Cases_on `p`
      >- fs[place_ptr_rel_def]
