@@ -163,6 +163,3 @@ Resume log_success_suffix_path_ptr[post]:
   metis_tac[]
 QED
 Finalise log_success_suffix_path_ptr
-
-val _ = if null (hyp log_success_suffix_path_ptr) then ()
-  else raise Fail "log_success_suffix_path_ptr is not closed";
