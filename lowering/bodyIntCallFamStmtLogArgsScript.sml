@@ -18,6 +18,7 @@ Theorem intcall_compile_log_eval_all:
   EVERY (supportedExprs$supported_expr fp.jc_tops) args /\
   EVERY (\e. calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) args /\
   EVERY supported_scalar_type (MAP expr_type args) /\
+  ~exprs_can_mutate ce args /\
   compile_log_eval_all ce args sa = (xs,sb) /\
   gas_admissible (eval_exprs fp.jc_cx args) log_args_res_ok es /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
@@ -50,20 +51,18 @@ Proof
   suspend "cons"
 QED
 
-(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
 Resume intcall_compile_log_eval_all[cons]:
-  (* original proof, kept while held:
-  rpt gen_tac >> simp[EVERY_DEF, MAP, compile_log_eval_all_cons] >>
-  strip_tac >> gvs[] >>
+  rpt gen_tac >> simp[EVERY_DEF, MAP, exprLoweringTheory.expr_can_mutate_def] >>
+  strip_tac >>
+  qpat_x_assum `compile_log_eval_all _ (_::_) _ = _` mp_tac >>
+  simp[compile_log_eval_all_unsaved_cons] >> strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr ce (expr_type e) e sa = (op,sm)` >>
-  `compile_log_eval_all ce [e] sa = ([(op,expr_type e)],sm)` by
-    simp[compile_log_eval_all_cons, compile_log_eval_all_nil] >>
-  drule_all compile_log_eval_all_grows >> strip_tac >>
+  `local_ptrs_reserved ce sa` by fs[intcall_expr_res_def] >>
   `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
-    (qpat_x_assum `compile_log_eval_all ce [e] _ = _` mp_tac >>
-     metis_tac[compile_log_eval_all_grows]) >>
-  qpat_assum `compile_log_eval_all ce args sm = _`
-    (strip_assume_tac o MATCH_MP compile_log_eval_all_grows) >>
+    (drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> simp[]) >>
+  `!z. op = Var z ==> not_fresh_at sm z` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  drule_all compile_log_eval_all_grows >> strip_tac >>
   `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
     (irule fragExecTheory.fn_has_code_split >> simp[]) >>
   `gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) expr_res_ok es` by
@@ -80,8 +79,6 @@ Resume intcall_compile_log_eval_all[cons]:
       fs[exprSimDefsTheory.expr_exit_INL, stmtSimPropsTheory.expr_exit_INR_type]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   suspend "normal"
-  *)
-  cheat
 QED
 
 Resume intcall_compile_log_eval_all[normal]:
