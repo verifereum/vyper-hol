@@ -1065,3 +1065,112 @@ Proof
   >- metis_tac[asm_op_terminal_gas_readings] >>
   rpt CASE_TAC >> simp[]
 QED
+
+(* GAS consumes one real reading before the unread assembly suffix. *)
+Theorem asm_frame_gas_step_tail:
+  asm_frame_prog_ok prog /\ asm_frame_rel_tail tail prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog = AsmOp "GAS" ==>
+  (?r final. run_call es = SOME (r,final) /\
+    frame_resource_starved es0 r final /\ call_requests es = []) \/
+  ?es1 w a1.
+    step es = (INL (),es1) /\ run_call es1 = run_call es /\
+    gas_readings es = w::gas_readings es1 /\
+    asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (AsmOp "GAS") a = AsmOK a1 /\
+    asm_frame_rel_tail tail prog data es0 a1 es1
+Proof
+  strip_tac >>
+  qabbrev_tac `b = a with as_gas_readings := gas_readings es` >>
+  `asm_frame_rel prog data es0 b es /\ b.as_pc = a.as_pc /\
+   a.as_gas_readings = gas_readings es ++ tail` by
+    fs[asm_frame_rel_tail_def, Abbr `b`] >>
+  `b.as_pc < LENGTH prog /\ ~is_data_inst (EL b.as_pc prog) /\
+   EL b.as_pc prog = AsmOp "GAS"` by simp[is_data_inst_def] >>
+  `EL b.as_pc prog <> AsmOp "CALL" /\
+   EL b.as_pc prog <> AsmOp "STATICCALL" /\
+   EL b.as_pc prog <> AsmOp "DELEGATECALL" /\
+   EL b.as_pc prog <> AsmOp "CREATE" /\
+   EL b.as_pc prog <> AsmOp "CREATE2" /\
+   EL b.as_pc prog <> AsmOp "SELFDESTRUCT"` by simp[] >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) b es /\ wf_state es` by
+    gvs[asm_frame_rel_def] >>
+  drule_all frame_local_opcode >> strip_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) b
+    (es with contexts := [(c,rb)])` by metis_tac[frame_rel_singleton] >>
+  `asm_encoding_wf prog /\ (!j. j <= b.as_pc ==>
+    ~is_data_inst (EL j prog))` by metis_tac[frame_local_instruction] >>
+  `LENGTH (es with contexts := [(c,rb)]).contexts = 1` by simp[] >>
+  drule_all asm_evm_gas_step >> strip_tac
+  >- (disj1_tac >> drule (SRULE [MEM] frame_starved_lift) >>
+      disch_then drule >> simp[] >>
+      impl_tac >- gvs[MEM] >> metis_tac[])
+  >- (disj1_tac >> drule (SRULE [MEM] frame_starved_lift) >>
+      disch_then drule >> simp[] >>
+      impl_tac >- gvs[MEM] >> metis_tac[]) >>
+  rename1 `step (es with contexts := [(c,rb)]) = (INL (),t)` >>
+  drule_all frame_continue_transplant >> strip_tac >>
+  `LENGTH es1.contexts = LENGTH es.contexts /\
+   next_opcode (FST (HD es.contexts)) = SOME Gas` by simp[] >>
+  drule_all frame_obs_gas_step >> strip_tac >>
+  `HD (FST (HD es1.contexts)).stack = w` by
+    (qpat_x_assum `asm_evm_rel _ _ es1` mp_tac >>
+     simp[asm_evm_rel_def] >> Cases_on `es1.contexts` >> simp[] >>
+     PairCases_on `h` >> simp[] >> strip_tac >> gvs[]) >>
+  `b.as_gas_readings = w::gas_readings es1` by gvs[asm_frame_rel_def] >>
+  drule frame_gas_asm_step >> strip_tac >>
+  `asm_frame_rel prog data es0
+     (b with <|as_stack := w::b.as_stack; as_pc := b.as_pc + 1;
+               as_gas_readings := gas_readings es1|>) es1` by
+    (irule frame_continue_rel >> simp[] >>
+     conj_tac >- gvs[asm_frame_rel_def] >>
+     conj_tac
+     >- (drule frame_rel_readings_update >>
+         disch_then (qspec_then `gas_readings es1` mp_tac) >> simp[]) >>
+     qexistsl_tac [`b`,`es`] >> simp[]) >>
+  `a with <|as_stack := w::a.as_stack; as_pc := a.as_pc + 1;
+             as_gas_readings := gas_readings es1|> =
+   b with <|as_stack := w::b.as_stack; as_pc := b.as_pc + 1;
+             as_gas_readings := gas_readings es1|>` by
+    simp[Abbr `b`, asm_state_component_equality] >>
+  disj2_tac >> qexistsl_tac [`es1`,`w`,
+    `a with <|as_stack := w::a.as_stack; as_pc := a.as_pc + 1;
+               as_gas_readings := gas_readings es1 ++ tail|>`] >>
+  simp[asm_frame_rel_tail_def] >>
+  conj_tac >- (irule frame_gas_asm_step >> simp[]) >>
+  qpat_x_assum `asm_frame_rel prog data es0
+    (b with <|as_stack := w::b.as_stack; as_pc := b.as_pc + 1;
+              as_gas_readings := gas_readings es1|>) es1`
+    (fn th => qpat_x_assum `b.as_pc = a.as_pc`
+      (fn eq => ACCEPT_TAC (REWRITE_RULE [eq] th)))
+QED
+
+Theorem frame_plain_success_not_last:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog <> AsmOp "CALL" /\
+  EL a.as_pc prog <> AsmOp "STATICCALL" /\
+  EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+  EL a.as_pc prog <> AsmOp "CREATE" /\
+  EL a.as_pc prog <> AsmOp "CREATE2" /\
+  EL a.as_pc prog <> AsmOp "SELFDESTRUCT" /\
+  EL a.as_pc prog <> AsmOp "GAS" /\
+  run_call es = SOME (r,t) /\ ~frame_resource_starved es0 r t /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 ==>
+  ~frame_last es
+Proof
+  strip_tac >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a es /\ wf_state es` by
+    gvs[asm_frame_rel_def] >>
+  drule_all frame_local_opcode >> strip_tac >>
+  drule_all frame_plain_singleton_sim >> simp[] >> strip_tac
+  >- (drule (SRULE [MEM] frame_starved_lift) >>
+      disch_then drule >> simp[] >> strip_tac >> gvs[])
+  >- (drule (SRULE [MEM] frame_starved_lift) >>
+      disch_then drule >> simp[] >> strip_tac >> gvs[]) >>
+  drule_all frame_continue_transplant >> disch_then strip_assume_tac >>
+  fs[frame_last_def]
+QED
