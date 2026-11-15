@@ -70,7 +70,7 @@ Proof
   Cases_on `i.inst_opcode` >> gvs[]
 QED
 
-Theorem label_positions_codecopy[local]:
+Theorem label_positions_codecopy:
   label_positions_ok i /\ i.inst_opcode = CODECOPY /\
   MEM (Label l) i.inst_operands ==>
   l = "runtime_begin"
