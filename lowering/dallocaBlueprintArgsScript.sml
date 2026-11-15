@@ -33,11 +33,11 @@ Theorem create_blueprint_encoded_args_compile:
   compile_create_blueprint_args cfn ce F args cb = ((args_ptr,args_len),sa) ==>
   ?buf c1 src c2.
     compile_alloc_buffer
-      (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) cb =
+      (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) cb =
       (buf,c1) /\
     compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
     compile_abi_encode_to_buf buf.buf_operand src
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
+      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
       c2 = (args_len,sa) /\ args_ptr = buf.buf_operand
 Proof
   Cases_on `args` >>
@@ -67,17 +67,17 @@ QED
    captured register at s_tup. This theorem executes the encoder stage. *)
 Theorem create_blueprint_encoded_args_prefix:
   compile_abi_encode_to_buf dst src
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
     c2 = (args_len,sa) /\
   abi_encoder_window_pre ctx func c2 sa dst src
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
-    (vyper_to_abi_type tenv (TupleT (MAP expr_type args))) av
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+    (vyper_to_abi_type tenv (TupleT (MAP (lowered_value_type ce) args))) av
     source_base source_cap dest_base s_tup /\
   sfields_tenv_consistent ce.ce_struct_fields tenv /\
-  evaluate_type tenv (TupleT (MAP expr_type args)) = SOME tv /\
+  evaluate_type tenv (TupleT (MAP (lowered_value_type ce) args)) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi tenv (TupleT (MAP expr_type args)) v = SOME av /\
-  abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) < 2 ** 64 /\
+  vyper_to_abi tenv (TupleT (MAP (lowered_value_type ce) args)) v = SOME av /\
+  abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) < 2 ** 64 /\
   compile_create_blueprint_check target offset ca = (Var code_name,cb) /\
   compile_alloc_buffer capacity cb = (buf,c1) /\
   compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
@@ -85,23 +85,23 @@ Theorem create_blueprint_encoded_args_prefix:
   lookup_var code_name s_tup = SOME captured ==>
   ?s2.
     window_strong_result ctx func c2 sa args_len
-      (vyper_to_abi_type tenv (TupleT (MAP expr_type args))) av
+      (vyper_to_abi_type tenv (TupleT (MAP (lowered_value_type ce) args))) av
       dest_base s_tup s2 /\
     eval_operand (Var code_name) s2 = SOME captured /\
     eval_operand args_len s2 =
       SOME (n2w (LENGTH (enc (vyper_to_abi_type tenv
-        (TupleT (MAP expr_type args))) av))) /\
+        (TupleT (MAP (lowered_value_type ce) args))) av))) /\
     w2n (n2w (LENGTH (enc (vyper_to_abi_type tenv
-      (TupleT (MAP expr_type args))) av)) : bytes32) < 2 ** 64
+      (TupleT (MAP (lowered_value_type ce) args))) av)) : bytes32) < 2 ** 64
 Proof
   strip_tac >> drule_all create_blueprint_encoded_check_operand >> strip_tac >>
   drule_all create_ctor_encoding_bound >> strip_tac >>
   drule_all abi_props_vyper_typed >> strip_tac >>
   `LENGTH (enc (vyper_to_abi_type tenv
-     (TupleT (MAP expr_type args))) av) < 2 ** 64` by
+     (TupleT (MAP (lowered_value_type ce) args))) av) < 2 ** 64` by
     metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS] >>
   `LENGTH (enc (vyper_to_abi_type tenv
-     (TupleT (MAP expr_type args))) av) < dimword (:256)` by
+     (TupleT (MAP (lowered_value_type ce) args))) av) < dimword (:256)` by
     (fs[dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
   drule_all compile_abi_encode_to_buf_window_strong_run >>
   disch_then (qx_choose_then `s2` assume_tac) >>
