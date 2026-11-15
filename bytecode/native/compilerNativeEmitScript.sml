@@ -10,7 +10,7 @@ Theory compilerNativeEmit
 Ancestors compileVyper evalCompiler evalCompilerSubsetAbiBuiltins evalCompilerSubsetAbiEvents
   evalCompilerSubsetAbiExternalCalls evalCompilerSubsetAbiExternal evalCompilerSubsetAbiInternalCalls
   evalCompilerSubsetBuiltins evalCompilerSubsetControlDeploy evalCompilerSubsetScalars evalCompilerSubsetState
-  integer_word alist jsonToVyperCV vyperTestRunner
+  integer_word alist jsonToVyperCV vyperTestRunner supportedProgram
 Libs EmitML finite_mapLib wordsLib cv_typeLib memoryStoreWitnessLib
 
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
@@ -448,6 +448,49 @@ val code_rewrites = [
   (* alloc_limits_expr asks whether a builtin is a Slice *)
   prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
     Cases_on `bi` >> rw[]),
+  (* supported_program's quantifiers: the storage dynamic-array tests of
+     supported_stmt and supported_append_target, and supported_iterator's
+     general iterable *)
+  prove (``(?vis mut dn slot.
+              supported_variable_decl tops id =
+                SOME (vis, mut, ArrayT ty (Dynamic dn), SOME slot)) <=>
+           (case supported_variable_decl tops id of
+              SOME (vis, mut, ArrayT ty' (Dynamic dn), SOME slot) => ty' = ty
+            | _ => F)``,
+    BasicProvers.every_case_tac >> gvs[]),
+  prove (``(?vis mut elem dn slot.
+              supported_variable_decl tops id =
+                SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem) <=>
+           (case supported_variable_decl tops id of
+              SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) =>
+                (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem
+            | _ => F)``,
+    BasicProvers.every_case_tac >> gvs[]),
+  prove (``(?t c l r. x = IfExp t c l r) <=> (case x of IfExp _ _ _ _ => T | _ => F)``,
+    Cases_on `x` >> rw[]),
+  prove (``(!tgt nid. p = SOME tgt ==> FST (place_access tgt []) <> TopLevelNameTarget nid) <=>
+           (case p of
+              NONE => T
+            | SOME tgt => (case FST (place_access tgt []) of
+                             TopLevelNameTarget _ => F
+                           | _ => T))``,
+    BasicProvers.every_case_tac >> gvs[]),
+  prove (``(!t fid args drv. e = Call t (IntCall fid) args drv ==>
+             ?m nr rr ps ds b.
+               supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b)) <=>
+           (case e of
+              Call t (IntCall fid) args drv =>
+                (case supported_function_decl tops fid Internal of
+                   SOME (m,nr,rr,ps,ds,t',b) => t' = t
+                 | NONE => F)
+            | _ => T)``,
+    BasicProvers.every_case_tac >> gvs[]),
+  prove (``(?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n) <=>
+           (case expr_type e of
+              ArrayT ty' bd => ty' = ty /\ bound_length bd <= n
+            | _ => F)``,
+    Cases_on `expr_type e` >> rw[EQ_IMP_THM]),
   GSYM listTheory.EXISTS_MEM, GSYM listTheory.EVERY_MEM,
   (* entry_instructions' no-effects test. *)
   prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
@@ -597,6 +640,7 @@ in list_mk_abs ([l, s], list_mk_comb (c,
 val entries = [
   ("compile", ``compile_vyper (K SOME) (o1_policy all_capabilities)``),
   ("annotate_sources_slots", annotate_slots_tm),
+  ("supported", ``\tops. supported_program tops /\ supported_program_deploy tops``),
   ("cv_num", ``\n. cv$Num n``),
   ("cv_pair", ``\a b. cv$Pair a b``)];
 val root_terms = map #2 entries @ map #2 all_fixtures;

@@ -1,5 +1,6 @@
 #!/bin/sh
 # Generate/check an independent bytecode oracle using the pinned Python Vyper.
+# With --install DIR, only install the patched pinned Vyper, as DIR/venv.
 set -eu
 
 mode=check
@@ -8,13 +9,19 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --check) mode=check ;;
     --update) mode=update ;;
+    --install)
+      shift
+      [ "$#" -gt 0 ] || { echo "--install requires a directory" >&2; exit 2; }
+      mode=install
+      install_dir=$1
+      ;;
     --vyper-repo)
       shift
       [ "$#" -gt 0 ] || { echo "--vyper-repo requires a path" >&2; exit 2; }
       vyper_repo=$1
       ;;
     *)
-      echo "usage: $0 [--check|--update] --vyper-repo PATH" >&2
+      echo "usage: $0 [--check|--update|--install DIR] --vyper-repo PATH" >&2
       exit 2
       ;;
   esac
@@ -50,8 +57,13 @@ if [ -n "$(git -C "$vyper_repo" status --porcelain --untracked-files=all)" ]; th
   exit 1
 fi
 
-stage=$(mktemp -d "${TMPDIR:-/tmp}/vyper-o1-oracle.XXXXXX")
-trap 'rm -rf "$stage"' EXIT HUP INT TERM
+if [ "$mode" = install ]; then
+  mkdir "$install_dir"
+  stage=$(CDPATH= cd -- "$install_dir" && pwd)
+else
+  stage=$(mktemp -d "${TMPDIR:-/tmp}/vyper-o1-oracle.XXXXXX")
+  trap 'rm -rf "$stage"' EXIT HUP INT TERM
+fi
 staged_vyper=$stage/vyper-src
 venv=$stage/venv
 generated=$stage/generated
@@ -82,6 +94,10 @@ UV_PYTHON_INSTALL_DIR="$stage/python" \
   UV_CONSTRAINT="$constraints" UV_BUILD_CONSTRAINT="$constraints" \
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
   uv pip install --quiet --python "$venv/bin/python" "$staged_vyper"
+if [ "$mode" = install ]; then
+  echo "installed the patched pinned Vyper in $venv"
+  exit 0
+fi
 
 source_count=$(find "$sources" -maxdepth 1 -type f -name '*.vy' | wc -l | tr -d ' ')
 expected_total=$((source_count + 1))
