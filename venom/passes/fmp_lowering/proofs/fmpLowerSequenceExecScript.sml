@@ -379,13 +379,6 @@ QED
  * steps; for any other instruction, the lowered head's run, R, the frontier
  * relation afterwards, and (unless it clears the marks) an unchanged runner
  * and marks. *)
-Theorem EL_segment[local]:
-  LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg ==>
-  EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg
-Proof
-  rw[EL_APPEND_EQN]
-QED
-
 (* Splitting a lowered instruction list, so a block can be taken a segment at
  * a time (e.g. the body before a terminator). *)
 Theorem fmp_lower_indexed_append:
@@ -541,7 +534,7 @@ Proof
   rename1 `df_at NONE states bb.bb_label j = SOME ast` >>
   `EL (j - LENGTH pre) seg = EL j bb.bb_instructions` by
     (`EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg` by
-       (irule EL_segment >> fs[]) >>
+       (fs[] >> simp[EL_APPEND_EQN]) >>
      metis_tac[]) >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `j < LENGTH bb.bb_instructions` by fs[] >>
