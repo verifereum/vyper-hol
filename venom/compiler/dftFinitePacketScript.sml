@@ -786,7 +786,11 @@ Proof
   `wf_function sf` by metis_tac[dft_fn_rel_def] >>
   `MEM inst bb.bb_instructions` by metis_tac[EL_MEM, MEM_APPEND] >>
   `u.vs_current_bb = bb.bb_label` by
-    (irule dft_packet_active_block >> metis_tac[]) >>
+    (qpat_assum `wf_function sf` mp_tac >>
+     qpat_assum `active_inst sf inst u` mp_tac >>
+     qpat_assum `lookup_block _ sf.fn_blocks = SOME bb` mp_tac >>
+     qpat_assum `MEM inst bb.bb_instructions` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[dft_packet_active_block]) >>
   `st.vs_current_bb = bt.bb_label` by
     metis_tac[simplifyCfgDefsTheory.lookup_block_member_label] >>
   `active_inst tf inst st` by
@@ -1647,6 +1651,68 @@ Proof
   qpat_x_assum `!a e rows keyrows kv. _ ==> MEM kv _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
   metis_tac[dft_packet_fresh_pair_none]
+QED
+
+Theorem dft_packet_pseudo_fuel[local]:
+  !zs f g s. EVERY (\i. is_pseudo i.inst_opcode) zs ==>
+    FOLDR (dft_exec_cons f C) OK zs s =
+    FOLDR (dft_exec_cons g C) OK zs s
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  `h.inst_opcode <> INVOKE` by
+    (Cases_on `h.inst_opcode` >> gvs[venomInstTheory.is_pseudo_def]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  Cases_on `step_inst_base h s` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_packet_selected_body[local]:
+  !N C7 C8 root_sf root_tf root_entry packet acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d q8 raw_slots sites unused a e bb bt ps xs ys rho hin h0 be hbe
+    count front closed brest.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  FLOOKUP blocks (a,e) =
+    SOME (bb,bt,ps,xs,ys,rho,hin,h0,SOME (be,hbe),count,front,closed,brest) ==>
+  ?sp. bb.bb_instructions = ps ++ xs /\
+    EVERY (\i. is_pseudo i.inst_opcode) ps /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) xs /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) ys /\
+    eval_phis hin (ps ++ ys) = OK sp /\
+    (!F. FOLDR (dft_exec_cons (F-e) C8) OK
+      (DROP (phi_prefix_length (ps ++ ys)) ps)
+      (sp with vs_inst_idx := phi_prefix_length (ps ++ ys)) = OK be) /\
+    LENGTH (THE (FLOOKUP ms_tab (a,e))) = LENGTH xs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qhdtm_x_assum `dft_focus_packet_rel`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,count,front,closed,brest) ==> _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` (mp_tac o cj 1) >>
+  qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM es_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ks_tab` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (a,e) = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,count,front,closed,brest) ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `case SOME (be,hbe) of _ => _ | _ => _` mp_tac >>
+  simp[] >> strip_tac >>
+  `?ms. FLOOKUP ms_tab (a,e) = SOME ms` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  `?ess. FLOOKUP es_tab (a,e) = SOME ess` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  `?ks. FLOOKUP ks_tab (a,e) = SOME ks` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` (drule_then strip_assume_tac) >> gvs[] >>
+  gen_tac >>
+  qpat_x_assum `FOLDR _ _ _ _ = OK be` mp_tac >>
+  `EVERY (\i. is_pseudo i.inst_opcode)
+    (DROP (phi_prefix_length (ps ++ ys)) ps)` by simp[EVERY_DROP] >>
+  metis_tac[dft_packet_pseudo_fuel]
 QED
 
 Theorem dft_focus_packet_step:
