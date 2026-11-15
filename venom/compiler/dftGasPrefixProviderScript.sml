@@ -13,6 +13,7 @@ Ancestors
   dftGasInvResidualTrace venomInstProps venomInstProofs stateEquivProofs
   dftBlockSim stateFrame venomEffects dftScheduleOrder
   dftGasInvSSAProbe unitShapeDefs venomWf option
+  dftPermSim dftShape dftStructural dftCorrectness passSharedDefs
 
 Definition dft_blocks_gas_prefix_def:
   dft_blocks_gas_prefix <=>
@@ -1537,6 +1538,93 @@ Resume native_silent_swap_observations[stopped]:
 QED
 
 Finalise native_silent_swap_observations
+
+Theorem native_from_block_observations[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM h bi /\
+  from_block bi i /\ h.inst_id = i.inst_id ==>
+  step_inst n C h a = step_inst n C i a /\
+  is_terminator h.inst_opcode = is_terminator i.inst_opcode /\
+  visit_gas ((p,d,h.inst_id),fn,h,a) ++
+    trace_gas (dftGasFromListTraceDefs$trace_step p d n C fn h a) =
+  visit_gas ((p,d,i.inst_id),fn,i,a) ++
+    trace_gas (dftGasFromListTraceDefs$trace_step p d n C fn i a) /\
+  gas_events_step n C fn.fn_name h a = gas_events_step n C fn.fn_name i a
+Proof
+  strip_tac >> fs[from_block_def]
+  >- (`h = i` by metis_tac[all_distinct_map_mem_inj] >> simp[]) >>
+  rename1 `i = flip_operands original` >>
+  `h = original` by
+    metis_tac[all_distinct_map_mem_inj, flip_operands_inst_id] >>
+  qpat_x_assum `h = original` SUBST_ALL_TAC >>
+  `original.inst_opcode <> GAS /\ original.inst_opcode <> INVOKE` by
+    (Cases_on `original.inst_opcode` >>
+     gvs[is_flippable_def, is_commutative_def, is_comparator_def]) >>
+  `(flip_operands original).inst_opcode <> GAS /\
+   (flip_operands original).inst_opcode <> INVOKE` by
+    metis_tac[flip_operands_special_opcode, MEM] >>
+  gvs[flip_operands_step_inst, flip_operands_is_terminator, visit_gas_def,
+      dftGasFromListTraceDefsTheory.trace_step_noninvoke, gas_events_step_def]
+QED
+
+Theorem native_normalized_suffix_observations[local]:
+  !norm scheduled a bn bt.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    EVERY (\i. MEM i bi) norm /\ EVERY (from_block bi) scheduled /\
+    LIST_REL (\h i. h.inst_id = i.inst_id) norm scheduled /\
+    DROP a.vs_inst_idx bn.bb_instructions = norm /\
+    DROP a.vs_inst_idx bt.bb_instructions = scheduled ==>
+    exec_block n C bn a = exec_block n C bt a /\
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bn a) =
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bt a) /\
+    gas_events_block n C fn.fn_name bn a = gas_events_block n C fn.fn_name bt a
+Proof
+  Induct >> Cases_on `scheduled` >> simp[] >> rpt gen_tac >> strip_tac
+  >- (gvs[DROP_EQ_NIL] >>
+      once_rewrite_tac[exec_block_def, cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                       gas_events_block_def] >> simp[get_instruction_def]) >>
+  rename1 `MEM source bi` >> rename1 `from_block bi target` >>
+  `a.vs_inst_idx < LENGTH bn.bb_instructions /\
+   a.vs_inst_idx < LENGTH bt.bb_instructions` by
+    (qpat_x_assum `DROP _ bn.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     qpat_x_assum `DROP _ bt.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL a.vs_inst_idx bn.bb_instructions = source /\
+   EL a.vs_inst_idx bt.bb_instructions = target /\
+   DROP (SUC a.vs_inst_idx) bn.bb_instructions = norm /\
+   DROP (SUC a.vs_inst_idx) bt.bb_instructions = t` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  drule_all native_from_block_observations >>
+  disch_then (qspecl_then [`p`, `n`, `fn`, `d`, `a`, `C`] strip_assume_tac) >>
+  once_rewrite_tac[exec_block_def, cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                   gas_events_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst n C target a` >> gs[] >>
+  Cases_on `is_terminator target.inst_opcode` >> gs[] >>
+  first_x_assum (qspecl_then
+    [`t`, `v with vs_inst_idx := SUC a.vs_inst_idx`, `bn`, `bt`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[APPEND_ASSOC]
+QED
+
+Theorem native_normalized_block_observations:
+  !norm scheduled a.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    EVERY (\i. MEM i bi) norm /\ EVERY (from_block bi) scheduled /\
+    LIST_REL (\h i. h.inst_id = i.inst_id) norm scheduled /\
+    a.vs_inst_idx = j ==>
+    !n C fn p d.
+      let bn = bb with bb_instructions := REPLICATE j pad ++ norm;
+          bt = bb with bb_instructions := REPLICATE j pad ++ scheduled in
+      exec_block n C bn a = exec_block n C bt a /\
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bn a) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bt a) /\
+      gas_events_block n C fn.fn_name bn a = gas_events_block n C fn.fn_name bt a
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> simp_tac pure_ss [LET_THM] >>
+  irule native_normalized_suffix_observations >>
+  qexists_tac `bi` >> simp[DROP_APPEND]
+QED
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
