@@ -3543,7 +3543,7 @@ Proof
 QED
 
 
-Theorem intcall_defaults_runtime_storage_consistent[local]:
+Theorem intcall_defaults_runtime_storage_consistent:
   runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   env_body.current_src = src_id_opt /\
