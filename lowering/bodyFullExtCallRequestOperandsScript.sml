@@ -384,7 +384,7 @@ Proof
     (assume_tac o SRULE [contextTheory.vv_operand_def])
   >| [
     rename1 `vv_at cenv cx _ sa sm mid _ (StackValue saved_tag saved_op) t` >>
-    mp_tac (Q.INST [`op` |-> `saved_op`]
+    mp_tac (Q.INST [`op` |-> `saved_op`, `tag` |-> `saved_tag`]
       (INST_TYPE [alpha |-> ``:256``]
         extcall_request_saved_stack_endpoint)) >>
     (impl_tac >- simp[contextTheory.vv_operand_def]) >>
