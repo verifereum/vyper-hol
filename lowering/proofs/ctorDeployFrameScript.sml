@@ -110,17 +110,17 @@ Proof
 QED
 
 Theorem deploy_venom_frame:
-  !tops runtime_bc deploy_bc am tx es src res.
+  !H tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
     runtime_bc <> [] /\ ~(?t. runtime_bc = 0xEFw :: t) /\
-    deploy_venom_result_rel HS tops runtime_bc tx src res /\
+    deploy_venom_result_rel H tops runtime_bc tx src res /\
     (?r g. run_call (shadow_root es) = SOME (r, g) /\
            (frame_resource_starved (shadow_root es) r g \/
             venom_frame_rel (shadow_root es) r g res))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
       (creation_resource_starved es r es' \/
-       deploy_result_rel tops runtime_bc tx es r es' src)
+       deploy_result_rel H tops runtime_bc tx es r es' src)
 Proof
   rpt strip_tac >>
   `?c0 rb0. es.contexts = [(c0,rb0)] /\
@@ -244,7 +244,7 @@ QED
    run's relation to the Venom result (codegen_correct or an optimised twin)
    can use it. *)
 Theorem deploy_frame_gas_tail:
-  !es ctxt rb tx tops runtime_bc src res r es'.
+  !H es ctxt rb tx tops runtime_bc src res r es'.
     es.contexts = [(ctxt, rb)] /\ ctxt.msgParams.outputTo = Code tx.target /\
     wf_state es /\
     (!s op r s'. frame_inst_at (shadow_root es) s op /\ step_inst op s = (r, s') /\
@@ -254,7 +254,7 @@ Theorem deploy_frame_gas_tail:
     run_call (shadow_root es) = SOME (r, es') /\
     (frame_resource_starved (shadow_root es) r es' \/
      venom_frame_rel (shadow_root es) r es' res) /\
-    ~deploy_source_exempt tops src /\ deploy_venom_result_rel tops runtime_bc tx src res
+    ~deploy_source_exempt tops src /\ deploy_venom_result_rel H tops runtime_bc tx src res
     ==>
     ?r es'. run_call es = SOME (r, es') /\
       (r = INR (SOME OutOfGas) ==> max_code_size < LENGTH runtime_bc + imm_len tops)
@@ -457,7 +457,7 @@ Proof
   disch_then (qx_choosel_then [`r`, `es'`]
                 (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   qpat_x_assum `sh = add_frame_gas _ _` kall_tac >>
-  qspecl_then [`add_frame_gas g' es`, `ctxt`, `rb`, `tx`, `tops`, `runtime_bc`,
+  qspecl_then [`H`, `add_frame_gas g' es`, `ctxt`, `rb`, `tx`, `tops`, `runtime_bc`,
                `src`, `run_context vfuel dout.po_unit.cu_context vs`,
                `r`, `es'`] mp_tac deploy_frame_gas_tail >>
   impl_tac >- (fs[Abbr `sh`] >> first_assum ACCEPT_TAC) >> simp[]
