@@ -292,31 +292,6 @@ Proof
   simp[venomExecSemanticsTheory.exec_read1_def]
 QED
 
-(* Admissibility rules out type/value mismatches; a word type's memory
-   representation is its typed word encoding, including zero padding. *)
-Theorem immutable_word_mem_word_at[local]:
-  !tenv t tv v off mem.
-    evaluate_type tenv t = SOME tv /\ is_word_type t /\
-    immutable_value_admissible tv v /\ val_in_memory tv v off mem ==>
-    mem_word_at off mem = typed_val_to_w256 tv v
-Proof
-  rpt strip_tac >> Cases_on `t`
-  >~ [`BaseT bt`]
-  >- (Cases_on `bt` >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-      gvs[vyperValueTheory.evaluate_type_def, is_word_type_def,
-          AllCaseEqs()] >>
-      Cases_on `v` >>
-      gvs[immutable_value_admissible_def,
-          valueEncodingPropsTheory.val_in_memory_fixed_bytes,
-          valueEncodingPropsTheory.val_in_memory_address,
-          val_in_memory_def, typed_val_to_w256_def]) >>
-  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[immutable_value_admissible_def, val_in_memory_def,
-      typed_val_to_w256_def]
-QED
-
 (* At runtime a word immutable is in the data section at its offset, as
    immutables_rel says.  Aggregates instead occupy their full memory layout. *)
 Theorem immutable_holds_dload:

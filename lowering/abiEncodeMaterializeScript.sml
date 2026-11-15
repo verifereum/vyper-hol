@@ -310,16 +310,6 @@ Proof
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem materialize_expr_post_inst_idx[local]:
-  expr_post H ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
-  expr_post H ctx func ce cx e es sa sb s0 es' v op s
-Proof
-  simp[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
-       expr_val_rel_def, expr_val_at_def, expr_val_own_def,
-       venomStateTheory.lookup_var_def,
-       local_region_def, locals_kept_def, popped_kept_def]
-QED
-
 Theorem materialize_rebase_post:
   vv_post H ctx func ce cx e es sa mid s0 es' tvv vv u /\
   expr_post H ctx func ce cx e es' (sa with cs_next_var := mid.cs_next_var)
