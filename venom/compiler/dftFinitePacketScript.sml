@@ -596,6 +596,24 @@ Proof
   gvs[mem_inv_raw_reachable] >> metis_tac[]
 QED
 
+Theorem dft_packet_cut_instruction:
+  bb.bb_instructions = ps ++ xs /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) xs /\ q < LENGTH xs /\
+  z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs ==>
+  EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) =
+    EL q xs
+Proof
+  rpt strip_tac >>
+  `EVERY (\i. i.inst_opcode <> PHI) xs` by
+    (gvs[EVERY_MEM] >> metis_tac[venomInstTheory.is_pseudo_def]) >>
+  `phi_prefix_length bb.bb_instructions = phi_prefix_length ps` by
+    metis_tac[dftIndexedExecTheory.dft_phi_prefix_append] >>
+  `phi_prefix_length ps <= LENGTH ps` by
+    simp[venomExecProofsTheory.phi_prefix_length_le] >>
+  simp[DROP_APPEND, LENGTH_TAKE, EL_APPEND_EQN] >>
+  `phi_prefix_length ps - LENGTH ps = 0` by decide_tac >> simp[]
+QED
+
 Theorem dft_packet_source_projection:
   (!N C7 C8 root_sf root_tf root_entry packet acts blocks calls
       ms_tab es_tab ks_tab rooted_eval p d stk PG G tn fn inst s oms om hs h.
