@@ -156,7 +156,8 @@ Proof
   simp[extend_place_def, record_storage_event_def, ignore_bind_def, bind_def, lift_option_type_def,
        return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  rpt strip_tac >> gvs[bind_def, ignore_bind_def, return_def, raise_def]
+  rpt strip_tac >>
+  gvs[bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]
 QED
 
 Theorem extend_storage_place_region:
