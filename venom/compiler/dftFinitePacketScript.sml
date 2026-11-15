@@ -594,6 +594,85 @@ Proof
   simp[venomStateTheory.venom_state_component_equality]
 QED
 
+Theorem dft_packet_native_row_keys:
+  !pre kss s bb.
+    pre = DROP s.vs_inst_idx bb.bb_instructions /\
+    LIST_REL (\i keys.
+      if i.inst_opcode = GAS then keys = [(p,d,i.inst_id)]
+      else if i.inst_opcode = INVOKE then T else keys = []) pre kss /\
+    (!j st.
+      j < LENGTH pre /\
+      EVERY (\i. ~is_terminator i.inst_opcode) (TAKE j pre) /\
+      FOLDR (dft_exec_cons fuel C) OK (TAKE j pre) s = OK st /\
+      (EL j pre).inst_opcode = INVOKE ==>
+      (?extra. EL j kss = MAP FST (trace_gas
+        (trace_step p d fuel C fn (EL j pre) st)) ++ extra) /\
+      (!u. step_inst fuel C (EL j pre) st = OK u ==>
+        EL j kss = MAP FST (trace_gas
+          (trace_step p d fuel C fn (EL j pre) st)))) ==>
+    ?extra. FLAT kss = MAP FST (trace_gas
+      (trace_block p d fuel C fn bb s)) ++ extra
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[DROP_EQ_NIL] >>
+      simp[Once trace_defs, venomInstTheory.get_instruction_def, trace_gas_def]) >>
+  namedCases_on `kss` ["", "row rows"] >> gvs[] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `_ = DROP _ _`
+      (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  `(?extra. row = MAP FST (visit_gas ((p,d,h.inst_id),fn,h,s) ++
+      trace_gas (trace_step p d fuel C fn h s)) ++ extra) /\
+   (!u. step_inst fuel C h s = OK u ==>
+      row = MAP FST (visit_gas ((p,d,h.inst_id),fn,h,s) ++
+        trace_gas (trace_step p d fuel C fn h s)))` by
+    (Cases_on `h.inst_opcode = INVOKE`
+     >- (qpat_x_assum `!j st. _` (qspecl_then [`0`, `s`] mp_tac) >>
+         qpat_x_assum `h::pre = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+         simp[visit_gas_def]) >>
+     Cases_on `h.inst_opcode = GAS` >>
+     gvs[trace_step_noninvoke, visit_gas_def, trace_gas_def]) >>
+  Cases_on `step_inst fuel C h s`
+  >- suspend "ok"
+  >> (`get_instruction bb s.vs_inst_idx = SOME h` by
+        simp[venomInstTheory.get_instruction_def] >>
+      drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+      simp[dftGasFromListReadingsTheory.trace_gas_cons,
+           dftGasFromListReadingsTheory.trace_gas_append,
+           dftGasFromListReadingsTheory.trace_gas_nil, MAP_APPEND] >>
+      metis_tac[APPEND_ASSOC, MAP_APPEND])
+QED
+
+Resume dft_packet_native_row_keys[ok]:
+  rename1 `step_inst fuel C h s = OK out` >>
+  `row = MAP FST (visit_gas ((p,d,h.inst_id),fn,h,s) ++
+      trace_gas (trace_step p d fuel C fn h s))` by metis_tac[] >>
+  qpat_x_assum `!u. _` kall_tac >>
+  qpat_x_assum `row = _ ++ extra` kall_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    simp[venomInstTheory.get_instruction_def] >>
+  Cases_on `is_terminator h.inst_opcode`
+  >- (drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+      simp[dftGasFromListReadingsTheory.trace_gas_cons,
+           dftGasFromListReadingsTheory.trace_gas_append, MAP_APPEND] >>
+      metis_tac[APPEND_ASSOC]) >>
+  first_x_assum (qspecl_then [`rows`, `out with vs_inst_idx := SUC s.vs_inst_idx`, `bb`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_x_assum `!j st. _` (qspecl_then [`SUC j`, `st`] mp_tac) >>
+      qpat_x_assum `h::pre = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+      simp[dftIndexedExecTheory.dft_exec_cons_def]) >>
+  strip_tac >>
+  drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+  simp[dftGasFromListReadingsTheory.trace_gas_cons,
+       dftGasFromListReadingsTheory.trace_gas_append, MAP_APPEND] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Finalise dft_packet_native_row_keys
+
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
     (root_entry:venom_state) packet
