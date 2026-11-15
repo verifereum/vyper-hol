@@ -425,7 +425,10 @@ Proof
          qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> fs[stmt_state_rel_def]) >>
       irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
       fs[regions_disjoint_def] >> decide_tac) >>
-  simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
+  `LENGTH s.vs_memory <=
+   LENGTH (mstore (w2n w) (val_to_w256 v) s).vs_memory` by
+    simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
+  fs[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 
 Theorem for_counter_entry_frame[local]:
@@ -853,6 +856,28 @@ Proof
   qexists_tac `cenv''` >> simp[]
 QED
 
+Theorem gas_outcome_exec_conseq[local]:
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  (!marks res mid t H.
+     gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
+     valid_horizon cx st0 H mid.storage_trace /\
+     Q H res (mid with gas_obs := []) t ==>
+     Q' H res (mid with gas_obs := []) t) /\
+  (!H res mid r. R H res mid r ==> R' H res mid r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R'
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >>
+  disch_then (qx_choose_then `marks` strip_assume_tac)
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_summary_at_def] >> BETA_TAC >> strip_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> fs[] >> metis_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
 Theorem for_round_prepare[local]:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -938,7 +963,9 @@ Proof
     qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ ==> _` drule >> strip_tac >>
     drule msg_gas_state_frame >>
     disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`]
-      (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[])) >> simp[]
+      (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[])) >> simp[] >>
+  disch_then (mp_then Any mp_tac gas_outcome_exec_conseq) >>
+  disch_then irule >> simp[]
 QED
 
 Theorem for_body_finish[local]:
@@ -1289,28 +1316,6 @@ Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
   disch_then irule >> simp[] >> rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem gas_outcome_exec_conseq[local]:
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
-  (!marks res mid t H.
-     gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
-     valid_horizon cx st0 H mid.storage_trace /\
-     Q H res (mid with gas_obs := []) t ==>
-     Q' H res (mid with gas_obs := []) t) /\
-  (!H res mid r. R H res mid r ==> R' H res mid r) ==>
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R'
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def] >>
-  disch_then (qx_choose_then `marks` strip_assume_tac)
-  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
-  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-      rewrite_tac[gas_summary_at_def] >> BETA_TAC >> strip_tac >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> fs[] >> metis_tac[]) >>
-  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem for_round_exec_preserves[local]:
