@@ -501,7 +501,7 @@ Proof
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
       (load_contract NONE gobs am tx [(NONE, tops)] [])` by fs[] >>
-  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `NONE`, `gobs`,
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `gobs`,
                `load_contract NONE gobs am tx [(NONE, tops)] []`,
                `run_context efuel dunit.cu_context vs_in`,
                `run_context vfuel dout.po_unit.cu_context vs`] mp_tac

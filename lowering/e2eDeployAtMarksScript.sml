@@ -23,6 +23,7 @@ Ancestors
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
+  ctorDeployLoweringSource
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs gasSummary vyperStorageFootprint
@@ -160,6 +161,12 @@ Proof
   strip_tac >>
   drule compile_vyper_runtime_nonempty >> strip_tac >>
   drule_all deploy_entry_facts >> strip_tac >>
+  `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
+  `load_contract (SOME vs.vs_outcomes)
+      (gas_explicit marks vs.vs_gas_readings ++ tail) am tx [(NONE, tops)] [] =
+   load_contract NONE
+      (gas_explicit marks vs.vs_gas_readings ++ tail) am tx [(NONE, tops)] []` by
+    metis_tac[load_contract_call_free] >>
   Cases_on `deploy_source_exempt tops
               (load_contract (SOME vs.vs_outcomes)
                  (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
@@ -189,7 +196,7 @@ Proof
              (run_context fuel' dout.po_unit.cu_context
                 (deploy_entry_state prog cplan tops es))` by
     metis_tac[ctx_sim_def] >>
-  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `SOME vs.vs_outcomes`,
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`,
                `gas_explicit marks vs.vs_gas_readings ++ tail`,
                `load_contract (SOME vs.vs_outcomes)
                   (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
