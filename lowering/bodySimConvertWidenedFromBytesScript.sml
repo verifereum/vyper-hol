@@ -122,12 +122,18 @@ Resume intcall_convert_from_bytestring_sim[value]:
       TRY (qexists_tac `H1` >> first_assum ACCEPT_TAC >> NO_TAC) >>
       simp[]) >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >> strip_tac >>
+  `res <> INR HaltException` by
+    (qpat_assum `gas_marked_exec _ _ (\vs. (convert_result _ _ _ _,vs)) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[convert_result_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   qexistsl_tac [`res`,`es_end'`,`r`] >>
   (conj_tac
    >- (irule (Q.INST [`right` |-> `[]`]
               gasSummaryComposeTheory.gas_marked_exec_bind_normal
               |> REWRITE_RULE [APPEND_NIL]) >>
        qexistsl_tac [`es_end`,`t'`,`v`] >> gvs[]) >>
-   gvs[] >> disj2_tac >> first_assum ACCEPT_TAC)
+   gvs[] >> disj2_tac >> rpt strip_tac >>
+   simp[exprSimDefsTheory.halt_exit_def] >> metis_tac[])
 QED
 Finalise intcall_convert_from_bytestring_sim
