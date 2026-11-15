@@ -905,13 +905,6 @@ Proof
   simp[asm_state_unop_def, asm_next_def, asm_state_component_equality]
 QED
 
-Theorem gas_tail_option_map_cond[local]:
-  OPTION_MAP h (if p then x else y) =
-  (if p then OPTION_MAP h x else OPTION_MAP h y)
-Proof
-  Cases_on `p` >> simp[]
-QED
-
 Theorem asm_context_gas_readings_append[local]:
   name <> "GAS" \/ a.as_gas_readings <> [] ==>
   asm_step_context name (a with as_gas_readings := a.as_gas_readings ++ tail) =
@@ -927,7 +920,8 @@ Proof
       gvs[asm_gas_def, asm_push_val_def, asm_next_def,
           asm_state_component_equality]) >>
   disch_then kall_tac >>
-  pure_rewrite_tac[asm_step_context_def, gas_tail_option_map_cond] >>
+  pure_rewrite_tac[asm_step_context_def,
+                   Q.ISPEC `OPTION_MAP h` COND_RAND] >>
   simp[asm_push_val_gas_readings_append, asm_state_unop_gas_readings_append]
 QED
 
