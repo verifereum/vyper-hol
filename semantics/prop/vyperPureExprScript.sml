@@ -47,16 +47,6 @@ Proof
   qpat_x_assum `b = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
-Theorem canonical_observations_state[local]:
-  (read_result cx r st = (v,st') ==> st' = st) /\
-  (select_result cx ty r sb st = (w,st') ==>
-     st' = st with storage_trace := st'.storage_trace) /\
-  (conditional_result cx r st = (x,st') ==> st' = st) /\
-  (result_array_length cx r st = (n,st') ==> st' = st)
-Proof
-  metis_tac[read_result_state, select_result_state,
-            conditional_result_state, result_array_length_state]
-QED
 
 (* ------------------------------------------------------------------------
    Individual Case Lemmas
@@ -287,14 +277,6 @@ Proof
   metis_tac[]
 QED
 
-(* All Call cases are vacuously true since pure_expr (Call _ _ _) = F *)
-Theorem case_Call[local]:
-  ∀cx ty c es drv st res st'.
-    eval_expr cx (Call ty c es drv) st = (res, st') ⇒
-    pure_expr (Call ty c es drv) ⇒ st' = st with storage_trace := st'.storage_trace
-Proof
-  rw[pure_expr_def]
-QED
 
 Theorem case_eval_exprs_nil[local]:
   ∀cx.

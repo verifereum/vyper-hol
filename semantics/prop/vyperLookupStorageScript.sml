@@ -377,7 +377,7 @@ QED
 
 (* Helper: sparse_has_type on enumerate implies EVERY on the original list,
    given that the default value has the type. *)
-Theorem sparse_has_type_enumerate_EVERY_back[local]:
+Theorem sparse_has_type_enumerate_EVERY_back:
   ∀vs tv n d i.
     sparse_has_type tv n (enumerate_static_array d i vs) ∧
     value_has_type tv d ⇒
@@ -475,7 +475,7 @@ Proof
   gvs[]
 QED
 
-Theorem slots_in_range_w2n_n2w[local]:
+Theorem slots_in_range_w2n_n2w:
   ∀storage off tv.
     slots_in_range storage (w2n ((n2w off):bytes32)) tv ⇒
     slots_in_range storage off tv

@@ -88,21 +88,30 @@ Theorem take_call_outcome_plan:
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME os =>
-      let rq = <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := LENGTH calldata;
-                 cr_target := target;
-                 cr_value := (case value_opt of NONE => 0 | SOME v => v);
-                 cr_data := calldata; cr_static := IS_NONE value_opt;
-                 cr_accounts := st.accounts; cr_tStorage := st.tStorage|> in
-      let (outcome,rest) = take_outcome rq os in
-      let st' = st with <|outcomes := SOME rest;
-                          requests := record_request rq st.requests;
-                          storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> in
-      if outcome.co_success /\ ~rq.cr_static /\
+      case take_outcome (call_outcome_request target calldata value_opt st) os of
+      (outcome,rest) =>
+      if outcome.co_success /\ ~IS_NONE value_opt /\
          ~accounts_runtime_well_typed outcome.co_accounts then
-        (INR (Error (RuntimeError "call outcome accounts")),st')
-      else (INL (rq,outcome),st')
+        (INR (Error (RuntimeError "call outcome accounts")),
+         st with <|outcomes := SOME rest;
+                   requests := record_request
+                     (call_outcome_request target calldata value_opt st) st.requests;
+                   storage_trace := st.storage_trace ++
+                     [StorageOutcome (call_outcome_request target calldata value_opt st)
+                       outcome]|>)
+      else (INL (call_outcome_request target calldata value_opt st,outcome),
+            st with <|outcomes := SOME rest;
+                      requests := record_request
+                        (call_outcome_request target calldata value_opt st) st.requests;
+                      storage_trace := st.storage_trace ++
+                        [StorageOutcome (call_outcome_request target calldata value_opt st)
+                          outcome]|>)
 Proof
-  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def]
+  Cases_on `st.outcomes` >>
+  simp[take_call_outcome_def, take_request_outcome_def] >>
+  rename1 `take_outcome _ os` >>
+  Cases_on `take_outcome (call_outcome_request target calldata value_opt st) os` >>
+  simp[call_outcome_request_def]
 QED
 
 Theorem take_request_outcome_frame:

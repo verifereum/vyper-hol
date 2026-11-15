@@ -123,13 +123,16 @@ Theorem typing_and_storage_contracts:
           checked_contract_runtime_ready art [(NONE,tops)] am tx /\
           machine_well_typed am /\ call_tx_well_typed tx) /\
   (source_storage_ok am tx os gs <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-    let obs = source_storage_trace am tx os gs in
-    let (regions, locks) = storage_trace_horizon obs in
-      storage_roots_fit obs /\ regions_consistent regions /\
-      storage_locks_separated regions locks /\
-      storage_well_formed_on cx (initial_state am []) regions)
+    storage_roots_fit (source_storage_trace am tx os gs) /\
+    regions_consistent (FST (storage_trace_horizon (source_storage_trace am tx os gs))) /\
+    storage_locks_separated
+      (FST (storage_trace_horizon (source_storage_trace am tx os gs)))
+      (SND (storage_trace_horizon (source_storage_trace am tx os gs))) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE) (initial_state am [])
+      (FST (storage_trace_horizon (source_storage_trace am tx os gs))))
 Proof
+  Cases_on `storage_trace_horizon (source_storage_trace am tx os gs)` >>
   simp[source_typing_ok_def, source_storage_ok_def]
 QED
 

@@ -941,22 +941,6 @@ Definition cont_def:
 End
 
 
-Triviality eval_expr_cps_owhile_result:
-  ∀cx e st q r k.
-  eval_expr cx e st = (q,r) ⇒
-  OWHILE (λak. nextk ak ≠ DoneK) stepk (eval_expr_cps cx e st k) =
-  OWHILE (λak. nextk ak ≠ DoneK) stepk
-    ((case eval_expr cx e st of
-        (INL tv,st1) => AK cx (ApplyTv tv) st1
-      | (INR ex,st1) => AK cx (ApplyExc ex) st1) k) ⇒
-  OWHILE (λak. nextk ak ≠ DoneK) stepk (eval_expr_cps cx e st k) =
-  OWHILE (λak. nextk ak ≠ DoneK) stepk
-    ((case q of
-        INL tv => AK cx (ApplyTv tv) r
-      | INR ex => AK cx (ApplyExc ex) r) k)
-Proof
-  rw[]
-QED
 
 
 
@@ -1084,14 +1068,6 @@ Proof
   simp[stepk_def, apply_vals_def, cont_apply_vals]
 QED
 
-Theorem cont_exprsk1_exc[local]:
-  cont (AK cx (ApplyExc ex) st (FOLDL (\k v. ExprsK1 v k) k vs)) =
-  cont (AK cx (ApplyExc ex) st k)
-Proof
-  qid_spec_tac `k` >> Induct_on `vs` >> simp[] >> rpt gen_tac >>
-  qspec_then `AK cx (ApplyExc ex) st (ExprsK1 h k)` mp_tac cont_step >>
-  simp[stepk_def, apply_exc_def]
-QED
 
 Theorem cont_codeslicek_vals[local]:
   cont (AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n is_self cty aty tys k)) =
