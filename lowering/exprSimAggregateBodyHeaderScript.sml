@@ -37,7 +37,7 @@ Proof
   conj_tac
   >- (irule alloca_room_fields >> qexists_tac `s` >> simp[mstore_def]) >>
   conj_tac
-  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[mstore_def]) >>
+  >- (irule fmp_room_mstore >> fs[stmt_state_rel_def]) >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[mstore_def] >> rpt strip_tac >> qexists_tac `id` >>
