@@ -159,8 +159,8 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s /\ access_ok lo G fn inst s` by
     metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
-  `gas_cut ncut vs0 s` by
-    (drule_all layout_cut_safe_frame >> simp[]) >>
+  `c <= LENGTH es` by decide_tac >>
+  `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
   `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   Q.SUBGOAL_THEN `(!k aid b sz.
       k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\

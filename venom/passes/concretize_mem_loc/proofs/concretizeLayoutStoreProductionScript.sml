@@ -1,6 +1,6 @@
 Theory concretizeLayoutStoreProduction
 Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
-  frameJointDemand venomState byte
+  frameJointDemand frameDemandTaint venomState byte
   frameActivationCache frameRelocationBinding frameJointTrace frameJointTransition
   frameRelocationOpaque frameRelocationStoreValues frameRelocationStoreSteps frameRelocationWriteCoverage
   frameRelocationReachableSupport concretizeLayoutRelocation
@@ -84,7 +84,7 @@ Proof
          decide_tac) >>
      `?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
         b <= a /\ a < b + sz` by
-       (irule joint_observed_read_cached >> metis_tac[]) >>
+       (irule joint_observed_read_cached_upto >> metis_tac[]) >>
      `b' + sz' <= joint_initial_fmp (EL j (q0::qs))` by metis_tac[] >>
      decide_tac) >>
   qpat_x_assum `relocation_pair _ _ (EL j _) _ _`
