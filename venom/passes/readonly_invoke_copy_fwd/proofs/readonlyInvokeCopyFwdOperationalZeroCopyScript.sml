@@ -74,7 +74,7 @@ Proof
     fs[ricf_heterogeneous_source_ledger_def] >>
   drule_all ricf_located_event_operands_available >> strip_tac >> gvs[] >>
   qabbrev_tac `inst = ricf_event_copy e (EL b fn.fn_blocks)` >>
-  `MEM fn C.ctx_functions` by metis_tac[occ_frame_reachable_annotation] >>
+  `MEM fn C.ctx_functions` by metis_tac[occ_frame_reachable_annotation_static] >>
   `fn_inst_wf fn` by fs[EVERY_MEM] >>
   `inst.inst_outputs = []` by
     (`inst_wf inst` by
@@ -111,7 +111,7 @@ Proof
   conj_tac >- (simp[Abbr `u`] >> irule ricf_support_zero_copy >> simp[]) >>
   conj_tac >- (irule ricf_global_support_next >>
     `occurrence_allocas_ok B a s` by
-      (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+      (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
     metis_tac[]) >>
   rpt strip_tac >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by

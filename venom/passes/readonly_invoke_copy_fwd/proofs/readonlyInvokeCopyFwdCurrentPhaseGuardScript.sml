@@ -30,8 +30,8 @@ Proof
   strip_tac >>
   fs[ricf_phase_entry_def] >>
   `fn = p.rpe_fn` by metis_tac[ricf_history_cursor_owner_function] >>
-  `occurrence_annotation_ok n p.rpe_owner U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n p.rpe_owner U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   `source_memory_write_ranges inst s = [(db,w2n z)]` by
     (gvs[source_memory_write_ranges_def, sized_source_write_range_def,
          eval_operands_def, AllCaseEqs(), w2n_n2w]) >>
