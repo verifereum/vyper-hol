@@ -45,10 +45,10 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem ptr_paired_current_static_bound:
+Theorem ptr_paired_current_static_bound_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C Ct /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -71,7 +71,7 @@ Theorem ptr_paired_current_static_bound:
     (w2n at.po_state.vs_initial_fmp <= off /\ off + len <= w2n at.po_state.vs_fmp))
 Proof
   strip_tac >> Cases_on `in_revert_forward a.po_fn a.po_state`
-  >- (disj1_tac >> drule_all ptr_paired_prefix_forwarding >> simp[]) >>
+  >- (disj1_tac >> drule_all ptr_paired_prefix_forwarding_static >> simp[]) >>
   disj2_tac >>
   Cases_on `a.po_inst.inst_opcode = ALLOCA`
   >- (gvs[concretize_inst_with_positions_def, AllCaseEqs()] >>
@@ -88,7 +88,7 @@ Proof
      a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -112,7 +112,7 @@ Proof
   suspend "range_supply"
 QED
 
-Resume ptr_paired_current_static_bound[range_supply]:
+Resume ptr_paired_current_static_bound_static[range_supply]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
    access_ok lo a.po_prov a.po_fn a.po_inst a.po_state` by
@@ -146,7 +146,7 @@ Resume ptr_paired_current_static_bound[range_supply]:
   suspend "range_bound"
 QED
 
-Resume ptr_paired_current_static_bound[range_bound]:
+Resume ptr_paired_current_static_bound_static[range_bound]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   drule_all ptr_current_range_transport >>
   disch_then (qx_choose_then `off_s` strip_assume_tac)
@@ -154,7 +154,7 @@ Resume ptr_paired_current_static_bound[range_bound]:
   suspend "descriptor_bound"
 QED
 
-Resume ptr_paired_current_static_bound[scalar_bound]:
+Resume ptr_paired_current_static_bound_static[scalar_bound]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   Cases_on `len = 0` >- simp[] >>
   `off_s + len <= lo` by
@@ -170,7 +170,7 @@ Resume ptr_paired_current_static_bound[scalar_bound]:
   drule_all ptr_stage_fixed_region_bound >> simp[] >> decide_tac
 QED
 
-Resume ptr_paired_current_static_bound[descriptor_bound]:
+Resume ptr_paired_current_static_bound_static[descriptor_bound]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   Q.SUBGOAL_THEN
     `((mem_read_ops a.po_inst = SOME ops /\
@@ -178,7 +178,7 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
       (mem_write_ops a.po_inst = SOME ops /\
        MEM (w2n x,len) (source_memory_write_ranges a.po_inst a.po_state)))`
     assume_tac >- metis_tac[] >>
-  drule_all ptr_paired_current_range_static_bound >>
+  drule_all ptr_paired_current_range_static_bound_static >>
   disch_then (DISJ_CASES_THEN2 (fn th => simp[th])
     (DISJ_CASES_THEN2 (fn th => simp[th]) strip_assume_tac)) >>
   gvs[] >>
@@ -202,4 +202,34 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
   decide_tac
 QED
 
-Finalise ptr_paired_current_static_bound
+Finalise ptr_paired_current_static_bound_static
+
+Theorem ptr_paired_current_static_bound:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  (ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs) /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions Ct.ctx_functions /\
+  ptr_stage_placements Ct positions /\
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst ==>
+  in_revert_forward at.po_fn at.po_state \/
+  (!off len.
+    MEM (off,len) (source_memory_read_ranges at.po_inst at.po_state ++
+                  source_memory_write_ranges at.po_inst at.po_state) ==>
+    len = 0 \/ off + len <= eom \/
+    (w2n at.po_state.vs_initial_fmp <= off /\ off + len <= w2n at.po_state.vs_fmp))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_static_bound_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

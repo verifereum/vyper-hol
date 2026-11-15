@@ -8,8 +8,8 @@ Ancestors
 
 (* Retention is occurrence-preserving. The recursive copy read will be at
    source index w, strictly before the demanded endpoint LENGTH h - 1. *)
-Theorem ptr_dalloca_demand_writer_index:
-  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+Theorem ptr_dalloca_demand_writer_index_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w ==>
   ?q. q < LENGTH done /\ EL q done = w /\ w < LENGTH h - 1
@@ -19,11 +19,40 @@ Proof
      births PT TG saved entries H /\
    SUC w < LENGTH h /\
    b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
-     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_def] >>
+     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_static_def] >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_actual_writer_retained >>
   disch_then (qspecl_then [`w`, `b+k`] mp_tac) >> simp[] >> strip_tac >>
   qexists `q` >> simp[] >> decide_tac
+QED
+
+Theorem ptr_dalloca_demand_writer_index:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w ==>
+  ?q. q < LENGTH done /\ EL q done = w /\ w < LENGTH h - 1
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_demand_writer_index_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_dalloca_demand_writer_source_edge_static:
+  ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w ==>
+  ptr_chrono_step C (EL w h) (EL (SUC w) h) /\
+  b+k NOTIN (EL (SUC w) h).po_taint.t_mem
+Proof
+  strip_tac >>
+  `ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+     births PT TG saved entries H /\ SUC w < LENGTH h /\
+   b+k NOTIN (EL (SUC w) h).po_taint.t_mem` by fs[ptr_demand_interval_static_def] >>
+  simp[] >> drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >>
+  disch_then (mp_tac o MATCH_MP ptr_chrono_history_adjacent) >>
+  disch_then (qspec_then `w` mp_tac) >> simp[]
 QED
 
 Theorem ptr_dalloca_demand_writer_source_edge:
@@ -33,14 +62,10 @@ Theorem ptr_dalloca_demand_writer_source_edge:
   ptr_chrono_step C (EL w h) (EL (SUC w) h) /\
   b+k NOTIN (EL (SUC w) h).po_taint.t_mem
 Proof
-  strip_tac >>
-  `ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
-     births PT TG saved entries H /\ SUC w < LENGTH h /\
-   b+k NOTIN (EL (SUC w) h).po_taint.t_mem` by fs[ptr_demand_interval_def] >>
-  simp[] >> drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_source >>
-  disch_then (mp_tac o MATCH_MP ptr_chrono_history_adjacent) >>
-  disch_then (qspec_then `w` mp_tac) >> simp[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_demand_writer_source_edge_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def,
+    concretizePtrDemandWriteExclusionTheory.ptr_demand_interval_static_compat] >>
+  tautLib.TAUT_TAC
 QED
 
 (* UNPROVED production obligation (diagnostic only, not a theorem):

@@ -7,6 +7,25 @@ Ancestors
   o1PassContract ptrDiscipline unitMemInv stackPlanGen concretizeMemLocDefs
   venomPassDispatcher cfgWf unitShapeDefs venomWf venomInst list
 
+Theorem ptr_stage_frame_retpc_shape_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom ==>
+  EVERY unitShapeDefs$retpc_shape_ok C.ctx_functions
+Proof
+  strip_tac >>
+  fs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+  fs[o1_fn_shape_def, fn_shape_ok_def] >> metis_tac[]
+QED
+
 Theorem ptr_stage_frame_retpc_shape:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -21,7 +40,7 @@ Theorem ptr_stage_frame_retpc_shape:
   max_live_eom C' = SOME eom ==>
   EVERY unitShapeDefs$retpc_shape_ok C.ctx_functions
 Proof
-  strip_tac >>
-  fs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
-  fs[o1_fn_shape_def, fn_shape_ok_def] >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_frame_retpc_shape_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

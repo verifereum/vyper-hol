@@ -35,12 +35,12 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_paired_fixed_read_recovery:
+Theorem ptr_paired_fixed_read_recovery_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -77,7 +77,7 @@ Proof
       (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) ==>
     x NOTIN range_bytes (step_writes (EL q ht).po_inst
       (EL q ht).po_state (EL (SUC q) ht).po_state)` by
-    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection >>
+    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection_static >>
      metis_tac[]) >>
   drule_all ptr_chrono_last_actual_or_none >> strip_tac
   >- (`read_byte x endpoint.po_state.vs_memory = read_byte x vs.vs_memory` by
@@ -90,7 +90,7 @@ Proof
   suspend "writer"
 QED
 
-Resume ptr_paired_fixed_read_recovery[writer]:
+Resume ptr_paired_fixed_read_recovery_static[writer]:
   drule ptr_structural_trace_actual_writer_retained >>
   disch_then (qspecl_then [`w`,`x`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -158,7 +158,7 @@ Resume ptr_paired_fixed_read_recovery[writer]:
   suspend "frame"
 QED
 
-Resume ptr_paired_fixed_read_recovery[frame]:
+Resume ptr_paired_fixed_read_recovery_static[frame]:
   `!j. q < j /\ j < LENGTH done ==> w < EL j done` by
     (qpat_x_assum `ptr_event_embedding _ _ _` mp_tac >>
      pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
@@ -197,4 +197,28 @@ Resume ptr_paired_fixed_read_recovery[frame]:
   metis_tac[]
 QED
 
-Finalise ptr_paired_fixed_read_recovery
+Finalise ptr_paired_fixed_read_recovery_static
+
+Theorem ptr_paired_fixed_read_recovery:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (x < lo \/ dyn_floor C vs <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN ==>
+  read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_fixed_read_recovery_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

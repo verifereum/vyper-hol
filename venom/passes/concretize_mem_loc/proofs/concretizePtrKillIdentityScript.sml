@@ -77,8 +77,8 @@ Proof
   fs[SUBSET_DEF]
 QED
 
-Theorem ptr_reachable_base_write_identity:
-  frame_reachable vs ctx stk PG G tn fn inst s /\ o1_run_state_ok vs /\
+Theorem ptr_reachable_base_write_identity_static:
+  frame_reachable vs ctx stk PG G tn fn inst s /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
   EVERY fn_inst_wf ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
@@ -98,7 +98,7 @@ Proof
          pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn))` by
     metis_tac[ptr_base_write_pure_local] >>
   `?site. FLOOKUP G v = SOME site` by
-    metis_tac[ptr_reachable_pure_local_totality] >>
+    metis_tac[ptr_reachable_pure_local_totality_static] >>
   qexists `site` >> simp[] >>
   `ptr_site_supported
     (pointer_derived_vars fn
@@ -120,6 +120,24 @@ Proof
   fs[ptr_site_supported_def] >> metis_tac[]
 QED
 
+Theorem ptr_reachable_base_write_identity:
+  frame_reachable vs ctx stk PG G tn fn inst s /\ o1_run_state_ok vs /\
+  EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
+  EVERY fn_inst_wf ctx.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs /\
+  wf_function fn /\ all_reachable fn /\
+  ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
+  MEM inst (fn_insts fn) /\ mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  find_base_allocas (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn)
+    (Var v) = [Allocation aid] /\ lookup_var v s = SOME w ==>
+  ?site. FLOOKUP G v = SOME site /\ FLOOKUP s.vs_allocas aid = SOME site
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_base_write_identity_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
 Theorem evaluated_member[local]:
   !operands vals. eval_operands operands s = SOME vals ==>
   !op. MEM op operands ==> ?w. eval_operand op s = SOME w
@@ -128,8 +146,8 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ptr_reachable_successful_kill_identity:
-  frame_reachable vs ctx stk PG G tn fn inst s /\ o1_run_state_ok vs /\
+Theorem ptr_reachable_successful_kill_identity_static:
+  frame_reachable vs ctx stk PG G tn fn inst s /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
   EVERY fn_inst_wf ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
@@ -152,8 +170,29 @@ Proof
      simp[inst_write_op_def]) >>
   `?w. lookup_var v s = SOME w` by
     metis_tac[evaluated_member, eval_operand_def] >>
-  drule_all ptr_reachable_base_write_identity >> strip_tac >>
+  drule_all ptr_reachable_base_write_identity_static >> strip_tac >>
   metis_tac[]
+QED
+
+Theorem ptr_reachable_successful_kill_identity:
+  frame_reachable vs ctx stk PG G tn fn inst s /\ o1_run_state_ok vs /\
+  EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
+  EVERY fn_inst_wf ctx.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs /\
+  wf_function fn /\ all_reachable fn /\
+  ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
+  MEM inst (fn_insts fn) /\
+  ptr_ml_can_kill (Allocation aid)
+    (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) sizes inst /\
+  step_inst fuel ctx inst s = OK s' ==>
+  ?ops v w site. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+    lookup_var v s = SOME w /\ FLOOKUP G v = SOME site /\
+    FLOOKUP s.vs_allocas aid = SOME site
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_reachable_successful_kill_identity_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 (* This boundary establishes allocation identity, not production size

@@ -25,10 +25,10 @@ Proof
   simp[adopt_return_fmp_def, merge_callee_state_def]
 QED
 
-Theorem ptr_paired_ret_prefix_immediate:
+Theorem ptr_paired_ret_prefix_immediate_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -60,7 +60,7 @@ Theorem ptr_paired_ret_prefix_immediate:
       (H ++ [(TL tokens,registry,B',PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])
       (TL calls) ws
 Proof
-  strip_tac >> drule_all ptr_paired_ret_successor_births >> strip_tac >>
+  strip_tac >> drule_all ptr_paired_ret_successor_births_static >> strip_tac >>
   `at.po_inst.inst_opcode = RET` by
     gvs[concretize_positions_unchanged] >>
   drule ptr_tagged_chrono_step_projection >> strip_tac >>
@@ -87,7 +87,7 @@ Proof
   suspend "writes"
 QED
 
-Resume ptr_paired_ret_prefix_immediate[alignment]:
+Resume ptr_paired_ret_prefix_immediate_static[alignment]:
   irule ptr_paired_alignment_pair >>
   rpt (goal_assum (drule_at Any)) >>
   `0 < LENGTH calls` by
@@ -124,7 +124,7 @@ Resume ptr_paired_ret_prefix_immediate[alignment]:
   simp[]
 QED
 
-Resume ptr_paired_ret_prefix_immediate[callers]:
+Resume ptr_paired_ret_prefix_immediate_static[callers]:
   qpat_x_assum `ptr_paired_callers _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ptr_paired_callers_def] >> strip_tac >>
   simp[ptr_paired_callers_def] >> rpt strip_tac >>
@@ -143,7 +143,7 @@ Resume ptr_paired_ret_prefix_immediate[callers]:
   metis_tac[]
 QED
 
-Resume ptr_paired_ret_prefix_immediate[writes]:
+Resume ptr_paired_ret_prefix_immediate_static[writes]:
   qpat_assum `ptr_structural_transcript _ _ _ _ h a _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any assume_tac ptr_structural_transcript_erasure) >>
   drule ptr_structural_trace_source >> strip_tac >>
@@ -160,4 +160,44 @@ Resume ptr_paired_ret_prefix_immediate[writes]:
   fs[ptr_paired_samples_def, ptr_sample_list_def, is_terminator_def]
 QED
 
-Finalise ptr_paired_ret_prefix_immediate
+Finalise ptr_paired_ret_prefix_immediate_static
+
+Theorem ptr_paired_ret_prefix_immediate:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode = RET /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?b PTc TGc outs B'.
+    HD saved = (PTc,TGc) /\
+    outs = (HD a.po_stack).cf_inst.inst_outputs /\
+    B' = ptr_birth_overlay (HD (TL tokens)) b.po_state.vs_allocas births /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [b]) b (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      (TL tokens) registry B' PTc (DRESTRICT TGc (COMPL (set outs)))
+      (TL saved) entries
+      (H ++ [(TL tokens,registry,B',PTc,DRESTRICT TGc (COMPL (set outs)),TL saved,entries)])
+      (TL calls) ws
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_ret_prefix_immediate_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

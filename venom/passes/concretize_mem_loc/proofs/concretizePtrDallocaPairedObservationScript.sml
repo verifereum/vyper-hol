@@ -20,10 +20,10 @@ Ancestors
 
 (* Both observations use the same actual stage bridge and endpoint ledger.
    In particular, a request bound is obtained from an actual source step. *)
-Theorem ptr_dalloca_paired_observation_taint:
+Theorem ptr_dalloca_paired_observation_taint_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
@@ -87,7 +87,7 @@ Proof
      qpat_x_assum `frame_reachable vs C' _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
   `MEM a.po_fn C.ctx_functions` by
-    (drule_all ptr_frame_sizes >> simp[]) >>
+    (drule_all ptr_frame_sizes_static >> simp[]) >>
   `MEM a.po_inst (fn_insts a.po_fn)` by
     (fs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
   `inst_wf a.po_inst /\ opaque_use_ok a.po_fn /\
@@ -138,7 +138,7 @@ Proof
      fs[EL_APPEND_EQN]) >>
   `LENGTH h - 1 <= EL (LENGTH done) (done ++ [LENGTH h - 1])` by
     simp[EL_APPEND_EQN] >>
-  mp_tac (Q.INST [`endpoint` |-> `a`] ptr_dalloca_ghost_history) >>
+  mp_tac (Q.INST [`endpoint` |-> `a`] ptr_dalloca_ghost_history_static) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspecl_then [`LENGTH h - 1`,`LENGTH done`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> fs[])) >>
@@ -156,7 +156,7 @@ Proof
   suspend "observations"
 QED
 
-Resume ptr_dalloca_paired_observation_taint[observations]:
+Resume ptr_dalloca_paired_observation_taint_static[observations]:
   markerLib.RESUME_TAC >> (conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `MEM at.po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]` by
@@ -198,7 +198,7 @@ Resume ptr_dalloca_paired_observation_taint[observations]:
                `s` |-> `at.po_state`, `s'` |-> `post`, `fuel` |-> `fuelt`]
                (SPEC_ALL (cj 1 ptr_chrono_step_rules))) >>
              simp[Abbr`zt`]) >>
-          drule_all ptr_paired_call_step >>
+          drule_all ptr_paired_call_step_static >>
           disch_then (qx_choose_then `srcpost` strip_assume_tac) >>
           mp_tac (Q.INST [`CS` |-> `C`, `stk` |-> `a.po_stack`,
             `PG` |-> `a.po_params`, `G` |-> `a.po_prov`,
@@ -230,7 +230,7 @@ Resume ptr_dalloca_paired_observation_taint[observations]:
   suspend "halt")
 QED
 
-Resume ptr_dalloca_paired_observation_taint[halt]:
+Resume ptr_dalloca_paired_observation_taint_static[halt]:
   markerLib.RESUME_TAC >> (
   `(at.po_inst.inst_opcode = SINK ==>
       a.po_state.vs_returndata = at.po_state.vs_returndata)` by
@@ -271,7 +271,7 @@ Resume ptr_dalloca_paired_observation_taint[halt]:
   suspend "return")
 QED
 
-Resume ptr_dalloca_paired_observation_taint[return]:
+Resume ptr_dalloca_paired_observation_taint_static[return]:
   markerLib.RESUME_TAC >> (
   `(at.po_inst.inst_opcode = RETURN ==>
     ?addr lenop offsrc offtgt readsz.
@@ -331,14 +331,14 @@ Resume ptr_dalloca_paired_observation_taint[return]:
        read_byte (w2n offtgt+i) at.po_state.vs_memory` by
        (mp_tac (Q.INST [`ops` |-> `readops`, `x` |-> `offsrc`,
           `y` |-> `offtgt`, `n` |-> `w2n (readsz:256 word)`]
-          ptr_paired_read_range_masked_bytes) >>
+          ptr_paired_read_range_masked_bytes_static) >>
         (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]) >>
      qexistsl_tac [`addr`,`lenop`,`offsrc`,`offtgt`,`readsz`] >> simp[] >>
      gen_tac >> strip_tac >>
      `w2n readsz <> 0` by decide_tac >>
      mp_tac (Q.INST [`ops` |-> `readops`, `x` |-> `offsrc`,
        `y` |-> `offtgt`, `n` |-> `w2n (readsz:256 word)`]
-       ptr_paired_read_range_classification) >>
+       ptr_paired_read_range_classification_static) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS)
        (qx_choose_then `rv` (qx_choose_then `rtok` (qx_choose_then `raid`
@@ -402,4 +402,51 @@ Resume ptr_dalloca_paired_observation_taint[return]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[])
 QED
 
-Finalise ptr_dalloca_paired_observation_taint
+Finalise ptr_dalloca_paired_observation_taint_static
+
+Theorem ptr_dalloca_paired_observation_taint:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst ==>
+  (!fuelt post. at.po_inst.inst_opcode <> INVOKE /\
+    step_inst fuelt C' at.po_inst at.po_state = OK post /\
+    LENGTH at.po_state.vs_requests < LENGTH post.vs_requests ==>
+    at.po_taint.t_stor SUBSET D.d_stor at.po_state.vs_call_ctx.cc_address
+      (at.po_state.vs_accounts at.po_state.vs_call_ctx.cc_address).storage /\
+    at.po_taint.t_trans SUBSET D.d_trans at.po_state.vs_call_ctx.cc_address
+      (at.po_state.vs_transient at.po_state.vs_call_ctx.cc_address)) /\
+  (!fuelt th. at.po_inst.inst_opcode <> INVOKE /\
+    step_inst fuelt C' at.po_inst at.po_state = Halt th ==>
+    (step_taint at.po_inst at.po_state th at.po_taint).t_stor SUBSET
+      D.d_stor th.vs_call_ctx.cc_address
+        (th.vs_accounts th.vs_call_ctx.cc_address).storage /\
+    (step_taint at.po_inst at.po_state th at.po_taint).t_trans SUBSET
+      D.d_trans th.vs_call_ctx.cc_address (th.vs_transient th.vs_call_ctx.cc_address) /\
+    (step_taint at.po_inst at.po_state th at.po_taint).t_imm SUBSET
+      D.d_imm th.vs_immutables /\
+    ret_taint at.po_taint at.po_inst at.po_state SUBSET D.d_ret th.vs_returndata)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_paired_observation_taint_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

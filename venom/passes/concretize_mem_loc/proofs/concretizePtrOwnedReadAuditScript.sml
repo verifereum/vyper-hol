@@ -16,7 +16,7 @@ Libs wordsLib
 
 val () = augment_srw_ss [wordsLib.SIZES_ss, wordsLib.WORD_GROUND_ss];
 
-Theorem ptr_paired_owned_read_recovery:
+Theorem ptr_paired_owned_read_recovery_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   vs.vs_allocas = FEMPTY /\
@@ -40,7 +40,7 @@ Theorem ptr_paired_owned_read_recovery:
   o1_walk_view rpolicy 2 C' fn observed /\ EVERY fn_inst_wf C.ctx_functions /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -61,7 +61,7 @@ Proof
   drule ptr_structural_trace_source >> strip_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
   qpat_assum `~(dyn_floor C vs <= b+k)` (fn th =>
-    drule_all ptr_endpoint_actual_protected_livesets >>
+    drule_all ptr_endpoint_actual_protected_livesets_static >>
     disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   `SUC w < LENGTH h` by decide_tac >>
   drule ptr_structural_trace_actual_writer_retained >>
@@ -266,6 +266,88 @@ val actual_writer_retention_candidate = ``
     ?q. q < LENGTH done /\ EL q done = w``;
 
 (* The supplied w is the SAME protected actual initializer. *)
+Theorem ptr_paired_actual_protected_write_exclusion_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  vs.vs_allocas = FEMPTY /\
+  EVERY wf_function C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  (!obs. MEM obs h ==> access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state) /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN /\ d <= LENGTH endpoint.po_stack /\
+  FLOOKUP (ptr_owner_view d endpoint).cf_state.vs_allocas aid = SOME (b,sz) /\
+  lo <= b+k /\ k < sz /\ b+k NOTIN endpoint.po_taint.t_mem /\
+  MEM (Var v) endpoint.po_inst.inst_operands /\
+  (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) /\
+  FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
+  fn = (ptr_owner_view d endpoint).cf_fn /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  mems = (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm))) /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\ o1_walk_view rpolicy 2 C' fn observed /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  SUC w < LENGTH h /\
+  b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+    (EL (SUC w) h).po_state) /\ b+k NOTIN (EL (SUC w) h).po_taint.t_mem /\
+  (!n. w < n /\ SUC n < LENGTH h ==>
+    b+k NOTIN range_bytes (step_writes (EL n h).po_inst (EL n h).po_state
+      (EL (SUC n) h).po_state)) /\
+  (!t. w < t /\ t < LENGTH h ==>
+    ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
+      observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
+      MEM ((ptr_owner_view d (EL t h)).cf_state.vs_current_bb,
+           (ptr_owner_view d (EL t h)).cf_state.vs_inst_idx) xs) /\
+  (!n. w <= n /\ n < LENGTH h ==>
+    d <= LENGTH (EL n h).po_stack /\
+    FLOOKUP (ptr_owner_view d (EL n h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+    ~in_revert_forward (EL n h).po_fn (EL n h).po_state) /\
+  ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
+  ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst /\
+  q < LENGTH done /\ w < EL q done ==>
+  pa+k NOTIN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
+    (EL (SUC q) ht).po_state)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_chrono_history_end >> strip_tac >>
+  drule ptr_structural_transcript_endpoint >> strip_tac >>
+  `LENGTH h-1 < LENGTH h /\ EL (LENGTH h-1) h = endpoint /\
+   EL (LENGTH h-1) H = (tokens,registry,births,PT,TG,saved,entries)` by
+    (Cases_on `h` >> Cases_on `H` >> gvs[LAST_EL]) >>
+  qmatch_goalsub_abbrev_tac `step_writes ti ts tz` >>
+  qabbrev_tac `token = EL (LENGTH endpoint.po_stack-d) tokens` >>
+  `!j. w <= j /\ j < LENGTH h ==>
+    EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token` by
+    (`!j. w <= j /\ j <= LENGTH h-1 ==>
+       ?tsj rj bj PTj TGj sj ej.
+         EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+         EL (LENGTH (EL j h).po_stack-d) tsj = token` by
+       (drule ptr_transcript_bottom_token_interval >>
+        disch_then (qspecl_then [`w`,`LENGTH h-1`,`d`] mp_tac) >>
+        simp[Abbr `token`]) >>
+     rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
+     (impl_tac >- decide_tac) >> strip_tac >> simp[]) >>
+  `ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w` by
+    (simp[ptr_demand_interval_static_def, Abbr `token`, ADD1] >> metis_tac[]) >>
+  unabbrev_all_tac >> drule_all ptr_paired_historical_owned_write_exclusion_static >> simp[]
+QED
+
 Theorem ptr_paired_actual_protected_write_exclusion:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -319,36 +401,12 @@ Theorem ptr_paired_actual_protected_write_exclusion:
   pa+k NOTIN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
     (EL (SUC q) ht).po_state)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_source >> strip_tac >>
-  drule ptr_chrono_history_end >> strip_tac >>
-  drule ptr_structural_transcript_endpoint >> strip_tac >>
-  `LENGTH h-1 < LENGTH h /\ EL (LENGTH h-1) h = endpoint /\
-   EL (LENGTH h-1) H = (tokens,registry,births,PT,TG,saved,entries)` by
-    (Cases_on `h` >> Cases_on `H` >> gvs[LAST_EL]) >>
-  qmatch_goalsub_abbrev_tac `step_writes ti ts tz` >>
-  qabbrev_tac `token = EL (LENGTH endpoint.po_stack-d) tokens` >>
-  `!j. w <= j /\ j < LENGTH h ==>
-    EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token` by
-    (`!j. w <= j /\ j <= LENGTH h-1 ==>
-       ?tsj rj bj PTj TGj sj ej.
-         EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
-         EL (LENGTH (EL j h).po_stack-d) tsj = token` by
-       (drule ptr_transcript_bottom_token_interval >>
-        disch_then (qspecl_then [`w`,`LENGTH h-1`,`d`] mp_tac) >>
-        simp[Abbr `token`]) >>
-     rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
-     (impl_tac >- decide_tac) >> strip_tac >> simp[]) >>
-  `ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
-    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
-    rpolicy s out names w` by
-    (simp[ptr_demand_interval_def, Abbr `token`, ADD1] >> metis_tac[]) >>
-  unabbrev_all_tac >> drule_all ptr_paired_historical_owned_write_exclusion >> simp[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_actual_protected_write_exclusion_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
-Resume ptr_paired_owned_read_recovery[target_frame]:
+Resume ptr_paired_owned_read_recovery_static[target_frame]:
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   `!j. q < j /\ j < LENGTH done ==> w < EL j done` by
@@ -363,7 +421,7 @@ Resume ptr_paired_owned_read_recovery[target_frame]:
     (rpt gen_tac >> strip_tac >>
      `j < LENGTH done /\ w < EL j done` by
        (conj_tac >- decide_tac >> first_x_assum irule >> decide_tac) >>
-     irule ptr_paired_actual_protected_write_exclusion >>
+     irule ptr_paired_actual_protected_write_exclusion_static >>
      goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP positions (Allocation _) = _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP (ptr_owner_view _ endpoint).cf_state.vs_allocas _ = _`)) >>
@@ -382,4 +440,47 @@ Resume ptr_paired_owned_read_recovery[target_frame]:
   metis_tac[ADD_COMM]
 QED
 
-Finalise ptr_paired_owned_read_recovery
+Finalise ptr_paired_owned_read_recovery_static
+
+Theorem ptr_paired_owned_read_recovery:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  vs.vs_allocas = FEMPTY /\
+  EVERY wf_function C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  (!obs. MEM obs h ==> access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state) /\
+  ~in_revert_forward endpoint.po_fn endpoint.po_state /\
+  endpoint.po_inst.inst_opcode <> ASSIGN /\ d <= LENGTH endpoint.po_stack /\
+  FLOOKUP (ptr_owner_view d endpoint).cf_state.vs_allocas aid = SOME (b,sz) /\
+  lo <= b+k /\ k < sz /\ b+k NOTIN endpoint.po_taint.t_mem /\
+  MEM (Var v) endpoint.po_inst.inst_operands /\
+  (inst_read_op endpoint.po_inst = SOME (Var v) \/ endpoint.po_inst.inst_opcode = INVOKE) /\
+  FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
+  fn = (ptr_owner_view d endpoint).cf_fn /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  mems = (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm))) /\
+  lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' fn observed /\ EVERY fn_inst_wf C.ctx_functions /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
+  read_byte (b+k) endpoint.po_state.vs_memory =
+    read_byte (pa+k) at.po_state.vs_memory \/
+  dyn_floor C vs <= b+k
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_owned_read_recovery_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
