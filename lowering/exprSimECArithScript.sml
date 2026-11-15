@@ -2150,8 +2150,9 @@ Theorem ec_outcome_then[local]:
   gas_outcome F tops (ctx,func) cx st0
     (m : evaluation_state -> value evaluation_result) (es,s0)
     (\H res ee t. ?v. res = INL v /\ P H v ee t)
-    (\H res ee r. expr_exit res r) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==>
      R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!marks v ee t.
@@ -2445,7 +2446,7 @@ Theorem ec_binary_call_gas[local]:
        vv_post H ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -2495,7 +2496,8 @@ Proof
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
       qexists_tac `expr_type a` >> simp[])
-  >- metis_tac[ec_expr_exit_INR_cast]
+  >- (rpt strip_tac >> gvs[halt_exit_def] >>
+      metis_tac[ec_expr_exit_INR_cast])
   >- (gen_tac >> match_mp_tac storage_trace_frame_bind_all >>
       simp[ec_source_tail_storage_frame]) >>
   qx_genl_tac [`m1`, `v1`, `es1`, `t`] >> strip_tac >>
@@ -2566,7 +2568,8 @@ Proof
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
       qexists_tac `expr_type b` >> simp[])
-  >- metis_tac[ec_expr_exit_INR_cast]
+  >- (rpt strip_tac >> gvs[halt_exit_def] >>
+      metis_tac[ec_expr_exit_INR_cast])
   >- simp[ec_source_tail_storage_frame] >>
   qx_genl_tac [`m2`, `v2`, `es2`, `u`] >> strip_tac >>
   `es2 with gas_obs := [] = es2` by
@@ -2623,6 +2626,11 @@ Proof
                          freshWritesTheory.not_fresh_at_mono]) >>
   Cases_on `ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2] es2` >>
   rename1 `_ = (res, es')` >>
+  `res <> INR HaltException` by
+    (qpat_x_assum `bt = ECAdd \/ bt = ECMul` strip_assume_tac >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ es2 = _` mp_tac >>
+     simp[ec_source_tail_cases, exprSimWordArgsTheory.builtin_result_def,
+          AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   `!(H:(bool # bytes32 # type_value) list # num list). valid_horizon cx st0 H es'.storage_trace ==>
        valid_horizon cx st0 H es.storage_trace` by
     (`?obs. es'.storage_trace = es2.storage_trace ++ obs` by
@@ -2673,7 +2681,7 @@ Proof
     (fn th => rewrite_tac[th]) >>
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
-  FIRST [disj2_tac >> simp[] >> NO_TAC,
+  FIRST [disj2_tac >> simp[halt_exit_def] >> NO_TAC,
          disj1_tac >> simp[] >> rpt strip_tac >>
          rename1 `valid_horizon cx st0 H' es'.storage_trace` >>
          `stmt_state_rel H' ctx func cenv cx es s0` by metis_tac[] >>
