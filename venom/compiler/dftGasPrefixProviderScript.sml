@@ -758,6 +758,191 @@ Proof
   cheat
 QED
 
+Theorem crossed_stopped_packet_constructor:
+  let q = (d,call.inst_id)::p;
+      e = (p,d,gas.inst_id);
+      bs = bb with bb_instructions := REPLICATE j pad ++ gas::call::rest;
+      bt = bb with bb_instructions := REPLICATE j pad ++ call::gas::rest;
+      Tc = run_blocks b C' callee' ct;
+      Oc = trace_gas (dftGasFromListTraceDefs$trace_blocks q d b C' callee' ct);
+      Mc = MAP (ALOOKUP Oc) Kc;
+      T = exec_block b C' bt a;
+      Ob = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt a);
+      M = MAP (ALOOKUP Ob) (e::Kc)
+  in
+  j = a.vs_inst_idx /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [out] /\
+  call.inst_opcode = INVOKE /\ inst_wf gas /\ inst_wf call /\
+  dft_gas_swap_pair gas call /\ ~MEM out call.inst_outputs /\
+  ~MEM (Var out) ops /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (gas::call::rest)) /\
+  fn.fn_name = fn'.fn_name /\
+  decode_invoke call = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  lookup_function nm C'.ctx_functions = SOME callee' /\
+  callee' = dft_fn callee /\ dft_fn_rel callee callee' /\
+  eval_operands ops a = SOME args /\
+  setup_callee callee args a = SOME cs /\
+  setup_callee callee' args a = SOME ct /\
+  ((?rt. Tc = Halt rt) \/ (?at rt. Tc = Abort at rt)) /\
+  terminates T /\ gas_count_block b C' bt a <= LENGTH a.vs_gas_readings /\
+  ALL_DISTINCT Kc /\ EVERY (later_region q d) Kc /\
+  LENGTH Kc = LENGTH Sc /\
+  PERM (MAP THE (FILTER IS_SOME Mc) ++ Uc) ct.vs_gas_readings /\
+  (!v u. Tc = IntRet v u ==> EVERY IS_SOME Mc /\ Uc = u.vs_gas_readings) /\
+  (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mc g ==>
+    (!n. ?k. k <= LENGTH Kc /\
+      trace_gas (dftGasFromListTraceDefs$trace_blocks q d n C callee
+        (cs with vs_gas_readings := g ++ tail)) = ZIP (TAKE k Kc,TAKE k g) /\
+      gas_events_blocks n C callee (cs with vs_gas_readings := g ++ tail) = TAKE k Sc) /\
+    ((?n. terminates (run_blocks n C callee (cs with vs_gas_readings := g ++ tail))) ==>
+      terminates (run_blocks b C callee (cs with vs_gas_readings := g ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (run_blocks b C callee (cs with vs_gas_readings := g ++ tail)))
+        (restore_result [] Tc) /\
+      (!v u. Tc = IntRet v u ==>
+        gas_events_blocks b C callee (cs with vs_gas_readings := g ++ tail) = Sc /\
+        residual_result tail Tc (run_blocks b C callee (cs with vs_gas_readings := g ++ tail)))))
+  ==>
+  ALL_DISTINCT (e::Kc) /\
+  EVERY (block_region p d (MAP (\i. i.inst_id) (gas::call::rest))) (e::Kc) /\
+  LENGTH (e::Kc) = LENGTH ((fn.fn_name,gas.inst_id)::Sc) /\
+  PERM (MAP THE (FILTER IS_SOME M) ++ Uc) a.vs_gas_readings /\
+  (!u. T = OK u ==> EVERY IS_SOME M /\ Uc = u.vs_gas_readings) /\
+  (!v u. T = IntRet v u ==> EVERY IS_SOME M /\ Uc = u.vs_gas_readings) /\
+  (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M g ==>
+    (!n. ?k. k <= LENGTH (e::Kc) /\
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bs
+        (a with vs_gas_readings := g ++ tail)) = ZIP (TAKE k (e::Kc),TAKE k g) /\
+      gas_events_block n C fn.fn_name bs (a with vs_gas_readings := g ++ tail) =
+        TAKE k ((fn.fn_name,gas.inst_id)::Sc)) /\
+    ((?n. terminates (exec_block n C bs (a with vs_gas_readings := g ++ tail))) ==>
+      terminates (exec_block b C bs (a with vs_gas_readings := g ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (exec_block b C bs (a with vs_gas_readings := g ++ tail)))
+        (restore_result [] T) /\
+      (!u. T = OK u ==>
+        gas_events_block b C fn.fn_name bs (a with vs_gas_readings := g ++ tail) =
+          (fn.fn_name,gas.inst_id)::Sc /\
+        residual_result tail T (exec_block b C bs (a with vs_gas_readings := g ++ tail))) /\
+      (!v u. T = IntRet v u ==>
+        gas_events_block b C fn.fn_name bs (a with vs_gas_readings := g ++ tail) =
+          (fn.fn_name,gas.inst_id)::Sc /\
+        residual_result tail T (exec_block b C bs (a with vs_gas_readings := g ++ tail)))))
+Proof
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `callee' = dft_fn callee` kall_tac >>
+  qmatch_asmsub_abbrev_tac `MAP (ALOOKUP obs) Kc` >>
+  qmatch_goalsub_abbrev_tac `trace_block p d b C' fn' bt a` >>
+  qabbrev_tac `bs = bb with bb_instructions := REPLICATE j pad ++ gas::call::rest` >>
+  `get_instruction bt a.vs_inst_idx = SOME call` by
+    simp[Abbr `bt`, get_instruction_def, EL_APPEND_EQN] >>
+  `exec_block b C' bt a = run_blocks b C' callee' ct` by
+    simp[Once exec_block_def, Once step_inst_def] >>
+  `trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt a) = obs` by
+    (drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+     disch_then (fn th => rewrite_tac [th]) >>
+     simp[cj 1 dftGasFromListTraceDefsTheory.trace_defs, Once step_inst_def,
+          trace_gas_def, visit_gas_def, Abbr `obs`]) >>
+  `~later_region ((d,call.inst_id)::p) d (p,d,gas.inst_id)` by
+    simp[later_region_def, frame_below_def] >>
+  `~MEM (p,d,gas.inst_id) Kc` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `ALOOKUP obs (p,d,gas.inst_id) = NONE` by
+    (`EVERY (\kw. later_region ((d,call.inst_id)::p) d (FST kw)) obs` by
+       simp[Abbr `obs`, native_blocks_gas_region] >>
+     fs[alistTheory.ALOOKUP_NONE, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `ct.vs_gas_readings = a.vs_gas_readings` by
+    (fs[setup_callee_def] >> gvs[]) >>
+  `PERM (MAP THE (FILTER IS_SOME (MAP (ALOOKUP obs) Kc)) ++ Uc) a.vs_gas_readings` by metis_tac[] >>
+  `EVERY (block_region p d (MAP (\i. i.inst_id) (gas::call::rest))) Kc` by
+    (fs[EVERY_MEM, later_region_def, frame_below_def, block_region_def] >>
+     rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     PairCases_on `e` >> irule below_call_region >>
+     qexists_tac `call.inst_id` >> simp[] >>
+     irule later_region_frame >> metis_tac[]) >>
+  simp[block_region_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `g` >- fs[] >>
+  fs[listTheory.LIST_REL_CONS1] >>
+  rename1 `LIST_REL _ _ hs` >>
+  qpat_x_assum `!g tail. LIST_REL _ _ g ==> _`
+    (qspecl_then [`hs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+  rename1 `a with vs_gas_readings := w::(hs ++ tail)` >>
+  `!n v u. run_blocks n C callee (cs with vs_gas_readings := hs ++ tail) <> IntRet v u` by
+    (rpt strip_tac >>
+     `terminates (run_blocks b C callee (cs with vs_gas_readings := hs ++ tail)) /\
+      dft_res_rel (restore_result [] (run_blocks b C callee (cs with vs_gas_readings := hs ++ tail)))
+        (restore_result [] (run_blocks b C' callee' ct))` by
+       (asm_rewrite_tac [] >> first_x_assum irule >> qexists_tac `n` >>
+        simp[passSimulationDefsTheory.terminates_def]) >>
+     `!err. run_blocks b C callee (cs with vs_gas_readings := hs ++ tail) <> Error err` by
+       (Cases_on `run_blocks b C callee (cs with vs_gas_readings := hs ++ tail)` >>
+        gvs[passSimulationDefsTheory.terminates_def]) >>
+     `run_blocks (MAX b n) C callee (cs with vs_gas_readings := hs ++ tail) =
+        run_blocks b C callee (cs with vs_gas_readings := hs ++ tail)` by
+       (irule (cj 3 venomExecProofsTheory.fuel_mono) >> simp[] >> qexists_tac `b` >> simp[]) >>
+     `run_blocks (MAX b n) C callee (cs with vs_gas_readings := hs ++ tail) = IntRet v u` by
+       (irule (cj 3 venomExecProofsTheory.fuel_mono) >> simp[] >> qexists_tac `n` >> simp[]) >>
+     Cases_on `run_blocks b C callee (cs with vs_gas_readings := hs ++ tail)` >>
+     gvs[restore_result_def, dft_res_rel_def]) >>
+  qabbrev_tac `aG = (update_var out w (a with vs_gas_readings := hs ++ tail)) with vs_inst_idx := SUC j` >>
+  `eval_operands ops aG = SOME args` by
+    (`eval_operands ops (update_var out w (a with vs_gas_readings := hs ++ tail)) = SOME args` by
+       (`!y. MEM (Var y) ops ==> out <> y` by metis_tac[] >>
+        simp[dftCommutationTheory.eval_operands_update_var, gas_eval_operands]) >>
+     `eval_operands ops aG = eval_operands ops (update_var out w (a with vs_gas_readings := hs ++ tail))` by
+       (irule eval_operands_agree >> rpt strip_tac >> Cases_on `op` >>
+        simp[Abbr `aG`, eval_operand_def, lookup_var_def]) >> metis_tac[]) >>
+  `setup_callee callee args aG = SOME (cs with vs_gas_readings := hs ++ tail)` by
+    (fs[Abbr `aG`, setup_callee_def, update_var_def] >> gvs[]) >>
+  `get_instruction bs a.vs_inst_idx = SOME gas /\ get_instruction bs aG.vs_inst_idx = SOME call` by
+    simp[Abbr `bs`, Abbr `aG`, get_instruction_def, EL_APPEND_EQN, update_var_def] >>
+  `!n. step_inst n C gas (a with vs_gas_readings := w::(hs ++ tail)) =
+     OK (update_var out w (a with vs_gas_readings := hs ++ tail))` by
+    simp[Once step_inst_def, step_inst_base_def, exec_gas_def] >>
+  `!n s u. run_blocks n C callee s <> OK u` by
+    (Induct >- simp[Once run_blocks_def] >>
+     simp[run_blocks_unfold] >> rpt gen_tac >> rpt (CASE_TAC >> fs[])) >>
+  `!n. step_inst n C call aG = run_blocks n C callee (cs with vs_gas_readings := hs ++ tail)` by
+    (gen_tac >> simp[Once step_inst_def] >>
+     Cases_on `run_blocks n C callee (cs with vs_gas_readings := hs ++ tail)` >> fs[] >> metis_tac[]) >>
+  `!n. exec_block n C bs (a with vs_gas_readings := w::(hs ++ tail)) =
+       run_blocks n C callee (cs with vs_gas_readings := hs ++ tail)` by
+    (gen_tac >> simp[Once exec_block_def, is_terminator_def] >>
+     `((update_var out w (a with vs_gas_readings := hs ++ tail)) with vs_inst_idx := SUC a.vs_inst_idx) = aG` by simp[Abbr `aG`] >>
+     `get_instruction bs (SUC a.vs_inst_idx) = SOME call` by
+       simp[Abbr `bs`, get_instruction_def, EL_APPEND_EQN] >>
+     asm_rewrite_tac [] >> simp[Once exec_block_def] >>
+     Cases_on `run_blocks n C callee (cs with vs_gas_readings := hs ++ tail)` >> gvs[] >> metis_tac[]) >>
+  `!n. trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bs
+          (a with vs_gas_readings := w::(hs ++ tail))) =
+       ((p,d,gas.inst_id),w)::trace_gas
+         (dftGasFromListTraceDefs$trace_blocks ((d,call.inst_id)::p) d n C callee
+           (cs with vs_gas_readings := hs ++ tail))` by
+    (gen_tac >>
+     simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs),
+          cj 1 dftGasFromListTraceDefsTheory.trace_defs, is_terminator_def] >>
+     `((update_var out w (a with vs_gas_readings := hs ++ tail)) with vs_inst_idx := SUC a.vs_inst_idx) = aG` by simp[Abbr `aG`] >>
+     asm_rewrite_tac [] >>
+     simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs),
+          cj 1 dftGasFromListTraceDefsTheory.trace_defs] >>
+     Cases_on `run_blocks n C callee (cs with vs_gas_readings := hs ++ tail)` >>
+     gvs[trace_gas_def, visit_gas_def] >> metis_tac[]) >>
+  `!n. gas_events_block n C fn'.fn_name bs
+          (a with vs_gas_readings := w::(hs ++ tail)) =
+       (fn'.fn_name,gas.inst_id)::gas_events_blocks n C callee
+           (cs with vs_gas_readings := hs ++ tail)` by
+    (gen_tac >> simp[Once gas_events_block_def, gas_events_step_def, is_terminator_def] >>
+     `((update_var out w (a with vs_gas_readings := hs ++ tail)) with vs_inst_idx := SUC a.vs_inst_idx) = aG` by simp[Abbr `aG`] >>
+     asm_rewrite_tac [] >> simp[Once gas_events_block_def, gas_events_step_def] >>
+     Cases_on `run_blocks n C callee (cs with vs_gas_readings := hs ++ tail)` >> gvs[] >> metis_tac[]) >>
+  (conj_tac >-
+    (gen_tac >> qpat_x_assum `!n. ?k. _` (qspec_then `n` strip_assume_tac) >>
+     qexists_tac `SUC k` >> simp[]) >>
+   asm_rewrite_tac [])
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
