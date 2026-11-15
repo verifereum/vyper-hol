@@ -19,6 +19,15 @@ Ancestors
 
 
 
+Theorem prefix_bool_preheader_arith_dispatch[local]:
+  step_inst_base (mk_inst iid MUL ops outs) s =
+    exec_pure2 $* (mk_inst iid MUL ops outs) s /\
+  step_inst_base (mk_inst iid ADD ops outs) s =
+    exec_pure2 $+ (mk_inst iid ADD ops outs) s
+Proof
+  simp[step_inst_base_def, mk_inst_def]
+QED
+
 Theorem prefix_bool_preheader_guard_dispatch[local]:
   step_inst_base (mk_inst iid GT ops outs) s =
     exec_pure2 (\w z. bool_to_word (w2n w > w2n z)) (mk_inst iid GT ops outs) s /\

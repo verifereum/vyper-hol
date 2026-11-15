@@ -44,26 +44,19 @@ QED
 Theorem gas_shadow_compiles_dynarray_append:
   gas_shadow_compiles
     (compile_dynarray_append cenv base_op val_op stride elem_size dst_ty src_ty
-      capacity prim load_opc store_opc)
+      capacity prim loc)
     (compile_dynarray_append cenv base_op val_op stride elem_size dst_ty src_ty
-      capacity prim load_opc store_opc)
+      capacity prim loc)
 Proof
-  Cases_on `prim` >>
+  Cases_on `prim` >> Cases_on `loc` >>
   simp[compile_dynarray_append_def, LET_THM, comp_ignore_bind_def] >>
-  rpt IF_CASES_TAC >> asm_rewrite_tac[] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_bind,
-               gas_shadow_compiles_store_memory, gas_shadow_compiles_word_copy_loop,
+       >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_ptr_load,
+               gas_shadow_compiles_ptr_store, gas_shadow_compiles_store_memory,
+               gas_shadow_compiles_imm_store_words, gas_shadow_compiles_bind,
                gas_shadow_compiles_return,
                cj 1 gas_shadow_compiles_store_slots]
-       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_emit_void] >>
-  qmatch_goalsub_abbrev_tac `if dst_loc = LocMemory then _ else _` >>
-  Cases_on `dst_loc = LocMemory` >> simp[] >>
-  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_bind, gas_shadow_compiles_store_memory,
-               gas_shadow_compiles_word_copy_loop, gas_shadow_compiles_return,
-               cj 1 gas_shadow_compiles_store_slots]
-       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_emit_void]
+       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_ptr_store]
 QED
 
 Theorem gas_shadow_compiles_create_snapshot:

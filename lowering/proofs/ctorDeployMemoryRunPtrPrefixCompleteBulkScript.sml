@@ -196,7 +196,38 @@ Theorem prefix_bulk_complete_mode_contract:
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
   (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
-  cheat
+  disch_then (strip_assume_tac o SIMP_RULE bool_ss []) >>
+  BETA_TAC >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decoder_dynarray_metadata_shape >> strip_tac >> gnvs[Excl "enc_def"] >>
+  `abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
+    (ListV avs) (ArrayV (DynArrayV vs))` by fs[abi_decoder_metadata_def] >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var (Var dst) /\
+   abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    (Cases_on `src` >>
+     fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= initial.vs_alloca_next /\
+   initial.vs_alloca_next < dimword (:256)` by
+    (drule_all deploy_ctor_shifted_frontier_bound >> strip_tac >> decide_tac) >>
+  `abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs))
+    st st.cs_next_id src (Var dst) DLOAD (Lit 0w) (Lit 0w) 0 sb d initial.vs_alloca_next 0
+    (abi_decoder_prune_vars st.cs_next_var initial)` by
+    (irule ctor_actual_bulk_empty_window_pre >>
+     asm_simp_tac bool_ss [vyper_to_abi_type_def] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
+  gnvs[Excl "enc_def"] >>
+  `checked ==> run_inst_seq_mem_ok (emitted_insts st st') initial` by
+    (strip_tac >>
+     irule ctor_bulk_reentry_mem_ok >> goal_assum (drule_at Any) >>
+     gvs[Excl "enc_def"]) >>
+  drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>
+  suspend "package"
 QED
 
 Resume prefix_bulk_complete_mode_contract[package]:
@@ -221,6 +252,7 @@ Resume prefix_bulk_complete_mode_contract[package]:
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   suspend "finish"
 QED
+
 Resume prefix_bulk_complete_mode_contract[finish]:
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   `frag_exec ctx st st' (\s. s = initial)
@@ -252,6 +284,22 @@ Resume prefix_bulk_complete_mode_contract[finish]:
      disch_then (qspec_then `ctx` strip_assume_tac) >>
      `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
      drule_all ctor_bulk_sequence_history >> simp[]) >>
+  `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+     (initial, G, tn) []
+     (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)` by
+    (strip_tac >> rpt gen_tac >>
+     `run_inst_seq_mem_ok (emitted_insts st st') initial` by simp[] >>
+     `inst_extends st st'` by
+       (irule abiDecoderTypedComposeTheory.abi_decoder_inst_extends_prefix >> simp[]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                 i.inst_opcode <> GAS) (emitted_insts st st')` by
+       (qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+        qpat_x_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                        ~is_alloca_op i.inst_opcode) _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+        gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+     irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,32+LENGTH vs * type_memory_size tv)]`] >>
   simp[SUBSET_REFL, op_taint_def, Excl "enc_def"] >>
@@ -274,7 +322,12 @@ Resume prefix_bulk_complete_mode_contract[finish]:
     simp_tac bool_ss [fresh_vars_wrt_def]) >>
   qpat_x_assum `DISJOINT _ qt.t_mem` mp_tac >> simp[]
 QED
+
 Finalise prefix_bulk_complete_mode_contract
+
+
+
+
 
 Theorem prefix_bulk_complete_code_contract:
   ~(is_abi_dynamic ce.ce_struct_fields ty \/

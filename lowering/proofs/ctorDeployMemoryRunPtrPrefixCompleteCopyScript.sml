@@ -188,7 +188,23 @@ QED
 Theorem prefix_bytestring_complete_mode_contract:
   type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
 Proof
-  cheat
+  strip_tac >> BETA_TAC >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `sb < dimword (:256) /\ d < dimword (:256) /\
+   type_memory_bytes ce ty < dimword (:256)` by
+    (drule_all deploy_ctor_shifted_frontier_bound >> strip_tac >> decide_tac) >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var (Var dst) /\
+   abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    (Cases_on `src` >>
+     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+     metis_tac[not_fresh_at_def]) >>
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
+     (DecBytestring n) st = ((),st')` by metis_tac[] >>
+  drule_all (SIMP_RULE bool_ss []
+    (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
+      ctor_actual_bytestring_ceiling_sequence)) >> strip_tac >>
+  suspend "package"
 QED
 
 Resume prefix_bytestring_complete_mode_contract[package]:
@@ -241,6 +257,26 @@ Resume prefix_bytestring_complete_mode_contract[package]:
      drule_all ctor_bytes_sequence_zero_path >> strip_tac >>
      `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
      drule_all ctor_bytes_sequence_history >> simp[]) >>
+  (* The forward joint path runs on the same run and ghost witness. *)
+  `inst_extends st st' /\ st'.cs_current_bb = st.cs_current_bb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+              i.inst_opcode <> GAS) (emitted_insts st st')` by
+    (drule prefix_bytestring_sentinel_code >>
+     pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+     asm_rewrite_tac[inst_extends_def] >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `checked ==> !D' explicit.
+     gas_origin_ptr_path (D', lo, explicit, ctx, func, PG) (initial, G, tn) []
+       (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)` by
+    (strip_tac >> gvs[] >>
+     `sb <= LENGTH initial.vs_data_section` by decide_tac >>
+     `d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next` by simp[] >>
+     `run_inst_seq_mem_ok (emitted_insts st st') initial` by
+       (irule ctor_bytes_reentry_mem_ok >>
+        qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
+        simp[] >> decide_tac) >>
+     rpt gen_tac >> irule emitted_origin_ptr_path >>
+     simp[] >> qexists_tac `st` >> simp[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>
   simp[SUBSET_REFL, op_taint_def] >>
@@ -263,7 +299,11 @@ Resume prefix_bytestring_complete_mode_contract[package]:
     simp_tac bool_ss [fresh_vars_wrt_def]) >>
   qpat_x_assum `DISJOINT _ qt.t_mem` mp_tac >> simp[]
 QED
+
 Finalise prefix_bytestring_complete_mode_contract
+
+
+
 
 Theorem prefix_bytestring_complete_code_contract:
   type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCode) ty tv

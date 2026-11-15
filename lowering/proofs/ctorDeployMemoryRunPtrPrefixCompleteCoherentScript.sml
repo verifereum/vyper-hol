@@ -278,5 +278,22 @@ QED
 Theorem prefix_canonical_coherent_complete_checked:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^CshiftChecked) ty tv
 Proof
-  cheat
+  qabbrev_tac `P = \ce env sf. (^CshiftChecked)` >>
+  `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
+    simp_tac bool_ss [Abbr `P`] >>
+  ho_match_mp_tac abi_decoder_coherent_ind >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
+      MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] prefix_base_complete_checked)) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
+      MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] prefix_flag_complete_checked)) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+      match_mp_tac (BETA_RULE prefix_array_complete_checked) >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+      match_mp_tac (BETA_RULE prefix_tuple_complete_checked_contract) >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+  match_mp_tac (BETA_RULE prefix_struct_complete_checked_contract) >> asm_rewrite_tac[]
 QED

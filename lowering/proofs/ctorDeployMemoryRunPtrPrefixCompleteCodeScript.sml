@@ -440,7 +440,63 @@ QED
 Theorem prefix_scalar_complete_mode_contract:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) checked ty tv
 Proof
-  cheat
+  disch_tac >> BETA_TAC >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_decoder_primitive_cases >> disch_then (qspec_then `clamp` mp_tac) >>
+  asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
+    (qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
+      (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
+     drule_all abi_decoder_descended_encoding_length >> simp[]) >>
+  `sb < dimword (:256) /\ d < dimword (:256)` by
+    (qpat_x_assum `alloca_frontier_inv_from _ _ _ _ _` mp_tac >>
+     simp[alloca_frontier_inv_from_def] >> strip_tac >> decide_tac) >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var (Var dst)` by
+    (Cases_on `src` >>
+     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+     metis_tac[not_fresh_at_def]) >>
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
+     (DecPrimWord clamp) st = ((),st')` by metis_tac[] >>
+  `mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
+   d+32 <= b+sz` by metis_tac[] >>
+  drule_all prefix_scalar_complete_shift_code >>
+  disch_then (qspecl_then [`site`,`PG`,`Ddead`] mp_tac) >>
+  simp[LET_THM, Excl "enc_def"] >> strip_tac >>
+  `checked ==> gas_path_mem ctx func initial 0
+      (OK (actual with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
+      alloca_history func (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (strip_tac >>
+     `d+32 <= initial.vs_alloca_next` by decide_tac >>
+     `sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial` by
+       metis_tac[] >>
+     drule_all ctor_checked_word_sequence >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >> gvs[]) >>
+  `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+      (initial, G, tn) []
+      (OK (actual with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)` by
+    (strip_tac >> rpt gen_tac >>
+     `d+32 <= initial.vs_alloca_next` by decide_tac >>
+     `sb+32 <= LENGTH initial.vs_data_section` by metis_tac[] >>
+     `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+     `mem_bytes_at sb 32 (abi_decode_source DLOAD initial) =
+        enc (vyper_to_abi_type env ty) av` by simp[abi_decode_source_def] >>
+     drule_all abiDecoderPrimitiveCallerTheory.abi_decoder_primitive_clamp >> strip_tac >>
+     drule_all ctor_word_reentry_mem_ok >> strip_tac >>
+     drule_all abi_decoder_clamped_word_shape >> strip_tac >>
+     drule_all abi_decoder_word_reentry_code >> strip_tac >>
+     `inst_extends st st'` by (irule abiDecoderTypedComposeTheory.abi_decoder_inst_extends_prefix >> simp[]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                 i.inst_opcode <> GAS) (emitted_insts st st')` by
+       (qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+        qpat_x_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                    ~is_alloca_op i.inst_opcode) _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+        gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+     irule emitted_origin_ptr_path >> metis_tac[]) >>
+  qexistsl [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,`B`] >>
+  simp[Excl "enc_def"]
 QED
 
 Theorem prefix_scalar_complete_code_contract:

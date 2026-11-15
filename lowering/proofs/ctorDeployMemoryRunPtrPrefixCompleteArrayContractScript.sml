@@ -173,7 +173,8 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
-  cheat
+ disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact) o BETA_RULE) >>
+ rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
 QED
 
 Theorem prefix_dynamic_array_loop_complete_mode_contract:
