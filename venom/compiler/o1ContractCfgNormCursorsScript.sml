@@ -81,6 +81,22 @@ Proof
   ho_match_mp_tac cfg_norm_cursors_ind >> simp[] >> metis_tac[]
 QED
 
+Theorem cfg_norm_cursors_admin_opcode:
+  !C rs cs. cfg_norm_cursors C rs cs /\
+    MEM (FST (FST (HD cs))).inst_opcode [ASSIGN; JMP; JNZ] ==>
+    MEM (FST (FST (LAST cs))).inst_opcode [ASSIGN; JMP; JNZ]
+Proof
+  pure_rewrite_tac [GSYM AND_IMP_INTRO] >>
+  ho_match_mp_tac cfg_norm_cursors_ind >>
+  pure_rewrite_tac [HD, LAST_CONS, FST, NOT_CONS_NIL] >> rpt strip_tac
+  >- (first_x_assum irule >>
+      metis_tac[supply_block_image_index]) >>
+  first_x_assum irule >>
+  `ir_supply_inst_ok s /\ ir_supply_covers_fn s fn` by
+    gvs[supply_norm_inv_def] >>
+  drule_all supply_split_index_shape >> simp[] >> metis_tac[]
+QED
+
 Theorem cfg_norm_cursors_entry_final:
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   fn_entry_state fn cs /\ enters_block fn cs v /\ active_inst fn inst v ==>
