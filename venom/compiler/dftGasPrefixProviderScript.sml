@@ -1626,6 +1626,90 @@ Proof
   qexists_tac `bi` >> simp[DROP_APPEND]
 QED
 
+Theorem native_prefix_cut:
+  !pre a j.
+    a.vs_inst_idx = j /\ EVERY (\i. ~is_terminator i.inst_opcode) pre ==>
+    !n C fn p d rest bb pad.
+    let bp = bb with bb_instructions := REPLICATE j pad ++ pre;
+        bw = bb with bb_instructions := REPLICATE j pad ++ (pre ++ rest);
+        br = bb with bb_instructions := REPLICATE (j + LENGTH pre) pad ++ rest;
+        R = FOLDR (dft_exec_cons n C) OK pre a
+    in
+    exec_block n C bw a = (case R of OK t => exec_block n C br t | other => other) /\
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bw a) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bp a) ++
+      (case R of OK t => trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn br t) | _ => []) /\
+    gas_events_block n C fn.fn_name bw a = gas_events_block n C fn.fn_name bp a ++
+      (case R of OK t => gas_events_block n C fn.fn_name br t | _ => []) /\
+    (!t. R = OK t ==> t.vs_inst_idx = j + LENGTH pre)
+Proof
+  Induct >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp_tac pure_ss [LET_THM]
+  >- (gvs[] >> simp[Once dftGasFromListTraceDefsTheory.trace_defs,
+        Once gas_events_block_def, get_instruction_def]) >>
+  gvs[EVERY_DEF] >>
+  `!xs.
+    exec_block n C (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs) a =
+      (case step_inst n C h a of OK u => exec_block n C
+        (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs)
+        (u with vs_inst_idx := SUC a.vs_inst_idx) | other => other) /\
+    dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs) a =
+      ((p,d,h.inst_id),fn,h,a)::(dftGasFromListTraceDefs$trace_step p d n C fn h a ++
+        case step_inst n C h a of OK u => dftGasFromListTraceDefs$trace_block p d n C fn
+          (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs)
+          (u with vs_inst_idx := SUC a.vs_inst_idx) | _ => []) /\
+    gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs) a =
+      gas_events_step n C fn.fn_name h a ++
+        (case step_inst n C h a of OK u => gas_events_block n C fn.fn_name
+          (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs)
+          (u with vs_inst_idx := SUC a.vs_inst_idx) | _ => [])` by
+    (gen_tac >> conj_tac
+     >- (CONV_TAC (LAND_CONV (REWR_CONV exec_block_def)) >>
+         simp[get_instruction_def, EL_APPEND_EQN]) >>
+     conj_tac
+     >- (CONV_TAC (LAND_CONV (REWR_CONV (cj 2 dftGasFromListTraceDefsTheory.trace_defs))) >>
+         simp[get_instruction_def, EL_APPEND_EQN]) >>
+     CONV_TAC (LAND_CONV (REWR_CONV gas_events_block_def)) >>
+     simp[get_instruction_def, EL_APPEND_EQN]) >>
+  simp_tac pure_ss [GSYM APPEND_ASSOC, APPEND] >>
+  qpat_x_assum `!xs. exec_block _ _ _ _ = _ /\ _`
+    (fn th => rewrite_tac[cj 1 th, cj 2 th, cj 3 th]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst n C h a` >> simp[] >>
+  rename1 `step_inst n C h a = OK u` >>
+  `a.vs_inst_idx - SUC a.vs_inst_idx = 0 /\
+   SUC a.vs_inst_idx - (a.vs_inst_idx + 1) = 0` by decide_tac >>
+  `!xs.
+    exec_block n C (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs)
+      (u with vs_inst_idx := SUC a.vs_inst_idx) =
+    exec_block n C (bb with bb_instructions := REPLICATE (SUC a.vs_inst_idx) pad ++ xs)
+      (u with vs_inst_idx := SUC a.vs_inst_idx) /\
+    dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs)
+      (u with vs_inst_idx := SUC a.vs_inst_idx) =
+    dftGasFromListTraceDefs$trace_block p d n C fn
+      (bb with bb_instructions := REPLICATE (SUC a.vs_inst_idx) pad ++ xs)
+      (u with vs_inst_idx := SUC a.vs_inst_idx) /\
+    gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE a.vs_inst_idx pad ++ h::xs)
+      (u with vs_inst_idx := SUC a.vs_inst_idx) =
+    gas_events_block n C fn.fn_name
+      (bb with bb_instructions := REPLICATE (SUC a.vs_inst_idx) pad ++ xs)
+      (u with vs_inst_idx := SUC a.vs_inst_idx)` by
+    (gen_tac >> conj_tac
+     >- (irule venomExecProofsTheory.exec_block_same_suffix >> simp[DROP_APPEND]) >>
+     conj_tac
+     >- (irule native_trace_block_suffix_cong >> simp[DROP_APPEND]) >>
+     irule gas_events_block_suffix_cong >> simp[DROP_APPEND]) >>
+  simp_tac pure_ss [GSYM APPEND_ASSOC, APPEND] >>
+  qpat_x_assum `!xs. exec_block _ _ _ _ = _ /\ _`
+    (fn th => rewrite_tac[cj 1 th, cj 2 th, cj 3 th]) >>
+  first_x_assum (qspec_then `u with vs_inst_idx := SUC a.vs_inst_idx` mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >> disch_then (mp_tac o cj 4) >> metis_tac[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
