@@ -241,5 +241,14 @@ Theorem lower_vyper_runtime_unit_exit_certificate:
       lower_budget_certificate (D,0,explicit,unit.cu_context) p history marks
         (INR (r,G',tn'))
 Proof
-  NO_TAC
+  rpt gen_tac >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac lower_vyper_runtime_unit_recorder_shape >>
+  impl_tac >- simp[] >> disch_tac >>
+  qabbrev_tac `p = <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+    bp_taint := entry_taint; bp_fn := fn;
+    bp_state := vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                           vs_inst_idx := 0 |> |>` >>
+  qexists_tac `p` >> simp[] >>
+  irule gas_origin_ptr_exit_certificate >> simp[Abbr`p`] >> metis_tac[]
 QED
