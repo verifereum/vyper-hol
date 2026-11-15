@@ -1950,7 +1950,8 @@ Proof
        wordsTheory.dimword_def, LENGTH_TAKE,
        vyperTypeBytesCryptoTheory.LENGTH_Keccak_256_w64,
        supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedProgramTheory.expr_abi_decode_target_root_def]) >>
+       supportedProgramTheory.expr_abi_decode_target_root_def,
+       exprSimHypsDefsTheory.const_name_root_def]) >>
   `expr_vv_ok cenv (Literal (BaseT (BytesT (Dynamic 4)))
      (BytesL (TAKE 4 (Keccak_256_w64 bs))))` by
     (irule compile_literal_other_vv_sim >> simp[is_word_type_def]) >>

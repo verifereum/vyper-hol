@@ -76,6 +76,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* ===== Helpers ===== *)
 
 (* The two module facts stmt_expr_body_pre takes about cx_tops. *)
@@ -138,7 +141,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assert_exists_def, int_calls_stmt_def,
          int_calls_assert_reason_def] >>
@@ -208,7 +211,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -342,7 +345,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
          int_calls_raise_reason_def] >>
@@ -395,6 +398,7 @@ Theorem assert_reason_vv_sim[local]:
   !cx e se tops ctx func cenv env es es1.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_ok cx se) /\
     body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
+    supported_string_reason tops se /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\
     ~supported_expr_exists
@@ -408,6 +412,9 @@ Theorem assert_reason_vv_sim[local]:
     expr_vv_sim ctx func cenv cx (expr_type se) se es1
 Proof
   rpt strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
+  `~supported_expr_exists (const_name_root cx) se` by
+    (drule bodySimTheory.body_inv_const_name_root >> strip_tac >>
+     drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
   `?tv t. eval_expr cx e es = (INL tv, t)` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
@@ -454,7 +461,7 @@ Proof
     simp[] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def] >>
      qexists_tac `int_calls_assert_reason (AssertReason se)` >> simp[]) >>
@@ -642,7 +649,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def] >>
@@ -787,7 +794,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def] >>
@@ -855,7 +862,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
@@ -1008,7 +1015,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, supported_expr_exists_def,
          int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
@@ -1118,7 +1125,7 @@ Proof
   imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, supported_expr_exists_def,
          int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
@@ -1164,7 +1171,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
@@ -1839,7 +1846,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def] >>
      qexists_tac `[]` >> simp[] >>
@@ -1942,7 +1949,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
@@ -2376,7 +2383,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
@@ -2448,7 +2455,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
@@ -2548,7 +2555,7 @@ Proof
   rename1 `evaluate_type _ ty = SOME tvt` >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
@@ -2635,7 +2642,7 @@ Proof
     gvs[env_consistent_def, env_context_consistent_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
@@ -2774,7 +2781,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
+     irule_body_pre stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `!ty. expr_sim ctx func cenv cx ty e es /\
         expr_vv_sim ctx func cenv cx ty e es` by
@@ -2832,7 +2839,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
+     irule_body_pre stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_ok _ _`

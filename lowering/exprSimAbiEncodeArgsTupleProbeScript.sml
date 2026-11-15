@@ -124,5 +124,7 @@ Theorem tuple_body_pre_contract:
        is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 Proof
   simp[exprSimHypsDefsTheory.expr_body_pre_def, tuple_abi_def, tuple_call_def,
-       vyperTypeCallGraphTheory.int_calls_expr_def]
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       exprSimHypsDefsTheory.const_name_root_def]
 QED

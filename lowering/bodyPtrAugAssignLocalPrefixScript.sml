@@ -52,7 +52,7 @@ Proof
     (drule supported_expr_body_calls >> strip_tac >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def, AllCaseEqs()] >>
-     irule stmt_expr_body_pre >>
+     bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      fs[body_inv_def, cx_tops_def] >>
      metis_tac[call_evaluation_safe_append_right, APPEND_NIL]) >>
   `?info. supported_target_info tops bindings t = SOME info` by

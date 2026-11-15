@@ -43,6 +43,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* ===== The source side (S1 copies) ===== *)
 
 (* S1 stmtSimAugAssign's eval_augassign_local_forced. *)
@@ -353,7 +356,8 @@ Proof
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
       supportedExprTraverseTheory.supported_expr_exists_def,
-      supportedProgramTheory.expr_abi_decode_target_root_def] >>
+      supportedProgramTheory.expr_abi_decode_target_root_def,
+      exprSimHypsDefsTheory.const_name_root_def] >>
   irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
   qexists_tac `int_calls_expr e` >> simp[]
 QED
@@ -728,7 +732,7 @@ Proof
        (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
      fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def] >>

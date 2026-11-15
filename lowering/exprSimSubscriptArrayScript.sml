@@ -250,7 +250,12 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
     (drule exprSimSubscriptArrayOriginTheory.compile_array_pointer_not_label >>
      disch_then irule >> simp[] >>
      qexists_tac `env` >>
-     fs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+     `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+     conj_tac
+     >- (qpat_x_assum `expr_sim_inv _ _ env _`
+           (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+         first_assum ACCEPT_TAC) >>
+     fs[expr_body_pre_def]) >>
   `is_word_type (expr_type idx)` by
     (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>

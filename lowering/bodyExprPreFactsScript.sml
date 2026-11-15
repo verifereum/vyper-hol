@@ -17,6 +17,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* An expression with no internal call in it has no internal calls to
    make.  Reasons and conditions are pure (supported_pure_no_internal_call). *)
 Theorem no_internal_call_int_calls:
@@ -131,6 +134,7 @@ Theorem stmt_expr_body_pre:
              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     ~is_extcode e /\
     ~supported_expr_exists call_operands_effect_root e /\
+    ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
@@ -164,6 +168,7 @@ Theorem stmt_expr_body_pre_alloc:
     alloc_limits_expr cenv e /\
     ~is_extcode e /\
     ~supported_expr_exists call_operands_effect_root e /\
+    ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
@@ -177,7 +182,7 @@ Theorem stmt_expr_body_pre_alloc:
        is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
     expr_body_pre cenv cx env e es
 Proof
-  rpt gen_tac >> strip_tac >> irule stmt_expr_body_pre >> simp[] >>
+  rpt gen_tac >> strip_tac >> irule_body_pre stmt_expr_body_pre >> simp[] >>
   reverse conj_tac >- (qexists_tac `calls` >> simp[]) >>
   `(\e. ~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) =
    (\e. (~is_extcode e /\ ~byte_widths_expr e) \/

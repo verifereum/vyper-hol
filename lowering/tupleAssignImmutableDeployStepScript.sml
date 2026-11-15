@@ -45,6 +45,9 @@ Theorem tuple_immutable_loaded_head_step:
 Proof
   strip_tac >>
   drule_all immutable_assign_bare_global >> strip_tac >>
+  `~cx_const_name cx (src,id)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     gvs[]) >>
   drule_all immutableDeployAssignFactsTheory.immutable_assign_target_layout >>
   disch_then (qspec_then `compile_expr` strip_assume_tac) >>
   `sa = sp /\ place = (Lit (n2w off),SOME LocCode,SOME (ValPT ity))` by

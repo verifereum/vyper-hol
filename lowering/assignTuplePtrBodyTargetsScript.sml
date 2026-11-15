@@ -13,6 +13,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem tuple_rhs_body_pre_ptr:
   body_inv tops ctx cenv cx /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -34,7 +37,7 @@ Proof
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]

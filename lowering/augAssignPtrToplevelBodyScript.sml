@@ -8,6 +8,9 @@ Ancestors
   vyperState vyperInterpreter vyperTypeCallGraph supportedStmtTraverse
   supportedExprTraverse gasContext compileVyper compileEnv list finite_map
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem augassign_toplevel_rhs_activate_ptr[local]:
   (!s0 p s1 s2 cur s3 s4 ptv s5.
      eval_target_place cx (TopLevelNameTarget (src,id)) s0 = (INL p,s1) /\
@@ -82,7 +85,7 @@ Resume body_augassign_toplevel_word_ptr[finish]:
     (`cx_tops cx = tops` by metis_tac[cx_tops_module] >>
      `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
         is_dynamic (vyper_to_abi_type (type_env tops) target)` by fs[body_inv_def] >>
-     irule stmt_expr_body_pre >>
+     irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def, optionTheory.IS_SOME_EXISTS] >>
      qexists_tac `[]` >> simp[]) >>

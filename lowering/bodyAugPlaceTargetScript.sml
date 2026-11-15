@@ -37,6 +37,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem aug_place_body_target_idx:
   !t cx tops ctx func cenv.
     body_base_target_ok cx t /\ body_inv tops ctx cenv cx ==>
@@ -132,6 +135,7 @@ Theorem aug_place_target_indices_pre:
   !t.
     ~supported_target_exists expr_evm_run_root t /\
     ~supported_target_exists call_operands_effect_root t /\
+    ~supported_target_exists (const_name_root cx) t /\
     EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
     EVERY (\e. ~is_extcode e) (target_indices t) /\
     IS_SOME (type_place_target env t) /\
@@ -150,6 +154,7 @@ Proof
   `(!e:expr. T) /\ (!t.
     ~supported_target_exists expr_evm_run_root t /\
     ~supported_target_exists call_operands_effect_root t /\
+    ~supported_target_exists (const_name_root cx) t /\
     EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
     EVERY (\e. ~is_extcode e) (target_indices t) /\
     IS_SOME (type_place_target env t) /\
@@ -189,7 +194,7 @@ Resume aug_place_target_indices_pre[subscript]:
   rpt strip_tac
   >- (first_x_assum irule >> simp[] >>
       metis_tac[call_evaluation_safe_append_left]) >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   simp[gasContextTheory.cx_tops_def] >>
   metis_tac[call_evaluation_safe_append_right, APPEND_NIL]
 QED

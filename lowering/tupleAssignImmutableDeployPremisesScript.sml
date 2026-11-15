@@ -124,7 +124,8 @@ Resume tuple_immutable_targets_ready[indices_pre]:
      EVERY (\c. IS_SOME (supported_function_decl ts c Internal))
        (int_calls_expr key))` by
     (strip_tac >> qexists_tac `tops` >> gvs[body_inv_def]) >>
-  irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre)) >>
+  bodyConstNameLib.irule_body_pre
+    (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre)) >>
   gvs[int_calls_expr_def] >> metis_tac[]
 QED
 
