@@ -289,7 +289,8 @@ Resume compile_internal_return_memory_frag[frame]:
      first_x_assum irule >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
-    (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
+    (`LENGTH s0.vs_memory <= LENGTH t.vs_memory` by fs[return_unlock_frames] >>
+     irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
      simp[local_region_def, lookup_scopes_def] >> rpt strip_tac >>
      `not_fresh_at su x` by metis_tac[] >>
      qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>

@@ -1181,7 +1181,7 @@ Proof
       qexistsl_tac [`INR exn`,`fe`,`fr`] >>
       simp[] >> conj_tac
       >- (rewrite_tac[len_source] >> irule gas_marked_exec_bind_exception >> simp[]) >>
-      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
+      gvs[] >> disj2_tac >> metis_tac[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule len_exempt_cert >> simp[]

@@ -54,7 +54,7 @@ Theorem word_builtin_mem_success:
          (exit_result r /\ expr_exit res r))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
   `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   `fresh_vars_wrt sa (drop_fresh sa s0)` by
     simp[fresh_vars_wrt_drop_fresh] >>
@@ -139,7 +139,7 @@ Theorem word_builtin_mem_revert:
          (exit_result r /\ expr_exit res r))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
   `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   `fresh_vars_wrt sa (drop_fresh sa s0)` by
     simp[fresh_vars_wrt_drop_fresh] >>

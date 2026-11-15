@@ -112,13 +112,14 @@ QED
 
 Theorem compile_loop_jump_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty st es.
-    (st = Break \/ st = Continue) ==>
+    ~ctx_has_dalloca ctx /\ (st = Break \/ st = Continue) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty st) (stmt_env cenv lctx ty st)
       (eval_stmt cx st) es
 Proof
-  rpt gen_tac >> disch_then (DISJ_CASES_THEN SUBST_ALL_TAC) >> (
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (DISJ_CASES_THEN SUBST_ALL_TAC)) >> (
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `lctx`
   >- (gvs[gas_admissible_def] >>
@@ -169,13 +170,14 @@ QED
 
 Theorem compile_raise_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty rk es.
-    (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
+    ~ctx_has_dalloca ctx /\ (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Raise rk)) (stmt_env cenv lctx ty (Raise rk))
       (eval_stmt cx (Raise rk)) es
 Proof
-  rpt gen_tac >> disch_then (DISJ_CASES_THEN SUBST_ALL_TAC) >> (
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (DISJ_CASES_THEN SUBST_ALL_TAC)) >> (
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
@@ -198,7 +200,7 @@ Proof
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `allocas_from lo s0` by fs[ghost_inv_at_def] >>
   conj_tac >- (irule emit_abort_origin_ptr >> simp[] >> metis_tac[]) >>
-  gvs[stmt_exit_ptr_def])
+  gvs[stmt_exit_ptr_def, halt_exit_def])
 QED
 
 (* ===== Assertion with no reason ===== *)
@@ -248,7 +250,7 @@ QED
 
 Theorem compile_assert_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty e ak es.
-    (ak = AssertBare \/ ak = AssertUnreachable) /\
+    ~ctx_has_dalloca ctx /\ (ak = AssertBare \/ ak = AssertUnreachable) /\
     expr_type e = BaseT BoolT /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (BaseT BoolT) e es ==>
@@ -258,7 +260,9 @@ Theorem compile_assert_frag_full:
       (stmt_env cenv lctx ty (Assert (gas_shadow_expr e) ak))
       (eval_stmt cx (Assert e ak)) es
 Proof
-  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_assum `stmt_env _ _ _ (Assert e _) _ = _`
     (mp_then Any mp_tac compile_assert_parts) >>
@@ -323,7 +327,7 @@ Proof
   conj_tac >- simp[] >>
   simp[Abbr `condR`] >> rpt strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  fs[stmt_exit_ptr_def, expr_exit_INR_type, halt_exit_def]
 QED
 
 Resume compile_assert_frag_full[selected]:
@@ -413,7 +417,7 @@ Resume compile_assert_frag_full[false]:
   irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G1`, `mid`, `Abort a u`, `INR (AssertException msg)`,
     `tn1`] >>
-  simp[raise_def, exit_result_def, stmt_exit_ptr_def]
+  simp[raise_def, exit_result_def, stmt_exit_ptr_def, halt_exit_def]
 QED
 
 Finalise compile_assert_frag_full
