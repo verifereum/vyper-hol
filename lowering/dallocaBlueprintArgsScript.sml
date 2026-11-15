@@ -46,6 +46,23 @@ Proof
   rpt (goal_assum $ drule_at Any)
 QED
 
+Theorem create_blueprint_encoded_check_operand:
+  compile_create_blueprint_check target offset ca = (Var code_name,cb) /\
+  compile_alloc_buffer capacity cb = (buf,c1) /\
+  compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
+  (!ce' ty e st. ci_mono st (SND (cfn ce' ty e st))) ==>
+  not_fresh_at c2 code_name
+Proof
+  strip_tac >> drule create_blueprint_check_operand >> strip_tac >>
+  `ci_mono cb c1` by
+    (mp_tac (Q.SPECL [`capacity`, `cb`] ci_mono_compile_alloc_buffer) >> simp[]) >>
+  `ci_mono c1 c2` by
+    (mp_tac (Q.SPECL [`cfn`, `ce`, `args`, `c1`]
+       ci_mono_compile_create_ctor_tuple) >> simp[]) >>
+  irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `cb` >>
+  fs[ci_mono_def] >> decide_tac
+QED
+
 (* The constructor-tuple producer supplies the typed input window and the
    captured register at s_tup. This theorem executes the encoder stage. *)
 Theorem create_blueprint_encoded_args_prefix:
@@ -61,7 +78,11 @@ Theorem create_blueprint_encoded_args_prefix:
   value_has_type tv v /\
   vyper_to_abi tenv (TupleT (MAP expr_type args)) v = SOME av /\
   abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) < 2 ** 64 /\
-  not_fresh_at c2 code_name /\ lookup_var code_name s_tup = SOME captured ==>
+  compile_create_blueprint_check target offset ca = (Var code_name,cb) /\
+  compile_alloc_buffer capacity cb = (buf,c1) /\
+  compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
+  (!ce' ty e st. ci_mono st (SND (cfn ce' ty e st))) /\
+  lookup_var code_name s_tup = SOME captured ==>
   ?s2.
     window_strong_result ctx func c2 sa args_len
       (vyper_to_abi_type tenv (TupleT (MAP expr_type args))) av
@@ -73,7 +94,8 @@ Theorem create_blueprint_encoded_args_prefix:
     w2n (n2w (LENGTH (enc (vyper_to_abi_type tenv
       (TupleT (MAP expr_type args))) av)) : bytes32) < 2 ** 64
 Proof
-  strip_tac >> drule_all create_ctor_encoding_bound >> strip_tac >>
+  strip_tac >> drule_all create_blueprint_encoded_check_operand >> strip_tac >>
+  drule_all create_ctor_encoding_bound >> strip_tac >>
   drule_all abi_props_vyper_typed >> strip_tac >>
   `LENGTH (enc (vyper_to_abi_type tenv
      (TupleT (MAP expr_type args))) av) < 2 ** 64` by
