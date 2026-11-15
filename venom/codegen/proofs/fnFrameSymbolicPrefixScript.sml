@@ -173,6 +173,7 @@ Theorem normal_frame_symbolic_joint_progress:
   normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
     (JointConfig stk PG G tn fn inst s oms om hs h) ast ss /\
   ~in_revert_forward fn s /\
+  env = asm_data_env prog vs0.vs_code /\
   focus_s7_symbolic_context unit prog /\
   focus_s7_symbolic_guard prog cpl fn inst s /\
   joint_transition unit.cu_context
