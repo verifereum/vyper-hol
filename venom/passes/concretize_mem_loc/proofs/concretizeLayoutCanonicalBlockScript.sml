@@ -1599,6 +1599,7 @@ QED
 
 Theorem layout_canonical_exempt_scalar_demand:
   o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
@@ -1761,6 +1762,7 @@ QED
 
 Theorem layout_forward_block_revert_empty:
   o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend

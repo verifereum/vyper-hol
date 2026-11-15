@@ -272,6 +272,8 @@ fun ldObserveSelected tm =
     let val (f,x) = dest_comb tm in
       mk_comb (ldObserveSelected f, ldObserveSelected x) end
   else tm;
+val ldStepClauseFuel = List.nth (strip_conj (fst (dest_imp
+  (concl ld_runner_templates_fuel))), 0);
 val ldObservedStepClauseFuel = ldObserveSelected ldStepClauseFuel;
 
 Theorem ld_runner_step_clause_fuel_revert_empty_conditional:
@@ -284,7 +286,13 @@ Proof
   drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
   disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
   simp[] >> strip_tac >>
-  drule_all lower_dload_stage_invoke_entry >> strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+  `?sn. enters_block fn' cs sn` by metis_tac[ld_run_enters] >>
+  drule_all (SRULE [] (Q.INST
+    [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+    lower_dload_stage_invoke_entry)) >> strip_tac >>
+  qpat_x_assum `enters_block fn' cs sn` kall_tac >>
   first_x_assum (drule_all_then strip_assume_tac o
     SIMP_RULE bool_ss [PULL_EXISTS]) >>
   gvs[] >>
@@ -303,7 +311,9 @@ Resume ld_runner_step_clause_fuel_revert_empty_conditional[return]:
   `cs.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
     metis_tac[ld_setup_callee_call_ctx] >>
   drule_at (Pat `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    (SIMP_RULE bool_ss [PULL_EXISTS] ld_return_endpoint_consume) >>
+    (SIMP_RULE bool_ss [PULL_EXISTS]
+      (SRULE [] (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+        ld_return_endpoint_consume))) >>
   simp[] >> disch_then (drule_all_then strip_assume_tac) >>
   `s1.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
     (qpat_x_assum `bind_outputs _ jr.iret_values _ = _` kall_tac >>
@@ -620,13 +630,18 @@ Theorem lower_dload_stage_revert_empty:
 Proof
   rpt strip_tac >>
   `terminates (Abort Revert_abort s)` by simp[terminates_def] >>
+  drule_all ld_run_context_entry >> strip_tac >>
+  qpat_x_assum `s0 = _` SUBST_ALL_TAC >>
+  drule o1_src_inv_safe_upto >> strip_tac >>
+  first_x_assum (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `0 < SUC (LENGTH vs.vs_gas_readings)` by simp[] >>
   drule_all lower_dload_stage_root_entry >> strip_tac >>
   `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
   `fn.fn_name = name` by
     (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
        (mp_tac o REWRITE_RULE [lookup_function_def]) >>
      disch_then (mp_tac o MATCH_MP venomExecPropsTheory.FIND_P) >> simp[]) >>
-  `terminates (run_blocks fuel C fn s0)` by metis_tac[] >>
+  `terminates (run_blocks fuel C fn ^ldS0)` by metis_tac[] >>
   drule_at (Pat `ld_joint_boundary`)
     (SIMP_RULE bool_ss [] (cj 3 ld_runner_simulation_fuel_revert_empty)) >>
   simp[] >>
