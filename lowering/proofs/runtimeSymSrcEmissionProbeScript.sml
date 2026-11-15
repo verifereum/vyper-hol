@@ -12,6 +12,12 @@ Proof
        FLAT_APPEND, APPEND_ASSOC]
 QED
 
+Theorem runtime_sym_new_block_result:
+  new_block l s = (u,s') ==> state_insts s' = state_insts s
+Proof
+  metis_tac[runtime_sym_new_block, pairTheory.SND]
+QED
+
 Theorem runtime_sym_package_blocks:
   !descs blocks entry functions.
     package_internal_blocks descs blocks = SOME (entry,functions) /\

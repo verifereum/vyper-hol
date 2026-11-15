@@ -1,6 +1,6 @@
 Theory o1LabelFlowSourceSsaStep
 Ancestors
-  o1LabelFlowSourceSsaLabels o1LabelFlowSourceBoundary
+  o1SymStaticMakeSSA o1LabelFlowSourceBoundary
   o1ContractMakeSsaPtrOk
   o1FnScheduleDecompHelpers fmpStepBridge venomFnScheduleRunnerProps
   venomPassDispatcher o1PassContract unitShapeDefs list
@@ -41,7 +41,8 @@ Proof
   `out.fpo_function = q` by
     gvs[fn_pass_step_def, execute_configured_fn_pass_make_ssa] >>
   conj_tac
-  >- metis_tac[make_ssa_current_fn_label_operand_absent] >>
+  >- (irule (REWRITE_RULE [EVERY_MEM] make_ssa_current_fn_label_absent) >>
+      goal_assum (drule_at Any) >> simp[]) >>
   drule_all mssa_origin >> strip_tac >>
   `!j. MEM j (fn_insts q) ==>
     MEM j.inst_opcode [PHI; ASSIGN; NOP] \/

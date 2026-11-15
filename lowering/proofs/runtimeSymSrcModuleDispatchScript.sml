@@ -3,12 +3,6 @@ Ancestors
   runtimeSymSrcInterfaces runtimeSymSrcEmission moduleLowering compileEnv
   emitHelper list pair loweringShapeDefs runtimeSymSrcEmissionProbe stackPlanTypes
 
-Theorem runtime_sym_new_block_result:
-  new_block l s = (u,s') ==> state_insts s' = state_insts s
-Proof
-  metis_tac[runtime_sym_new_block, pairTheory.SND]
-QED
-
 Theorem runtime_sym_selector_checks:
   !sels mid s u s'. ~is_label_operand mid /\
     EVERY (\(sel,lbl). runtime_sym_label lbl) sels /\

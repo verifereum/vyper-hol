@@ -1,5 +1,6 @@
 Theory runtimeSymSrcArrayLoopBlocks
 Ancestors
+  runtimeSymSrcEmissionProbe
   runtimeSymSrcArrayIterator runtimeSymSrcInterfaces runtimeSymSrcEmission
   supportedStmts supportedExprs supportedExprTraverse exprLowering vyperAST
   runtimeSymSrcContext runtimeSymSrcContextTypedArrays runtimeSymSrcContextCopy compileEnv
@@ -63,7 +64,7 @@ Proof
   strip_tac >>
   qpat_x_assum `emit_inst JMP [Label entry] _ _ = _`
     (mp_then Any mp_tac runtime_sym_jump) >> simp[] >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> strip_tac >>
+  imp_res_tac runtime_sym_new_block_result >> fs[] >>
   drule runtime_sym_fresh_var >> strip_tac >> gvs[] >>
   qpat_x_assum `emit_inst ASSIGN _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_assign) >>
@@ -99,12 +100,12 @@ Theorem runtime_sym_array_address:
 Proof
   rpt disch_tac >> fs[] >>
   qpat_x_assum `new_block cond _ = _`
-    (mp_then Any mp_tac runtime_sym_copy_new_block) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac runtime_sym_new_block_result) >> simp[] >> strip_tac >> fs[] >>
   qpat_x_assum `emit_op EQ _ _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>
   drule_all runtime_sym_jnz >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> strip_tac >>
+  imp_res_tac runtime_sym_new_block_result >> fs[] >>
   qpat_x_assum `emit_op MUL _ _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>
@@ -125,7 +126,7 @@ Theorem runtime_sym_array_tail:
 Proof
   strip_tac >>
   drule_all runtime_sym_jmp_if_not_terminated >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> strip_tac >>
+  imp_res_tac runtime_sym_new_block_result >> fs[] >>
   drule_all runtime_sym_typed_array_tail >> simp[]
 QED
 

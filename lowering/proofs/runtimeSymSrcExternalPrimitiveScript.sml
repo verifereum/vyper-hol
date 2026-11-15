@@ -1,5 +1,6 @@
 Theory runtimeSymSrcExternalPrimitive
 Ancestors
+  runtimeSymSrcEmissionProbe
   runtimeSymSrcCallStaging runtimeSymSrcContextComplete runtimeSymSrcContextCopy
   runtimeSymSrcContext
   runtimeSymSrcEmission runtimeSymSrcInterfaces exprLowering compileEnv emitHelper
@@ -90,7 +91,7 @@ Proof
   rev_dxrule runtime_sym_fresh_label >> strip_tac >>
   qpat_assum `emit_inst JNZ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jnz) >> simp[] >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> strip_tac >>
+  imp_res_tac runtime_sym_new_block_result >> fs[] >>
   qpat_assum `emit_op RETURNDATASIZE _ _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[] >> strip_tac >>
@@ -105,7 +106,7 @@ Proof
   disch_then (qspec_then `0` mp_tac) >>
   simp[runtime_sym_inst_def, mk_inst_def, is_label_operand_def] >>
   impl_tac >- metis_tac[runtime_sym_nonlabel_reserved] >>
-  strip_tac >> drule_all runtime_sym_copy_new_block >> strip_tac >>
+  strip_tac >> imp_res_tac runtime_sym_new_block_result >> fs[] >>
   suspend "return"
 QED
 
