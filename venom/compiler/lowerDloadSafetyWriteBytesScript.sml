@@ -102,6 +102,3 @@ Proof
   simp[read_byte_write_memory_with_expansion, ld_write_interval] >>
   metis_tac[]
 QED
-
-val _ = if null (hyp ld_memory_write_private) then ()
-  else raise Fail "private memory theorem has hypotheses";

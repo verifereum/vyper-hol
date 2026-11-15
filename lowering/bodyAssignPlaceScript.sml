@@ -44,6 +44,10 @@ Ancestors
      with cx_tops_module.
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
      acyclic_struct_metadata: body_inv_def. *)
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem assign_place_typing:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
   well_typed_expr env e /\
@@ -133,7 +137,7 @@ Proof
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
@@ -165,7 +169,8 @@ Proof
 QED
 
 Theorem target_indices_body_pre[local]:
-  !tops bindings t cenv cx env pt.
+  !tops bindings ctx t cenv cx env pt.
+    body_inv tops ctx cenv cx /\
     ~supported_target_exists call_operands_effect_root t /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
     EVERY (\e. ~is_extcode e) (target_indices t) /\
@@ -186,7 +191,7 @@ Theorem target_indices_body_pre[local]:
        is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
     target_indices_pre cenv cx env t
 Proof
-  ntac 2 gen_tac >>
+  ntac 3 gen_tac >>
   Induct using base_assignment_target_induct >>
   simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
        allocLimitsTheory.alloc_limits_expr_def, listTheory.EVERY_APPEND, targetPlaceLiveTheory.target_indices_def] >> rpt strip_tac >>
@@ -194,7 +199,7 @@ Proof
   imp_res_tac supported_attribute_target_shape >>
   gvs[Once well_typed_expr_def, AllCaseEqs()]
   >>~- ([`expr_body_pre _ _ _ _ _`],
-        irule stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
+        irule_body_pre stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
         rpt conj_tac >>
         TRY (strip_tac >> qexists_tac `tops` >> simp[] >> NO_TAC) >>
         qexists_tac `[]` >> simp[] >>
@@ -235,7 +240,7 @@ Proof
    IS_SOME (supported_target_info tops bindings t)` by
     (fs[supported_assignment_def] >>
      Cases_on `supported_target_info tops bindings t` >> fs[]) >>
-  irule (Q.SPECL [`tops`, `bindings`] target_indices_body_pre) >>
+  irule (Q.SPECL [`tops`, `bindings`, `ctx`] target_indices_body_pre) >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_assignment_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def, listTheory.EVERY_CONJ] >>
@@ -252,8 +257,8 @@ Theorem supported_decl_storage_exists[local]:
 Proof
   Induct >> simp[supported_variable_decl_def, supported_hashmap_decl_def] >>
   gen_tac >> Cases_on `h` >> rpt gen_tac >> Cases_on `src` >>
-  gvs[supported_variable_decl_def, supported_hashmap_decl_def,
-      find_var_decl_by_name_def] >>
+  gvs[supported_variable_decl_def, supported_hashmap_decl_def] >>
+  gvs[find_var_decl_by_name_def] >>
   rpt strip_tac >>
   first_x_assum (qspecl_then [`NONE`, `id`] mp_tac) >>
   simp[] >> Cases_on `s = id` >> gvs[] >>

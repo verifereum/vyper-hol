@@ -232,7 +232,8 @@ Resume compile_log_ready_stmt_frag_mem[suffix]:
     (`?rest. DROP t.vs_inst_idx bb.bb_instructions =
              emitted_insts sm sb ++ rest` by
        fs[IS_PREFIX_APPEND, Excl "enc_def"] >>
-     `alloca_inv t` by fs[stmt_state_rel_def, Excl "enc_def"] >>
+     `alloca_inv t` by (qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[stmt_state_rel_def, Excl "enc_def"]) >>
      qspecl_then [`func`, `bb`, `t`, `emitted_insts sm sb`, `rest`, `u`]
        mp_tac alloca_history_run_inst_seq >>
      impl_tac >- fs[EVERY_MEM, Excl "enc_def"] >>
@@ -515,7 +516,10 @@ Resume compile_log_ready_stmt_frag_mem_widen[suffix]:
     (`?rest. DROP t.vs_inst_idx bb.bb_instructions =
              emitted_insts sm sb ++ rest` by
        fs[IS_PREFIX_APPEND, Excl "enc_def"] >>
-     `alloca_inv t` by fs[stmt_state_rel_def, Excl "enc_def"] >>
+      `alloca_inv t` by
+        (qpat_assum `stmt_state_rel _ _ _ _ _ t`
+           (strip_assume_tac o PURE_REWRITE_RULE [stmt_state_rel_def]) >>
+         first_assum ACCEPT_TAC) >>
      qspecl_then [`func`, `bb`, `t`, `emitted_insts sm sb`, `rest`, `u`]
        mp_tac alloca_history_run_inst_seq >>
      impl_tac >- fs[EVERY_MEM, Excl "enc_def"] >>
@@ -580,7 +584,9 @@ Resume compile_log_ready_stmt_frag_mem_widen[post]:
         simp[Abbr `E1`, Abbr `E2`, Abbr `ev`, wordsTheory.w2w_id,
              evaluation_state_component_equality, Excl "enc_def"] >>
       simp[Excl "enc_def"])
-  >- fs[lookup_var_def, Excl "enc_def"] >>
+  >- (qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+        lookup_var x u = SOME w` mp_tac >>
+      simp_tac (srw_ss()) [lookup_var_def]) >>
   qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
                `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
     mp_tac return_buf_frame_frame >>

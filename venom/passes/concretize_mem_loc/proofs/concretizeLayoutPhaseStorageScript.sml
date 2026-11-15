@@ -1,12 +1,12 @@
 Theory concretizeLayoutPhaseStorage
-Ancestors concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
   concretizeLayoutPhaseSuccess concretizeLayoutLocalStateReads
   concretizeLayoutLocalStateWrites frameRelocationEnvironment
   frameOriginUpdates frameResolvedTrace venomExecSemantics venomState venomInst
   o1PassContract ptrDiscipline frameRelocationLocal list memSafeRun venomWf
 
 Theorem layout_state_read_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -40,6 +40,7 @@ Proof
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`)
     (REWRITE_RULE[ETA_AX] concretize_state_read_local_complete) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `step_inst_base _ _ = OK _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
@@ -61,7 +62,7 @@ Proof
 QED
 
 Theorem layout_state_write_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -99,6 +100,7 @@ Proof
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`)
     (REWRITE_RULE[ETA_AX] concretize_state_write_local_complete) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `step_inst_base _ _ = OK _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>

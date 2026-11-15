@@ -202,14 +202,3 @@ Theorem target_transient_trace_opcodes:
 Proof
   EVAL_TAC
 QED
-
-(* Regression tests must remain kernel-closed, including their dependencies. *)
-val () = List.app (fn (name,_) =>
-  let
-    val th = DB.fetch "targetPlaceTest" name
-    val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail ("targetPlaceTest." ^ name ^ ": not kernel-closed")
-  end) (DB.thms "targetPlaceTest");

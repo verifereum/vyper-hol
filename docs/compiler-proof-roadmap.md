@@ -27,7 +27,7 @@ Related documents:
   mandatory-pass surrogate. Successful compilation is a boundary input;
   identity finalization yields `runtime_bc = assemble prog` via L1.
 - `e2eCorrectness.vyper_call_correct` has the exact
-  [eight-premise public schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem).
+  [public call schema](compiler-correctness-specification.md#calls-and-nested-contexts).
   Its composition proof inherits **exactly seven ADMITTED stage leaves**, not
   one. The old configured `e2e_vyper_to_evm_O1` export is retired.
 - `e2eCorrectness.e2e_vyper_to_evm` is **proved generic composition** with
@@ -185,10 +185,18 @@ Sufficient gas is the companion theorem `vyper_call_gas_sufficient`
 some gas `g` exists such that with any `g' >= g` more gas for the frame, the
 run exists, and, provided the outcomes of that run's call trace are
 storage-valid (`call_outcomes_storage_ok`) and none of its source observations
-is exempt (`~source_exempt`), if the frame runs out of gas then it reaches a
-`RETURNDATACOPY` instruction (`frame_inst_at`). It composes the planned stage bounds S1b
+is exempt (`~gas_source_exempt`), if the frame runs out of gas then it reaches a
+`RETURNDATACOPY` instruction (`frame_inst_at`). Its identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
-(`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`).
+(`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). These
+stage bounds have proofs. The assembly-optimizer sufficiency case remains
+admitted, and the general companion inherits that admission. The deploy twin
+`e2e_deploy_gas_sufficient` uses the proved S1b-d `deploy_unit_run_bounded`,
+the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. Its OutOfGas
+conclusion allows oversized deposited code or a reached `RETURNDATACOPY`;
+the per-finalizer case theorems give the stronger code-size-only alternative.
+Its optimizer case is also admitted. These are conditional results: upstream stage admissions and the
+stated source, storage and execution premises still apply.
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
@@ -226,7 +234,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
 | D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too, but DELEGATECALL/CREATE/CREATE2 stay excluded by `unit_shape_ok`, not oracle-certified. | 2.1 / 4 |
 | D15 | Exclude static entry, not change write effects | `call_state_rel`/`initial_ctx_rel` nonstatic; outgoing STATICCALL is allowed. No static-entry correctness claim. | 7 generalization |
-| D16 | Exclude runtime immutables | The top theorem assumes `immutable_free_program`; `call_state_rel` requires frame code `runtime_bc ++ section` with `immutables_section_rel` for the target's immutables, and the live target account's code to equal the frame code; source installation is exact. Deployment/immutables generalization deferred. | 6 item7 |
+| D16 | Runtime immutables without a separate exclusion | The call theorem carries no separate immutable restriction. `call_state_rel` still requires frame code `runtime_bc ++ section` with `immutables_section_rel` for the target's immutables, and the live target account's code to equal the frame code; source installation is exact. Deployment remains separate. | 6 item7 |
 | D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 ADMITTED. | 3 |
 | D18 | S6 output shape, not new compiler final-hook check | S6 ADMITTED; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
 | D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 ADMITTED; empty memory is not a producer. | 5 |
@@ -508,7 +516,7 @@ Remaining work, roughly in dependency order (all future):
    short writes and static preservation. Lift non-GAS/no-call/single-frame
    interfaces to the actual S7 frame contract. CREATE is excluded here; source
    callee equivalence is Milestone7. The gas bound is a
-   separate admission, S7g `codegen_gas_sufficient`, not required by S7's
+   separate proved theorem, S7g `codegen_gas_sufficient`, not required by S7's
    resource disjunction.
 4. **`codegen_correct`**, from the pieces above. Reuse proved
    `initial_state_bridge`, `block_insts_sim` and `terminal_asm_evm_final` only

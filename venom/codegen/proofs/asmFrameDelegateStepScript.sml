@@ -2,7 +2,7 @@
 Theory asmFrameDelegateStep
 Ancestors
   vfmWfState
-  asmFrameRel asmFrameCallStep frameObsStep asmCallOracleProps asmDataSuffixProps
+  asmFrameRel asmFrameCallStep frameObsStep frameStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   evmCreationGuard frameCreationGuard vfmExecution vfmExecutionProp vfmRunCall vfmDomainCollection asmEncodeParse vfmOperation rich_list list regularMemorySim
 
@@ -110,7 +110,13 @@ Theorem asm_frame_delegate_prepare_exit[local]:
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "DELEGATECALL" /\
   s.contexts = (c,rb)::rest /\
   asm_call_prepare DelegateCall s = (INR e,t) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a <> AsmError e) ==>
+   frame_last s \/ ?a1 t1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL a.as_pc prog) a = AsmOK a1 /\
+     frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -142,14 +148,11 @@ Proof
       `rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)` by
         (fs[asm_frame_rel_def, asm_evm_rel_def] >>
          Cases_on `c.msgParams.outputTo` >> gvs[]) >>
-      `c.gasUsed <= c.msgParams.gasLimit` by
-        gvs[wf_state_def, wf_context_def] >>
-      `?r s'. run_call s = SOME (r,s') /\
-        frame_outcome s r s' (SOME OutOfGas) [] [] /\ call_requests s = []` by
-        (irule asm_step_fault_outcome >> simp[vfm_abort_def] >>
-         qexistsl [`c with stack := DROP 6 c.stack`, `t`] >> simp[]) >>
-      `frame_resource_starved s r s'` by
-        metis_tac[frame_resource_starved_def] >>
+      `step_inst DelegateCall s = (INR (SOME OutOfGas),t)` by
+        simp[step_inst_def] >>
+      mp_tac (Q.INST [`op` |-> `DelegateCall`, `n` |-> `6`]
+                asm_step_oog_starved) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
       `frame_resource_starved es0 r s'` by
         (fs[asm_frame_rel_def] >> drule_all frame_resource_starved_mid >> simp[]) >>
       simp[asm_frame_step_ok_def] >> metis_tac[]) >>
@@ -167,7 +170,13 @@ Theorem asm_frame_delegate_abort[local]:
   asm_call_prepare DelegateCall s =
     (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
   ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a <> AsmError e) ==>
+   frame_last s \/ ?a1 t1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL a.as_pc prog) a = AsmOK a1 /\
+     frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -185,6 +194,8 @@ Proof
     (irule asm_call_step_success >> simp[] >> metis_tac[]) >>
   `LENGTH t.contexts = LENGTH s.contexts` by simp[Abbr `t`] >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `6 <= LENGTH c.stack` by
     (drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
@@ -263,6 +274,7 @@ Resume asm_frame_delegate_abort[package]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
+  `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _`)) >>
@@ -281,7 +293,13 @@ Theorem asm_frame_delegate_terminal_exception[local]:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR (SOME exc),v) /\ exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a <> AsmError e) ==>
+   frame_last s \/ ?a1 t1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL a.as_pc prog) a = AsmOK a1 /\
+     frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -300,6 +318,8 @@ Proof
   `LENGTH t.contexts = LENGTH s.contexts` by
     (qpat_assum `s.contexts = _` (fn th => rewrite_tac[th]) >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `observable_call c` by simp[observable_call_def] >>
   drule frame_obs_call_same_depth >>
@@ -352,6 +372,7 @@ Resume asm_frame_delegate_terminal_exception[package]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
+  `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _`)) >>
@@ -370,7 +391,13 @@ Theorem asm_frame_delegate_terminal_none[local]:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR NONE,v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a <> AsmError e) ==>
+   frame_last s \/ ?a1 t1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL a.as_pc prog) a = AsmOK a1 /\
+     frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
@@ -392,6 +419,8 @@ Proof
   `LENGTH t.contexts = LENGTH s.contexts` by
     (qpat_assum `s.contexts = _` (fn th => rewrite_tac[th]) >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `observable_call c` by simp[observable_call_def] >>
   drule frame_obs_call_same_depth >>
@@ -436,6 +465,7 @@ Resume asm_frame_delegate_terminal_none[package]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
+  `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _`)) >>
@@ -454,7 +484,13 @@ Theorem asm_frame_delegate_terminal[local]:
   value <= (lookup_account sender accounts).balance /\ LENGTH s.contexts <= 1024 /\
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INR result,v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a <> AsmError e) ==>
+   frame_last s \/ ?a1 t1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL a.as_pc prog) a = AsmOK a1 /\
+     frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   Cases_on `result`
@@ -478,7 +514,13 @@ Theorem asm_frame_delegate_enter_step_ok[local]:
   asm_call_finish DelegateCall (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INL (),v) /\ step s = (INL (),v) /\ observable_call c /\
   run_call v = SOME (INL (),t) /\ LENGTH t.contexts = LENGTH s.contexts ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL a.as_pc prog) a <> AsmError e) ==>
+   frame_last s \/ ?a1 t1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL a.as_pc prog) a = AsmOK a1 /\
+     frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\
@@ -508,6 +550,8 @@ Proof
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   drule_all asm_call_prepared_enter_view >> strip_tac >>
   `LENGTH v.contexts = SUC (LENGTH s.contexts)` by simp[] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule run_call_enter_return_rtc >> metis_tac[]) >>
   drule_all asm_frame_call_enter_transport >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   suspend "consume"
@@ -542,6 +586,7 @@ Resume asm_frame_delegate_enter_step_ok[consume]:
      (DROP (6 + (if call_has_value DelegateCall then 1 else 0)) a.as_stack)
      (a with as_memory := asm_call_memory ao az ro rs a.as_memory)` by
     simp[call_has_value_def] >>
+  `frame_next s t` by (simp[frame_next_def] >> metis_tac[]) >>
   drule_at (Pat `asm_step _ _ _ _ = _`) asm_frame_call_effects_step_ok >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (drule_at (Pat `asm_frame_rel _ _ _ _ _`)) >>
@@ -554,7 +599,13 @@ Finalise asm_frame_delegate_enter_step_ok
 Theorem asm_frame_delegate_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "DELEGATECALL" ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok prog data es0 as es /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL as.as_pc prog) as <> AsmError e) ==>
+   frame_last es \/ ?as1 es1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as = AsmOK as1 /\
+     frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by

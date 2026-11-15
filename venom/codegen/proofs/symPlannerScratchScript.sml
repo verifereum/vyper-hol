@@ -437,8 +437,9 @@ Theorem scratch_save_cons_runs[local]:
     LENGTH (execute_plan initial_fmp (MAP SOSpill (off::offsets)))
 Proof
   strip_tac >> drule_all_then strip_assume_tac scratch_save_cons_post >>
-  metis_tac[sym_steps_spill_cons_compose, execute_plan_spill_cons_length,
-            arithmeticTheory.ADD_ASSOC]
+  drule_all sym_steps_spill_cons_compose >>
+  disch_then (qspec_then `off` assume_tac) >>
+  asm_rewrite_tac[execute_plan_spill_cons_length, arithmeticTheory.ADD_ASSOC]
 QED
 
 Theorem scratch_save_cons_finish[local]:

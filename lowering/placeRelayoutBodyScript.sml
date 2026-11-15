@@ -8,6 +8,9 @@ Ancestors
   placeRelayoutOpen exprOpenMain supportedExprs supportedTargets
   assignPlacePureFacts
 
+(* Keep the shared gas reset in the expression and target posts paired. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem widened_place_raw_rhs_outcome:
   expr_body_pre cenv cx env e es /\
   expr_vv_sim ctx func cenv cx (expr_type e) e es /\

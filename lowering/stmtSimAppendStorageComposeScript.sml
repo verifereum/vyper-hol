@@ -26,7 +26,7 @@ Theorem append_storage_word_code_parts:
     lower_value compile_expr cenv elem e sa = (op,sb) /\
     compile_dynarray_append cenv (Lit slot) op 1 1 elem
       (lowered_value_type cenv e) cap T
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf)
+      (if tr then LocTransient else LocStorage) sb = ((),sf)
 Proof
   strip_tac >>
   drule_all compile_get_target_ptr_toplevel >> strip_tac >>
@@ -34,12 +34,11 @@ Proof
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def, Once compile_stmt_def] >>
   Cases_on `tr` >>
-  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def,
-       load_opc_for_def, store_opc_for_def] >>
+  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def] >>
   Cases_on `lower_value compile_expr cenv elem e sa` >>
   rename1 `lower_value _ _ _ _ _ = (op,sb)` >> simp[] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = (u,_)` >>
+  rename1 `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = (u,_)` >>
   Cases_on `u` >> simp[]
 QED
 
@@ -57,7 +56,7 @@ Theorem append_storage_copy_code_parts:
       (lowered_value_type cenv e) sc = ((),sd) /\
     compile_dynarray_append cenv (Lit slot) tmp.buf_operand 1
       ((type_memory_bytes cenv elem + 31) DIV 32) elem elem cap F
-      (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sd = ((),sf)
+      (if tr then LocTransient else LocStorage) sd = ((),sf)
 Proof
   strip_tac >>
   drule_all compile_get_target_ptr_toplevel >> strip_tac >>
@@ -65,8 +64,7 @@ Proof
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def, Once compile_stmt_def] >>
   Cases_on `tr` >>
-  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def,
-       load_opc_for_def, store_opc_for_def] >>
+  simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def] >>
   Cases_on `lower_value compile_expr cenv elem e sa` >>
   rename1 `lower_value _ _ _ _ _ = (raw,sb)` >> simp[] >>
   Cases_on `compile_alloc_buffer (type_memory_bytes cenv elem) sb` >>
@@ -79,7 +77,7 @@ QED
 
 Theorem append_storage_copy_suffix_parts:
   compile_dynarray_append cenv bop vop 1 stride dt st cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) <=>
+    (if tr then LocTransient else LocStorage) s0 = ((),s9) <=>
   ?lop valid dop off pop nop u s1 s2 s3 s4 s5 s6 s7 s8.
     emit_op (if tr then TLOAD else SLOAD) [bop] s0 = (lop,s1) /\
     emit_op LT [lop; Lit (n2w cap)] s1 = (valid,s2) /\
@@ -92,7 +90,8 @@ Theorem append_storage_copy_suffix_parts:
     emit_void (if tr then TSTORE else SSTORE) [bop; nop] s8 = ((),s9)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_ignore_bind_def, comp_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_ignore_bind_def, comp_bind_def,
        comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_var_def, fresh_id_def, emit_def] >>
   pairarg_tac >> simp[] >> eq_tac >> strip_tac >> gvs[] >>
@@ -294,14 +293,6 @@ Proof
   Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def, LET_THM]
 QED
 
-Theorem append_copy_prefix_suc[local]:
-  store_copy_prefix loc b k c (SUC n) =
-    (if loc = LocStorage then sstore else tstore) (k+n2w n)
-      (mload (w2n (b+n2w n*32w)) c) (store_copy_prefix loc b k c n)
-Proof
-  simp[stmtSimStoreCopyTheory.store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
-QED
-
 Theorem append_copy_normalize_store[local]:
   store_copy_normalize a ((if tr then tstore else sstore) k v c) =
   (if tr then tstore else sstore) k v (store_copy_normalize a c)
@@ -316,23 +307,9 @@ Proof
   simp[stmtSimStoreCopyTheory.store_copy_normalize_def]
 QED
 
-Theorem append_copy_normalize_prefix[local]:
-  !n. store_copy_normalize a (store_copy_prefix loc b k c n) =
-      store_copy_prefix loc b k (store_copy_normalize a c) n
-Proof
-  `!p. mload p (store_copy_normalize a c) = mload p c` by
-    simp[stmtSimStoreCopyTheory.store_copy_normalize_def, mload_def] >>
-  Induct
-  >- simp[stmtSimStoreCopyTheory.store_copy_prefix_def, COUNT_LIST_def] >>
-  simp[append_copy_prefix_suc] >>
-  Cases_on `loc = LocStorage` >>
-  fs[SRULE [] (Q.INST [`tr` |-> `T`] append_copy_normalize_store),
-     SRULE [] (Q.INST [`tr` |-> `F`] append_copy_normalize_store)]
-QED
-
 Theorem append_storage_copy_suffix_path:
   compile_dynarray_append cenv bop vop 1 stride dt st cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   cap < dimword (:256) /\ stride < dimword (:256) /\
   evaluate_type tenv dt = SOME tv /\ value_has_type tv v /\
@@ -352,21 +329,22 @@ Theorem append_storage_copy_suffix_path:
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  let len = if tr then tload slot s else sload slot s in
-  if w2n len < cap then
+  if w2n (if tr then tload slot s else sload slot s) < cap then
     ?t ks. gas_marked_path F ctx func s 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!j. MEM j ks <=> MEM j (MAP FST writes)) /\
       store_copy_normalize s t =
-        (if tr then tstore else sstore) slot (len+1w)
+        (if tr then tstore else sstore) slot
+          ((if tr then tload slot s else sload slot s)+1w)
           (FOLDL (\q j. (if tr then tstore else sstore)
-            (slot+1w+len*n2w stride+n2w j) (mload (w2n b+32*j) s) q) s ks)
+            (slot+1w+(if tr then tload slot s else sload slot s)*n2w stride+n2w j)
+            (mload (w2n b+32*j) s) q) s ks)
   else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
-  qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
     (strip_assume_tac o REWRITE_RULE [append_storage_copy_suffix_parts]) >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
    ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\
@@ -443,13 +421,14 @@ QED
 
 Theorem append_storage_word_suffix_structure:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   same_blocks sa sf /\ inst_extends sa sf /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               ~is_ext_call_op i.inst_opcode) (emitted_insts sa sf)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   simp[same_blocks_def, inst_extends_def, emitted_insts_def] >>
@@ -462,7 +441,7 @@ Theorem append_storage_word_code_frame:
   lower_value compile_expr cenv elem e sa = (op,sb) /\
   compile_dynarray_append cenv (Lit slot) op 1 1 elem
     (lowered_value_type cenv e) cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sa sf func ==>
   cs_extends sa sb /\ cs_extends sb sf /\
   fn_has_code sa sb func /\ fn_has_code sb sf func
@@ -532,11 +511,12 @@ QED
 
 Theorem append_storage_word_suffix_open[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sb = ((),sf) ==>
   ~block_is_terminated sf
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>
@@ -683,11 +663,12 @@ QED
 
 Theorem append_storage_word_suffix_no_gas[local]:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sf)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   simp[emitted_insts_def] >>
@@ -698,7 +679,7 @@ QED
 
 Theorem append_storage_word_suffix_code[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sb sf func /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -721,9 +702,52 @@ QED
 (* From the operand's state, the suffix either aborts on a full array or
    stores the element and the new length, along an actual path with no GAS
    reads. *)
+Theorem append_storage_word_abort_path[local]:
+  compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
+  fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
+  eval_operand op s = SOME w /\ cap < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  (cap <= w2n (if tr then tload slot s else sload slot s) \/
+   s.vs_call_ctx.cc_static) ==>
+  !ctx. ?a t. gas_marked_path F ctx func s 0 (Abort a t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >>
+  drule_all append_storage_word_suffix_code >> strip_tac >>
+  `fresh_vars_wrt sb (drop_fresh sb s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `eval_operand (Lit slot) (drop_fresh sb s) = SOME slot /\
+   eval_operand op (drop_fresh sb s) = SOME w` by
+    simp[eval_operand_def, eval_operand_drop_fresh] >>
+  `vars_ext_result (run_inst_seq (emitted_insts sb sf) (drop_fresh sb s))
+     (run_inst_seq (emitted_insts sb sf) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >> fs[EVERY_MEM]) >>
+  `?a t'. run_inst_seq (emitted_insts sb sf) (drop_fresh sb s) = Abort a t'` by
+    (Cases_on `cap <= w2n (if tr then tload slot s else sload slot s)`
+     >- (`cap <= w2n (if tr then tload slot (drop_fresh sb s)
+                     else sload slot (drop_fresh sb s))` by
+           simp[storage_load_drop_fresh] >>
+         drule_all compile_dynarray_append_word_abort >> metis_tac[]) >>
+     `w2n (if tr then tload slot (drop_fresh sb s)
+           else sload slot (drop_fresh sb s)) < cap` by
+       (simp[storage_load_drop_fresh] >> decide_tac) >>
+     `(drop_fresh sb s).vs_call_ctx.cc_static` by fs[drop_fresh_def] >>
+     drule_all compile_dynarray_append_word_static >> metis_tac[]) >>
+  `?a t'. run_inst_seq (emitted_insts sb sf) s = Abort a t'` by
+    (qpat_x_assum `vars_ext_result _ _` mp_tac >>
+     simp[vars_ext_result_def] >> metis_tac[]) >>
+  rename1 `run_inst_seq (emitted_insts sb sf) s = Abort actual_abort actual_state` >>
+  qspecl_then [`emitted_insts sb sf`, `s`, `actual_state`, `actual_abort`, `ctx`, `func`, `bb`]
+    mp_tac run_inst_seq_abort_zero_path >>
+  impl_tac >- fs[EVERY_MEM] >>
+  disch_then (qx_choose_then `j` assume_tac) >>
+  qexistsl_tac [`actual_abort`, `actual_state with vs_inst_idx := j`] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem append_storage_word_suffix_path:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   fn_has_code sb sf func /\ (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -758,17 +782,9 @@ QED
 
 Resume append_storage_word_suffix_path[abort]:
   strip_tac >>
-  `cap <= w2n (if tr then tload slot (drop_fresh sb s)
-               else sload slot (drop_fresh sb s))` by
-    simp[storage_load_drop_fresh] >>
-  drule_all compile_dynarray_append_word_abort >> strip_tac >>
-  `?a t'. run_inst_seq (emitted_insts sb sf) s = Abort a t'` by
-    (qpat_x_assum `vars_ext_result _ _` mp_tac >>
-     simp[vars_ext_result_def] >> metis_tac[]) >>
-  qspecl_then [`emitted_insts sb sf`, `s`, `t'`, `a`, `ctx`, `func`, `bb`]
-    mp_tac run_inst_seq_abort_zero_path >>
-  impl_tac >- fs[EVERY_MEM] >>
-  metis_tac[]
+  qpat_assum `cap <= w2n (if tr then tload slot s else sload slot s)`
+    (fn th => assume_tac (DISJ1 th ``s.vs_call_ctx.cc_static``)) >>
+  drule_all append_storage_word_abort_path >> simp[]
 QED
 
 Resume append_storage_word_suffix_path[store]:
@@ -797,7 +813,7 @@ Resume append_storage_word_suffix_path[store]:
       qpat_x_assum `state_frame u = _` (fn th => pure_once_rewrite_tac [th]) >>
       qpat_x_assum `state_frame t = _` (fn th => pure_once_rewrite_tac [th]) >>
       Cases_on `tr` >>
-      simp[drop_fresh_def, sstore_def, tstore_def, LET_THM]) >>
+      simp_tac (srw_ss()) [drop_fresh_def, sstore_def, tstore_def, LET_THM]) >>
   rpt strip_tac >>
   `eval_operand (Var x) (drop_fresh sb s) = SOME a` by
     simp[eval_operand_def, lookup_var_drop_fresh] >>
@@ -817,6 +833,7 @@ Theorem append_storage_word_success_post[local]:
   (!x a. not_fresh_at sb x /\ lookup_var x s = SOME a ==>
          lookup_var x u = SOME a) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  ~cx.txn.is_static /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
@@ -926,7 +943,40 @@ Resume compile_append_storage_word_stmt_frag[operand]:
   `(if tr then tload slot t else sload slot t) =
    lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr)` by
     metis_tac[append_storage_header_agree] >>
-  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      qpat_assum `t.vs_call_ctx.cc_static`
+        (fn th => assume_tac (DISJ2
+          ``cenv.ce_module_dynarray_capacity nid <=
+            w2n (if tr then tload slot t else sload slot t)`` th)) >>
+      drule_all append_storage_word_abort_path >> simp[] >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      rename1 `gas_marked_path F ctx func t 0 (Abort a ta)` >>
+      `?m. !tail.
+        append_place cx (StoragePlace tr slot
+          (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v
+          (es_end with gas_obs := tail) =
+          (INR (Error (RuntimeError m)), es_end with gas_obs := tail)` by
+        (Cases_on `w2n (lookup_storage slot (get_storage cx es_end tr)) <
+                    cenv.ce_module_dynarray_capacity nid`
+         >- (qexists_tac `"write in static context"` >> gen_tac >>
+             irule append_storage_static >> simp[get_storage_gas_obs]) >>
+         qexists_tac `"append full storage array"` >> gen_tac >>
+         irule append_storage_full >> simp[get_storage_gas_obs] >> decide_tac) >>
+      `gas_marked_exec F (ctx,func)
+        (append_place cx (StoragePlace tr slot
+          (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v)
+        (es_end with gas_obs := [], t) []
+        (INR (Error (RuntimeError m))) es_end (Abort a ta)` by
+        simp[gas_marked_exec_def] >>
+      qexistsl_tac [`INR (Error (RuntimeError m))`, `es_end`, `Abort a ta`] >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
+      irule (SIMP_RULE std_ss [APPEND_NIL]
+        (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
+      qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all append_storage_word_suffix_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   Cases_on `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v
@@ -1318,7 +1368,7 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
   `~staged.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `?writes. encode_value tv v = SOME writes` by
     metis_tac[vyperTypingTheory.value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
-  drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)
     append_storage_copy_suffix_path >>
   disch_then (drule_at (Pat `fn_has_code sd sb func`)) >>
   disch_then (drule_at (Pat `encode_value tv v = SOME writes`)) >>
@@ -1393,7 +1443,7 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
       qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
   disj1_tac >> simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
-  >- (qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  >- (qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       rewrite_tac[append_storage_copy_suffix_parts] >> strip_tac >>
       drule exprOpenPrimitivesTheory.emit_void_terminated >>
       Cases_on `tr` >> simp[is_terminator_def]) >>

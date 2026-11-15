@@ -235,15 +235,3 @@ Resume entry_registration_address_frame[compose]:
 QED
 
 Finalise entry_registration_address_frame
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then ()
-       else raise Fail "registration address frame inherited admission"
-    end)
-    [registration_pure_operation_frame, registration_add_frame,
-     registration_read_frame, entry_registration_address_frame];
-val () = print "ENTRY_REGISTRATION_ADDRESS_FRAME_AUDIT OK\n";

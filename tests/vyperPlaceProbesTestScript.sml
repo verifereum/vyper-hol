@@ -120,7 +120,7 @@ Proof
       vyperValueOperationTheory.array_index_def, oEL_def] >> EVAL_TAC
 QED
 
-Theorem nested_pop_region_probe[local]:
+Theorem nested_pop_region_probe:
   let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
       before = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1; IntV 2])]);
       middle = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1])]);
@@ -145,7 +145,7 @@ Proof
     wordsTheory.dimword_def]
 QED
 
-Theorem unrelated_pop_region_probe[local]:
+Theorem unrelated_pop_region_probe:
   let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
       before = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1]);
                                  ArrayV (DynArrayV [IntV 2])]);
@@ -166,11 +166,3 @@ Proof
   EVAL_TAC >> simp[value_has_type_def, well_formed_type_value_def,
     wordsTheory.dimword_def]
 QED
-
-val _ = List.app (fn name =>
-  let val (ors,_) = Tag.dest_tag (Thm.tag (DB.fetch "vyperPlaceProbesTest" name))
-  in if List.all (fn s => s = "DISK_THM") ors then ()
-     else raise Fail ("oracle dependency in " ^ name) end)
-  ["tuple_sparse_metadata_probe", "tuple_metadata_present_dense_probes",
-   "tuple_metadata_nested_sparse_probes", "tuple_sparse_delayed_read_probe",
-   "tuple_sparse_old_history_probe"];

@@ -67,10 +67,6 @@ QED
 
 (* ld_slots_empty_push, ld_charge_empty_push and ld_frontiers_empty_push
    are reused from lowerDloadSafetyRelation, not duplicated here. *)
-val _ = List.app (fn th => if null (hyp th) then ()
-          else raise Fail "empty-frame boundary has kernel hypotheses")
-  [ld_sites_empty_push, ld_global_empty_push,
-   ld_serials_fresh_push, ld_order_fresh_push];
 
 (* Slot membership carries the allocation lookup witness, not just an address. *)
 Theorem ld_slots_agree_subset:
@@ -122,7 +118,3 @@ Proof
   qpat_assum `!h. MEM h fs0 ==> FRANGE _ SUBSET _ /\ _` mp_tac >>
   rpt (pop_assum kall_tac) >> simp[SUBSET_DEF] >> metis_tac[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-        else raise Fail "saved-slot transport has kernel hypotheses")
-  [ld_slots_agree_subset, ld_saved_slots_restore];

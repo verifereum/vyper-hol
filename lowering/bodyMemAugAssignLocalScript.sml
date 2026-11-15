@@ -14,6 +14,7 @@
    flag where S1's fix it to F. *)
 Theory bodyMemAugAssignLocal
 Ancestors
+  targetPlaceSim
   supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignLocalWord bodyNameWordMemory
@@ -41,6 +42,9 @@ Ancestors
   list rich_list finite_map pred_set
 Libs
   monadsyntax
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* ===== The source side (S1 copies) ===== *)
 
@@ -352,7 +356,8 @@ Proof
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
       supportedExprTraverseTheory.supported_expr_exists_def,
-      supportedProgramTheory.expr_abi_decode_target_root_def] >>
+      supportedProgramTheory.expr_abi_decode_target_root_def,
+      exprSimHypsDefsTheory.const_name_root_def] >>
   irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
   qexists_tac `int_calls_expr e` >> simp[]
 QED
@@ -427,7 +432,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word] >>
   `is_word_type ty` by metis_tac[word_value_type_word] >>
@@ -576,7 +581,7 @@ Resume compile_augassign_local_mem[operator_normal]:
     metis_tac[find_containing_scope_lookup] >>
   `evaluate_type (get_tenv cx) ty = SOME cur.type` by
     (`expr_sim_inv cenv cx env (ee with gas_obs := [])` by simp[] >>
-     drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> simp[]) >>
+     drule_all targetPlaceSimTheory.expr_sim_inv_local >> simp[]) >>
   `cur.type = entry.type` by gvs[] >>
   `value_has_type entry.type result` by
     (mp_tac (Q.INST [`t1` |-> `ty`, `t2` |-> `expr_type e`,
@@ -727,7 +732,7 @@ Proof
        (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
      fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def] >>
@@ -743,7 +748,7 @@ Proof
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
      Cases_on `asg` >> gvs[] >>
      metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `body_expr_mem_ok cx e` by
     (first_x_assum irule >>
      metis_tac[stmtSimAugAssignTheory.eval_target_place_local]) >>

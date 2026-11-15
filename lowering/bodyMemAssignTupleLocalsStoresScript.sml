@@ -353,7 +353,8 @@ Resume tuple_store_mixed_locals_path_mem[head_code]:
            (qx_choose_then `dty` (map_every assume_tac o CONJUNCTS)))) >>
          qexistsl_tac [`q`, `n`, `dty`] >> simp[] >> metis_tac[]) >> simp[]) >>
   `fn_has_code st sm func /\ fn_has_code sm st' func` by
-    metis_tac[fn_has_code_split] >>
+    (mp_tac (Q.SPECL [`st`, `sm`, `st'`, `func`] fn_has_code_split) >>
+     asm_rewrite_tac[]) >>
   `lookup_scopes id es.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
   qpat_assum `!i. i < LENGTH (id::ids) ==> ?w. eval_operand _ _ = _ /\ _`

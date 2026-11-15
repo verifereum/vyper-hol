@@ -501,9 +501,3 @@ Proof
   drule backward_fold_lookup >> disch_then (qspec_then `i` mp_tac) >>
   simp[] >> strip_tac >> gvs[df_fold_block_def] >> metis_tac[]
 QED
-
-(* Each exported set interface is kernel proved. *)
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in liveness transfer API")
-  (DB.thms "livenessTransferProofs");

@@ -93,7 +93,7 @@ The entire public theorem is:
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
   compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-  supported_program tops /\ immutable_free_program tops /\
+  supported_program tops /\
   source_typing_ok tops am tx /\
   source_storage_ok tops am tx /\
   call_state_rel tops runtime_bc am tx es /\
@@ -106,7 +106,7 @@ The entire public theorem is:
 ```
 
 This is the actual O1 compiler with identity finalizer `K SOME`, not an
-arbitrary minimal/custom pipeline. Exactly eight public premises remain;
+arbitrary minimal/custom pipeline. Exactly seven public premises remain;
 L1 produces raw/O1/assembly/plan witnesses and exact runtime bytes from compile
 success, and L6–L8 construct initial relations from the supplied boundary.
 The whitelist `supported_program` is computational syntax on `tops` alone,
@@ -213,8 +213,15 @@ them to EVM readings. The old
   success regardless of resources; the companion `vyper_call_gas_sufficient`
   does: with enough gas the run exists, and, provided the call trace's outcomes are
   storage-valid (`call_outcomes_storage_ok`) and none of its source
-  observations is exempt (`~source_exempt`), the frame runs out of gas only
-  if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`).
+  observations is exempt (`~gas_source_exempt`), the frame runs out of gas only
+  if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`). The identity
+  case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
+  assembly-optimizer case remains admitted, so the general companion is not
+  an admission-free result. The deploy companion `e2e_deploy_gas_sufficient`
+  similarly composes proved stage bounds; under its source-exemption and
+  storage premises, OutOfGas implies oversized deposited code or a reached
+  `RETURNDATACOPY`. The per-finalizer case theorems give the stronger
+  code-size-only alternative. Its assembly-optimizer case also remains admitted.
 - Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing
   STATICCALL is not a static-entry guarantee. Environmental satisfiability,

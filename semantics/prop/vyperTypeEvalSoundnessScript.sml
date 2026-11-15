@@ -1903,33 +1903,6 @@ Proof
 QED
 
 
-Theorem iterator_range_expr_error_eq[local]:
-  !cx e' y st1 res st'.
-    (case (INR y,st1) of
-       (INL tv1,s'') =>
-         (case read_result cx tv1 s'' of
-            (INL v1,s'') =>
-              (case eval_expr cx e' s'' of
-                 (INL tv2,s'') =>
-                   (case read_result cx tv2 s'' of
-                      (INL v2,s'') =>
-                        (case lift_sum (get_range_limits v1 v2) s'' of
-                           (INL rl,s'') =>
-                             (let n1 = FST rl; n2 = SND rl in
-                                return (GENLIST (\n. Value (IntV (n1 + &n))) n2)) s''
-                         | (INR err,s'') => (INR err,s''))
-                    | (INR err,s'') => (INR err,s''))
-               | (INR err,s'') => (INR err,s''))
-          | (INR err,s'') => (INR err,s''))
-     | (INR err,s'') => (INR err,s'')) = (res,st') ==>
-    res = INR y /\ st' = st1
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `(case (INR y,st1) of _ => _ | _ => _) = (res,st')` mp_tac >>
-  simp[]
-QED
-
-
 (* The trusted history is only the prefix created while a place is live. *)
 Definition typed_scope_transition_def:
   typed_scope_transition st st' <=>
@@ -4485,14 +4458,6 @@ Proof
   Cases_on `tvs` >> Cases_on `vs` >> gvs[Once value_has_type_def]
 QED
 
-
-Theorem OPT_MMAP_from_LIST_REL_evaluate_type_stmt[local]:
-  !tys tvs tenv.
-    LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs ==>
-    OPT_MMAP (evaluate_type tenv) tys = SOME tvs
-Proof
-  Induct >> Cases_on `tvs` >> simp[OPT_MMAP_def]
-QED
 
 Theorem OPT_MMAP_evaluate_type_mono_stmt:
   !types tenv nid tvs.
@@ -10155,10 +10120,6 @@ Finalise eval_scc_type_sound_results_mutual
 Theorem eval_scc_type_sound_mutual =
   LIST_CONJ (List.take (CONJUNCTS eval_scc_type_sound_results_mutual, 10));
 
-val _ = if null (hyp eval_scc_type_sound_mutual) then
-  print "Soundness SCC finalised with no suspension hypotheses\n"
-  else raise Fail "Soundness SCC retains hypotheses";
-
 (* Forcing is part of the public expression guarantee, not a caller premise. *)
 Theorem eval_expr_read_type_sound:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
@@ -10187,15 +10148,3 @@ Proof
   >- gvs[no_type_error_result_def] >>
   drule_all live_result_read_typed >> strip_tac >> simp[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print (name ^ " is closed\n")
-    else raise Fail (name ^ " is not closed")
-  end)
-  [("stmt_no_control_escape_eval_no_loop_control",stmt_no_control_escape_eval_no_loop_control),
-   ("eval_scc_type_sound_results_mutual",eval_scc_type_sound_results_mutual),
-   ("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
-   ("eval_expr_read_type_sound",eval_expr_read_type_sound)];

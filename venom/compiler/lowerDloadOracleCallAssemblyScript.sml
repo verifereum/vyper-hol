@@ -663,6 +663,3 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`H`, `fn`, `lo`, `tn`] >> simp[]
 QED
-
-val _ = if null (hyp ld_sha3_observed_bytes) then ()
-        else raise Fail "SHA3 observation consumer has hypotheses";

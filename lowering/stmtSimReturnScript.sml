@@ -148,9 +148,8 @@ Proof
       return_unlock_state_def, comp_return_def, emit_void_def,
       comp_bind_def, fresh_id_def, emit_def, emitted_insts_def,
       DROP_LENGTH_APPEND, IS_PREFIX_APPEND] >>
-  simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
-       step_inst_base_def, exec_write2_def, eval_operand_def,
-       arithmeticTheory.ADD1] >>
+  (simp[mk_inst_def, is_terminator_def, run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, arithmeticTheory.ADD1]) >>
   simp[venom_state_component_equality]
 QED
 
@@ -202,19 +201,6 @@ Proof
        return_unlock_insts_def, word_type_elem_types,
        comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_void_def, emit_inst_def, fresh_id_def, emit_def]
-QED
-
-Theorem eval_operand_return_index[local,simp]:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem eval_operand_return_sstore[local,simp]:
-  !op key value s.
-    eval_operand op (sstore key value s) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def, sstore_def]
 QED
 
 (* Both guard representations preserve all operands. *)
@@ -663,13 +649,6 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   `!opc ops. cs_appends (emit_op opc ops)` by simp[cs_appends_emit_helpers] >>
   fs[cs_appends_def] >> res_tac >> metis_tac[cs_extends_trans]
-QED
-
-Theorem eval_operands_inst_idx[local]:
-  !ops s n. eval_operands ops (s with vs_inst_idx := n) = eval_operands ops s
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  Cases_on `h` >> simp[eval_operand_def, lookup_var_def]
 QED
 
 Theorem eval_operands_vars_inst_idx:

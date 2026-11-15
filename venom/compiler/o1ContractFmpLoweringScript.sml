@@ -23,6 +23,7 @@
  *   fmp_lower_function_seal_only - one run on an FMP-free function
  *   fmp_lowering_stage_sealed    - a whole stage only seals
  *   fmp_lowering_stage_seal_only - equal runs, memory phase lowered
+ *   o1_static_stage_fmp_lowering - stage half, allowing static calls
  *   fmp_lowering_run_contract    - the stage half, row 3 to row 4
  *   o1_contract_fmp_lowering     - the pass contract
  *)
@@ -250,11 +251,17 @@ QED
 (* Why: the stage only seals (fmp_lowering_stage_sealed), so the output
    runs as the input does, which simulates itself (its entry function
    never returns), and the static memory phase is a lowered one. *)
-Theorem fmp_lowering_run_contract:
-  o1_run_contract rpolicy D 3
+Theorem o1_static_stage_fmp_lowering:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 3 o1_fn_passes) (o1_walk_view rpolicy 3) C C' /\
+    o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 3 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 3 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 3) C' vs
 Proof
   `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def, o1_pre_def,
+  simp[o1_inv_def, o1_pre_def,
        o1_static_inv_def, o1_lowered_inv_def, fmp_free_ctx_def,
        pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
@@ -272,6 +279,14 @@ Proof
   drule ctx_pass_stage_max_live_eom >>
   simp[fn_pass_tag_def, fn_pass_static_layout_effect_def] >>
   strip_tac >> qexists_tac `eom` >> simp[]
+QED
+
+Theorem fmp_lowering_run_contract:
+  o1_run_contract rpolicy D 3
+Proof
+  simp[o1_run_contract_def, o1_stage_contract_def, o1_run_state_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`C`, `C'`, `vs`] o1_static_stage_fmp_lowering) >> simp[]
 QED
 
 Theorem o1_contract_fmp_lowering:

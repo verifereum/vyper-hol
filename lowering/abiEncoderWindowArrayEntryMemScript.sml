@@ -144,7 +144,7 @@ Proof
     (`mem_word_at b t'.vs_memory = mem_word_at b t.vs_memory` by
        (irule window_array_transition_cursor_frame >>
         qexistsl_tac [`ctx`, `func`, `{}`, `[(d,32)]`, `c1`, `st.cs_next_id`] >>
-        simp[] >> metis_tac[]) >> metis_tac[]) >>
+        simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> metis_tac[]) >>
   `window_phase ctx func st en {st.cs_next_id} [(d,32)] s t' /\ mem_cont_sim ctx func s t'` by
     (irule window_phase_chain_mem >>
      qexistsl_tac [`{st.cs_next_id}`, `[]`, `c1`, `{}`, `[(d,32)]`, `t`] >>

@@ -29,9 +29,8 @@ Current integration boundary:
   Immutable compilation and its encoding/deployment proofs remain available;
   the raw O1 shape contract admits `DLOAD` and `DLOADBYTES`, and the
   body-shape proof covers immutable locations, so S2 covers runtime
-  immutable reads. Only `vyper_call_correct` still states
-  `immutable_free_program`. The dated audit's exact public call schema
-  predates that restriction.
+  immutable reads. The call theorem carries no separate immutable restriction.
+  The dated audit preserves its historical statement.
 
 Notes:
 

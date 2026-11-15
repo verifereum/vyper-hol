@@ -72,7 +72,7 @@ Proof
   rpt (pop_assum mp_tac) >> rw[] >> gvs[is_bytestring_type_def]
 QED
 
-Theorem aggregate_store_lowered_elem[local]:
+Theorem aggregate_store_lowered_elem:
   !ce e src dst.
     lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e) ==>
     compile_store_memory ce src dst (expr_type e) (lowered_value_type ce e) =
@@ -893,7 +893,9 @@ Resume aggregate_make_tuple_member_sim[child_steps]:
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
   qmatch_asmsub_abbrev_tac `eval_operand (Var d) r` >>
   `lookup_var d r = SOME (n2w (b+off))` by
-    gvs[venomStateTheory.eval_operand_def, wordsTheory.word_add_n2w] >>
+    (qpat_assum `eval_operand (Var d) r = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomStateTheory.eval_operand_def, wordsTheory.word_add_n2w]) >>
   `not_fresh_at sn d` by
     simp[Abbr `d`, not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
   `!z. op = Var z ==> not_fresh_at su z` by
@@ -1013,35 +1015,10 @@ Resume aggregate_make_tuple_member_sim[rest]:
 QED
 
 Resume aggregate_make_tuple_member_sim[tuple_join]:
-  (* Drop the hypotheses the joins below never use (consumed by the head
-     and tail steps); gnvs over all of them was near the 2.5 s step limit. *)
-  MAP_EVERY (fn q => rpt (qpat_x_assum q kall_tac))
-    [`gas_outcome _ _ _ _ _ _ _`, `gas_marked_exec _ _ _ _ _ _ _ _`,
-     `gas_marked_path _ _ _ _ _ _`, `eval_expr _ _ _ = _`,
-     `compile_make_tuple _ _ _ _ _ _ _ = _`, `compile_expr _ _ _ _ = _`,
-     `compile_store_memory _ _ _ _ _ _ = _`, `emit_op _ _ _ = _`,
-     `unwrap_value _ _ _ = _`, `emitted_insts _ _ = _`,
-     `exprs_case _ _ _ _ _ _`, `expr_body_pre _ _ _ _ _`,
-     `!e st. (e = h \/ MEM e args) /\ _ ==> _`, `_ /\ LIST_REL _ tys' args`,
-     `~nocalls ==> !e. _`, `nocalls ==> int_calls_expr _ = _`,
-     `well_typed_expr _ _`,
-     `post_value_type _ _ = _`, `eval_result_typed _ _ _`,
-     `!v. read_result _ _ _ = _ ==> _`, `read_result _ _ _ = _`,
-     `OPT_MMAP _ _ = _`, `ce.ce_is_ctor ==> _`,
-     `!name itv iv io. ce.ce_is_ctor /\ _ ==> _`] >>
-  (* Keep the conditional memory-frame facts out of gnvs's assumption
-     passes, where each would rewrite every other assumption. *)
-  MAP_EVERY (fn q => qpat_x_assum q mp_tac)
-    [`!a k. _ ==>
-        mem_bytes_at a k t2.vs_memory = mem_bytes_at a k u.vs_memory`,
-     `!aid c sz a k. _ ==>
-        mem_bytes_at a k t2.vs_memory = mem_bytes_at a k t1.vs_memory`,
-     `!p n. b <= p /\ _ ==> _`,
-     `!aid p n. _ ==>
-        mem_bytes_at p n s.vs_memory = mem_bytes_at p n t2.vs_memory`,
-     `EVERY _ args ==> _`] >>
-  gnvs[] >>
-  rpt (disch_then assume_tac) >>
+  qpat_x_assum `Abbrev (r = q)`
+    (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `rr = INL vs` SUBST_ALL_TAC >>
+  asm_simp_tac (srw_ss()) [] >>
   qpat_x_assum `q.vs_memory = t1.vs_memory` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   qpat_x_assum `q.vs_allocas = t1.vs_allocas` (fn th =>
@@ -1065,7 +1042,9 @@ Resume aggregate_make_tuple_member_sim[head_encoding]:
         (qspecl_then [`b + off`, `type_memory_size dtv`] mp_tac) >>
       fs[type_memory_size_def] >> strip_tac >> gvs[]) >>
   qpat_x_assum `tuple_in_memory vs t' _ _` mp_tac >>
-  rpt (pop_assum kall_tac) >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  qpat_x_assum `type_memory_bytes ce mty = _` (fn th =>
+    rpt (pop_assum kall_tac) >>
+    pure_rewrite_tac[th, arithmeticTheory.ADD_ASSOC]) >>
   simp_tac bool_ss []
 QED
 

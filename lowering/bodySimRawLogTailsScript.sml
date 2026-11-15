@@ -13,6 +13,7 @@ Libs
   pairLib
 
 Theorem raw_log_dynamic_tail_counted:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op, s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
@@ -82,6 +83,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_tail_counted:
+  ~cx.txn.is_static /\
   expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::

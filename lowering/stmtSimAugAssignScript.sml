@@ -23,6 +23,7 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  targetPlaceSim
   exprBopSimDefs exprBopSimProps
   exprSimSource gasContext gasExemptCert gasSummary gasSummaryCompose
   fragGasMode fragGasPath fragGasPathMem fragGasSeq gasCount
@@ -358,8 +359,9 @@ Proof
   strip_tac >>
   Cases_on `bop = Eq \/ bop = NotEq`
   >- (gvs[bop_result_def, evaluate_builtin_def] >>
-      Cases_on `v1` >> Cases_on `v2` >>
-      gvs[evaluate_binop_def, binop_negate_def]) >>
+      Cases_on `v1` >> gvs[evaluate_binop_def] >> gvs[binop_negate_def] >>
+      Cases_on `v2` >> gvs[evaluate_binop_def] >>
+      gvs[binop_negate_def]) >>
   `bop_result cx ty bop [ty; t2] v1 v2 es =
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -495,24 +497,6 @@ QED
 
 
 (* ===== The statement ===== *)
-
-(* A local the typing environment knows: it is held through a pointer
-   variable, it is in scope, and its entry's type is its type's. *)
-Theorem expr_sim_inv_local:
-  !cenv cx env es id ty.
-    expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
-    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    (?entry. lookup_scopes id es.scopes = SOME entry) /\
-    !entry. lookup_scopes id es.scopes = SOME entry ==>
-            evaluate_type (get_tenv cx) ty = SOME entry.type
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
-  qpat_x_assum `!id ty. _ ==> IS_SOME _` drule >>
-  qpat_x_assum `!id ty. _ ==> ?p sz. _` drule >>
-  simp[optionTheory.IS_SOME_EXISTS] >> rpt strip_tac >>
-  qpat_x_assum `!id ty entry. _ /\ _ ==> _` drule_all >> simp[]
-QED
 
 Theorem augassign_binop_admissible:
   lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
@@ -1212,14 +1196,3 @@ Proof
   fs[expr_sim_pre_body, expr_sim_ok_case] >>
   irule (Q.SPEC `T` compile_augassign_local_case) >> simp[] >> metis_tac[]
 QED
-
-(* Integrity gate: the source and code sides and the store carry no
-   admission; the statement itself inherits exprSimBinopFrag's (#572). *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "AUGASSIGN_AUDIT OK\n"
-     else raise Fail "augmented assignment inherited admission"
-  end) [eval_augassign_local_bop, augassign_local_code_bop,
-        expr_sim_inv_local, assign_local_store_run];

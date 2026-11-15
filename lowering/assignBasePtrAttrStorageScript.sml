@@ -17,6 +17,9 @@ Ancestors assignBasePtrAttrLocal assignBasePtrFieldAddress assignTuplePtrStorage
   stmtSimAssignAttr supportedExprForms assignBasePtrStorageBody
 Libs monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem assign_base_attr_storage_target:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
@@ -138,6 +141,9 @@ Proof
    eval_operand op s = SOME (typed_val_to_w256 ftv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `compile_store_at_loc cenv.ce_imm_alloca dst op
     (SOME (if tr then LocTransient else LocStorage)) su = ((),sb)` by
@@ -407,7 +413,7 @@ Proof
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat,supported_stmt_expr_exists_def,
        supported_assignment_exists_def,supported_expr_exists_def,
        int_calls_stmt_def,int_calls_atarget_def,int_calls_expr_def] >>

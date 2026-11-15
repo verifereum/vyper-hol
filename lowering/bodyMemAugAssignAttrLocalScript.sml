@@ -4,6 +4,7 @@
    MSTORE there. *)
 Theory bodyMemAugAssignAttrLocal
 Ancestors
+  targetPlaceSim
   supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph supportedStmts supportedStmtTraverse
   bodyMemoryPreds bodyMemoryDefs stmtSimAugAssignAttr stmtSimAugAssign stmtSimAssignAttr
@@ -26,6 +27,9 @@ Ancestors
   vyperExprNoControl vyperAST
 Libs
   monadsyntax emitTacticsLib
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* Pure source boundaries; all observations remain available to the RHS. *)
 Theorem augassign_attr_place_reads_mem_src[local]:
@@ -138,7 +142,7 @@ Proof
   simp[GSYM bind_assoc, bind_def]
 QED
 
-Theorem augassign_attr_rhs_normal_mem_src[local]:
+Theorem augassign_attr_rhs_normal_mem_src:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
@@ -417,22 +421,6 @@ Proof
   FULL_SIMP_TAC std_ss [] >> metis_tac[]
 QED
 
-Theorem expr_sim_inv_local_mem_src[local]:
-  !cenv cx env es id ty.
-    expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
-    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    (?entry. lookup_scopes id es.scopes = SOME entry) /\
-    !entry. lookup_scopes id es.scopes = SOME entry ==>
-      evaluate_type (get_tenv cx) ty = SOME entry.type
-Proof
-  rpt gen_tac >>
-  pure_rewrite_tac [expr_sim_inv_def, env_consistent_def,
-    env_scopes_consistent_def] >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- (Cases_on `lookup_scopes id es.scopes` >>
-    metis_tac[optionTheory.IS_SOME_DEF]) >> metis_tac[]
-QED
-
 Theorem alookup_zip_field_mem_src[local]:
   !fields tvs f fld fty fsz.
     OPT_MMAP f (MAP (FST o SND) fields) = SOME tvs /\
@@ -522,7 +510,7 @@ Theorem augassign_attr_source_fields_mem_src[local]:
     evaluate_type (get_tenv cx) fty = SOME ftv /\ value_has_type ftv fv
 Proof
   strip_tac >>
-  drule_all expr_sim_inv_local_mem_src >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
     metis_tac[] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
@@ -559,7 +547,7 @@ Proof
   drule_all augassign_attr_source_fields_mem_src >> strip_tac >>
   drule lookup_scopes_find_containing_scope >> strip_tac >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by
-    metis_tac[expr_sim_inv_local_mem_src] >>
+    metis_tac[expr_sim_inv_local] >>
   drule_all struct_fields_layout >> strip_tac >>
   FULL_SIMP_TAC std_ss [type_value_11] >>
   `struct_has_type fs vals` by
@@ -947,7 +935,7 @@ Proof
   strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all augassign_attr_source_fields_mem_src >> strip_tac >>
-  drule_all expr_sim_inv_local_mem_src >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word_mem_src] >>
   `evaluate_type (get_tenv cx) (StructT sid) = SOME entry.type` by metis_tac[] >>
@@ -2118,7 +2106,7 @@ Proof
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>

@@ -172,7 +172,7 @@ Proof
         fs[body_inv_def] >>
       `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
       `EVERY (\c. FST c = NONE) (int_calls_target bt)` by
-        (drule_all assignPlaceContinuationTheory.target_indices_pre_static >>
+        (drule_all tuplePlaceTargetGasTheory.target_indices_pre_static >>
          simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
       irule compile_assign_place_case >> simp[] >> metis_tac[]) >>
   irule assign_place_nonmutating_widened_case >> metis_tac[]
@@ -197,6 +197,9 @@ Theorem immutable_deploy_assign_case:
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `nsid` >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `~cx_const_name cx (nsid0,nsid1)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     gvs[]) >>
   drule_all immutable_assign_bare_global >> strip_tac >> gvs[] >>
   drule_all immutableDeployAssignFactsTheory.immutable_assign_target_layout >>
   disch_then (qspec_then `compile_expr` strip_assume_tac) >> gvs[] >>

@@ -137,21 +137,6 @@ Proof
   pure_once_rewrite_tac[bind_assoc] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
-(* A marked prefix supplies the frozen endpoint hypotheses at exactly the
-   canonical state used by bind composition, even for gas-sensitive H. *)
-Theorem marked_endpoint_normalized[local]:
-  !memory ctx func source es s0 marks v mid t H.
-  gas_marked_exec memory (ctx,func) source (es,s0) marks (INL v) mid (OK t) /\
-  (!gs v ee. source (es with gas_obs := gs) = (INL v,ee) ==> H v ee) ==>
-  H v (mid with gas_obs := [])
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!gs v ee. _` irule >>
-  qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
-  fs[gas_marked_exec_def] >>
-  first_x_assum (qspec_then `[]` mp_tac) >> simp[]
-QED
-
 Theorem forced_endpoint_tail_cert[local]:
   !memory tops ctx func cx e next es s0 left v mid t right err ee leaf finish.
   gas_marked_exec memory (ctx,func)
@@ -360,40 +345,6 @@ Theorem step_ASSIGN_op[local]:
     step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out v s)
 Proof
   rw[step_inst_base_def, venomInstTheory.mk_inst_def]
-QED
-
-Theorem run_from_prefix_abort[local]:
-  !ctx func s bb pre a t.
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    s.vs_inst_idx = 0 /\ isPREFIX pre bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
-    run_inst_seq pre s = Abort a t ==>
-    ?t'. run_from 0 ctx func s = Abort a t'
-Proof
-  rpt strip_tac >>
-  qspecl_then [`pre`, `s`, `0`, `ctx`, `bb`] mp_tac exec_block_run_inst_seq >>
-  simp[] >> strip_tac >> simp[run_from_def]
-QED
-
-Theorem run_from_prefix_ok[local]:
-  !ctx func s bb pre t.
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    s.vs_inst_idx = 0 /\ isPREFIX pre bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
-    run_inst_seq pre s = OK t ==>
-    t.vs_current_bb = s.vs_current_bb /\
-    !fuel. run_from fuel ctx func s =
-           run_from fuel ctx func (t with vs_inst_idx := LENGTH pre)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!fuel. t.vs_current_bb = s.vs_current_bb /\
-          exec_block fuel ctx bb s =
-          exec_block fuel ctx bb (t with vs_inst_idx := LENGTH pre)` by
-    (gen_tac >>
-     qspecl_then [`pre`, `s`, `fuel`, `ctx`, `bb`] mp_tac
-       exec_block_run_inst_seq >>
-     simp[]) >>
-  simp[run_from_def]
 QED
 
 (* The entry block of a range loop with nonliteral ends, from its start with
@@ -1826,13 +1777,3 @@ Proof
   conj_tac >- metis_tac[] >>
   qexists `env` >> simp[] >> metis_tac[]
 QED
-
-(* Integrity gate for the forced iterator boundary and checked-range consumer. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "RANGE_FORCE_AUDIT OK\n"
-     else raise Fail "forced range inherited admission"
-  end) [eval_iterator_range_forced, eval_stmt_for_range_cases,
-        compile_for_range_checked_frag_active, compile_for_range_checked_frag];

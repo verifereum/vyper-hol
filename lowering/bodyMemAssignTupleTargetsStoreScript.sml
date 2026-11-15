@@ -272,7 +272,8 @@ Theorem tuple_storage_store_head_path_mem:
       alloca_history func t /\ return_buf_frame d cenv sb t
 Proof
   rpt gen_tac >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   `emit_void (if tr then TSTORE else SSTORE) [dst; op] sa = ((),sb)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>

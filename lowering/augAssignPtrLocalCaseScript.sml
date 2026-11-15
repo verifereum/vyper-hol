@@ -1,6 +1,7 @@
 (* Local augmented-assignment counted pointer pipeline. *)
 Theory augAssignPtrLocalCase
 Ancestors
+  targetPlaceSim
   augAssignPtrLocalLayout augAssignPtrLocalSource augAssignPtrLoadClean
   augAssignPtrLoad augAssignPtrStore stmtFragPtr venomState venomExecSemantics
   emitHelper list rich_list stmtSimProps

@@ -5,7 +5,6 @@ Theory vyperTestsHol
 Ancestors
   e2eSourceBoundaryCVTest
   vyperConstEvalWitness
-  livenessProofIntegrity
   vyperAccountCodehashTest
   vyperBytesAddressConvertTest
   vyperBytesDecimalConvertTest
@@ -30,7 +29,6 @@ Ancestors
   vyperEventFixtureTest
   vyperEventRegression
   vyperExtCallConsumptionTest
-  vyperExtCallCpsCVKernelCheck
   vyperExtCallCpsCVTest
   vyperExtCallCpsEquivalenceTest
   vyperExtCallModesTest

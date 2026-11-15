@@ -122,10 +122,7 @@ Proof
         rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]) >>
   rpt gen_tac >> BETA_TAC >>
   irule entry_code_bind >> reverse conj_tac >- simp[entry_code_return] >>
-  rpt gen_tac >> BETA_TAC >> irule entry_code_dynarray_append >>
-  `!l. load_opc_for l <> DALLOCA /\ store_opc_for l <> DALLOCA` by
-    (Cases >> simp[load_opc_for_def, store_opc_for_def]) >>
-  simp[]
+  rpt gen_tac >> BETA_TAC >> simp[entry_code_dynarray_append]
 QED
 
 Theorem entry_code_assert_stmt[local]:

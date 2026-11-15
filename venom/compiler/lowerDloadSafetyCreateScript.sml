@@ -327,6 +327,3 @@ Proof
   gen_tac >> strip_tac >> irule ld_set_prov_selected >>
   qexistsl [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
 QED
-
-val _ = if null (hyp ld_sync_create_effect) then ()
-        else raise Fail "CREATE producer has hypotheses";

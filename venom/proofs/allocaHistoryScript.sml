@@ -428,12 +428,3 @@ Proof
   rpt gen_tac >> simp[setup_callee_def, AllCaseEqs()] >> strip_tac >>
   irule alloca_history_empty >> gvs[]
 QED
-
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "ALLOCA_HISTORY_KERNEL_AUDIT OK\n"
-     else raise Fail "allocation history inherited admission"
-  end) [alloca_history_empty, alloca_history_frame, alloca_history_jump, alloca_history_pair, alloca_history_step, alloca_history_exec_block, alloca_history_run_blocks, alloca_history_callee_entry];

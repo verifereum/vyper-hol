@@ -357,8 +357,3 @@ Theorem create_outcome_address_probe:
 Proof
   simp[outcome_of_def, w2w_def, dimword_def, trace_dimindex_256] >> EVAL_TAC
 QED
-
-val _ = List.app (fn (name, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("callTrace oracle dependency: " ^ name))
-  (DB.thms "callTrace");

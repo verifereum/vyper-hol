@@ -34,7 +34,7 @@ Theory unitMemInv
 Ancestors
   list pair words finite_map venomInst venomState venomMemDefs
   venomExecSemantics contextCodegenRel contextCodegenRelProps
-  contextRawReachable unitTransformDefs stackPlanTypes
+  contextRawReachable unitTransformDefs stackPlanTypes codegenRel arithmetic
 
 (* ===== Definitions ===== *)
 
@@ -42,6 +42,20 @@ Definition inst_mem_ranges_def:
   inst_mem_ranges inst s =
     source_memory_read_ranges inst s ++ source_memory_write_ranges inst s
 End
+
+(* A numeric resource ceiling does not imply that these ranges avoid spills. *)
+Theorem inst_mem_ranges_word_ceiling:
+  !inst s.
+    EVERY (\(off,len). off + len <= 2 * dimword(:256))
+      (inst_mem_ranges inst s)
+Proof
+  rpt gen_tac >>
+  `EVERY (\(off,len). off < dimword(:256) /\ len < dimword(:256))
+     (inst_mem_ranges inst s)` by
+    simp[inst_mem_ranges_def, source_memory_read_ranges_word_bounds,
+         source_memory_write_ranges_word_bounds] >>
+  fs[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >> res_tac >> decide_tac
+QED
 
 (* The shared invariant: some packaged reachability invariant, every state
    of which satisfies the phase's memory fact M. *)

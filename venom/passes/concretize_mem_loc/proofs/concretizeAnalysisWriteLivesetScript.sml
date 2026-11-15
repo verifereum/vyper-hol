@@ -1,5 +1,5 @@
 Theory concretizeAnalysisWriteLiveset
-Ancestors concretizeAnalysisStoreMark concretizeAnalysisPastUse
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeAnalysisStoreMark concretizeAnalysisPastUse
   concretizeAnalysisUsedDemand concretizeAnalysisIncomingDemand concretizeAnalysisTemporalDemand
   frameWriteOwnership frameActivationSeparation frameActivationCache
   concretizeAnalysisScanCoverage frameOriginCacheReach concretizePtrOrdering
@@ -14,7 +14,7 @@ Theorem concretize_write_owner_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   o1_walk_view rpolicy 2 C' owner observed /\
   joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
   joint_transition C (JointConfig stk PG G tn fn inst s oms om hs h) ev qnext /\
@@ -36,7 +36,7 @@ Proof
     metis_tac[joint_origin_history_erasure] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[origin_frame_erasure] >>
-  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_upto_at] >>
   drule_all joint_write_owner_identity >> strip_tac >>
   drule_all origin_frame_current_lookup >> strip_tac >>
   Cases_on `tag`
@@ -59,7 +59,7 @@ Resume concretize_write_owner_liveset[local]:
   `EVERY wf_function C.ctx_functions` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
   `wf_function fn /\ all_reachable fn /\ ssa_form fn` by metis_tac[EVERY_MEM] >>
   `Allocation aid IN bp_bases
@@ -108,8 +108,8 @@ Resume concretize_write_owner_liveset[incoming]:
 QED
 
 Resume concretize_write_owner_liveset[dynamic]:
-  qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-  simp[ptr_discipline_def] >> strip_tac >>
+  qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+  simp[layout_cut_safe_def, ptr_discipline_upto_def] >> strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[]) >>

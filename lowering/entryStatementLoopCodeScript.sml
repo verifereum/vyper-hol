@@ -34,22 +34,22 @@ Proof
 QED
 
 Theorem entry_code_dynarray_append:
-  load_opc <> DALLOCA /\ store_opc <> DALLOCA ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_dynarray_append ce base_op val_op scale elem_bytes dty sty cap prim
-       load_opc store_opc)
+       loc)
 Proof
-  strip_tac >> simp[compile_dynarray_append_def, comp_ignore_bind_def] >>
+  simp[compile_dynarray_append_def, comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_emit_op, entry_code_emit_void] >>
+    >- simp[entry_code_emit_op, entry_code_emit_void, entry_code_ptr_load] >>
     rpt gen_tac >> BETA_TAC) >>
   irule entry_code_bind >> reverse conj_tac
   >- (simp[LET_THM] >>
-      rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_void,
+      rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_void, entry_code_ptr_store,
+          entry_code_imm_store_words,
           entry_code_store_memory, entry_code_store_slots, entry_code_return]),
         gen_tac, irule entry_code_bind, conj_tac, IF_CASES_TAC])) >>
   rpt gen_tac >> BETA_TAC >>
-  irule entry_code_bind >> simp[entry_code_emit_op, entry_code_emit_void]
+  irule entry_code_bind >> simp[entry_code_emit_op, entry_code_ptr_store]
 QED
 
 Theorem entry_code_jmp_if_not_terminated:

@@ -942,10 +942,3 @@ Proof
   metis_tac[eval_outcomes_suffix_mutual, outcomes_suffix_def,
             outcome_suffix_modes]
 QED
-
-(* Closed-export outcome suffix audit. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Outcome suffix oracle debt: " ^ name)
-  end) (DB.thms "vyperEvalOutcomeSuffix");

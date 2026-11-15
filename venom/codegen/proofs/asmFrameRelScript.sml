@@ -14,12 +14,14 @@
  *   frame_outcome_mid     - a frame outcome taken from mid-frame is the
  *                           frame's outcome
  *   frame_resource_starved_mid - likewise for starvation
+ *   frame_inst_raises_next - next_opcode's instruction raises at our depth
+ *   asm_frame_rel_rtc_trans - the frame's run reaches what es's run reaches
  *)
 
 Theory asmFrameRel
 Ancestors
   codegenEntryRel asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
-  frameOutcome callTrace vfmExecution vfmExecutionProp
+  frameOutcome frameGas callTrace vfmExecution vfmExecutionProp asmEncodeParse rich_list
 
 (* Well-formed instruction encodings, with data confined to the suffix. *)
 Definition asm_frame_prog_ok_def:
@@ -31,9 +33,10 @@ End
 
 (* es is the frame es0 part way through: the same depth, saved rollback,
    outer contexts, message and txParams; its head context is as by
-   asm_evm_rel over the frame's whole code; and the call outcomes and GAS
+   asm_evm_rel over the frame's whole code; the call outcomes and GAS
    readings the assembly has left are the ones the rest of es's run
-   observes, while its requests so far and the rest's make es0's. *)
+   observes, while its requests so far and the rest's make es0's; and
+   the frame's run reaches es from es0 at its depth or deeper. *)
 Definition asm_frame_rel_def:
   asm_frame_rel prog data es0 as es <=>
     ?c0 c rb rest.
@@ -49,7 +52,9 @@ Definition asm_frame_rel_def:
       asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
       as.as_outcomes = MAP SND (call_trace es) /\
       as.as_gas_readings = gas_readings es /\
-      as.as_requests ++ call_requests es = call_requests es0
+      as.as_requests ++ call_requests es = call_requests es0 /\
+      RTC (\a b. LENGTH a.contexts >= LENGTH es0.contexts /\
+                 step a = (INL (), b)) es0 es
 End
 
 (* The step of prog at as.as_pc: either the frame starves at this step
@@ -75,7 +80,7 @@ Definition asm_frame_step_ok_def:
     | AsmRevert as1 =>
         ?r es'. run_call es = SOME (r, es') /\
           (?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs) /\
-          call_requests es = []
+          call_requests es = [] /\ frame_inst_raises es0 Reverted Revert
     | AsmFault as1 =>
         ?r es'. run_call es = SOME (r, es') /\
           (?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs) /\
@@ -100,10 +105,38 @@ QED
 Theorem frame_resource_starved_mid:
   es0.contexts = (c0, rb) :: rest /\ es.contexts = (c, rb) :: rest /\
   c0.logs = [] /\ c.msgParams = c0.msgParams /\ es.txParams = es0.txParams /\
+  RTC (\a b. LENGTH a.contexts >= LENGTH es0.contexts /\
+             step a = (INL (), b)) es0 es /\
   frame_resource_starved es r es' ==>
   frame_resource_starved es0 r es'
 Proof
-  rw[frame_resource_starved_def] >> metis_tac[frame_outcome_mid]
+  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >> strip_tac >>
+  drule_all frame_outcome_mid >> strip_tac >>
+  qexistsl_tac [`exc`, `out`, `c.logs ++ lgs`] >> simp[] >>
+  qexists_tac `op` >> irule frame_inst_raises_mid >>
+  qexists_tac `es` >> gvs[]
+QED
+
+(* The frame's run reaches what es's run reaches at es's depth. *)
+Theorem asm_frame_rel_rtc_trans:
+  asm_frame_rel prog data es0 as es /\
+  RTC (\x y. LENGTH x.contexts >= LENGTH es.contexts /\
+             step x = (INL (), y)) es es1 ==>
+  RTC (\x y. LENGTH x.contexts >= LENGTH es0.contexts /\
+             step x = (INL (), y)) es0 es1
+Proof
+  rw[asm_frame_rel_def] >> gvs[] >> metis_tac[relationTheory.RTC_RTC]
+QED
+
+(* The instruction next_opcode names raises exc at the state's depth. *)
+Theorem frame_inst_raises_next:
+  s.contexts = (c, rb) :: rest /\ next_opcode c = SOME op /\ op <> Stop /\
+  step_inst op s = (INR (SOME exc), s') /\
+  LENGTH s'.contexts = LENGTH s.contexts ==>
+  frame_inst_raises s exc op
+Proof
+  strip_tac >> irule frame_inst_raises_here >> simp[] >>
+  qpat_x_assum `next_opcode _ = _` mp_tac >> rw[next_opcode_def] >> gvs[]
 QED
 
 (* The frame starts in the relation with its own entry assembly state. *)
@@ -117,5 +150,91 @@ Proof
   rw[initial_ctx_rel_def, initial_state_rel_def, asm_frame_rel_def,
      asm_evm_rel_def, entry_asm_state_def, msg_ctx_rel_def, tx_ctx_rel_def,
      block_ctx_rel_def, blockhash_rel_def, data_suffix_assemble] >>
-  gvs[asm_pc_to_offset_def, CONJ_ASSOC]
+  gvs[asm_pc_to_offset_def, CONJ_ASSOC, relationTheory.RTC_REFL]
+QED
+
+Theorem asm_frame_decode_setup:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) ==>
+  es.contexts <> [] /\
+  (FST (HD es.contexts)).pc < LENGTH (FST (HD es.contexts)).msgParams.code /\
+  ?op. next_opcode (FST (HD es.contexts)) = SOME op /\
+       opcode op = encode_inst (SND (compute_label_offsets (prog ++ [AsmDataItem data])))
+                     (EL a.as_pc prog) /\ wf_opname op
+Proof
+  strip_tac >>
+  `asm_encoding_wf (prog ++ [AsmDataItem data])` by
+    gvs[asm_frame_prog_ok_def, data_suffix_encoding_wf] >>
+  `!j. j <= a.as_pc ==> ~is_data_inst (EL j (prog ++ [AsmDataItem data]))` by
+    (rpt strip_tac >> `j < LENGTH prog` by decide_tac >>
+     gvs[EL_APPEND1, asm_frame_prog_ok_def] >> metis_tac[]) >>
+  `asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc <
+     LENGTH (assemble (prog ++ [AsmDataItem data]))` by
+    (irule offset_in_bounds >> simp[]) >>
+  `a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+  drule_all assemble_parse_exact >> strip_tac >>
+  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def, next_opcode_def, EL_APPEND1]
+QED
+
+(* The existing frame relation observes the real prefix; assembly keeps
+   an additional unread suffix for the enclosing replay. *)
+Definition asm_frame_rel_tail_def:
+  asm_frame_rel_tail tail prog data es0 a es <=>
+    asm_frame_rel prog data es0
+      (a with as_gas_readings := gas_readings es) es /\
+    a.as_gas_readings = gas_readings es ++ tail
+End
+
+(* Terminating assembly steps retain the suffix after the real readings. *)
+Definition asm_frame_step_ok_tail_def:
+  asm_frame_step_ok_tail tail prog data es0 a es <=>
+    (?r es'. run_call es = SOME (r, es') /\
+      frame_resource_starved es0 r es' /\ call_requests es = []) \/
+    case asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+                  (EL a.as_pc prog) a of
+      AsmOK a1 =>
+        ?es1. run_call es1 = run_call es /\
+          asm_frame_rel_tail tail prog data es0 a1 es1
+    | AsmHalt a1 =>
+        ?r es'. run_call es = SOME (r, es') /\
+          frame_outcome es0 r es' NONE a1.as_returndata a1.as_logs /\
+          es'.rollback.accounts = a1.as_accounts /\
+          es'.rollback.toDelete = a1.as_pending_deletions /\
+          es'.rollback.tStorage = a1.as_transient /\
+          a1.as_requests = call_requests es0 /\ a1.as_gas_readings = tail
+    | AsmRevert a1 =>
+        ?r es'. run_call es = SOME (r, es') /\
+          (?lgs. frame_outcome es0 r es' (SOME Reverted) a1.as_returndata lgs) /\
+          call_requests es = [] /\ frame_inst_raises es0 Reverted Revert /\
+          a1.as_gas_readings = tail
+    | AsmFault a1 =>
+        ?r es'. run_call es = SOME (r, es') /\
+          (?exc lgs. exc <> Reverted /\
+            frame_outcome es0 r es' (SOME exc) [] lgs) /\
+          call_requests es = [] /\ a1.as_gas_readings = tail
+    | AsmError _ => T
+End
+
+Theorem asm_frame_rel_tail_nil:
+  asm_frame_rel_tail [] prog data es0 a es <=>
+  asm_frame_rel prog data es0 a es
+Proof
+  simp[asm_frame_rel_tail_def] >> eq_tac >> strip_tac >>
+  `a with as_gas_readings := gas_readings es = a` by
+    gvs[asm_frame_rel_def, asm_state_component_equality] >>
+  gvs[asm_frame_rel_def]
+QED
+
+Theorem asm_frame_rel_entry_tail:
+  initial_ctx_rel_tail tail cplan prog ctx vs es /\
+  (vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+    (lookup_account (FST (HD es.contexts)).msgParams.callee
+      es.rollback.accounts)) ==>
+  asm_frame_rel_tail tail prog vs.vs_data_section es (entry_asm_state vs es) es
+Proof
+  strip_tac >> fs[initial_ctx_rel_tail_def] >>
+  mp_tac (Q.INST [`vs` |-> `vs with vs_gas_readings := gas_readings es`]
+    asm_frame_rel_entry) >>
+  simp[asm_frame_rel_tail_def, entry_asm_state_def]
 QED

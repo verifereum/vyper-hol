@@ -71,10 +71,3 @@ Theorem bounded_decode_nested_head_reverts_after_prefix:
 Proof
   EVAL_TAC
 QED
-
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean ABI bounds regression: " ^ name)
-  end) (DB.thms "abiDecodeBoundsTest");

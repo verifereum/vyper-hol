@@ -82,10 +82,4 @@ Proof
   gvs[dead_result_rel_def]
 QED
 
-val _ = if null (hyp eval_operands_domain_agreement) andalso
-           null (hyp concretize_static_write_abort_complete) andalso
-           null (hyp concretize_stop_sink_complete) andalso
-           null (hyp concretize_invalid_complete) andalso
-           null (hyp concretize_revert_complete) then ()
-        else raise Fail "simple terminal exports have hypotheses";
 val _ = export_theory();

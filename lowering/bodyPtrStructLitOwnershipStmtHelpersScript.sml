@@ -428,29 +428,30 @@ QED
 
 
 Theorem alloc_run_compile_dynarray_append:
-  store_opc <> ALLOCA ==>
   alloc_run fresh_outputs
-    (compile_dynarray_append ce base_op val_op ws es dt st cap prim load_opc store_opc)
+    (compile_dynarray_append ce base_op val_op ws es dt st cap prim loc)
     (\u s. fresh_outputs s)
 Proof
-  strip_tac >> simp[compile_dynarray_append_def, comp_ignore_bind_def,
-    comp_bind_assoc] >>
+  simp[compile_dynarray_append_def, comp_ignore_bind_def, comp_bind_assoc] >>
   rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
     reverse conj_tac
     >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
-          SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >> NO_TAC) >>
+          SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+          SRULE [SF ETA_ss] alloc_run_compile_ptr_load] >> NO_TAC) >>
     gen_tac >> simp[comp_ignore_bind_def, comp_bind_assoc]) >>
   irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >> conj_tac
   >- (gen_tac >> simp[] >> irule alloc_run_bind >>
       qexists `\v s. fresh_outputs s` >>
       simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
-        SRULE [SF ETA_ss] alloc_run_emit_void_fresh]) >>
-  IF_CASES_TAC >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
-  IF_CASES_TAC >> simp[comp_ignore_bind_def]
-  >>~- ([`alloc_run _ (compile_store_slots _ _ _ _ _) _`],
-    MATCH_ACCEPT_TAC (SRULE [SF ETA_ss] (CONJUNCT1 alloc_run_compile_store_slots))) >>
-  irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory,
-    SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop] >>
-  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+        SRULE [SF ETA_ss] alloc_run_compile_ptr_store]) >>
+  IF_CASES_TAC
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_ptr_store] >>
+  IF_CASES_TAC
+  >- (simp[comp_ignore_bind_def] >>
+      irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
+      simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory] >>
+      simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+  IF_CASES_TAC
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_imm_store_words] >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] (CONJUNCT1 alloc_run_compile_store_slots)]
 QED

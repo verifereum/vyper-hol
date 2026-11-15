@@ -10,6 +10,9 @@ Ancestors
   supportedExprTraverse supportedStmts vyperTypeSystem exprSimHyps
   allocLimits gasContext vyperAST vyperTypeCallGraph compileEnv exprLoweringProps
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem body_raise_reason_mem_case:
   !cx e. body_expr_mem_ok cx e ==> body_stmt_mem_ok cx (Raise (RaiseReason e))
 Proof
@@ -49,7 +52,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
          int_calls_raise_reason_def, body_inv_def] >>

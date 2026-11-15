@@ -42,7 +42,7 @@
  * targetPlaceSimCases.
  *
  * Helpers: target_pre_sub,
- *   expr_sim_inv_local, target_post_refl, toplevel_decl_ce_vars, toplevel_target_decl
+ *   expr_sim_inv_local, toplevel_decl_ce_vars, toplevel_target_decl
  *)
 
 Theory targetPlaceSim
@@ -172,9 +172,7 @@ QED
 (* ===== Locals ===== *)
 
 (* A local the typing knows: its pointer variable, its scope entry, and its
-   declared type evaluating to the entry's type.  As stmtSimAugAssign's
-   expr_sim_inv_local, restated here so the judgment does not depend on the
-   statement simulation. *)
+   declared type evaluating to the entry's type. *)
 Theorem expr_sim_inv_local:
   !cenv cx env es id ty.
     expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
@@ -192,20 +190,6 @@ Proof
 QED
 
 (* ===== Leaves ===== *)
-
-(* No code, and the post at the start state. *)
-Theorem target_post_refl[local]:
-  !ctx func cenv cx es sa s pv vt r.
-    stmt_state_rel ctx func cenv cx es s /\
-    (?w. eval_operand (FST r) s = SOME w /\
-         place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
-    SND (SND r) = SOME (value_type_place vt) /\
-    (!x. FST r = Var x ==> not_fresh_at sa x) /\
-    place_readable cx es pv ==>
-    target_post ctx func cenv cx es sa sa s es pv vt r s
-Proof
-  rw[target_post_def] >> metis_tac[]
-QED
 
 (* A local: its place MemoryPlace x [] at its pointer, no code. *)
 Theorem target_name_case:

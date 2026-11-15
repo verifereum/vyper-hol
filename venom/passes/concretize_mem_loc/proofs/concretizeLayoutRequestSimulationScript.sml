@@ -1,12 +1,12 @@
 Theory concretizeLayoutRequestSimulation
-Ancestors concretizeLayoutRequestBase concretizeLayoutRequestControl
+Ancestors concretizeLayoutCutSafe concretizeLayoutRequestBase concretizeLayoutRequestControl
   concretizeLayoutCorridorRequests concretizeLayoutStageSimulation
   passSharedFrame frameSelectedSimulation concretizeLayoutRequestRelations
   concretizeLayoutCanonicalDriver list
 
 (* Assemble the strengthened observations without changing the canonical
    recursive driver or its run-entry relation. *)
-Theorem layout_request_simulation_contract:
+Theorem layout_request_simulation_contract_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -26,7 +26,7 @@ Theorem layout_request_simulation_contract:
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs qend ==>
-  selected_simulation_contract C C' q0 path
+  selected_simulation_contract_fuel C C' q0 path
     (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
@@ -34,11 +34,14 @@ Theorem layout_request_simulation_contract:
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  strip_tac >> rewrite_tac[selected_simulation_contract_def] >>
+  strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    simp[layout_cut_safe_whole_run] >>
+  rewrite_tac[selected_simulation_contract_fuel_def] >>
   conj_tac
-  >- (irule layout_request_base_certificate >>
+  >- (irule layout_request_base_certificate_fuel >>
       metis_tac[step_inst_base_abort_requests]) >>
-  irule layout_request_structural_certificates >> metis_tac[]
+  irule layout_request_structural_certificates_fuel >> metis_tac[]
 QED
 
 (* Use precisely the same decoration, selected segment, and initialization
@@ -71,15 +74,20 @@ Theorem layout_stage_request_selected_run:
       q n qe (n + LENGTH w) fn s fn' t r r'
 Proof
   strip_tac >>
-  `selected_simulation_contract C C' q0 path
+  `selected_simulation_contract_fuel C C' q0 path
     (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)` by
-    (irule layout_request_simulation_contract >> metis_tac[]) >>
-  drule_all selected_run_simulation >> simp[selected_run_match_def]
+    (irule layout_request_simulation_contract_fuel >> metis_tac[]) >>
+  `finite_run C fn s r` by
+    metis_tac[cj 3 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+  `?k. run_blocks k C fn s = r` by
+    (fs[frameFiniteExecutionTheory.finite_run_iff] >> metis_tac[]) >>
+  drule_all selected_run_simulation_fuel >>
+  simp[selected_run_match_fuel_def] >> metis_tac[]
 QED
 
 (* Constructor compatibility comes from the old canonical result; the new

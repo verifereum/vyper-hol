@@ -65,7 +65,7 @@ Theorem ptr_mixed_mul_execution[local]:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   `ptr_lookup_transport births positions NONE (op_taint tn op1)
     (eval_operand op1 s) (SOME v1)` by

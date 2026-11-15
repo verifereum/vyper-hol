@@ -494,7 +494,11 @@ Proof
       allocLimitsTheory.alloc_limits_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
   rpt strip_tac >>
-  TRY (qpat_x_assum `~supported_expr_exists _ (Subscript _ _ _)` mp_tac >>
+  TRY (qpat_x_assum `~supported_expr_exists call_operands_effect_root (Subscript _ _ _)`
+         mp_tac >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
+  TRY (qpat_x_assum `~supported_expr_exists (const_name_root _) (Subscript _ _ _)`
+         mp_tac >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
   qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
     (qspec_then `target` irule) >>
@@ -1195,7 +1199,7 @@ Proof
             `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
             `tys`,`btv`,`fe with gas_obs := []`] tuple_base_facts) >>
   simp[] >> strip_tac >>
-  drule_all attr_add_path >> strip_tac >>
+  drule_all attr_add_path_frame >> strip_tac >>
   rename1 `gas_path ctx func t 0 (OK t1)` >>
   qspecl_then [`func`,`cenv`,`cx`,`obj`,`es`,`sa`,`sb`,`s0`,
                `fe with gas_obs := []`,`btv`,`bvv`,`t1`,`w`,`tys`,`tvs`,

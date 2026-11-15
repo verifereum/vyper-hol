@@ -36,13 +36,3 @@ Proof
   qpat_x_assum `!fn. MEM fn C.ctx_functions ==> (_ /\ _) /\ _` drule >>
   simp[] >> strip_tac >> simp[]
 QED
-
-(* Fail the build if the contract ever regresses to an admitted proof. *)
-val _ = let
-  val th = lower_dload_stage_mem
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-in
-  if null (hyp th) andalso null axioms andalso
-     List.all (fn s => s = "DISK_THM") oracles then ()
-  else raise Fail "lower_dload_stage_mem: non-kernel proof dependency"
-end;

@@ -3,6 +3,7 @@
    (S1's body_assign_local_memory). *)
 Theory bodyMemAssignLocalMem
 Ancestors
+  targetPlaceSim
   supportedExprTraverse allocLimits allocLimitsProps
   bodyMemoryPreds bodySim bodyExprPreFacts memoryLocalRhsProps
   bodyRhsRoomMemory exprSimAggregateLayout vyperTypeArgFits
@@ -22,6 +23,9 @@ Ancestors
   memoryValueEncoding
 Libs
   monadsyntax
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 Theorem body_assign_local_rhs_pre[local]:
   !cx id e tops bindings ctx cenv env env' ret_ty es ty.
@@ -67,7 +71,7 @@ Proof
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
@@ -107,32 +111,6 @@ Theorem assign_local_memory_type_cases[local]:
     expr_type e = ty \/ is_bytestring_type ty
 Proof
   metis_tac[]
-QED
-
-Theorem body_assign_local_memory_read[local]:
-  !cenv cx env e es tops id ty tyv v es1 entry.
-    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-    supported_program tops /\
-    cenv.ce_func_return_type = build_func_return_type tops /\
-    get_module_code cx NONE = SOME tops /\
-    FLOOKUP env.var_types id = SOME ty /\
-    type_widens_to env.type_defs (expr_type e) ty /\
-    (expr_type e = ty \/ is_bytestring_type ty) /\
-    evaluate_type (get_tenv cx) ty = SOME tyv /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
-    lookup_scopes id es1.scopes = SOME entry /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e) /\
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
-    entry.type = tyv /\ value_has_type tyv v /\
-    val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `entry.type = tyv` by metis_tac[memory_rhs_read_local_type] >>
-  simp[] >> irule memory_rhs_read_destination_footprint >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`cx`, `env`, `es`, `es1`, `tops`, `ty`] >> simp[]
 QED
 
 Theorem assign_local_memory_sizes[local]:
@@ -843,7 +821,7 @@ Proof
    cenv.ce_func_return_type = build_func_return_type tops /\
    get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
   drule_all body_assign_local_rhs_pre >> strip_tac >>
-  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>

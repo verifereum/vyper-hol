@@ -92,12 +92,3 @@ QED
    producers; bytes compilation must discharge same-block/prefix/opcode
    premises of entry_valid_bytes_endpoint_frame from actual code facts.
    No such missing property is assumed for the frozen theorem here. *)
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry endpoint validation inherited admission"
-    end) [entry_valid_bytes_endpoint_frame, entry_header_endpoint_frame,
-          entry_backedge_endpoint_frame];

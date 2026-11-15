@@ -28,7 +28,9 @@
 
 Theory codegenRel
 Ancestors
-  asmWf asmSem stackPlanGen
+  asmWf asmSem stackPlanGen memLocDefs words list
+Libs
+  BasicProvers
 
 (* ===== Operand Evaluation in Venom State ===== *)
 
@@ -223,6 +225,28 @@ Definition source_memory_write_ranges_def:
                        dret_source_write_ranges s.vs_call_entry_fmp pairs)))
     | _ => []
 End
+Theorem source_memory_write_ranges_nonwriter:
+  inst.inst_opcode <> DRET /\ mem_write_ops inst = NONE /\
+  LENGTH ops = LENGTH inst.inst_operands ==>
+  source_memory_write_ranges (inst with inst_operands := ops) t = []
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[source_memory_write_ranges_def] >>
+  namedCases_on `ops` ["", "o1 os1"] >> gvs[] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[] >>
+  namedCases_on `os2` ["", "o3 os3"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os3` ["", "o4 os4"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os4` ["", "o5 os5"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os5` ["", "o6 os6"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  namedCases_on `os6` ["", "o7 os7"] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def] >>
+  Cases_on `os7` >> gvs[listTheory.LENGTH_EQ_NUM_compute, mem_write_ops_def]
+QED
+
 (* Every nonempty source-write interval is disjoint from the compiler-owned
    half-open spill interval [sa_spill_base,sa_next_offset). *)
 Definition source_memory_writes_disjoint_def:
@@ -339,14 +363,15 @@ End
 
 (* Terminal state: observable effects match at halt/revert.
    No plan_state, no stack layout, no memory details.
-   Recorded requests are observable; leftover outcomes and GAS readings
-   are not constrained at this terminal boundary. *)
+   Recorded requests and remaining GAS readings agree; leftover call
+   outcomes are not constrained at this terminal boundary. *)
 Definition venom_asm_terminal_rel_def:
   venom_asm_terminal_rel vs as ⇔
     as.as_accounts = vs.vs_accounts ∧
     as.as_transient = vs.vs_transient ∧
     as.as_returndata = vs.vs_returndata ∧
     as.as_logs = vs.vs_logs ∧
+    as.as_gas_readings = vs.vs_gas_readings ∧
     as.as_requests = vs.vs_requests ∧
     as.as_pending_deletions = vs.vs_pending_deletions
 End
@@ -533,4 +558,42 @@ Theorem venom_asm_rel_stack_cleanup_promised[simp]:
   venom_asm_rel lo (ps with ps_stack := stk) vs ast
 Proof
   simp[venom_asm_rel_def]
+QED
+
+Theorem fixed_source_write_range_word_bounds:
+  len < dimword(:256) ==>
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (fixed_source_write_range s dst value len)
+Proof
+  rw[fixed_source_write_range_def] >> every_case_tac >> simp[w2n_lt]
+QED
+
+Theorem sized_source_write_range_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (sized_source_write_range s dst src len)
+Proof
+  rw[sized_source_write_range_def] >> every_case_tac >> simp[w2n_lt]
+QED
+
+Theorem dret_source_write_ranges_word_bounds:
+  !(pairs : (bytes32 # bytes32) list) cursor.
+    EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+      (dret_source_write_ranges cursor pairs)
+Proof
+  Induct >> simp[dret_source_write_ranges_def] >>
+  Cases_on `h` >> simp[dret_source_write_ranges_def, w2n_lt]
+QED
+
+Theorem source_memory_write_ranges_word_bounds:
+  EVERY (\(off,sz). off < dimword(:256) /\ sz < dimword(:256))
+    (source_memory_write_ranges inst s)
+Proof
+  `32 < dimword(:256)` by
+    simp[dimword_def, venomLayoutTheory.dimindex_256] >>
+  `1 < dimword(:256)` by decide_tac >>
+  Cases_on `inst.inst_opcode` >> simp[source_memory_write_ranges_def] >>
+  every_case_tac >>
+  simp[fixed_source_write_range_word_bounds,
+       sized_source_write_range_word_bounds,
+       dret_source_write_ranges_word_bounds, w2n_lt]
 QED

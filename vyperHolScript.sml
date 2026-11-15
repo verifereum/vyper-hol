@@ -9,6 +9,11 @@
  *)
 Theory vyperHol
 Ancestors
+  codegenStaticAbort
+  runtimeLabelReadiness
+  o1LabelReadiness
+  runtimeLabelEntry
+  o1LabelStages
   (* semantics properties *)
   vyperSemanticsHol
   (* frontend, its cv translation, and the test runner *)
@@ -19,8 +24,11 @@ Ancestors
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
+  constSubstStmts constSubstStmtsPreserve
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
+  staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
+  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticMemoryObservation dftStaticMemoryInv dftStaticContextSim dftStaticRequestSim dftStaticGasContract
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
@@ -31,7 +39,10 @@ Ancestors
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
-  codegenRequestPrefix
+  codegenRequestPrefix callTraceFrame guardPushProjections
+  fnStaticAbortSim
+  contextStaticAbortRel
+  staticAbortMemDefs
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
@@ -44,6 +55,8 @@ Ancestors
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
   stmtSimReturnWiden bodyMemory
+  (* whitelist: retained raw-call and CREATE compiler shape proofs *)
+  whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
   batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr

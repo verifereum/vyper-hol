@@ -1,6 +1,7 @@
 (* Normal clean-payload memory-write family. *)
 Theory o1LowerDloadJointCleanWrite
 Ancestors
+  o1SafeUpto
   o1LowerDloadPtrDiscipline o1LowerDloadJointRead1 o1LowerDloadShared
   o1LowerDloadJointRangeCopy o1LowerDloadJointRelation o1LowerDloadJointScalar
   o1LowerDloadJointMemoryWrite o1LowerDloadRangeTransport
@@ -11,7 +12,7 @@ Ancestors
 
 Theorem ld_joint_clean_write_scalar:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (((inst.inst_opcode = CALLDATACOPY \/ inst.inst_opcode = CODECOPY \/
      inst.inst_opcode = RETURNDATACOPY) /\
@@ -25,12 +26,12 @@ Proof
   Cases_on `(inst.inst_opcode = CALLDATACOPY \/ inst.inst_opcode = CODECOPY \/
      inst.inst_opcode = RETURNDATACOPY) /\
      inst.inst_operands = [dst;src;sz] /\ MEM op [src;sz]`
-  >- (gvs[] >> drule ld_joint_copy_scalar_operand >> disch_then irule >>
+  >- (gvs[] >> drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
       simp[] >> metis_tac[]) >>
   gs[] >>
   (`frame_reachable vs C stk PG G tn fn inst s` by
        metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-      `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
+      `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
       `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
         metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
       `ptr_use_ok P (fn_pv P fn) inst` by
@@ -54,7 +55,7 @@ Proof
            fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
          drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
          Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>
-      `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+      `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
       `op_taint tn op = {}` by
         (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
       irule ld_joint_operand_clean >>
@@ -82,7 +83,7 @@ QED
 
 Theorem ld_joint_clean_write_destination:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   (((inst.inst_opcode = CALLDATACOPY \/ inst.inst_opcode = CODECOPY \/
      inst.inst_opcode = RETURNDATACOPY) /\
@@ -101,10 +102,10 @@ Theorem ld_joint_clean_write_destination:
 Proof
   strip_tac >>
   `taint_ok fn tn inst s` by
-    metis_tac[ld_joint_source, occ_frame_reachable_projection, ptr_discipline_def] >>
+    metis_tac[ld_joint_source, occ_frame_reachable_projection, ptr_discipline_upto_def] >>
   `op_taint tn dst = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
-  drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
+  drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >>
   gvs[mem_write_ops_def, source_memory_write_ranges_def,
       fixed_source_write_range_def, sized_source_write_range_def,
       retpc_use_ok_def, eval_operand_def] >> metis_tac[]
@@ -112,7 +113,7 @@ QED
 
 Theorem ld_joint_clean_write_execution:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [MSTORE8;CALLDATACOPY;CODECOPY;RETURNDATACOPY;EXTCODECOPY] /\
   step_inst fuel C inst s = OK s1 ==>
@@ -138,12 +139,12 @@ Proof
   >- (rename [`inst.inst_operands = [dop;vop]`,
               `eval_operand dop s = SOME d`, `eval_operand vop s = SOME v`] >>
       `eval_operand vop s = eval_operand vop t` by
-        (drule ld_joint_clean_write_scalar >> disch_then irule >> simp[] >> metis_tac[]) >>
+        (drule ld_joint_clean_write_scalar >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >> metis_tac[]) >>
       `?d'. eval_operand dop t = SOME d' /\
         ((w2n d=w2n d' /\ w2n d+1<=lo) \/
          (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+1<=z /\
                         w2n d=b+j /\ w2n d'=c+j))` by
-        (drule ld_joint_clean_write_destination >> simp[] >> metis_tac[]) >>
+        (drule ld_joint_clean_write_destination >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[] >> metis_tac[]) >>
       `eval_operand vop t = SOME v` by metis_tac[] >>
       qexistsl_tac [`w2n d`,`w2n d'`,`[w2w v : word8]`] >>
       gvs[mstore8_def, write_memory_with_expansion_def,
@@ -156,13 +157,13 @@ Proof
   `eval_operand rop t = SOME r /\ eval_operand lop t = SOME l` by
     (`eval_operand rop s = eval_operand rop t /\
       eval_operand lop s = eval_operand lop t` by
-       (conj_tac >> drule ld_joint_clean_write_scalar >> disch_then irule >>
+       (conj_tac >> drule ld_joint_clean_write_scalar >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
         simp[] >> metis_tac[]) >> metis_tac[]) >>
   `?d'. eval_operand dop t = SOME d' /\
     (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
-    (drule ld_joint_clean_write_destination >> disch_then irule >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_clean_write_destination >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >> metis_tac[]) >>
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n d) bytes s` >>
   `LENGTH bytes = w2n l` by
     (simp[Abbr `bytes`, LENGTH_TAKE] >> gvs[] >> decide_tac) >>
@@ -176,14 +177,14 @@ Resume ld_joint_clean_write_execution[extcopy]:
           `eval_operand aop s = SOME av`, `eval_operand dop s = SOME d`,
           `eval_operand rop s = SOME r`, `eval_operand lop s = SOME l`] >>
   `!op. MEM op [aop;rop;lop] ==> eval_operand op s = eval_operand op t` by
-    (rpt strip_tac >> drule ld_joint_clean_write_scalar >> disch_then irule >> simp[] >> fs[]) >>
+    (rpt strip_tac >> drule ld_joint_clean_write_scalar >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >> fs[]) >>
   `eval_operand aop t = SOME av /\ eval_operand rop t = SOME r /\
    eval_operand lop t = SOME l` by metis_tac[MEM] >>
   `?d'. eval_operand dop t = SOME d' /\
     (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
-    (drule ld_joint_clean_write_destination >> disch_then irule >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_clean_write_destination >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >> metis_tac[]) >>
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n d) bytes s` >>
   `LENGTH bytes = w2n l` by simp[Abbr `bytes`, LENGTH_TAKE] >>
   qexistsl_tac [`w2n d`,`w2n d'`,`bytes`] >>
@@ -213,7 +214,7 @@ QED
 
 Theorem ld_joint_clean_write_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [MSTORE8;CALLDATACOPY;CODECOPY;RETURNDATACOPY;EXTCODECOPY] /\
   step_inst fuel C inst s = OK s1 ==>
@@ -245,7 +246,7 @@ QED
 Theorem ld_joint_clean_write_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\
   MEM inst.inst_opcode [MSTORE8;CALLDATACOPY;CODECOPY;RETURNDATACOPY;EXTCODECOPY] /\
   ~in_revert_forward fn s /\ step_inst fuel C inst s = OK s1 /\

@@ -11,10 +11,11 @@ Ancestors
   o1FrameLockstep unitTransformDefs contextCodegenRel
   o1ContractMakeSsaPtrOk o1ContractMakeSsaPtrRows o1ContractMakeSsaPtrPos
 
-Theorem make_ssa_stage_ptr:
+Theorem make_ssa_stage_ptr_initial:
   !rpolicy D view C C' vs names lo.
     ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\
     o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
     callee_first names C.ctx_functions /\
     fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
@@ -22,7 +23,7 @@ Theorem make_ssa_stage_ptr:
 Proof
   rpt strip_tac >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+    gvs[o1_initial_state_ok_def] >>
   `~ctx_has_dalloca C` by gvs[o1_src_inv_def] >>
   `C'.ctx_entry = C.ctx_entry /\
    LIST_REL (\fn fn'. ?t t'.
@@ -116,4 +117,17 @@ Proof
   `~p /\ inst2.inst_opcode = NOP ==> inst2.inst_operands = []` by
     (strip_tac >> gvs[]) >>
   drule_all lockstep_ptr_rows >> simp[]
+QED
+
+Theorem make_ssa_stage_ptr:
+  !rpolicy D view C C' vs names lo.
+    ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+    callee_first names C.ctx_functions /\
+    fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
+    ptr_discipline lo C' vs
+Proof
+  rw[o1_run_state_ok_def] >>
+  drule_all make_ssa_stage_ptr_initial >> simp[]
 QED

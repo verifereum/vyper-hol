@@ -221,7 +221,14 @@ Proof
   `isPREFIX code (DROP t.vs_inst_idx bb.bb_instructions)` by
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
   drule_all send_call_read_step >>
-  disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac) >>
+  disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac)
+  >- (`run_inst_seq code t =
+         Abort ExHalt_abort (halt_state (set_returndata [] t))` by
+        asm_simp_tac (srw_ss()) [Abbr `code`, run_inst_seq_def] >>
+      drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_abort_zero_path_mem >>
+      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[exit_result_def, expr_exit_def]) >>
   rename1 `s' = t with <| vs_outcomes := _; vs_requests := _;
     vs_accounts := _; vs_transient := _; vs_logs := _;
     vs_pending_deletions := _; vs_returndata := _ |>` >>

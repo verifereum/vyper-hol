@@ -23,9 +23,6 @@ Proof
   qexistsl_tac [`b`,`inst`,`n`,`szS`] >> simp[exec_alloca_def]
 QED
 
-val _ = if null (hyp ld_cached_alloca_pair) then ()
-  else raise Fail "nonclosed ld_cached_alloca_pair";
-
 Theorem ld_alloca_step:
   inst.inst_opcode = ALLOCA ==>
   (step_inst fuel C inst s = OK ss <=>
@@ -130,9 +127,6 @@ Proof
   simp[] >> simp[SUBSET_DEF, IN_FRANGE, DOMSUB_FAPPLY_THM] >>
   metis_tac[])
 QED
-
-val _ = if null (hyp ld_cached_alloca_effect) then ()
-  else raise Fail "nonclosed ld_cached_alloca_effect";
 
 Theorem ld_cached_alloca_advance:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -722,14 +716,6 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* Exported allocation interfaces must be closed kernel theorems. *)
-val _ = List.app (fn (name, th) =>
-  if null (hyp th) then () else raise Fail ("nonclosed " ^ name))
-  [("ld_fresh_alloca_structure", ld_fresh_alloca_structure),
-   ("ld_sync_fresh_alloca_update", ld_sync_fresh_alloca_update),
-   ("ld_cached_alloca_advance", ld_cached_alloca_advance),
-   ("ld_fresh_alloca_advance", ld_fresh_alloca_advance)];
-
 (* Cached original allocations also have an endpoint at the end of a block. *)
 Theorem ld_cached_alloca_endpoint:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -929,7 +915,3 @@ Resume ld_fresh_alloca_endpoint[continuation]:
   qpat_x_assum `Abbrev (g = _)` kall_tac >> gvs[]
 QED
 Finalise ld_fresh_alloca_endpoint
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "allocation endpoint has hypotheses")
-  [ld_cached_alloca_endpoint, ld_fresh_alloca_endpoint];

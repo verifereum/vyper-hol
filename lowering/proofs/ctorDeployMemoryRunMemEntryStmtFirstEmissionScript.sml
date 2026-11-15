@@ -113,24 +113,6 @@ Proof
   metis_tac[cj 1 first_emission_emit_helpers]
 QED
 
-Theorem ctor_external_void_return_first_emission[local]:
-  !nr a x b.
-    (let (enabled,nk,ut,view) = nr in
-       do (if enabled then compile_nonreentrant_unlock nk ut view else return ());
-          emit_inst STOP [] [] od) a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  gen_tac >> PairCases_on `nr` >> simp_tac (bool_ss ++ pairSimps.PAIR_ss) [LET_THM] >>
-  ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-  >- (Cases_on `nr0` >> simp[] >>
-      metis_tac[ctor_unlock_first_emission, first_emission_return]) >>
-  mp_tac (ctor_emit_inst_weak_first_emission |> Q.SPEC `STOP`) >>
-  simp[] >> metis_tac[]
-QED
-
 Theorem ctor_return_none_stmt_first_emission:
   !ce lc ty a x b. compile_stmt ce lc ty (Return NONE) a = (x,b) ==>
     cs_extends a b /\
@@ -282,31 +264,35 @@ Proof
 QED
 
 Theorem ctor_dynarray_append_first_emission:
-  !ce base v ws sz dt st cap prim loc sop a x b.
-    compile_dynarray_append ce base v ws sz dt st cap prim (load_opc_for loc) sop a = (x,b) ==>
+  !ce base v ws sz dt st cap prim loc a x b.
+    compile_dynarray_append ce base v ws sz dt st cap prim loc a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 11 gen_tac >> simp_tac bool_ss [compile_dynarray_append_def, LET_THM] >>
+  ntac 10 gen_tac >> simp_tac bool_ss [compile_dynarray_append_def, LET_THM] >>
   ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (Cases_on `loc` >> simp_tac bool_ss [load_opc_for_def] >>
-      rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[]) >>
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at Any entryReachBodyFirstEmissionSupportTheory.first_emission_ptr_load >>
+      simp[]) >>
   gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >> conj_tac
        >- simp[cs_appends_emit_helpers] >> rpt gen_tac) >>
   ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
-  >- (Cases_on `prim` >> simp[cs_appends_emit_helpers] >>
+  >- (IF_CASES_TAC
+      >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_ptr_store]) >>
       IF_CASES_TAC
       >- (ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >>
           simp[cs_appends_emit_helpers] >> irule ctor_ci_mono_appends >>
           simp[ci_mono_compile_store_memory, comp_return_def, ci_mono_def, cs_extends_refl]) >>
+      IF_CASES_TAC
+      >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_imm_store_words]) >>
       irule ctor_ci_mono_appends >> simp[ci_mono_compile_store_slots]) >>
-  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
+  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+  rpt gen_tac >> irule ctor_ci_mono_appends >> simp[ci_mono_compile_ptr_store]
 QED
 
 Theorem ctor_append_stmt_first_emission:
@@ -524,7 +510,8 @@ Resume ctor_typed_memory_first_emission[dispatch]:
       TRY (rename1 `compile_store_memory_typed ce dst (ArrayT de db) src (ArrayT se sb)` >>
            Cases_on `db` >> Cases_on `sb`) >>
       fs[] >> simp[Once compile_store_memory_typed_def, LET_THM] >>
-      metis_tac[ctor_copy_memory_first_emission]) >>
+      rpt gen_tac >> strip_tac >>
+      drule ctor_copy_memory_first_emission >> simp[]) >>
   asm_simp_tac bool_ss [Once compile_store_memory_typed_def] >>
   mp_tac (cj 2 first_emission_emit_helpers |> Q.SPEC `INVALID`) >> simp[] >> metis_tac[]
 QED
@@ -1003,25 +990,6 @@ Theorem ctor_annassign_stmt_first_emission:
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   MATCH_ACCEPT_TAC (cj 1 entryReachBodyFirstEmissionStmtTheory.first_emission_compile_stmt)
-QED
-
-Theorem ctor_snapshot_vv_first_emission[local]:
-  !ce copy vv a x b. compile_snapshot_vv ce copy vv a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  rpt IF_CASES_TAC
-  >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_unwrap_value_first_emission] >>
-      metis_tac[first_emission_return])
-  >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_materialize_vv_first_emission] >>
-      metis_tac[first_emission_return]) >>
-  metis_tac[first_emission_return]
 QED
 
 Theorem ctor_baseassign_stmt_first_emission:

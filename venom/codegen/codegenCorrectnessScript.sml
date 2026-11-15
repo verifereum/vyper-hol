@@ -69,7 +69,9 @@ Ancestors
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
-  frameGas venomRunBounded
+  frameGas venomRunBounded frameStep codegenEntryBounded
+  codegenAsmProgOk asmFrameRel venomRetProps
+  asmFrameGas asmFrameSurplus gasCount
 Libs
   BasicProvers
 
@@ -129,75 +131,6 @@ QED
    region is located by [ops_contain_at]. *)
 
 
-(* Bridge from a positioned context-region entry to an assembly state. *)
-Theorem initial_state_bridge[local]:
-  ∀cp prog off fn vs es ctx i r unit lo.
-    initial_state_rel cp prog off fn vs es /\
-    generate_context_plan ctx = SOME cp /\
-    i < LENGTH ctx.ctx_functions /\
-    EL i ctx.ctx_functions = fn /\
-    EL i cp.cp_regions = r /\
-    ops_contain_at off
-      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
-      (execute_plan cp.cp_initial_fmp r.sr_plan) /\
-    prog = execute_plan cp.cp_initial_fmp (context_plan_ops cp) ++
-           data_segment_asm unit.cu_data_segment /\
-    lo = SND (compute_label_offsets prog) /\
-    (case es.contexts of
-       (ctxt, rb) :: _ =>
-         ctxt.msgParams.code = assemble prog /\
-         ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog)
-     | [] => F) ==>
-    ∃as0.
-      context_venom_asm_rel cp lo
-        (fn_init_ps fn r.sr_spill_base) vs as0 /\
-      asm_evm_rel prog as0 es /\
-      asm_block_at prog off
-        (execute_plan cp.cp_initial_fmp r.sr_plan) /\
-      as0.as_pc = off
-Proof
-  rpt gen_tac >> strip_tac >>
-  every_case_tac >> gvs[] >>
-  rename1 `es.contexts = (ctxt, rb) :: rest` >>
-  qexists_tac `<| as_stack := ctxt.stack;
-                   as_memory := buffer_to_list ctxt.memory;
-                   as_accounts := vs.vs_accounts;
-                   as_transient := vs.vs_transient;
-                   as_returndata := vs.vs_returndata;
-                   as_logs := vs.vs_logs;
-                   as_pc := off;
-                   as_call_ctx := vs.vs_call_ctx;
-                   as_tx_ctx := vs.vs_tx_ctx;
-                   as_block_ctx := vs.vs_block_ctx;
-                   as_code := vs.vs_code;
-                   as_prev_hashes := vs.vs_prev_hashes;
-                   as_outcomes := vs.vs_outcomes;
-                   as_requests := vs.vs_requests;
-                   as_pending_deletions := vs.vs_pending_deletions;
-                   as_gas_readings := vs.vs_gas_readings |>` >>
-  gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
-      block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
-      context_venom_asm_rel_def, fn_init_ps_def,
-      init_plan_state_def, init_spill_alloc_def, LET_THM,
-      plan_spill_rel_def, FLOOKUP_DEF, asm_evm_rel_def] >>
-  conj_tac >- suspend "plan_stack" >>
-  conj_tac >- (rpt gen_tac >> simp[CONJ_ASSOC]) >>
-  gvs[asm_block_at_def, ops_contain_at_def, EL_APPEND1]
-QED
-
-Resume initial_state_bridge[plan_stack]:
-  simp[plan_stack_rel_def, operand_val_def] >>
-  rpt strip_tac >>
-  rename1 `j < LENGTH ctxt.stack` >>
-  simp[EL_REVERSE, EL_MAP, operand_val_def, FLOOKUP_DEF] >>
-  qpat_x_assum `!k. k < LENGTH ctxt.stack ==> _`
-    (qspec_then `PRE (LENGTH ctxt.stack - j)` mp_tac) >>
-  simp[EL_REVERSE] >>
-  `PRE (LENGTH ctxt.stack - PRE (LENGTH ctxt.stack - j)) = j` by simp[] >>
-  simp[]
-QED
-
-Finalise initial_state_bridge
 
 (* run_blocks never returns OK — it always terminates with
    Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
@@ -245,7 +178,8 @@ Definition venom_frame_rel_def:
         es'.rollback.tStorage = vs'.vs_transient /\
         vs'.vs_requests = call_requests es
     | Abort Revert_abort vs' =>
-        ?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs
+        (?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs) /\
+        frame_inst_raises es Reverted Revert
     | Abort ExHalt_abort vs' =>
         ?exc lgs. exc <> Reverted /\ frame_outcome es r es' (SOME exc) [] lgs
     | Error _ => T
@@ -283,22 +217,106 @@ Proof
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   simp[venom_frame_rel_def] >>
   Cases_on `run_context fuel unit.cu_context vs` >>
-  gvs[run_context_never_ok]
+  gvs[run_context_not_ok]
   >- (res_tac >> gvs[venom_asm_terminal_rel_def]) >>
   rename1 `Abort a _` >> Cases_on `a` >>
   res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
 QED
 
-(* PLANNED ADMISSION S7g (sufficient gas), next to S7.  Given the Venom
-   run's resource bound (fuel and memory, venom_run_bounded), some gas g,
-   independent of the EVM state, is enough: with g' >= g more gas, our
-   frame runs out of gas only once it has run a RETURNDATACOPY, whose size
-   the callee sets.  The generated code runs RETURNDATACOPY only to forward
-   a failed callee's revert data, followed by the REVERT's operands and the
-   REVERT, so the exemption covers that tail.  Proof idea: each Venom block runs a bounded number of assembly
-   steps, each with a bounded cost under the memory bound, and each call
-   forwards at most all but 1/64 of the remaining gas, so g grows by a
-   factor of 64 per call the fuel allows. *)
+(* S7g's surplus form, for the stages that need gas left over after our
+   frame's steps (D).  Given the Venom run's resource bound (fuel and memory,
+   venom_run_bounded), some gas g, independent of the EVM state, is
+   enough: with g' >= g more gas, each step of our frame that no
+   RETURNDATACOPY of it (whose size the callee sets) comes at or before
+   doesn't run out of gas at our depth and leaves at least D.  The generated code runs
+   RETURNDATACOPY only to forward a failed callee's revert data, followed
+   by the REVERT's operands and the REVERT.  Proof idea: an instance of
+   the program-generic asm_frame_gas_surplus (asmFrameSurplus) at the N
+   and H of codegen_entry_asm_bounded (whose memory premise comes from
+   venom_run_bounded's mem_inv, conjoined with Inv), from the entry
+   relation asm_frame_rel_entry as codegen_asm_run_call sets it up. *)
+Theorem codegen_gas_surplus:
+  !rpolicy unit cp prog fuel M D.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es s op r s'.
+      g <= g' /\ wf_state (add_frame_gas g' es) /\
+      g' <= frame_gas_left (add_frame_gas g' es) /\
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
+      frame_inst_at (add_frame_gas g' es) s op /\
+      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
+           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
+                       step a = (INL (), b)) t s) /\
+      step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
+      ==>
+      r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_run >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qspecl_then [`H`, `N`, `D`] strip_assume_tac asm_frame_gas_surplus >>
+  qexists_tac `g` >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `e = add_frame_gas g' es` >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  `asm_run_bounded (SND (compute_label_offsets prog))
+     (build_offset_to_pc prog) prog H N (entry_asm_state vs e)` by
+    metis_tac[] >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD e.contexts)).msgParams.callee
+       e.rollback.accounts)` by
+    (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
+  `asm_frame_rel prog vs.vs_data_section e (entry_asm_state vs e) e` by
+    (irule asm_frame_rel_entry >> simp[] >> metis_tac[]) >>
+  `g <= frame_gas_left e` by decide_tac >>
+  metis_tac[]
+QED
+
+(* Lockstep corollary: our frame runs only instructions of prog (or STOP
+   past the code's end), so code without an assembly RETURNDATACOPY has no
+   frame state that runs one. *)
+Theorem codegen_no_returndatacopy:
+  !rpolicy unit cp prog fuel M Inv vs es t.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\ wf_state es /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel cp prog unit.cu_context vs es /\
+    venom_run_bounded fuel M unit.cu_context vs /\
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
+    ~MEM (AsmOp "RETURNDATACOPY") prog
+    ==>
+    ~frame_inst_at es t ReturnDataCopy
+Proof
+  rpt strip_tac >>
+  drule_all codegen_entry_asm_bounded_run >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  `asm_run_bounded (SND (compute_label_offsets prog))
+     (build_offset_to_pc prog) prog H N (entry_asm_state vs es)` by
+    metis_tac[] >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD es.contexts)).msgParams.callee
+       es.rollback.accounts)` by
+    (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
+  `asm_frame_rel prog vs.vs_data_section es (entry_asm_state vs es) es` by
+    (irule asm_frame_rel_entry >> simp[] >> metis_tac[]) >>
+  drule_all asm_frame_no_returndatacopy >> metis_tac[]
+QED
+
+(* S7g (sufficient gas), next to S7: codegen_gas_surplus with D = 0.  With
+   g' >= g more gas, our frame runs out of gas only once it has run a
+   RETURNDATACOPY, whose size the callee sets. *)
 Theorem codegen_gas_sufficient:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -310,14 +328,110 @@ Theorem codegen_gas_sufficient:
       codegen_context_obligations Inv unit.cu_context cp /\
       codegen_reachability_package Inv unit.cu_context vs /\
       initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
-      venom_run_bounded fuel M unit.cu_context vs
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all codegen_gas_surplus >>
+  disch_then (qspecl_then [`fuel`, `M`, `0`] strip_assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  drule_all codegen_asm_run_call >> strip_tac >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  rpt strip_tac >> gvs[frame_inst_raises_def] >>
+  CCONTR_TAC >>
+  `wf_state (add_frame_gas g' es) /\
+   g' <= frame_gas_left (add_frame_gas g' es)` by
+    metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
+  `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
+    fs[frame_inst_at_def] >>
+  first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
+                   mp_tac) >>
+  metis_tac[]
+QED
+
+Theorem initial_ctx_rel_gas_tail[local]:
+  !cp prog ctx vs es tail. initial_ctx_rel cp prog ctx vs es ==>
+  initial_ctx_rel_tail tail cp prog ctx
+    (vs with vs_gas_readings := gas_readings es ++ tail) es
+Proof
+  simp[initial_ctx_rel_tail_def] >> rpt strip_tac >>
+  `vs with vs_gas_readings := gas_readings es = vs` by
+    gvs[initial_ctx_rel_def, venom_state_component_equality] >>
+  gvs[]
+QED
+
+Theorem codegen_terminal_gas_tail[local]:
+  !fuel rpolicy unit cp prog Inv vs es tail r es' vf.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel_tail tail cp prog unit.cu_context vs es /\
+    run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
+    (run_context fuel unit.cu_context vs = Halt vf \/
+     ?a. run_context fuel unit.cu_context vs = Abort a vf) ==>
+    vf.vs_gas_readings = tail
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_asm_run_call_tail >> strip_tac >> gvs[] >>
+  drule_all codegen_entry_asm_sim_tail >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
+QED
+
+Theorem gas_prefix_padding[local]:
+  !gs n. LENGTH gs <= n ==>
+    gas_prefix n gs = gs ++ REPLICATE (n - LENGTH gs) 0w
+Proof
+  rpt strip_tac >>
+  simp[gasOracleReplayTheory.gas_prefix_def, TAKE_APPEND,
+       TAKE_LENGTH_TOO_LONG, evmStepSimTheory.take_replicate_le]
+QED
+
+(* The replay count cannot consume padding beyond the actual EVM readings. *)
+Theorem codegen_gas_replay_count_bound:
+  !fuel rpolicy unit cplan prog vs es r es' n vf.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    initial_ctx_rel cplan prog unit.cu_context vs es /\
+    (!k. ?Inv.
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context
+        (vs with vs_gas_readings := gas_readings es ++ REPLICATE k 0w)) /\
+    run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
+    gas_replay_at n (run_context fuel unit.cu_context) vs /\
+    (run_context fuel unit.cu_context vs = Halt vf \/
+     ?a. run_context fuel unit.cu_context vs = Abort a vf)
+    ==> n <= LENGTH (gas_readings es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  spose_not_then assume_tac >>
+  `vs.vs_gas_readings = gas_readings es` by gvs[initial_ctx_rel_def] >>
+  `gas_prefix n vs.vs_gas_readings =
+   gas_readings es ++ REPLICATE (n - LENGTH (gas_readings es)) 0w` by
+    (gvs[] >> irule gas_prefix_padding >> simp[]) >>
+  qpat_x_assum `gas_replay_at _ _ _` mp_tac >>
+  pure_rewrite_tac[gasOracleReplayTheory.gas_replay_at_def] >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  simp[stateEquivTheory.lift_result_def] >> strip_tac >>
+  qpat_x_assum `!k. ?Inv. _`
+    (qspec_then `n - LENGTH (gas_readings es)` strip_assume_tac) >>
+  drule initial_ctx_rel_gas_tail >>
+  disch_then (qspec_then `REPLICATE (n - LENGTH (gas_readings es)) 0w`
+    assume_tac) >>
+  Cases_on `run_context fuel unit.cu_context
+    (vs with vs_gas_readings := gas_readings es ++
+      REPLICATE (n - LENGTH (gas_readings es)) 0w)` >>
+  gvs[stateEquivTheory.lift_result_def] >>
+  `(vf with vs_gas_readings := []).vs_gas_readings =
+    REPLICATE (n - LENGTH (gas_readings es)) (0w:256 word)` by
+    (irule codegen_terminal_gas_tail >> metis_tac[]) >>
+  pop_assum (mp_tac o AP_TERM ``LENGTH : (256 word) list -> num``) >> simp[]
 QED
 
 (* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;

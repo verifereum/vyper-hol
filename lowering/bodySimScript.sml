@@ -39,7 +39,7 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
-  immutableLocationProps exprSimMapDefs
+  immutableLocationProps exprSimMapDefs supportedNameRoot
 Libs
   monadsyntax
 
@@ -98,6 +98,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    ALOOKUP cx.sources cx.txn.target = SOME [(NONE, tops)] /\
     (cx.in_deploy ==> supported_program_deploy tops) /\
     (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -141,6 +142,16 @@ Proof
   gvs[check_toplevel_decl_def]
 QED
 
+Theorem body_inv_copies_subscript_base:
+  !tops ctx cenv cx obj idx.
+    body_inv tops ctx cenv cx ==>
+    copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
+Proof
+  rw[body_inv_def, cenv_module_pins_def,
+     exprLoweringTheory.copies_subscript_base_def,
+     vyperInterpreterTheory.subscript_reads_base_def]
+QED
+
 Theorem cenv_module_pins_immutable_section_layout:
   !tops cenv. cenv_module_pins tops cenv ==> immutable_section_layout cenv tops
 Proof
@@ -154,6 +165,58 @@ Theorem body_inv_immutable_section_layout:
 Proof
   rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
   simp[]
+QED
+
+(* A name const_name_root marks is a constant declaration of tops: neither a
+   place root, storage nor an immutable, so supported code never names one. *)
+Theorem body_inv_const_name_decl:
+  body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
+  ?vis c ty slot.
+    supported_variable_decl tops nsid = SOME (vis,Constant c,ty,slot)
+Proof
+  strip_tac >>
+  `cx_tops cx = tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    gvs[body_inv_def, gasContextTheory.cx_tops_module] >>
+  PairCases_on `nsid` >> gvs[cx_const_name_def] >>
+  drule_all distinct_module_consts_env_names_constant >> simp[]
+QED
+
+Theorem body_inv_const_name_not_root:
+  body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
+  ~supported_place_root tops nsid /\
+  (!ty. ~supported_storage_value tops nsid ty) /\
+  supported_immutable_type tops nsid = NONE
+Proof
+  strip_tac >> drule_all body_inv_const_name_decl >> strip_tac >>
+  drule supported_constant_decl_not_root >> simp[]
+QED
+
+Theorem body_inv_const_name_root:
+  body_inv tops ctx cenv cx ==>
+  !x. const_name_root cx x ==>
+    ?ty id. x = TopLevelName ty id /\
+      ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
+      supported_immutable_type tops id = NONE
+Proof
+  rpt strip_tac >> Cases_on `x` >> gvs[const_name_root_def] >>
+  drule_all body_inv_const_name_not_root >> simp[]
+QED
+
+Theorem body_inv_const_name_free:
+  body_inv tops ctx cenv cx /\ supported_expr tops e ==>
+  ~supported_expr_exists (const_name_root cx) e
+Proof
+  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
+  drule_all supported_expr_no_name_root >> simp[]
+QED
+
+Theorem body_inv_target_const_name_free:
+  body_inv tops ctx cenv cx /\ supported_target_info tops bindings bt <> NONE ==>
+  ~supported_target_exists (const_name_root cx) bt
+Proof
+  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
+  irule (cj 2 supported_target_info_no_name_root) >> metis_tac[]
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose

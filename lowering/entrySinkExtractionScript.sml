@@ -45,9 +45,9 @@ Theorem step_inst_base_nonterminator_no_exit:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
-  simp[exec_pure1_def, AllCaseEqs()] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
+  >>~- ([`exec_pure1 _ _ _`], simp[exec_pure1_def, AllCaseEqs()])
+  >>~- ([`exec_pure2 _ _ _`], simp[exec_pure2_def, AllCaseEqs()]) >>
   simp[exec_pure3_def, AllCaseEqs()] >>
   simp[exec_read0_def, AllCaseEqs()] >>
   simp[exec_gas_def, AllCaseEqs()] >>

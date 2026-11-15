@@ -70,6 +70,7 @@ Proof
    accounts_runtime_well_typed esK.accounts` by
     fs[expr_sim_inv_def,
       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  `cx.txn.is_static ==> amount = 0` by simp[] >>
   drule_all raw_call_source_tail >>
   disch_then (qspecl_then [`target`,
     `forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)`,`bs`]
@@ -137,7 +138,8 @@ Resume raw_call_tail_outcome_mem[path]:
     (Cases_on `flags.rcf_is_static` >> simp[]) >>
   `take_call_outcome target
     (read_memory (w2n (n2w (b+32):bytes32)) (w2n (n2w (LENGTH bs):bytes32)) t)
-    (if flags.rcf_is_static then NONE else SOME amount) esK = (INL (rq,outcome),es1)` by simp[] >>
+    (if flags.rcf_is_static then NONE else SOME amount) esK = (INL (rq,outcome),es1)` by
+    (qpat_x_assum `take_call_outcome _ _ _ esK = _` mp_tac >> simp[]) >>
   `MAP FDOM esK.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes` by simp[] >>
   `0 < flags.rcf_max_outsize ==> evaluate_type (get_tenv cx)
     (expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)) =

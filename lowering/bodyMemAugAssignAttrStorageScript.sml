@@ -43,6 +43,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* ===== The source side (S1 copies) ===== *)
 
 (* S1 stmtSimAugAssignAttrStorage's eval_target_place_attr_toplevel_field. *)
@@ -776,6 +779,9 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
   Cases_on `write_storage_slot cx tr (n2w slot + n2w off) ftv result
     (ee with gas_obs := [])` >>
   rename1 `_ = (wres, fin)` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   qspecl_then [`func`, `cenv`, `cx`, `ee with gas_obs := []`, `s`, `tr`,
     `n2w slot + n2w off`, `ftv`, `result`, `typed_val_to_w256 ftv result`,
     `wres`, `fin`, `ctx`] mp_tac stmt_state_rel_write_storage_word >>
@@ -959,7 +965,7 @@ Proof
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>

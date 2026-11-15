@@ -176,5 +176,5 @@ Proof
   >- metis_tac[] >>
   qexistsl [`lo`,`x`] >> simp[] >> reverse conj_tac
   >- (first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[]) >>
-  drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >> simp[]
+  drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] step_writes_source_subset) >> simp[]
 QED

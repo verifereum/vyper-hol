@@ -40,7 +40,7 @@ Proof
      `ctx`, `func`, `bb`] mp_tac) >>
   simp[is_terminator_def, run_inst_seq_mem_ok_def,
        run_inst_seq_def, below_frontier_MLOAD, step_MLOAD,
-       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_def,
+       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_read1_def, eval_operand_def,
        venomStateTheory.eval_operands_def, arithmeticTheory.ADD1]
 QED
@@ -68,7 +68,7 @@ Proof
     (simp[run_inst_seq_mem_ok_def] >> conj_tac
      >- (irule below_frontier_no_ranges >> Cases_on `tr` >> simp[mk_inst_def]) >>
      Cases_on `tr` >> simp[inst_dload_in_section_def, mk_inst_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operands_def]) >>
   drule run_inst_seq_gas_path_mem >>
   disch_then (qspecl_then
@@ -76,7 +76,7 @@ Proof
      `(if tr then tstore else sstore) dw w s`, `ctx`, `func`, `bb`] mp_tac) >>
   Cases_on `tr` >>
   simp[is_terminator_def, run_inst_seq_def,
-       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_def,
+       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operands_def,
        arithmeticTheory.ADD1]
 QED
@@ -947,9 +947,17 @@ Proof
  rename1 `compile_store_slots cenv ms ds ty tr b = (unit,sc)` >>
  Cases_on `unit` >> gvs[] >>
  `ci_mono sa a /\ ci_mono a b /\ ci_mono b sc /\ ci_mono sc sb` by
-   metis_tac[exprLoweringPropsTheory.ci_mono_compile_lit_byte_offset,
-     cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots,
-     cj 2 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
+   (rpt conj_tac
+    >- (mp_tac (Q.SPECL [`src`, `32 * so`, `sa`]
+          exprLoweringPropsTheory.ci_mono_compile_lit_byte_offset) >>
+        asm_rewrite_tac[pairTheory.SND])
+    >- (mp_tac (Q.SPECL [`slot`, `so`, `a`]
+          exprLoweringPropsTheory.ci_mono_compile_lit_byte_offset) >>
+        asm_rewrite_tac[pairTheory.SND])
+    >- (mp_tac (Q.SPECL [`cenv`, `ms`, `ds`, `ty`, `tr`, `b`]
+          (cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots)) >>
+        asm_rewrite_tac[pairTheory.SND]) >>
+    metis_tac[cj 2 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND]) >>
  `fn_has_code sa sc func /\ fn_has_code sc sb func` by
    (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
  qpat_x_assum `tuple_in_memory _ _ _ _` mp_tac >>
@@ -1762,7 +1770,16 @@ Resume append_sparse_dynarray_checked[header]:
   `eval_operand slot u = SOME dw /\
    eval_operand cnt u = SOME (mload (w2n sw) s)` by
     (conj_tac
-     >- (Cases_on `slot` >> gvs[eval_operand_def] >> metis_tac[]) >>
+     >- (qpat_assum `eval_operand slot s = SOME dw` mp_tac >>
+         qpat_assum `!x. src = Var x \/ slot = Var x ==> _` mp_tac >>
+         qpat_assum `!x. not_fresh_at sa x ==> _` mp_tac >>
+         qpat_assum `!x. data = Var x \/ dst = Var x \/ cnt = Var x \/ slot = Var x ==> _`
+           mp_tac >>
+         qpat_assum `!x. not_fresh_at sc x ==> _` mp_tac >>
+         qpat_assum `p.vs_labels = s.vs_labels` mp_tac >>
+         qpat_assum `u.vs_labels = p.vs_labels` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         Cases_on `slot` >> simp[eval_operand_def] >> metis_tac[]) >>
      Cases_on `cnt` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `~u.vs_call_ctx.cc_static` by metis_tac[] >>
   drule_all append_sparse_slot_store_mem >>
@@ -2459,7 +2476,7 @@ QED
 
 Theorem append_storage_aggregate_abort_path:
   compile_dynarray_append cenv bop vop 1 n dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot s else sload slot s) /\
@@ -2526,7 +2543,8 @@ Resume append_storage_aggregate_abort_path[path]:
   `run_inst_seq_mem_ok (emitted_insts sa s6) s` by
     (irule run_inst_seq_mem_ok_every >> fs[EVERY_MEM] >> rpt strip_tac >>
      qpat_x_assum `!i. MEM i (emitted_insts sa s6) ==> i.inst_opcode = SLOAD \/ _` drule >>
-     simp[] >> strip_tac >> gvs[below_frontier_no_ranges, inst_dload_in_section_def]) >>
+     simp[] >> strip_tac >> gvs[below_frontier_no_ranges] >>
+     gvs[inst_dload_in_section_def]) >>
   `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa s6 ++ rest` by
     (gvs[fn_has_code_def, same_blocks_def, inst_extends_def, IS_PREFIX_APPEND,
@@ -2542,7 +2560,7 @@ Finalise append_storage_aggregate_abort_path
 
 Theorem append_storage_aggregate_suffix_mem:
   compile_dynarray_append cenv bop vop 1 stride dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   cap < dimword (:256) /\ stride < dimword (:256) /\
   evaluate_type tenv dt = SOME tv /\ value_has_type tv v /\

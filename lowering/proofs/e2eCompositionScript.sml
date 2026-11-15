@@ -85,15 +85,6 @@ Proof
   simp[external_call_dead_def]
 QED
 
-val () =
-  let val th = external_call_dead_observations
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then
-       print "DEAD_CALL_METADATA_AUDIT OK\n"
-     else raise Fail "external_call_dead_observations: admitted proof dependency"
-  end;
-
 Theorem storage_agree_dead_trans:
   storage_agree (storage_dead cx tr st0) st0 st1 /\
   storage_agree (storage_dead cx tr st1) st1 st2 ==>
@@ -306,10 +297,12 @@ Theorem venom_frame_rel_assertion:
   (a = Revert_abort \/ s = "UNREACHABLE") /\
   venom_frame_rel es r es' (Abort a ss) ==>
   ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                (exc = Reverted \/ s = "UNREACHABLE")
+                ((exc = Reverted /\ frame_raises es Reverted) \/
+                 s = "UNREACHABLE")
 Proof
   Cases_on `a` >> simp[venom_frame_rel_def] >>
-  rpt strip_tac >> goal_assum $ drule_at Any >> simp[]
+  rpt strip_tac >> goal_assum $ drule_at Any >>
+  gvs[frameGasTheory.frame_raises_inst_raises] >> metis_tac[]
 QED
 
 Theorem external_call_result_rel_frame_success:

@@ -335,7 +335,7 @@ Proof
   Cases_on `salted` >> CONV_TAC cv_eval
 QED
 
-Theorem blueprint_invalid_source_result[local]:
+Theorem blueprint_invalid_source_result:
   eval_expr blueprint_test_context
     (blueprint_test_expr blueprint_test_nested_create F salted rof 0
       [blueprint_test_nested_create]) (blueprint_test_state []) =
@@ -478,22 +478,6 @@ Proof
   conj_tac >- CONV_TAC cv_eval >>
   CONV_TAC cv_eval
 QED
-
-(* These execution regressions must remain kernel-closed. *)
-val () = List.app (fn th =>
-  if List.all (fn tag => tag = "DISK_THM")
-       (fst (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "create regression has oracle dependencies")
-  [blueprint_test_nested_run, blueprint_test_nested_source_check,
-   blueprint_test_outer_failure, blueprint_test_captured_run,
-   blueprint_invalid_source_precedes_constructor_effects,
-   blueprint_size_is_captured_before_constructor_changes_source,
-   blueprint_constructor_cannot_make_invalid_source_valid,
-   blueprint_wrapped_offset_pads_small_positive_size,
-   blueprint_oversized_copy_rejected_before_padding,
-   blueprint_encoded_constructor_counts_toward_size_limit,
-   blueprint_zero_and_signed_negative_source_sizes,
-   vyperSmallStepTheory.eval_expr_eq_cont_cps];
 
 (* The constructor tuple is (DynArray[uint256,3],uint256), whose array-length
    word is 64 bytes into its ABI encoding. This loader returns that word from

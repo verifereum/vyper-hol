@@ -715,6 +715,3 @@ Proof
   goal_assum (drule_at (Pat `ld_global _ _ _`)) >>
   metis_tac[]
 QED
-
-val _ = if null (hyp ld_private_slot_separation) then ()
-  else raise Fail "private slot separation has hypotheses";

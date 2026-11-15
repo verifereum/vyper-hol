@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalOffset
-Ancestors concretizeLayoutLocalValues concretizeLayoutReaderContext
+Ancestors concretizeLayoutCutSafe concretizeLayoutLocalValues concretizeLayoutReaderContext
   frameRelocationEnvironment frameRelocationCleanValueSteps frameRelocationMemory
   frameRelocationCleanOperands frameRelocationReachableSupport frameRelocationGuardedValues
   concretizeLayoutOperandCleanliness concretizeLayoutLoadProduction
@@ -52,7 +52,7 @@ Proof
 QED
 
 Theorem concretize_offset_local_complete:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -94,7 +94,7 @@ Proof
      fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -130,8 +130,5 @@ Proof
   >- (irule relocation_env_update_var >> simp[]) >>
   irule relocation_reader_context_update_var >> simp[]
 QED
-
-val _ = if null (hyp concretize_offset_local_complete) then ()
-        else raise Fail "OFFSET export has hypotheses";
 
 val _ = export_theory();

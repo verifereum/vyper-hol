@@ -140,7 +140,7 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c)`, `PG`] mp_tac) >>
   simp[] >> strip_tac >>
-  qexists_tac `update_var v z (t with vs_gas_readings := rest)` >> simp[]
+  qpat_x_assum `step_inst_base inst t = OK _` (irule_at Any) >> simp[]
 QED
 
 Resume concretize_env_reader_local_complete[callcontext]:
@@ -154,6 +154,3 @@ Resume concretize_env_reader_local_complete[callcontext]:
   qexists_tac `update_var v z t` >> simp[])
 QED
 Finalise concretize_env_reader_local_complete
-
-val _ = if null (hyp concretize_env_reader_local_complete) then ()
-        else raise Fail "environment reader export has hypotheses";

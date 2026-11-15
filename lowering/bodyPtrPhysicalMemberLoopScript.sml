@@ -1,7 +1,7 @@
 (* Literal traversal uses physical child-store endpoints. *)
 Theory bodyPtrPhysicalMemberLoop
 Ancestors
-  bodyPtrPhysicalMemberOutcome bodyPtrPhysicalLiteralLoop
+  bodyPtrPhysicalMemberOutcome
   bodyPtrMakeArrayTupleLoop bodyPtrPhysicalChildStore
   bodyPtrMakeArrayConsOutcome exprLowering exprLoweringProps emitHelperProps
   compileEnv context bodyPtrMakeArrayConsBind gasSummaryComposePtr

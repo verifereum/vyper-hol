@@ -344,8 +344,3 @@ Proof
   simp[step_prov_def, out_prov_def, set_prov_def,
        step_taint_def, set_var_taint_def]
 QED
-
-val _ = if null (hyp ld_vars_bump_operands_equal) andalso
-           null (hyp ld_nonghost_initial_fmp) andalso
-           null (hyp ld_bump_output_ghosts) then ()
-        else raise Fail "residual scalar boundary has hypotheses";

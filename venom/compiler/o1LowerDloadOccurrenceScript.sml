@@ -347,6 +347,19 @@ Proof
   gen_tac >> Cases_on `aid = inst.inst_id` >> simp[]
 QED
 
+Theorem step_inst_noninvoke_allocas_submap:
+  inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK s' ==>
+  s.vs_allocas SUBMAP s'.vs_allocas
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
+  >- (drule_all occurrence_alloca_metadata >> strip_tac >>
+      simp[SUBMAP_FLOOKUP_EQN] >> rpt strip_tac >>
+      Cases_on `x = inst.inst_id` >> gvs[] >> metis_tac[]) >>
+  `s'.vs_allocas = s.vs_allocas` by
+    (irule step_inst_base_preserves_allocas >>
+     metis_tac[step_inst_non_invoke]) >> simp[]
+QED
+
 Theorem occurrence_sites_step_preserves:
   occurrence_allocas_ok B a s /\ inst.inst_opcode = ALLOCA /\
   step_inst fuel C inst s = OK s' /\ FLOOKUP B id = SOME site ==>
@@ -620,4 +633,13 @@ Proof
   strip_tac >> drule frame_reachable_occurrence_lift >> strip_tac >>
   drule occ_frame_reachable_annotation >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem occurrence_saved_ok_allocas:
+  !U stk j. occurrence_saved_ok B U stk /\ j < LENGTH stk ==>
+    FLOOKUP B ((EL j U).of_owner,aid) =
+      FLOOKUP (EL j stk).cf_state.vs_allocas aid
+Proof
+  Induct >> simp[occurrence_saved_ok_def] >> rpt strip_tac >>
+  Cases_on `j` >> gvs[occurrence_allocas_ok_def] >> metis_tac[]
 QED

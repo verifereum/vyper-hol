@@ -9,13 +9,14 @@ Ancestors
 
 Theorem append_storage_word_suffix_footprint_mem:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   same_blocks sa sf /\ inst_extends sa sf /\
   EVERY (\i. MEM i.inst_opcode [SLOAD; TLOAD; LT; ASSERT; ADD; MUL; SSTORE; TSTORE])
     (emitted_insts sa sf)
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   simp[same_blocks_def, inst_extends_def, emitted_insts_def] >>
@@ -26,11 +27,12 @@ QED
 
 Theorem append_storage_word_suffix_open_mem:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sb = ((),sf) ==>
   ~block_is_terminated sf
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[] >>
   pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>
@@ -41,7 +43,7 @@ QED
 
 Theorem append_storage_word_suffix_mem_ok:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   run_inst_seq_mem_ok (emitted_insts sa sf) s
 Proof
   strip_tac >> drule append_storage_word_suffix_footprint_mem >> strip_tac >>
@@ -112,11 +114,12 @@ QED
 
 Theorem append_storage_word_suffix_grows_mem:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+    (if tr then LocTransient else LocStorage) sa = ((),sf) ==>
   sa.cs_next_var <= sf.cs_next_var
 Proof
   Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_dynarray_append_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def] >> strip_tac >> gvs[]
 QED

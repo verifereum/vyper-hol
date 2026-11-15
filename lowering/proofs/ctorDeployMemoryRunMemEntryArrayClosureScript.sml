@@ -201,7 +201,11 @@ Proof
  pop_assum strip_assume_tac >>
  `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
    LENGTH prepared.vs_data_section` by
-   fs[ctor_actual_array_observation_def, Once vyper_to_abi_type_def, Excl "enc_def"] >>
+   (qpat_assum `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial _ _ prepared`
+      (mp_tac o el 12 o CONJUNCTS o PURE_REWRITE_RULE [ctor_actual_array_observation_def]) >>
+    qpat_assum `sb + LENGTH (enc _ _) <= LENGTH initial.vs_data_section` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[Once vyper_to_abi_type_def, Excl "enc_def"]) >>
  asm_x "child" mp_tac >> simp_tac bool_ss [Abbr `Child`] >> disch_tac >>
  drule_all (BETA_RULE ctor_checked_array_prepared_run) >>
  disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>

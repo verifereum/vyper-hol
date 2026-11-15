@@ -1,6 +1,7 @@
 (* External family integration: masked oracle and concrete EVM boundaries. *)
 Theory o1LowerDloadJointExternal
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointExternalUpdate o1LowerDloadConcreteExternal
   o1LowerDloadExternalEffects o1LowerDloadExternalOracle o1LowerDloadPrecompileEffects
   o1LowerDloadJointRangeRead o1LowerDloadJointRangeCopy
@@ -26,7 +27,8 @@ QED
 
 Theorem ld_joint_call_shared_observation:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_src_inv D C vs /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\
+  gas_cut ncut vs s /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
   step_inst fuel C inst s = OK s1 /\
   LENGTH s.vs_requests < LENGTH s1.vs_requests ==>
@@ -40,7 +42,7 @@ Proof
       (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
    tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
       (s.vs_transient s.vs_call_ctx.cc_address)` by
-    (fs[o1_src_inv_def, taint_within_def] >> metis_tac[]) >>
+    (fs[taint_within_upto_def] >> metis_tac[]) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
     fs[ld_joint_boundary_def] >>
   metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe]
@@ -50,7 +52,7 @@ QED
    A scalar alias at another position therefore cannot carry provenance. *)
 Theorem ld_joint_external_scalar_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
   MEM op inst.inst_operands /\
@@ -63,9 +65,9 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   `op_prov H op = NONE` by
-    (drule ld_joint_nonaddress_no_provenance >> disch_then irule >>
+    (drule ld_joint_nonaddress_no_provenance >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      gvs[is_pointer_preserving_op_def] >> metis_tac[]) >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn op = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   simp[]
@@ -73,7 +75,7 @@ QED
 
 Theorem ld_joint_external_scalar_operand:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
   MEM op inst.inst_operands /\
@@ -91,7 +93,7 @@ QED
 
 Theorem ld_joint_external_input_slice:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
   mem_read_ops inst = SOME ops /\ ops.iao_ofst = op /\
@@ -103,7 +105,7 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn op = {}` by
     (qpat_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
@@ -111,7 +113,7 @@ Proof
     (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
-    (drule ld_joint_read_operand_range >> disch_then irule >> metis_tac[]) >>
+    (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> metis_tac[]) >>
   `!k. k<len ==> w2n x+k NOTIN tn.t_mem` by
     (rpt strip_tac >>
      `w2n x <= w2n x+k /\ w2n x+k < w2n x+len` by decide_tac >>
@@ -126,7 +128,7 @@ QED
 
 Theorem ld_joint_concrete_shared_inputs:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   active_inst fn inst s /\
   MEM inst.inst_opcode [DELEGATECALL;CREATE;CREATE2] ==>
   tn.t_stor = {} /\ tn.t_trans = {} /\
@@ -135,7 +137,7 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `tn.t_stor = {} /\ tn.t_trans = {}` by
     (fs[taint_ok_def, MEM] >> metis_tac[]) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
@@ -145,7 +147,7 @@ QED
 
 Theorem ld_joint_delegatecall_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DELEGATECALL /\
   inst.inst_operands = [gop;adop;offop;szop;rop;rsop] /\
@@ -166,7 +168,7 @@ Proof
   `!op. MEM op [gop;adop;szop;rsop] ==>
      op_prov H op = NONE /\ op_taint tn op = {}` by
     (gen_tac >> disch_tac >>
-     drule ld_joint_external_scalar_clean >> disch_then irule >>
+     drule ld_joint_external_scalar_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      simp[Excl "FILTER"] >> reverse conj_tac >- metis_tac[MEM] >>
      gvs[Excl "FILTER", MEM, mem_read_ops_def, mem_write_ops_def] >>
      rpt strip_tac >> gvs[FILTER, SF boolSimps.COND_elim_ss]) >>
@@ -178,12 +180,12 @@ Proof
   `?off'. eval_operand offop t = SOME off' /\
      read_memory (w2n off) (w2n sz) s =
        read_memory (w2n off') (w2n sz) t` by
-    (drule ld_joint_external_input_slice >> disch_then irule >>
+    (drule ld_joint_external_input_slice >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      simp[mem_read_ops_def, source_memory_read_ranges_def,
           memory_range_of_operands_def]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn rop = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      simp[taint_ok_def] >> metis_tac[MEM]) >>
@@ -191,7 +193,7 @@ Proof
     (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
-    (drule ld_joint_write_operand_range >> disch_then irule >>
+    (drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      simp[mem_write_ops_def, source_memory_write_ranges_def,
           fixed_source_write_range_def, retpc_use_ok_def]) >>
   qexistsl_tac [`off'`,`ro'`] >> gvs[] >> metis_tac[MEM]
@@ -199,7 +201,7 @@ QED
 
 Theorem ld_joint_delegatecall_execute:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DELEGATECALL /\ step_inst fuel C inst s = OK s1 ==>
   ?out w r rq ro ro' rs.
@@ -244,7 +246,7 @@ Proof
   disch_then (qx_choose_then `di_target` (qx_choose_then `dr_target` assume_tac)) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (drule ld_joint_concrete_shared_inputs >> simp[]) >>
+    (drule ld_joint_concrete_shared_inputs >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
@@ -301,7 +303,7 @@ QED
 Theorem ld_joint_delegatecall_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ inst.inst_opcode = DELEGATECALL /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
@@ -412,7 +414,7 @@ Finalise ld_joint_delegatecall_next
 
 Theorem ld_joint_create_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;offop;szop] /\ rest = []) \/
    (inst.inst_opcode = CREATE2 /\ ?salt sw.
@@ -428,14 +430,14 @@ Proof
   `!op. MEM op (vop::szop::rest) ==>
      op_prov H op = NONE /\ op_taint tn op = {}` by
     (gen_tac >> disch_tac >>
-     drule ld_joint_external_scalar_clean >> disch_then irule >>
+     drule ld_joint_external_scalar_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      gvs[Excl "FILTER", MEM, mem_read_ops_def, mem_write_ops_def] >>
      rpt strip_tac >> gvs[FILTER, SF boolSimps.COND_elim_ss]) >>
   conj_tac
   >- (rpt strip_tac >> irule ld_joint_operand_clean >>
       `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
       metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc, MEM]) >>
-  drule ld_joint_external_input_slice >> disch_then irule >>
+  drule ld_joint_external_input_slice >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
   gvs[mem_read_ops_def, source_memory_read_ranges_def,
       memory_range_of_operands_def])
 QED
@@ -474,7 +476,7 @@ QED
 
 Theorem ld_joint_create_execute:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [CREATE;CREATE2] /\ step_inst fuel C inst s = OK s1 ==>
   ?out w r rq. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
@@ -518,9 +520,9 @@ Proof
   `(!op. MEM op (vop::szop::rest) ==> eval_operand op s = eval_operand op t) /\
    ?off'. eval_operand offop t = SOME off' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t` by
-    (drule ld_joint_create_operands >> disch_then irule >> metis_tac[]) >>
+    (drule ld_joint_create_operands >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> metis_tac[]) >>
   `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (drule ld_joint_concrete_shared_inputs >> simp[]) >>
+    (drule ld_joint_concrete_shared_inputs >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
     fs[ld_joint_boundary_def, ld_shared_agree_def] >>
@@ -547,7 +549,7 @@ QED
 Theorem ld_joint_create_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CREATE;CREATE2] /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
@@ -647,7 +649,7 @@ Finalise ld_joint_create_next
 
 Theorem ld_joint_call_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop]) \/
    (inst.inst_opcode = STATICCALL /\ prefix = [gop;adop])) /\
@@ -666,7 +668,7 @@ Proof
   `!op. MEM op (prefix ++ [szop;rsop]) ==>
      op_prov H op = NONE /\ op_taint tn op = {}` by
     (gen_tac >> disch_tac >>
-     drule ld_joint_external_scalar_clean >> disch_then irule >>
+     drule ld_joint_external_scalar_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      gvs[Excl "FILTER", MEM, mem_read_ops_def, mem_write_ops_def] >>
      rpt strip_tac >> gvs[Excl "FILTER"] >>
      qpat_x_assum `FILTER _ _ = _` mp_tac >>
@@ -678,7 +680,7 @@ Proof
       metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc, MEM, MEM_APPEND]) >>
   `?off'. eval_operand offop t = SOME off' /\
      read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t` by
-    (drule ld_joint_external_input_slice >> disch_then irule >>
+    (drule ld_joint_external_input_slice >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      gvs[mem_read_ops_def, source_memory_read_ranges_def,
          memory_range_of_operands_def] >>
      `(?w. eval_operand gop s = SOME w) /\
@@ -688,7 +690,7 @@ Proof
        (qspec_then `vop` mp_tac) >> simp[] >> strip_tac >> simp[]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn rop = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      gvs[taint_ok_def] >> metis_tac[MEM]) >>
@@ -696,7 +698,7 @@ Proof
     (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
-    (drule ld_joint_write_operand_range >> disch_then irule >>
+    (drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      gvs[mem_write_ops_def, source_memory_write_ranges_def,
          fixed_source_write_range_def, retpc_use_ok_def] >>
      `(?w. eval_operand gop s = SOME w) /\
@@ -745,8 +747,8 @@ QED
 
 Theorem ld_joint_call_execute_effects[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_src_inv D C vs /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   step_inst fuel C inst s = OK s1 ==>
   ?out w r1 r2 rq1 rq2 (ro:bytes32) (rs:bytes32) (ro':bytes32).
@@ -793,7 +795,7 @@ Proof
     (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))` by
-    (drule ld_joint_call_operands >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
+    (drule ld_joint_call_operands >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> gvs[MEM] >> metis_tac[]) >>
   `s.vs_call_ctx = t.vs_call_ctx` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   qabbrev_tac `rq1 = venom_call_request s addr value off sz static` >>
@@ -824,7 +826,7 @@ Proof
          gvs[update_var_def, record_request_def]) >>
       `accounts_agree_except D s.vs_accounts t.vs_accounts /\
        transient_agree_except D s.vs_transient t.vs_transient` by
-        (drule ld_joint_call_shared_observation >> disch_then irule >>
+        (drule ld_joint_call_shared_observation >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
          gvs[Excl "consume_call_outcome_eq", MEM] >>
          qexistsl_tac [`fuel`,`update_var out w1 r1`] >>
          simp[Excl "consume_call_outcome_eq", update_var_def]) >>
@@ -853,8 +855,8 @@ QED
 
 Theorem ld_joint_call_execute:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_src_inv D C vs /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   step_inst fuel C inst s = OK s1 ==>
   ?out w r1 r2 rq1 rq2 (ro:bytes32) (rs:bytes32) (ro':bytes32).
@@ -891,8 +893,8 @@ QED
 
 Theorem ld_joint_call_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_src_inv D C vs /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ taint_within_upto D ncut C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>

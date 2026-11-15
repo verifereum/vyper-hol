@@ -5,7 +5,7 @@ Ancestors
   o1LowerDloadRunnerEndpoints o1LowerDloadShared o1LowerDloadJointRelation
   venomExecSemantics venomExecProps venomState venomInst contextCodegenRel
   ptrDiscipline list o1LowerDloadOccurrence unitShapeDefs venomWf lowerDloadDefs
-  lowerDloadSupplyProofs o1ContractLowerDload o1PassContract
+  lowerDloadSupplyProofs o1ContractLowerDload o1PassContract o1SafeUpto
 
 Theorem assign_suffix_abort_requests:
   !n s j bb fuel ctx reason t.
@@ -111,7 +111,12 @@ Theorem ld_joint_forward_abort_requests:
     exec_block fuel C' bb' t = Abort reason t1 /\
     LIST_REL (request_agree_except D) s1.vs_requests t1.vs_requests
 Proof
-  strip_tac >> drule_all ld_joint_forward_abort >> strip_tac >>
+  strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    simp[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
+  drule_all ld_joint_forward_abort >> strip_tac >>
   `MEM fn C.ctx_functions` by
     (drule ld_joint_source >> strip_tac >>
      drule occ_frame_reachable_annotation >> simp[]) >>

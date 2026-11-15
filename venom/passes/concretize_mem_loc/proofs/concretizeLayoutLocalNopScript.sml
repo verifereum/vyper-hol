@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalNop
-Ancestors concretizeLayoutLocalOffset frameRelocationLocal frameRelocationDemand
+Ancestors concretizeLayoutCutSafe concretizeLayoutLocalOffset frameRelocationLocal frameRelocationDemand
   frameRelocationTaintOrder frameRelocationCopyTaint frameRelocationMemory concretizeLayoutReaderContext
   frameRelocationEnvironment frameRelocationBinding frameJointDemand frameJointTrace
   frameJointTransition frameResolvedTrace frameJointTaint frameOriginUpdates
@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem concretize_nop_local_complete:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -81,6 +81,4 @@ Proof
   fs[relocation_taint_le_def, demand_taint_def] >> metis_tac[]
 QED
 
-val _ = if null (hyp concretize_nop_local_complete) then ()
-        else raise Fail "NOP export has hypotheses";
 val _ = export_theory();

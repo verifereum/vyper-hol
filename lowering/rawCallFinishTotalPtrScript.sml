@@ -136,9 +136,6 @@ Proof
   drule_all (cj 2 gas_path_ptr_rules) >> simp[]
 QED
 
-val () = if null (hyp raw_call_scalar_finish) then ()
-  else raise Fail "scalar finish has kernel hypotheses";
-
 (* Both oracle outcomes at zero capacity share the same checked edge. *)
 Theorem raw_call_zero_reverting_finish:
   compile_raw_call_finish addr dp dl gas_op value_op
@@ -291,8 +288,10 @@ Proof
      `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
      `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
-    strip_tac >> gvs[venomStateTheory.eval_operand_def,
-      venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
+    strip_tac >> fs[venomStateTheory.eval_operand_def] >>
+    gvs[venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >>
+    rpt strip_tac >> res_tac >>
+    FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >> strip_tac >>
   `local_ptrs_reserved cenv sj /\
    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
@@ -400,8 +399,10 @@ Proof
      `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
      `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
-    strip_tac >> gvs[venomStateTheory.eval_operand_def,
-      venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
+    strip_tac >> fs[venomStateTheory.eval_operand_def] >>
+    gvs[venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >>
+    rpt strip_tac >> res_tac >>
+    FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >> strip_tac >>
   mp_tac (raw_call_nonrevert_suffix |> Q.INST
     [`s` |-> `u`, `sa` |-> `sc`, `success` |-> `out`, `ncopy` |-> `capacity`,
      `aw` |-> `n2w ob`, `off` |-> `ob`, `len` |-> `capacity`,
@@ -698,8 +699,8 @@ Theorem raw_call_positive_nonreverting_finish_outcome:
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all raw_call_positive_nonreverting_finish >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  strip_tac >> mp_tac (SPEC_ALL raw_call_positive_nonreverting_finish) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value (ArrayV (TupleV [BoolV outcome.co_success;

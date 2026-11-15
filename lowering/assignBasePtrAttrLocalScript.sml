@@ -1,6 +1,7 @@
 (* Local struct fields: keep robust representation separate from execution. *)
 Theory assignBasePtrAttrLocal
-Ancestors wordLoadStorePtr assignBasePtrFieldAddress assignBasePtrFieldRobust
+Ancestors
+  targetPlaceSim wordLoadStorePtr assignBasePtrFieldAddress assignBasePtrFieldRobust
   assignBasePtrScopePost assignBasePtrScalarPost assignBasePtrWordStore
   typedCopyPtr assignTuplePtrStoreHead bodyPtrDefs stmtSimAssignAttr
   venomState venomExecSemantics venomMemProofs ptrDiscipline venomInst
@@ -14,6 +15,9 @@ Ancestors wordLoadStorePtr assignBasePtrFieldAddress assignBasePtrFieldRobust
   supportedExprTraverse supportedStmtTraverse supportedExprs supportedStmts
   vyperTypeEnv vyperTyping exprSimHyps vyperTypeCallGraph
   vyperTypeSystem vyperTypeInvariants
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 Theorem assign_base_attr_local_store_ghost:
   !d cenv cx es G tn s id pre sc entry rest p sz rootw dst addr value v sa fn PG iid
@@ -651,7 +655,7 @@ Proof
   `cx_tops cx = tops` by
     (irule cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, supported_expr_exists_def,
          int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>

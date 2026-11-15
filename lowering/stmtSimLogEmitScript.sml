@@ -1,6 +1,7 @@
 (* Physical LOG operand order and the continuing event state relation. *)
 Theory stmtSimLogEmit
 Ancestors
+  logEmitStep
   stmtSimLogEncodeFrame stmtSimLogTopics stmtSimLogDataRun stmtSimLogArgsRun
   stmtSimLogSource venomExecSemantics venomState venomInst loweringSlice
   compileEnv loweringStateRelDefs exprLoweringProps valueEncoding valueEncodingDefs words list arithmetic extCallOracleStep
@@ -44,7 +45,7 @@ Theorem compile_log_emit_run:
   LENGTH topic_ops < dimword (:256) /\
   eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
   eval_operands topic_ops s = SOME topics /\
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx es s /\ ~cx.txn.is_static ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
@@ -55,7 +56,8 @@ Proof
   strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  `~s.vs_call_ctx.cc_static` by gvs[stmt_state_rel_def, state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `emitted_insts sa sb =
     [mk_inst sa.cs_next_id LOG
       (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) []]` by
@@ -74,4 +76,24 @@ Proof
   simp[GSYM APPEND_ASSOC] >> strip_tac >>
   simp[Once run_inst_seq_def] >> simp[run_inst_seq_def] >>
   irule log_append_stmt_state_rel >> simp[]
+QED
+
+Theorem compile_log_emit_static_run:
+  emit_inst LOG
+    (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) [] sa =
+      ((),sb) /\
+  eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
+  eval_operands topic_ops s = SOME topics /\
+  stmt_state_rel ctx func cenv cx es s /\ cx.txn.is_static ==>
+  run_inst_seq (emitted_insts sa sb) s =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))
+Proof
+  strip_tac >> drule emitted_insts_emit_inst >> strip_tac >>
+  `s.vs_call_ctx.cc_static` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `step_inst_base (mk_inst sa.cs_next_id LOG
+      (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) []) s =
+    Abort ExHalt_abort (halt_state (set_returndata [] s))` by
+    (irule log_emit_static_step >> simp[mk_inst_def] >> metis_tac[]) >>
+  fs[run_inst_seq_def]
 QED

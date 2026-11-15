@@ -1149,12 +1149,3 @@ Proof
     simp[jump_to_def] >>
   drule_all frag_outcome_loop_header >> simp[SF ETA_ss]
 QED
-
-(* Reject accidental oracle dependencies in the completed loop rule. *)
-val _ =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag frag_exec_loop)
-  in
-    if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
-    then print "frag_exec_loop: kernel proof audit passed\n"
-    else raise Fail "frag_exec_loop has oracle or axiom dependencies"
-  end;

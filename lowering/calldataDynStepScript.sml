@@ -140,7 +140,7 @@ Proof
   drule_all abi_decode_loop_increment_word >> strip_tac >>
   `step_inst_base (mk_inst id ADD [Var iv; Lit 1w] [nv]) s =
      OK (update_var nv (n2w (SUC j)) s)` by
-    simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_lit] >>
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_lit] >>
   simp[Once mem_safe_block_def, get_instruction_def, EL_APPEND_EQN,
        abi_decode_backedge_insts_def] >>
   fs[mk_inst_def] >>

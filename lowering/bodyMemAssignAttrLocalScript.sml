@@ -2,6 +2,7 @@
    (bodyMemAssign's dispatch): a word field of a local struct (S1's body_assign_attr_local). *)
 Theory bodyMemAssignAttrLocal
 Ancestors
+  targetPlaceSim
   supportedExprTraverse allocLimits allocLimitsProps
   bodySim bodyExprPreFacts supportedStmtTraverse supportedStmts supportedExprs
   vyperTypeCallGraph vyperTypeSystem vyperTypeInvariants
@@ -16,6 +17,9 @@ Ancestors
   exprSimHypsDefs stmtSimAugAssign stmtSimDeclMem
   gasSummaryCompose stmtSimProps exprSimUnwrapProps exprSimUnwrap
   vyperLookup valueEncoding allocaFootprint bodyDeclMemoryCore bodyMemoryDefs
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 Theorem assign_attr_local_add_exact_mem[local]:
   emit_op ADD [Var p; Lit (n2w off)] sm = (dst,sn) /\
@@ -390,7 +394,7 @@ Proof
   simp[Abbr `u`, lookup_var_def, mstore_def]
 QED
 
-Theorem assign_attr_local_suffix_mem[local]:
+Theorem assign_attr_local_suffix_mem:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   emit_op ADD [Var p; Lit (n2w (struct_field_offset fields fld))] sm = (dst,sn) /\
@@ -802,7 +806,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>

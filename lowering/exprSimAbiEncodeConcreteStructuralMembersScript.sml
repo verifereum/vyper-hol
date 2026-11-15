@@ -149,7 +149,10 @@ Proof
      asm_rewrite_tac[] >>
      qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]) >>
-  qexists_tac `r` >> fs[Abbr `t`] >> metis_tac[]
+  qexists_tac `r` >>
+  (qpat_x_assum `Abbrev (t = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+   qpat_x_assum `window_member_prefix _ _ _ (SUC _) _ _`
+     (assume_tac o SIMP_RULE (srw_ss()) []) >> asm_rewrite_tac[]) >> metis_tac[]
 QED
 
 Theorem abi_encode_structural_member_dynamic_concrete:
@@ -255,7 +258,8 @@ Proof
   `SUM (MAP abi_member_head_size (TAKE k ats)) +
    LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
     (drule_all window_structural_members_inv_output_bounds >> strip_tac >>
-     `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >> gvs[] >> decide_tac) >>
+     `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >> qpat_assum `~is_dynamic (EL k ats)`
+       (fn th => qpat_x_assum `~is_dynamic (EL k ats) ==> _` (assume_tac o C MP th)) >> decide_tac) >>
   `EXISTS (\(_,_,_,dyn). dyn) infos ==>
     mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k))` by
     (strip_tac >>
@@ -267,7 +271,11 @@ Proof
        (drule_all window_structural_member_static_cursor_frame >> simp[]) >>
      `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
      `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by
-       fs[window_structural_members_inv_def, window_member_prefix_def] >>
+        (qhdtm_assum `window_structural_members_inv`
+           (strip_assume_tac o PURE_REWRITE_RULE [window_structural_members_inv_def]) >>
+         qhdtm_assum `window_member_prefix`
+           (strip_assume_tac o PURE_REWRITE_RULE [window_member_prefix_def]) >>
+         decide_tac) >>
      drule_all window_member_tail_step >>
      fs[window_structural_members_inv_def]) >>
   `window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
@@ -348,7 +356,11 @@ Proof
   asm_rewrite_tac[] >> gen_tac >> strip_tac >>
   drule window_phase_effect >> strip_tac >>
   drule window_registered_sizes_transport >>
-  pure_rewrite_tac [venom_state_accfupds, combinTheory.K_THM] >> metis_tac[]
+  pure_rewrite_tac [venom_state_accfupds, combinTheory.K_THM] >>
+  disch_then (qspec_then `R` assume_tac) >>
+  map_every qx_gen_tac [`i`, `b`, `sz`] >> strip_tac >>
+  qpat_x_assum `!i b sz. (_ /\ _) /\ _ ==> _`
+    (qspecl_then [`i`, `b`, `sz`] MATCH_MP_TAC) >> asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_structural_member_static_step_concrete:

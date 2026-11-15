@@ -1,6 +1,7 @@
 (* Successful block-entry alignment for the joint relation. *)
 Theory o1LowerDloadJointEntry
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointRelation o1ContractLowerDload contextCodegenRel
   lowerDloadDefs venomExecSemantics venomExecProps irSupply list
   o1PassContract venomWf venomInst unitMemInv unitTransformDefs
@@ -111,7 +112,7 @@ QED
 
 Theorem ld_joint_entry:
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo ncut C vs /\ gas_cut ncut vs s1 /\
   C.ctx_entry = SOME name /\
   lookup_function name C.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl /\
@@ -137,21 +138,21 @@ Proof
     (irule o1LowerDloadOccurrenceTheory.occ_frame_reachable_entry >> metis_tac[]) >>
   `vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C` by
     gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
-        o1_src_inv_def] >>
+        o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >> strip_tac >>
   `raw_reachable vs C fn inst s1` by
     (irule contextRawReachableTheory.raw_reachable_entry >> metis_tac[]) >>
   `s1.vs_alloca_next < dimword (:256)` by
-    (qpat_x_assum `o1_src_inv D C vs` mp_tac >>
-     simp[o1_src_inv_def, mem_inv_raw_reachable] >> strip_tac >>
-     qpat_x_assum `!fn inst s. _ ==> raw_mem_ok _ _ _ _` drule >>
-     simp[raw_mem_ok_def]) >>
+    (qpat_x_assum `o1_safe_upto D lo ncut C vs` mp_tac >>
+     simp[o1_safe_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[raw_mem_ok_def]) >>
   `s1.vs_allocas = FEMPTY /\ s1.vs_alloca_next = vs.vs_alloca_next` by
     (qpat_x_assum `enters_block fn _ s1` mp_tac >>
      simp[enters_block_def] >> strip_tac >> gvs[] >>
      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
      disch_then (fn th => once_rewrite_tac[th]) >> gvs[]) >>
-  `lo <= s1.vs_alloca_next` by gvs[ptrDisciplineTheory.ptr_discipline_def] >>
+  `lo <= s1.vs_alloca_next` by
+    gvs[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
   `fn.fn_name = name` by
     (qpat_x_assum `lookup_function name C.ctx_functions = SOME fn` mp_tac >>
      simp[lookup_function_def] >> strip_tac >> drule FIND_P >> simp[]) >>

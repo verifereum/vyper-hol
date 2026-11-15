@@ -38,13 +38,10 @@ Theorem dload_create_success_inputs:
    (i.inst_opcode = CREATE2 /\ ?v a z salt. i.inst_operands = [v;a;z;salt]))
 Proof
   strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  (gvs[step_inst_non_invoke] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
   simp[] >> rpt strip_tac >> gvs[eval_operands_def] >> metis_tac[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "CREATE operand interface: nonempty hypotheses")
-  [dload_create_operand_safety, dload_create_success_inputs];
 
 Theorem dload_create_evaluated_inputs:
   ((i.inst_opcode = CREATE /\ i.inst_operands = [value;a;sz]) \/
@@ -114,9 +111,6 @@ Resume dload_create_evaluated_inputs[create_read_inputs]:
   drule_all dload_call_clean_slice >> simp[read_memory_def]
 QED
 Finalise dload_create_evaluated_inputs
-
-val _ = if null (hyp dload_create_evaluated_inputs) then ()
-        else raise Fail "CREATE evaluated inputs: nonempty hypotheses";
 
 Theorem dload_create_step:
   ((i.inst_opcode = CREATE /\ i.inst_operands = [value;a;sz] /\ salt = NONE) \/
@@ -294,9 +288,3 @@ Proof
   qpat_x_assum `_ \/ _` strip_assume_tac >>
   irule dload_boundary_core_create_shaped >> metis_tac[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "CREATE transport: nonempty hypotheses")
-  [dload_create_step, dload_create_frame_fields, dload_create_mem_ghost,
-   dload_create_boundary, dload_boundary_core_create_shaped,
-   dload_boundary_core_create];

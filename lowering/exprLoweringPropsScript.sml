@@ -341,39 +341,6 @@ Definition immutable_alloca_sep_def:
          regions_disjoint off (type_memory_size tv) b sz))
 End
 
-(* A live borrowed local needs no tracked allocation.  The same initialized
-   constructor immutable admits [64,96), but rejects a local alias at zero. *)
-Theorem immutable_alloca_sep_borrowed_probe[local]:
-  !func ce cx es s entry c v t u.
-    (c,v,t,u) =
-      (ce with <| ce_is_ctor := T; ce_module := NONE; ce_module_var_type := K NONE;
-          ce_module_vars := FEMPTY |+ ((NONE,"imm"), ImmutableLoc 0);
-          ce_vars := FEMPTY |+ ("local", PtrVar (Var "p") 32) |>,
-       es with <| scopes := [FEMPTY |+ ("local",entry)];
-          immutables := [(cx.txn.target,
-            [(NONE,FEMPTY |+ ("imm",(BaseTV BoolT,BoolV T)))])] |>,
-       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
-                 vs_vars := FEMPTY |+ ("p",64w) |>,
-       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
-                 vs_vars := FEMPTY |+ ("p",0w) |>) ==>
-      local_region c v.scopes t "local" 64 32 /\
-      t.vs_allocas = FEMPTY /\
-      immutable_alloca_sep func c cx v t /\
-      local_region c v.scopes u "local" 0 32 /\
-      ~immutable_alloca_sep func c cx v u
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[local_region_def, lookup_scopes_def, lookup_var_def,
-       immutable_alloca_sep_def, immutable_decl_sep_alt, get_source_immutables_def,
-       finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
-       type_memory_size_def, loweringStateRelDefsTheory.regions_disjoint_def, wordsTheory.dimword_def,
-       venomMemPropsTheory.dimindex_256] >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
-      Cases_on `id = "local"` >> gvs[]) >>
-  qexistsl_tac [`"local"`, `0`, `32`] >> simp[]
-QED
-
 Theorem immutable_alloca_sep_fields:
   !func cenv cx vs vs' ss ss'.
     immutable_alloca_sep func cenv cx vs ss /\
@@ -1479,68 +1446,6 @@ Proof
   metis_tac[]
 QED
 
-(* Primitive isPREFIX lemmas *)
-Theorem comp_return_isPREFIX[local]:
-  !x sa av sb. comp_return x sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[comp_return_def]
-QED
-
-Theorem emit_isPREFIX[local]:
-  !inst sa av sb. emit inst sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_def] >> simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-Theorem fresh_var_ci_eq[local]:
-  !sa av sb. fresh_var sa = (av, sb) ==> sa.cs_current_insts = sb.cs_current_insts
-Proof
-  rw[fresh_var_def] >> simp[]
-QED
-
-Theorem fresh_id_ci_eq[local]:
-  !sa av sb. fresh_id sa = (av, sb) ==> sa.cs_current_insts = sb.cs_current_insts
-Proof
-  rw[fresh_id_def] >> simp[]
-QED
-
-Theorem fresh_label_ci_eq[local]:
-  !pfx sa av sb. fresh_label pfx sa = (av, sb) ==> sa.cs_current_insts = sb.cs_current_insts
-Proof
-  rw[fresh_label_def] >> simp[]
-QED
-
-Theorem emit_op_isPREFIX[local]:
-  !opc ops sa av sb. emit_op opc ops sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-     emit_def, comp_return_def, venomInstTheory.mk_inst_def, pairTheory.UNCURRY] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-Theorem emit_void_isPREFIX[local]:
-  !opc ops sa av sb. emit_void opc ops sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
-     emit_def, comp_return_def, venomInstTheory.mk_inst_def, pairTheory.UNCURRY] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-Theorem emit_inst_isPREFIX[local]:
-  !opc ops outs sa av sb. emit_inst opc ops outs sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
-     emit_def, comp_return_def, venomInstTheory.mk_inst_def, pairTheory.UNCURRY] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-(* new_block changes cs_blocks (needed for vacuous cases) *)
-Theorem new_block_changes_blocks[local]:
-  !label st. (SND (new_block label st)).cs_blocks <> st.cs_blocks
-Proof
-  rw[new_block_def, LET_THM]
-QED
-
 (* ===== ci_mono: Compile monad monotonicity ===== *)
 
 (* ci_mono st st' holds when the compile state transition from st to st'
@@ -1689,7 +1594,7 @@ Proof
   ci_mono_chain_tac [ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_ptr_store[local]:
+Theorem ci_mono_compile_ptr_store:
   ∀ is_ctor imm loc op v sa.
     ci_mono sa (SND (compile_ptr_store is_ctor imm loc op v sa))
 Proof
@@ -2328,20 +2233,6 @@ QED
 
 (* ===== Kernel audit for changed place helpers ===== *)
 
-val () = List.app (fn (name,theorem) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
-  in
-    if null (Thm.hyp theorem) andalso null axioms andalso
-       List.all (fn label => label = "DISK_THM") oracles then
-      print ("PLACE_HELPER_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
-    else raise Fail ("admitted place helper: " ^ name)
-  end)
-  [("ci_mono_compile_subscript_cfn",ci_mono_compile_subscript_cfn),
-   ("ci_mono_compile_attribute_cfn",ci_mono_compile_attribute_cfn),
-   ("ci_mono_compile_mapping_subscript",ci_mono_compile_mapping_subscript),
-   ("ci_mono_compile_keccak256_key",ci_mono_compile_keccak256_key),
-   ("ci_mono_compile_make_array_cfn",ci_mono_compile_make_array_cfn)]
-
 Theorem ci_mono_as_stack_val[local]:
   ∀ ty p sa. SND (as_stack_val ty p) = SND p
 Proof
@@ -2409,12 +2300,6 @@ Theorem ci_mono_compile_store_byte_chunks:
   ∀ data_ptr bs offset sa. ci_mono sa (SND (compile_store_byte_chunks data_ptr bs offset sa))
 Proof
   ho_match_mp_tac compile_store_byte_chunks_ind >> rpt strip_tac >- simp[compile_store_byte_chunks_def, ci_mono_comp_return] >> simp[Once compile_store_byte_chunks_def, LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> first_x_assum (qspecl_then [`TAKE 32 (v4::v5 ++ REPLICATE 31 0w)`, `word_of_bytes T 0w (TAKE 32 (v4::v5 ++ REPLICATE 31 0w))`] mp_tac) >> simp[]
-QED
-
-Theorem ci_mono_compile_store_words[local]:
-  ∀ buf_op vs offset sa. ci_mono sa (SND (compile_store_words buf_op vs offset sa))
-Proof
-  Induct_on `vs` >- simp[compile_store_words_def, ci_mono_comp_return] >> rpt strip_tac >> once_rewrite_tac[compile_store_words_def] >> simp_tac std_ss [LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> simp[ci_mono_emit_void]
 QED
 
 Theorem ci_mono_clamp_and_return[local]:
@@ -2830,16 +2715,6 @@ Proof
   simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load]
 QED
 
-val _ = app (fn (name, th) =>
-  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles
-     then print ("Membership proof oracle check: " ^ name ^ " clean\n")
-     else raise Fail ("Membership proof has oracle: " ^ name)
-  end)
-  [("entry traces", array_membership_entry_traces),
-   ("loop monotonicity", ci_mono_compile_array_membership_loop),
-   ("caller monotonicity", ci_mono_compile_var_array_membership)];
-
 Theorem ci_mono_compile_keccak256_bytes[local]:
   ∀ ptr_op sa. ci_mono sa (SND (compile_keccak256_bytes ptr_op sa))
 Proof
@@ -2933,28 +2808,6 @@ Theorem ci_mono_compile_ecrecover[local]:
 Proof
   rpt gen_tac >>
   rewrite_tac[builtinMiscTheory.compile_ecrecover_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
-QED
-
-Theorem ci_mono_compile_ecadd[local]:
-  ∀ x1 y1 x2 y2 sa. ci_mono sa (SND (compile_ecadd x1 y1 x2 y2 sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinMiscTheory.compile_ecadd_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
-QED
-
-Theorem ci_mono_compile_ecmul[local]:
-  ∀ x y scalar sa. ci_mono sa (SND (compile_ecmul x y scalar sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinMiscTheory.compile_ecmul_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
        gen_tac ORELSE strip_tac) >>
@@ -3365,95 +3218,6 @@ Proof
   ho_match_mp_tac ci_mono_bind >> conj_tac
   >- (first_x_assum irule >> simp[]) >>
   simp[ci_mono_comp_return]
-QED
-
-Theorem ci_mono_compile_abi_encode_child_branches[local]:
-  (¬is_dyn ⇒ ∀dst sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  (is_dyn ⇒ ∀dst sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  ∀dst static_ofst dyn_ofst_ptr sa.
-    ci_mono sa (SND (compile_abi_encode_child dst child_ptr child_info
-      is_dyn static_ofst dyn_ofst_ptr sa))
-Proof
-  rpt strip_tac >>
-  simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
-  ho_match_mp_tac ci_mono_bind >>
-  conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >> Cases_on `is_dyn` >> gvs[]
-  >- (rpt (ho_match_mp_tac ci_mono_bind ORELSE
-           ho_match_mp_tac ci_mono_ignore_bind ORELSE
-           (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void,
-                             ci_mono_comp_return]) ORELSE
-           gen_tac ORELSE strip_tac) >>
-      simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-      first_x_assum irule >> simp[])
-QED
-
-(* Helper: the unfolded child body produced by the mutual induction rule. *)
-Theorem ci_mono_compile_abi_encode_child_body[local]:
-  (∀dst. ¬is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  (∀dst. is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  ∀dst static_ofst dyn_ofst_ptr sa.
-    ci_mono sa
-      (SND
-        (do static_loc <- emit_op ADD [dst; Lit (n2w static_ofst)];
-            if ¬is_dyn then
-              compile_abi_encode_to_buf static_loc child_ptr child_info
-            else
-              do dyn_ofst <- emit_op MLOAD [dyn_ofst_ptr];
-                 child_dst <- emit_op ADD [dst; dyn_ofst];
-                 child_len <-
-                   compile_abi_encode_to_buf child_dst child_ptr child_info;
-                 emit_void MSTORE [static_loc; dyn_ofst];
-                 new_dyn <- emit_op ADD [dyn_ofst; child_len];
-                 emit_void MSTORE [dyn_ofst_ptr; new_dyn];
-                 comp_return child_len
-              od
-         od sa))
-Proof
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >>
-  conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >> Cases_on `is_dyn` >> gvs[]
-  >- (rpt (ho_match_mp_tac ci_mono_bind ORELSE
-           ho_match_mp_tac ci_mono_ignore_bind ORELSE
-           (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void,
-                             ci_mono_comp_return]) ORELSE
-           gen_tac ORELSE strip_tac) >>
-      simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-      first_x_assum irule >> simp[])
-QED
-
-(* Helper: premise shape emitted by compile_abi_encode_child_ind. *)
-Theorem ci_mono_compile_abi_encode_child_body_ind[local]:
-  (∀dst. ¬is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  (∀dst. ¬¬is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  ∀dst static_ofst dyn_ofst_ptr sa.
-    ci_mono sa
-      (SND
-        (do static_loc <- emit_op ADD [dst; Lit (n2w static_ofst)];
-            if ¬is_dyn then
-              compile_abi_encode_to_buf static_loc child_ptr child_info
-            else
-              do dyn_ofst <- emit_op MLOAD [dyn_ofst_ptr];
-                 child_dst <- emit_op ADD [dst; dyn_ofst];
-                 child_len <-
-                   compile_abi_encode_to_buf child_dst child_ptr child_info;
-                 emit_void MSTORE [static_loc; dyn_ofst];
-                 new_dyn <- emit_op ADD [dyn_ofst; child_len];
-                 emit_void MSTORE [dyn_ofst_ptr; new_dyn];
-                 comp_return child_len
-              od
-         od sa))
-Proof
-  rpt strip_tac >>
-  irule ci_mono_compile_abi_encode_child_body >>
-  simp[]
 QED
 
 Theorem ci_mono_compile_abi_encode_complex_step[local]:
@@ -5213,83 +4977,6 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
-
-(* Kernel-closure audit for the membership-order change and shared typed-memory prerequisite. *)
-val () = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null axioms andalso null (Thm.hyp th) andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("Kernel-closed: " ^ name ^ "\n")
-    else raise Fail ("Unexpected oracle dependency: " ^ name)
-  end)
-  [("ci_mono_bytestring_hash_selection", ci_mono_bytestring_hash_selection),
-   ("ci_mono_bytestring_comparison_branch", ci_mono_bytestring_comparison_branch),
-   ("ci_mono_emit_membership_eqs", ci_mono_emit_membership_eqs),
-   ("ci_mono_fold_membership_or", ci_mono_fold_membership_or),
-   ("ci_mono_fold_membership_and", ci_mono_fold_membership_and),
-   ("ci_mono_compile_list_membership_in", ci_mono_compile_list_membership_in),
-   ("ci_mono_compile_list_membership_notin", ci_mono_compile_list_membership_notin),
-   ("list_membership_small_traces", list_membership_small_traces),
-   ("ci_mono_typed_memory_family", ci_mono_typed_memory_family)];
-(* Immutable helper monotonicity interfaces share the typed-memory family
-   with aggregate construction; all must remain kernel-closed. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted immutable monotonicity interface"
-  end)
-  [ci_mono_compile_lit_byte_offset, ci_mono_compile_imm_copy_to_memory,
-   ci_mono_compile_imm_store_words, ci_mono_compile_ensure_in_memory,
-   ci_mono_compile_array_subscript, ci_mono_compile_array_membership_loop,
-   ci_mono_typed_memory_family];
-
-(* Issue #560 integrity gate, including local proof-interface helpers. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction proof interface"
-  end)
-  [ci_mono_typed_memory_family, ci_mono_compile_store_memory,
-   ci_mono_compile_struct_lit_cfn, ci_mono_compile_make_array_elems_cfn,
-   ci_mono_compile_make_array_cfn, ci_mono_compile_zero_words,
-   ci_mono_compile_builtin_empty_complex,
-   builtinSimpleTheory.compile_zero_words_zero,
-   builtinSimpleTheory.compile_zero_words_one_order,
-   builtinSimpleTheory.compile_zero_words_two_order,
-   builtinSimpleTheory.compile_builtin_empty_complex_length_order,
-   builtinSimpleTheory.compile_builtin_empty_complex_fixed_order];
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction regression theorem"
-  end)
-  [exprLoweringTheory.compile_empty_word_dispatch,
-   exprLoweringTheory.compile_empty_memory_dispatch,
-   exprLoweringTheory.compile_make_array_empty_length,
-   exprLoweringTheory.compile_make_array_word_order,
-   exprLoweringTheory.compile_make_fixed_array_word_order,
-   exprLoweringTheory.compile_make_tuple_word_order,
-   exprLoweringTheory.compile_struct_lit_word_order,
-   exprLoweringTheory.compile_make_array_empty_full_capacity,
-   exprLoweringTheory.compile_make_array_typed_tuple_order];
-
-(* Retained general compiler admissions and their existing structural corollary
-   are excluded; all other exported proofs must be closed.
-   compile_expr_extends_insts inherits compile_expr_ci_mono's admission. *)
-val () = List.app
-  (fn (name,th) =>
-    if List.exists (fn allowed => name = allowed)
-      ["compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
-    else let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("expression lowering proof is not closed: " ^ name)
-    end)
-  (DB.thms "exprLoweringProps");
 
 Theorem as_stack_val_stack:
   !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)

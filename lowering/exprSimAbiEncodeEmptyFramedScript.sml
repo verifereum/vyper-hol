@@ -85,7 +85,8 @@ Proof
   `alloca_inv actual /\ alloca_room ctx func actual` by
     metis_tac[abi_window_setup_alloca_inv, abi_window_setup_room] >>
   `eval_operand src actual = SOME a` by
-    (fs[abi_builtin_encode_setup_frame_def] >> metis_tac[]) >>
+    (qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _`
+       (assume_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_builtin_encode_setup_frame_def]) >> metis_tac[]) >>
   `abi_encoder_window_input (AbiCopy 0) at av (w2n a) 0 actual.vs_memory` by
     (fs[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def] >>
      simp[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def]) >>

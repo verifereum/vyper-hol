@@ -1,6 +1,6 @@
 Theory assignEffectfulIndexSnapshotRun
 Ancestors
-  assignEffectfulIndexPhysical assignEffectfulIndexAllocUnwrap
+  assignEffectfulIndexPhysical assignEffectfulIndexAllocUnwrap bodyMemSnapshotSourceLocation
   assignEffectfulIndexWord assignEffectfulIndexBytesCopy assignEffectfulIndexMemoryCopy
   exprSimMemoryRead exprSimMemoryPath exprSimUnwrapProps exprSimCopy
   stmtSimDefs exprSimProps freshWrites venomState loweringPosts

@@ -277,6 +277,9 @@ QED
 Resume compile_augassign_toplevel_case_ptr[store_entry]:
   qmatch_asmsub_abbrev_tac
     `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) u` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   `eval_operand res_op u = SOME (typed_val_to_w256 tvt result)` by
     simp[Abbr `u`, typed_val_to_w256_word_value] >>
   `stmt_state_rel ctx func cenv cx fin

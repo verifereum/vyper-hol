@@ -8,7 +8,8 @@
  * function has no internal return.  Being the identity, the run keeps any
  * stage invariant.
  *
- * TOP-LEVEL: o1_contract_dret_desugar_pre_walk.
+ * TOP-LEVEL: o1_static_pre_walk_dret_desugar,
+ *            o1_contract_dret_desugar_pre_walk.
  *)
 Theory o1DretDesugarContract
 Ancestors
@@ -70,6 +71,20 @@ Proof
   drule_all dret_desugar_step_identity >> simp[]
 QED
 
+Theorem o1_static_pre_walk_dret_desugar:
+  !C C' vs.
+    ctx_pass_stage rpolicy (CFP_Simple VP_DretDesugar) view C C' /\
+    no_pre C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ Inv C vs ==>
+    ctx_sim_fuel (pass_fuel (CFP_Simple VP_DretDesugar) C') D C C' vs vs /\
+    Inv C' vs
+Proof
+  rw[pass_fuel_def] >>
+  drule_all dret_desugar_stage_identity >>
+  rw[] >> irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]
+QED
+
 Theorem o1_contract_dret_desugar_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_DretDesugar) /\
   (!view I. o1_stage_contract rpolicy D (CFP_Simple VP_DretDesugar) view
@@ -83,7 +98,7 @@ Proof
       `no_dret fn` by gvs[o1_fn_shape_def] >>
       drule_all dret_desugar_step_identity >> rw[] >>
       simp[fresh_names_ok_def, label_map_sources_ok_def]) >>
-  rw[o1_stage_contract_def, pass_fuel_def] >>
-  drule_all dret_desugar_stage_identity >>
-  rw[] >> irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]
+  simp[o1_stage_contract_def] >> rpt gen_tac >> strip_tac >>
+  irule o1_static_pre_walk_dret_desugar >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

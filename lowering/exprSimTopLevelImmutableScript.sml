@@ -35,7 +35,9 @@ Proof
    ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
          !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
               off + type_memory_size tv < dimword (:256)` by
-    (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+    (fs[expr_sim_pre_def, expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def] >>
+     metis_tac[]) >>
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   simp[gas_admissible_def] >>
   disch_then (qspec_then `es.gas_obs` mp_tac) >>

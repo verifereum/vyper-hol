@@ -2,7 +2,7 @@ Theory vyperCalldataSliceTest
 Ancestors
   arithmetic integer list words
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperContext vyperValue vyperConstEval
-  jsonToVyperType
+  jsonToVyperType vyperPinFold
   vyperValueOperation vyperState vyperInterpreter vyperSmallStep
   vyperTypeSystem vyperTypeBuiltins vyperTypeContract
 Libs
@@ -48,7 +48,7 @@ Proof
        is_calldata_slice_call_def] >>
   ntac 3 (simp[Once translate_expr_def]) >>
   simp[calldata_slice_bound_def, calldata_slice_length_def, translate_expr_def,
-       eval_constant_def, evaluate_literal_def, translate_type_def]
+       pin_fold_value_def, pin_fold_literal, evaluate_literal_def, translate_type_def]
 QED
 
 Theorem calldata_slice_zero_marker_typing_test:
@@ -85,7 +85,7 @@ val data_expr = ``JE_Attribute
 val start_expr = ``JE_Int 0 (JT_Integer 256 F)``;
 val length_expr = ``JE_Int 4 (JT_Integer 256 F)``;
 fun translate_slice args kwargs = rhs (concl (bossLib.EVAL
-  ``translate_expr (0, NONE, [], [], [], [], [], [], [])
+  ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] [])
     (JE_Call (JE_Name "slice" NONE JMissingSource JT_None)
       ^args ^kwargs (JT_Bytes 4) JMissingSource)``));
 fun check_slice_expr expression =

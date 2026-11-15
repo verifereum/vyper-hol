@@ -4,6 +4,7 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
+  bodyMemStorageCopyStage
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
@@ -39,7 +40,7 @@ Ancestors
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
-  allocaBudgetChecks
+  allocaFrontierWitness
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect

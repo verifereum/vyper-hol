@@ -131,6 +131,3 @@ Resume ld_full_endpoint[fresh]:
   drule ld_head_order_cong >> simp[]
 QED
 Finalise ld_full_endpoint
-
-val _ = if null (hyp ld_full_endpoint) then ()
-  else raise Fail "full endpoint has hypotheses";

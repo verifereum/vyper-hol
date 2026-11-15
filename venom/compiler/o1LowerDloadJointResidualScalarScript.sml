@@ -1,6 +1,7 @@
 (* Remaining clean single-output scalar operations. *)
 Theory o1LowerDloadJointResidualScalar
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointScalar o1LowerDloadJointRead0 o1LowerDloadJointAssign
   o1LowerDloadJointRelation o1LowerDloadOccurrence o1LowerDloadEnvironment
   ptrDiscipline pointerConfinedDefs memLocDefs unitShapeDefs o1PassContract
@@ -8,7 +9,7 @@ Ancestors
 
 Theorem ld_joint_residual_scalar_operands_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [SIGNEXTEND; BYTE; OFFSET] ==>
   !op. MEM op inst.inst_operands ==>
@@ -22,7 +23,7 @@ QED
 
 Theorem ld_joint_residual_scalar_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [SIGNEXTEND; BYTE; OFFSET; INITIAL_FMP] /\
   step_inst fuel C inst s = OK s1 ==>
@@ -64,7 +65,7 @@ QED
 Theorem ld_joint_residual_scalar_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [SIGNEXTEND; BYTE; OFFSET; INITIAL_FMP] /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>

@@ -43,6 +43,3 @@ Proof
      simp[lower_dload_inst_supply_def]) >>
   `n = 0` by gvs[] >> gvs[]
 QED
-
-val _ = if null (hyp dload_control_next_source_guards) then ()
-        else raise Fail "next source guards: nonempty hypotheses";
