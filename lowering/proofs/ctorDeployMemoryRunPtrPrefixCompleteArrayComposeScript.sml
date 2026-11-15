@@ -226,7 +226,57 @@ Theorem prefix_complete_array_setup_exit_pair_mode_exact:
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
       !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
-  cheat
+  disch_then (mk_asm "child") >>
+  strip_tac >>
+  mp_tac prefix_complete_array_setup_loop_mode_exact >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rule_assum_tac BETA_RULE >>
+  rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
+  `(^SetupResult)` by (simp_tac std_ss [] >> asm_rewrite_tac[SUBSET_REFL] >> simp[]) >>
+  `?actual Hout qout A.
+    (^LoopAtMode) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
+    (^FrameMode) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    (checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (prepared,H,qt) [] (OK actual,Hout,qout)) /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
+    (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
+      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem)` by
+    (BETA_TAC >> asm "child" (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_prepared_path_mode)) >>
+     (impl_tac >- (
+     asm_rewrite_tac[] >>
+     conj_tac >- (strip_tac >> fs[]) >>
+     conj_tac
+     >- (qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (irule_at Any) >> simp[] >> rpt strip_tac >> fs[]) >>
+     qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (irule_at Any) >>
+     qexistsl [`loop_st.cs_current_insts`,`jump_id`,`hdr_bb'`,`entry_bb`] >>
+     simp_tac std_ss [SUBSET_REFL] >> asm_rewrite_tac[] >> simp[])) >>
+     disch_then (qx_choosel_then [`actual`,`Hout`,`qout`,`A`] strip_assume_tac) >>
+     qexistsl [`actual`,`Hout`,`qout`,`A`] >> fs[]) >>
+  qexistsl [`prepared`,`slot`,`H`,`qt`,`actual`,`Hout`,`qout`,`A`] >>
+  rule_assum_tac (SIMP_RULE std_ss []) >>
+  rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
+  simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
+  conj_tac >- (strip_tac >> fs[] >> metis_tac[gas_origin_ptr_path_trans]) >>
+  conj_tac >-
+    (strip_tac >> fs[] >>
+     irule (gas_path_mem_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE std_ss []) >> qexists `prepared` >> simp[]) >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `st.cs_next_var <= loop_st.cs_next_var` by
+       (drule abi_decode_dynarray_checked_prefix_shape >>
+        simp[abi_decode_source_opcode_def] >> strip_tac >>
+        drule abi_decode_array_header_shape >>
+        simp[abi_decode_source_opcode_def] >> strip_tac >>
+        drule abi_decode_index_init_shape >> strip_tac >> simp[]) >>
+     `abi_decoder_older_vars loop_st.cs_next_var x` by
+       (fs[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  conj_tac >-
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `hdr_bb'` >> simp[]) >>
+  irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]
 QED
 
 
