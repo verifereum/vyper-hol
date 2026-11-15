@@ -4,6 +4,7 @@ Ancestors
   codegenEntryRel codegenAsmProgOk asmFrameRel frameJointTrace asmSem symbolResolve
   frameOutcome callTrace vfmExecution frameHistoryCfg frameOriginHistory
   frameJointTransition venomExecProps blockSimHelpers fnSimSpec
+  asmOptimizer codegenEntrySim codegenSymRel
   list rich_list pred_set words arithmetic
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
@@ -53,6 +54,27 @@ val focus_producer_goal : term = ``
 
 (* The actual execution component of the simultaneous motive. The empty
    tail belongs to the initial relation; the current tail is explicit. *)
+val focus_finalizer_prefix_bridge_goal : term = ``
+  \fin rpolicy unit cpl prog prog' vs0 es0 result final.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    generate_context_plan unit.cu_context = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+    codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+    asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+      (entry_asm_state vs0 es0 with
+        as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+    label_flow_ok unit.cu_context /\ sym_unit_static_ok unit /\
+    run_call es0 = SOME (result,final) /\
+    ~frame_resource_starved es0 result final ==>
+    ?max_cost. !n ast.
+      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog n (entry_asm_state vs0 es0) = AsmOK ast ==>
+      n <= max_cost /\
+      (ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" ==>
+        ast.as_gas_readings <> [])
+``;
+
 val focus_execution_motive : term = ``
   \vs0 ctx prog data es0 ast0 result final tail q0 evs qs q n ast es.
     joint_trace vs0 ctx q0 evs qs q /\
@@ -198,7 +220,7 @@ val _ = app
        type_of (snd (strip_abs tm)) = type_of ``T``
     then ()
     else raise Fail "focus component interface has free names or a non-Boolean body")
-  [focus_joint_motive, focus_dft_packet_step_goal,
+  [focus_finalizer_prefix_bridge_goal, focus_joint_motive, focus_dft_packet_step_goal,
    focus_cfg_cursor_step_goal, focus_s7_frame_step_goal, focus_s7_guard];
 
 val _ = app
