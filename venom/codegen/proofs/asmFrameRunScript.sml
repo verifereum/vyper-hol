@@ -163,3 +163,45 @@ Proof
     simp[asm_frame_rel_tail_def] >> gvs[asm_frame_rel_def]) >>
   metis_tac[asm_frame_terminal_gas_readings]
 QED
+
+Theorem asm_frame_run_tail:
+  !n tail prog data es0 a es r es'.
+    asm_frame_prog_ok prog /\ asm_frame_rel_tail tail prog data es0 a es /\
+    run_call es = SOME (r, es') ==>
+    frame_resource_starved es0 r es' \/
+    ((!a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+             prog n a = AsmHalt a' ==>
+        frame_outcome es0 r es' NONE a'.as_returndata a'.as_logs /\
+        es'.rollback.accounts = a'.as_accounts /\
+        es'.rollback.toDelete = a'.as_pending_deletions /\
+        es'.rollback.tStorage = a'.as_transient /\
+        a'.as_requests = call_requests es0 /\ a'.as_gas_readings = tail) /\
+     (!a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+             prog n a = AsmRevert a' ==>
+        (?lgs. frame_outcome es0 r es' (SOME Reverted) a'.as_returndata lgs) /\
+        frame_inst_raises es0 Reverted Revert /\ a'.as_gas_readings = tail) /\
+     (!a'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+             prog n a = AsmFault a' ==>
+        (?exc lgs. exc <> Reverted /\
+          frame_outcome es0 r es' (SOME exc) [] lgs) /\
+        a'.as_gas_readings = tail))
+Proof
+  Induct >- simp[asm_steps_def] >>
+  rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `a.as_pc < LENGTH prog`) >- simp[asm_steps_def] >>
+  Cases_on `is_data_inst (EL a.as_pc prog)`
+  >- (Cases_on `EL a.as_pc prog` >>
+      gvs[is_data_inst_def, asm_step_def, asm_steps_def]) >>
+  `asm_frame_step_ok_tail tail prog data es0 a es` by
+    (irule asm_frame_step_tail >> simp[]) >>
+  pop_assum mp_tac >> simp[asm_frame_step_ok_tail_def] >> strip_tac
+  >- gvs[] >>
+  simp[asm_steps_def] >>
+  Cases_on `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+              (EL a.as_pc prog) a` >> gvs[]
+  >~ [`AsmOK a1`]
+  >- (first_x_assum (qspecl_then
+        [`tail`, `prog`, `data`, `es0`, `a1`, `es1`, `r`, `es'`] mp_tac) >>
+      simp[]) >>
+  DISJ2_TAC >> metis_tac[]
+QED
