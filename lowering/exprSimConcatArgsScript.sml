@@ -1330,7 +1330,8 @@ Resume concat_args_sim[tail_exit]:
   `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
        (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac) >>
-     simp[] >> disch_then (qx_choose_then `exc` strip_assume_tac) >>
+     impl_tac >- simp[] >>
+     disch_then (qx_choose_then `exc` strip_assume_tac) >>
      qexists_tac `exc` >> conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
