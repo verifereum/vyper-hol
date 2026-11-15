@@ -437,6 +437,10 @@ Proof
     (simp[Abbr `t`, Abbr `a`] >> irule local_mstore_immutables_at >>
      reverse conj_tac >- metis_tac[] >>
      qexistsl_tac [`id`, `sz`] >> gvs[type_memory_size_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+    LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    simp[Abbr `t`, venomMemPropsTheory.mstore_memory_nondecreasing] >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `t`, Abbr `a`]
 QED
 
@@ -1154,11 +1158,12 @@ Theorem assign_attr_local_rhs_outcome:
       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\H res ee r. expr_exit res r) ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (es,s0) (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -1187,7 +1192,8 @@ Proof
           strip_tac >>
           disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
-          qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs]) >>
+          qexistsl_tac [`INL ()`, `ff`, `OK u`] >>
+          simp[stmt_post_end_gas_obs, halt_exit_def]) >>
       reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
       >- (disj1_tac >> assign_attr_bad_storage_tac >>
           metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
@@ -1201,7 +1207,7 @@ Proof
       >- (irule assign_attr_local_marked_exec >>
           (conj_tac >- (qexists_tac `lctx` >> simp[])) >>
           ntac 2 (irule gas_marked_exec_bind_exception) >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[halt_exit_def] >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
