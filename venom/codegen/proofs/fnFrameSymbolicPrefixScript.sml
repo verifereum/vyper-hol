@@ -199,6 +199,41 @@ Proof
   cheat
 QED
 
+Theorem active_frame_symbolic_return_progress:
+  joint_config_reachable vs0 unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn saved
+    ra rest mem0 sentry ret srest labs0 /\
+  active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast ra rest mem0
+    ret srest labs0 ss /\
+  ~in_revert_forward fn s /\
+  env = asm_data_env prog vs0.vs_code /\
+  focus_s7_symbolic_context unit prog /\
+  focus_s7_symbolic_guard prog cpl fn inst s /\
+  joint_transition unit.cu_context
+    (JointConfig stk PG G tn fn inst s oms om hs h)
+    (SOME (OriginResume fuel fn inst s retv send post))
+    (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+  ?n ast1 ss1.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
+      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast1 ss1 /\
+    (0 < n \/
+     (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+      stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\
+      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        LENGTH bb.bb_instructions - t.vs_inst_idx <
+          LENGTH bb.bb_instructions - s.vs_inst_idx))
+Proof
+  simp[joint_transition_return] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `frame_stack_symbolic_plan _ _ _ _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [frame_stack_symbolic_plan_cases]) >>
+  gvs[] >> FAIL_TAC "return snapshot inversion"
+QED
+
 Theorem normal_frame_symbolic_joint_progress:
   joint_config_reachable vs0 unit.cu_context
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
