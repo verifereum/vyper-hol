@@ -255,6 +255,44 @@ Proof
   disch_then (qspec_then `s.vs_gas_readings` mp_tac) >> simp[]
 QED
 
+Theorem stopped_invoke_native_row:
+  !p d fuel ctx fn bb inst s nm ops callee args cs slots keys.
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode = INVOKE /\
+    decode_invoke inst = SOME (nm,ops) /\
+    lookup_function nm ctx.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME args /\
+    setup_callee callee args s = SOME cs /\
+    (!g tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots g ==>
+      ?k. k <= LENGTH keys /\
+        trace_gas (dftGasFromListTraceDefs$trace_blocks
+          ((d,inst.inst_id)::p) d fuel ctx callee
+          (cs with vs_gas_readings := g ++ tail)) =
+        ZIP (TAKE k keys, TAKE k g)) ==>
+    !g tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots g /\
+      (~?u. step_inst fuel ctx inst
+        (s with vs_gas_readings := g ++ tail) = OK u) ==>
+      ?k. k <= LENGTH keys /\
+        trace_gas (dftGasFromListTraceDefs$trace_block p d fuel ctx fn bb
+          (s with vs_gas_readings := g ++ tail)) =
+        ZIP (TAKE k keys, TAKE k g)
+Proof
+  rpt strip_tac >>
+  `get_instruction bb
+     (s with vs_gas_readings := g ++ tail).vs_inst_idx = SOME inst`
+    by simp[] >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[cj 1 dftGasFromListTraceDefsTheory.trace_defs,
+       gas_eval_operands, gas_setup_callee] >>
+  Cases_on `step_inst fuel ctx inst
+    (s with vs_gas_readings := g ++ tail)` >>
+  gvs[dftGasFromListTraceDefsTheory.trace_gas_def,
+      dftGasFromListTraceDefsTheory.visit_gas_def]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
