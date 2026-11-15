@@ -13,13 +13,12 @@ val () = holbuild_extra_deps ["../tests/fixtures/check_contract"]
 (* Branch checks for guarded call dispatch; fixture checks below also exercise
    these paths through the contract checker. Deliberately conflicting metadata
    checks that syntax shortcuts and self/pop keep their original priority. *)
-val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], [], [], [], []) :
+val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], [], [], []) :
   int # num option # (string # num) list # string list #
   (string # type) list # ((num option # string) # type) list #
   (((num option # string) # (num option # string)) list) #
   ((num option # string) # literal) list #
-  (num # (string # num) list) list #
-  ((num option # string) # (expr # json_expr)) list``;
+  (num # (string # num) list) list``;
 val call_arg = ``Literal (BaseT BoolT) (BoolL T)``;
 (* An interface constructor yields its address as a stack value. *)
 val iface_result = ``Builtin (BaseT AddressT) (Acc Address) [^call_arg]``;
@@ -45,13 +44,12 @@ fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
 val override_call_ctx =
   ``(0, SOME 0, [], [], [], [],
-      [((SOME 0, "compute"), (NONE, "compute"))], [], [], []) :
+      [((SOME 0, "compute"), (NONE, "compute"))], [], []) :
     int # num option # (string # num) list # string list #
     (string # type) list # ((num option # string) # type) list #
     (((num option # string) # (num option # string)) list) #
     ((num option # string) # literal) list #
-    (num # (string # num) list) list #
-  ((num option # string) # (expr # json_expr)) list``;
+    (num # (string # num) list) list``;
 val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   "abstract call links to concrete override"
   (call_attr self_name ``"compute"`` ``NONE : string option``)
@@ -650,7 +648,7 @@ val expected_ordinary_slice =
 val () = if not (null (find_terms (aconv expected_ordinary_slice) ordinary_slice_ast))
   then () else raise Fail "ordinary slice decoded unexpectedly";
 val () = if aconv (rhs (concl (bossLib.EVAL
-    ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^expected_ordinary_slice``)))
+    ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^expected_ordinary_slice``)))
   ``Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
       [Name (BaseT (BytesT (Dynamic 10))) "b";
        Builtin (BaseT (UintT 256)) (Bop Add)

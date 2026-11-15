@@ -2,7 +2,7 @@ Theory jsonToVyperExprCV
 Ancestors
   jsonToVyperExpr jsonToVyperTypeCV jsonAST vyperAST list option cv cv_rep
 Libs
-  cv_transLib jsonToVyperCVLib wordsLib Omega
+  cv_transLib jsonToVyperCVLib wordsLib
 
 (* Eliminate higher-order recursive OPTION_MAP specializations without changing
    which optional operands are translated. *)
@@ -18,38 +18,21 @@ val () = cv_auto_trans interface_constructor_result_def;
 val () = cv_auto_trans translate_module_call_def;
 val () = cv_auto_trans translate_call_def;
 
-val origin_hex_byte_pre_def = cv_trans_pre "origin_hex_byte_pre"
-  (SIMP_RULE list_ss [] origin_hex_byte_def);
+val translate_expr_compute = save_thm ("translate_expr_compute",
+  PURE_REWRITE_RULE [OPTION_MAP_as_case] translate_expr_def);
 
-Theorem origin_hex_byte_pre[cv_pre]:
-  origin_hex_byte_pre (b : word8)
-Proof
-  rw[origin_hex_byte_pre_def] >>
-  qspec_then `b` mp_tac wordsTheory.w2n_lt >>
-  simp[wordsTheory.dimword_def] >> Omega.OMEGA_TAC
-QED
-
-val () = cv_auto_trans origin_hex_bytes_def;
-val () = cv_auto_trans origin_int_string_def;
-val () = cv_auto_trans canonical_literal_origin_def;
-val () = cv_auto_trans origin_node_kind_def;
-val () = cv_auto_trans origin_numeric_def;
-val () = cv_auto_trans origin_text_def;
-val () = cv_auto_trans origin_bytes_def;
-val () = cv_auto_trans origin_same_value_def;
-val () = cv_auto_trans origin_homogeneous_def;
-val () = cv_auto_trans origin_membership_def;
-val origin_select_pre_def = cv_auto_trans_pre "origin_select_pre" origin_select_def;
-
-Theorem origin_select_pre[cv_pre]:
-  origin_select_pre origin index
-Proof
-  rw[origin_select_pre_def, AllCaseEqs()]
-QED
-
-val () = cv_auto_trans origin_retype_def;
-val () = cv_auto_trans expr_origin_key_def;
-val () = cv_auto_trans lookup_origin_pair_def;
+val translate_expr_compute_ind =
+  jsonToVyperCVLib.register_first_order_induction "translate_expr_exec"
+    translate_expr_compute
+    (WF_REL_TAC `measure (λx. case x of
+       | INL (_, e) => json_expr_size e
+       | INR (INL (_, es)) => list_size json_expr_size es
+       | INR (INR (_, kws)) => list_size json_keyword_size kws)` >>
+     rw[] >>
+     imp_res_tac find_keyword_size >>
+     gvs[] >>
+     drule is_raw_call_calldata_call_nonempty >>
+     Cases_on `args` >> gvs[]);
 
 val () = cv_auto_trans find_keyword_def;
 fun cv_equation name =
@@ -80,74 +63,20 @@ Proof
 QED
 
 
-val translate_expr_with_policy_compute = save_thm
-  ("translate_expr_with_policy_compute",
-   PURE_REWRITE_RULE [OPTION_MAP_as_case, optionTheory.OPTION_BIND_eq_case]
-     translate_expr_with_policy_def);
-
-val translate_expr_with_policy_compute_ind =
-  jsonToVyperCVLib.register_first_order_induction
-    "translate_expr_with_policy_exec" translate_expr_with_policy_compute
-    (WF_REL_TAC `measure (λx. case x of
-       | INL (_, _, e) => json_expr_size e
-       | INR (INL (_, _, es)) => list_size json_expr_size es
-       | INR (INR (INL (_, _, kws))) => list_size json_keyword_size kws
-       | INR (INR (INR (INL (_, _, e, value)))) => json_expr_size e
-       | INR (INR (INR (INR (_, _, es, value)))) => list_size json_expr_size es)` >>
-     rw[] >> imp_res_tac find_keyword_size >> gvs[] >>
-     drule is_raw_call_calldata_call_nonempty >> Cases_on `args` >> gvs[]);
-
-val translate_expr_with_policy_pre_def = cv_auto_trans_pre_rec
-  "translate_expr_with_policy_pre translate_expr_list_with_policy_pre translate_kwargs_with_policy_pre resolved_origin_expr_pre resolved_origin_list_pre"
-  translate_expr_with_policy_compute
+val translate_expr_pre_def = cv_auto_trans_pre_rec
+  "translate_expr_pre translate_expr_list_pre translate_kwargs_pre"
+  translate_expr_compute
   (WF_REL_TAC `measure (λx. case x of
-       | INL (_, _, e) => cv_size e
-       | INR (INL (_, _, es)) => cv_size es
-       | INR (INR (INL (_, _, kws))) => cv_size kws
-       | INR (INR (INR (INL (_, _, e, value)))) => cv_size e
-       | INR (INR (INR (INR (_, _, es, value)))) => cv_size es)` >>
-   cv_termination_tac >> imp_res_tac cv_find_keyword_pair_size >>
+     | INL (_, e) => cv_size e
+     | INR (INL (_, es)) => cv_size es
+     | INR (INR (_, kws)) => cv_size kws)` >>
+   cv_termination_tac >>
+   imp_res_tac cv_find_keyword_pair_size >>
    first_assum (fn th =>
      match_mp_tac (MATCH_MP
        (REWRITE_RULE [GSYM AND_IMP_INTRO] arithmeticTheory.LESS_EQ_LESS_TRANS)
-       th)) >> cv_termination_tac);
-
-(* Default-mode APIs are nonrecursive aliases of the total policy translator. *)
-val translate_expr_pre_def = cv_auto_trans_pre
-  "translate_expr_pre" translate_expr_api_def;
-val translate_expr_list_pre_def = cv_auto_trans_pre
-  "translate_expr_list_pre" translate_expr_list_api_def;
-val translate_kwargs_pre_def = cv_auto_trans_pre
-  "translate_kwargs_pre" translate_kwargs_api_def;
-val translate_origin_expr_pre_def = cv_auto_trans_pre
-  "translate_origin_expr_pre" translate_origin_expr_api_def;
-val translate_origin_list_pre_def = cv_auto_trans_pre
-  "translate_origin_list_pre" translate_origin_list_api_def;
-
-
-Theorem translate_expr_list_with_policy_map:
-  translate_expr_list_with_policy resolve ctx es =
-    MAP (translate_expr_with_policy resolve ctx) es
-Proof
-  Induct_on `es` >> simp[translate_expr_with_policy_def]
-QED
-
-Theorem translate_expr_with_policy_pre[cv_pre]:
-  (∀resolve ctx e. translate_expr_with_policy_pre resolve ctx e) ∧
-  (∀resolve ctx es. translate_expr_list_with_policy_pre resolve ctx es) ∧
-  (∀resolve ctx kws. translate_kwargs_with_policy_pre resolve ctx kws) ∧
-  (∀resolve ctx e value. resolved_origin_expr_pre resolve ctx e value) ∧
-  (∀resolve ctx es values. resolved_origin_list_pre resolve ctx es values)
-Proof
-  ho_match_mp_tac translate_expr_with_policy_ind >>
-  rpt strip_tac >> gvs[] >>
-  ONCE_REWRITE_TAC [translate_expr_with_policy_pre_def] >> simp[] >>
-  rpt strip_tac >>
-  imp_res_tac calldata_slice_bound_length >>
-  imp_res_tac is_raw_call_calldata_call_nonempty >>
-  gvs[translate_expr_list_with_policy_map]
-QED
-
+       th)) >>
+   cv_termination_tac);
 
 Theorem translate_expr_list_map:
   translate_expr_list ctx es = MAP (translate_expr ctx) es
@@ -155,16 +84,18 @@ Proof
   Induct_on `es` >> simp[translate_expr_def]
 QED
 
+(* The remaining HD and EL operands are guarded by the call-shape tests. *)
 Theorem translate_expr_pre[cv_pre]:
   (∀ctx e. translate_expr_pre ctx e) ∧
   (∀ctx es. translate_expr_list_pre ctx es) ∧
-  (∀ctx kws. translate_kwargs_pre ctx kws) ∧
-  (∀ctx e value. translate_origin_expr_pre ctx e value) ∧
-  (∀ctx es values. translate_origin_list_pre ctx es values)
+  (∀ctx kws. translate_kwargs_pre ctx kws)
 Proof
-  simp[translate_expr_pre_def, translate_expr_list_pre_def,
-       translate_kwargs_pre_def, translate_origin_expr_pre_def,
-       translate_origin_list_pre_def, translate_expr_with_policy_pre]
+  ho_match_mp_tac translate_expr_compute_ind >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [translate_expr_pre_def] >> rw[] >>
+  imp_res_tac calldata_slice_bound_length >>
+  imp_res_tac is_raw_call_calldata_call_nonempty >>
+  gvs[translate_expr_list_map]
 QED
 
 (* These list helpers expose the original nested MAP recursions as ordinary
