@@ -5,7 +5,7 @@ Ancestors
   stmtLowering nonreentrantEquiv transientLockProps
   emitHelperProps exprLoweringProps emitHelper compileEnv context
   venomExecSemantics venomState venomInst
-  vyperAST list rich_list transientLockFrameProps
+  vyperAST list rich_list transientLockFrameProps venomOperandProps
 
 Theorem compile_return_unlock_source_correct:
   state_rel func cenv cx vs ss /\
@@ -78,20 +78,6 @@ Theorem eval_operands_tstore[simp]:
   eval_operands ops (tstore key value ss) = eval_operands ops ss
 Proof
   Induct_on `ops` >> simp[eval_operands_def]
-QED
-
-Theorem eval_operands_append[local]:
-  eval_operands (left ++ right) ss =
-    case eval_operands left ss of
-      NONE => NONE
-    | SOME words => OPTION_MAP (APPEND words) (eval_operands right ss)
-Proof
-  Induct_on `left`
-  >- (Cases_on `eval_operands right ss` >> simp[eval_operands_def]) >>
-  simp[eval_operands_def] >>
-  Cases_on `eval_operand h ss` >> simp[] >>
-  Cases_on `eval_operands left ss` >> simp[] >>
-  Cases_on `eval_operands right ss` >> simp[]
 QED
 
 Theorem step_RET_values:
