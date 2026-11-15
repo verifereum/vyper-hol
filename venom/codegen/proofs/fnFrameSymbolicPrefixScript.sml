@@ -445,13 +445,79 @@ Proof
   drule body_plan_inv_facts >> strip_tac >>
   drule_all fnBlockBodyTheory.body_operands_le_16 >> strip_tac >>
   drule_all fnBlockBodyClassesTheory.body_plan_call_entry >> strip_tac >>
-  drule_all body_plan_inv_static >> strip_tac >>
-  drule_all body_plan_inv_step >> strip_tac >>
-  fs[] >>
-  `unit_shape_ok unit /\ dfg = dfg_build_function fn` by
+  `?sms. sym_steps prog (asm_data_env prog vs0.vs_code)
+    (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops))) ss = SymOK sms /\
+    sym_frame_inv prog (asm_data_env prog vs0.vs_code) unit.cu_context cpl
+      fn ret srest labs0 arranged mid sms` by
+    (irule body_plan_symbolic_call_prepare >>
+     simp[] >> qhdtm_assum `body_plan_inv` (irule_at Any) >>
+     simp[] >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`ps'`,
+       `[SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post'`] >>
+     gvs[]) >>
+  `unit_shape_ok unit` by gvs[body_plan_inv_def] >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_compute_operands >> strip_tac >>
+  `fn_shape_ok fn'` by metis_tac[unit_shape_ok_def, EVERY_MEM, EL_MEM] >>
+  `fn_shape_ok fn` by metis_tac[unit_shape_ok_def, EVERY_MEM] >>
+  `generate_context_plan unit.cu_context = SOME cpl` by gvs[body_plan_inv_def] >>
+  `MEM (AsmLabel nm) prog` by
+    metis_tac[sym_invoke_callee_code_label] >>
+  `EVERY (\op. op <> dead_stack_marker) ops` by
+    metis_tac[fnLineageInvSupportTheory.analyzed_compute_operands_no_marker] >>
+  `?scas saved_sym.
+    sym_steps prog (asm_data_env prog vs0.vs_code)
+      (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3) ss = SymOK scas /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) 3 sms = SymOK scas /\
+    asm_sym_rel prog (asm_data_env prog vs0.vs_code) cas scas /\
+    scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ saved_sym ++ srest /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (stack_pop (LENGTH ops) arranged.ps_stack)) saved_sym /\
+    scas.sym_mem_labels = sms.sym_mem_labels /\
+    (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cpl b) /\
+    MEM (AsmLabel ret_lbl) prog` by
+    (irule sym_invoke_entry_symbolic_boundary >> simp[] >>
+     qhdtm_assum `sym_frame_inv` (irule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`saved'`, `rest`] >> simp[] >>
+     qpat_assum `inst.inst_operands = _` (irule_at Any) >>
+     gvs[] >> metis_tac[]) >>
+  `(s.vs_call_ctx, s.vs_tx_ctx, s.vs_block_ctx, s.vs_code, s.vs_prev_hashes) =
+    (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx, vs0.vs_code, vs0.vs_prev_hashes)` by
+    metis_tac[joint_config_reachable_def, joint_origin_history_projection,
+      frame_history_readonly] >>
+  qexistsl [`LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3`,
+    `cas`, `scas`] >> simp[] >> conj_tac
+  >- (irule blockSimHelpersTheory.asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+  simp[normal_frame_symbolic_plan_def] >>
+  qexistsl [`cas`, `n2w ret_off`, `saved' ++ rest`, `cas.as_memory`,
+    `scas`, `ret_lbl`, `saved_sym ++ srest`, `scas.sym_mem_labels`] >>
+  conj_tac
+  >- (irule frame_stack_symbolic_plan_call >> simp[] >>
+      qhdtm_assum `frame_stack_symbolic_plan` (irule_at Any) >> simp[] >>
+      gvs[] >>
+      (metisTools.METIS_TAC [])) >>
+  disj2_tac >>
+  `codegen_assembly rpolicy unit = SOME prog /\
+   codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl` by
     gvs[body_plan_inv_def] >>
-  drule_at (Pat `MEM inst (fn_insts fn)`) sym_invoke_selected_entry_facts >>
-  FAIL_TAC "entry facts matching"
+  `codegen_ready_fn fn'` by
+    ((metis_tac[body_fn_shape])) >>
+  `enters_block fn' cs (cs with vs_inst_idx := 0)` by
+    metis_tac[entry_prefix_enters] >>
+  `t = cs with vs_inst_idx := 0` by gvs[enters_block_def] >>
+  `cs.vs_params = args` by metis_tac[setup_callee_frame] >>
+  `cs.vs_labels = s.vs_labels` by
+    metis_tac[calleeTransportTheory.setup_callee_shared_fields] >>
+  `!l. FLOOKUP cs.vs_labels l =
+    OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)` by
+    gvs[body_plan_inv_def] >>
+  qexistsl [`cs`, `ast.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3`] >>
+  simp[entry_frame_symbolic_plan_def] >>
+  conj_tac
+  >- (gvs[] >> simp[entry_frame_plan_def] >> conj_tac
+      >- (qexists `j` >> simp[]) >>
+      qexists `0` >> simp[entry_prefix_zero]) >>
+  gvs[]
 QED
 
 Theorem sym_body_plan_ordinary_ok:
