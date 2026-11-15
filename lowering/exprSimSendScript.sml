@@ -8,8 +8,8 @@
  * oracle mode the CALL takes the same outcome as the source's eval_send
  * (extCallOracleStep's send_call_oracle_step): on success both adopt it and
  * state_rel holds after, on failure the source raises "send failed" and
- * the ASSERT of the 0w success word aborts. In a static frame, positive
- * value faults at CALL after the operands run. expr_sim_inv's
+ * the ASSERT of the 0w success word aborts.  In a static frame, nonzero
+ * value instead faults at CALL after all operands run.  expr_sim_inv's
  * outcomes_accounts_typed rules out the source's
  * "call outcome accounts" error, which Venom does not make.  The NoneV
  * result occupies no bytes, so expr_val_at holds of it wherever Lit 0w

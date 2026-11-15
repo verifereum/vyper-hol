@@ -752,7 +752,8 @@ Theorem dynarray_round_prepare:
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   (!s. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
-     ainst stmts_lbl st k es s ==>
+     ainst stmts_lbl st k es s /\
+     alloca_frame cenv origin_es caller old cenv es s ==>
      val_in_memory tv (EL k vs) (w2n arr_base + 32 + k * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
   (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) ==>
@@ -769,7 +770,9 @@ Theorem dynarray_round_prepare:
     (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts) entry /\
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) entry /\
   caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= ainst.inst_id /\
-  caller.cs_next_id <= st.cs_next_id ==>
+  caller.cs_next_id <= st.cs_next_id /\
+  array_caller_frame caller old cc /\
+  alloca_frame cenv origin_es caller old cenv es cc ==>
   ?s2 bc'.
     stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = (bc',sb1) /\
     ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
@@ -796,7 +799,18 @@ Proof
   `k <> LENGTH vs` by decide_tac >> gvs[] >>
   `cenv_top_ext cenv bc (FEMPTY :: es.scopes)` by
     (irule dynarray_for_code_scope_frame >> fs[array_loop_inv_def] >> metis_tac[]) >>
-  first_x_assum drule >> strip_tac >>
+  `alloca_frame cenv es caller cc cenv es s` by
+    (qpat_x_assum `alloca_frame cenv es st cc cenv es s` mp_tac >>
+     qpat_x_assum `caller.cs_next_id <= st.cs_next_id` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[alloca_frame_def] >>
+     disch_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+     `aid < st.cs_next_id` by (fs[] >> decide_tac) >>
+     first_x_assum irule >> fs[] >> metis_tac[]) >>
+  `alloca_frame cenv origin_es caller old cenv es s` by
+    (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
+  qpat_x_assum `!s. _ /\ alloca_frame _ _ _ _ _ _ _ ==> _`
+    drule_all >> strip_tac >>
   drule dynarray_for_code_iteration_static >> strip_tac >>
   drule dynarray_for_code_entry_inputs >> strip_tac >>
   `?s2. dynarray_entry_ready ctx func bc cx st0 es id tv (EL k vs) sb0 sa ov tot ep
@@ -828,13 +842,6 @@ Proof
   `alloca_frame cenv es caller s bc entry s2` by
     (qpat_x_assum `!caller. _` (qspec_then `caller` mp_tac) >>
      simp[Abbr `entry`, alloca_frame_def]) >>
-  `alloca_frame cenv es caller cc cenv es s` by
-    (qpat_x_assum `alloca_frame cenv es st cc cenv es s` mp_tac >>
-     qpat_x_assum `caller.cs_next_id <= st.cs_next_id` mp_tac >>
-     rpt (pop_assum kall_tac) >> rewrite_tac[alloca_frame_def] >>
-     disch_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
-     `aid < st.cs_next_id` by (fs[] >> decide_tac) >>
-     first_x_assum irule >> fs[] >> metis_tac[]) >>
   `alloca_frame cenv es caller cc bc entry s2` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[]) >>
@@ -862,7 +869,8 @@ Theorem dynarray_for_round_counted:
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   (!s. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
-     ainst stmts_lbl st k es s ==>
+     ainst stmts_lbl st k es s /\
+     alloca_frame cenv origin_es caller old cenv es s ==>
      val_in_memory tv (EL k vs) (w2n arr_base + 32 + k * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
   (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) ==>
@@ -887,7 +895,9 @@ Theorem dynarray_for_round_counted:
         P (es2 with scopes := rest) /\
         lookup_scopes id rest = NONE)) /\
   caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= ainst.inst_id /\
-  caller.cs_next_id <= st.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id ==>
+  caller.cs_next_id <= st.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id /\
+  array_caller_frame caller old cc /\
+  alloca_frame cenv origin_es caller old cenv es cc ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do push_scope_with_var id tv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
@@ -1072,7 +1082,8 @@ Theorem dynarray_for_loop_counted:
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   (!j ei s. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
-     ainst stmts_lbl st j ei s /\ j < LENGTH vs ==>
+     ainst stmts_lbl st j ei s /\
+     alloca_frame cenv origin_es caller old cenv ei s /\ j < LENGTH vs ==>
      val_in_memory tv (EL j vs) (w2n arr_base + 32 + j * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
   (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) ==>
@@ -1196,7 +1207,8 @@ Resume dynarray_for_loop_counted[round]:
         lookup_scopes id rest = NONE)` by
     (qpat_x_assum `!gs r es2. _` mp_tac >> simp[Abbr `entry`]) >>
   `!t. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
-      ainst stmts_lbl st j ei t ==>
+      ainst stmts_lbl st j ei t /\
+      alloca_frame cenv origin_es caller old cenv ei t ==>
     val_in_memory tv (EL j vs) (w2n arr_base + 32 + j * stride) t.vs_memory /\
     ret_pc_ok bc sb0 t` by metis_tac[] >>
   `entry = ei with <|scopes := (FEMPTY |+ (id,

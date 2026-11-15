@@ -6,7 +6,7 @@ Ancestors
   o1LowerDloadNonCallContinuation o1LowerDloadRunnerEndpoints
   o1LowerDloadUnchangedFetch o1LowerDloadRunnerBoundary
   o1ContractSimplifyCfg o1ContractSimplifyCfgSrcFrame o1PassContract
-  ptrDiscipline dretDesugarDefs opcodeClass o1PassLift
+  ptrDiscipline o1SafeUpto dretDesugarDefs opcodeClass o1PassLift
   o1LowerDloadJointRelation o1LowerDloadOccurrence passSimulationDefs
   venomExecSemantics venomExecProps venomInstProps venomInst venomWf
   contextCodegenRel list
@@ -40,6 +40,10 @@ val ldForwardEndpoint = ``
     exec_block fuel C' bb' t = Abort reason t1 /\
     LIST_REL (request_agree_except D) s1.vs_requests t1.vs_requests``;
 
+(* Specialize the cut-sensitive leaves to the whole run. *)
+fun ld_whole th = SIMP_RULE bool_ss [gas_cut_whole]
+  (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] th);
+
 Theorem ld_request_runner_exec_conditional:
   ^ldAbortEndpoint /\ ^ldForwardEndpoint ==> ^ldRequestExecClause
 Proof
@@ -52,11 +56,14 @@ Proof
     (drule ld_joint_source >>
      disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_projection) >>
      fs[Once frame_reachable_cases] >> metis_tac[]) >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   taint_within_upto D (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   fmp_free_ctx C` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+  `ptr_discipline lo C vs` by metis_tac[ptr_discipline_upto_all] >>
   Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
   >- (fs[] >>
       `exec_block fuel C bb s = exec_block fuel C bb s` by simp[] >>
       first_x_assum (drule_all_then strip_assume_tac) >>
-      qexists_tac `fuel` >>
       gvs[Abbr `RR`, ld_request_result_rel_abort]) >>
   Cases_on `step_inst fuel C i s`
   >- suspend "ok"
@@ -70,8 +77,7 @@ QED
 Resume ld_request_runner_exec_conditional[ok]:
   `~v.vs_halted` by metis_tac[ld_step_ok_halted] >>
   Cases_on `is_terminator i.inst_opcode`
-  >- (drule_all ld_runner_branch_endpoint >> strip_tac >>
-      qexists_tac `fuel` >>
+  >- (drule_all (ld_whole ld_runner_branch_endpoint) >> strip_tac >>
       `exec_block fuel C bb s = OK v` by simp[Once exec_block_def] >>
       fs[Abbr `RR`] >> metis_tac[]) >>
   `v.vs_current_bb = s.vs_current_bb /\
@@ -86,7 +92,7 @@ Resume ld_request_runner_exec_conditional[ok]:
     (spose_not_then assume_tac >>
      fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
      gvs[] >> fs[is_terminator_def]) >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (ld_whole ld_joint_noncall_continue)) >>
   strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
@@ -106,7 +112,7 @@ Resume ld_request_runner_exec_conditional[ok]:
   `exec_block fuel C bb s =
    exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[Once exec_block_def] >>
-  gvs[] >> qexists_tac `m` >> simp[]
+  gvs[] >> simp[]
 QED
 
 Resume ld_request_runner_exec_conditional[halt]:
@@ -117,11 +123,10 @@ Resume ld_request_runner_exec_conditional[halt]:
       first_x_assum (drule_all_then strip_assume_tac) >>
       `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
       drule_all ld_joint_unchanged_fetch >> strip_tac >>
-      `exec_block m C' bb' t = Halt te` by simp[Once exec_block_def] >>
-      qexists_tac `m` >> gvs[Abbr `RR`]) >>
-  `taint_within D C vs` by fs[o1_src_inv_def] >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_runner_halt_endpoint) >>
-  strip_tac >> qexists_tac `fuel` >>
+      `exec_block fuel C' bb' t = Halt te` by simp[Once exec_block_def] >>
+      gvs[Abbr `RR`]) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (ld_whole ld_runner_halt_endpoint)) >>
+  strip_tac >>
   gvs[Abbr `RR`, ld_request_result_rel_halt]
 QED
 
@@ -133,10 +138,10 @@ Resume ld_request_runner_exec_conditional[abort]:
       first_x_assum (drule_all_then strip_assume_tac) >>
       `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
       drule_all ld_joint_unchanged_fetch >> strip_tac >>
-      `exec_block m C' bb' t = Abort reason te` by simp[Once exec_block_def] >>
-      qexists_tac `m` >> gvs[Abbr `RR`]) >>
+      `exec_block fuel C' bb' t = Abort reason te` by simp[Once exec_block_def] >>
+      gvs[Abbr `RR`]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
-  qexists_tac `fuel` >> gvs[Abbr `RR`, ld_request_result_rel_abort]
+  gvs[Abbr `RR`, ld_request_result_rel_abort]
 QED
 
 Resume ld_request_runner_exec_conditional[ret]:
@@ -150,14 +155,14 @@ Resume ld_request_runner_exec_conditional[ret]:
   `MEM i (fn_insts fn)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
   `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
-    (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
+    (fs[fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
         o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
   `i.inst_opcode = RET` by
     (drule step_inst_intret_opcodes >>
      fs[no_dret_def, EVERY_MEM] >> strip_tac >>
      gvs[is_raw_fmp_opcode_def]) >>
-  drule_all ld_runner_ret_endpoint >> strip_tac >>
-  qexists_tac `fuel` >> fs[Abbr `RR`] >> metis_tac[]
+  drule_all (ld_whole ld_runner_ret_endpoint) >> strip_tac >>
+  fs[Abbr `RR`] >> metis_tac[]
 QED
 
 Resume ld_request_runner_exec_conditional[call_ok]:
@@ -180,24 +185,13 @@ Resume ld_request_runner_exec_conditional[call_ok]:
     (fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_control_def] >>
      metis_tac[]) >>
   gvs[] >>
-  `terminates (exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx))` by
-    (irule ld_request_runner_packet_terminates >>
-     qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Abbr `RR`] >> metis_tac[]) >>
-  `step_inst (MAX m m') C' i t = OK t1` by
-    (`terminates (step_inst m C' i t)` by simp[terminates_def] >>
-     drule step_inst_terminates_mono >>
-     disch_then (qspec_then `MAX m m'` mp_tac) >> simp[]) >>
-  `exec_block (MAX m m') C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx) =
-   exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
-    (irule exec_block_terminates_mono >> simp[]) >>
   `exec_block fuel C bb s =
    exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[Once exec_block_def] >>
-  `exec_block (MAX m m') C' bb' t =
-   exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+  `exec_block fuel C' bb' t =
+   exec_block fuel C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
     simp[Once exec_block_def] >>
-  qexists_tac `MAX m m'` >> simp[]
+  simp[]
 QED
 Finalise ld_request_runner_exec_conditional
 

@@ -260,26 +260,6 @@ Proof
   simp[venom_state_component_equality] >> metis_tac[optionTheory.IS_SOME_DEF]
 QED
 
-Theorem ld_log_taint:
-  inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
-  step_taint inst s (s with vs_logs := logs) tn = tn
-Proof
-  strip_tac >>
-  `written_taint tn inst s = {}` by
-    (namedCases_on `inst.inst_operands` ["", "a rest"]
-     >- simp[written_taint_def] >>
-     namedCases_on `rest` ["", "b tail"]
-     >- simp[written_taint_def] >>
-     namedCases_on `tail` ["", "c more"]
-     >- simp[written_taint_def] >>
-     Cases_on `more` >> simp[written_taint_def]) >>
-  simp[step_taint_def, mem_taint_def, set_var_taint_def,
-       new_site_bytes_def, step_writes_def, range_bytes_def,
-       source_memory_write_ranges_def, store_taint_def, adopt_reset_def,
-       imm_taint_def, FLOOKUP_DEF, DRESTRICT_UNIV,
-       taint_component_equality] >> SET_TAC[]
-QED
-
 Theorem ld_log_effect:
   ld_vars P A f /\ tn.t_var = f.lf_tv /\
   f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
@@ -307,7 +287,7 @@ Proof
      metis_tac[]) >>
   drule_all ld_log_steps >> strip_tac >>
   `step_taint inst f.lf_src (f.lf_src with vs_logs := logs) tn = tn` by
-    (irule ld_log_taint >> simp[]) >>
+    (irule step_taint_log_logs >> simp[]) >>
   qexists `ss` >>
   gvs[ld_vars_def, ld_memory_def, ld_nonghost_def,
       step_prov_def, set_prov_def, DRESTRICT_UNIV] >> metis_tac[]

@@ -30,7 +30,7 @@ Proof
   `w2n w + (32 + LENGTH bs) < dimword (:256)` by
     (irule (INST_TYPE [alpha |-> ``:256``] hash_live_footprint_bound) >>
      goal_assum (drule_at Any) >>
-     metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
+      fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
   simp[] >> metis_tac[]
 QED
 

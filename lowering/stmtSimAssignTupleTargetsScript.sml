@@ -3,7 +3,7 @@ Theory stmtSimAssignTupleTargets
 Ancestors
   exprSimDefs exprSimProps exprSimStack exprOperandVar loweringPosts stmtSimDefs stmtSimProps
   stmtSimForced gasSummaryCompose fragGasMode
-  tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
+  tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleTargetStoreAbort tupleAssignPrefix
   tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple 
    exprLowering exprLoweringProps fragExec loweringSlice compileEnv loweringStateRelDefs freshWrites
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding stmtLowering
@@ -53,7 +53,7 @@ Proof
 QED
 
 Theorem assign_tuple_targets_suffix[local]:
-  !ctx func cx st0 lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
+  !ctx func cx st0 lctx RetQ cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
     lowered_value_type cenv e = TupleT tys /\
     (?H. valid_horizon cx st0 H ee.storage_trace) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -87,17 +87,23 @@ Theorem assign_tuple_targets_suffix[local]:
     su.cs_next_var <= sl.cs_next_var /\ sl.cs_next_var <= ss.cs_next_var /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\ fn_has_code ss sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    ?ee' t'.
+    ?res ee' r.
       (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
-        (INL (), ee' with gas_obs := tail)) /\
-      gas_marked_path F ctx func sv 0 (OK t') /\
-      !H. valid_horizon cx st0 H ee'.storage_trace ==>
-        stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ())
-          (ee' with gas_obs := []) t'
+        (res, ee' with gas_obs := tail)) /\
+      gas_marked_path F ctx func sv 0 r /\
+      ((?t'. r = OK t' /\
+         !H. valid_horizon cx st0 H ee'.storage_trace ==>
+           stmt_post H ctx func cx lctx cenv cenv sa sf es s0 res
+             (ee' with gas_obs := []) t') \/
+       (exit_result r /\
+        !H. valid_horizon cx st0 H ee'.storage_trace ==>
+          !tail. stmt_exit (RetQ H) (ee' with gas_obs := tail) res r))
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_post H ctx func cenv cx e es sa su s0 ee v op sv` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
+  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa su s0 ee v op sv` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
      simp[]) >>
   drule_all tuple_type_value >> strip_tac >> gvs[] >>
   `LENGTH tys = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
@@ -108,15 +114,6 @@ Proof
      irule tuple_target_aligned_source >>
      qexistsl [`cenv`, `EL n tys`, `EL n vs`] >> simp[]) >>
   `LIST_REL value_has_type tvs vs` by simp[GSYM values_have_types_LIST_REL] >>
-  `~cx.txn.is_static` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
-     disch_then (strip_assume_tac o
-       REWRITE_RULE [expr_post_def, stmt_state_rel_def, state_rel_def]) >>
-     simp[]) >>
-  drule_all assign_tuple_targets_safe >> strip_tac >>
-  rename1 `assign_tuple_targets _ _ _ ee = (INL (),ee')` >>
-  qpat_assum `assign_tuple_targets _ _ _ _ = _`
-    (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
   suspend "prefix"
 QED
 
@@ -192,26 +189,35 @@ Resume assign_tuple_targets_suffix[stores]:
   qpat_x_assum `expr_val_at _ _ (post_value_type cenv e) _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_val_rel _ (TupleT tys) _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
-  `stmt_state_rel H ctx func cenv cx ee t` by
+  `stmt_state_rel H0 ctx func cenv cx ee t` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ ee t` drule >>
      disch_then ACCEPT_TAC) >>
   `local_ptrs_rel func cenv ee.scopes t /\ alloca_inv t /\
-   ~t.vs_call_ctx.cc_static` by
-    (qpat_assum `stmt_state_rel H _ _ _ _ ee t`
-       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+   t.vs_call_ctx.cc_static = cx.txn.is_static` by
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ ee t`
+       (strip_assume_tac o REWRITE_RULE
+         [stmt_state_rel_def,state_rel_def,call_ctx_rel_def]) >>
      asm_rewrite_tac[]) >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`gs`, `T`] tuple_store_targets_path)) >>
-  disch_then (qspec_then `ctx` (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `?t. (!st0 H. _) /\ _`
-    (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
-  qexistsl [`ee'`, `sfv`] >> conj_tac
-  >- (drule_all assign_tuple_target_list_gas_obs >>
-      simp[Once evaluate_def]) >>
+    (Q.SPECL [`gs`, `T`] tuple_store_targets_outcome)) >>
+  disch_then (qspec_then `RetQ`
+    (qx_choosel_then [`res`, `ee'`, `r`] (map_every assume_tac o CONJUNCTS))) >>
+  qexistsl [`res`, `ee'`, `r`] >> conj_tac
+  >- simp[Once evaluate_def] >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>
-  qx_gen_tac `H'` >> strip_tac >>
-  suspend "post"
+  qpat_x_assum `(res = INL () /\ _) \/ _`
+    (DISJ_CASES_THEN2
+      (CONJUNCTS_THEN2 SUBST_ALL_TAC
+        (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)))
+      (map_every assume_tac o CONJUNCTS))
+  >- (disj1_tac >> qexists_tac `sfv` >> conj_tac >- REFL_TAC >>
+      `assign_tuple_target_list cx gs vs ee =
+        (INL (),ee' with gas_obs := ee.gas_obs)` by
+        (qpat_assum `!tail. assign_tuple_target_list _ _ _ _ = _`
+           (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
+      qx_gen_tac `H'` >> strip_tac >> suspend "post") >>
+  disj2_tac >> simp[]
 QED
 
 Resume assign_tuple_targets_suffix[post]:
@@ -337,7 +343,6 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
        (qspec_then `Hx` mp_tac) >> fs[]) >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] assign_tuple_targets_suffix) >>
-  disch_then (qspec_then `lctx` strip_assume_tac) >>
-  qexistsl [`INL ()`, `ee'`, `OK t'`] >> simp[]
+  disch_then (qspecl_then [`lctx`, `RetQ`] mp_tac) >> simp[]
 QED
 

@@ -3,7 +3,7 @@
 Theory tupleAssignImmutableDeployRestore
 Ancestors
   tuplePlaceHeadAdvance immutableAssignCompose tuplePlacePointerReady
-  valueEncodingProps vyperStorageFootprint vyperStorageTrace
+  valueEncodingProps vyperStorageFootprint vyperStorageTrace externalReturnBufferlessNormalize
 
 Theorem tuple_immutable_pending_memory[local]:
   tuple_place_head ctx func ce cx st0 es lo sa tys ltys ltvs vs elems w i s /\

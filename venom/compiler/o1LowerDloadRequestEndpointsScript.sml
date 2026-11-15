@@ -5,21 +5,7 @@ Ancestors
   o1LowerDloadJointRelation o1LowerDloadAbortResult
   o1LowerDloadExceptional o1LowerDloadJointIdentity o1LowerDloadUnchangedFetch
   ptrDiscipline venomExecSemantics venomState opcodeClass list
-
-Theorem step_inst_abort_requests:
-  step_inst fuel C inst s = Abort reason s1 /\
-  inst.inst_opcode <> INVOKE ==> s1.vs_requests = s.vs_requests
-Proof
-  strip_tac >>
-  drule step_inst_abort_opcodes >> strip_tac >>
-  gvs[step_inst_non_invoke] >>
-  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-  simp[exec_create_abort_iff, AllCaseEqs(), halt_state_def,
-       set_returndata_def, exec_write2_def, eval_operands_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[exec_ext_call_def, AllCaseEqs()] >> pairarg_tac >> gvs[]
-QED
+  o1SafeUpto dftGasRequestObservation
 
 Theorem ld_joint_requests:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
@@ -44,6 +30,10 @@ Theorem ld_runner_abort_endpoint_requests:
     LIST_REL (request_agree_except D) s1.vs_requests t1.vs_requests
 Proof
   strip_tac >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    simp[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
   `?t1. step_inst fuel C' inst t = Abort reason t1` by
     (Cases_on `inst.inst_opcode = REVERT`
      >- metis_tac[ld_joint_revert_result] >>

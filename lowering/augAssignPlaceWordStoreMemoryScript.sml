@@ -5,7 +5,7 @@ Ancestors
   instMemFrontier fragGasMode venomExecSemantics venomInst venomState
   emitHelperProps exprSimProps exprLoweringProps memSafeRun loweringPosts
 
-Theorem place_store_emit_run_mem[local]:
+Theorem place_store_emit_run_mem:
   (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient) /\
   emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
                        | _ => MSTORE) [dst; op] sa = ((),sb) /\

@@ -271,20 +271,31 @@ Proof
     (gvs[] >> irule alloca_step_ptr_covers >> metis_tac[]) >>
   drule_all alloca_step_site >> strip_tac >>
   `lookup_var out s1 = SOME (n2w b)` by gvs[eval_operand_def] >>
-  drule_all store_offset_endpoint >> strip_tac >> gvs[] >>
+  drule_all store_offset_endpoint >> strip_tac >>
+  mp_tac (Q.SPECL [`PG`, `G1`, `tn1`, `s1`, `id+1`, `out`,
+    `Lit value`, `n2w b : bytes32`, `value`] mstore_ghost_frame) >>
+  simp[eval_operand_def, op_taint_def] >>
+  disch_then (fn th => map_every assume_tac
+    [CONJUNCT1 th, CONJUNCT1 (CONJUNCT2 th)]) >> gvs[] >>
   `b + off < dimword(:256) /\ b < dimword(:256) /\ off < dimword(:256)` by decide_tac >>
   gvs[lookup_var_def] >>
   conj_tac
   >- (simp[ptr_covers_def, step_prov_def, set_prov_def, out_prov_def,
        first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
-       FLOOKUP_DRESTRICT, op_taint_def, step_taint_def, out_taint_def,
-       set_var_taint_def, mstore_def, update_var_def, lookup_var_def,
-       eval_operand_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac) >>
+       FLOOKUP_DRESTRICT] >>
+      simp[op_taint_def, step_taint_def, out_taint_def,
+       set_var_taint_def, mk_inst_def] >>
+      simp[mstore_def, update_var_def, lookup_var_def,
+       eval_operand_def, FLOOKUP_UPDATE,
+       w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac) >>
   simp[ptr_covers_def, step_prov_def, set_prov_def, out_prov_def,
        first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
-       FLOOKUP_DRESTRICT, op_taint_def, step_taint_def, out_taint_def,
-       set_var_taint_def, mstore_def, update_var_def, lookup_var_def,
-       eval_operand_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac
+       FLOOKUP_DRESTRICT] >>
+  simp[op_taint_def, step_taint_def, out_taint_def,
+       set_var_taint_def, mk_inst_def] >>
+  simp[mstore_def, update_var_def, lookup_var_def,
+       eval_operand_def, FLOOKUP_UPDATE,
+       w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac
 QED
 
 Theorem alloca_store_offset_alloca_ptr_covers:

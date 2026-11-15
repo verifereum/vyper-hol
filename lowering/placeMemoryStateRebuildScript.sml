@@ -128,7 +128,6 @@ Theorem memory_place_write_stmt_state:
   (!name b len a n. local_region cenv ee.scopes r name b len /\ b <= a /\
     a+n <= b+len /\ (a+n <= w2n w \/ w2n w+type_memory_size dtv <= a) ==>
     mem_bytes_at a n t.vs_memory = mem_bytes_at a n r.vs_memory) /\
-  LENGTH r.vs_memory <= LENGTH t.vs_memory /\
   (cenv.ce_is_ctor ==> !nm tv iv off.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY

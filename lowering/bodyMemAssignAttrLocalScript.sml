@@ -2,7 +2,7 @@
    (bodyMemAssign's dispatch): a word field of a local struct (S1's body_assign_attr_local). *)
 Theory bodyMemAssignAttrLocal
 Ancestors
-  gasStorage vyperStorageTrace vyperStorageFootprint
+  gasStorage vyperStorageTrace vyperStorageFootprint targetPlaceSim
   supportedExprTraverse allocLimits allocLimitsProps
   bodySim bodyExprPreFacts supportedStmtTraverse supportedStmts supportedExprs
   vyperTypeCallGraph vyperTypeSystem vyperTypeInvariants

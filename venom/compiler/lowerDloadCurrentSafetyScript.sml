@@ -68,7 +68,10 @@ Resume ld_sync_ordinary_raw[ranges]:
       eval_operand ops.iao_ofst t = SOME y /\ r0 = w2n y /\
       MEM (w2n x,r1) (ranges inst s)` by
     (gvs[] >> drule_all ld_single_access_range_transport >>
-     metis_tac[]) >>
+     (disch_then strip_assume_tac >> first_assum irule >>
+     asm_rewrite_tac[] >> rpt gen_tac >> strip_tac >>
+     first_x_assum irule >> asm_rewrite_tac[] >>
+     qexists_tac `ops` >> asm_rewrite_tac[])) >>
   `?x. eval_operand ops.iao_ofst s = SOME x /\
       (op_prov f.lf_H ops.iao_ofst = NONE ==> x=y) /\
       (!a. op_prov f.lf_H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y)` by

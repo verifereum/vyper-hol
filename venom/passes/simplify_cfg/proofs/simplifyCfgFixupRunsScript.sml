@@ -6,7 +6,7 @@ Ancestors
   simplifyCfgFixupStatic contextCodegenRel passSimulationDefs
   simplifyCfgStruct
 
-Theorem scfg_fix_all_phis_runs_forward_same_fuel:
+Theorem scfg_fix_all_phis_runs_forward_same_fuel[local]:
   !n s r. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
   (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
   fn_entry_state fn s0 /\ scfg_bprefix C fn s0 s /\ (!e. r <> Error e) /\
@@ -35,16 +35,6 @@ Proof
     (irule scfg_rooted_fix_phis_run_block_same_fuel >> simp[] >> metis_tac[]) >>
   simp[run_blocks_unfold, scfg_fix_all_phis_lookup] >>
   Cases_on `run_block n C bb s` >> gvs[]
-QED
-
-Theorem scfg_fix_all_phis_runs_forward:
-  !n s r. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
-  (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
-  fn_entry_state fn s0 /\ scfg_bprefix C fn s0 s /\ (!e. r <> Error e) /\
-  run_blocks n C fn s = r ==>
-  ?m. run_blocks m C (fix_all_phis fn) s = r
-Proof
-  metis_tac[scfg_fix_all_phis_runs_forward_same_fuel]
 QED
 
 Theorem scfg_fix_all_phis_runs_backward:
@@ -96,8 +86,7 @@ Theorem scfg_fix_all_phis_entry_runs_forward:
   fn_entry_state fn s /\ (!e. r <> Error e) /\ run_blocks n C fn s = r ==>
   ?m. run_blocks m C (fix_all_phis fn) s = r
 Proof
-  rpt strip_tac >> irule scfg_fix_all_phis_runs_forward >>
-  simp[] >> metis_tac[scfg_bprefix_rules]
+  metis_tac[scfg_fix_all_phis_entry_runs_forward_same_fuel]
 QED
 
 Theorem scfg_fix_all_phis_entry_runs_backward:

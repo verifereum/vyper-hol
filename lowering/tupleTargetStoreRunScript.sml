@@ -10,7 +10,7 @@ Ancestors
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
   emitHelper emitHelperProps compileEnv loweringStateRelDefs list finite_map
   tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingDefs valueEncodingProps vyperTyping stmtLoweringMono
-  vyperInterpreter freshWrites memoryValueEncoding
+  vyperInterpreter vyperStorageBackend freshWrites memoryValueEncoding
   vyperStorageFootprint vyperStorageTrace vyperFiniteStoragePreservation localPtrsProps
 Libs
   horizonTypeLib
@@ -63,7 +63,7 @@ Proof
      qexistsl [`[dst; op]`, `if tr then TSTORE else SSTORE`, `[]`, `st`, `st'`] >>
      Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
        emit_inst_def, is_terminator_def] >>
-     simp[mk_inst_def] >> simp[Once step_inst_base_def, exec_write2_def]) >>
+     simp[mk_inst_def] >> simp[step_inst_base_opcode_eqs, exec_write2_def]) >>
   `st'.cs_current_bb = st.cs_current_bb /\
    LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
@@ -205,6 +205,10 @@ Proof
           listTheory.EVERY_APPEND]) >>
   qpat_x_assum `MEM _ _ ==> _` drule >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es1 s` by simp[Abbr `es1`] >>
+  `~cx.txn.is_static` by
+    (qpat_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` mp_tac >>
+     Cases_on `cx.txn.is_static` >>
+     simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   qspecl_then [`H`, `func`, `cenv`, `cx`, `es1`, `s`, `tr`, `slot`, `tv`, `v`,
     `typed_val_to_w256 tv v`, `INL ()`, `es'`, `ctx`] mp_tac
     stmt_state_rel_write_storage_word >>
@@ -620,7 +624,7 @@ Theorem tuple_target_nonlocal_head_path:
     (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
     eval_operand op s = SOME (typed_val_to_w256 tv v) /\
     local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
-    ~s.vs_call_ctx.cc_static /\ fn_has_code st sf func /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\ fn_has_code st sf func /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     es'.scopes = es.scopes /\
@@ -646,6 +650,10 @@ Resume tuple_target_nonlocal_head_path[toplevel]:
   drule_all tuple_target_toplevel_place >>
   disch_then (qspec_then `es` assume_tac) >>
   drule_all tuple_target_storage_assignment >> strip_tac >>
+  `~cx.txn.is_static` by
+    (qpat_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` mp_tac >>
+     Cases_on `cx.txn.is_static` >> simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  `~s.vs_call_ctx.cc_static` by metis_tac[] >>
   drule_all compile_get_target_ptr_toplevel >>
   disch_then (qspec_then `st` assume_tac) >> gvs[] >>
   drule_all tuple_store_word_step >> strip_tac >>
@@ -686,6 +694,10 @@ Resume tuple_target_nonlocal_head_path[field]:
   drule_all tuple_target_field_place >>
   disch_then (qspec_then `es` assume_tac) >>
   drule_all tuple_target_storage_assignment >> strip_tac >>
+  `~cx.txn.is_static` by
+    (qpat_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` mp_tac >>
+     Cases_on `cx.txn.is_static` >> simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+  `~s.vs_call_ctx.cc_static` by metis_tac[] >>
   Cases_on `emit_op ADD [Lit (n2w k); Lit (n2w (struct_field_offset_slots
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] st` >>
   rename1 `emit_op ADD _ st = (dst,sp)` >>
@@ -741,7 +753,7 @@ Theorem tuple_target_store_head_path:
        type_memory_size tv + 64 < dimword(:256)) /\
     local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
     local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
-    ~s.vs_call_ctx.cc_static /\ fn_has_code st sf func /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\ fn_has_code st sf func /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?t. (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
@@ -750,7 +762,7 @@ Theorem tuple_target_store_head_path:
                  stmt_state_rel H ctx func cenv cx es' t /\
                  storage_well_formed_on cx es' (FST H)) /\
       local_ptrs_rel func cenv es'.scopes t /\ alloca_inv t /\
-      ~t.vs_call_ctx.cc_static /\
+      t.vs_call_ctx = s.vs_call_ctx /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
@@ -936,7 +948,7 @@ Theorem tuple_store_targets_path:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
-    ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static ==>
+    s.vs_call_ctx.cc_static = cx.txn.is_static ==>
     (gs <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
     ?t. (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
                  stmt_state_rel H ctx func cenv cx es s /\

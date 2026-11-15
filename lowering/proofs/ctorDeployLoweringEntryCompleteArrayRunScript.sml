@@ -257,8 +257,13 @@ Proof
        (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
        tv vs slot_id slot initial j j u` by simp[] >>
      drule_all deploy_ctor_array_loop_complete_step >>
-     disch_then (qx_choose_then `v` (MAP_EVERY assume_tac o CONJUNCTS)) >>
-     qexists `v` >> fs[]) >>
+     disch_then (qx_choose_then `v` mp_tac) >>
+     qpat_x_assum `j < LENGTH vs` mp_tac >>
+     qpat_x_assum `u.vs_outcomes = _` mp_tac >>
+     qpat_x_assum `u.vs_tx_ctx = _` mp_tac >>
+     qpat_x_assum `u.vs_block_ctx = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> qexists `v` >> fs[]) >>
   `!u. R (LENGTH vs) u ==> ?v. Post v /\ abi_decode_sim ctx func u v` by
     (simp[Abbr `R`, Abbr `Post`] >> rpt strip_tac >>
      `(^Ok) k ctx func site ids D N d
@@ -266,8 +271,12 @@ Proof
        tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) u` by simp[] >>
      drule_all (Q.INST [`s` |-> `u:venom_state`, `j` |-> `LENGTH (vs:vyperValue$value list)`]
        deploy_ctor_array_header_complete_reach) >>
-     disch_then (qx_choose_then `v` (MAP_EVERY assume_tac o CONJUNCTS)) >>
-     qexists `v` >> fs[]) >>
+     disch_then (qx_choose_then `v` mp_tac) >>
+     qpat_x_assum `u.vs_outcomes = _` mp_tac >>
+     qpat_x_assum `u.vs_tx_ctx = _` mp_tac >>
+     qpat_x_assum `u.vs_block_ctx = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> qexists `v` >> fs[]) >>
   `?t. Post t /\ abi_decode_sim ctx func s t` by
     (irule deploy_ctor_array_complete_finite_bridge >> qexistsl [`R`, `i`, `LENGTH vs`] >>
      asm_simp_tac bool_ss []) >>

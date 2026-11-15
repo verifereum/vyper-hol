@@ -947,6 +947,8 @@ Proof
                outcomes_replace_basic, outcomes_replace_lifts,
                outcomes_replace_precompile_call_success, return_def]) >>
       simp[return_def]) >>
+  simp_tac (srw_ss()) [outcomes_replace_basic, outcomes_replace_lifts,
+    return_def, raise_def] >>
   rpt (FIRST [first_assum ACCEPT_TAC,
       goal_assum (drule_at Any),
       first_assum (fn th => irule th >> rpt conj_tac >>

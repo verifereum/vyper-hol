@@ -1308,7 +1308,9 @@ Resume prefix_bulk_success_ghost[body]:
        FLOOKUP_UPDATE] >> metis_tac[]) >>
   `t.vs_current_bb = s.vs_current_bb` by
     (qpat_assum `t = write_memory_with_expansion _ _ _` (fn th => rewrite_tac[th]) >>
-     simp_tac (srw_ss()) [Abbr `s8`, Abbr `s7`, Abbr `s6`, Abbr `s5`,
+     simp_tac (srw_ss()) [Abbr `s8`, update_var_def,
+       write_memory_with_expansion_def, LET_THM] >>
+     simp_tac (srw_ss()) [Abbr `s7`, Abbr `s6`, Abbr `s5`,
        Abbr `s4`, Abbr `s3`, update_var_def, mstore_def,
        write_memory_with_expansion_def, LET_THM]) >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>

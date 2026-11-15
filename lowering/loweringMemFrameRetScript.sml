@@ -21,6 +21,7 @@ Ancestors
   gasStorage vyperStorageTrace vyperStorageFootprint
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 (* ===== The counted contract from run-level return sequences ===== *)
 

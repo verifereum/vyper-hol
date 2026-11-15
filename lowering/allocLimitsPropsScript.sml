@@ -340,6 +340,19 @@ Proof
   Cases_on `bt` >> gvs[target_store_place_def]
 QED
 
+Theorem target_place_type_frame:
+  !c c' bt.
+    c'.ce_struct_fields = c.ce_struct_fields /\
+    c'.ce_var_type = c.ce_var_type /\
+    c'.ce_hashmap_info = c.ce_hashmap_info /\
+    c'.ce_module_var_type = c.ce_module_var_type ==>
+    target_place_type c' bt = target_place_type c bt
+Proof
+  ntac 2 gen_tac >> strip_tac >>
+  measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> gvs[target_place_type_def]
+QED
+
 Theorem lowered_value_type_frame:
   !c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
            c'.ce_func_return_type = c.ce_func_return_type ==>
@@ -362,6 +375,19 @@ Proof
   simp[type_alloc_ok_def]
 QED
 
+Theorem tuple_assign_alloc_ok_frame:
+  !c tys gs c'. alloc_env_agree c c' ==>
+    tuple_assign_alloc_ok c' tys gs = tuple_assign_alloc_ok c tys gs
+Proof
+  recInduct tuple_assign_alloc_ok_ind >> rpt strip_tac >>
+  rename1 `alloc_env_agree c c'` >>
+  `!bt. target_store_place c' bt = target_store_place c bt` by
+    (gen_tac >> irule target_store_place_frame >> gvs[alloc_env_agree_def]) >>
+  `type_memory_bytes c' = type_memory_bytes c` by
+    (irule type_memory_bytes_frame >> gvs[alloc_env_agree_def]) >>
+  res_tac >> simp[tuple_assign_alloc_ok_def]
+QED
+
 (* A statement's check reads the struct sizes, for a log the events, and
    for an assignment's buffer the module's variables and the internal
    functions' return types. *)
@@ -375,6 +401,11 @@ Proof
   rpt strip_tac >> rename1 `alloc_env_agree c0 c1` >>
   drule assign_alloc_ok_frame >> strip_tac >>
   drule custom_error_alloc_ok_frame >> strip_tac >>
+  drule tuple_assign_alloc_ok_frame >> strip_tac >>
+  `!bt. target_place_type c1 bt = target_place_type c0 bt` by
+    (gen_tac >> irule target_place_type_frame >> gvs[alloc_env_agree_def]) >>
+  `!e. lowered_value_type c1 e = lowered_value_type c0 e` by
+    (gen_tac >> irule lowered_value_type_frame >> gvs[alloc_env_agree_def]) >>
   `!s. alloc_env_agree (decl_var_type c0 s) (decl_var_type c1 s)` by
     metis_tac[alloc_env_agree_decl_var_type] >>
   `!f. alloc_env_agree (c0 with ce_var_type updated_by f)

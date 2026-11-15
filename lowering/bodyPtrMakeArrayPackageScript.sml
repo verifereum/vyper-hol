@@ -2,6 +2,7 @@
    pointer value/buffer posts.  Capacity is distinct from value footprint. *)
 Theory bodyPtrMakeArrayPackage
 Ancestors
+  bodyPtrPhysicalLiteralPackage
   bodyPtrMakeArrayTupleLoop bodyPtrDefs exprSimProps valueEncoding valueEncodingDefs
   venomState words ptrDiscipline bodyPtrMakeArrayAllocCursor
   bodyPtrMakeArrayAllocatedOne bodyPtrMakeArrayMaterialiseFrame
@@ -270,7 +271,9 @@ Theorem literal_tuple_widened_vv_sim_ptr:
   ann <> TupleT (MAP expr_type args) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
 Proof
-  cheat
+  strip_tac >> mp_tac (SPEC_ALL literal_tuple_vv_sim_ptr_physical) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem literal_tuple_vv_sim_ptr:
@@ -603,7 +606,9 @@ Theorem literal_array_widened_vv_sim_ptr:
   ~EVERY (\e. expr_type e = et) args ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray (SOME et) bnd) args) es
 Proof
-  cheat
+  strip_tac >> mp_tac (SPEC_ALL literal_array_vv_sim_ptr_physical) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem literal_array_vv_sim_ptr:

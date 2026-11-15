@@ -14,6 +14,11 @@ Ancestors
   list finite_map vyperTypeValues exprSimHyps valueEncoding compileEnv vyperState supportedExprForms supportedTargets
   supportedStmtTraverse supportedExprTraverse gasContext vyperTypeCallGraph
   vyperTypeCallStackSoundness allocLimits targetPlaceLive
+  tupleAssignImmutableDeploy tupleAssignImmutableDeployPremises
+  exprSimIfExpCompat exprSimSource aggregateEvaluatedLayout
+  tupleTargetStoreProps tupleMemoryLayout compileVyper vyperCompiler
+  vyperTypeArgFits vyperAST
+  bodyAugPlaceTarget
 
   tupleAssignImmutableDeploy tupleAssignImmutableDeployPremises
   exprSimIfExpCompat exprSimSource aggregateEvaluatedLayout
@@ -94,8 +99,9 @@ Proof
   >- (Cases_on `t` >> gvs[] >> metis_tac[])
 QED
 
-(* Constructor immutable targets use the ordinary tuple snapshot and the
-   source-aware mixed-target continuation. *)
+(* Constructor tuples use the ordinary snapshot alternatives. Each target
+   consumes its head in source order; immutable stores retain the code
+   allocation relation, and mutable targets use their actual endpoint. *)
 Theorem immutable_deploy_tuple_assign:
   !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
@@ -212,7 +218,11 @@ Proof
   `acyclic_struct_metadata cenv.ce_struct_fields` by
     gvs[body_inv_def] >>
   `expr_sim ctx func cenv cx (TupleT tys) e es` by
-    (gvs[body_expr_ok_def] >> metis_tac[]) >>
+    (qpat_x_assum `body_expr_ok cx e`
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+     disch_then (qspecl_then
+       [`tops`, `ctx`, `func`, `cenv`, `env`, `TupleT tys`, `es`] mp_tac) >>
+     simp[]) >>
   mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`,
     `env`, `tops`, `bindings`, `gs`, `e`, `es`, `tys`, `tvs`, `ltys`, `ltvs`]
     compile_assign_tuple_mixed_stmt_frag) >>

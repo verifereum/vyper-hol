@@ -461,7 +461,9 @@ Resume prefix_loop_separated_body_pair[child_inputs]:
    prepared.vs_alloca_next = X0.vs_alloca_next` by
     fs[Abbr `prepared`,abi_decoder_address_frame_def,Excl "enc_def"] >>
   `prepared.vs_data_section = initial.vs_data_section` by
-    fs[ctor_actual_array_observation_def,Excl "enc_def"] >>
+    (qhdtm_assum `ctor_actual_array_observation`
+       (strip_assume_tac o PURE_REWRITE_RULE [ctor_actual_array_observation_def]) >>
+     asm_rewrite_tac[]) >>
   drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)
     (SIMP_RULE std_ss [] (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
       ctor_actual_array_child_inputs_at_index)) >>
@@ -515,7 +517,8 @@ Resume prefix_loop_separated_body_pair[child_call]:
       (mp_then Any mp_tac (MATCH_MP prefix_loop_child_iteration_floor th))) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>
+  disch_then (qpat_assum `bb.bb_instructions = _` o
+    mp_then (Pat `bb.bb_instructions = _`) mp_tac) >>
   disch_then (drule_at (Pat `FLOOKUP H child_dst = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP H slot_var = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP H dst_var = _`)) >>

@@ -1937,25 +1937,6 @@ Proof
   simp[venomCallOracleDefsTheory.venom_create_request_def, read_memory_def]
 QED
 
-Theorem frag_consume_call_control[local]:
-  consume_call_outcome rq ro rs (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
-    (FST (consume_call_outcome rq ro rs s),
-     SND (consume_call_outcome rq ro rs s) with
-       <|vs_prev_bb := p; vs_current_bb := b|>)
-Proof
-  simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
-       write_memory_with_expansion_def]
-QED
-
-Theorem frag_consume_create_control[local]:
-  consume_create_outcome rq (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
-    (FST (consume_create_outcome rq s),
-     SND (consume_create_outcome rq s) with
-       <|vs_prev_bb := p; vs_current_bb := b|>)
-Proof
-  simp[venomCallOracleDefsTheory.consume_create_outcome_eq]
-QED
-
 Theorem frag_ext_call_control:
   exec_ext_call inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     gas addr value ao az ro rz static =
@@ -2251,7 +2232,10 @@ Theorem frag_relabel_base_abort:
     Abort a (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => pure_rewrite_tac [MATCH_MP
+      (valOf (List.find (fn th => can (MATCH_MP th) eq)
+        (CONJUNCTS step_inst_base_opcode_eqs))) eq]) >>
   simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
        frag_ext_call_control, frag_create_control, frag_delegatecall_control,
        frag_read0_control, frag_read1_control, frag_write2_control,
@@ -2295,7 +2279,10 @@ Theorem frag_relabel_base_intret:
     IntRet vals (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => pure_rewrite_tac [MATCH_MP
+      (valOf (List.find (fn th => can (MATCH_MP th) eq)
+        (CONJUNCTS step_inst_base_opcode_eqs))) eq]) >>
   simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
        frag_ext_call_control, frag_create_control, frag_delegatecall_control,
        frag_read0_control, frag_read1_control, frag_write2_control,

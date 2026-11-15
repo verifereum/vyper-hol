@@ -32,13 +32,12 @@ Proof
 QED
 
 Theorem log_arguments_admissible:
-  ~cx.txn.is_static /\
   gas_admissible (eval_stmt cx (Log id args)) (stmt_res_ok lctx) es ==>
   gas_admissible (eval_exprs cx args)
     (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es
 Proof
   rw[gas_admissible_def] >>
   `eval_stmt cx (Log id args) (es with gas_obs := gs) = (INR exc, ee)` by
-    simp[log_eval_outcome] >>
+    simp[log_eval_bind, bind_def] >>
   first_x_assum drule >> strip_tac >> metis_tac[log_argument_error_ok]
 QED

@@ -1028,6 +1028,7 @@ Finalise compile_ifexp_word_vv_sim_mem
 
 
 (* The non-word case: selected arms are converted by compile_ifexp_arm
+   and the result is routed to the join as a bounded memory pointer. *)
 Theorem compile_ifexp_nonword_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     ~is_word_type t /\

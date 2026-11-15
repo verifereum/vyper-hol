@@ -42,7 +42,7 @@ Ancestors
 Libs
   pairLib
 
-(* The nonreverting result stores the flag inline before the bytes value. *)
+
 
 Theorem raw_call_tuple_copy_seq_run[local]:
   emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
@@ -883,6 +883,22 @@ Proof
   strip_tac >> gvs[supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
+Theorem raw_call_outbuf_capacity[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+  0 < flags.rcf_max_outsize ==>
+  ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)
+Proof
+  strip_tac >> drule raw_call_pre_flags >> strip_tac >>
+  `type_alloc_ok cenv ann` by
+    fs[expr_body_pre_def, alloc_limits_expr_def] >>
+  Cases_on `flags.rcf_revert_on_failure` >>
+  gvs[raw_call_return_type_def, type_alloc_ok_def, is_word_type_def,
+      type_memory_bytes_def] >>
+  `2 ** 64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  fs[] >> decide_tac
+QED
+
+
 Theorem expr_body_pre_raw_call_arg:
   !cenv cx env ann flags args dflt e es es'.
     expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
@@ -898,6 +914,7 @@ Proof
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
+
 
 (* MLOAD/ADD only extend the variable map. Keep their memory and source
    relation interface explicit before running the keyword expressions. *)
@@ -2764,9 +2781,6 @@ Proof
   qexistsl_tac [`es`,`s`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-
-(* The two new blocks are essential: the failure arm is not a linear prefix
-   of the successful arm.  Leave the final length-store program packaged. *)
 
 
 Theorem raw_call_length_prefix_run[local]:
@@ -4665,8 +4679,7 @@ Resume raw_call_tail_outcome[static_value_abort]:
   `0 < flags.rcf_max_outsize ==>
      ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)` by
     (strip_tac >>
-     qpat_x_assum `0 < flags.rcf_max_outsize ==> _` mp_tac >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+     drule_all raw_call_outbuf_capacity >> simp[]) >>
   `ci_mono s6 s7 /\ ci_mono s7 sb` by
     metis_tac[ci_mono_compile_raw_call_outbuf,
               ci_mono_compile_raw_call_finish, pairTheory.SND] >>

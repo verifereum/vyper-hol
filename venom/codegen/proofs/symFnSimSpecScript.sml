@@ -1,6 +1,6 @@
 (*
  * The function-level statements of the label-discipline proof at one fixed
- * fuel: fnSimSpec's gen_fn_sim_at and gen_fn_frame_sim_at with the symbolic
+ * fuel: fnSimSpec's gen_fn_sim_at_simple and gen_fn_frame_sim_at_simple with the symbolic
  * run added.  The symbolic run starts from a state related to the concrete
  * one and takes the same n steps: it ends where the concrete run halts,
  * reverts or faults, and at an internal return it is OK, related, and holds
@@ -8,8 +8,8 @@
  * control leaves (INVOKE, RET, JMP, JNZ) and the fuel induction share them.
  *
  * TOP-LEVEL:
- *   sym_fn_sim_at        - gen_fn_sim_at with the symbolic run
- *   sym_fn_frame_sim_at  - gen_fn_frame_sim_at with the symbolic run
+ *   sym_fn_sim_at        - gen_fn_sim_at_simple with the symbolic run
+ *   sym_fn_frame_sim_at  - gen_fn_frame_sim_at_simple with the symbolic run
  *)
 
 Theory symFnSimSpec
@@ -48,7 +48,6 @@ Definition sym_fn_sim_at_def:
       (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
       codegen_context_obligations Inv ctx cp /\
       reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
-      ~vs.vs_call_ctx.cc_static /\
       asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan) /\
       LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
       fn_entry_state_rel cp fn vs as ra rest /\
@@ -113,7 +112,6 @@ Definition sym_fn_frame_sim_at_def:
       (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
       codegen_context_obligations Inv ctx cp /\
       reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
-      ~vs.vs_call_ctx.cc_static /\
       liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
       cfg = cfg_analyze fn /\
       ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx

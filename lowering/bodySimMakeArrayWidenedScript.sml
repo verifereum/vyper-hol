@@ -46,7 +46,7 @@ Proof
      qpat_x_assum `body_exprs_ok cx es` mp_tac >>
      rpt (pop_assum kall_tac) >> qid_spec_tac `es` >>
      Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
-     fs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
+     fs[Once body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   drule_all compile_make_array_body_vv_case >>
   disch_then (qspecl_then [`ty`, `t`, `n`] assume_tac) >>

@@ -26,7 +26,7 @@ Theorem body_target_idx_case:
 Proof
   recInduct base_assignment_target_induct >>
   rw[target_idx_case_def, body_base_target_ok_def] >>
-  gvs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
+  gvs[Once body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[]
 QED
 

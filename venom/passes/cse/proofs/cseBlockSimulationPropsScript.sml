@@ -63,7 +63,9 @@ Theorem cse_same_opcode_zero_outputs:
  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> BUMP /\
  inst.inst_outputs = [] ==> src.inst_outputs = []
 Proof
- strip_tac >> Cases_on `inst.inst_opcode` >>
+ strip_tac >> qpat_x_assum `inst_wf inst` mp_tac >>
+ simp[venomWfTheory.inst_wf_def] >>
+ Cases_on `inst.inst_opcode` >> simp[] >> rpt strip_tac >>
  gvs[venomWfTheory.inst_wf_def]
 QED
 

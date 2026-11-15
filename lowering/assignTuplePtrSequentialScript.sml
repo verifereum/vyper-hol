@@ -280,7 +280,9 @@ Resume tuple_store_sequential_path_ptr[resources]:
      qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >> metis_tac[]) >>
   `eval_operand (Var p) t = SOME w /\
    op_prov G' (Var p) = op_prov G (Var p)` by
-    gvs[eval_operand_def, op_prov_def] >>
+    (asm_x "callback" kall_tac >>
+     qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >>
+     gvs[eval_operand_def, op_prov_def]) >>
   `ptr_val_ok cx (EL i tys1) (EL i vs1) (Var p) G' tn' t` by suspend "robust" >>
   conj_tac >- gvs[] >>
   qexists `w` >> simp[] >> rpt strip_tac >>

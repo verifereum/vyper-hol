@@ -11,6 +11,7 @@
    stated for any target whose place is a fixed storage slot. *)
 Theory bodyMemAugAssignAttrStorage
 Ancestors
+  fragGasSeqAbort
   supportedExprTraverse allocLimitsProps
   bodySimStmtCases
   bodySim vyperTypeCallGraph
@@ -702,8 +703,59 @@ Resume compile_augassign_attr_storage_mem[operator_normal]:
      simp[stmt_state_rel_start_gas_obs]) >>
   `stmt_state_rel H2 ctx func cenv cx (ee with gas_obs := []) s` by
     metis_tac[] >>
-  `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+  `eval_operand (Var dv) s = SOME (n2w slot + n2w off)` by
+    (fs[eval_operand_def] >> metis_tac[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (`s.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
+      `gas_marked_path T ctx func s 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+       (drule emitted_insts_emit_void >> strip_tac >>
+        `sb.cs_current_bb = s3.cs_current_bb` by
+          gvs[emit_void_def,comp_bind_def,fresh_id_def,emit_def] >>
+        drule_all fn_has_code_same_block >> strip_tac >>
+        `get_instruction bb (LENGTH s3.cs_current_insts) =
+          SOME (mk_inst s3.cs_next_id (if tr then TSTORE else SSTORE)
+            [Var dv;res_op] [])` by
+          (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+        `gas_marked_path T ctx func s
+          (if (mk_inst s3.cs_next_id (if tr then TSTORE else SSTORE)
+            [Var dv;res_op] []).inst_opcode = GAS then 1 else 0)
+          (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+         (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
+          Cases_on `tr` >>
+          simp[mk_inst_def,is_terminator_def,step_inst_base_def,
+               eval_operands_def,eval_operand_def,below_frontier_no_ranges,
+               inst_dload_in_section_other]) >>
+        Cases_on `tr` >> gvs[mk_inst_def]) >>
+      `gas_marked_exec T (ctx,func) (bind (eval_expr cx e) (read_result cx))
+         ((es with storage_trace :=
+             es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
+          with gas_obs := [],t) marks (INL v) ee (OK u)` by
+        (qpat_assum `gas_marked_exec _ _ (bind (eval_expr _ _) _) _ _ _ _ _`
+           mp_tac >> simp[]) >>
+      `gas_marked_path T ctx func u 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        (drule_all gas_marked_path_then >> simp[]) >>
+      `gas_marked_exec T (ctx,func)
+        (bind (lift_sum (evaluate_binop
+          (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+          ftv bop v0 v)) (write_storage_slot cx tr (n2w slot + n2w off) ftv))
+        (ee with gas_obs := [],u) [] (INR (Error (RuntimeError "write in static context")))
+        (ee with gas_obs := [])
+        (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        (irule augassign_storage_continuation_exec_mem_src >>
+         simp[lift_sum_def,bind_def,return_def,write_storage_slot_eq]) >>
+      `gas_marked_exec T (ctx,func) (eval_stmt cx (AugAssign ty (AttributeTarget (TopLevelNameTarget (src,id)) fld) bop e))
+        (es,s0) marks (INR (Error (RuntimeError "write in static context"))) (ee with gas_obs := [])
+        (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        (irule augassign_place_rhs_normal_exec_mem_src >> metis_tac[]) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `ee with gas_obs := []`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      disj2_tac >> simp[exit_result_def,stmt_exit_def,expr_exit_def]) >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   Cases_on `write_storage_slot cx tr (n2w slot + n2w off) ftv result
     (ee with gas_obs := [])` >>
   rename1 `_ = (wres, fin)` >>

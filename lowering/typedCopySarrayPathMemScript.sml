@@ -3,7 +3,7 @@ Ancestors
   typedNormalizeLoop typedNormalizeContinuation typedCopyArrayEntryPathMem typedCopyControlPathMem
   typedArrayLoopControlMem fragGasPathMem context compileEnv emitHelper
   exprLoweringProps venomState venomExecSemantics venomInst
-  words arithmetic list rich_list
+  words arithmetic list rich_list loweringStateRelDefs
 
 Theorem typed_sarray_header_path_mem[local]:
   ~(type_memory_bytes ce dt = type_memory_bytes ce st /\

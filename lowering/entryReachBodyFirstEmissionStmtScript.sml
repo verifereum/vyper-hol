@@ -995,6 +995,10 @@ val fe_array_suffix =
 
 val fe_append_suffix =
   all_tac
+  >>~- ([`cs_appends (compile_ptr_store _ _ _ _ _)`],
+    rw[cs_appends_def] >> metis_tac[compile_ptr_store_labels, pairTheory.SND])
+  >>~- ([`cs_appends (compile_imm_store_words _ _ _ _ _)`],
+    rw[cs_appends_def] >> metis_tac[compile_imm_store_words_labels, pairTheory.SND])
   >>~- ([`cs_appends (compile_store_memory _ _ _ _ _)`],
     rw[cs_appends_def] >> metis_tac[first_emission_store_memory])
   >>~- ([`cs_appends (compile_store_slots _ _ _ _ _)`],
@@ -1381,12 +1385,7 @@ Resume first_emission_compile_stmt[append_stmt]:
   ho_match_mp_tac first_emission_strong >>
   pure_rewrite_tac[compile_dynarray_append_def, LET_THM] >> BETA_TAC >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (Cases_on `FST (SND result)`
-      >- (simp[load_opc_for_def] >> rpt strip_tac >>
-          drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
-      rename1 `SOME loc` >> Cases_on `loc` >>
-      simp[load_opc_for_def] >> rpt strip_tac >>
-      drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  >- (rpt strip_tac >> drule_at Any first_emission_ptr_load >> simp[]) >>
   gen_tac >> BETA_TAC >> rewrite_tac[GSYM cs_appends_def] >>
   rpt (FIRST [irule cs_appends_bind >> conj_tac,
               irule cs_appends_ignore_bind >> conj_tac, gen_tac, IF_CASES_TAC] >> BETA_TAC >>

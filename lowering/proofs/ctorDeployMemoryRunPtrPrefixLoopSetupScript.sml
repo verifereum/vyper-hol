@@ -694,9 +694,12 @@ Resume prefix_loop_setup_pair[after_header]:
      qpat_x_assum `header.vs_allocas = initial.vs_allocas` mp_tac >>
      qpat_x_assum `header.vs_alloca_next = initial.vs_alloca_next` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-     fs[alloca_inv_def,allocas_non_overlapping_def,alloca_next_valid_def,
-       alloca_frontier_inv_def,remaining_alloca_budget_def,ctor_actual_scratch_def] >>
-     metis_tac[]) >>
+     rpt conj_tac
+     >- (fs[alloca_inv_def,allocas_non_overlapping_def,alloca_next_valid_def] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (fs[alloca_frontier_inv_def] >> fs[remaining_alloca_budget_def] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (fs[ctor_actual_scratch_def] >> first_assum ACCEPT_TAC) >> fs[]) >>
   `abi_decode_load DLOAD (n2w sb : bytes32) guard = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ initial = _` mp_tac >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>

@@ -64,6 +64,47 @@ QED
 
 
 
+Theorem prefix_bool_preheader_extent_guard:
+  ALL_DISTINCT [src;cnt;vm;va;vend;cmp;ok] /\
+  eval_operand (Var src) s = SOME (n2w a) /\
+  eval_operand (Var cnt) s = SOME (n2w n) /\
+  n <= max_count /\ a+32*(max_count+1) < dimword(:256) /\
+  data_size < dimword(:256) ==>
+  let s1 = update_var vm (n2w (n*32)) s;
+      s2 = update_var va (n2w (n*32+32)) s1;
+      s3 = update_var vend (n2w (a+32*(n+1))) s2;
+      s4 = update_var cmp (bool_to_word (data_size < a+32*(n+1))) s3;
+      s5 = update_var ok (bool_to_word (~(data_size < a+32*(n+1)))) s4
+  in run_inst_seq
+       [mk_inst iid MUL [Var cnt; Lit 32w] [vm];
+        mk_inst (iid+1) ADD [Var vm; Lit 32w] [va];
+        mk_inst (iid+2) ADD [Var src; Var va] [vend];
+        mk_inst (iid+3) GT [Var vend; Lit(n2w data_size)] [cmp];
+        mk_inst (iid+4) ISZERO [Var cmp] [ok];
+        mk_inst (iid+5) ASSERT [Var ok] []] s =
+     if a+32*(n+1) <= data_size then OK s5
+     else Abort Revert_abort (revert_state (set_returndata [] s5))
+Proof
+  rpt strip_tac >>
+  `a+32*(n+1) < dimword(:256)` by decide_tac >>
+  `a+(n*32+32) = a+32*(n+1)` by decide_tac >>
+  `step_inst_base (mk_inst iid MUL [Var cnt; Lit 32w] [vm]) s =
+     OK (update_var vm (n2w (n*32)) s)` by
+    (irule prefix_bool_body_mul_n2w >> simp[eval_operand_def]) >>
+  `!v x w t. eval_operand (Var v) (update_var x w t) =
+     if v = x then SOME w else eval_operand (Var v) t` by
+    (rpt gen_tac >> Cases_on `v=x` >>
+     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `!w t. eval_operand (Lit w) t = SOME w` by simp[eval_operand_def] >>
+  gvs[ALL_DISTINCT] >>
+  simp[run_inst_seq_def, prefix_bool_preheader_arith_dispatch,
+       prefix_bool_preheader_guard_dispatch, exec_pure2_def, exec_pure1_def,
+       mk_inst_def, word_mul_n2w, word_add_n2w, w2n_n2w, GREATER_DEF] >>
+  `a+(32*n+32) = a+32*(n+1)` by decide_tac >>
+  asm_rewrite_tac[] >>
+  Cases_on `a+32*(n+1) <= data_size` >>
+  simp[step_inst_base_opcode_eqs, bool_to_word_def]
+QED
 
 Theorem prefix_bool_preheader_limit_continuation:
   eval_operand u s = SOME w /\ op_taint tn u = {} /\ op_prov G u = NONE /\

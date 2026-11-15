@@ -16,7 +16,7 @@ Ancestors
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs
   venomExecSemantics venomState venomInst fnPlanLineageEntryProduction
 
-(* block_body_frame_sim's conclusion (fnBlockBodySteps' body_result) with
+(* block_body_frame_sim's conclusion (fnBlockBodySteps' body_result_simple) with
    the symbolic run from ss over the same n steps: it ends where the
    concrete run halts, reverts or faults, and at an internal return it is
    OK, related, and holds the returned values as words above srest, with
@@ -387,12 +387,11 @@ Proof
 QED
 
 Theorem sym_body_invoke_step:
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\
@@ -442,7 +441,7 @@ Proof
     ["codegen_context_obligations", "codegen_assembly"]
     fnBlockBodyClassesTheory.body_callee_placed) >> simp[] >> strip_tac >>
   leaf_matches 3 mp_tac (anchored_leaf_core false
-    ["codegen_context_obligations", "codegen_assembly", "gen_fn_sim_at"]
+    ["codegen_context_obligations", "codegen_assembly", "gen_fn_sim_at_simple"]
     fnBlockBodyClassesTheory.body_callee_sim) >> simp[] >>
   (impl_tac >- gvs[]) >> strip_tac >>
   leaf_matches 9 mp_tac (anchored_leaf
@@ -458,22 +457,6 @@ Proof
       disch_then ACCEPT_TAC)) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >> simp[sym_body_result_def]
-QED
-
-Theorem codegen_ready_intret_opcode:
-  !fuel ctx inst vs rv vs1.
-  codegen_ready_inst inst /\ step_inst fuel ctx inst vs = IntRet rv vs1 ==>
-  inst.inst_opcode = RET
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by metis_tac[step_inst_invoke_not_intret] >>
-  gvs[step_inst_non_invoke] >>
-  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
-  gvs[stackPlanGenTheory.codegen_ready_inst_def,
-      stackPlanGenTheory.is_pre_codegen_opcode_def,
-      stackPlanGenTheory.is_unlowered_fmp_opcode_def,
-      venomInstTheory.is_raw_fmp_opcode_def] >>
-  strip_tac >> gvs[venomInstTheory.is_raw_fmp_opcode_def]
 QED
 
 Theorem sym_body_halt_step:
@@ -516,7 +499,6 @@ Theorem sym_body_abort_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode <> INVOKE /\ (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -784,12 +766,11 @@ Proof
 QED
 
 Theorem sym_body_jump_continue:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   is_terminator inst.inst_opcode /\
   step_inst fuel ctx inst vs = OK vs1 /\ vs1 = jump_to t vs /\
@@ -821,8 +802,6 @@ Proof
   disch_then (fn th => leaf_matches 4 irule (anchored_leaf_core false
     ["sym_frame_inv", "fn_frame_inv", "generate_block_plan", "lineage_entry"] th)) >>
   qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-  `~vs1.vs_call_ctx.cc_static` by
-    (qpat_x_assum `vs1 = _` SUBST1_TAC >> simp[venomStateTheory.jump_to_def]) >>
   metis_tac[]
 QED
 
@@ -836,7 +815,7 @@ Proof
 QED
 
 Theorem sym_body_jmp_prefix:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -906,7 +885,14 @@ Proof
   rpt conj_tac >- gvs[] >- gvs[] >>
   rpt strip_tac >>
   qpat_x_assum `!at. MEM at ps_after.ps_stack \/ _ ==> _`
-    (qspec_then `at` mp_tac) >> gvs[]
+    (qspec_then `at` mp_tac) >>
+  pop_assum mp_tac >>
+  qpat_assum `lo = SND (compute_label_offsets prog)` mp_tac >>
+  qpat_assum `dfg = dfg_build_function fn` mp_tac >>
+  qpat_assum `vs1 = jump_to target vs` mp_tac >>
+  qpat_assum `ps_after.ps_spilled = ps_dfs_after.ps_spilled` mp_tac >>
+  qpat_assum `ps_after.ps_stack = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]
 QED
 
 Theorem body_succ_sym_label:
@@ -951,7 +937,7 @@ Proof
 QED
 
 Theorem sym_body_jnz_prefix:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
@@ -1015,12 +1001,11 @@ Proof
 QED
 
 Theorem sym_body_jmp_step:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = JMP /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1036,12 +1021,11 @@ Proof
 QED
 
 Theorem sym_body_jnz_step:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1057,12 +1041,11 @@ Proof
 QED
 
 Theorem sym_body_nonterm_prefix:
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -1131,12 +1114,11 @@ Proof
 QED
 
 Theorem sym_body_terminator:
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   is_terminator inst.inst_opcode /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1156,12 +1138,11 @@ Proof
 QED
 
 Theorem sym_body_nonok:
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -1222,13 +1203,12 @@ Theorem sym_body_nonterm_result:
   (!m. m < d ==>
     !k prefix_ops rest_ops ps vs as ss.
       m = LENGTH bb.bb_instructions - k /\
-      gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+      gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
       sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
       body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
         growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
         block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
         ra pc_ret rest mem0 /\
-      ~vs.vs_call_ctx.cc_static /\
       label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
       sym_unit_static_ok unit /\ asm_static_wf prog /\
       (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
@@ -1236,13 +1216,12 @@ Theorem sym_body_nonterm_result:
       sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
         as ss (block_rest fuel ctx fn bb vs)) /\
   d = LENGTH bb.bb_instructions - k /\
-  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
-  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  gen_fn_sim_at_simple fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_frame_sim_at_simple fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -1268,13 +1247,12 @@ QED
 Theorem sym_body_run:
   !d k prefix_ops rest_ops ps vs as ss.
     d = LENGTH bb.bb_instructions - k /\
-    gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+    gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
     sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
     body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
       ra pc_ret rest mem0 /\
-    ~vs.vs_call_ctx.cc_static /\
     label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
     sym_unit_static_ok unit /\ asm_static_wf prog /\
     (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
@@ -1306,13 +1284,12 @@ Theorem sym_block_body_frame_sim:
    spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
    ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
    rest mem0 env ret srest labs0 ss.
-    gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+    gen_fn_sim_at_simple fuel /\ gen_fn_frame_sim_at_simple fuel /\
     sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
     body_inv rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
       ra pc_ret rest mem0 /\
-    ~vs.vs_call_ctx.cc_static /\
     (* ----- The symbolic side ----- *)
     label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
     sym_unit_static_ok unit /\ asm_static_wf prog /\

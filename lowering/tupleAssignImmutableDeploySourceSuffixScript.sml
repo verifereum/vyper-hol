@@ -2,7 +2,7 @@
    after the current tuple target has actually been assigned. *)
 Theory tupleAssignImmutableDeploySourceSuffix
 Ancestors
-  tupleAssignImmutableDeploySuffix tuplePlaceHead
+  tupleAssignImmutableDeploySuffix tuplePlaceHead tuplePlaceHeadGas
   tuplePlaceSuffixCode tuplePlaceSource bodySim
   aggregateCountedOutcome gasStorage vyperStorageTrace vyperStorageFootprint
   gasOutcome gasSummary gasSummaryCompose gasExemptCert

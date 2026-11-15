@@ -7,6 +7,7 @@ Theory stmtSimAssignStorageCopy
 Ancestors
   stmtSimAssignStorageFacts
   abiTypeBoundProps vyperABI vyperStorageCoverage
+  placeStoreStorage placeStaticCopyExit
   exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
   stmtSimProps stmtSimForced
@@ -1133,7 +1134,7 @@ Proof
   simp[Abbr `s1`, storage_copy_backend_fold]
 QED
 
-Theorem storage_copy_initial_agree[local]:
+Theorem storage_copy_initial_agree:
   !H ctx func cenv cx es s tr.
     stmt_state_rel H ctx func cenv cx es s ==>
     storage_agree (storage_dead H tr (get_storage cx es tr))
@@ -1147,7 +1148,7 @@ QED
 
 Theorem storage_copy_state_region[local]:
   !H ctx func cenv cx es s tr k tv v writes off mem ws res es'.
-    stmt_state_rel H ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\ ~cx.txn.is_static /\
     MEM (tr, k, tv) (FST H) /\ regions_consistent (FST H) /\
     storage_locks_separated (FST H) (SND H) /\
     w2n k + type_slot_size tv <= dimword (:256) /\
@@ -1177,7 +1178,6 @@ Proof
        (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.regions_consistent_def]) >>
      metis_tac[]) >>
   drule_all storage_agree_copy_region >> strip_tac >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq] >>
   irule storage_copy_state_fold >> simp[]
 QED
@@ -1245,15 +1245,6 @@ Proof
   fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]
 QED
 
-(* Storage writes keep the call context. *)
-Theorem storage_fold_call_ctx[local]:
-  !l s f g tr.
-    (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_call_ctx =
-    s.vs_call_ctx
-Proof
-  Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
-QED
-
 Theorem storage_fold_memory[local]:
   !l s f g tr.
     (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
@@ -1266,7 +1257,7 @@ Theorem storage_copy_bulk_run[local]:
   !ctx func cenv tr src k n sa sb u s b.
     compile_word_copy_loop src (Lit k) n LocMemory
       (if tr then LocTransient else LocStorage) F sa = (u,sb) /\
-    n < dimword (:256) /\
+    n < dimword (:256) /\ ~s.vs_call_ctx.cc_static /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME b /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -1417,7 +1408,7 @@ Theorem storage_copy_suffix_run[local]:
       typ src_ty (32 * n) sa = ((),sb) /\
     ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = 32 * n /\
-    0 < n /\ n < dimword (:256) /\
+    0 < n /\ n < dimword (:256) /\ ~s.vs_call_ctx.cc_static /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME b /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -1466,6 +1457,66 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >> simp[]
 QED
 
+Theorem storage_copy_static_suffix[local]:
+  compile_assign_value cenv (Lit k)
+    (if tr then LocTransient else LocStorage) src F loc
+    typ typ (32 * n) sa = ((),sb) /\
+  ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
+  type_memory_bytes cenv typ = 32 * n /\
+  0 < n /\ n < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME b /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `32 * n DIV 32 = n` by
+    (irule arithmeticTheory.DIV_UNIQUE >> qexists_tac `0` >> simp[]) >>
+  dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >>
+  qpat_x_assum `32 * n DIV 32 = n` (fn th => simp[th]) >>
+  Cases_on `n = 1`
+  >- (gvs[] >> simp[comp_bind_def, AllCaseEqs()] >> strip_tac >>
+      Cases_on `emit_op MLOAD [src] sa` >> gvs[] >>
+      rename1 `emit_op MLOAD [src] sa = (loaded,sm)` >>
+      `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+        metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def,
+                  pairTheory.SND, fn_has_code_split] >>
+      `!out. step_inst_base (mk_inst sa.cs_next_id MLOAD [src] [out]) s =
+        OK (update_var out (mload (w2n b) s) s)` by
+        (gen_tac >> irule step_MLOAD >> simp[eval_operands_def]) >>
+      drule_all (Q.INST [`opc` |-> `MLOAD`] place_store_emit_op_path
+        |> SRULE [is_terminator_def]) >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      first_x_assum (qspecl_then [`0`,`0`] strip_assume_tac) >>
+      fs[typedMemoryCopyTheory.typed_copy_state_frame_def] >>
+      `t.vs_call_ctx.cc_static` by
+        (qpat_x_assum `_ = s` mp_tac >>
+         simp[venom_state_component_equality] >> metis_tac[]) >>
+      `eval_operand (Lit k) t = SOME k` by simp[eval_operand_def] >>
+      drule_all storageStoreFrameTheory.storage_emit_static_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      qexists_tac `Abort ExHalt_abort (halt_state (set_returndata [] t))` >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
+      metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]) >>
+  simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
+       comp_bind_def, comp_return_def, AllCaseEqs()] >> strip_tac >>
+  fs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> rename1 `_ sa = (u,sf)` >>
+  `compile_word_copy_loop src (Lit k) n LocMemory
+     (if tr then LocTransient else LocStorage) F sa = (u,sf)` by
+    (Cases_on `tr` >> gvs[]) >>
+  irule place_static_copy_exit >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`b`, `Lit k`, `k`, `if tr then LocTransient else LocStorage`,
+                `n`, `sa`, `sf`, `src`, `u`] >>
+  Cases_on `tr` >> simp[eval_operand_def]
+QED
+
 Theorem storage_copy_post_region:
   !H ctx func cenv cx e es sa sm s0 es1 v op s tv tr slot es'.
     expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
@@ -1485,6 +1536,8 @@ Theorem storage_copy_post_region:
           s (COUNT_LIST (type_slot_size tv)))
 Proof
   rpt gen_tac >> strip_tac >>
+  `~cx.txn.is_static` by
+    (Cases_on `cx.txn.is_static` >> gvs[write_storage_slot_eq]) >>
   `slot < dimword (:256)` by decide_tac >>
   `IS_SOME (encode_value tv v)` by metis_tac[value_has_type_equiv] >>
   Cases_on `encode_value tv v` >> gvs[] >>
@@ -1550,9 +1603,30 @@ Proof
         (irule toplevel_storage_ce_vars >>
          gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
       drule_all assign_storage_empty_code >> strip_tac >> gvs[] >>
+      `eval_operand (Lit 0w) s0 = SOME 0w /\
+       eval_operand (Lit (n2w slot)) s0 = SOME (n2w slot)` by
+        simp[eval_operand_def] >>
+      Cases_on `cx.txn.is_static`
+      >- (`s0.vs_call_ctx.cc_static` by
+            fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+          drule_all storageStoreFrameTheory.storage_emit_static_path >>
+          disch_then (qspec_then `ctx` assume_tac) >>
+          simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+          simp[gas_summary_at_def, gas_marked_exec_def] >>
+          qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `es`,
+            `Abort ExHalt_abort (halt_state (set_returndata [] s0))`] >>
+          conj_tac
+          >- (conj_tac
+              >- (gen_tac >>
+                  qpat_x_assum `!tail. _ = (INL v, _)`
+                    (qspec_then `tail` mp_tac) >>
+                  simp[bind_def] >> strip_tac >>
+                  gvs[AllCaseEqs(), write_storage_slot_eq]) >>
+              first_assum ACCEPT_TAC) >>
+          simp[exit_result_def, stmt_exit_def, expr_exit_def]) >>
       `~s0.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
         (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
-         fs[stmt_state_rel_def, state_rel_def]) >>
+         fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
       `eval_operand (Lit 0w) s0 = SOME 0w` by simp[eval_operand_def] >>
       drule_all assign_storage_store_path >>
       disch_then (qspec_then `ctx` assume_tac) >>
@@ -1697,6 +1771,10 @@ Theorem storage_copy_success_run[local]:
         mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
+  `~cx.txn.is_static` by
+    (Cases_on `cx.txn.is_static` >> gvs[write_storage_slot_eq]) >>
+  `~s1.vs_call_ctx.cc_static` by
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule compile_lower_value_var >> simp[] >> disch_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
@@ -1844,7 +1922,31 @@ Proof
   `value_has_type tvt v` by
     (qpat_x_assum `!gs v es1. _ ==> value_has_type _ _` irule >>
      fs[ETA_THM] >> metis_tac[]) >>
-  `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  Cases_on `cx.txn.is_static`
+  >- (`post_value_type cenv e = expr_type e` by
+        (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+      `expr_val_rel cx (expr_type e) v op t /\ stmt_state_rel ctx func cenv cx ee t` by
+        fs[expr_post_def] >>
+      `?sw. eval_operand op t = SOME sw` by
+        (gvs[expr_val_rel_def] >> metis_tac[]) >>
+      `t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      drule_all hash_post_footprint_bound >> strip_tac >>
+      `well_formed_type_value tvt` by
+        (drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> simp[]) >>
+      `type_slot_size tvt < dimword (:256)` by
+        (irule storage_copy_count_bound >> simp[] >>
+         qexists_tac `v` >> decide_tac) >>
+      `!x. op = Var x ==> not_fresh_at sB x` by
+        metis_tac[compile_lower_value_var] >>
+      `type_memory_bytes cenv (expr_type e) = 32 * type_slot_size tvt` by
+        simp[valueEncodingPropsTheory.type_memory_size_slots] >>
+      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
+        (assume_tac o REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
+      drule_all storage_copy_static_suffix >>
+      disch_then (qspecl_then [`ee`,`ctx`,`RetQ`] strip_assume_tac) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `ee`, `r`] >>
+      fs[write_storage_slot_eq, stmt_exit_def]) >>
   drule typed_storage_copy_write >>
   disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>

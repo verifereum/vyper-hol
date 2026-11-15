@@ -3,7 +3,7 @@ Theory tupleAssignImmutableDeployStep
 Ancestors
   tupleAssignImmutableDeployWord tupleAssignImmutableDeployAggregate
   tupleAssignImmutableDeployRestore tupleAssignImmutableDeploySource
-  immutableAssignMetadata immutableDeployAssignRanges
+  immutableAssignMetadata immutableDeployAssignRanges tuplePlaceHeadOpen
   immutableDeployAssignAdmissible immutableAssignOpen stmtLoweringMono
 
 Libs

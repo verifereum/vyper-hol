@@ -1623,7 +1623,8 @@ Proof
    ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"]` by
     (qpat_x_assum `ALOOKUP log_table name = _` mp_tac >>
      simp[log_table_def, AllCaseEqs()] >> rpt strip_tac >>
-     gvs[asm_op_arity_def, asm_op_arity_table_def, dup_table_def, swap_table_def]) >>
+     simp[asm_op_arity_def, asm_op_arity_table_def, dup_table_def, swap_table_def] >>
+     gvs[]) >>
   `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
     (`label_positions_ok inst` by
        metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,

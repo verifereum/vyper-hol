@@ -13,7 +13,7 @@ Ancestors
   targetPlaceSim targetPlaceSimCases targetPlaceLive vyperTypeEnv vyperTypeInvariants
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
-  venomExecSemantics venomInst venomState emitHelper emitHelperProps
+  venomExecSemantics venomInst venomState emitHelper emitHelperProps loweringHalt
   exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation

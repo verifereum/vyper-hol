@@ -7,7 +7,7 @@
  *)
 Theory venomRunBounded
 Ancestors
-  unitMemInv passSimulationDefs contextCodegenRel
+  unitMemInv passSimulationDefs contextCodegenRel list pair
 
 (* Resource bound codegen's gas proof consumes: the run ends within fuel,
    and every access is below M or part of a revert forwarding.  The stages
@@ -19,4 +19,28 @@ Definition venom_run_bounded_def:
                in_revert_forward fn s \/
                EVERY (\(off,len). len = 0 \/ off + len <= M)
                  (inst_mem_ranges inst s)) ctx vs
+End
+
+Theorem venom_run_bounded_word_ceiling:
+  terminates (run_context fuel ctx vs) /\
+  codegen_reachability_package Inv ctx vs ==>
+  venom_run_bounded fuel (2 * dimword(:256)) ctx vs
+Proof
+  rw[venom_run_bounded_def, mem_inv_def] >>
+  qexists_tac `Inv` >> simp[] >>
+  rpt strip_tac >> disj2_tac >>
+  mp_tac (Q.SPECL [`inst`, `s`] inst_mem_ranges_word_ceiling) >>
+  simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]
+QED
+
+(* Every CREATE or CREATE2 the run reaches has an initcode within the
+   EIP-3860 limit; the EVM answers a longer one with OutOfGas at any gas.
+   S7g takes it as mem_inv (\ctx fn inst s. inst_create_size_ok inst s). *)
+Definition inst_create_size_ok_def:
+  inst_create_size_ok inst s <=>
+    !v off sz salt sz_w.
+      ((inst.inst_opcode = CREATE /\ inst.inst_operands = [v; off; sz]) \/
+       (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [v; off; sz; salt])) /\
+      eval_operand sz s = SOME sz_w ==>
+      w2n sz_w <= 2 * max_code_size
 End

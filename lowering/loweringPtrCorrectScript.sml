@@ -18,6 +18,9 @@ Theory loweringPtrCorrect
 Ancestors
   vyperCompiler vyperLoweringCorrect ptrSafeRun
 
+val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
+
 Theorem lower_vyper_runtime_unit_ptr_taint:
   !tops rpolicy unit vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

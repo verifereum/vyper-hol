@@ -15,13 +15,6 @@ Ancestors
 Libs
   fragFuelLib
 
-Theorem fuel_ok_ld_st_opc[local]:
-  !loc. ~is_terminator (load_opc_for loc) /\ load_opc_for loc <> PHI /\
-        ~is_terminator (store_opc_for loc) /\ store_opc_for loc <> PHI
-Proof
-  Cases >> simp[load_opc_for_def, store_opc_for_def, is_terminator_def]
-QED
-
 Theorem fuel_ok_stmt_annassign[local]:
   !cenv lctx ty id vtyp e Wv E.
     cenv_ptrs_in Wv cenv ==>
@@ -187,7 +180,7 @@ Proof
   fuel_auto [fuel_ok_compile_get_target_ptr_ce,
              fuel_ok_lower_value_compile_expr, fuel_ok_compile_alloc_buffer,
              fuel_ok_compile_store_memory, fuel_ok_compile_dynarray_append] >>
-  simp[fuel_ok_ld_st_opc]
+  simp[]
 QED
 
 Theorem fuel_ok_compile_stmt_simple:

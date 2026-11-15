@@ -396,12 +396,13 @@ Theorem bound_labels_dynarray_append:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_dynarray_append ce base_op val_op ws sz dst_ty src_ty
-      cap prim ld st s))))
+      cap prim loc s))))
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_store_memory, cj 1 bound_labels_store_slots,
-    bound_labels_word_copy_loop, comp_return_def]),
+    bound_labels_ptr_load, bound_labels_ptr_store,
+    bound_labels_imm_store_words, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED

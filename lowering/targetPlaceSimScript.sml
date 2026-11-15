@@ -173,10 +173,8 @@ QED
 (* ===== Locals ===== *)
 
 (* A local the typing knows: its pointer variable, its scope entry, and its
-   declared type evaluating to the entry's type.  As stmtSimAugAssign's
-   expr_sim_inv_local, restated here so the judgment does not depend on the
-   statement simulation. *)
-Theorem expr_sim_inv_local[local]:
+   declared type evaluating to the entry's type. *)
+Theorem expr_sim_inv_local:
   !cenv cx env es id ty.
     expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
     (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\

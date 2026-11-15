@@ -157,7 +157,10 @@ Proof
   conj_tac >- (rpt strip_tac >> gvs[EL_DROP] >>
     qpat_x_assum `!k. _ /\ is_terminator _ ==> _`
       (qspec_then `i' + (i + 1)` mp_tac) >> simp[] >> decide_tac) >>
-  rpt strip_tac >> gvs[EL_DROP] >>
+  rpt strip_tac >>
+  `i' + (i + 1) < LENGTH bb.bb_instructions /\
+   j + (i + 1) < LENGTH bb.bb_instructions` by decide_tac >>
+  fs[EL_DROP] >>
   first_x_assum (qspecl_then [`i' + (i + 1)`, `j + (i + 1)`] mp_tac) >> simp[]
 QED
 

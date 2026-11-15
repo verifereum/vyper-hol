@@ -284,8 +284,10 @@ Proof
                    loweringShapeDefsTheory.not_fresh_at_mono]) >>
       `lookup_var p u = SOME w /\ eval_operand buf.buf_operand u = SOME tw` by
         (fs[eval_operand_def] >> metis_tac[]) >>
-      drule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+      qpat_assum `compile_store_memory _ _ (Var _) _ _ _ = _`
+        (mp_then (Pat `compile_store_memory _ _ _ _ _ _ = _`) mp_tac
           store_memory_declare_path) >>
+      disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ u`)) >>
       disch_then (drule_at (Pat `val_in_memory _ _ (w2n tw) _`)) >>
       disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ u`)) >>
       simp[] >>

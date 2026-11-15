@@ -9,23 +9,30 @@ Ancestors
   vyperInterpreter vyperState vyperAST
   gasStorage vyperStorageTrace vyperStorageFootprint
 
-Theorem compile_struct_lit_body_case:
-  !ctx func ce cx ann nsid fields.
-    exprs_case F ctx func ce cx (MAP SND fields) /\
-    acyclic_struct_metadata ce.ce_struct_fields ==>
-    expr_sim_case F ctx func ce cx (StructLit ann nsid fields) /\
-    expr_vv_case F ctx func ce cx (StructLit ann nsid fields)
+(* Keep the constructor allocation available to enclosing projections. *)
+Theorem compile_struct_lit_body_value_owned:
+  !ctx func cenv cx ann nsid fields env ty es sa vv sb s0 st0.
+    exprs_case F ctx func cenv cx (MAP SND fields) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    expr_body_pre cenv cx env (StructLit ann nsid fields) es /\ compile_expr cenv ty (StructLit ann nsid fields) sa = (vv,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    gas_admissible (eval_expr cx (StructLit ann nsid fields)) expr_vv_res_ok es /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx (StructLit ann nsid fields)) (es,s0)
+      (\H res ee s. ?rv. res = INL rv /\
+        vv_post H ctx func cenv cx (StructLit ann nsid fields) es sa sb s0 ee rv vv s /\
+        (!v. rv = Value v ==> vv_own cenv cx (expr_type (StructLit ann nsid fields)) sa sb ee rv vv s) /\
+        s.vs_current_bb = sb.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\H res ee r. expr_exit res r)
 Proof
-  rpt gen_tac >> strip_tac >>
-  `expr_vv_case F ctx func ce cx (StructLit ann nsid fields)` by
-    suspend "vv" >>
-  conj_tac >- (irule expr_sim_case_of_vv >> simp[post_value_type_def]) >>
-  first_assum ACCEPT_TAC
-QED
-
-Resume compile_struct_lit_body_case[vv]:
-  simp[expr_vv_case_def, expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> simp[LET_THM] >> strip_tac >>
+  rename1 `compile_expr ce ty (StructLit ann nsid fields) sa = (vv,sb)` >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gas_bad_storage_at_initial >> simp[evaluate_storage_trace_frame]) >>
@@ -76,7 +83,7 @@ Resume compile_struct_lit_body_case[vv]:
   suspend "outcome"
 QED
 
-Resume compile_struct_lit_body_case[immutable]:
+Resume compile_struct_lit_body_value_owned[immutable]:
   qpat_assum `stmt_state_rel H _ _ _ _ _ t` mp_tac >>
   pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
@@ -88,7 +95,7 @@ Resume compile_struct_lit_body_case[immutable]:
   simp[venomInstTheory.mk_inst_def] >> metis_tac[]
 QED
 
-Resume compile_struct_lit_body_case[outcome]:
+Resume compile_struct_lit_body_value_owned[outcome]:
   `eval_expr cx (StructLit ann nsid fields) =
     bind (eval_exprs cx (MAP SND fields))
       (\vs. return (Value (StructV (ZIP (MAP FST fields,vs)))))` by
@@ -125,6 +132,15 @@ Resume compile_struct_lit_body_case[outcome]:
   `expr_body_pre ce cx env (StructLit ann nsid fields) (es with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_eval_result >>
   simp[] >> strip_tac >>
+  `vv_own ce cx (expr_type (StructLit ann nsid fields)) sa sb ee
+     (Value (StructV (ZIP (MAP FST fields,vs)))) vv t'` by suspend "owned" >>
+  qpat_x_assum `vv = _` SUBST_ALL_TAC >>
+  conj_tac >- suspend "post" >>
+  simp[expr_type_def, contextTheory.base_ptr_def] >> metis_tac[]
+
+QED
+
+Resume compile_struct_lit_body_value_owned[post]:
   simp[vv_post_def, post_value_type_def] >>
   simp[contextTheory.base_ptr_def, expr_type_def] >>
   conj_tac >- suspend "holds" >>
@@ -140,7 +156,7 @@ Resume compile_struct_lit_body_case[outcome]:
   irule exprSimPropsTheory.locals_kept_mem >> simp[]
 QED
 
-Resume compile_struct_lit_body_case[holds]:
+Resume compile_struct_lit_body_value_owned[holds]:
   `ann = StructT nsid` by
     (`well_typed_expr env (StructLit ann nsid fields)` by fs[expr_body_pre_def] >>
      drule structFieldsPropsTheory.struct_literal_decl_types >> simp[]) >>
@@ -151,7 +167,30 @@ Resume compile_struct_lit_body_case[holds]:
   fs[val_in_memory_def, compileEnvTheory.is_word_type_def]
 QED
 
-Resume compile_struct_lit_body_case[at]:
+Resume compile_struct_lit_body_value_owned[at]:
+  `!ce0 cx0 a st0 st1 ee0 v p0 s.
+     vv_own ce0 cx0 a st0 st1 ee0 (Value v) (LocatedValue a p0) s /\
+     (!tv0. evaluate_type (get_tenv cx0) a = SOME tv0 ==> val_wf tv0 v) ==>
+     vv_at ce0 cx0 a st0 st1 ee0 (Value v) (LocatedValue a p0) s` by
+    (POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vv_own_def, vv_at_def, read_result_def, return_def] >> metis_tac[]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `!tv0. evaluate_type (get_tenv cx) ann = SOME tv0 ==>
+     val_wf tv0 (StructV (ZIP (MAP FST fields,vs)))` by
+    (imp_res_tac valueEncodingTypingTheory.value_has_type_val_wf >>
+     rpt strip_tac >> gvs[expr_type_def]) >>
+  qpat_x_assum `!ce0 cx0 a st0 st1 ee0 v p0 s. _`
+    (qspecl_then [`ce`, `cx`, `ann`, `sa`, `sb`, `ee`,
+       `StructV (ZIP (MAP FST fields,vs))`, `base_ptr ba`, `t'`] mp_tac) >>
+  impl_tac
+  >- (qpat_x_assum `vv_own _ _ _ _ _ _ _ _ _` mp_tac >>
+      asm_rewrite_tac[expr_type_def, contextTheory.base_ptr_def]) >>
+  simp[contextTheory.base_ptr_def]
+QED
+
+Resume compile_struct_lit_body_value_owned[owned]:
   `ann = StructT nsid` by
     (`well_typed_expr env (StructLit ann nsid fields)` by fs[expr_body_pre_def] >>
      drule structFieldsPropsTheory.struct_literal_decl_types >> simp[]) >>
@@ -159,10 +198,11 @@ Resume compile_struct_lit_body_case[at]:
     fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
        vyperTypeInvariantsTheory.env_context_consistent_def] >>
   `lookup_var x t' = SOME (n2w b)` by metis_tac[] >>
-  simp[vv_at_def, read_result_def, return_def, venomStateTheory.eval_operand_def] >>
+  simp[vv_own_def, read_result_def, return_def,
+       contextTheory.base_ptr_def, venomStateTheory.eval_operand_def] >>
   gvs[expr_type_def] >>
-  conj_tac >- metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
-  disj1_tac >> qexistsl_tac [`inst.inst_id`, `b`, `type_memory_size_list tvs`] >>
+  disj1_tac >>
+  qexistsl_tac [`inst.inst_id`, `b`, `type_memory_size_list tvs`] >>
   simp[val_footprint_def, type_memory_size_def] >>
   conj_tac >- fs[ci_mono_def] >>
   conj_tac >-
@@ -183,7 +223,7 @@ Resume compile_struct_lit_body_case[at]:
   simp[regions_disjoint_def]
 QED
 
-Resume compile_struct_lit_body_case[frame]:
+Resume compile_struct_lit_body_value_owned[frame]:
   rpt strip_tac >>
   qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` irule >>
   conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
@@ -193,7 +233,7 @@ Resume compile_struct_lit_body_case[frame]:
   simp[regions_disjoint_def]
 QED
 
-Resume compile_struct_lit_body_case[pure_frame]:
+Resume compile_struct_lit_body_value_owned[pure_frame]:
   rewrite_tac[expr_has_effect_thm] >> strip_tac >>
   `EVERY ($~ o expr_has_effect) (MAP SND fields)` by
     gvs[listTheory.EVERY_MAP, listTheory.EXISTS_MAP, combinTheory.o_DEF] >>
@@ -206,6 +246,30 @@ Resume compile_struct_lit_body_case[pure_frame]:
      SOME (b,type_memory_size_list tvs)` by metis_tac[] >>
   qexistsl_tac [`t`, `sm`, `b`, `type_memory_size_list tvs`] >>
   gvs[] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Finalise compile_struct_lit_body_value_owned
+
+Theorem compile_struct_lit_body_case:
+  !ctx func ce cx ann nsid fields.
+    exprs_case F ctx func ce cx (MAP SND fields) /\
+    acyclic_struct_metadata ce.ce_struct_fields ==>
+    expr_sim_case F ctx func ce cx (StructLit ann nsid fields) /\
+    expr_vv_case F ctx func ce cx (StructLit ann nsid fields)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func ce cx (StructLit ann nsid fields)` by
+    suspend "vv" >>
+  conj_tac >- (irule expr_sim_case_of_vv >> simp[post_value_type_def]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume compile_struct_lit_body_case[vv]:
+  simp[expr_vv_case_def, expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_struct_lit_body_value_owned >>
+  strip_tac >> irule counted_outcome_conseq >>
+  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
 Finalise compile_struct_lit_body_case

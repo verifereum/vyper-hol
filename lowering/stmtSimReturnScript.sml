@@ -56,18 +56,33 @@ Definition return_unlock_insts_def:
       else []
 End
 
-(* Exact epilogue-aware RetQ: result_rel holds BEFORE the unlock, with
+(* Epilogue-aware RetQ: result_rel holds BEFORE the unlock, with
    exactly ce_returns_count stack words (excluding the memory-return []
    alternative when the count is positive).  The returned VM state is
-   precisely its optional unlock, not an arbitrary state with selected
-   effects equal.  No guard cases are excluded. *)
+   its optional unlock, not an arbitrary state with selected effects
+   equal, except for the instruction index: the compiled return unlocks
+   before copying the value out, and a relayout copy can end in a fresh
+   block, so RET may run at any index.  No guard cases are excluded. *)
 Definition intret_q_def:
   intret_q H func cenv cx ret_tv v (es : evaluation_state) r <=>
-    ?ir s. r = IntRet ir (return_unlock_state cenv s) /\
-           LENGTH ir.iret_values = cenv.ce_returns_count /\
-           result_rel H func ret_tv cenv cx (INR (ReturnException v), es)
-             (IntRet ir s)
+    ?ir s i. r = IntRet ir (return_unlock_state cenv s with vs_inst_idx := i) /\
+             LENGTH ir.iret_values = cenv.ce_returns_count /\
+             result_rel H func ret_tv cenv cx (INR (ReturnException v), es)
+               (IntRet ir s)
 End
+
+(* Producers that return exactly the unlocked state. *)
+Theorem intret_q_intro:
+  r = IntRet ir (return_unlock_state cenv s) /\
+  LENGTH ir.iret_values = cenv.ce_returns_count /\
+  result_rel func ret_tv cenv cx (INR (ReturnException v), es)
+    (IntRet ir s) ==>
+  intret_q func cenv cx ret_tv v es r
+Proof
+  rw[intret_q_def] >>
+  qexistsl_tac [`s`, `(return_unlock_state cenv s).vs_inst_idx`] >>
+  simp[venom_state_component_equality]
+QED
 
 Theorem intret_q_gas_obs:
   intret_q H func cenv cx ret_tv v (es with gas_obs := readings) r =
@@ -138,10 +153,8 @@ Proof
       return_unlock_state_def, comp_return_def, emit_void_def,
       comp_bind_def, fresh_id_def, emit_def, emitted_insts_def,
       DROP_LENGTH_APPEND, IS_PREFIX_APPEND] >>
-  simp[run_inst_seq_def, is_terminator_def] >>
-  TRY (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-       simp[mk_inst_def, exec_write2_def, eval_operands_def, eval_operand_def,
-            arithmeticTheory.ADD1]) >>
+  (simp[mk_inst_def, is_terminator_def, run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, arithmeticTheory.ADD1]) >>
   simp[venom_state_component_equality]
 QED
 
@@ -193,19 +206,6 @@ Proof
        return_unlock_insts_def, word_type_elem_types,
        comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_void_def, emit_inst_def, fresh_id_def, emit_def]
-QED
-
-Theorem eval_operand_return_index[local,simp]:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem eval_operand_return_sstore[local,simp]:
-  !op key value s.
-    eval_operand op (sstore key value s) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def, sstore_def]
 QED
 
 (* Both guard representations preserve all operands. *)
@@ -307,6 +307,25 @@ Proof
   simp[state_rel_def, local_ptrs_rel_inst_idx, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def,
        contract_storage_def, contract_transient_def]
+QED
+
+(* With no guard to release, RetQ is result_rel with the counted stack
+   words, at whatever instruction index RET runs. *)
+Theorem intret_q_inactive:
+  ~(FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+  (intret_q func cenv cx ret_tv v es r <=>
+   ?ir s. r = IntRet ir s /\
+          LENGTH ir.iret_values = cenv.ce_returns_count /\
+          result_rel func ret_tv cenv cx (INR (ReturnException v), es)
+            (IntRet ir s))
+Proof
+  strip_tac >>
+  `!s. return_unlock_state cenv s = s` by
+    (qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+     Cases_on `info0` >> Cases_on `info3` >>
+     gvs[return_unlock_state_def]) >>
+  simp[intret_q_def, result_rel_def] >> eq_tac >> rw[] >>
+  qexistsl_tac [`s`, `s.vs_inst_idx`] >> simp[venom_state_component_equality]
 QED
 
 (* For the source's transient guard representation, RetQ implies ordinary
@@ -655,13 +674,6 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   `!opc ops. cs_appends (emit_op opc ops)` by simp[cs_appends_emit_helpers] >>
   fs[cs_appends_def] >> res_tac >> metis_tac[cs_extends_trans]
-QED
-
-Theorem eval_operands_inst_idx[local]:
-  !ops s n. eval_operands ops (s with vs_inst_idx := n) = eval_operands ops s
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  Cases_on `h` >> simp[eval_operand_def, lookup_var_def]
 QED
 
 Theorem eval_operands_vars_inst_idx:

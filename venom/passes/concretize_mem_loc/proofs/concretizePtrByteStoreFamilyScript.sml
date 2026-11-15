@@ -433,7 +433,7 @@ Resume ptr_byte_store_write_producer[setup]:
   simp[ptr_observe_def, ptr_observation_component_equality] >>
   strip_tac >> fs[listTheory.MEM] >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst _ C _ _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >> rename1 `a.po_inst.inst_operands = [op1;op2]` >>
   suspend "classify"
 QED

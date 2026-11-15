@@ -3,7 +3,7 @@
 Theory tupleAssignImmutableDeployAggregate
 Ancestors
   tupleAssignImmutableDeployAggregatePlain
-  tupleAssignImmutableDeployAggregateNormalize typedMemoryCopy
+  tupleAssignImmutableDeployAggregateNormalize typedMemoryCopy tuplePlaceHeadOpen
 
 Theorem tuple_immutable_aggregate_store:
   place = (dst,SOME LocCode,SOME (ValPT dty)) /\

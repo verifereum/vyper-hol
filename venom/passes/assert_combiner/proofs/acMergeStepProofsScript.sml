@@ -39,7 +39,7 @@ Theorem ac_or_iszero_prefix:
           (update_var ov (word_or a b) s))
 Proof
   rpt strip_tac >>
-  simp[run_insts_def, step_inst_non_invoke, step_inst_base_def,
+  simp[run_insts_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
        exec_pure2_def, exec_pure1_def, eval_operand_def,
        lookup_var_def, update_var_def, FLOOKUP_UPDATE, word_or_eq_0w]
 QED

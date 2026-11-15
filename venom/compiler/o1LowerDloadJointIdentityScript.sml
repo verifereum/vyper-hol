@@ -1,6 +1,7 @@
 (* Successful identity-state operations and PC-only boundary transport. *)
 Theory o1LowerDloadJointIdentity
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointScalar o1LowerDloadJointAssign o1LowerDloadJointRelation
   o1LowerDloadOccurrence o1LowerDloadEnvironment o1LowerDloadShared ptrDiscipline
   pointerConfinedDefs memLocDefs unitShapeDefs o1PassContract venomWf contextCodegenRel
@@ -8,7 +9,7 @@ Ancestors
 
 Theorem ld_joint_identity_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [NOP; ASSERT; ASSERT_UNREACHABLE] /\
   step_inst fuel C inst s = OK s1 ==>
@@ -86,7 +87,7 @@ QED
 Theorem ld_joint_identity_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [NOP; ASSERT; ASSERT_UNREACHABLE] /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
@@ -130,7 +131,7 @@ QED
 
 Theorem ld_joint_assert_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE] /\
   step_inst fuel C inst s = Abort ab s1 ==>

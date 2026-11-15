@@ -92,6 +92,29 @@ Proof
        encode_value_def, encode_base_to_slot_def, integer_wordTheory.i2w_def]
 QED
 
+Theorem eval_pop_storage_static[local]:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT et (Dynamic n)), name) /\
+  lookup_var_slot_from_layout cx tr src name = SOME slot /\
+  evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
+  cx.txn.is_static ==>
+  eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
+    if lookup_storage (n2w slot) (get_storage cx es tr) = 0w then
+      (INR (Error (RuntimeError "pop empty storage array")), es)
+    else (INR (Error (RuntimeError "write in static context")), es)
+Proof
+  strip_tac >>
+  simp[evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+       return_def, get_place_def, pop_place_def, get_storage_backend_eq,
+       ignore_bind_def, check_def, assert_def, raise_def,
+       write_storage_slot_eq, encode_value_def, encode_base_to_slot_def,
+       integer_wordTheory.i2w_def] >>
+  IF_CASES_TAC >>
+  Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w` >> gvs[] >>
+  `w2n (lookup_storage (n2w slot) (get_storage cx es tr)) = 0` by decide_tac >>
+  fs[wordsTheory.w2n_eq_0]
+QED
+
 Theorem pop_storage_target_facts:
   well_typed_expr env (Pop ann (TopLevelNameTarget (src,id))) /\
   env_consistent env cx es /\

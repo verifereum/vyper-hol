@@ -45,7 +45,8 @@ Theorem body_inv_build_internal_env:
                ce_is_ctor := caller.ce_is_ctor |>) cx
 Proof
   rw[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[]
 QED
 
 Theorem compile_register_positional_args_body_inv:

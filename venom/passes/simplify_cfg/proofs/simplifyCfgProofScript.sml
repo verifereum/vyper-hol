@@ -65,7 +65,7 @@ Proof
 QED
 
 (* The final join supplies these elementary interfaces independently. *)
-Theorem simplify_cfg_fn_bisim_fuel_from_steps:
+Theorem simplify_cfg_fn_bisim_fuel_from_steps[local]:
   (!fn. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn ==>
     fn_bisim_fuel I fn (fix_all_phis (remove_unreachable_blocks fn))) /\
   (!fn a b. scfg_chain_hyp fn a b ==>

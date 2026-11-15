@@ -7,7 +7,7 @@ Ancestors
   venomInst venomState venomExecSemantics words list rich_list
   loweringPosts vyperEvent bodyMemBiSha256Compose
   stmtForArrayMemoryBodyEntry entrySinkExtraction exprSimAlloc
-  stmtSimDefs exprSimSend
+  stmtSimDefs exprSimSend loweringStateRelDefs
 
 Theorem raw_log_dynamic_suffix_shape[local]:
   emit_op MLOAD [x] sm = (len,s1) /\
@@ -49,7 +49,9 @@ Theorem raw_log_dynamic_suffix_run[local]:
     wb_frame cenv es0
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t
 Proof
-  strip_tac >> drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
+  strip_tac >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
   `?t'. step_inst_base (mk_inst s2.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t = OK t' /\
     stmt_state_rel H ctx func cenv cx
@@ -208,7 +210,9 @@ Theorem raw_log_fixed_suffix_run[local]:
     wb_frame cenv es0
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t
 Proof
-  strip_tac >> drule_all raw_log_fixed_store_frame >> strip_tac >>
+  strip_tac >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all raw_log_fixed_store_frame >> strip_tac >>
   `?t. step_inst_base (mk_inst s1.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [])
       (mstore (w2n p) w s) = OK t /\

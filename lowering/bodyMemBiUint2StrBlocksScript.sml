@@ -126,7 +126,7 @@ Theorem u2s_zero_second_address_run[local]:
 Proof
   strip_tac >>
   simp[u2s_zero_def, u2s_inst_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operands_def, eval_operand_def,
        lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   gvs[eval_operand_def, lookup_var_def]
@@ -165,7 +165,7 @@ Theorem u2s_zero_first_address_run[local]:
 Proof
   strip_tac >>
   simp[u2s_zero_def, u2s_inst_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operands_def, eval_operand_def]
 QED
 
@@ -196,7 +196,7 @@ Proof
   conj_tac >- simp[] >> qexists_tac `bw` >>
   qpat_x_assum `run_inst_seq [_] _ = _` mp_tac >>
   simp[u2s_zero_def, u2s_inst_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_write2_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operands_def, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE] >>
   strip_tac >> gvs[] >>
@@ -332,7 +332,7 @@ Proof
      `pre` |-> `[]`, `code` |-> `TAKE 9 (u2s_body a buf n)`,
      `j` |-> `LAST (u2s_body a buf n)`] u2s_memory_block_history) >>
   simp[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_def]
+       step_inst_base_opcode_eqs]
 QED
 
 Theorem u2s_final_memory_path:
@@ -359,7 +359,7 @@ Proof
      `pre` |-> `[]`, `code` |-> `TAKE 4 (u2s_final a buf n)`,
      `j` |-> `LAST (u2s_final a buf n)`] u2s_memory_block_history) >>
   simp[u2s_final_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_def]
+       step_inst_base_opcode_eqs]
 QED
 
 Theorem u2s_zero_memory_path:
@@ -386,7 +386,7 @@ Proof
      `pre` |-> `[]`, `code` |-> `TAKE 6 (u2s_zero a buf n)`,
      `j` |-> `LAST (u2s_zero a buf n)`] u2s_memory_block_history) >>
   simp[u2s_zero_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_def]
+       step_inst_base_opcode_eqs]
 QED
 
 Theorem u2s_setup_memory_path:
@@ -411,7 +411,7 @@ Proof
      `code` |-> `TAKE 3 (u2s_setup a op buf)`,
      `j` |-> `LAST (u2s_setup a op buf)`] u2s_memory_block_history) >>
   simp[u2s_setup_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_def]
+       step_inst_base_opcode_eqs]
 QED
 
 Theorem u2s_check_memory_path:

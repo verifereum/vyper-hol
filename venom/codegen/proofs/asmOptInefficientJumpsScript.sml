@@ -142,7 +142,7 @@ Proof
        asmSemTheory.asm_state_component_equality]
 QED
 
-Theorem optimize_inefficient_jumps_fst[local]:
+Theorem optimize_inefficient_jumps_fst:
   FST (optimize_inefficient_jumps (a :: b :: c :: d :: e :: rest)) =
   if asm_jumpi_over_jump a b c d e then
     FST (optimize_inefficient_jumps

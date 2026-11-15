@@ -226,3 +226,13 @@ Definition ricf_transform_function_def:
         if fn'.fn_blocks <> fn.fn_blocks then clear_nops_function fn'
         else fn'
 End
+
+(* Context-level transform: every function, against the original list. *)
+Definition ricf_transform_ctx_def:
+  ricf_transform_ctx (fn_meta : (string, invoke_fn_meta) fmap)
+                     (rma : (string, bool list) fmap)
+                     (ctx : venom_context) : venom_context =
+    ctx with ctx_functions :=
+      MAP (ricf_transform_function fn_meta ctx.ctx_functions rma)
+          ctx.ctx_functions
+End

@@ -264,6 +264,16 @@ Proof
   >- metis_tac[abi_encode_nonword_zero_plan] >> simp[]
 QED
 
+(* The arithmetic simplifier caches its results, so what a cached result
+   depends on varies with which goals ran before it.  This step runs on four
+   goals, in a different order with proof steps on and off, so it clears the
+   cache first and is one ML value, which holbuild doesn't split into steps.
+   Otherwise the theorem records other dependencies in the two modes. *)
+val nonword_disjoint_tac =
+  (fn g => (numSimps.clear_arith_caches (); ALL_TAC g)) >>
+  strip_tac >> Cases_on `mid` >>
+  fs[Abbr `outsz`, venomMemDefsTheory.regions_disjoint_def] >> gvs[];
+
 (* Resources at the actual nonword expression boundary. Empty footprints
    retain the real pointer and impose no endpoint constraint. *)
 Theorem abi_encode_nonword_phase_resources:
@@ -380,8 +390,7 @@ Proof
        LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av)) /\
     (w2n w+val_footprint tv v <= p+32 \/
      p+32+(case mid of NONE => 0 | SOME _ => 32) <= w2n w)` by
-    (strip_tac >> Cases_on `mid` >>
-     fs[Abbr `outsz`, venomMemDefsTheory.regions_disjoint_def] >> gvs[]) >>
+    nonword_disjoint_tac >>
   qexistsl [`w`, `ct`, `rv`, `p`] >> simp_tac bool_ss [LET_THM] >>
   unabbrev_all_tac >> asm_rewrite_tac [] >>
   conj_tac >- simp[venomMemDefsTheory.regions_disjoint_def] >>

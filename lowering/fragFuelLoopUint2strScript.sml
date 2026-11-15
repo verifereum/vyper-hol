@@ -352,7 +352,7 @@ Theorem uint2str_setup_word[local]:
 Proof
   simp[u2s_setup_def, u2s_inst_def, mk_inst_def] >>
   pure_rewrite_tac[exprLoweringPropsTheory.run_inst_seq_def] >>
-  simp[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
   Cases_on `eval_operand op s` >> simp[] >>
   rename1 `eval_operand op s = SOME w` >>
   simp[venomStateTheory.eval_operand_def] >>

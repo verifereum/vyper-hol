@@ -15,7 +15,7 @@ Ancestors
   supportedExprForms supportedTypes typedCopyMetadata list rich_list pair alist finite_map venomInst
   structFieldsProps  vyperTypeInvariants vyperTypeSystem
 
-Theorem compile_copy_memory_open[local]:
+Theorem compile_copy_memory_open:
   !dst src n sa r sb.
     ~block_is_terminated sa /\ compile_copy_memory dst src n sa = (r,sb) ==>
     ~block_is_terminated sb
@@ -36,7 +36,7 @@ QED
 
 (* Past the word and bytestring cases, acyclic metadata sends the typed
    copy to one of its helpers or to a plain copy. *)
-Theorem compile_store_memory_typed_complex_cases[local]:
+Theorem compile_store_memory_typed_complex_cases:
   !cenv dst dst_ty src src_ty sa r sb.
     ~is_word_type dst_ty /\
     ~(is_bytestring_type dst_ty /\ is_bytestring_type src_ty) /\

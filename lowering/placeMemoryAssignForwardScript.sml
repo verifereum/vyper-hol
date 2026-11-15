@@ -10,7 +10,7 @@ Ancestors
   placeMemoryStoreEffect placeMemoryStagingFrame freshWrites exprSimProps
   placeMemoryProtectedFrame
 
-Theorem immutable_local_slice_disjoint[local]:
+Theorem immutable_local_slice_disjoint:
   immutable_alloca_sep func cenv cx ee s /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY

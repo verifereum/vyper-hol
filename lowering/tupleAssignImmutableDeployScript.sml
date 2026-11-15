@@ -5,7 +5,7 @@ Ancestors
   tupleAssignImmutableDeploySourceSuffix
   tuplePlaceFlagPrefix tuplePlaceRootReady tuplePlaceOpen tuplePlaceHead
   tuplePlaceCodeParts tuplePlaceSource tuplePlaceHeadGas tuplePlaceSuffixCode
-  stmtSimAssignTuple stmtSimDeclCompose stmtReasonVvMemory
+  stmtSimAssignTuple stmtSimDeclCompose stmtReasonVvMemory stmtSimAssignTuplePlaces
   stmtSimDefs stmtSimForced stmtSimProps stmtSimForRounds bodySim
   exprSimHypsDefs exprSimDefs exprSimHyps loweringPosts exprLoweringProps
   supportedTargets vyperTypeSystem vyperTypeDefaults vyperTypeArgFits

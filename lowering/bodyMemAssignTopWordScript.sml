@@ -5,6 +5,7 @@
    touches no memory. *)
 Theory bodyMemAssignTopWord
 Ancestors
+  fragGasSeqAbort
   gasStorage vyperStorageTrace vyperStorageFootprint
   supportedExprTraverse allocLimits allocLimitsProps
   bodySim vyperTypeCallGraph
@@ -182,10 +183,39 @@ Resume compile_assign_storage_typed_stmt_frag_mem[store]:
   rewrite_tac[expr_post_def] >> strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 tvt v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
-    (qpat_x_assum `stmt_state_rel H1 _ _ _ _ ee t` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[stmt_state_rel_def, state_rel_def]) >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
+      `gas_marked_path T ctx func t 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+       (drule emitted_insts_emit_void >> strip_tac >>
+        `sb.cs_current_bb = sB.cs_current_bb` by
+          gvs[emit_void_def,comp_bind_def,fresh_id_def,emit_def] >>
+        drule_all fn_has_code_same_block >> strip_tac >>
+        `get_instruction bb (LENGTH sB.cs_current_insts) =
+          SOME (mk_inst sB.cs_next_id (if tr then TSTORE else SSTORE)
+            [Lit (n2w slot);op] [])` by
+          (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+        `gas_marked_path T ctx func t
+          (if (mk_inst sB.cs_next_id (if tr then TSTORE else SSTORE)
+            [Lit (n2w slot);op] []).inst_opcode = GAS then 1 else 0)
+          (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+         (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
+          Cases_on `tr` >>
+          simp[mk_inst_def,is_terminator_def,step_inst_base_def,
+               eval_operands_def,eval_operand_def,below_frontier_no_ranges,
+               inst_dload_in_section_other]) >>
+        Cases_on `tr` >> gvs[mk_inst_def]) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot (tvt)]`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+      conj_tac >-
+        simp[ignore_bind_def,bind_def,record_storage_event_def,return_def,
+             write_place_def,write_storage_slot_eq] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      disj2_tac >> simp[exit_result_def,stmt_exit_def,expr_exit_def]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `alloca_inv t` by
     (qpat_x_assum `stmt_state_rel H1 _ _ _ _ ee t` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def]) >>

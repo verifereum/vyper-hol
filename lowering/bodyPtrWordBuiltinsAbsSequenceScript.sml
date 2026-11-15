@@ -14,9 +14,10 @@ Theorem word_abs_ghost_step:
 Proof
   strip_tac >>
   Cases_on `inst.inst_outputs` >> gvs[MEM] >>
-  simp[step_prov_def, out_prov_def, set_prov_def,
-       step_taint_def, mem_taint_def, store_taint_def,
-       adopt_reset_def, imm_taint_def, taint_component_equality,
+  simp[step_prov_def, out_prov_def, set_prov_def] >>
+  simp[step_taint_def] >>
+  simp[mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+  simp[taint_component_equality,
        step_writes_def, source_memory_write_ranges_def, range_bytes_def] >>
   namedCases_on `inst.inst_operands` ["", "a rest"] >> simp[written_taint_def] >>
   namedCases_on `rest` ["", "b more"] >> simp[written_taint_def] >>

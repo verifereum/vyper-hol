@@ -87,7 +87,7 @@ Resume log_scalar_members_seq_ptr[cons]:
   rename1 `compile_abi_encode_complex_elems _ _ ((ei,asz,mz,dyn)::infos) _ _ _ _ = _` >>
   `?elem. elem_src = Var elem` by
     (qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     metis_tac[]) >>
+     qpat_assum `elem_src = Var _` (irule_at Any)) >>
   qpat_x_assum `elem_src = Var elem` SUBST_ALL_TAC >>
   `child_end.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   mp_tac (Q.INST [`sa` |-> `prepared`, `end_st` |-> `child_end`, `out` |-> `child_len`]

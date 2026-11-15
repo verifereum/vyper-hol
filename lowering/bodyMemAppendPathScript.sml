@@ -22,7 +22,7 @@ QED
 
 Theorem append_storage_word_run_mem[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ eval_operand vop s = SOME w /\
@@ -96,6 +96,9 @@ Proof
   qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `MEM _ (FST H)` kall_tac >>
   qmatch_asmsub_abbrev_tac `state_frame u = state_frame su` >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_append_storage_word >> strip_tac >>
   `stmt_state_rel H1 ctx func cenv cx es' su` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ es' _` mp_tac >>
@@ -113,7 +116,7 @@ QED
 
 Theorem append_storage_word_success_path_mem:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
@@ -176,7 +179,7 @@ QED
 
 Theorem append_storage_word_abort_path_mem[local]:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ cap < dimword (:256) /\
   cap <= w2n (if tr then tload slot s else sload slot s) /\
@@ -219,7 +222,7 @@ QED
 
 Theorem append_storage_word_value_path_mem:
   compile_dynarray_append cenv (Lit slot) op 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
+    (if tr then LocTransient else LocStorage) sb = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   (!H. P H ==> stmt_state_rel H ctx func cenv cx es s /\

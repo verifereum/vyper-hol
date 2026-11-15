@@ -6,7 +6,7 @@
 Theory bodyMemAssignOther
 Ancestors
   bodyMemoryPreds bodyMemImmutableDeploy bodyMemAssignPlace bodyMemAssignPlaceWidened
-  bodyMemAssignEffectfulIndex bodyMemAssignSnapshot
+  bodyMemAssignPlaceSnapshot exprLowering
 
 Theorem body_assign_other_mem:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -22,6 +22,7 @@ Theorem body_assign_other_mem:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget t) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
@@ -58,18 +59,25 @@ Proof
   >- (qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_immutable_deploy_mem >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       disch_then ACCEPT_TAC) >>
-  Cases_on `supported_target_pure tops t`
-  >- (Cases_on `(lowered_value_type cenv e = expr_type e \/
-              is_bytestring_type (expr_type e) /\
-              is_bytestring_type (lowered_value_type cenv e) /\
-              arg_type_fits (lowered_value_type cenv e) (expr_type e))`
-      >- (qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_mem_case >>
+  Cases_on `expr_can_mutate cenv (target_to_expr t)`
+  >- (`~(?nsid mut ty slot.
+         t = TopLevelNameTarget nsid /\
+         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+         (mut = Storage \/ mut = Transient) /\ ~is_word_type ty /\
+         (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+         0 < type_memory_bytes cenv ty /\ expr_type e = ty)` by
+        (strip_tac >> gvs[stmtLoweringTheory.target_to_expr_def, expr_can_mutate_def]) >>
+      qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_snapshot_mem >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then ACCEPT_TAC) >>
+  Cases_on `(lowered_value_type cenv e = expr_type e \/
+             is_bytestring_type (expr_type e) /\
+             is_bytestring_type (lowered_value_type cenv e) /\
+             arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+  >- (qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_mem_case >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       disch_then ACCEPT_TAC) >>
-      (qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_widened_aggregate_call_mem >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      disch_then ACCEPT_TAC)) >>
-  (qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_effectful_index_mem >>
+  (qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_widened_aggregate_call_mem >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       disch_then ACCEPT_TAC)
 QED

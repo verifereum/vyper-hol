@@ -1,7 +1,8 @@
 (* Common RawLog source/compiler and LOG execution interfaces. *)
 Theory exprSimRawLog
 Ancestors
-  logEmitStep gasSummary fragGasMode fragGasSeqAbort
+  logEmitStep
+  gasSummary fragGasMode fragGasSeqAbort
   exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimHyps exprSimPrecompiles exprSimWordArgs exprSimSend exprSimAggregateSource compileEnv loweringStateRelDefs extCallOracleStep allocLimits
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState

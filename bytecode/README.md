@@ -159,6 +159,19 @@ Any byte difference or checked-compiler `NONE` result fails. No HOL-generated
 expected output or implementation-derived fallback is used. This is finite
 fixture evidence, not a universal compiler-equivalence theorem.
 
+The `raw-system` and `create-builtins` manifests instead have kernel-checked
+comparisons under CI's `loweringChecks` root:
+
+```sh
+holbuild -j4 build evalCompilerRawSystemTheory evalCompilerCreateBuiltinsTheory
+```
+
+Each retained fixture has a named theorem proving exact deployment/runtime
+byte equality with its Python oracle. The corpus rollups compare these theorem
+names with `parity-fixtures.txt`, so adding an unchecked name fails the build.
+Fixtures excluded from these manifests have reasons in
+[`pending-5127-port.md`](pending-5127-port.md).
+
 ## Supported-subset boundary
 
 The machine-readable authority is

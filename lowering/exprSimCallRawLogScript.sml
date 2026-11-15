@@ -6,6 +6,7 @@
 Theory exprSimCallRawLog
 Ancestors
   exprSimHashBoundary
+  fragGasSeqAbort
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource exprSimHyps exprSimSend vyperAST vyperTypeSystem
   vyperTypeCallGraph allocLimits supportedExprTraverse exprLowering
   vyperInterpreter vyperContext vyperValue vyperState exprCallbackContracts exprCallBounds

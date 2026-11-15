@@ -18,6 +18,7 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 (* The selected external function's frame (d = NONE, ce_return_pc = NONE):
    every return sequence runs to an exit, checking memory on every step.

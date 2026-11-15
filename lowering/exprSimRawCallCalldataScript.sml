@@ -287,15 +287,6 @@ Proof
        lift_option_type_def, vyperStateTheory.return_def]
 QED
 
-Theorem calldata_call_operand_exit[local]:
-  !cx ann flags args dflt es es' exc.
-  eval_exprs cx args es = (INR exc,es') ==>
-  eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt) es =
-    (INR exc,es')
-Proof
-  rpt strip_tac >> simp[Once evaluate_def] >> simp[bind_def]
-QED
-
 Theorem calldata_call_action[local]:
   eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt) =
   do
@@ -799,48 +790,6 @@ Proof
     rich_listTheory.IS_PREFIX_APPEND]
 QED
 
-Theorem raw_call_finish_nonrevert_outbuf_compile[local]:
-  compile_raw_call_finish to_op dp dl gas_op value_op call_ty n F
-    out_val out_ptr sa = (result,sb) /\ n > 0 ==>
-  ?success s1 z s2 cmp s3 cap s4 s5 buf s6 s7 dst s8.
-    (case call_ty of
-      DelegateCall => emit_op DELEGATECALL
-        [gas_op;to_op;dp;dl;out_ptr;Lit (n2w n)] sa
-    | StaticCall => emit_op STATICCALL
-        [gas_op;to_op;dp;dl;out_ptr;Lit (n2w n)] sa
-    | RegularCall => emit_op CALL
-        [gas_op;to_op;value_op;dp;dl;out_ptr;Lit (n2w n)] sa) = (success,s1) /\
-    emit_op RETURNDATASIZE [] s1 = (z,s2) /\
-    emit_op LT [z;Lit (n2w n)] s2 = (cmp,s3) /\
-    compile_select cmp z (Lit (n2w n)) s3 = (cap,s4) /\
-    emit_void MSTORE [out_val;cap] s4 = ((),s5) /\
-    compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32) s5 = (buf,s6) /\
-    emit_void MSTORE [buf.buf_operand;success] s6 = ((),s7) /\
-    emit_op ADD [buf.buf_operand;Lit 32w] s7 = (dst,s8) /\
-    emit_void MCOPY [dst;out_val;Lit (n2w (32 + ((n + 31) DIV 32) * 32))]
-      s8 = ((),sb) /\ result = buf.buf_operand
-Proof
-  strip_tac >> drule raw_call_finish_nonrevert_compile >> strip_tac >>
-  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
-QED
-
-Theorem raw_call_finish_nonrevert_empty[local]:
-  compile_raw_call_finish to_op dp dl gas_op value_op call_ty 0 F
-    out_val out_ptr sa =
-    (case call_ty of
-      DelegateCall => emit_op DELEGATECALL
-        [gas_op;to_op;dp;dl;out_ptr;Lit 0w] sa
-    | StaticCall => emit_op STATICCALL
-        [gas_op;to_op;dp;dl;out_ptr;Lit 0w] sa
-    | RegularCall => emit_op CALL
-        [gas_op;to_op;value_op;dp;dl;out_ptr;Lit 0w] sa)
-Proof
-  simp[compile_raw_call_finish_def, comp_bind_def, comp_return_def] >>
-  pairarg_tac >> Cases_on `call_ty` >> gvs[]
-QED
-
 Theorem raw_call_finish_revert_compile:
   !to_op dp dl gas_op value_op call_ty n out_val out_ptr sa result sb.
     compile_raw_call_finish to_op dp dl gas_op value_op call_ty n T
@@ -886,7 +835,7 @@ Proof
   Cases_on `call_ty` >> gvs[]
 QED
 
-Theorem raw_call_finish_prefix[local]:
+Theorem raw_call_finish_prefix:
   compile_raw_call_finish aop dp dl gop vop RegularCall n rev ov op sa =
     (result,sb) ==>
   ?success sc. emit_op CALL [gop;aop;vop;dp;dl;op;Lit (n2w n)] sa =
@@ -1289,26 +1238,6 @@ Proof
 QED
 
 (* The header store is valid even while DALLOCA has temporarily moved FMP. *)
-Theorem raw_call_output_store_run[local]:
-  !sa sb ptr cap s w n data.
-    emit_void MSTORE [ptr;cap] sa = ((),sb) /\
-    eval_operand ptr s = SOME w /\
-    eval_operand cap s = SOME (n2w (MIN n (LENGTH data))) /\
-    fresh_vars_wrt sa s /\
-    mem_bytes_at (w2n w + 32) (LENGTH (TAKE n data)) s.vs_memory = TAKE n data ==>
-    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      t = mstore (w2n w) (n2w (MIN n (LENGTH data))) s /\
-      val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data))
-        (w2n w) t.vs_memory /\
-      fresh_vars_wrt sb t /\
-      (!op v. eval_operand op s = SOME v ==> eval_operand op t = SOME v)
-Proof
-  rpt strip_tac >> drule_all emit_void_MSTORE_correct >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[] >>
-  drule raw_call_output_length_memory >>
-  simp[mstore_def, write_memory_with_expansion_def]
-QED
-
 Theorem raw_call_output_store_frame[local]:
   !ctx func cenv cx es s saved inst q b sz (w:bytes32) len.
     stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
@@ -1328,24 +1257,6 @@ Proof
   asm_rewrite_tac[] >> irule raw_call_outbuf_write_frame >>
   simp[byteTheory.LENGTH_word_to_bytes] >>
   qexistsl_tac [`b`, `inst`, `q`, `sz`] >> simp[]
-QED
-
-Theorem raw_call_restore_run[local]:
-  !sa sb op s saved.
-    emit_void SETFMP [op] sa = ((),sb) /\
-    eval_operand op s = SOME saved /\ fresh_vars_wrt sa s ==>
-    run_inst_seq (emitted_insts sa sb) s = OK (s with vs_fmp := saved) /\
-    fresh_vars_wrt sb (s with vs_fmp := saved) /\
-    (!p w. eval_operand p s = SOME w ==>
-           eval_operand p (s with vs_fmp := saved) = SOME w)
-Proof
-  rpt strip_tac >>
-  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
-  drule emit_void_extends >> strip_tac >>
-  gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
-      emit_void_def, comp_bind_def, fresh_id_def, emit_def, comp_return_def] >>
-  Cases_on `p` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
 Theorem raw_call_output_code[local]:
@@ -1876,13 +1787,6 @@ Proof
   gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
       eval_operand_def, exec_alloca_def, AllCaseEqs(),
       exec_pure2_def, bind_outputs_def, update_var_def, lookup_var_def]
-QED
-
-Theorem raw_call_safe_operand_drop_fresh[local]:
-  safe_operand sa p ==> eval_operand p (drop_fresh sa s) = eval_operand p s
-Proof
-  Cases_on `p` >> simp[safe_operand_def, eval_operand_def,
-    lookup_var_drop_fresh, drop_fresh_def]
 QED
 
 Theorem raw_call_eval_vars_ext[local]:
@@ -2847,27 +2751,6 @@ Proof
   drule_all raw_call_failed_jnz_frag >> simp[]
 QED
 
-Theorem raw_call_finish_branch_frag[local]:
-  !ctx sa sx sf sz sp sc se sk sb cond ok fl x y z rb s success Q R.
-    emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
-    new_block fl sx = (x,sf) /\
-    emit_op RETURNDATASIZE [] sf = (z,sz) /\
-    compile_alloc_buffer 0 sz = (rb,sp) /\
-    emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;z] sp = ((),sc) /\
-    emit_inst REVERT [rb.buf_operand;z] [] sc = ((),se) /\
-    new_block ok se = (y,sk) /\
-    cs_extends sf se /\ cs_extends sk sb /\
-    eval_operand cond s = SOME (if success then 1w else 0w) /\
-    LENGTH s.vs_returndata < dimword (:256) /\
-    (!t. t.vs_returndata = s.vs_returndata ==> R (Abort Revert_abort t)) /\
-    (success ==> frag_path ctx sk sb (\u. u = jump_to ok s) Q R) ==>
-    frag_path ctx sa sb (\u. u = s) Q R
-Proof
-  rpt strip_tac >>
-  `~success ==> !t. t.vs_returndata = s.vs_returndata ==> R (Abort Revert_abort t)` by simp[] >>
-  drule_all raw_call_finish_branch_guarded_frag >> simp[]
-QED
-
 
 Theorem raw_call_success_suffix_mono[local]:
   !n ov sa.
@@ -3720,23 +3603,6 @@ Proof
   drule_all raw_call_tuple_copy_restored >> strip_tac >>
   qexists_tac `t` >> simp[] >>
   gvs[mcopy_def, write_memory_with_expansion_def]
-QED
-
-Theorem raw_call_tuple_tail_code[local]:
-  emit_op ADD [pop;Lit 32w] sa = (dst,sb) /\
-  emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
-  emit_void SETFMP [dop] sc = ((),sd) ==>
-  sd.cs_blocks = sa.cs_blocks /\ sd.cs_current_bb = sa.cs_current_bb /\
-  isPREFIX sa.cs_current_insts sd.cs_current_insts /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sd)
-Proof
-  rpt strip_tac >>
-  gvs[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[mk_inst_def, is_terminator_def]
 QED
 
 

@@ -12,6 +12,7 @@
 Theory fnFrameDeepGas
 Ancestors
   deepResidualSim fnPlanPrefix gasFrameSim genFrameSim frameRel contextCodegenRel
+  asmRunBounded planEmissionProps
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs doSwapSim regularPostfixSim
@@ -37,7 +38,8 @@ Theorem gas_plan_local_sim_numeric[local]:
     venom_asm_rel lo ps'
       (update_var out (HD (vs.vs_gas_readings ++ [0w]))
         (vs with vs_gas_readings := TL vs.vs_gas_readings)) st' /\
-    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    create_safe_prefix lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st
 Proof
   strip_tac >>
   drule_all gas_plan_shape >> disch_then assume_tac >>
@@ -80,6 +82,14 @@ Resume gas_plan_local_sim_numeric[live]:
      drule_all do_swap_venom_asm_rel_numeric >>
      disch_then (qspec_then `o2pc` strip_assume_tac) >>
      qexists_tac `st''` >> simp[]) >>
+  `EVERY plan_admin_op tail` by metis_tac[optimistic_swap_plan_admin] >>
+  `create_safe_prefix lo o2pc prog (LENGTH (execute_plan initial_fmp tail)) st'` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `create_safe_prefix lo o2pc prog (SUC (LENGTH (execute_plan initial_fmp tail))) st` by
+    (`SUC (LENGTH (execute_plan initial_fmp tail)) =
+      1 + LENGTH (execute_plan initial_fmp tail)` by simp[] >>
+     asm_rewrite_tac[] >> irule create_safe_prefix_compose >>
+     goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `st''` >>
   conj_tac
   >- (`SUC (LENGTH (execute_plan initial_fmp tail)) =
@@ -109,6 +119,8 @@ Resume gas_plan_local_sim_numeric[pop]:
   disch_then (qspec_then `TL vs.vs_gas_readings` assume_tac) >>
   drule_all venom_asm_rel_update_var >>
   disch_then (qspec_then `HD (vs.vs_gas_readings ++ [0w])` assume_tac) >>
+  `create_safe_prefix lo o2pc prog 2 st` by
+    (irule gas_pop_create_safe_prefix >> simp[]) >>
   qexists_tac `st with <|as_pc := st.as_pc + 2;
                         as_gas_readings := TL vs.vs_gas_readings|>` >>
   simp[] >> conj_tac
@@ -231,7 +243,8 @@ Theorem gas_inst_frame_sim_owned_deep_exact:
       ?as'.
         asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops)) as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
-        as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)
+        as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+        create_safe_prefix lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops)) as
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   rename1 `MEM r cplan.cp_regions` >>
@@ -243,11 +256,14 @@ Proof
    vs'.vs_memory = vs.vs_memory` by simp[update_var_def] >>
   `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
     fs[generated_plan_state_wf_marked_def] >>
-  irule gas_frame_lift >>
-  reverse conj_tac
-  >- (conj_tac >- (qexists_tac `r` >> simp[]) >>
-      qexistsl_tac [`ps`, `vs`] >> simp[]) >>
-  qx_gen_tac `top` >> strip_tac >>
+  `!top. as.as_stack = top ++ rest ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp ops))
+       (as with as_stack := top) = AsmOK st' /\
+      venom_asm_rel lo ps' (frame_view fn ra vs' with vs_memory := as.as_memory) st' /\
+      st'.as_pc = as.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp ops) /\
+      create_safe_prefix lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp ops))
+        (as with as_stack := top)` by
+  (qx_gen_tac `top` >> strip_tac >>
   `context_venom_asm_rel cplan lo ps (frame_view fn ra vs)
      (as with as_stack := top)` by
     (fs[fn_frame_inv_def] >> gvs[]) >>
@@ -267,7 +283,14 @@ Proof
      (execute_plan cplan.cp_initial_fmp ops)` by simp[] >>
   drule_all gas_plan_local_sim_numeric >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  qexists_tac `st'` >> gvs[]
+  qexists_tac `st'` >> gvs[]) >>
+  `create_safe_prefix lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp ops)) as` by
+    (irule (cj 2 gas_frame_lift) >> metis_tac[]) >>
+  asm_rewrite_tac[] >> irule (cj 1 gas_frame_lift) >>
+  reverse conj_tac
+  >- (conj_tac >- (qexists `r` >> simp[]) >>
+      qexistsl [`ps`, `vs`] >> gvs[]) >>
+  metis_tac[]
 QED
 
 (* Existential-count interface retained for existing clients. *)
@@ -338,7 +361,8 @@ Theorem gas_inst_frame_sim_owned_deep:
       ?n as'.
         asm_steps lo o2pc prog n as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
-        as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)
+        as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+        create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   drule_all gas_inst_frame_sim_owned_deep_exact >> strip_tac >> metis_tac[]

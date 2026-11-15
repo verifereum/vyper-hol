@@ -640,7 +640,7 @@ Definition exception_outcome_rel_def:
   (exception_outcome_rel tops (AssertException s) es r es' <=>
      ?exc out lgs.
        frame_outcome es r es' (SOME exc) out lgs /\
-       (exc = Reverted \/ s = "UNREACHABLE")) /\
+       ((exc = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")) /\
   (exception_outcome_rel tops (Error e) es r es' <=>
      unspecified_behaviour_exempt tops e \/
      ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) /\
@@ -653,7 +653,7 @@ Theorem exception_outcome_rel_cases:
       AssertException s =>
         ?failure out lgs.
           frame_outcome es r es' (SOME failure) out lgs /\
-          (failure = Reverted \/ s = "UNREACHABLE")
+          ((failure = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")
     | Error e =>
         unspecified_behaviour_exempt tops e \/
         ?failure out lgs. frame_outcome es r es' (SOME failure) out lgs

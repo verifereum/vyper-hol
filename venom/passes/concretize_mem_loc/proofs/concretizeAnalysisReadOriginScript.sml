@@ -1,5 +1,5 @@
 Theory concretizeAnalysisReadOrigin
-Ancestors venomWfProps
+Ancestors concretizeLayoutCutSafe o1SafeUpto venomWfProps
   concretizeAnalysisScanCoverage concretizePtrIncomingOrigins frameOriginCacheReach
   frameAllocationOwnership frameReadOwnership frameJointDemand frameJointTransition frameJointTrace
   frameOriginHistory frameOriginReachable ptrDiscipline o1PassContract
@@ -38,7 +38,7 @@ QED
 
 Theorem joint_read_production_origin:
   joint_trace vs0 ctx q0 es qs q /\ o1_ctx_shape ctx /\
-  ptr_discipline lo ctx vs0 /\ EVERY ssa_form ctx.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 ctx q /\ EVERY ssa_form ctx.ctx_functions /\
   EVERY all_reachable ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
   j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
@@ -72,7 +72,8 @@ Proof
   `EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions` by
     metis_tac[shape_context_inst_wf] >>
   `wf_function fn /\ all_reachable fn /\ ssa_form fn` by metis_tac[EVERY_MEM] >>
-  fs[ptr_discipline_def] >>
+  `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
+  fs[layout_cut_safe_def, ptr_discipline_upto_def] >>
   `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
   `access_ok lo G fn inst s` by metis_tac[] >>

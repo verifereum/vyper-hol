@@ -28,6 +28,7 @@ Ancestors
   gasStorage vyperStorageTrace vyperStorageFootprint
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 (* ===== The end of the body ===== *)
 

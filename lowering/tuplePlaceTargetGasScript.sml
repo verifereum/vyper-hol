@@ -7,7 +7,7 @@ Ancestors
 
 (* The static part of each index's expr_body_pre, collected over the
    target: no evm-run root and every internal call supported. *)
-Theorem target_indices_pre_static[local]:
+Theorem target_indices_pre_static:
   !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
   ~supported_target_exists expr_evm_run_root bt /\
   EVERY (\c. FST c = NONE /\

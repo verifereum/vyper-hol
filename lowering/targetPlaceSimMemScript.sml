@@ -10,7 +10,8 @@ Ancestors
   gasExemptCert gasStorage vyperStorageFootprint vyperStorageTrace
   stmtSimProps loweringPosts exprLowering compileEnv
   supportedTargets vyperAST vyperInterpreter vyperState vyperTypeSystem
-  venomState
+  venomState targetRootAttributeMemory targetAttributeMemory
+  targetSubscriptCompositionMemory targetPlaceSimCasesBase
 Libs
   pairLib
 
@@ -20,7 +21,7 @@ Definition target_sim_mem_def:
       type_place_target env bt = SOME vt /\
       compile_get_target_ptr compile_expr cenv bt sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\
+      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
       gas_admissible (eval_base_place cx bt) target_res_ok es /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
@@ -40,9 +41,6 @@ Definition target_sim_mem_def:
         (\H res ee r. expr_exit res r)
 End
 
-(* Held: the subscript case waits on S1's proved
-   targetSubscriptSplit.target_subscript_main_case, which this base
-   predates; the name, toplevel and attribute cases are in reach. *)
 Theorem body_target_sim_mem:
   !t cx tops ctx func cenv env es.
     body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
@@ -50,7 +48,30 @@ Theorem body_target_sim_mem:
     target_pre cenv cx env t es ==>
     target_sim_mem ctx func cenv cx env t es
 Proof
-  cheat
+  ho_match_mp_tac base_assignment_target_induct >> rpt conj_tac
+  >- (rpt strip_tac >> rewrite_tac[target_sim_mem_def] >>
+      rpt strip_tac >> irule target_name_memory >> simp[] >> qexists `env` >> simp[])
+  >- (rpt strip_tac >> rewrite_tac[target_sim_mem_def] >>
+      rpt strip_tac >> irule target_toplevel_memory >> simp[] >> qexists `env` >> simp[])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      rewrite_tac[target_sim_mem_def] >>
+      rpt strip_tac >> irule (Q.SPEC `F` target_subscript_case_mem) >> simp[] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          first_x_assum (irule o REWRITE_RULE [target_sim_mem_def]) >>
+          gvs[body_base_target_mem_ok_def, targetPlaceLiveTheory.target_indices_def] >>
+          conj_tac >- (qexists `tops` >> simp[]) >> qexists `env'` >> simp[]) >>
+      conj_tac
+      >- (gvs[body_base_target_mem_ok_def, body_expr_mem_ok_def] >> metis_tac[]) >>
+      conj_tac >- (qexists `tops` >> simp[]) >> qexists `env` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[target_sim_mem_def] >> rpt strip_tac >>
+  irule target_attribute_memory >> simp[] >>
+  qexists `env` >> simp[] >> rpt strip_tac >>
+  first_x_assum (irule o REWRITE_RULE [target_sim_mem_def]) >>
+  gvs[body_base_target_mem_ok_def, targetPlaceLiveTheory.target_indices_def] >>
+  conj_tac >- (qexists `tops` >> simp[]) >>
+  qexists `env` >> simp[] >> metis_tac[target_pre_sub]
 QED
 
 (* The place-valued evaluation after the base's counted outcome: the base's
@@ -153,7 +174,7 @@ Theorem target_place_sim_mem:
     type_place_target env bt = SOME (Type ty) /\
     compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
       stmt_state_rel H ctx func cenv cx es s0 /\

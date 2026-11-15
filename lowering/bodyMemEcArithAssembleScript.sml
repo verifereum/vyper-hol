@@ -65,7 +65,7 @@ Proof
     (simp[NoAsms, listTheory.EVERY_MEM, listTheory.FILTER_EQ_NIL] >>
      rpt strip_tac >>
      qpat_x_assum `!i. MEM i code ==> _` drule >>
-     disch_tac >> Cases_on `i.inst_opcode` >> fs[is_terminator_def]) >>
+     rewrite_tac[listTheory.MEM] >> strip_tac >> fs[is_terminator_def]) >>
   conj_tac
   >- (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
   gvs[rich_listTheory.IS_PREFIX_APPEND] >>
@@ -159,8 +159,9 @@ Proof
   `s1.vs_labels = s.vs_labels` by
     (drule_all hash_alloc_buffer_labels >> simp[]) >>
   `eval_operand p s1 = SOME point /\ eval_operand q s1 = SOME point2` by
-    (conj_tac >> Cases_on `p` >> Cases_on `q` >>
-     gvs[eval_operand_def] >> metis_tac[]) >>
+    (conj_tac
+     >- (Cases_on `p` >> gvs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `q` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `!x. MEM (Var x) [p;q;ib.buf_operand] ==> not_fresh_at sa x` by
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `regions_disjoint (w2n w) 128 (w2n point) 64` by

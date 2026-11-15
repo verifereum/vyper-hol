@@ -2,7 +2,7 @@
    I sees gas-reset source states, exactly as recursive continuations do. *)
 Theory tupleAssignImmutableDeploySuffix
 Ancestors
-  tuplePlaceSuffixCode tuplePlaceSource tuplePlaceHead tuplePlaceHeadGas
+  tuplePlaceSuffixCode tuplePlaceSource tuplePlaceHead tuplePlaceHeadGas tuplePlaceSuffixOpen tuplePlaceHeadOpen
   stmtSimForRounds tupleTargetStoreProps vyperInterpreter vyperState
   stmtLowering compileEnv loweringStateRelDefs fragGasMode fragGasPath exprSimHypsDefs vyperStorageTrace
   vyperTypeDefaults list rich_list

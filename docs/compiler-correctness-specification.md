@@ -93,7 +93,7 @@ The entire public theorem is:
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
   compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-  supported_program tops /\ immutable_free_program tops /\
+  supported_program tops /\
   source_typing_ok tops am tx /\
   source_storage_ok tops am tx /\
   call_state_rel tops runtime_bc am tx es /\
@@ -106,7 +106,7 @@ The entire public theorem is:
 ```
 
 This is the actual O1 compiler with identity finalizer `K SOME`, not an
-arbitrary minimal/custom pipeline. Exactly eight public premises remain;
+arbitrary minimal/custom pipeline. Exactly seven public premises remain;
 L1 produces raw/O1/assembly/plan witnesses and exact runtime bytes from compile
 success, and L6–L8 construct initial relations from the supplied boundary.
 The whitelist `supported_program` is computational syntax on `tops` alone,

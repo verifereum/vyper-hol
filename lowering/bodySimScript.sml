@@ -40,6 +40,8 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
   immutableLocationProps exprSimMapDefs
+Libs
+  monadsyntax
 
 (* ===== The frame ===== *)
 
@@ -96,6 +98,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    ALOOKUP cx.sources cx.txn.target = SOME [(NONE, tops)] /\
     (cx.in_deploy ==> supported_program_deploy tops) /\
     (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -117,8 +120,37 @@ Definition body_inv_def:
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id)) /\
     cenv_module_pins tops cenv /\
-    (!src ts. get_module_code cx src = SOME ts ==> src = NONE)
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+    (!vis mut nr rr fn args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
+       function_mutability_ok [(NONE, tops)] vis mut nr dflts body)
 End
+
+(* The type checker gives every function of the main module its declared
+   mutability (function_mutability_ok), as body_inv has it. *)
+Theorem check_contract_function_mutability_ok:
+  check_contract in_deploy layouts addr [(NONE, tops)] = SOME art /\
+  MEM (FunctionDecl vis mut nr rr fname args dflts ret stmts) tops ==>
+  function_mutability_ok [(NONE, tops)] vis mut nr dflts stmts
+Proof
+  strip_tac >>
+  `check_toplevel_decl [(NONE, tops)] art NONE
+     (FunctionDecl vis mut nr rr fname args dflts ret stmts)` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def, check_module_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  gvs[check_toplevel_decl_def]
+QED
+
+Theorem body_inv_copies_subscript_base:
+  !tops ctx cenv cx obj idx.
+    body_inv tops ctx cenv cx ==>
+    copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
+Proof
+  rw[body_inv_def, cenv_module_pins_def,
+     exprLoweringTheory.copies_subscript_base_def,
+     vyperInterpreterTheory.subscript_reads_base_def]
+QED
 
 Theorem cenv_module_pins_immutable_section_layout:
   !tops cenv. cenv_module_pins tops cenv ==> immutable_section_layout cenv tops
@@ -260,7 +292,21 @@ Definition body_expr_ok_def:
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_ok cx elems)) /\
+      body_exprs_ok cx elems) /\
+    (!v8 e1 e2.
+      e = Subscript v8 e1 e2 ==>
+      body_expr_ok cx e1 /\
+      (!s'' res t s3 res' t'.
+        eval_expr cx e1 s'' = (INL res,t) /\
+        (if subscript_reads_base cx e1 e2
+         then do v <- read_result cx res; return (Value v) od
+         else return res) s3 = (INL res',t') ==>
+        body_expr_ok cx e2)) /\
+    (!ann obj field.
+      e = Attribute ann obj field ==> body_expr_ok cx obj) /\
+    (!ann nsid fields.
+      e = StructLit ann nsid fields ==>
+      body_exprs_ok cx (MAP SND fields))) /\
   body_exprs_ok cx [] = T /\
   body_exprs_ok cx (e::es) =
     (body_expr_ok cx e /\
@@ -271,7 +317,12 @@ Termination
   WF_REL_TAC `measure (\x. case x of
       INL (_, e) => expr_size e
     | INR (_, es) => list_size expr_size es)` >>
-  simp[expr_size_def]
+  simp[expr_size_def] >> rpt gen_tac >>
+  `!fs. list_size (\x. expr_size (SND x)) fs <=
+         list_size (pair_size (list_size char_size) expr_size) fs` by
+    (Induct >> simp[basicSizeTheory.pair_size_def, pairTheory.FORALL_PROD] >>
+     rpt strip_tac >> decide_tac) >>
+  first_x_assum (qspec_then `fields` mp_tac) >> decide_tac
 End
 
 Theorem body_exprs_ok_def = CONJUNCT2 body_expr_ok_def;
@@ -285,7 +336,50 @@ Theorem body_make_array_children_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_ok _ _`
-    (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
+QED
+
+(* A subscript's index simulates when evaluation reaches it. *)
+Theorem body_subscript_children_ok:
+  !cx v8 e1 e2.
+    body_expr_ok cx (Subscript v8 e1 e2) ==>
+    body_expr_ok cx e1 /\
+    (!s'' res t s3 res' t'.
+      eval_expr cx e1 s'' = (INL res,t) /\
+      (if subscript_reads_base cx e1 e2
+       then do v <- read_result cx res; return (Value v) od
+       else return res) s3 = (INL res',t') ==>
+      body_expr_ok cx e2)
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem body_attribute_child_ok:
+  !cx ann obj field.
+    body_expr_ok cx (Attribute ann obj field) ==> body_expr_ok cx obj
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
+QED
+
+Theorem body_structlit_children_ok:
+  !cx ann nsid fields.
+    body_expr_ok cx (StructLit ann nsid fields) ==>
+    body_exprs_ok cx (MAP SND fields)
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
   simp[]
 QED
 
@@ -303,7 +397,11 @@ Theorem body_expr_ok_map_case:
     body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
     expr_map_case F ctx func cenv cx e
 Proof
-  rw[body_expr_ok_def, expr_map_case_def] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `body_expr_ok _ _`
+    (assume_tac o CONJUNCT1 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  rw[expr_map_case_def] >> metis_tac[]
 QED
 
 (* A well-typed, supported statement of the frame, with its declaration,

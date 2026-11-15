@@ -95,8 +95,7 @@ End
 
 Definition transform_block_supply_def:
   transform_block_supply dfg s bb =
-    let bb1 = transform_block_dload dfg bb in
-    case transform_block_memzero_supply dfg s bb1 of
+    case transform_block_memzero_supply dfg s bb of
       (bb2, s1) =>
         case transform_block_mode_supply dfg CalldataMerge s1 bb2 of
           (bb3, s2) =>
@@ -104,18 +103,7 @@ Definition transform_block_supply_def:
               (bb4, s3) => transform_block_mode_supply dfg Mem2Mem s3 bb4
 End
 
-Definition transform_blocks_supply_def:
-  transform_blocks_supply dfg s [] = ([], s) /\
-  transform_blocks_supply dfg s (bb::bbs) =
-    case transform_block_supply dfg s bb of
-      (bb', s1) =>
-        case transform_blocks_supply dfg s1 bbs of
-          (bbs', s2) => (bb'::bbs', s2)
-End
-
 Definition transform_function_supply_def:
   transform_function_supply s fn =
-    let dfg = dfg_build_function fn in
-    case transform_blocks_supply dfg s fn.fn_blocks of
-      (bbs, s') => (fn with fn_blocks := bbs, s')
+    transform_function_with transform_block_supply s fn
 End

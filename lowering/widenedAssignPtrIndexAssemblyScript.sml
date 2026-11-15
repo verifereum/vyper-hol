@@ -314,7 +314,9 @@ Proof
        get_instruction bb t'.vs_inst_idx =
          SOME (mk_inst ste.cs_next_id JMP [Label hdr] [])` by
        (drule_all fn_has_code_same_block >> strip_tac >>
-        qexists_tac `bb'` >> conj_tac >- gvs[] >>
+        qexists_tac `bb'` >> conj_tac
+        >- (qpat_assum `t'.vs_current_bb = ste.cs_current_bb`
+              (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
         qpat_x_assum `!k. _` (qspec_then `0` mp_tac) >> simp[]) >>
      `gas_path_ptr D 0 ctx fn PG H' tm' t' 0 H' tm' (OK (jump_to hdr t'))` by
        (irule for_range_jump_path_ptr >> simp[] >> metis_tac[]) >>

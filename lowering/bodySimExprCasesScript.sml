@@ -63,6 +63,9 @@ Theorem body_expr_ok_intro:
        builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
        body_exprs_ok cx elems) /\
     (!ty e1 e2. e <> Subscript ty e1 e2) /\
+    (!ann obj field. e = Attribute ann obj field ==> body_expr_ok cx obj) /\
+    (!ann nsid fields. e = StructLit ann nsid fields ==>
+       body_exprs_ok cx (MAP SND fields)) /\
     (!tops ctx func cenv env ty es.
        body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
        int_calls_expr e <> [] ==>
@@ -72,7 +75,7 @@ Theorem body_expr_ok_intro:
 Proof
   (* rw splits the simulation clause into its expr_sim and expr_vv_sim
      goals, so the mapping goal is picked by its conclusion *)
-  rw[body_expr_ok_def]
+  rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[body_expr_ok_def] >> rw[]
   >~ [`expr_map_sim _ _ _ _ _ _ _`]
   >- (drule body_expr_ok_map_other >>
       simp[expr_map_case_def] >> metis_tac[]) >>
@@ -86,7 +89,7 @@ Theorem body_expr_ok_case:
     body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
     expr_sim_case F ctx func cenv cx e /\ expr_vv_case F ctx func cenv cx e
 Proof
-  rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
+  rw[Once body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 
 Theorem body_expr_ok_of_case:
@@ -96,13 +99,16 @@ Theorem body_expr_ok_of_case:
        builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
        body_exprs_ok cx elems) /\
     (!ty e1 e2. e <> Subscript ty e1 e2) /\
+    (!ann obj field. e = Attribute ann obj field ==> body_expr_ok cx obj) /\
+    (!ann nsid fields. e = StructLit ann nsid fields ==>
+       body_exprs_ok cx (MAP SND fields)) /\
     (!tops ctx func cenv.
        body_inv tops ctx cenv cx ==>
        expr_sim_case F ctx func cenv cx e /\
        expr_vv_case F ctx func cenv cx e) ==>
     body_expr_ok cx e
 Proof
-  rw[body_expr_ok_def]
+  rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[body_expr_ok_def] >> rw[]
   >~ [`expr_map_sim _ _ _ _ _ _ _`]
   >- (drule body_expr_ok_map_other >>
       simp[expr_map_case_def] >> metis_tac[]) >>
@@ -142,7 +148,9 @@ Theorem body_structlit_case:
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >>
+  `body_exprs_ok cx (MAP SND kes)` by metis_tac[] >>
+  match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. MEM e (MAP SND kes) ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
   >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case, body_inv_acyclic]) >>
@@ -220,6 +228,7 @@ Proof
       `expr_sim_case F ctx func cenv cx (Subscript v8 e1 e2)` by
         (irule expr_sim_case_of_vv >> simp[]) >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
+  (reverse conj_tac >- asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >>
   drule expr_map_pre_subscript_not_read >> strip_tac >>
   `!s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_ok cx e2` by

@@ -1441,7 +1441,10 @@ Proof
   strip_tac >> qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >>
   Cases_on `FLOOKUP s.vs_allocas (sb.cs_next_id - 2)` >> gvs[]
   >- fs[abi_decoder_budget_def] >>
-  PairCases_on `x` >> gvs[] >> fs[abi_decoder_budget_def] >>
+  PairCases_on `x` >> gvs[] >>
+  qhdtm_assum `abi_decoder_budget`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_budget_def]) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `!id off sz. _` drule_all >> strip_tac >> decide_tac
 QED
 

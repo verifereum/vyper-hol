@@ -47,7 +47,12 @@ Proof
   drule vv_post_read_result >> strip_tac >>
   conj_tac
   >- (irule expr_post_of_vv_post_memory >> metis_tac[]) >>
-  gvs[vv_post_def, vv_holds_def, ptr_vv_ok_def, ptr_val_ok_def]
+  qpat_x_assum `ptr_vv_ok _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `p.ptr_location = LocMemory` mp_tac >>
+  qpat_x_assum `read_result _ _ _ = _` mp_tac >>
+  qpat_x_assum `~is_word_type (expr_type e)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+  gvs[ptr_vv_ok_def, ptr_val_ok_def]
 QED
 
 (* Only the source evaluation, not vv_post's frame, fixes the scope domains. *)

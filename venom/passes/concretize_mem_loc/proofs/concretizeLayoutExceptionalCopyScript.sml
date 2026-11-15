@@ -1,12 +1,12 @@
 Theory concretizeLayoutExceptionalCopy
-Ancestors concretizeLayoutLocalReturnCopy concretizeLayoutRankedCorridor
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutLocalReturnCopy concretizeLayoutRankedCorridor
   concretizeLayoutLocalCalldataCopy frameResolvedTrace concretizePtrParamSupport
   frameRelocationReachableSupport frameRelocationLocal frameRelocationValues
   frameRelocationGuardedValues frameRelocationEnvironment
   ptrDiscipline venomExecSemantics venomState list
 
 Theorem concretize_returncopy_success_complete:
-  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   frame_reachable vs0 C stk PG G tn fn inst s /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -21,7 +21,7 @@ Theorem concretize_returncopy_success_complete:
   ?tpost. step_inst_base inst t = OK tpost
 Proof
   strip_tac >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by (fs[layout_cut_safe_def, ptr_discipline_upto_def] >> metis_tac[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem concretize_returncopy_atomic_abort:
-  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   frame_reachable vs0 C stk PG G tn fn inst s /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)

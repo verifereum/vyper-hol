@@ -36,7 +36,7 @@ Proof
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   rename1 `Call a (IntCall fid) args drv` >>
   `expr_sim ctx func cenv cx a (Call a (IntCall fid) args drv) st` by
-    (gvs[body_expr_ok_def] >> metis_tac[]) >>
+    (gvs[Once body_expr_ok_def] >> metis_tac[]) >>
   `expr_sim ctx func cenv cx ty
      (TypeBuiltin typ Convert typ [Call a (IntCall fid) args drv]) st` by
     (Cases_on `is_bytestring_type typ`

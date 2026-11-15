@@ -172,7 +172,8 @@ Proof
      simp[Abbr `q`, Abbr `l`, Abbr `w`]) >>
   conj_tac
   >- (drule prefix_decoder_noclamp_code >> strip_tac >>
-      gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+      gvs[run_inst_seq_def, mk_inst_def] >>
+      gvs[step_inst_base_opcode_eqs,
            exec_read1_def, exec_write2_def,
            Abbr `t`, Abbr `l`, Abbr `w`, eval_operand_def, lookup_var_def,
            update_var_def, FLOOKUP_UPDATE]) >>

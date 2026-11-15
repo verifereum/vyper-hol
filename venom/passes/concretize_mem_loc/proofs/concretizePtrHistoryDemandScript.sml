@@ -3,23 +3,12 @@ Ancestors
   frameExecutionHistory ptrDiscipline venomExecSemantics venomInst list rich_list
   pred_set
 
-Theorem ptr_step_writes_subset:
-  range_bytes (step_writes inst s s') SUBSET
-  range_bytes (source_memory_write_ranges inst s)
-Proof
-  simp[step_writes_def] >> IF_CASES_TAC >> simp[] >>
-  rw[range_bytes_def, SUBSET_DEF, listTheory.MEM_MAP] >>
-  PairCases_on `y` >> gvs[] >>
-  qexistsl [`off`,`y1`] >> simp[] >>
-  Cases_on `y1 <= LENGTH s'.vs_returndata` >> gvs[arithmeticTheory.MIN_DEF]
-QED
-
 Theorem ptr_step_mem_no_write:
   (x IN tn.t_mem \/ x IN new_site_bytes s s') /\
   x NOTIN range_bytes (source_memory_write_ranges inst s) ==>
   x IN (step_taint inst s s' tn).t_mem
 Proof
-  mp_tac ptr_step_writes_subset >>
+  mp_tac step_writes_source_subset >>
   simp[step_taint_def, mem_taint_def, SUBSET_DEF] >> metis_tac[]
 QED
 

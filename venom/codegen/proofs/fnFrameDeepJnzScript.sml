@@ -16,6 +16,7 @@ Ancestors
   mixedPrefixSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   cfgDefs list rich_list finite_map stackOpSim stackModel
+  planEmissionProps asmRunBounded stackOpAsmSim asmFrame
 
 (* gen_jnz_frame_sim with any-depth ownership, generated_plan_state_wf_marked and an
    address bound on spill and restore offsets. *)
@@ -70,7 +71,10 @@ Theorem gen_jnz_frame_sim_deep_exact:
            (if w = 0w then 4 else 2)) as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         ((vs' = jump_to if_nz vs /\ as'.as_pc = pc_nz) \/
-         (vs' = jump_to if_z vs /\ as'.as_pc = pc_z))
+         (vs' = jump_to if_z vs /\ as'.as_pc = pc_z)) /\
+        create_safe_prefix lo o2pc prog
+          (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)) +
+           (if w = 0w then 4 else 2)) as
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `MEM r cplan.cp_regions` >>
@@ -144,6 +148,43 @@ Proof
      simp[execute_plan_append, asm_block_at_append] >>
      simp[execute_plan_def, exec_stack_op_def]) >>
   drule_all jnz_suffix >> strip_tac >>
+  `asm_steps lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) as =
+     AsmOK (mid with as_stack := mid.as_stack ++ rest)` by
+    (`as with as_stack := top ++ rest = as` by
+       simp[asmSemTheory.asm_state_component_equality] >>
+     pop_assum (SUBST1_TAC o GSYM) >> irule asm_steps_frame >> simp[]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) as` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl [`cplan.cp_initial_fmp`, `iops ++ rops`] >>
+     simp[EVERY_APPEND] >> conj_tac
+     >- metis_tac[emit_input_plan_admin, reorder_plan_admin] >>
+     gvs[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog (if w = 0w then 4 else 2)
+     (mid with as_stack := mid.as_stack ++ rest)` by
+    (`mid.as_pc + 4 <= LENGTH prog /\
+      EL mid.as_pc prog = AsmPushLabel if_nz /\
+      EL (mid.as_pc + 1) prog = AsmOp "JUMPI" /\
+      EL (mid.as_pc + 2) prog = AsmPushLabel if_z /\
+      EL (mid.as_pc + 3) prog = AsmOp "JUMP"` by
+       (qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
+        simp[asm_block_at_def] >> strip_tac >>
+        qpat_x_assum `!j. j < 4 ==> _`
+          (fn th => map_every (fn n => mp_tac (Q.SPEC n th))
+            [`0`, `1`, `2`, `3`]) >> simp[]) >>
+     rpt (qpat_x_assum `mid.as_pc = _` kall_tac) >>
+     qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
+     imp_res_tac asm_step_pushlabel_ok >> Cases_on `w = 0w` >>
+     asm_rewrite_tac[numLib.num_CONV ``4:num``, numLib.num_CONV ``3:num``,
+       numLib.num_CONV ``2:num``, numLib.num_CONV ``1:num``,
+       create_safe_prefix_suc] >>
+     simp[create_safe_def,
+       asm_next_def, asm_step_jumpi, asm_jumpi_def]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) +
+      (if w = 0w then 4 else 2)) as` by
+    metis_tac[create_safe_prefix_compose] >>
   (* The jump, and the frame invariant again. *)
   qabbrev_tac `dest = if w = 0w then pc_z else pc_nz` >>
   qabbrev_tac `label = if w = 0w then if_z else if_nz` >>
@@ -225,7 +266,8 @@ Theorem gen_jnz_frame_sim_deep:
         asm_steps lo o2pc prog n as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         ((vs' = jump_to if_nz vs /\ as'.as_pc = pc_nz) \/
-         (vs' = jump_to if_z vs /\ as'.as_pc = pc_z))
+         (vs' = jump_to if_z vs /\ as'.as_pc = pc_z)) /\
+        create_safe_prefix lo o2pc prog n as
 Proof
   rpt strip_tac >> drule_all gen_jnz_frame_sim_deep_exact >>
   metis_tac[]

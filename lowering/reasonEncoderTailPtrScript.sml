@@ -876,12 +876,13 @@ Proof
     (gvs[ptr_covers_def, mload_def, op_taint_def] >>
      rpt conj_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
        arithmeticTheory.SUB_LESS_EQ]) >>
-  qpat_assum `emit_inst MLOAD [Var src] [len] sm = _`
-    (mp_then Any mp_tac reason_encoder_payload_tail_ptr) >>
-  ntac 14 (disch_then drule) >>
-  disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
-    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  mp_tac (Q.INST [`sa` |-> `sm`, `s` |-> `s1`, `G` |-> `G1`, `tn` |-> `tn1`,
+                  `b` |-> `b + 32w : bytes32`, `capacity` |-> `capacity - 32`,
+                  `h` |-> `b : bytes32`, `d` |-> `32w : bytes32`]
+    (SPEC_ALL reason_encoder_payload_tail_ptr)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `G2`
+    (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac))) >>
   qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
   >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
   simp[] >> rpt strip_tac >> fs[] >> metis_tac[]

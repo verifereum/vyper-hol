@@ -1,6 +1,7 @@
 (* Typed source and covered field-address inputs, before running any code. *)
 Theory augAssignPtrFieldInputs
 Ancestors
+  targetPlaceSim
   augAssignPtrFieldLoad augAssignPtrFieldSource exprSimFieldLayout
   exprSimAttributeFields stmtSimAugAssignAttr exprSimHyps exprSimHypsDefs
   exprSimDefs exprSimProps bodyPtrDefs vyperTypeSystem vyperValue

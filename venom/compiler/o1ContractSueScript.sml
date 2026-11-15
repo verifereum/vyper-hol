@@ -519,7 +519,8 @@ Theorem sue_assign_observations:
 Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_initial_fmp = s.vs_initial_fmp` by
+   t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_gas_readings = s.vs_gas_readings` by
     (fs[sue_state_rel_def] >>
      drule stateFrameTheory.execution_frame_projection >>
      simp[stateFrameTheory.execution_frame_def]) >>
@@ -655,6 +656,7 @@ Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
    t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_gas_readings = s.vs_gas_readings /\
    s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
     (fs[stateFrameTheory.execution_frame_def,
         venomStateTheory.venom_state_component_equality]) >>
@@ -836,7 +838,7 @@ QED
 
 
 (* The forward half at the input's fuel. *)
-Theorem sue_expand_function_supply_fn_bisim_fuel:
+Theorem sue_expand_function_supply_fn_bisim_fuel[local]:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
   EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -926,24 +928,6 @@ Proof
       listTheory.EVERY_EL] >> metis_tac[]
 QED
 
-Theorem sue_stage_sim:
-  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
-  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
-  EVERY (o1_fn_row 6) C.ctx_functions /\
-  vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==> ctx_sim D C C' vs vs
-Proof
-  strip_tac >>
-  `ctx_bisim C C'` by (irule sue_stage_bisim >> metis_tac[]) >>
-  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
-  irule ctx_bisim_ctx_sim >> simp[] >>
-  rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
-  `MEM fn C.ctx_functions /\ fn.fn_name = name` by
-    metis_tac[venomInstTheory.lookup_function_MEM,
-              ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
-  gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_MEM,
-      entry_fn_no_return_def] >> metis_tac[]
-QED
-
 (* SUE keeps the fuel: each function's output finishes on its input's
    fuel, lifted through calls by fn_bisim_fuel_run_context. *)
 Theorem sue_stage_sim_fuel:
@@ -1022,19 +1006,33 @@ Proof
   gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_EL] >> metis_tac[]
 QED
 
-Theorem sue_stage_walk:
-  o1_run_contract rpolicy D 6
+Theorem o1_static_stage_sue:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 6 o1_fn_passes) (o1_walk_view rpolicy 6) C C' /\
+    o1_pre 6 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 6 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 6 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 6) C' vs
 Proof
-  simp[o1_run_contract_def, venomPassScheduleTheory.o1_fn_passes_def,
-       o1_stage_contract_def, o1_inv_def, pass_fuel_def] >>
+  simp[venomPassScheduleTheory.o1_fn_passes_def, o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[o1_pre_def, o1_ssa_inv_def, o1_lowered_inv_def,
-      o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+      unitTransformDefsTheory.o1_initial_state_ok_def] >>
   conj_tac >- (irule sue_stage_sim_fuel >> metis_tac[]) >>
   `EVERY wf_ssa C'.ctx_functions` by (irule sue_stage_wf_ssa >> metis_tac[]) >>
   simp[] >> qexists_tac `eom` >>
   conj_tac >- metis_tac[sue_stage_max_live_eom] >>
   irule sue_stage_mem_inv >> metis_tac[]
+QED
+
+Theorem sue_stage_walk:
+  o1_run_contract rpolicy D 6
+Proof
+  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`C`, `C'`, `vs`] o1_static_stage_sue) >>
+  gvs[o1_run_state_ok_def]
 QED
 
 Theorem o1_contract_sue:

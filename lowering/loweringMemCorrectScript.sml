@@ -22,6 +22,7 @@ Ancestors
   venomInst unitMemInv
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 (* ===== S3 ===== *)
 

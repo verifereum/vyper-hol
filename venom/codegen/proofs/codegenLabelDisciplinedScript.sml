@@ -4,7 +4,7 @@
  * the asm finalizer contract and the forward bridge need.
  *
  * The entry is stated over a Venom state vs and an assembly state as
- * (codegen_asm_entry_rel), not over an EVM frame: codegen_entry_asm_sim's
+ * (codegenEntrySim's codegen_asm_entry_rel), not over an EVM frame: codegen_entry_asm_sim's
  * initial_ctx_rel ties the frame's code to assemble prog and its oracle
  * lists to vs at once, while the optimized program's run needs prog's
  * code and labels with another frame's oracle lists.  initial_ctx_rel
@@ -20,10 +20,6 @@
  * (finalizerContract's sym_terminal_disciplined).
  *
  * TOP-LEVEL:
- *   codegen_asm_entry_rel         - the assembly entry state of codegen's
- *                                   program for Venom state vs
- *   initial_ctx_codegen_asm_entry_rel - initial_ctx_rel gives it for
- *                                   entry_asm_state
  *   codegen_entry_asm_sim_state   - codegen_entry_asm_sim from it
  *   codegen_label_disciplined     - the program is label_disciplined from it
  *)
@@ -37,37 +33,6 @@ Ancestors
 
 val _ = Parse.hide "cp";
 
-(* The assembly state as starts codegen's program prog for the Venom
-   state vs at the context's entry: at PC 0 with an empty stack, memory
-   and shared state related, and vs a fresh, non-static entry state whose
-   labels are prog's offsets. *)
-Definition codegen_asm_entry_rel_def:
-  codegen_asm_entry_rel cp prog vs as <=>
-    as.as_pc = 0 /\ as.as_stack = [] /\
-    ~vs.vs_halted /\ ~vs.vs_call_ctx.cc_static /\
-    vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\
-    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
-    (!l. FLOOKUP vs.vs_labels l =
-         OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
-    context_memory_rel cp vs.vs_memory as.as_memory /\
-    shared_state_rel vs as
-End
-
-Theorem codegen_asm_entry_fn_state_rel:
-  !cp prog vs as fe lbl ra.
-    codegen_asm_entry_rel cp prog vs as /\
-    get_params (HD fe.fn_blocks).bb_instructions = [] /\
-    fn_entry_label fe = SOME lbl ==>
-    fn_entry_state_rel cp fe
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-      as ra []
-Proof
-  rw[codegen_asm_entry_rel_def] >>
-  gvs[fn_entry_label_def, entry_block_def] >>
-  gvs[fn_entry_state_rel_def, fn_has_retpc_def,
-      shared_state_rel_def, venom_asm_terminal_rel_def]
-QED
-
 Theorem codegen_asm_entry_sym_init:
   !cp prog vs as env.
     codegen_asm_entry_rel cp prog vs as /\ asm_data_env_ok prog env vs.vs_code ==>
@@ -79,16 +44,6 @@ Proof
   conj_tac >- (irule asm_sym_rel_init >>
     gvs[codegen_asm_entry_rel_def, shared_state_rel_def]) >>
   gvs[codegen_asm_entry_rel_def, sym_init_def]
-QED
-
-Theorem codegen_entry_reachable:
-  ctx_wf ctx /\ ctx.ctx_functions = fe :: rest /\ ctx.ctx_entry = SOME fe.fn_name ==>
-  MEM fe.fn_name (fcg_analyze ctx).fcg_reachable
-Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`ctx`, `fe.fn_name`, `fe.fn_name`]
-    fcg_analyze_reachable_complete) >>
-  simp[fcg_is_reachable_def, fcg_path_def, ctx_fn_names_def]
 QED
 
 Theorem codegen_entry_layout:
@@ -104,32 +59,6 @@ Proof
   drule generate_context_plan_regions_length >>
   Cases_on `cp.cp_regions` >> gvs[codegen_asm_entry_rel_def] >>
   metis_tac[codegen_assembly_first_region]
-QED
-
-Theorem codegen_entry_selection:
-  !unit Inv vs.
-    unit_shape_ok unit /\ codegen_reachability_package Inv unit.cu_context vs ==>
-    ?fe rest lbl.
-      unit.cu_context.ctx_functions = fe :: rest /\
-      unit.cu_context.ctx_entry = SOME fe.fn_name /\
-      get_params (HD fe.fn_blocks).bb_instructions = [] /\
-      entry_fn_no_ret fe /\ fn_entry_label fe = SOME lbl /\
-      reachability_closed Inv unit.cu_context /\
-      fn_entry_inv Inv unit.cu_context fe
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-Proof
-  rw[unit_shape_ok_def, entry_fn_first_def, codegen_reachability_package_def] >>
-  gvs[lookup_function_def, listTheory.FIND_thm] >> metis_tac[]
-QED
-
-Theorem codegen_entry_no_returns:
-  !cp unit Inv fe rest.
-    codegen_context_obligations Inv unit.cu_context cp /\
-    unit.cu_context.ctx_functions = fe :: rest /\ entry_fn_no_ret fe ==>
-    EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)
-Proof
-  rpt gen_tac >> strip_tac >> irule entry_no_ret_opcodes >>
-  gvs[codegen_context_obligations_def, codegen_ready_def]
 QED
 
 Theorem codegen_entry_blocks_sim:
@@ -227,20 +156,6 @@ Proof
   simp[fn_has_retpc_def] >>
   impl_tac >- (gvs[codegen_asm_entry_rel_def, fn_has_retpc_def] >> metis_tac[]) >>
   metis_tac[]
-QED
-
-Theorem initial_ctx_codegen_asm_entry_rel:
-  !cp prog ctx vs es.
-    initial_ctx_rel cp prog ctx vs es ==>
-    codegen_asm_entry_rel cp prog vs (entry_asm_state vs es)
-Proof
-  rw[initial_ctx_rel_def] >>
-  gvs[initial_state_rel_def, initial_codegen_state_rel_def,
-      stack_params_rel_def, msg_ctx_rel_def] >>
-  simp[codegen_asm_entry_rel_def, entry_asm_state_def,
-       shared_state_rel_def, venom_asm_terminal_rel_def] >>
-  Cases_on `ctxt.stack` >> gvs[] >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
 Theorem codegen_entry_asm_sim_state:

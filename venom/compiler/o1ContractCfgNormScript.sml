@@ -777,8 +777,10 @@ Proof
   strip_tac >>
   `eval_operands inst.inst_operands a = eval_operands inst.inst_operands b` by
     (irule supply_eval_operands_cong >> simp[]) >>
+  pure_rewrite_tac [codegenRelTheory.source_memory_write_ranges_def] >>
   Cases_on `inst.inst_opcode` >>
-  gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq => pure_rewrite_tac [eq]) >>
+  pure_rewrite_tac [TypeBase.case_def_of ``:opcode``] >>
   simp[codegenRelTheory.fixed_source_write_range_def,
        codegenRelTheory.sized_source_write_range_def] >>
   namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[] >>
@@ -946,7 +948,8 @@ Proof
   `execution_frame a = execution_frame v` by gvs[supply_state_agree_def] >>
   `a.vs_call_entry_fmp = v.vs_call_entry_fmp /\
    a.vs_alloca_next = v.vs_alloca_next /\ a.vs_allocas = v.vs_allocas /\
-   a.vs_initial_fmp = v.vs_initial_fmp` by gvs[stateFrameTheory.execution_frame_def] >>
+   a.vs_initial_fmp = v.vs_initial_fmp /\
+   a.vs_gas_readings = v.vs_gas_readings` by gvs[stateFrameTheory.execution_frame_def] >>
   conj_tac
   >- (drule_all supply_inst_mem_ranges_cong >> simp[mem_corr_def]) >>
   simp[call_corr_def] >> strip_tac >>
@@ -1173,7 +1176,7 @@ QED
 (* ===== Fuel bounds (gas sufficiency S6b) ===== *)
 
 (* One split at most doubles the fuel a frame of fn needs. *)
-Theorem insert_split_supply_fn_fuel:
+Theorem insert_split_supply_fn_fuel[local]:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
   EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -1195,7 +1198,7 @@ Proof
   disch_then (qspec_then `u` mp_tac) >> simp[]
 QED
 
-Theorem supply_round_fuel:
+Theorem supply_round_fuel[local]:
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   cfg_norm_round_supply s fn = (fn',changed,s') ==>
   (~changed ==> fn' = fn) /\
@@ -1217,7 +1220,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem supply_iter_fuel:
+Theorem supply_iter_fuel[local]:
   !k s fn fn' s'.
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   cfg_norm_iter_supply k s fn = (fn',s') ==>
@@ -1270,7 +1273,7 @@ Finalise supply_iter_fuel
 
 (* A normalized function needs at most 2 ** b times the fuel, for any b
    bounding its block count. *)
-Theorem cfg_norm_function_supply_fuel:
+Theorem cfg_norm_function_supply_fuel[local]:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
   EVERY label_positions_ok (fn_insts fn) /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -1480,23 +1483,6 @@ Proof
   irule cfg_norm_function_supply_fn_bisim >> metis_tac[]
 QED
 
-Theorem cfg_norm_stage_sim:
-  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
-  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
-  vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==> ctx_sim D C C' vs vs
-Proof
-  strip_tac >>
-  `ctx_bisim C C'` by (irule cfg_norm_stage_bisim >> metis_tac[]) >>
-  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
-  irule ctx_bisim_ctx_sim >> simp[] >>
-  rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
-  `MEM fn C.ctx_functions /\ fn.fn_name = name` by
-    metis_tac[venomInstTheory.lookup_function_MEM,
-              ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
-  gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_MEM,
-      entry_fn_no_return_def] >> metis_tac[]
-QED
-
 Theorem cfg_norm_stage_max_live_eom:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' ==>
   max_live_eom C' = max_live_eom C
@@ -1536,7 +1522,7 @@ Proof
   Cases_on `(2:num) ** m` >> gvs[arithmeticTheory.MULT_CLAUSES]
 QED
 
-Theorem cfg_norm_stage_fn_bisim_fuel:
+Theorem cfg_norm_stage_fn_bisim_fuel[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions ==>
   LIST_REL
@@ -1585,14 +1571,20 @@ Proof
   once_rewrite_tac[arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC
 QED
 
-(* Row 8 (o1_lowered_inv and wf_ssa) to row 9 (o1_lowered_inv). *)
-Theorem cfg_norm_stage_walk:
-  o1_run_contract rpolicy D 8
+(* Row 8 to row 9 also holds for an incoming static frame. *)
+Theorem o1_static_stage_cfg_normalization:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 8 o1_fn_passes) (o1_walk_view rpolicy 8) C C' /\
+    o1_pre 8 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 8 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 8 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 8) C' vs
 Proof
-  simp[o1_run_contract_def, venomPassScheduleTheory.o1_fn_passes_def,
-       o1_stage_contract_def, o1_inv_def, pass_fuel_def] >>
+  simp[venomPassScheduleTheory.o1_fn_passes_def,
+       o1_inv_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  gvs[o1_ssa_inv_def, o1_lowered_inv_def, o1_run_state_ok_def,
+  gvs[o1_ssa_inv_def, o1_lowered_inv_def,
       unitTransformDefsTheory.o1_initial_state_ok_def] >>
   conj_tac
   >- (simp[ctx_sim_fuel_def] >> rpt strip_tac >>
@@ -1600,6 +1592,15 @@ Proof
   qexists_tac `eom` >>
   conj_tac >- metis_tac[cfg_norm_stage_max_live_eom] >>
   irule cfg_norm_stage_mem_inv >> metis_tac[]
+QED
+
+Theorem cfg_norm_stage_walk:
+  o1_run_contract rpolicy D 8
+Proof
+  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  irule (SIMP_RULE (srw_ss()) [] o1_static_stage_cfg_normalization) >>
+  gvs[o1_run_state_ok_def] >> qexists_tac `rpolicy` >> simp[]
 QED
 
 Theorem o1_contract_cfg_normalization:

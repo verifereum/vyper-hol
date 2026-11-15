@@ -171,9 +171,10 @@ QED
 
 Finalise inv_paired_prefix_cut
 
-Theorem inv_paired_prefix_invoke:
+Theorem inv_paired_prefix_invoke_static:
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
-  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
+  initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
   dft_fn_rel fn fn' /\
   lookup_block entry.vs_current_bb fn.fn_blocks = SOME bb /\
   lookup_block entry.vs_current_bb fn'.fn_blocks = SOME bb' /\
@@ -205,13 +206,32 @@ Proof
     (gvs[EVERY_MEM] >> metis_tac[MEM_APPEND, is_pseudo_def]) >>
   `?srcpre srcpost. sourcebody = srcpre ++ targetobs::srcpost` by
     metis_tac[MEM_SPLIT] >>
-  `~s0.vs_call_ctx.cc_static` by
-    (irule inv_ev_reachable_nonstatic >> goal_assum (drule_at Any) >>
-     gvs[o1_run_state_ok_def]) >>
-  irule inv_source_reachable_invoke >> simp[] >>
+  irule inv_source_reachable_invoke_static >> simp[] >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `ev_reachable _ _ _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `dft_fn_rel _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `inv_ev_ftrace _ _ _ _ _ _ _`)) >> simp[] >>
   qexistsl_tac [`pseudos`, `srcpost`, `srcpre`, `targetobs`, `targetpost`] >> gvs[]
+QED
+
+Theorem inv_paired_prefix_invoke:
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  dft_fn_rel fn fn' /\
+  lookup_block entry.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block entry.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  entry.vs_inst_idx = phi_prefix_length bb.bb_instructions /\
+  ev_reachable orc initial C p d fn first entry /\
+  inv_ev_prefix orc p d C' bb' n entry t /\
+  get_instruction bb' t.vs_inst_idx = SOME targetobs /\
+  targetobs.inst_opcode = INVOKE ==>
+  ?sS. ev_reachable orc initial C p d fn targetobs sS /\
+    (!op. MEM op targetobs.inst_operands ==> eval_operand op sS = eval_operand op t) /\
+    (!callee args. setup_callee callee args sS = setup_callee callee args t)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `o1_run_state_ok initial`
+    (strip_assume_tac o PURE_REWRITE_RULE [o1_run_state_ok_def]) >>
+  drule_all inv_paired_prefix_invoke_static >> simp[]
 QED

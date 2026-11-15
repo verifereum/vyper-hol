@@ -494,8 +494,9 @@ Proof
            qpat_x_assum `eval_operand (FST ops) prepared = _`
              (assume_tac o PURE_REWRITE_RULE [flag, COND_CLAUSES])) >>
          asm "child" assume_tac >>
-         drule_at (Pat `mem_bytes_at _ _ _ = enc (Tuple _) (ListV _)`)
-           deploy_ctor_member_child_encoded_complete >>
+         qpat_assum `mem_bytes_at _ _ _ = enc (Tuple _) (ListV _)`
+           (mp_then (Pat `mem_bytes_at _ _ _ = enc (Tuple _) (ListV _)`)
+             mp_tac deploy_ctor_member_child_encoded_complete) >>
          disch_then irule >> asm_x "child" kall_tac >>
          qpat_x_assum `middle.cs_next_var = _` kall_tac >>
          asm_simp_tac bool_ss [] >>

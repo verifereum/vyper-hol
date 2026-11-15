@@ -5,7 +5,7 @@ Ancestors
   typedNormalizeFrame externalReturnNormalizeMem bodyDeclMemoryCounted
   typedCopyAgreement exprSimBufferStore exprSimAggregateChildren allocaFootprint
   exprLoweringProps exprSimProps exprSimDefs loweringPosts valueEncoding
-  valueEncodingProps valueEncodingProofs emitHelper compileEnv context
+  valueEncodingProps valueEncodingProofs valueEncodingDefs emitHelper compileEnv context
   venomState venomExecSemantics memSafeRun fragExecMem fragGasPathMem instMemFrontier
   words arithmetic list rich_list venomInst
 
