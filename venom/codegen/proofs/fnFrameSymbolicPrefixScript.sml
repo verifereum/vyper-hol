@@ -4,7 +4,7 @@ Ancestors
   fnFramePrefixDriver fnFramePrefix fnFramePrefixEntry fnFramePrefixStack
   codegenLabelDisciplined codegenEntrySim codegenEntryRel codegenSymRel
   symFrameBoundary symFrameInst symFrameInvoke symFrameControl
-  symBlockBody stepWriteFootprintBase
+  symBlockBody symFnStep fnBlockStepHelpers stepWriteFootprintBase
   fnEntryPlan fnEntryStep fnBlockBodyHelpers stackOpSim fnFrameBoundaryEntryParams fnEntryParams
   asmDataEnv asmSymBridge asmSymSem asmSem
   fnBlockBodyClasses fnBlockBodySteps fnBlockBody venomWf fnFrameDeepJnz
@@ -601,6 +601,150 @@ Proof
   >- (qpat_x_assum `!at. MEM at ps_after.ps_stack \/ _ ==> _` mp_tac >> simp[]) >>
   qpat_x_assum `sym_frame_inv prog env ctx _ _ _ _ _ _ ac sy` mp_tac >> simp[]
 QED
+
+Theorem block_step_symbolic_prefix:
+  !unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth spill_base
+   lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after vs as Inv
+   ra rest mem0 s_phi env ret srest labs0 ss.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+    codegen_context_obligations Inv ctx cpl /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps /\
+    vs.vs_prev_bb = SOME pred /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      vs.vs_current_bb ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp block_ops) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs as /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    eval_phis vs bb.bb_instructions = OK s_phi /\
+    focus_s7_symbolic_context unit prog /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+    ?h promised ps_after prefix_ops rest_ops ps1 n as1 ss1.
+      n = LENGTH (execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: prefix_ops)) /\
+      generate_block_plan liveness dfg cfg fn bb
+        (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+        SOME (block_ops, ps_after) /\
+      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
+      block_plan_state liveness dfg cfg fn bb
+        (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+        (phi_prefix_length bb.bb_instructions) ps1 /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions)
+        (phi_prefix_length bb.bb_instructions -
+         LENGTH (get_params bb.bb_instructions))
+        (DROP (phi_prefix_length bb.bb_instructions -
+               LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+        ps1 = SOME (rest_ops, ps_after) /\
+      block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
+      asm_steps lo o2pc prog n as = AsmOK as1 /\
+      as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp
+                                       (SOLabel bb.bb_label :: prefix_ops)) /\
+      fn_frame_inv ctx cpl lo fn ra rest mem0 ps1
+        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) as1 /\
+      (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+         operand_val (frame_view fn ra
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) lo at =
+         operand_val (frame_view fn ra
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) lo
+           (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as /\
+      sym_steps prog env n ss = SymOK ss1 /\
+      sym_frame_inv prog env ctx cpl fn ret srest labs0 ps1 as1 ss1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all sym_block_prefix_prepare >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  `MEM fn ctx.ctx_functions /\ fn_shape_ok fn` by
+    (fs[unit_shape_ok_def, listTheory.EVERY_EL] >>
+     metis_tac[listTheory.MEM_EL]) >>
+  `label_flow_ok ctx /\ asm_static_wf prog` by
+    fs[focus_s7_symbolic_context_def] >>
+  qpat_assum `block_ops = _` (fn eq =>
+    qpat_assum `asm_block_at _ _ _` (mp_tac o REWRITE_RULE [eq])) >>
+  rewrite_tac[listTheory.APPEND] >>
+  disch_then (mp_then (Pat `asm_block_at _ _ _`) mp_tac sym_label_block_steps) >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`lo`, `o2pc`] strip_assume_tac) >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    sym_block_prefix_step_exact >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (mp_tac o REWRITE_RULE [fn_frame_inv_pc]) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_all o SIMP_RULE pure_ss [asmSemTheory.asm_state_accfupds, combinTheory.K_THM]) >>
+  strip_tac >> suspend "paired_prefix"
+QED
+
+Resume block_step_symbolic_prefix[paired_prefix]:
+  `create_safe_prefix lo o2pc prog n (as with as_pc := as.as_pc + 1)` by
+    (`fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs
+       (as with as_pc := as.as_pc + 1)` by simp[fn_frame_inv_pc] >>
+     drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+       block_prefix_step >>
+     disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+     disch_then (drule_all o SIMP_RULE pure_ss
+       [asmSemTheory.asm_state_accfupds, combinTheory.K_THM]) >>
+     strip_tac >> gvs[]) >>
+  `EL as.as_pc prog = AsmLabel bb.bb_label` by
+    (qpat_assum `block_ops = _` (fn eq =>
+       qpat_assum `asm_block_at _ as.as_pc (execute_plan _ block_ops)`
+         (mp_tac o REWRITE_RULE [eq])) >>
+     simp[execute_plan_def, exec_stack_op_def, asm_block_at_cons]) >>
+  `create_safe_prefix lo o2pc prog 1 as` by
+    (rewrite_tac[arithmeticTheory.ONE, asmRunBoundedTheory.create_safe_prefix_suc] >>
+     qpat_assum `EL as.as_pc prog = AsmLabel bb.bb_label`
+       (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [asmRunBoundedTheory.create_safe_def,
+                          asmRunBoundedTheory.create_safe_prefix_zero]) >>
+  `create_safe_prefix lo o2pc prog (1 + n) as` by
+    (irule asmRunBoundedTheory.create_safe_prefix_compose >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `as with as_pc := as.as_pc + 1` >> simp[]) >>
+  `asm_steps lo o2pc prog (1 + n) as = AsmOK as'` by
+    (qpat_assum `asm_steps _ _ _ 1 as = _`
+       (fn th => rewrite_tac[MATCH_MP asm_steps_add_ok th]) >> simp[]) >>
+  qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
+               `body_ops`, `ps1`, `1 + n`, `as'`, `ss'`] >>
+  simp[execute_plan_label_length, Once sym_steps_add,
+       operand_val_frame_view_inst_idx, listTheory.APPEND_ASSOC] >>
+  conj_tac
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> gvs[]) >>
+  conj_tac
+  >- (rewrite_tac[fnBlockPlanStaticTheory.block_plan_state_def] >>
+      qexistsl_tac [`[]`,
+        `ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
+        `clean_ops`, `ps2`, `phi_ops`] >> gvs[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Finalise block_step_symbolic_prefix
 
 Theorem active_frame_symbolic_ret_boundary:
   frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 sentry ret srest labs0 /\
