@@ -2901,6 +2901,26 @@ Proof
   disch_then (qspecl_then [`u`, `r`, `t`] mp_tac) >> simp[]
 QED
 
+Theorem source_exhausted_try_guarded_safety[local]:
+  source_exhausted_safe f /\
+  (!s e t. f s = (INR e,t) /\
+     e <> Error (RuntimeError "create outcome accounts") ==>
+     source_exhausted_safe (h e)) ==>
+  source_exhausted_safe (try f h)
+Proof
+  simp_tac bool_ss [] >> ntac 2 strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `try _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [vyperStateTheory.try_def] >>
+  Cases_on `f s` >> rename1 `f s = (a,u)` >>
+  qpat_x_assum `source_exhausted_safe f`
+    (qspecl_then [`s`, `a`, `u`] mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `a` >> simp[] >>
+  strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`s`, `y`, `u`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`u`, `r`, `t`] mp_tac) >> simp[]
+QED
+
 Theorem source_exhausted_finally_safety[local]:
   source_exhausted_safe f /\ source_exhausted_safe g ==>
   source_exhausted_safe (finally f g)
@@ -2953,10 +2973,119 @@ fun exhausted_computation tm =
 fun exhausted_at c = STRIP_QUANT_CONV
   (LAND_CONV (RAND_CONV (RAND_CONV (LAND_CONV (RATOR_CONV c)))));
 
-val exhausted_safety_leaves = CONJUNCTS source_exhausted_place_safety @
+Theorem source_exhausted_new_variable_safety[local]:
+  !id tv v. source_exhausted_safe (new_variable id tv v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule vyperTypeStatePreservationTheory.new_variable_accounts >> strip_tac >>
+  `t.outcomes = s.outcomes` by
+    (qspecl_then [`s`, `s.outcomes`] mp_tac
+       (Q.INST [`nm` |-> `id`, `ty` |-> `tv`] outcomes_replace_new_variable) >>
+     simp[] >> disch_then (mp_tac o Q.AP_TERM `\st. st.outcomes`) >> simp[]) >>
+  simp[] >>
+  qpat_x_assum `new_variable _ _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [vyperStateTheory.new_variable_def,
+    vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+    vyperStateTheory.get_scopes_def, vyperStateTheory.type_check_def,
+    vyperStateTheory.assert_def, vyperStateTheory.set_scopes_def,
+    vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  Cases_on `lookup_scopes id s.scopes = NONE` >>
+  Cases_on `s.scopes` >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.set_scopes_def] >> strip_tac >> gvs[]
+QED
+
+Theorem source_exhausted_scope_safety[local]:
+  source_exhausted_safe push_scope /\
+  source_exhausted_safe pop_scope /\
+  (!nm tv v. source_exhausted_safe (push_scope_with_var nm tv v))
+Proof
+  conj_tac
+  >- (rpt strip_tac >> gvs[vyperStateTheory.push_scope_def,
+        vyperStateTheory.return_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `s.scopes` >>
+      gvs[vyperStateTheory.pop_scope_def, vyperStateTheory.return_def,
+          vyperStateTheory.raise_def]) >>
+  rpt strip_tac >> gvs[vyperStateTheory.push_scope_with_var_def,
+    vyperStateTheory.return_def]
+QED
+
+Theorem source_exhausted_array_iterator_safety[local]:
+  !cx ty pv s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    array_iterator_results cx ty pv s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule array_iterator_results_state >> strip_tac >> gvs[] >>
+  qpat_x_assum `array_iterator_results _ _ _ _ = _` mp_tac >>
+  simp[oneline array_iterator_results_def,
+       vyperStateTheory.eval_result_CASE_rator,
+       vyperStateTheory.place_CASE_rator,
+       vyperValueTheory.type_value_CASE_rator, vyperMiscTheory.option_CASE_rator,
+       vyperASTTheory.bound_CASE_rator, AllCaseEqs(), LET_THM,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), vyperStateTheory.return_def, vyperStateTheory.raise_def,
+      LET_THM] >>
+  metis_tac[source_exhausted_length_safety,
+            source_exhausted_read_result_safety]
+QED
+
+Theorem source_exhausted_return_safety[local]:
+  !x. source_exhausted_safe (return x)
+Proof
+  rpt strip_tac >> gvs[vyperStateTheory.return_def]
+QED
+
+Theorem source_exhausted_internal_call_safety[local]:
+  (!cx nr view. source_exhausted_safe (lock_if_nr cx nr view)) /\
+  (!cx nr view. source_exhausted_safe (unlock_if_nr cx nr view)) /\
+  (!fn sc cx. source_exhausted_safe (push_function fn sc cx)) /\
+  (!prev. source_exhausted_safe (pop_function prev))
+Proof
+  rpt conj_tac
+  >- (rpt gen_tac >> Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
+      Cases_on `view` >>
+      simp[lock_if_nr_def, acquire_nonreentrant_lock_def,
+        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.record_storage_event_def,
+        vyperStateTheory.get_transient_storage_def,
+        vyperStateTheory.update_transient_def, vyperStateTheory.check_not_static_def,
+        vyperStateTheory.check_def, vyperStateTheory.assert_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        AllCaseEqs()] >> rpt strip_tac >>
+      gvs[COND_RATOR, AllCaseEqs(), vyperStateTheory.raise_def,
+        vyperStateTheory.return_def, vyperStateTheory.update_transient_def])
+  >- (rpt gen_tac >> Cases_on `nr` >> Cases_on `view` >>
+      Cases_on `cx.nonreentrant_slot` >>
+      simp[unlock_if_nr_def, release_nonreentrant_lock_def,
+        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.record_storage_event_def,
+        vyperStateTheory.get_transient_storage_def,
+        vyperStateTheory.update_transient_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      rpt strip_tac >> gvs[])
+  >- (rpt strip_tac >> gvs[push_function_def, vyperStateTheory.return_def]) >>
+  rpt strip_tac >> gvs[pop_function_def, vyperStateTheory.set_scopes_def,
+    vyperStateTheory.return_def]
+QED
+
+val exhausted_safety_leaves =
+  CONJUNCTS source_exhausted_internal_call_safety @
+  [source_exhausted_return_safety, source_exhausted_array_iterator_safety] @
+  CONJUNCTS source_exhausted_scope_safety @
+  [source_exhausted_new_variable_safety] @
+  CONJUNCTS source_exhausted_place_safety @
   CONJUNCTS source_exhausted_effect_safety;
 val exhausted_safety_rules =
-  [source_exhausted_bind_safety, source_exhausted_try_safety,
+  [source_exhausted_bind_safety, source_exhausted_try_guarded_safety,
    source_exhausted_finally_safety, source_exhausted_finally_unless_halt_safety];
 val exhausted_safety_net = List.foldl (fn ((tm,tac),net) => Net.insert (tm,tac) net)
   Net.empty
@@ -2965,16 +3094,108 @@ val exhausted_safety_net = List.foldl (fn ((tm,tac),net) => Net.insert (tm,tac) 
    map (fn th => (exhausted_computation (snd (dest_imp (concl (BETA_RULE th)))),
       MATCH_MP_TAC (BETA_RULE th) >> conj_tac)) exhausted_safety_rules);
 
+val exhausted_safety_pattern = ``source_exhausted_safe f``;
+fun is_exhausted_safety tm = can (match_term exhausted_safety_pattern) tm;
+
+fun EXHAUSTED_IH_TAC (asl,w) =
+  let
+    fun terminal tm =
+      if is_exhausted_safety tm then tm
+      else if is_forall tm then terminal (snd (dest_forall tm))
+      else terminal (snd (dest_imp tm))
+    val candidates = List.mapPartial
+      (total (fn a => PART_MATCH terminal (ASSUME a) w)) asl
+    fun close th = POP_ASSUM_LIST (fn facts =>
+      map_every assume_tac (List.filter (is_eq o concl) facts) >>
+      metis_tac [th])
+  in FIRST (first_assum MATCH_ACCEPT_TAC :: map close candidates) (asl,w) end;
+
+Theorem exhausted_truth_wrapper[local]:
+  !p. p = (p = T)
+Proof
+  simp[]
+QED
+
+fun exhausted_wrap_conv tm =
+  if is_exhausted_safety tm then REWR_CONV exhausted_truth_wrapper tm
+  else if is_forall tm then BINDER_CONV exhausted_wrap_conv tm
+  else if is_imp tm then RAND_CONV exhausted_wrap_conv tm
+  else ALL_CONV tm;
+
+fun EXHAUSTED_RECURSIVE_TAC (g as (asl,w)) =
+  let val name = fst (dest_const (fst (strip_comb (exhausted_computation w))))
+  in if List.exists (fn n => n = name)
+    ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for", "eval_expr",
+     "eval_exprs", "eval_base_place", "eval_target_place", "assign_tuple_targets",
+     "assign_tuple_target_list", "eval_expr_results"]
+    then (RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] o
+        CONV_RULE exhausted_wrap_conv o
+          SIMP_RULE bool_ss (vyperStateTheory.return_def ::
+            map ASSUME (List.filter (fn a => not (is_forall a) andalso not (is_eq a)) asl))) >>
+      CONV_TAC exhausted_wrap_conv >>
+      pure_rewrite_tac [GSYM AND_IMP_INTRO] >>
+      evalWalkLib.IH_TAC {stop = K false, normalise = I}) g
+    else NO_TAC g
+  end;
+
 fun EXHAUSTED_SAFETY_STEP g = FIRST
-  [evalWalkLib.IH_TAC {stop = K false, normalise = BETA_RULE},
+  [first_assum MATCH_ACCEPT_TAC,
    (fn goal as (_,w) => FIRST
       (Net.match (exhausted_computation w) exhausted_safety_net) goal),
+   EXHAUSTED_RECURSIVE_TAC,
    CONV_TAC (exhausted_at (CHANGED_CONV evalWalkLib.head_conv)),
    CONV_TAC (exhausted_at (evalWalkLib.unfold_conv
      [vyperStateTheory.ignore_bind_def, switch_BoolV_def,
-      vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def])),
-   CHANGED_TAC (simp [vyperStateTheory.return_def, vyperStateTheory.raise_def]),
-   evalWalkLib.HEAD_CASE_TAC,
+      vyperStateTheory.type_check_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, handle_loop_exception_def, handle_function_def,
+      vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+      vyperStateTheory.lift_sum_def])),
+   (fn (asl,w) => CHANGED_TAC (simp_tac (srw_ss())
+     ([vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       source_binop_excludes_create_error] @
+      map ASSUME (List.filter (fn tm => is_eq tm orelse
+        (is_neg tm andalso is_eq (dest_neg tm))) asl))) (asl,w)),
+   (fn goal as (_,w) =>
+     let val c = exhausted_computation w in
+       if TypeBase.is_case c orelse is_cond c
+       then evalWalkLib.HEAD_CASE_TAC goal else NO_TAC goal end),
+   gen_tac, DISCH_THEN STRIP_ASSUME_TAC,
+   (fn goal as (_,w) => if is_forall w orelse is_imp w then NO_TAC goal
+     else (POP_ASSUM_LIST (fn facts =>
+       map_every assume_tac (List.filter (fn th => not (is_forall (concl th))) facts)) >>
+       CHANGED_TAC (gvs[vyperStateTheory.get_scopes_def,
+         vyperStateTheory.set_scopes_def, vyperStateTheory.get_accounts_def,
+         vyperStateTheory.update_pending_deletions_def,
+         vyperStateTheory.assert_def, vyperStateTheory.return_def,
+         vyperStateTheory.raise_def, AllCaseEqs()])) goal)] g;
+
+fun EXHAUSTED_HEAD_STEP g = FIRST
+  [first_assum MATCH_ACCEPT_TAC,
+   (fn goal as (_,w) =>
+      if List.exists (fn n => n = fst (dest_const
+           (fst (strip_comb (exhausted_computation w)))))
+           ["raise", "assert", "get_scopes", "set_scopes", "get_accounts"]
+      then (POP_ASSUM_LIST (fn facts =>
+        map_every assume_tac (List.filter (fn th => not (is_forall (concl th))) facts)) >>
+        simp[vyperStateTheory.raise_def, vyperStateTheory.assert_def,
+          vyperStateTheory.return_def, vyperStateTheory.get_scopes_def,
+          vyperStateTheory.set_scopes_def, vyperStateTheory.get_accounts_def,
+          AllCaseEqs()] >> NO_TAC) goal
+      else NO_TAC goal),
+   (fn goal as (_,w) => FIRST
+      (Net.match (exhausted_computation w) exhausted_safety_net) goal),
+   EXHAUSTED_RECURSIVE_TAC,
+   CONV_TAC (exhausted_at (CHANGED_CONV
+     (REPEATC (CHANGED_CONV evalWalkLib.head_conv)))),
+   CONV_TAC (exhausted_at (evalWalkLib.unfold_conv
+     [vyperStateTheory.ignore_bind_def, vyperStateTheory.type_check_def,
+      vyperStateTheory.check_def, vyperStateTheory.assert_def,
+      oneline handle_function_def, vyperStateTheory.lift_option_type_def,
+      vyperStateTheory.lift_option_def, vyperStateTheory.lift_sum_def])),
+   (fn goal as (_,w) =>
+     let val c = exhausted_computation w in
+       if TypeBase.is_case c orelse is_cond c
+       then evalWalkLib.HEAD_CASE_TAC goal else NO_TAC goal end),
    gen_tac, DISCH_THEN STRIP_ASSUME_TAC] g;
 
 Theorem source_exhausted_assert_reason_safety[local]:
@@ -3012,8 +3233,414 @@ Theorem source_exhausted_eval_safety_mutual[local]:
   (!cx gs vs. source_exhausted_safe (assign_tuple_target_list cx gs vs)) /\
   (!cx es. source_exhausted_safe (eval_expr_results cx es))
 Proof
-  rpt conj_tac >> rpt gen_tac >> strip_tac
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >- suspend "c01" >- suspend "c02" >- suspend "c03"
+  >- suspend "c04" >- suspend "c05" >- suspend "c06"
+  >- suspend "c07" >- suspend "c08" >- suspend "c09"
+  >- suspend "c10" >- suspend "c11" >- suspend "c12"
+  >- suspend "c13" >- suspend "c14" >- suspend "c15"
+  >- suspend "c16" >- suspend "c17" >- suspend "c18"
+  >- suspend "c19" >- suspend "c20" >- suspend "c21"
+  >- suspend "c22" >- suspend "c23" >- suspend "c24"
+  >- suspend "c25" >- suspend "c26" >- suspend "c27"
+  >- suspend "c28" >- suspend "c29" >- suspend "c30"
+  >- suspend "c31" >- suspend "c32" >- suspend "c33"
+  >- suspend "c34" >- suspend "c35" >- suspend "c36"
+  >- suspend "c37" >- suspend "c38" >- suspend "c39"
+  >- suspend "c40" >- suspend "c41" >- suspend "c42"
+  >- suspend "c43" >- suspend "c44" >- suspend "c45"
+  >- suspend "c46" >- suspend "c47" >- suspend "c48"
+  >- suspend "c49" >- suspend "c50" >- suspend "c51"
+  >- suspend "c52" >- suspend "c53" >- suspend "c54"
+  >- suspend "c55" >- suspend "c56" >- suspend "c57"
+  >- suspend "c58" >- suspend "c59" >- suspend "c60"
+  >- suspend "c61" >- suspend "c62" >> suspend "c63"
 QED
+
+fun exhausted_conclusion_conv c tm =
+  if can exhausted_computation tm then exhausted_at c tm
+  else if is_forall tm then QUANT_CONV (exhausted_conclusion_conv c) tm
+  else RAND_CONV (exhausted_conclusion_conv c) tm;
+
+val EXHAUSTED_CONSTRUCTOR_TAC =
+  CONV_TAC (exhausted_conclusion_conv
+    (evalWalkLib.unfold_conv [evaluate_def])) >> rpt EXHAUSTED_SAFETY_STEP;
+
+Resume source_exhausted_eval_safety_mutual[c01]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c02]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c03]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c04]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c05]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c06]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c07]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c08]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c09]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c10]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c11]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c12]:
+  ntac 3 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 12 evaluate_def))) >>
+  BETA_TAC >> MATCH_MP_TAC (BETA_RULE source_exhausted_assert_reason_safety) >>
+  conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c13]:
+  ntac 3 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 13 evaluate_def))) >>
+  EXHAUSTED_SAFETY_STEP >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (BETA_CONV THENC REWR_CONV switch_BoolV_def)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- MATCH_ACCEPT_TAC source_exhausted_read_result_safety >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  Cases_on `v' = BoolV T` >- simp[vyperStateTheory.return_def] >>
+  Cases_on `v' = BoolV F`
+  >- (asm_rewrite_tac [] >> Cases_on `err` >>
+      rename1 `CustomError id positional kwargs` >>
+      CONV_TAC (exhausted_at evalWalkLib.head_conv) >>
+      Cases_on `get_module_code cx (FST id)`
+      >- gvs[vyperStateTheory.raise_def] >>
+      rename1 `get_module_code cx (FST id) = SOME tops` >>
+      Cases_on `lookup_custom_error_args_in (SND id) tops`
+      >- gvs[vyperStateTheory.raise_def] >>
+      rename1 `lookup_custom_error_args_in (SND id) tops = SOME params` >>
+      Cases_on `order_custom_error_args params (CustomError id positional kwargs)`
+      >- gvs[vyperStateTheory.raise_def] >>
+      gvs[] >> rpt EXHAUSTED_SAFETY_STEP) >>
+  simp[vyperStateTheory.raise_def]
+QED
+Resume source_exhausted_eval_safety_mutual[c14]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c15]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c16]:
+  ntac 3 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 16 evaluate_def))) >>
+  rpt EXHAUSTED_SAFETY_STEP
+QED
+Resume source_exhausted_eval_safety_mutual[c17]:
+  ntac 3 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 17 evaluate_def))) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- MATCH_ACCEPT_TAC source_exhausted_read_result_safety >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- ((metis_tac[])) >>
+  rpt EXHAUSTED_SAFETY_STEP
+QED
+Resume source_exhausted_eval_safety_mutual[c18]:
+  ntac 3 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 18 evaluate_def))) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- MATCH_ACCEPT_TAC source_exhausted_read_result_safety >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >> metis_tac[]
+QED
+Resume source_exhausted_eval_safety_mutual[c19]:
+  ntac 5 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 19 evaluate_def))) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- MATCH_ACCEPT_TAC source_exhausted_read_place_safety >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- rpt EXHAUSTED_SAFETY_STEP >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- metis_tac[] >>
+  qpat_x_assum `!s p t s' cur t' s'' ptv t''. _` kall_tac >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  rpt EXHAUSTED_SAFETY_STEP >> metis_tac[source_binop_excludes_create_error]
+QED
+Resume source_exhausted_eval_safety_mutual[c20]:
+  ntac 4 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 20 evaluate_def))) >>
+  EXHAUSTED_SAFETY_STEP >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  CONV_TAC (exhausted_at (REWR_CONV vyperStateTheory.ignore_bind_def)) >>
+  EXHAUSTED_SAFETY_STEP >- MATCH_ACCEPT_TAC (cj 1 source_exhausted_scope_safety) >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_finally_safety) >> reverse conj_tac
+  >- MATCH_ACCEPT_TAC (cj 2 source_exhausted_scope_safety) >>
+  CONV_TAC (exhausted_at (REWR_CONV switch_BoolV_def)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- MATCH_ACCEPT_TAC source_exhausted_read_result_safety >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  Cases_on `v'' = BoolV T` >- (asm_rewrite_tac [] >> EXHAUSTED_IH_TAC) >>
+  Cases_on `v'' = BoolV F` >- (asm_rewrite_tac [] >> EXHAUSTED_IH_TAC) >>
+  asm_rewrite_tac [] >> POP_ASSUM_LIST (K all_tac) >>
+  simp[vyperStateTheory.raise_def]
+QED
+Resume source_exhausted_eval_safety_mutual[c21]:
+  ntac 6 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 21 evaluate_def))) >>
+  CONV_TAC (exhausted_at (evalWalkLib.head_conv THENC BETA_CONV)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- rpt EXHAUSTED_SAFETY_STEP >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- EXHAUSTED_IH_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  CONV_TAC (exhausted_at (REWR_CONV vyperStateTheory.ignore_bind_def)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- (POP_ASSUM_LIST (K all_tac) >>
+      simp[vyperStateTheory.check_def, vyperStateTheory.assert_def,
+           vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      Cases_on `compatible_bound (Dynamic n) (LENGTH v')` >> simp[]) >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >> EXHAUSTED_IH_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c22]:
+  EXHAUSTED_CONSTRUCTOR_TAC >>
+  qpat_x_assum `source_exhausted_safe _` kall_tac >>
+  gvs[vyperStateTheory.assert_def, AllCaseEqs()]
+QED
+Resume source_exhausted_eval_safety_mutual[c23]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c24]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c25]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c26]:
+  EXHAUSTED_CONSTRUCTOR_TAC >>
+  qpat_x_assum `get_range_limits _ _ = _` mp_tac >>
+  simp[oneline get_range_limits_def, AllCaseEqs()]
+QED
+Resume source_exhausted_eval_safety_mutual[c27]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c28]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c29]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c30]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c31]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c32]:
+  ntac 5 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 32 evaluate_def))) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  `source_exhausted_safe (eval_expr cx e')` by metis_tac[] >>
+  `source_exhausted_safe (eval_expr cx e'')` by metis_tac[] >>
+  qpat_x_assum `!s tv t. _ ==> source_exhausted_safe (eval_expr cx e')` kall_tac >>
+  qpat_x_assum `!s tv t. _ ==> source_exhausted_safe (eval_expr cx e'')` kall_tac >>
+  rpt EXHAUSTED_SAFETY_STEP
+QED
+Resume source_exhausted_eval_safety_mutual[c33]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c34]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c35]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c36]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c37]:
+  ntac 4 gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 37 evaluate_def) THENC
+    REWR_CONV vyperStateTheory.ignore_bind_def)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- (POP_ASSUM_LIST (K all_tac) >> rpt EXHAUSTED_SAFETY_STEP) >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  Cases_on `bt = Len` >- (asm_rewrite_tac [] >> rpt EXHAUSTED_SAFETY_STEP) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (asm_rewrite_tac [] >>
+      `source_exhausted_safe (eval_exprs cx es)` by
+        (qpat_x_assum `!s x t. _ /\ _ /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+           mp_tac >> metis_tac[]) >>
+      POP_ASSUM_LIST (fn facts => map_every assume_tac
+        (List.filter (fn th => not (is_forall (concl th)) orelse
+          is_exhausted_safety (concl th)) facts)) >>
+      rpt EXHAUSTED_SAFETY_STEP >>
+      metis_tac[MP source_ordinary_pure_exclusions source_binop_excludes_create_error]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (asm_rewrite_tac [] >> rpt EXHAUSTED_SAFETY_STEP >>
+      gvs[next_gas_reading_def, vyperStateTheory.raise_def,
+          vyperStateTheory.return_def, AllCaseEqs()]) >>
+  Cases_on `code_slice_source bt es`
+  >- (asm_rewrite_tac [] >>
+      `source_exhausted_safe (eval_exprs cx es)` by
+        (qpat_x_assum `!s x t. _ /\ _ /\ _ /\ _ /\ NONE = NONE ==> _`
+          mp_tac >> metis_tac[]) >>
+      POP_ASSUM_LIST (fn facts => map_every assume_tac
+        (List.filter (fn th => not (is_forall (concl th)) orelse
+          is_exhausted_safety (concl th)) facts)) >>
+      rpt EXHAUSTED_SAFETY_STEP >>
+      gvs[MP source_ordinary_pure_exclusions source_binop_excludes_create_error] >>
+      gvs[precompile_call_success_def, vyperStateTheory.check_def,
+          vyperStateTheory.assert_def, vyperStateTheory.return_def,
+          vyperStateTheory.raise_def, AllCaseEqs()]) >>
+  PairCases_on `x` >>
+  `source_exhausted_safe (eval_exprs cx (TL es))` by
+    (qpat_x_assum `!s x t v code_ty addr. _ ==> _` mp_tac >> metis_tac[]) >>
+  qpat_x_assum `!s x t v code_ty addr. _ ==> source_exhausted_safe (eval_exprs cx (TL es))` kall_tac >>
+  qpat_x_assum `!s x t. _ ==> source_exhausted_safe (eval_exprs cx es)` kall_tac >>
+  qpat_x_assum `!s x t. _ ==> source_exhausted_safe (eval_exprs cx es)` kall_tac >>
+  qpat_x_assum `!s x t. _ ==> source_exhausted_safe (eval_expr cx (HD es))` kall_tac >>
+  `!u vs w. eval_exprs cx (TL es) u = (INL vs,w) ==>
+     source_exhausted_safe (eval_exprs cx [x1])` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!s x t v code_ty addr u vs w. _ ==> _` mp_tac >> metis_tac[]) >>
+  qpat_x_assum `!s x t v code_ty addr u vs w. _ ==> _` kall_tac >>
+  asm_rewrite_tac [] >> rpt EXHAUSTED_SAFETY_STEP >>
+  gvs[MP source_ordinary_pure_exclusions source_binop_excludes_create_error,
+      precompile_call_success_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs()]
+QED
+Resume source_exhausted_eval_safety_mutual[c38]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c39]:
+  EXHAUSTED_CONSTRUCTOR_TAC >>
+  gvs[MP source_type_pure_exclusions source_abi_decode_excludes_create_error]
+QED
+Resume source_exhausted_eval_safety_mutual[c40]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c41]:
+  rpt gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 41 evaluate_def))) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  `source_exhausted_safe (eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)))` by
+    (qpat_x_assum `!s target t nargs. _ ==> _` mp_tac >> metis_tac[]) >>
+  qpat_x_assum `!s target t nargs. _ ==> _` kall_tac >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  `source_exhausted_safe (eval_exprs cx (DROP (1 + LENGTH (FST (SND sig))) es))` by
+    (qpat_x_assum `!s target t nargs u vs w. _ ==> _` mp_tac >> metis_tac[]) >>
+  qpat_x_assum `!s target t nargs u vs w. _ ==> _` kall_tac >>
+  rpt EXHAUSTED_SAFETY_STEP
+QED
+Resume source_exhausted_eval_safety_mutual[c42]:
+  rpt gen_tac >> strip_tac >>
+  CONV_TAC (exhausted_at (REWR_CONV (cj 42 evaluate_def))) >>
+  CONV_TAC (exhausted_at (REWR_CONV vyperStateTheory.ignore_bind_def)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- (POP_ASSUM_LIST (K all_tac) >> rpt EXHAUSTED_SAFETY_STEP) >>
+  ntac 3 gen_tac >> strip_tac >> BETA_TAC >>
+  RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >>
+  rpt EXHAUSTED_HEAD_STEP
+QED
+Resume source_exhausted_eval_safety_mutual[c43]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c44]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c45]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c46]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c47]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c48]:
+  rpt gen_tac >> strip_tac >> Cases_on `kind` >>
+  RULE_ASSUM_TAC (SIMP_RULE bool_ss [create_kind_distinct,
+    GSYM create_kind_distinct, create_kind_11]) >>
+  CONV_TAC (exhausted_conclusion_conv
+    (evalWalkLib.unfold_conv [evaluate_def])) >> rpt EXHAUSTED_HEAD_STEP >>
+  gvs[vyperCreateTheory.check_create_blueprint_def,
+    vyperStateTheory.bind_def, vyperStateTheory.get_accounts_def,
+    vyperStateTheory.return_def, vyperStateTheory.raise_def,
+    vyperStateTheory.lift_option_def, vyperMiscTheory.option_CASE_rator,
+    AllCaseEqs()]
+QED
+Resume source_exhausted_eval_safety_mutual[c49]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c50]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c51]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c52]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c53]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c54]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c55]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c56]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c57]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c58]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c59]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c60]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c61]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c62]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Resume source_exhausted_eval_safety_mutual[c63]:
+  EXHAUSTED_CONSTRUCTOR_TAC
+QED
+Finalise source_exhausted_eval_safety_mutual[local]
 
 Theorem eval_outcome_probe_replay_mutual:
   (!cx stmt st0 os res_p st_p.
