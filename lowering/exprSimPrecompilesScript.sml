@@ -166,6 +166,8 @@ Proof
       simp[write_memory_with_expansion_def]) >>
   conj_tac
   >- (irule fmp_room_fields >> qexists_tac `s` >>
+      simp_tac (srw_ss()) [venomMemPropsTheory.LENGTH_write_memory_with_expansion,
+                          arithmeticTheory.MAX_DEF] >>
       simp[write_memory_with_expansion_def]) >>
   gvs[write_memory_with_expansion_def, immutable_alloca_sep_def,
       local_region_def, lookup_var_def] >> metis_tac[]
@@ -415,7 +417,7 @@ Theorem lower_typed_args_nil_sim:
          typed_args_post H ctx func cenv cx es sa s0 ee [] [] vs t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -514,7 +516,7 @@ Theorem lower_typed_args_sim:
          typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -630,7 +632,7 @@ Resume lower_typed_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume lower_typed_args_sim[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -690,7 +692,7 @@ Resume lower_typed_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume lower_typed_args_sim[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
@@ -3055,9 +3057,11 @@ QED
 Theorem eval_exprs_suffix:
   gas_outcome F tops (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
     (\H rr ee t. ?vs. rr = INL vs /\ P H vs ee t)
-    (\H rr ee r. wb_args_exit rr r) /\
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r) /\
   (!vs. storage_trace_frame (k vs)) /\
-  (!H exc ee r. wb_args_exit (INR exc) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. wb_args_exit (INR exc) r /\
+     halt_exit H cx ee (INR exc : value list + exception) r ==>
+     R H (INR exc) ee r) /\
   (!gs vs ee t.
      eval_exprs cx args (es with gas_obs := gs) = (INL vs, ee) /\
      ee.gas_obs = [] /\ ~t.vs_halted /\
@@ -3123,7 +3127,7 @@ Proof
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       BETA_TAC >> rpt strip_tac >>
       qpat_x_assum `!H exc ee r. _ ==> R _ _ _ _` irule >>
-      gvs[wb_args_exit_def]) >>
+      gvs[wb_args_exit_def, halt_exit_def] >> metis_tac[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qabbrev_tac `a = eval_exprs cx args` >>
   `ignore_bind (bind a k) (return ()) =
@@ -3313,7 +3317,7 @@ Proof
   drule_then (fn th => rewrite_tac[th]) eval_expr_ecrecover_read_action >>
   irule eval_exprs_suffix >> rpt conj_tac
   >~ [`storage_trace_frame _`] >- simp[ecrecover_continuation_frame]
-  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def] >>
+  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def, halt_exit_def] >>
   qexists_tac `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee args
                  [h;v;r;sig] vs t /\ t.vs_current_bb = sm.cs_current_bb /\
                  t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
@@ -3356,7 +3360,8 @@ Proof
       qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`, `ee`,
                     `Abort a u`] >>
       asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
-        expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]) >>
+        expr_exit_def, halt_exit_def, ignore_bind_def, bind_def,
+        ecrecover_source_outcome_step]) >>
   rename1 `t.vs_outcomes = co::rest` >> Cases_on `co.co_success`
   >- (`~EXISTS expr_has_effect [ah;av;ar;asig] ==>
         pure_frame cenv func es sa s0 t` by
@@ -3393,7 +3398,8 @@ Proof
   qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`,
                 `ee with outcomes := SOME rest`, `Abort a u`] >>
   asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
-    expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]
+    expr_exit_def, halt_exit_def, ignore_bind_def, bind_def,
+    ecrecover_source_outcome_step]
 QED
 
 Theorem compile_ecrecover_call_case:
