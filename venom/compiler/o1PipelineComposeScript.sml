@@ -18,6 +18,7 @@
  *)
 Theory o1PipelineCompose
 Ancestors
+  o1LabelFlowStaticContracts
   o1ComposeSupport o1PassContract o1ContractTheorems o1ScheduleDecomp
   o1FnScheduleDecompHelpers o1DretDesugarContract o1ContractSimplifyCfg
   ctxLookupAgree ptrDiscipline ptrDisciplineAgree unitMemInv
@@ -114,16 +115,6 @@ Theorem dload_headroom_ok_prune:
 Proof
   simp[lowerDloadDefsTheory.dload_headroom_ok_def] >>
   mp_tac ctx_dload_count_prune >> decide_tac
-QED
-
-Theorem o1_fn_passes_steps:
-  o1_step_contracts_from rp 0 o1_fn_passes
-Proof
-  simp[o1_fn_passes_def, o1_step_contracts_from_def,
-       o1_contract_make_ssa_1, o1_contract_lower_dload,
-       o1_contract_concretize_mem_loc, o1_contract_fmp_lowering,
-       o1_contract_make_ssa_2, o1_contract_simplify_cfg, o1_contract_sue,
-       o1_contract_dft, o1_contract_cfg_normalization]
 QED
 
 Theorem o1_run_contracts:

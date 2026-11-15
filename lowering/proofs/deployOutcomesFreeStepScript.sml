@@ -21,12 +21,6 @@ Proof
   simp[update_var_def]
 QED
 
-Theorem outcomes_active_inst[simp]:
-  active_inst fn inst (s with vs_outcomes := os) = active_inst fn inst s
-Proof
-  simp[active_inst_def]
-QED
-
 Theorem outcomes_eval_one_phi[simp]:
   eval_one_phi (s with vs_outcomes := os) inst = eval_one_phi s inst
 Proof

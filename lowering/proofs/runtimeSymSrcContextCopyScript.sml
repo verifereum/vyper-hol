@@ -31,13 +31,6 @@ Proof
     (mp_then Any mp_tac runtime_sym_emit_op) >> simp[]
 QED
 
-Theorem runtime_sym_copy_new_block:
-  EVERY runtime_sym_inst (state_insts s) /\
-  new_block lbl s = (u,s') ==> EVERY runtime_sym_inst (state_insts s')
-Proof
-  strip_tac >> mp_tac (Q.INST [`label` |-> `lbl`, `st` |-> `s`] runtime_sym_new_block) >> simp[]
-QED
-
 Theorem runtime_sym_word_copy_loop_base:
   ~is_label_operand src /\ ~is_label_operand dst /\
   ~is_label_operand count_op /\
@@ -58,14 +51,14 @@ Proof
   qpat_x_assum `emit_inst JMP _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jump) >> simp[] >> strip_tac >>
   qpat_x_assum `new_block cond_lbl _ = _`
-    (mp_then Any mp_tac runtime_sym_copy_new_block) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac runtime_sym_new_block_result) >> simp[] >> strip_tac >> fs[] >>
   qpat_x_assum `emit_op EQ _ _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_inst JNZ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jnz) >> simp[] >> strip_tac >>
   qpat_x_assum `new_block body_lbl _ = _`
-    (mp_then Any mp_tac runtime_sym_copy_new_block) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac runtime_sym_new_block_result) >> simp[] >> strip_tac >> fs[] >>
   qpat_x_assum `(if _ then _ else _) _ = _`
     (mp_then Any mp_tac runtime_sym_copy_offset) >> simp[] >> strip_tac >>
   qpat_x_assum `compile_ptr_load _ _ _ _ _ = _`
@@ -81,7 +74,7 @@ Proof
     (mp_then Any mp_tac runtime_sym_assign) >> simp[] >> strip_tac >>
   qpat_x_assum `emit_inst JMP _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jump) >> simp[] >> strip_tac >>
-  gvs[] >> drule_all runtime_sym_copy_new_block >> simp[]
+  gvs[] >> imp_res_tac runtime_sym_new_block_result >> fs[]
 QED
 
 Theorem runtime_sym_word_copy_loop_op:

@@ -25,15 +25,6 @@ Proof
   simp[asm_terminal_op_def]
 QED
 
-Theorem trailing_terminal_zero_window[local]:
-  (?pre t post. x::AsmOp "ISZERO"::AsmOp "ISZERO"::r = pre ++ [t] ++ post /\
-    asm_terminal_op t /\ EVERY (\i. !l. i <> AsmLabel l) post) <=>
-  (?pre t post. x::r = pre ++ [t] ++ post /\
-    asm_terminal_op t /\ EVERY (\i. !l. i <> AsmLabel l) post)
-Proof
-  simp[trailing_terminal_cons]
-QED
-
 Theorem merge_iszero_pairs_no_labels:
   !p. EVERY (\i. !l. i <> AsmLabel l) p ==>
       EVERY (\i. !l. i <> AsmLabel l) (FST (merge_iszero_pairs p))

@@ -1,5 +1,6 @@
 Theory runtimeSymSrcAbiEncode
 Ancestors
+  runtimeSymSrcEmissionProbe
   runtimeSymSrcAbiCalls runtimeSymSrcContext runtimeSymSrcEmission
   runtimeSymSrcInterfaces runtimeSymSrcModuleDispatch
   abiEncoder compileEnv emitHelper loweringShapeDefs

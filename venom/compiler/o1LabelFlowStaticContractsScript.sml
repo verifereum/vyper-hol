@@ -12,7 +12,7 @@ Proof
   simp[lower_dload_step_contract] >> metis_tac[lower_dload_fn_row]
 QED
 
-Theorem o1_label_flow_static_steps:
+Theorem o1_fn_passes_steps:
   o1_step_contracts_from rp 0 o1_fn_passes
 Proof
   simp[o1_fn_passes_def, o1_step_contracts_from_def,

@@ -148,20 +148,23 @@ Proof
   ntac 3 (rev_dxrule runtime_sym_fresh_label >> strip_tac >> gvs[]) >>
   qpat_assum `emit_inst JNZ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jnz) >> simp[] >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> strip_tac >>
-  drule_all runtimeSymSrcContextTypedTheory.runtime_sym_store_memory >> strip_tac >>
+  imp_res_tac runtime_sym_new_block_result >> fs[] >>
+  drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
+    runtimeSymSrcContextTypedTheory.runtime_sym_store_memory >> simp[] >> strip_tac >>
   Cases_on `skip` >> gvs[comp_return_def]
   >- (drule_all runtime_sym_jump >> strip_tac >>
-      drule_all runtime_sym_copy_new_block >> strip_tac >>
-      drule_all runtime_sym_return_value_decode >> strip_tac >>
+      imp_res_tac runtime_sym_new_block_result >> fs[] >>
+      drule_at (Pat `compile_return_value_decode _ _ _ = _`)
+        runtime_sym_return_value_decode >> simp[] >> strip_tac >>
       first_x_assum drule_all >> strip_tac >>
       drule_all runtime_sym_jump >> strip_tac >>
-      drule_all runtime_sym_copy_new_block >> simp[]) >>
+      imp_res_tac runtime_sym_new_block_result >> fs[]) >>
   drule_all runtime_sym_extcodesize_check >> strip_tac >>
   drule_all runtime_sym_jump >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> strip_tac >>
-  drule_all runtime_sym_return_value_decode >> strip_tac >>
+  imp_res_tac runtime_sym_new_block_result >> fs[] >>
+  drule_at (Pat `compile_return_value_decode _ _ _ = _`)
+    runtime_sym_return_value_decode >> simp[] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   drule_all runtime_sym_jump >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> simp[]
+  imp_res_tac runtime_sym_new_block_result >> fs[]
 QED

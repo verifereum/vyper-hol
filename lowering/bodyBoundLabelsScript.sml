@@ -1100,12 +1100,6 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem bound_labels_as_stack_val[local]:
-  SND (as_stack_val ty m) = SND m
-Proof
-  Cases_on `m` >> simp[as_stack_val_def]
-QED
-
 Theorem bound_labels_create_snapshot[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -1298,7 +1292,7 @@ Proof
   >- (irule bound_labels_call_raw >> simp[])
   >- (irule bound_labels_call_raw_calldata >> simp[])
   >~ [`CreateTarget`]
-  >- (simp[compile_call_def, bound_labels_as_stack_val] >>
+  >- (simp[compile_call_def, as_stack_val_state] >>
       irule bound_labels_create_call >> simp[])
   >~ [`RawLog`]
   >- (simp[compile_call_def] >> Cases_on `args` >> simp[]
@@ -1599,12 +1593,6 @@ Proof
          irule bound_labels_call] >> simp[]
 QED
 
-Theorem bound_labels_as_ptr_val[local]:
-  SND (as_ptr_val ty loc m) = SND m
-Proof
-  Cases_on `m` >> simp[as_ptr_val_def]
-QED
-
 Theorem bound_labels_builtin_scalar[local]:
   (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
@@ -1621,7 +1609,7 @@ Proof
   simp[compile_builtin_dispatch_body_def] >>
   rpt (irule pair_let_snd_preserves >> reverse conj_tac
     >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-  simp[bound_labels_as_stack_val, bound_labels_as_ptr_val,
+  simp[as_stack_val_state, as_ptr_val_state,
        bound_labels_neg, bound_labels_builtin_abs, bound_labels_blockhash,
        bound_labels_blobhash, bound_labels_ceil, bound_labels_floor,
        bound_labels_uint2str, bound_labels_slice_calldata,
@@ -1638,7 +1626,7 @@ Theorem bound_labels_builtin_environment[local]:
     (SND (compile_builtin_dispatch_body f ce rt ty bi args s))))
 Proof
   strip_tac >> gen_tac >> Cases_on `bi` >>
-  simp[compile_builtin_dispatch_body_def, bound_labels_as_stack_val,
+  simp[compile_builtin_dispatch_body_def, as_stack_val_state,
        bound_labels_env_var, bound_labels_builtin_calldatasize] >>
   irule bound_labels_acc >> simp[]
 QED
@@ -1658,7 +1646,7 @@ Proof
    >- (simp[] >> irule bound_labels_lower_value >> simp[]) >>
    rpt strip_tac >> simp[] >>
    rpt IF_CASES_TAC >>
-   simp[bound_labels_as_stack_val, bound_labels_emit_op,
+   simp[as_stack_val_state, bound_labels_emit_op,
         bound_labels_invert, bound_labels_builtin_len,
         bound_labels_as_wei_value_decimal, bound_labels_as_wei_value_int])
 QED
@@ -1677,14 +1665,14 @@ Proof
   (IF_CASES_TAC
    >- (irule pair_let_snd_preserves >> reverse conj_tac
        >- (irule bound_labels_lower_value >> simp[]) >>
-       rpt strip_tac >> simp[bound_labels_as_stack_val,
+       rpt strip_tac >> simp[as_stack_val_state,
          bound_labels_keccak256_bytes, bound_labels_sha256_bytes]) >>
    Cases_on `expr_type (HD args)` >> simp[] >>
    TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
         TRY (rename1 `BytesT bnd` >> Cases_on `bnd` >> simp[])) >>
    (irule pair_let_snd_preserves >> reverse conj_tac
     >- (irule bound_labels_lower_value >> simp[]) >>
-    rpt strip_tac >> simp[bound_labels_as_stack_val,
+    rpt strip_tac >> simp[as_stack_val_state,
       bound_labels_keccak256_bytesm, bound_labels_sha256_bytesm,
       bound_labels_keccak256_word, bound_labels_sha256_word]))
 QED
@@ -1703,7 +1691,7 @@ Proof
   rpt (irule pair_let_snd_preserves >> reverse conj_tac
     >- (simp[bound_labels_unwrap_value] >>
         irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-  simp[bound_labels_as_stack_val, bound_labels_as_ptr_val,
+  simp[as_stack_val_state, as_ptr_val_state,
        bound_labels_ecrecover, bound_labels_ecadd_points, bound_labels_ecmul_point]
 QED
 
@@ -1720,7 +1708,7 @@ Proof
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_lower_value >> simp[]) >>
   rpt strip_tac >> simp[] >> IF_CASES_TAC >>
-  simp[bound_labels_as_stack_val, bound_labels_as_ptr_val,
+  simp[as_stack_val_state, as_ptr_val_state,
        bound_labels_method_id_runtime]
 QED
 
@@ -1759,7 +1747,7 @@ Proof
   strip_tac >> Cases_on `opt` >> simp[compile_builtin_dispatch_body_def] >>
   (irule pair_let_snd_preserves >> reverse conj_tac
    >- simp[bound_labels_alloc_buffer] >> rpt strip_tac >>
-   simp[bound_labels_as_ptr_val] >>
+   simp[as_ptr_val_state] >>
    FIRST [irule bound_labels_make_tuple, irule bound_labels_make_array] >> simp[])
 QED
 
@@ -1786,8 +1774,8 @@ Proof
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_lower_value >> simp[]) >>
   rpt strip_tac >> simp[] >> IF_CASES_TAC >> simp[] >> IF_CASES_TAC
-  >- simp[bound_labels_as_stack_val, bound_labels_bytestring_widen_copy] >>
-  Cases_on `rt` >> simp[bound_labels_as_stack_val, bound_labels_type_convert]
+  >- simp[as_stack_val_state, bound_labels_bytestring_widen_copy] >>
+  Cases_on `rt` >> simp[as_stack_val_state, bound_labels_type_convert]
 QED
 
 Theorem bound_labels_type_builtin_constants[local]:
@@ -1821,7 +1809,7 @@ Proof
   >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_extract32_load] >> rpt strip_tac >>
-  simp[bound_labels_as_stack_val, bound_labels_clamp_basetype]
+  simp[as_stack_val_state, bound_labels_clamp_basetype]
 QED
 
 Theorem bound_labels_type_builtin_abi_decode[local]:
@@ -1837,7 +1825,7 @@ Proof
   >- simp[] >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_unwrap_value] >> rpt strip_tac >>
-  simp[bound_labels_as_ptr_val, bound_labels_lower_abi_decode]
+  simp[as_ptr_val_state, bound_labels_lower_abi_decode]
 QED
 
 Theorem bound_labels_store_abi_tuple[local]:
@@ -1871,19 +1859,19 @@ Proof
           >- simp[bound_labels_alloc_buffer] >> rpt strip_tac >> simp[] >>
           irule pair_let_snd_preserves >> reverse conj_tac
           >- simp[bound_labels_emit_void] >> rpt strip_tac >>
-          simp[bound_labels_as_ptr_val, bound_labels_lower_abi_encode]) >>
+          simp[as_ptr_val_state, bound_labels_lower_abi_encode]) >>
       irule pair_let_snd_preserves >> reverse conj_tac
       >- simp[] >> rpt strip_tac >> simp[] >>
       irule pair_let_snd_preserves >> reverse conj_tac
       >- simp[bound_labels_unwrap_value] >> rpt strip_tac >>
-      simp[bound_labels_as_ptr_val, bound_labels_lower_abi_encode]) >>
+      simp[as_ptr_val_state, bound_labels_lower_abi_encode]) >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_abi_encode_args >> simp[]) >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_alloc_buffer] >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_store_abi_tuple] >> rpt strip_tac >>
-  simp[bound_labels_as_ptr_val, bound_labels_lower_abi_encode]
+  simp[as_ptr_val_state, bound_labels_lower_abi_encode]
 QED
 
 Theorem bound_labels_type_builtin_body[local]:
@@ -1913,7 +1901,7 @@ Proof
   >- (gvs[] >>
       rpt (irule pair_let_snd_preserves >> reverse conj_tac
         >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-      simp[bound_labels_as_ptr_val, bound_labels_slice_code]) >>
+      simp[as_ptr_val_state, bound_labels_slice_code]) >>
   gvs[] >> IF_CASES_TAC
   >- (irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
@@ -1921,7 +1909,7 @@ Proof
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
       irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >>
-      simp[bound_labels_as_ptr_val, bound_labels_slice_extcode]) >>
+      simp[as_ptr_val_state, bound_labels_slice_extcode]) >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
   IF_CASES_TAC
@@ -1930,14 +1918,14 @@ Proof
       map_every qx_gen_tac [`v`, `t`] >> strip_tac >> PairCases_on `v` >> simp[] >>
       rpt (irule pair_let_snd_preserves >> reverse conj_tac
         >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-      simp[bound_labels_as_ptr_val, bound_labels_slice_data]) >>
+      simp[as_ptr_val_state, bound_labels_slice_data]) >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_alloc_buffer] >> rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_emit_void] >> rpt strip_tac >> simp[] >>
   rpt (irule pair_let_snd_preserves >> reverse conj_tac
     >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-  simp[bound_labels_as_ptr_val, bound_labels_slice_data]
+  simp[as_ptr_val_state, bound_labels_slice_data]
 QED
 
 Theorem bound_labels_builtin_membership[local]:
@@ -1957,7 +1945,7 @@ Proof
   (irule pair_let_snd_preserves >> reverse conj_tac
    >- (simp[] >> irule bound_labels_multi_exprs >> simp[]) >>
    rpt strip_tac >> simp[] >> rpt IF_CASES_TAC >>
-   simp[bound_labels_as_stack_val, bound_labels_list_membership_in,
+   simp[as_stack_val_state, bound_labels_list_membership_in,
         bound_labels_list_membership_notin, bound_labels_var_array_membership]))
 QED
 
@@ -1996,11 +1984,11 @@ Proof
       irule pair_let_snd_preserves >> conj_tac >>
       TRY (irule bound_labels_bytestring_operand_hash >> simp[] >> NO_TAC) >>
       rpt strip_tac >> simp_tac (srw_ss()) [] >>
-      IF_CASES_TAC >> simp[bound_labels_as_stack_val, bound_labels_emit_op] >>
-      irule pair_let_snd_preserves >> simp[bound_labels_emit_op, bound_labels_as_stack_val]) >>
+      IF_CASES_TAC >> simp[as_stack_val_state, bound_labels_emit_op] >>
+      irule pair_let_snd_preserves >> simp[bound_labels_emit_op, as_stack_val_state]) >>
   rpt (irule pair_let_snd_preserves >> reverse conj_tac
     >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-  simp[bound_labels_as_stack_val, bound_labels_binop]
+  simp[as_stack_val_state, bound_labels_binop]
 QED
 
 Theorem bound_labels_builtin_body[local]:

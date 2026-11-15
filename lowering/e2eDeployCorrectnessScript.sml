@@ -171,16 +171,6 @@ Proof
   fs[deploy_result_rel_def]
 QED
 
-(* An exempt source result is an exempt Error. *)
-Theorem deploy_source_exempt_error[local]:
-  !tops res.
-    deploy_source_exempt tops res ==>
-    ?e. res = INR (Error e) /\ unspecified_behaviour_exempt tops e
-Proof
-  rpt gen_tac >> Cases_on `res` >- simp[deploy_source_exempt_def] >>
-  Cases_on `y` >> simp[deploy_source_exempt_def]
-QED
-
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code. *)
 (* RESTATED ADMITTED THEOREM SEQ-3665: creation_resource_starved is the
@@ -200,18 +190,17 @@ Theorem e2e_deploy_correctness_asm_opt:
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
            if ALOOKUP am'.sources tx.target = NONE then
-             let cx = initial_evaluation_context
-                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
              ?lgs.
                frame_outcome es r es' NONE [] lgs /\
                (lookup_account tx.target es'.rollback.accounts).code = [] /\
-               accounts_agree cx am'.accounts
+               accounts_agree (initial_evaluation_context
+                  ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE) am'.accounts
                  (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               transient_agree (initial_evaluation_context
+                  ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE) am'.tStorage es'.rollback.tStorage /\
                logs_correspond (compiled_event_info tops) (type_env tops)
                  tx.target am'.logs lgs
            else
-           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
               frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -224,10 +213,10 @@ Theorem e2e_deploy_correctness_asm_opt:
                <| code := [];
                   storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
              storage_agree
-               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+               (storage_dead (initial_evaluation_context am'.sources am'.layouts tx NONE) F (lookup_account tx.target am'.accounts).storage)
                (lookup_account tx.target am'.accounts).storage
                (lookup_account tx.target es'.rollback.accounts).storage /\
-             transient_agree cx am'.tStorage es'.rollback.tStorage /\
+             transient_agree (initial_evaluation_context am'.sources am'.layouts tx NONE) am'.tStorage es'.rollback.tStorage /\
              logs_correspond (compiled_event_info tops) (type_env tops)
                tx.target am'.logs lgs
        | INR (AssertException s) =>
@@ -317,7 +306,7 @@ Proof
   pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
   >- (drule_all e2e_deploy_correctness_identity >> simp[])
   >> `~program_reads_self_code tops` by fs[] >>
-  drule_all e2e_deploy_correctness_asm_opt >> simp[]
+  drule_all e2e_deploy_correctness_asm_opt >> simp[LET_THM]
 QED
 
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds

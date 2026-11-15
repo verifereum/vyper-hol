@@ -1,5 +1,6 @@
 Theory runtimeSymSrcStatementReasons
 Ancestors
+  runtimeSymSrcEmissionProbe
   runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcReasonMessage
   runtimeSymSrcRevertEncoder runtimeSymSrcModuleDispatch stmtLowering compileEnv
   context venomInst stackPlanTypes supportedStmts supportedStmtTraverse

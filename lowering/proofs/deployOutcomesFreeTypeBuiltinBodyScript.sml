@@ -38,8 +38,8 @@ Proof
   simp[compile_type_builtin_dispatch_body_def] >> pairarg_tac >> simp[] >>
   rename1 `lower_value f ce _ _ s = (v, st)` >>
   `Q st` by metis_tac[pairTheory.SND] >>
-  rpt IF_CASES_TAC >> simp[outcomes_free_as_stack_val] >>
-  Cases_on `target_ty` >> simp[outcomes_free_as_stack_val]
+  rpt IF_CASES_TAC >> simp[as_stack_val_state] >>
+  Cases_on `target_ty` >> simp[as_stack_val_state]
 QED
 
 Theorem outcomes_free_type_builtin_extract32:
@@ -72,7 +72,7 @@ Proof
     (rpt strip_tac >>
      irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
   simp[compile_type_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[]) >> simp[outcomes_free_as_stack_val] >>
+  rpt (pairarg_tac >> simp[]) >> simp[as_stack_val_state] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -96,7 +96,7 @@ Proof
      `args <> []` by (strip_tac >> gvs[]) >>
      drule_all outcomes_free_head >> simp[]) >>
   simp[compile_type_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[]) >> simp[outcomes_free_as_ptr_val] >>
+  rpt (pairarg_tac >> simp[]) >> simp[as_ptr_val_state] >>
   metis_tac[pairTheory.SND]
 QED
 
@@ -129,9 +129,9 @@ Proof
         (rpt strip_tac >>
          irule deployOutcomesFreeExprBodyTheory.outcomes_free_lower_value >> simp[]) >>
       IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
-      simp[outcomes_free_as_ptr_val] >>
+      simp[as_ptr_val_state] >>
       metis_tac[pairTheory.SND]) >>
-  rpt (pairarg_tac >> simp[]) >> simp[outcomes_free_as_ptr_val] >>
+  rpt (pairarg_tac >> simp[]) >> simp[as_ptr_val_state] >>
   metis_tac[pairTheory.SND]
 QED
 

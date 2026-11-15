@@ -1,5 +1,6 @@
 Theory runtimeSymSrcContextTypedArrays
 Ancestors
+  runtimeSymSrcEmissionProbe
   runtimeSymSrcContextTypedBase runtimeSymSrcContextCopy runtimeSymSrcContext
   runtimeSymSrcEmission context compileEnv emitHelper loweringShapeDefs
   venomInst stackPlanTypes list
@@ -33,7 +34,7 @@ Proof
   qpat_x_assum `emit_inst JMP _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jump) >> simp[] >> strip_tac >>
   qpat_x_assum `new_block cl _ = _`
-    (mp_then Any mp_tac runtime_sym_copy_new_block) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac runtime_sym_new_block_result) >> simp[] >> strip_tac >> fs[] >>
   qpat_x_assum `emit_op LT _ _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >> simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_op ISZERO _ _ = _`
@@ -41,7 +42,7 @@ Proof
   qpat_x_assum `emit_inst JNZ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jnz) >> simp[] >> strip_tac >>
   qpat_x_assum `new_block bl _ = _`
-    (mp_then Any mp_tac runtime_sym_copy_new_block) >> simp[] >> strip_tac >>
+    (mp_then Any mp_tac runtime_sym_new_block_result) >> simp[] >> strip_tac >> fs[] >>
   qpat_x_assum `emit_op MUL _ s11 = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >> simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_op MUL _ s12 = _`
@@ -67,7 +68,7 @@ Proof
     (mp_then Any mp_tac runtime_sym_assign) >> simp[] >> strip_tac >>
   qpat_x_assum `emit_inst JMP _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_jump) >> simp[] >> strip_tac >>
-  drule_all runtime_sym_copy_new_block >> simp[]
+  imp_res_tac runtime_sym_new_block_result >> fs[]
 QED
 
 Theorem runtime_sym_copy_sarray_typed_branch:

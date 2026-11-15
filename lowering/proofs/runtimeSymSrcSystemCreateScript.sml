@@ -1,5 +1,6 @@
 Theory runtimeSymSrcSystemCreate
 Ancestors
+  runtimeSymSrcEmissionProbe
   runtimeSymSrcContext runtimeSymSrcContextTypedBase runtimeSymSrcEmission
   runtimeSymSrcInterfaces
   builtinSystem builtinCreate builtinSimple compileEnv emitHelper
@@ -90,15 +91,6 @@ Proof
   rev_dxrule runtime_sym_emit_op_result >> simp[is_label_operand_def]
 QED
 
-Theorem runtime_sym_sc_block[local]:
-  new_block l s = (u,s') ==>
-  EVERY runtime_sym_inst (state_insts s) ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  simp[new_block_def, state_insts_def, all_blocks_def, MAP_APPEND,
-       FLAT_APPEND, EVERY_APPEND] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem runtime_sym_check_create_result:
   ~is_label_operand result /\ EVERY runtime_sym_inst (state_insts s) /\
   compile_check_create_result result revert_flag s = (v,s') ==>
@@ -111,13 +103,13 @@ Proof
   imp_res_tac runtime_sym_fresh_label >> gvs[] >>
   drule_at (Pat `emit_inst JNZ _ _ _ = _`) runtime_sym_jnz >>
   simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_block >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_new_block_result >> simp[] >> strip_tac >> fs[] >>
   rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_alloc >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_inst REVERT _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_sc_inst) >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_block >> simp[]
+  rev_dxrule runtime_sym_new_block_result >> simp[]
 QED
 
 Theorem runtime_sym_create_dispatch:
@@ -283,13 +275,13 @@ Proof
   imp_res_tac runtime_sym_fresh_label >> gvs[] >>
   drule_at (Pat `emit_inst JNZ _ _ _ = _`) runtime_sym_jnz >>
   simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_block >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_new_block_result >> simp[] >> strip_tac >> fs[] >>
   rev_dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
   rev_dxrule runtime_sym_sc_alloc >> strip_tac >>
   rev_dxrule runtime_sym_emit_void_result >> simp[is_label_operand_def] >> strip_tac >>
   qpat_x_assum `emit_inst REVERT _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_sc_inst) >> simp[] >> strip_tac >>
-  rev_dxrule runtime_sym_sc_block >> simp[] >> strip_tac >>
+  rev_dxrule runtime_sym_new_block_result >> simp[] >> strip_tac >> fs[] >>
   Cases_on `max_outsize > 0` >>
   gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def, is_label_operand_def] >>
   qpat_x_assum `(\(a,b). _) _ = _` mp_tac >>

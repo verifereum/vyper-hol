@@ -20,22 +20,6 @@ Definition middle_code_end_lifetime_def:
          ?pre post. bb.bb_instructions = pre ++ d::j::post)
 End
 
-Theorem middle_code_end_lifetime_explicit[local]:
-  middle_code_end_lifetime f <=>
-  !x. code_end_var f x ==>
-    ?d op. MEM d (fn_insts f) /\ d.inst_opcode = ADD /\
-      d.inst_operands = [op; Label "code_end"] /\ d.inst_outputs = [x] /\
-      (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
-      (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
-         MEM (Var x) j.inst_operands ==>
-         j.inst_opcode = CODECOPY /\
-         (?dst sz. j.inst_operands = [dst; Var x; sz] /\
-                   dst <> Var x /\ sz <> Var x) /\
-         ?pre post. bb.bb_instructions = pre ++ d::j::post)
-Proof
-  rewrite_tac[middle_code_end_lifetime_def]
-QED
-
 Theorem middle_lifetime_same_blocks[local]:
   f.fn_blocks = g.fn_blocks ==>
   (middle_code_end_lifetime f <=> middle_code_end_lifetime g)

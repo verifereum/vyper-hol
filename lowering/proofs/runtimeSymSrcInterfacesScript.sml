@@ -164,7 +164,7 @@ Theorem runtime_sym_ordinary_emit:
   EVERY runtime_sym_inst (state_insts s) ==>
   EVERY runtime_sym_inst (state_insts (SND (emit (mk_inst id opc ops outs) s)))
 Proof
-  simp[runtime_sym_emit] >> metis_tac[runtime_sym_ordinary_inst]
+  simp[state_insts_emit] >> metis_tac[runtime_sym_ordinary_inst]
 QED
 
 Theorem runtime_sym_compile_name:

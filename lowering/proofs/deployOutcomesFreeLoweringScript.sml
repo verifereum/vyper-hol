@@ -71,12 +71,6 @@ Proof
   simp[new_block_def, outcomes_free_state_insts] >> metis_tac[]
 QED
 
-Theorem outcomes_free_emit:
-  EVERY P (state_insts (SND (emit i s))) <=> EVERY P (state_insts s) /\ P i
-Proof
-  simp[emit_def, outcomes_free_state_insts, EVERY_APPEND] >> metis_tac[]
-QED
-
 Theorem outcomes_free_emit_ops:
   EVERY (\i. P i.inst_opcode) (state_insts s) /\ P opc ==>
   EVERY (\i. P i.inst_opcode) (state_insts (SND (emit_op opc ops s))) /\

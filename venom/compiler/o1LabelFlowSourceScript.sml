@@ -1,5 +1,6 @@
 Theory o1LabelFlowSource
 Ancestors
+  o1LabelFlowStaticContracts
   o1LabelFlowSourcePreWalk o1LabelFlowSourceSsaStep o1LabelFlowSourceBoundary
   o1PipelineCompose
   o1ScheduleDecomp o1PartialSchedule o1FnScheduleDecompHelpers

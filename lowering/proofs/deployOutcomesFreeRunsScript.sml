@@ -59,12 +59,6 @@ Proof
      `os`] mp_tac) >> simp[]
 QED
 
-Theorem active_inst_outcomes_replace[simp]:
-  active_inst fn inst (s with vs_outcomes := os) = active_inst fn inst s
-Proof
-  simp[active_inst_def]
-QED
-
 Theorem raw_reachable_outcomes_replace_aux[local]:
   !seed ctx f i t. raw_reachable seed ctx f i t ==>
   !s os name entry.

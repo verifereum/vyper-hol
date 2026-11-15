@@ -5,19 +5,17 @@ Theory runtimeSymSrcEmissionProbe
 Ancestors
   loweringShapeDefs vyperCompiler compileEnv list venomInst venomState
 
-Theorem runtime_sym_emit:
-  EVERY P (state_insts (SND (emit inst st))) <=>
-  EVERY P (state_insts st) /\ P inst
-Proof
-  simp[state_insts_def, all_blocks_def, emit_def, MAP_APPEND,
-       FLAT_APPEND, EVERY_APPEND]
-QED
-
 Theorem runtime_sym_new_block:
   state_insts (SND (new_block label st)) = state_insts st
 Proof
   simp[state_insts_def, all_blocks_def, new_block_def, MAP_APPEND,
        FLAT_APPEND, APPEND_ASSOC]
+QED
+
+Theorem runtime_sym_new_block_result:
+  new_block l s = (u,s') ==> state_insts s' = state_insts s
+Proof
+  metis_tac[runtime_sym_new_block, pairTheory.SND]
 QED
 
 Theorem runtime_sym_package_blocks:

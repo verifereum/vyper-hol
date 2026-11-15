@@ -1,24 +1,7 @@
 Theory o1LabelFlowMiddleCleanupFlow
 Ancestors
   o1LabelFlowMiddleCleanup codegenSymRel makeSsaDefs
-  makeSsaCurrentLockstepShape venomExecProofs venomInst unitLabelMapIdentity list
-
-Theorem remove_phi_self_operand:
-  !out ops a. MEM a (remove_current_phi_self out ops) ==> MEM a ops
-Proof
-  recInduct remove_current_phi_self_ind >>
-  rpt strip_tac >> gvs[remove_current_phi_self_def] >>
-  Cases_on `v = out` >> gvs[] >> metis_tac[]
-QED
-
-Theorem phi_values_operand:
-  !ops vs. current_phi_values ops = SOME vs ==>
-    !v. MEM v vs ==> MEM (Var v) ops
-Proof
-  recInduct current_phi_values_ind >>
-  simp[current_phi_values_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()] >> metis_tac[]
-QED
+  makeSsaOriginCleanup makeSsaCurrentLockstepShape venomExecProofs venomInst unitLabelMapIdentity list
 
 Theorem simplified_phi_operand:
   MEM (Var v) (simplify_current_phi i).inst_operands ==>
@@ -32,7 +15,7 @@ Proof
   Cases_on `current_phi_values (remove_current_phi_self out i.inst_operands)` >> simp[] >>
   rename1 `current_phi_values _ = SOME vs` >>
   Cases_on `vs` >> simp[] >> IF_CASES_TAC >> simp[] >>
-  metis_tac[phi_values_operand, remove_phi_self_operand, MEM]
+  metis_tac[origin_phi_values_member, origin_remove_self_member, MEM]
 QED
 
 Theorem cleanup_reassign_payloads:
@@ -184,10 +167,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem cleanup_code_end_backward:
-  !g x. code_end_var g x ==> !f enabled ctx.
+Theorem cleanup_code_end_backward_no_phi:
+  !g x. code_end_var g x ==> !f enabled.
     g = f with fn_blocks := simplify_current_phis_if enabled f.fn_blocks /\
-    label_flow_ok (ctx with ctx_functions := [f]) ==> code_end_var f x
+    (!i y. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\ code_end_var f y ==>
+           ~MEM (Var y) i.inst_operands) ==> code_end_var f x
 Proof
   Induct_on `code_end_var` >> rpt strip_tac >> gvs[] >>
   drule cleanup_if_origin >> strip_tac >> gvs[]
@@ -198,7 +182,20 @@ Proof
       metis_tac[]) >>
   rename1 `inst.inst_operands = [Var src]` >>
   `code_end_var f src` by metis_tac[] >>
-  drule_all cleanup_phi_no_protected_read >> simp[]
+  metis_tac[simplified_phi_operand, MEM]
+QED
+
+Theorem cleanup_code_end_backward:
+  !g x. code_end_var g x ==> !f enabled ctx.
+    g = f with fn_blocks := simplify_current_phis_if enabled f.fn_blocks /\
+    label_flow_ok (ctx with ctx_functions := [f]) ==> code_end_var f x
+Proof
+  rpt strip_tac >> drule cleanup_code_end_backward_no_phi >>
+  disch_then (qspecl_then [`f`, `enabled`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> fs[label_flow_ok_def] >>
+    qpat_x_assum `!inst. MEM inst (fn_insts f) ==> _`
+      (qspec_then `i` mp_tac) >> simp[] >> metis_tac[]) >>
+  simp[]
 QED
 
 Theorem cleanup_code_end_iff:
