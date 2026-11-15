@@ -186,16 +186,16 @@ End
 val () = cv_auto_trans blueprint_test_offset_expr_def;
 
 Theorem blueprint_prefix_rejected[local]:
-  eval_pure_exprs cx st
-    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); off] =
-      SOME vs /\
+  eval_exprs cx
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); off] st =
+      (INL vs,st) /\
   ~blueprint_literal_offset cx F
     [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); off] /\
   blueprint_prefix_size F F vs st.accounts = NONE ==>
   eval_expr cx (blueprint_test_offset_expr off) st =
     (INR (Error (RuntimeError "create source has no deployable code")), st)
 Proof
-  strip_tac >> drule (CONJUNCT2 eval_pure_to_eval_mutual) >> strip_tac >>
+  strip_tac >>
   simp[blueprint_test_offset_expr_def, Once evaluate_def] >>
   simp[vyperStateTheory.bind_def, check_create_blueprint_def,
        vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_def,
@@ -231,12 +231,14 @@ Proof
 QED
 
 Theorem blueprint_runtime_pure_prefix[local]:
-  eval_pure_exprs blueprint_test_context (blueprint_runtime_state offset)
+  eval_exprs blueprint_test_context
     [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0);
-     Name (BaseT (UintT 256)) "offset"] =
-    SOME [BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)]
+     Name (BaseT (UintT 256)) "offset"] (blueprint_runtime_state offset) =
+    (INL [BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)],
+     blueprint_runtime_state offset)
 Proof
-  simp[eval_pure_expr_def, blueprint_test_address_def, evaluate_literal_def,
+  simp[evaluate_def, vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.ignore_bind_def, blueprint_test_address_def, evaluate_literal_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
        vyperStateTheory.read_place_def, vyperStateTheory.bind_def,
        vyperStateTheory.get_scopes_def, vyperStateTheory.lift_option_type_def,
@@ -404,7 +406,10 @@ Proof
   simp[blueprint_flag_runtime_mode] >>
   qexists_tac `[BytesV (REPLICATE 19 0w ++ [42w]); IntV 0;
                IntV (&(2 ** 256 - 1))]` >>
-  simp[blueprint_flag_runtime_mode, eval_pure_expr_def,
+  simp[blueprint_flag_runtime_mode, evaluate_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.lift_sum_def, vyperStateTheory.read_results_def,
        blueprint_flag_offset_def, blueprint_test_address_def, evaluate_literal_def,
        type_builtin_args_length_ok_def, evaluate_type_builtin_def,
        blueprint_flag_type_environment, SRULE [] blueprint_flag_conversion_values,
