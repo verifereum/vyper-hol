@@ -1,7 +1,7 @@
 (* Direct joint execution of a word-field assignment. *)
 Theory bodyFullAssignAttrStorage
 Ancestors
-  bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore
+  bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore augAssignFullStore
   bodyFullUnwrapWord bodySimFull gasOutcomeFullCompose gasOutcomeFull
   stmtSimAssignAttrStorage stmtSimAssignStorage stmtSimForced assignTuplePtrStorage
   stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
@@ -210,8 +210,55 @@ Resume compile_assign_attr_storage_full[continue]:
   `~z.vs_halted` by
     metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase,
               gas_marked_path_exec, gas_path_normal] >>
-  `~z.vs_call_ctx.cc_static /\ ~cx.txn.is_static /\ alloca_inv z` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+  `alloca_inv z` by fs[stmt_state_rel_def] >>
+  `eval_operand op z = SOME (typed_val_to_w256 ftv v)` by
+    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `eval_operand dst z = SOME (n2w slot + n2w off) /\
+   op_taint tu dst = {}` by
+    (gvs[ptr_val_ok_def] >>
+     qpat_assum `!x. not_fresh_at sn x ==> _`
+       (qspec_then `out` mp_tac) >>
+     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  Cases_on `cx.txn.is_static`
+  >- (`z.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `result = INR (Error (RuntimeError "write in static context")) /\
+       ff.gas_obs = [] /\
+       ff.storage_trace = mid.storage_trace ++ [StorageRoot tr slot (StructTV fs)]` by
+        (fs[write_storage_slot_eq] >> gvs[]) >>
+      qpat_x_assum `result = _` SUBST_ALL_TAC >>
+      irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+      qexistsl_tac [`Gu`, `ff`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] z))`,
+        `INR (Error (RuntimeError "write in static context"))`, `tu`] >>
+      simp[exit_result_def] >>
+      qx_gen_tac `H` >> strip_tac >>
+      `valid_horizon cx st0 H mid.storage_trace` by
+        metis_tac[valid_horizon_append] >>
+      `ghost_inv_at (DF H) lo d cenv cx mid Gu tu z` by metis_tac[] >>
+      `allocas_from lo z /\ op_taint tu op = {}` by
+        fs[ghost_inv_at_def, ptr_val_ok_def] >>
+      `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (z,Gu,tu) []
+         (Abort ExHalt_abort (halt_state (set_returndata [] z)),Gu,tu)` by
+        (irule storage_emit_static_origin_ptr >> simp[] >>
+         qexistsl_tac [`n2w slot + n2w off`, `dst`, `su`, `sb`, `tr`, `op`,
+           `typed_val_to_w256 ftv v`] >> simp[]) >>
+      conj_tac
+      >- (qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
+            (qspec_then `DF H` assume_tac) >>
+          qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
+            (qspec_then `H` mp_tac) >>
+          (impl_tac >- simp[]) >> strip_tac >>
+          qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK q,HG,tf)` mp_tac >>
+          qpat_assum `gas_origin_ptr_path _ (q,HG,tf) [] (OK z,Gu,tu)` mp_tac >>
+          qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
+          rpt (pop_assum kall_tac) >> rpt strip_tac >>
+          metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+      simp[stmt_exit_ptr_def, expr_exit_def]) >>
+  `~z.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `result = INL ()` by
     (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
      simp[write_storage_slot_eq]) >>
@@ -223,15 +270,6 @@ Resume compile_assign_attr_storage_full[continue]:
      simp[set_storage_def] >> strip_tac >> gvs[]) >>
   `ff with gas_obs := [] = ff` by
     simp[evaluation_state_component_equality] >>
-  `eval_operand op z = SOME (typed_val_to_w256 ftv v)` by
-    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  `eval_operand dst z = SOME (n2w slot + n2w off) /\
-   op_taint tu dst = {}` by
-    (gvs[ptr_val_ok_def] >>
-     qpat_assum `!x. not_fresh_at sn x ==> _`
-       (qspec_then `out` mp_tac) >>
-     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     metis_tac[]) >>
   qabbrev_tac `u = if tr then tstore (n2w slot + n2w off)
       (typed_val_to_w256 ftv v) z
     else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) z` >>

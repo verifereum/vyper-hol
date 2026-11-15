@@ -717,6 +717,7 @@ QED
 
 (* Complete the Assign store for both valid and invalid extended traces. *)
 Theorem body_assign_toplevel_word_full_residual[local]:
+  ~cx.txn.is_static /\
   get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -768,6 +769,7 @@ QED
 
 (* The normal RHS endpoint feeds the joint top-level store. *)
 Theorem body_assign_toplevel_word_full_after_rhs[local]:
+  ~cx.txn.is_static /\
   get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -859,6 +861,63 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+(* The rejected write still evaluates the RHS and records its root. *)
+Theorem body_assign_toplevel_word_full_static_rhs[local]:
+  cx.txn.is_static /\ get_module_code cx src = SOME tops /\
+  find_var_decl_by_name id tops = SOME (StorageVarDecl tr typ,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\ is_word_type (expr_type e) /\
+  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);op] sm = ((),sb) /\
+  fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (res,mid with gas_obs := tail)) /\
+  storage_trace_domain cx st0 mid.storage_trace /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s0,G0,tn0) marks (OK t,G1,tn1) /\
+    ?v. res = INL v /\
+      expr_post H ctx func cenv cx e es sa sm s0
+        (mid with gas_obs := []) v op t /\
+      t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      ghost_inv_at (DF H) lo d cenv cx (mid with gas_obs := []) G1 tn1 t /\
+      ptr_val_ok cx (expr_type e) v op G1 tn1 t) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
+    (es,s0,G0,tn0) Q
+    (\H res ee gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  simp[NoAsms] >> (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  `~t.vs_halted` by
+    (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
+     simp[fragExecTheory.exit_result_def]) >>
+  `?w. eval_operand op t = SOME w` by
+    (gvs[expr_post_def, expr_val_rel_def, post_value_type_word] >> metis_tac[]) >>
+  `op_taint tn1 op = {}` by fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
+  irule body_assign_toplevel_word_full_normal >>
+  qpat_assum `find_var_decl_by_name _ _ = _` (irule_at Any) >>
+  qpat_assum `lookup_var_slot_from_layout _ _ _ _ = _` (irule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`v`,`tn1`,`t`,`marks`,`G1`] >> simp[] >>
+  irule body_assign_toplevel_word_full_static_store >> simp[] >>
+  conj_tac
+  >- (qexists_tac `cenv` >> rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      gvs[expr_post_def, stmt_state_rel_start_gas_obs,
+          bodyPtrDefsTheory.ghost_inv_at_def]) >>
+  qexistsl_tac [`op`,`sm`,`sb`,`w`] >> simp[]
+QED
+
 (* Instantiate the RHS judgment in the paired Assign frame. *)
 Theorem body_assign_toplevel_word_full_framed[local]:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -937,6 +996,10 @@ Proof
     simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def] >>
     Cases_on `e'` >> simp[exprSimDefsTheory.expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>
+  Cases_on `cx.txn.is_static`
+  >- (irule body_assign_toplevel_word_full_static_rhs >> simp[Abbr `Q1`] >>
+      qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   irule body_assign_toplevel_word_full_after_rhs >>
   simp[cs_extends_def,Abbr `Q1`] >>
   reverse conj_tac >- metis_tac[] >>
