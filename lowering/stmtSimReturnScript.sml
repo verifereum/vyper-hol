@@ -1047,20 +1047,19 @@ Proof
   rpt gen_tac >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac
-  >~ [`allocas_below_fmp _`]
-  >- metis_tac[]
-  >~ [`halt_exit _ _ _ _ _`]
-  >- first_assum ACCEPT_TAC >>
-  first_x_assum (qspec_then `tail` mp_tac) >>
-  simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
-  disj2_tac >> gvs[intret_q_def, result_rel_def] >>
-  `return_unlock_state cenv' s = return_unlock_state cenv s` by
-    simp[return_unlock_state_def] >>
-  qexistsl_tac [`s`, `i`] >> simp[] >>
-  drule_all (Q.INST
-    [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
-    constructor_exit_state_rel) >> simp[]
+  simp[] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (gen_tac >>
+      first_x_assum (qspec_then `tail` mp_tac) >>
+      simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
+      disj2_tac >> gvs[intret_q_def, result_rel_def] >>
+      `return_unlock_state cenv' s = return_unlock_state cenv s` by
+        simp[return_unlock_state_def] >>
+      qexistsl_tac [`s`, `i`] >> simp[] >>
+      drule_all (Q.INST
+        [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
+        constructor_exit_state_rel) >> simp[]) >>
+  simp[]
 QED
 
 (* A word return releases the guard and then RETs the value and the PC. *)
@@ -1361,18 +1360,17 @@ Proof
   rpt gen_tac >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac
-  >~ [`allocas_below_fmp _`]
-  >- metis_tac[]
-  >~ [`halt_exit _ _ _ _ _`]
-  >- first_assum ACCEPT_TAC >>
-  first_x_assum (qspec_then `tail` mp_tac) >>
-  simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
-  disj2_tac >> gvs[intret_q_def, result_rel_def] >>
-  `return_unlock_state cenv' s = return_unlock_state cenv s` by
-    fs[return_unlock_state_def] >>
-  qexistsl_tac [`s`, `i`] >> simp[] >>
-  drule_all (Q.INST
-    [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
-    constructor_exit_state_rel) >> simp[]
+  simp[] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (gen_tac >>
+      first_x_assum (qspec_then `tail` mp_tac) >>
+      simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
+      disj2_tac >> gvs[intret_q_def, result_rel_def] >>
+      `return_unlock_state cenv' s = return_unlock_state cenv s` by
+        fs[return_unlock_state_def] >>
+      qexistsl_tac [`s`, `i`] >> simp[] >>
+      drule_all (Q.INST
+        [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
+        constructor_exit_state_rel) >> simp[]) >>
+  simp[]
 QED
