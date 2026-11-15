@@ -140,7 +140,7 @@ Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_initial >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
