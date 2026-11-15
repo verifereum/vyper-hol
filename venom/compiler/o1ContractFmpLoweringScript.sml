@@ -21,19 +21,24 @@ Ancestors
    fields, a raw variant of it; the stage simulation and the lowered
    memory phase hold there, the static layout's end is the input's, which
    FmpLowering keeps, and row 4's function rows carry make_ssa_input_ok. *)
-Theorem o1_static_stage_fmp_lowering:
+Theorem o1_static_stage_fmp_lowering_fixed:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
   o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
   o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
   code_layout_valid vs' ==>
-  ?vs. raw_variant fmp vs vs' /\
-    (o1_inv D 3 C vs /\ fmp_variant_room (SOME fmp) C' vs' ==>
-     ctx_sim_fuel I D C C' vs vs' /\ ctx_abort_rq D C C' vs vs' /\
+  raw_variant fmp
+    (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs' /\
+    (o1_inv D 3 C
+       (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
+     fmp_variant_room (SOME fmp) C' vs' ==>
+     ctx_sim_fuel I D C C'
+       (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs' /\
+     ctx_abort_rq D C C'
+       (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs' /\
      o1_inv D (SUC 3) C' vs')
 Proof
   strip_tac >>
-  qexists_tac `vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>` >>
   conj_tac
   >- simp[raw_variant_def, gas_variant_def,
           venom_state_component_equality] >>
@@ -51,6 +56,20 @@ Proof
      simp[fn_pass_tag_def, fn_pass_static_layout_effect_def]) >>
   simp[o1_inv_def, o1_lowered_inv_def] >>
   fs[o1_pre_def, EVERY_MEM, o1_fn_row_def]
+QED
+
+Theorem o1_static_stage_fmp_lowering:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+  code_layout_valid vs' ==>
+  ?vs. raw_variant fmp vs vs' /\
+    (o1_inv D 3 C vs /\ fmp_variant_room (SOME fmp) C' vs' ==>
+     ctx_sim_fuel I D C C' vs vs' /\ ctx_abort_rq D C C' vs vs' /\
+     o1_inv D (SUC 3) C' vs')
+Proof
+  metis_tac[o1_static_stage_fmp_lowering_fixed]
 QED
 
 Theorem fmp_lowering_run_contract_gas:
