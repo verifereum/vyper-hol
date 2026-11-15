@@ -52,8 +52,8 @@ Theorem trusted_path_pop_header:
       (mstore (base + k) (n2w (LENGTH vs - 1)) s).vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
-  drule read_popped_owner >> strip_tac >> gvs[] >>
-  drule mem_path_offset_append_decompose >> strip_tac >>
+  drule vyperStateTheory.read_popped_owner >> strip_tac >> gvs[] >>
+  drule loweringPostsTheory.mem_path_offset_append_decompose >> strip_tac >>
   qpat_assum `mem_path_offset tv prefix = SOME _`
     (mp_then Any strip_assume_tac mem_path_offset_sound) >> gvs[] >>
   first_x_assum drule_all >> strip_tac >>

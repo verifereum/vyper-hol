@@ -130,6 +130,32 @@ Proof
     (strip_assume_tac o MATCH_MP mem_path_offset_sound) >> decide_tac
 QED
 
+Theorem read_popped_snapshot_in_memory:
+  popped_kept cenv es0 es1 s0 s /\
+  local_region cenv es0.scopes s0 id b sz /\
+  lookup_scopes id es1.scopes = SOME entry /\
+  popped_history_typed entry.type entry.popped /\
+  read_popped entry.type path entry.popped = SOME v /\
+  mem_path_offset entry.type path = SOME (k,ctv) /\
+  (!old prefix owner.
+     lookup_scopes id es0.scopes = SOME old /\
+     MEM (prefix,owner) entry.popped /\
+     MEM (prefix,owner) old.popped ==>
+     snapshot_in old.type b sz (prefix,owner) s0.vs_memory) ==>
+  val_in_memory ctv v (b + k) s.vs_memory /\
+  k + type_memory_size ctv <= sz
+Proof
+  strip_tac >>
+  drule read_popped_owner >> strip_tac >> gvs[] >>
+  drule mem_path_offset_append_decompose >> strip_tac >>
+  qpat_assum `mem_path_offset entry.type prefix = SOME _`
+    (mp_then Any strip_assume_tac mem_path_offset_sound) >> gvs[] >>
+  `well_formed_type_value ptv /\ value_has_type ptv owner` by
+    (fs[vyperPlaceInvariantsTheory.popped_history_typed_def] >>
+     res_tac >> gvs[]) >>
+  drule_all popped_snapshot_path_in_memory >> simp[ADD_ASSOC]
+QED
+
 Theorem place_ptr_rel_memory_current:
   !ctx func cenv cx env es s id path entry v w loc ty tv.
     expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\

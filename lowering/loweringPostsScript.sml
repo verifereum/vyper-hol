@@ -90,6 +90,19 @@ Definition mem_path_offset_def:
         OPTION_MAP (\(k',ptv). (k + k',ptv)) (mem_path_offset etv path)
 End
 
+Theorem mem_path_offset_append_decompose:
+  !prefix tv suffix k ctv.
+    mem_path_offset tv (prefix ++ suffix) = SOME (k,ctv) ==>
+    ?d ptv r.
+      mem_path_offset tv prefix = SOME (d,ptv) /\
+      mem_path_offset ptv suffix = SOME (r,ctv) /\ k = d + r
+Proof
+  Induct >> simp[mem_path_offset_def] >> rpt gen_tac >>
+  strip_tac >> gvs[AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  first_x_assum drule >> strip_tac >>
+  simp[mem_path_offset_def] >> metis_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
 (* The cenv twin of mem_step_offset and mem_path_offset, over declared
    types and read off the compile environment alone: a field sits at
    struct_field_offset of its struct's ce_struct_fields entry, as

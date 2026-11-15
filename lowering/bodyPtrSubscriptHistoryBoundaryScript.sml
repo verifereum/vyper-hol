@@ -4,34 +4,6 @@ Ancestors
   bodyPtrSubscriptCurrentMemory vyperState rich_list loweringPosts
   exprSimProps pair arithmetic
 
-Theorem read_popped_owner:
-  !history tv path v.
-    read_popped tv path history = SOME v ==>
-    ?prefix owner ptv suffix.
-      MEM (prefix,owner) history /\ path = prefix ++ suffix /\
-      subscripts_type tv prefix = SOME ptv /\
-      evaluate_subscripts ptv owner suffix = INL v
-Proof
-  Induct >> simp[read_popped_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[read_popped_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  gvs[IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >> metis_tac[]
-QED
-
-Theorem mem_path_offset_append_decompose:
-  !prefix tv suffix k ctv.
-    mem_path_offset tv (prefix ++ suffix) = SOME (k,ctv) ==>
-    ?d ptv r.
-      mem_path_offset tv prefix = SOME (d,ptv) /\
-      mem_path_offset ptv suffix = SOME (r,ctv) /\ k = d + r
-Proof
-  Induct >> simp[mem_path_offset_def] >> rpt gen_tac >>
-  strip_tac >> gvs[AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
-  first_x_assum drule >> strip_tac >>
-  simp[mem_path_offset_def] >> metis_tac[arithmeticTheory.ADD_ASSOC]
-QED
-
 (* This sufficient owner premise is not a consequence of ghost_inv. *)
 Theorem read_popped_in_memory:
   !tv path history v k ctv base mem.
