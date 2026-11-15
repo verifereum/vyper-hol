@@ -290,9 +290,20 @@ Theorem external_entry_joint:
 Proof
   rpt gen_tac >> strip_tac >>
   `module_consts_env tops [] = []` by
-    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
-     fs[supported_program_def, supported_declaration_headers_def]) >>
+    (irule (Q.SPECL [`tops`,`tops`,`[]`]
+       supportedDeclsTheory.supported_headers_module_consts_env) >>
+     fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def]) >>
   drule_all external_entry_subst_consts_joint >>
   simp[constSubstTheory.subst_consts_fn_empty,
-       constSubstTheory.subst_consts_stmt_empty]
+       constSubstTheory.subst_consts_stmt_empty] >>
+  disch_then (qx_choosel_then
+    [`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,`iv`,`rt`,
+     `st`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`] strip_assume_tac) >>
+  qexistsl_tac
+    [`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,`iv`,`rt`,
+     `st`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`] >>
+  simp[] >> conj_tac >-
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[package_external_fn_def]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
