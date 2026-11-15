@@ -818,17 +818,6 @@ Proof
        same_blocks_def, mk_inst_def, is_terminator_def]
 QED
 
-Theorem ecrecover_run_frag[local]:
-  compile_ecrecover h v r sig sa = (op,sb) /\
-  (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-       Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-  frag_exec ctx sa sb P Q R
-Proof
-  strip_tac >> drule ecrecover_code_shape >> strip_tac >>
-  irule frag_exec_run_inst_seq >>
-  gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[]
-QED
-
 (* A scratch write frames every earlier allocation, including reused ones. *)
 Theorem scratch_mstore_frame:
   (!aid b sz. aid < sa.cs_next_id /\
