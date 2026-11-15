@@ -1222,7 +1222,9 @@ Theorem array_round_body_prepare:
           :: es.scopes) (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) cx st0 source (ei,s2)
       (\H. stmt_post H ctx func cx lctx bc bc' sb0 sb1 ei s2)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r) /\
     (!caller. caller.cs_next_id <= sa.cs_next_id /\
       caller.cs_next_id <= ainst.inst_id ==>
       alloca_frame cenv es caller s bc
@@ -1675,7 +1677,9 @@ Theorem array_round_prepare:
     gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_stmts cx stmts) (entry,s2)
       (\H. stmt_post H ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1
               entry s2)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r) /\
     alloca_frame cenv es caller cc bc entry s2
 Proof
   strip_tac >>
@@ -1799,7 +1803,8 @@ Theorem array_for_round_counted:
         p dst sz ainst cond_lbl st (SUC k) ee t) /\
       alloca_frame cenv es caller cc cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >>
   `gas_admissible (eval_stmts cx stmts)
@@ -1878,7 +1883,8 @@ Resume array_for_round_counted[exit_finish]:
   Cases_on `res` >- gvs[] >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >> disj2_tac >>
-  gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def]
+  gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def,
+      exprSimDefsTheory.halt_exit_def, halt_rel_def, accounts_rel_def]
 QED
 
 Resume array_for_round_counted[normal_finish]:
@@ -2025,7 +2031,8 @@ Theorem array_for_loop_counted:
       array_caller_frame caller old t /\
       alloca_frame cenv origin_es caller old cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >>
   qabbrev_tac `Inv = \(H:(bool # bytes32 # type_value) list # num list) j ei s.
@@ -2038,7 +2045,8 @@ Proof
     array_caller_frame caller old s /\
     alloca_frame cenv origin_es caller old cenv ei s` >>
   qabbrev_tac `R = \(H:(bool # bytes32 # type_value) list # num list) ex ee r.
-    !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r` >>
+    (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+    halt_exit H cx ee (INR ex) r` >>
   `(!j ei s. j < LENGTH vs /\
       (!H. valid_horizon cx st0 H ei.storage_trace ==> Inv H j ei s) /\
       gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
@@ -2057,7 +2065,7 @@ Proof
     (conj_tac >- suspend "round" >> suspend "last") >>
   drule eval_for_value_rounds >>
   disch_then (qspecl_then [`k`, `es`, `cc`] mp_tac) >>
-  simp[Abbr `Inv`, Abbr `Done`, Abbr `R`]
+  simp[Abbr `Inv`, Abbr `Done`, Abbr `R`, exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume array_for_loop_counted[last]:
