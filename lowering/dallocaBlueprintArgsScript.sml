@@ -112,6 +112,40 @@ Proof
   asm_simp_tac bool_ss [eval_operand_def, w2n_n2w, arithmeticTheory.LESS_MOD]
 QED
 
+(* Equal representative bytes retain the canonical encoder result. *)
+Theorem create_blueprint_encoded_args_representative_prefix:
+  compile_abi_encode_to_buf dst src
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+    c2 = (args_len,sa) /\
+  abi_encoder_window_pre ctx func c2 sa dst src
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+    ct rv source_base source_cap dest_base s_tup /\
+  enc ct rv = enc (vyper_to_abi_type tenv
+    (TupleT (MAP (lowered_value_type ce) args))) av /\
+  sfields_tenv_consistent ce.ce_struct_fields tenv /\
+  evaluate_type tenv (TupleT (MAP (lowered_value_type ce) args)) = SOME tv /\
+  value_has_type tv v /\
+  vyper_to_abi tenv (TupleT (MAP (lowered_value_type ce) args)) v = SOME av /\
+  abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) < 2 ** 64 /\
+  compile_create_blueprint_check target offset ca = (Var code_name,cb) /\
+  compile_alloc_buffer capacity cb = (buf,c1) /\
+  compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
+  (!ce' ty e st. ci_mono st (SND (cfn ce' ty e st))) /\
+  lookup_var code_name s_tup = SOME captured ==>
+  ?s2.
+    window_strong_result ctx func c2 sa args_len
+      (vyper_to_abi_type tenv (TupleT (MAP (lowered_value_type ce) args))) av
+      dest_base s_tup s2 /\
+    eval_operand (Var code_name) s2 = SOME captured /\
+    eval_operand args_len s2 =
+      SOME (n2w (LENGTH (enc (vyper_to_abi_type tenv
+        (TupleT (MAP (lowered_value_type ce) args))) av))) /\
+    w2n (n2w (LENGTH (enc (vyper_to_abi_type tenv
+      (TupleT (MAP (lowered_value_type ce) args))) av)) : bytes32) < 2 ** 64
+Proof
+  FAIL_TAC "representative window transport proof pending"
+QED
+
 Theorem create_blueprint_raw_args_prefix:
   compile_create_blueprint_check target offset ca = (code_op,cb) /\
   run_inst_seq (emitted_insts ca cb) s0 = OK s1 /\
