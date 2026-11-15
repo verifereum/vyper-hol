@@ -98,6 +98,9 @@ Proof
     fs[decode_static_frame_def, venom_state_component_equality] >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
    t.vs_fmp = s.vs_fmp` by fs[venom_state_component_equality] >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
   `decode_site_resources ctx fn t` by metis_tac[decode_site_resources_fields] >>
   `decode_memory_frame writes s t` by metis_tac[abi_word_frame_memory] >>
   `decode_upper_frame s t` by
