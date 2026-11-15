@@ -1,6 +1,7 @@
 (* Rollup theory for Vyper->Venom lowering + e2e correctness *)
 Theory vyperLoweringHol
 Ancestors
+  e2eLifecycle
   e2eCodeFrame
   (* definitions *)
   moduleLowering
