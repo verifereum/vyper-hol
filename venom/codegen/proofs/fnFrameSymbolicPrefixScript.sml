@@ -357,6 +357,59 @@ Proof
   fs[fn_entry_state_rel_def] >> metis_tac[]
 QED
 
+Theorem body_plan_symbolic_call_prepare:
+  body_plan_inv rpolicy unit cpl prog unit.cu_context
+    (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    i fn r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+    bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+    rest_ops k ps pc0 s ast ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  generate_inst_plan liveness dfg cfg fn inst
+    (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+    (k + 1 < LENGTH bb.bb_instructions /\
+     is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+    bb.bb_label ps = SOME (ops, ps') /\
+  emit_input_plan INVOKE (compute_operands inst)
+    (live_vars_at liveness bb.bb_label (k + 1)) ps = (iops, prepared) /\
+  reorder_plan dfg (compute_operands inst) prepared = (rops, arranged) /\
+  ops = iops ++ rops ++ post /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  asm_static_wf prog /\
+  sym_frame_inv prog env unit.cu_context cpl fn ret srest labs0 ps ast ss /\
+  asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    prog (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops))) ast = AsmOK mid ==>
+  ?sms. sym_steps prog env (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops))) ss = SymOK sms /\
+    sym_frame_inv prog env unit.cu_context cpl fn ret srest labs0 arranged mid sms
+Proof
+  rpt strip_tac >>
+  drule body_plan_inv_facts >> strip_tac >>
+  drule_all body_plan_inv_inst >> strip_tac >>
+  drule_all fnBlockBodyTheory.body_operands_le_16 >> strip_tac >>
+  drule_all body_plan_inv_static >> strip_tac >>
+  drule_all body_plan_inv_step >> strip_tac >> fs[] >>
+  `unit_shape_ok unit /\ dfg = dfg_build_function fn` by
+    gvs[body_plan_inv_def] >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_compute_operands >> strip_tac >>
+  gvs[] >>
+  fs[EVERY_APPEND, codegen_ready_fn_def,
+     fnPlanLineageInventoryTheory.stack_get_depth_is_some,
+     finite_mapTheory.FLOOKUP_DEF] >>
+  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base` by
+    metis_tac[allocMonoTheory.emit_input_plan_spill_base,
+              allocMonoTheory.reorder_plan_spill_base] >>
+  `fn_shape_ok fn` by metis_tac[unit_shape_ok_def, EVERY_MEM] >>
+  `asm_block_at prog ast.as_pc (execute_plan cpl.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog ast.as_pc _` mp_tac >>
+     simp[execute_plan_def, stackOpSimTheory.asm_block_at_append]) >>
+  irule sym_invoke_selected_frame_prefix >> simp[EVERY_APPEND] >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem active_frame_symbolic_call_progress:
   joint_config_reachable vs0 unit.cu_context
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
