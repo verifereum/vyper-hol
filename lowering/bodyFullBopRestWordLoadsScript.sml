@@ -2896,3 +2896,138 @@ Resume rest_word_membership_header_joint_const[post]:
 QED
 
 Finalise rest_word_membership_header_joint_const
+
+
+Theorem rest_word_membership_runtime_address_operand_joint_bounded_const:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load F imm loc) (SOME cap) is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  product = "%" ++ toString (sa.cs_next_var+5) /\
+  delta = (if 0 < skip then 1 else 0) /\
+  offset = "%" ++ toString (sa.cs_next_var+5+delta) /\
+  dst = "%" ++ toString (sa.cs_next_var+6+delta) /\
+  code = [mk_inst (sa.cs_next_id+9) MUL
+      [Var ("%" ++ toString (sa.cs_next_var+1));Lit (n2w stride)] [product]] ++
+    (if 0 < skip then [mk_inst (sa.cs_next_id+10) ADD
+      [Lit (n2w skip);Var product] [offset]] else []) ++
+    [mk_inst (sa.cs_next_id+10+delta) ADD [arr;Var offset] [dst]] /\
+  A = {"%" ++ toString (sa.cs_next_var+1)} UNION
+    (case arr of Var x => {x} | _ => {}) /\
+  (!x. arr = Var x ==> not_fresh_at sa x) /\
+  (!H:'h. guard H ==>
+    ~s.vs_halted /\ allocas_from lo s /\
+    membership_loop_frame sa G0 T0 s0 Gs Ts s /\
+    membership_loop_registers sa i r Gs Ts s /\
+    s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    s.vs_inst_idx = 0 /\ eval_operand arr s0 = SOME bw /\
+    op_taint T0 arr = {}) ==>
+  ?t Gt Tt. !H:'h. guard H ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
+      (s,Gs,Ts) [] (OK t,Gt,Tt) /\
+    membership_loop_frame sa G0 T0 s0 Gt Tt t /\
+    membership_loop_registers sa i r Gt Tt t /\
+    ~t.vs_halted /\ allocas_from lo t /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 2+delta /\
+    lookup_var dst t = SOME (bw+n2w (skip+stride*i)) /\
+    FLOOKUP Gt dst = op_prov G0 arr /\ op_taint Tt (Var dst) = {}
+Proof
+  strip_tac >>
+  drule rest_word_membership_runtime_prefix_operational_bounded >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `code = _`)) >> simp[] >> strip_tac >>
+  qabbrev_tac `ins1 = mk_inst (sa.cs_next_id+9) MUL
+    [Var ("%" ++ toString (sa.cs_next_var+1));Lit (n2w stride)] [product]` >>
+  qabbrev_tac `u1 = update_var product (n2w i * n2w stride) s` >>
+  qabbrev_tac `g1 = step_prov PG Gs ins1 u1` >>
+  qabbrev_tac `t1 = step_taint ins1 s u1 Ts` >>
+  qabbrev_tac `v1 = u1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `ins2 = mk_inst (sa.cs_next_id+10) ADD
+    [Lit (n2w skip);Var product] [offset]` >>
+  qabbrev_tac `u2 = update_var offset (n2w skip + n2w i * n2w stride) v1` >>
+  qabbrev_tac `g2 = if 0 < skip then step_prov PG g1 ins2 u2 else g1` >>
+  qabbrev_tac `t2 = if 0 < skip then step_taint ins2 v1 u2 t1 else t1` >>
+  qabbrev_tac `v2 = if 0 < skip then
+    u2 with vs_inst_idx := SUC v1.vs_inst_idx else v1` >>
+  qabbrev_tac `last = mk_inst (sa.cs_next_id+10+delta) ADD [arr;Var offset] [dst]` >>
+  qabbrev_tac `u3 = update_var dst (bw+n2w (skip+stride*i)) v2` >>
+  qabbrev_tac `g3 = step_prov PG g2 last u3` >>
+  qabbrev_tac `t3 = step_taint last v2 u3 t2` >>
+  qexistsl_tac [`case run_inst_seq code s of
+    OK u => u with vs_inst_idx := 2+delta | _ => s`, `g3`, `t3`] >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. guard H ==> _` (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  `?u gf tf. run_inst_seq code s = OK u /\
+    lookup_var dst u = SOME (bw+n2w (skip+stride*i)) /\
+    inst_seq_ptr (DF H) 0 ctx fn PG Gs Ts code s gf tf /\
+    membership_loop_frame sa G0 T0 s0 gf tf u /\
+    membership_loop_registers sa i r gf tf u /\
+    FLOOKUP gf dst = op_prov G0 arr /\ op_taint tf (Var dst) = {}` by
+    (irule rest_word_membership_runtime_prefix_checked_operand_bounded >>
+     simp[Abbr `ins1`, Abbr `ins2`, Abbr `last`] >>
+     Cases_on `0 < skip` >> gvs[] >> metis_tac[]) >>
+  `eval_operand arr s = SOME bw` by
+    (qpat_assum `membership_loop_frame _ _ _ _ Gs Ts s`
+       (mp_then Any mp_tac membership_loop_frame_operand) >> simp[]) >>
+  `lookup_var ("%" ++ toString (sa.cs_next_var+1)) s = SOME (n2w i)` by
+    gvs[membership_loop_registers_def] >>
+  `gf = g3 /\ tf = t3` by suspend "ghosts" >>
+  qpat_x_assum `gf = g3` SUBST_ALL_TAC >>
+  qpat_x_assum `tf = t3` SUBST_ALL_TAC >>
+  qunabbrev_tac `ins1` >> qunabbrev_tac `ins2` >> qunabbrev_tac `last` >>
+  `?v. run_inst_seq code s = OK v /\ (v with vs_vars := s.vs_vars) = s` by
+    (qpat_x_assum `!s i bw. _` (qspecl_then [`s`, `i`, `bw`] mp_tac) >>
+     simp[] >> strip_tac >> Cases_on `0 < skip` >> gvs[]) >>
+  `run_inst_seq_mem_ok code s` by
+    (irule run_inst_seq_mem_ok_every >> Cases_on `0 < skip` >>
+     simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+       inst_dload_in_section_def, mk_inst_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def,
+       is_terminator_def]) >>
+  `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[] >> Cases_on `bb.bb_instructions` >> gvs[]) >>
+  drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
+    (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
+  disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `0 < skip` >> gvs[] >>
+  `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `u with vs_vars := _ = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  simp[lookup_var_def, allocas_from_def] >>
+  conj_tac
+  >- (gvs[membership_loop_frame_def, venom_state_component_equality,
+         lookup_var_def] >> metis_tac[]) >>
+  gvs[membership_loop_registers_def, lookup_var_def, op_taint_def,
+      op_prov_def, allocas_from_def] >>
+  gvs[] >>
+  gvs[membership_loop_frame_def, venom_state_component_equality,
+      lookup_var_def] >> gvs[] >> metis_tac[]
+QED
+
+Resume rest_word_membership_runtime_address_operand_joint_bounded_const[ghosts]:
+  `!k w v. sa.cs_next_var <= k ==> eval_operand arr
+     (update_var (STRING #"%" (toString k)) w v) = eval_operand arr v` by
+    (rpt strip_tac >>
+     irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
+     qexists_tac `sa` >> simp[]) >>
+  `eval_operand arr u1 = SOME bw` by simp[Abbr `u1`] >>
+  `eval_operand arr v1 = SOME bw` by simp[Abbr `v1`] >>
+  `eval_operand arr u2 = SOME bw` by simp[Abbr `u2`] >>
+  `eval_operand arr v2 = SOME bw` by
+    (Cases_on `0 < skip` >> simp[Abbr `v2`]) >>
+  fs[lookup_var_def] >>
+  Cases_on `0 < skip` >>
+  fs[Abbr `u1`, Abbr `u2`, Abbr `v1`, Abbr `v2`, update_var_def] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  unabbrev_all_tac >> fs[] >>
+  simp[inst_seq_ptr_def,
+    step_inst_base_opcode_eqs, exec_pure2_def, eval_operands_def,
+    eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+    GSYM word_add_n2w, GSYM word_mul_n2w, arithmeticTheory.MULT_COMM] >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `step_taint _ _ _ ts` >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, mk_inst_def, new_site_bytes_def, step_writes_def,
+       written_taint_def, source_memory_write_ranges_def]
+QED
+
+Finalise rest_word_membership_runtime_address_operand_joint_bounded_const
