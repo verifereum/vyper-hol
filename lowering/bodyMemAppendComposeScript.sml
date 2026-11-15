@@ -179,11 +179,12 @@ Resume compile_append_storage_word_stmt_frag_mem[operand]:
       irule return_buf_frame_frame >>
       qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
   pop_assum strip_assume_tac >>
+  `res <> INR HaltException` by metis_tac[append_storage_place_not_halt] >>
   qexistsl_tac [`res`, `ee'`, `r`] >>
   conj_tac >- metis_tac[append_storage_place_gas_obs] >>
   conj_tac >- simp[] >>
   disj2_tac >> simp[] >> rpt strip_tac >>
-  fs[stmt_exit_def]
+  fs[stmt_exit_def, halt_exit_def]
 QED
 
 Finalise compile_append_storage_word_stmt_frag_mem

@@ -172,9 +172,11 @@ Resume compile_append_storage_aggregate_stmt_frag_mem[value]:
   disch_then DISJ_CASES_TAC
   >- suspend "success" >>
   pop_assum strip_assume_tac >>
+  `res <> INR HaltException` by metis_tac[append_storage_place_not_halt] >>
   qexistsl_tac [`res`, `ee'`, `r`] >>
   conj_tac >- metis_tac[append_storage_place_gas_obs] >>
-  conj_tac >- simp[] >> disj2_tac >> simp[] >> rpt strip_tac >> fs[stmt_exit_def]
+  conj_tac >- simp[] >> disj2_tac >> simp[] >> rpt strip_tac >>
+  fs[stmt_exit_def, halt_exit_def]
 QED
 
 Resume compile_append_storage_aggregate_stmt_frag_mem[success]:

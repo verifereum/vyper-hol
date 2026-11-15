@@ -560,6 +560,16 @@ Proof
   Cases_on `b` >> simp[set_storage_def]
 QED
 
+Theorem append_storage_place_not_halt:
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v st =
+    (res, st') ==> res <> INR HaltException
+Proof
+  simp[Once append_place_def, get_storage_backend_eq, bind_def, LET_THM,
+       ignore_bind_def, check_def, assert_def, return_def, raise_def,
+       write_storage_slot_eq] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+QED
+
 (* Appending to a storage array reads no gas. *)
 Theorem append_storage_place_gas_obs:
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v st =
@@ -1033,7 +1043,7 @@ Resume compile_append_storage_word_stmt_frag[operand]:
         (INR (Error (RuntimeError m))) es_end (Abort a ta)` by
         simp[gas_marked_exec_def] >>
       qexistsl_tac [`INR (Error (RuntimeError m))`, `es_end`, `Abort a ta`] >>
-      simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
+      simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def] >>
       irule (SIMP_RULE std_ss [APPEND_NIL]
         (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
       qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
@@ -1071,7 +1081,7 @@ Resume compile_append_storage_word_stmt_frag[full]:
   pop_assum SUBST_ALL_TAC >>
   qexistsl_tac [`INR (Error (RuntimeError "append full storage array"))`, `ee1`,
                 `Abort a ta`] >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def] >> gvs[]
+  simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def] >> gvs[]
 QED
 
 Resume compile_append_storage_word_stmt_frag[stored]:
@@ -1604,7 +1614,7 @@ Resume compile_append_storage_aggregate_stmt_frag[static]:
   `gas_marked_path F ctx func t 0 r` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>
   qexistsl_tac [`INR (Error (RuntimeError m))`, `es_end`, `r`] >>
-  simp[stmt_exit_def]
+  simp[stmt_exit_def, halt_exit_def]
 QED
 
 Resume compile_append_storage_aggregate_stmt_frag[stored]:
@@ -1704,7 +1714,7 @@ Resume compile_append_storage_aggregate_stmt_frag[full]:
   `res1 = INR (Error (RuntimeError "append full storage array")) /\ ee1 = es_end` by
     metis_tac[append_storage_full] >>
   qexistsl_tac [`res1`, `ee1`, `Abort Revert_abort fin`] >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def]
+  simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def]
 QED
 
 Finalise compile_append_storage_aggregate_stmt_frag
