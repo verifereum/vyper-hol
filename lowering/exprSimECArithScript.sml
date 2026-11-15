@@ -1530,22 +1530,6 @@ Proof
   Cases_on `call_outcome_success h` >> simp[]
 QED
 
-Theorem ec_two_args_source[local]:
-  (bt = ECAdd \/ bt = ECMul) /\
-  eval_expr cx (Builtin ann bt [a;b]) es = (res,es') /\
-  (do r <- eval_expr cx a; read_result cx r od) es = (r1,es1) /\
-  (do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2) ==>
-  (!ex. r1 = INR ex ==> res = INR ex) /\
-  (!v ex. r1 = INL v /\ r2 = INR ex ==> res = INR ex) /\
-  (!v1 v2. r1 = INL v1 /\ r2 = INL v2 ==>
-    ec_source_tail cx ann bt [expr_type a;expr_type b] [v1;v2] es2 = (res,es'))
-Proof
-  strip_tac >> drule_at Any eval_expr_ec_cases >> simp[] >> strip_tac >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >> gvs[] >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >>
-  gvs[exprSimWordArgsTheory.eval_exprs_nil]
-QED
-
 Theorem ec_suffix_failure[local]:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit 64w];
@@ -2279,14 +2263,6 @@ Proof
   first_x_assum (qspec_then `x` mp_tac) >>
   rewrite_tac[storage_trace_frame_def] >>
   disch_then (qspecl_then [`st`, `observations`] ACCEPT_TAC)
-QED
-
-Theorem ec_source_tail_scopes[local]:
-  (bt = ECAdd \/ bt = ECMul) /\
-  ec_source_tail cx ann bt tys vs es = (r,es') ==>
-  es'.scopes = es.scopes
-Proof
-  rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()]
 QED
 
 (* Both operands as counted outcomes, then the point suffix as an actual
