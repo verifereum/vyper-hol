@@ -112,6 +112,19 @@ Proof
   Cases_on `rr` >> simp[]
 QED
 
+Theorem eval_exprs_append_action:
+  !xs ys cx. eval_exprs cx (xs ++ ys) =
+    do vs <- eval_exprs cx xs; ws <- eval_exprs cx ys; return (vs ++ ws) od
+Proof
+  Induct_on `xs`
+  >- (simp[Once evaluate_def, FUN_EQ_THM, bind_def, return_def] >>
+      rpt gen_tac >> Cases_on `eval_exprs cx ys x` >>
+      Cases_on `q` >> simp[]) >>
+  rpt gen_tac >> simp[eval_exprs_cons_action, bind_assoc] >>
+  simp[FUN_EQ_THM, bind_def, return_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> simp[]) >> Cases_on `v` >> simp[]
+QED
+
 Theorem eval_expr_builtin_action:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
