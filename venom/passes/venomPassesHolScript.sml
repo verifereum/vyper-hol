@@ -49,6 +49,7 @@ Ancestors
   venomPipelineRunnerProps venomPipelineData
   (* dead function traversal *)
   dftCorrectnessFinal
+  dftGasPrefixProvider
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
