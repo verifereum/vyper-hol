@@ -417,7 +417,8 @@ Proof
   TRY (qpat_assum `ghost_inv_at (DF H) lo d cenv cx ee G2 tn2 u` (irule_at Any)) >>
   TRY (simp[contextTheory.vv_operand_def, contextTheory.vv_location_def]) >>
   TRY (qpat_assum `stmt_state_rel H ctx func cenv cx ee u` (irule_at Any)) >>
-  TRY (qexists_tac `raw'` >> simp[] >> NO_TAC)
+  TRY (rename1 `vv_at cenv cx _ sa sm mid saved_raw _ t` >>
+       qexists_tac `saved_raw` >> simp[] >> NO_TAC)
   >>~- ([`?ctx' H0. dead_lo_ok H0 (DF H) lo cenv cx /\ stmt_state_rel H0 ctx' func cenv cx ee u`],
      qexists_tac `ctx` >> qexists_tac `H` >>
      conj_tac >- (qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H` ACCEPT_TAC)) >>
@@ -456,5 +457,3 @@ Proof
   qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H` mp_tac) >>
   metis_tac[]
 QED
-
-
