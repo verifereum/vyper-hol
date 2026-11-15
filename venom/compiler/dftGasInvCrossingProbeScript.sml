@@ -2,7 +2,7 @@ Theory dftGasInvCrossingProbe
 Ancestors
   dftRunRel dftScheduleOrder venomEffects venomInst dftGasInvCallBoundary
   unitShapeDefs unitMemInv venomWf dftGasOracleDefs venomExecSemantics
-  contextCodegenRel codegenRel list
+  contextCodegenRel codegenRel venomExecProofs venomState list pred_set
 
 (* Syntactic cases, not the state-dependent nonempty-range predicate. *)
 Definition inv_memory_observation_def:
@@ -138,7 +138,7 @@ Theorem inv_static_class_no_abort:
 Proof
   simp[] >> rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_write2_def]
+  gvs[Once step_inst_base_def, AllCaseEqs(), exec_write2_def]
 QED
 
 Theorem inv_oracle_static_class_total:
@@ -171,6 +171,53 @@ Proof
        source_memory_write_ranges_def]
 QED
 
+Theorem inv_ev_step_static_class_nonstatic:
+  ev_step orc p d fuel ctx inst s = OK t /\
+  MEM inst.inst_opcode [SSTORE; TSTORE; LOG] ==>
+  ~s.vs_call_ctx.cc_static
+Proof
+  strip_tac >>
+  gvs[ev_step_def, step_inst_non_invoke] >>
+  gvs[Once step_inst_base_def, AllCaseEqs(), exec_write2_def,
+      eval_operands_def, eval_operand_def] >>
+  drule log_operands_defined >> simp[]
+QED
+
+Theorem inv_crossed_predecessor_total_core:
+  inst_wf x /\ inst_shape_ok x /\
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  inv_memory_observation y.inst_opcode /\ ~dft_must_order x y /\
+  (~s.vs_call_ctx.cc_static \/ ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]) /\
+  (!op. MEM op x.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
+  ?t. ev_step orc p d fuel ctx x s = OK t
+Proof
+  strip_tac >>
+  (drule inv_crossing_candidate_necessary >> strip_tac >>
+   drule_all inv_fallible_crossing_classification >> strip_tac
+   >- (Cases_on `x.inst_opcode = ALLOCA`
+       >- metis_tac[inv_oracle_alloca_total] >>
+       irule inv_oracle_nofail_total >> simp[]) >>
+   `~s.vs_call_ctx.cc_static` by metis_tac[] >>
+   irule inv_oracle_static_class_total >> simp[])
+QED
+
+(* INVOKE's all-effects barrier excludes the three static-write fault cases. *)
+Theorem inv_crossed_predecessor_total_observation:
+  inst_wf x /\ inst_shape_ok x /\
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  inv_memory_observation y.inst_opcode /\ ~dft_must_order x y /\
+  (~s.vs_call_ctx.cc_static \/ y.inst_opcode = INVOKE) /\
+  (!op. MEM op x.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
+  ?t. ev_step orc p d fuel ctx x s = OK t
+Proof
+  strip_tac >>
+  `~s.vs_call_ctx.cc_static \/ ~MEM x.inst_opcode [SSTORE; TSTORE; LOG]` by
+    (Cases_on `s.vs_call_ctx.cc_static` >> fs[] >> rpt strip_tac >>
+     gvs[dft_must_order_def, read_effects_def, write_effects_def,
+         all_effects_def]) >>
+  metis_tac[inv_crossed_predecessor_total_core]
+QED
+
 Theorem inv_crossed_predecessor_total:
   inst_wf x /\ inst_shape_ok x /\
   ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
@@ -179,11 +226,5 @@ Theorem inv_crossed_predecessor_total:
   (!op. MEM op x.inst_operands ==> ?v. eval_operand op s = SOME v) ==>
   ?t. ev_step orc p d fuel ctx x s = OK t
 Proof
-  strip_tac >>
-  drule inv_crossing_candidate_necessary >> strip_tac >>
-  drule_all inv_fallible_crossing_classification >> strip_tac
-  >- (Cases_on `x.inst_opcode = ALLOCA`
-      >- metis_tac[inv_oracle_alloca_total] >>
-      irule inv_oracle_nofail_total >> simp[]) >>
-  irule inv_oracle_static_class_total >> simp[]
+  metis_tac[inv_crossed_predecessor_total_observation]
 QED
