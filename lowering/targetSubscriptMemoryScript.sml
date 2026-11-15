@@ -122,7 +122,8 @@ Proof
      disch_then (qspecl_then [`id`,`b`,`sz`,`entry`,`(prefix,owner)`] mp_tac) >>
      simp[]) >>
   `d + type_memory_size ptv <= sz /\
-   val_in_memory ptv owner (b + d) s.vs_memory` by fs[snapshot_in_def] >>
+   val_in_memory ptv owner (b + d) s.vs_memory` by
+    (fs[snapshot_in_def] >> gvs[]) >>
   conj_tac
   >- (drule_all mem_path_offset_current_value >> simp[ADD_ASSOC]) >>
   qpat_x_assum `mem_path_offset ptv suffix = SOME (k,ctv)`
