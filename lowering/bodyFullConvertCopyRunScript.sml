@@ -189,12 +189,13 @@ Theorem copy_mcopy_path[local]:
   ptr_covers G tn dst s k /\ ptr_covers G tn src s k /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   w2n b+k <= s.vs_alloca_next /\ w2n a+k <= s.vs_alloca_next ==>
-  let u = mcopy (w2n b) (w2n a) k s;
-      ins = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w k)] [] in
-  run_inst_seq (emitted_insts sa sb) s = OK u /\
+  run_inst_seq (emitted_insts sa sb) s = OK (mcopy (w2n b) (w2n a) k s) /\
   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),
-     step_prov PG G ins u, step_taint ins s u tn))
+    (OK ((mcopy (w2n b) (w2n a) k s) with vs_inst_idx := LENGTH sb.cs_current_insts),
+     step_prov PG G (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w k)] [])
+       (mcopy (w2n b) (w2n a) k s),
+     step_taint (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w k)] []) s
+       (mcopy (w2n b) (w2n a) k s) tn))
 Proof
   strip_tac >> simp[] >>
   drule emitted_insts_emit_void >> strip_tac >>
@@ -296,7 +297,6 @@ Proof
     gvs[] >>
   drule_all copy_mcopy_path >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  qpat_x_assum `let u = _ in _` (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM]) >>
   `emit_op ALLOCA [Lit (n2w d)] sm = (buf.buf_operand,mid)` by
     (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
      simp[contextTheory.compile_alloc_buffer_def, compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
