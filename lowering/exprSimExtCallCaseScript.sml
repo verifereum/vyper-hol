@@ -832,6 +832,287 @@ Proof
   metis_tac[]
 QED
 
+Theorem extcall_request_saved_capture[local]:
+  expr_body_pre ce cx env e root /\ ~expr_has_effect e /\
+  post_value_type ce e = expr_type e /\
+  compile_expr ce (expr_type e) e ca = (vv,sm) /\
+  compile_snapshot_vv ce F (ext_call_arg_value (lowered_value_type ce e) vv)
+    sm = (snap,sh) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME sv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv /\
+  value_has_type sv value /\ value_has_type dv value /\
+  read_result cx original head = (INL value,head) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) ==>
+    ?pre. vv_holds ce cx (post_value_type ce e) original vv head pre) /\
+  (if is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv))
+   then ?op. snap = StackValue (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) op /\
+     (!H. valid_horizon cx st0 H head.storage_trace ==>
+       expr_post H ctx func ce cx e root ca sh r0 head value op u)
+   else sh = sm /\
+     (!H. valid_horizon cx st0 H head.storage_trace ==>
+       vv_post H ctx func ce cx e root ca sh r0 head original vv u) /\
+     ((?tag p. vv = LocatedValue tag p /\
+         snap = LocatedValue (lowered_value_type ce e) p /\
+         vv_holds ce cx (lowered_value_type ce e) original snap head u /\
+         vv_at ce cx (post_value_type ce e) ca sh head original snap u /\
+         val_footprint sv value = val_footprint dv value) \/
+      (?tag op. vv = StackValue tag op /\ snap = StackValue tag op /\
+         (!H. valid_horizon cx st0 H head.storage_trace ==>
+           expr_post H ctx func ce cx e root ca sh r0 head value op u)))) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    valid_horizon cx st0 H head.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee t) /\
+  wb_frame ce head ee sh u t /\ pure_frame ce func head sh u t /\
+  (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+  (head with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+  local_ptrs_reserved ce sh /\
+  ca.cs_next_id <= sh.cs_next_id /\ sh.cs_next_id <= cb.cs_next_id /\
+  ca.cs_next_var <= sh.cs_next_var /\ sh.cs_next_var <= cb.cs_next_var ==>
+  ?raw cut sv' dv'.
+    ca.cs_next_id <= cut.cs_next_id /\ cut.cs_next_id <= cb.cs_next_id /\
+    ca.cs_next_var <= cut.cs_next_var /\ cut.cs_next_var <= cb.cs_next_var /\
+    evaluate_type (get_tenv cx) (post_value_type ce e) = SOME sv' /\
+    evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv' /\
+    value_has_type sv' value /\ val_wf sv' value /\
+    value_has_type dv' value /\ val_wf dv' value /\
+    val_footprint sv' value = val_footprint dv' value /\
+    read_result cx raw ee = (INL value,ee) /\
+    (!x. vv_operand snap = Var x ==> not_fresh_at cb x) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      vv_holds ce cx (lowered_value_type ce e) raw snap ee t /\
+      vv_at ce cx (post_value_type ce e) cut cb ee raw snap t /\
+      vv_storage_live H cx snap ee t)
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) (expr_type e) = SOME sv` by metis_tac[] >>
+  `val_wf sv value /\ val_wf dv value` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `exprReasonOperand$reason_uniform_shape compile_expr ce (expr_type e) e` by
+    (irule exprReasonOperandTheory.compile_expr_reason_uniform >>
+     qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]) >>
+  `ee.scopes = head.scopes` by
+    (qpat_assum `ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _`
+      (mp_tac o Q.AP_TERM `\z:evaluation_state. z.scopes`) >> simp[]) >>
+  qpat_assum `if is_word_type _ then _ else _` mp_tac >>
+  IF_CASES_TAC >> strip_tac
+  >- (`unwrap_value ce vv sm = (op,sh)` by
+        (`?pre. vv_holds ce cx (post_value_type ce e) original vv head pre` by metis_tac[] >>
+         pop_assum strip_assume_tac >>
+         drule_all bodyFullExtCallRequestSnapshotWordTheory.extcall_request_word_snapshot_unwrap >>
+         strip_tac >>
+         qpat_x_assum `compile_snapshot_vv ce F _ sm = _` mp_tac >>
+         asm_rewrite_tac[] >> simp[comp_bind_def, comp_return_def] >>
+         pairarg_tac >> gvs[]) >>
+      `!x. op = Var x ==> not_fresh_at sh x` by
+        (drule_at (Pos hd) exprOperandVarTheory.compiler_unwrap_value_var >>
+         Cases_on `vv` >> fs[contextTheory.vv_operand_def] >> metis_tac[]) >>
+      `!l. op <> Label l` by
+        (irule exprReasonOperandTheory.lower_compile_expr_not_label >>
+         qexistsl_tac [`ce`, `e`, `env`, `ca`, `sh`, `expr_type e`] >>
+         simp[lower_value_def, comp_bind_def] >>
+         fs[expr_body_pre_def, expr_sim_inv_def]) >>
+      qexistsl_tac [`Value value`, `ca`] >>
+      simp[vyperStateTheory.read_result_def, return_def] >>
+      conj_tac >- (irule extcall_request_pure_head_footprint >> metis_tac[]) >>
+      conj_tac
+      >- (simp[contextTheory.vv_operand_def] >>
+          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+      `!H. valid_horizon cx st0 H ee.storage_trace ==>
+        vv_holds ce cx (lowered_value_type ce e) (Value value)
+          (StackValue (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) op) ee t /\
+        vv_at ce cx (expr_type e) ca cb ee (Value value)
+          (StackValue (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) op) t` by
+        (match_mp_tac extcall_request_saved_head_capture >> simp[] >> metis_tac[]) >>
+      simp[loweringPostsTheory.vv_storage_live_def])
+  >- (`!l. vv_operand vv <> Label l` by
+        (qpat_assum `exprReasonOperand$reason_uniform_shape _ _ _ _` mp_tac >>
+         qpat_assum `compile_expr ce (expr_type e) e ca = _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> Cases_on `vv` >>
+         simp[exprReasonOperandTheory.reason_uniform_shape_def,
+              contextTheory.vv_operand_def] >>
+         metis_tac[exprReasonOperandTheory.reason_result_shape_def]) >>
+      `ee.accounts = head.accounts /\ ee.tStorage = head.tStorage /\
+       ee.immutables = head.immutables` by
+        (qpat_assum `ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _`
+          (fn th => map_every (mp_tac o (fn f => AP_TERM f th))
+            [``\z:evaluation_state. z.accounts``, ``\z:evaluation_state. z.tStorage``,
+             ``\z:evaluation_state. z.immutables``]) >> simp[]) >>
+      `FST (read_result cx original ee) = FST (read_result cx original head)` by
+        (map_every (fn pat => qpat_assum pat mp_tac)
+           [`ee.scopes = head.scopes`, `ee.accounts = head.accounts`,
+            `ee.tStorage = head.tStorage`, `ee.immutables = head.immutables`] >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         Cases_on `original` >> simp[vyperStateTheory.read_result_def, return_def, raise_def] >>
+         rename1 `read_place cx place` >> Cases_on `place`
+         >- (rename1 `StoragePlace tr slot vt` >> Cases_on `tr` >>
+             simp[vyperStateTheory.read_place_def, vyperStateTheory.read_storage_slot_def,
+                  vyperStateTheory.get_storage_backend_def, vyperStateTheory.get_accounts_def,
+                  vyperStateTheory.get_transient_storage_def, bind_def, return_def,
+                  vyperStateTheory.lift_option_def] >>
+             rpt (BasicProvers.TOP_CASE_TAC >> simp[bind_def, return_def, raise_def]))
+         >- (rename1 `MemoryPlace id path` >>
+             simp[vyperStateTheory.read_place_def, vyperStateTheory.get_scopes_def,
+                  bind_def, return_def] >>
+             Cases_on `lookup_scopes id head.scopes` >>
+             simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+                  bind_def, return_def, raise_def] >>
+             Cases_on `read_memory_path x path` >>
+             simp[vyperStateTheory.lift_sum_def, return_def, raise_def]) >>
+         rename1 `ImmutablePlace src id path` >>
+         simp[vyperStateTheory.read_place_def, vyperStateTheory.get_immutables_def,
+              vyperStateTheory.get_address_immutables_def, bind_def, return_def] >>
+         Cases_on `ALOOKUP head.immutables cx.txn.target` >>
+         simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+              bind_def, return_def, raise_def] >>
+         Cases_on `FLOOKUP (get_source_immutables src x) id` >>
+         simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+              bind_def, return_def, raise_def] >>
+         Cases_on `evaluate_subscripts (FST x') (SND x') path` >>
+         simp[vyperStateTheory.lift_sum_def, return_def, raise_def]) >>
+      `read_result cx original ee = (INL value,ee)` by
+        (qpat_assum `FST (read_result cx original ee) = _` mp_tac >>
+         qpat_assum `read_result cx original head = _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         Cases_on `read_result cx original ee` >>
+         imp_res_tac vyperStateTheory.read_result_state >> gvs[]) >>
+      qexistsl_tac [`original`, `ca`] >> simp[] >>
+      conj_tac
+      >- (qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
+          qpat_assum `vv = LocatedValue tag p` mp_tac >>
+          qpat_assum `sh = sm` mp_tac >>
+          qpat_assum `sh.cs_next_var <= cb.cs_next_var` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> simp[contextTheory.vv_operand_def] >>
+          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+      gen_tac >> strip_tac >>
+      `vv_post H ctx func ce cx e root ca sh r0 head original vv u` by metis_tac[] >>
+      `!w. eval_operand p.ptr_operand u = SOME w ==>
+           eval_operand p.ptr_operand t = SOME w` by
+        (qpat_assum `!l. vv_operand vv <> Label l` mp_tac >>
+         qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
+         qpat_assum `vv = LocatedValue tag p` mp_tac >>
+         qpat_assum `sh = sm` mp_tac >>
+         qpat_assum `wb_frame ce head ee sh u t` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+         Cases_on `p.ptr_operand` >>
+         gvs[contextTheory.vv_operand_def, venomStateTheory.eval_operand_def, wb_frame_def] >>
+         metis_tac[]) >>
+      `~is_word_type (expr_type e) /\
+       arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+        (fs[ext_call_arg_value_def, contextTheory.vv_type_def] >>
+         metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type]) >>
+      `p.ptr_location <> LocMemory ==>
+       post_value_type ce e = lowered_value_type ce e` by
+        metis_tac[abiEncodeMaterializeTheory.materialize_compiled_nonword_capture_layout] >>
+      Cases_on `p.ptr_location = LocMemory`
+      >- (`?w. eval_operand p.ptr_operand u = SOME w /\
+                 val_in_memory dv value (w2n w) u.vs_memory` by
+            (qpat_assum `vv_holds ce cx (lowered_value_type ce e) original snap head u` mp_tac >>
+             qpat_assum `read_result cx original head = _` mp_tac >>
+             qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv` mp_tac >>
+             qpat_assum `snap = LocatedValue _ p` mp_tac >>
+             qpat_assum `p.ptr_location = LocMemory` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> simp[vv_holds_def, expr_val_rel_def] >> metis_tac[]) >>
+          `!aid row. FLOOKUP u.vs_allocas aid = SOME row ==>
+                     FLOOKUP t.vs_allocas aid = SOME row` by fs[wb_frame_def] >>
+          `!n b sz. local_region ce ee.scopes t n b sz <=>
+                     local_region ce head.scopes u n b sz` by
+            (qpat_assum `wb_frame ce head ee sh u t` mp_tac >>
+             qpat_assum `local_ptrs_reserved ce sh` mp_tac >>
+             qpat_assum `vv_post H ctx func ce cx e root ca sh r0 head original vv u` mp_tac >>
+             qpat_assum `ee.scopes = head.scopes` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+             fs[vv_post_def] >>
+             drule wordArgsPtrTheory.wb_frame_local_regions >> simp[] >>
+             disch_then drule >> simp[] >>
+             disch_then (qspecl_then [`t`, `ee`, `ee`] mp_tac) >> simp[]) >>
+          `val_in_memory dv value (w2n w) t.vs_memory /\
+           vv_at ce cx (expr_type e) ca cb ee original
+             (LocatedValue (lowered_value_type ce e) p) t` by
+            (irule bodyFullExtCallRequestSnapshotWordTheory.extcall_capture_located_memory_transport >>
+             conj_tac >- simp[] >>
+             conj_tac >- (qexists_tac `sv` >> simp[]) >>
+             conj_tac >- simp[] >>
+             qexistsl_tac [`sh`, `head`, `func`, `u`, `sh`] >> simp[] >>
+             qpat_assum `vv_at ce cx (post_value_type ce e) ca sh head original snap u` mp_tac >>
+             qpat_assum `post_value_type ce e = expr_type e` mp_tac >>
+             qpat_assum `snap = LocatedValue _ p` mp_tac >>
+             qpat_assum `sh = sm` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+          `~is_word_type (lowered_value_type ce e)` by
+            (qpat_assum `~is_word_type (vv_type (ext_call_arg_value _ vv))` mp_tac >>
+             qpat_assum `vv = LocatedValue tag p` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >>
+             simp[ext_call_arg_value_def, contextTheory.vv_type_def]) >>
+          simp[vv_holds_def, expr_val_rel_def] >> qexists_tac `w` >> simp[]) >>
+      `lowered_value_type ce e = expr_type e` by metis_tac[] >>
+      `tag = expr_type e` by
+        (qpat_assum `exprReasonOperand$reason_uniform_shape _ _ _ _` mp_tac >>
+         qpat_assum `compile_expr ce (expr_type e) e ca = _` mp_tac >>
+         qpat_assum `vv = LocatedValue tag p` mp_tac >>
+         qpat_assum `lowered_value_type ce e = expr_type e` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[exprReasonOperandTheory.reason_uniform_shape_def] >>
+         metis_tac[exprReasonOperandTheory.reason_result_shape_def]) >>
+      `vv_storage_live H cx snap head u` by
+        (qpat_assum `vv_post H ctx func ce cx e root ca sh r0 head original vv u` mp_tac >>
+         qpat_assum `~expr_has_effect e` mp_tac >>
+         qpat_assum `vv = LocatedValue tag p` mp_tac >>
+         qpat_assum `snap = LocatedValue _ p` mp_tac >>
+         qpat_assum `tag = expr_type e` mp_tac >>
+         qpat_assum `lowered_value_type ce e = expr_type e` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[vv_post_def]) >>
+      `stmt_state_rel H ctx func ce cx ee t` by metis_tac[] >>
+      qpat_assum `vv_holds ce cx (lowered_value_type ce e) original snap head u` mp_tac >>
+      qpat_assum `vv_at ce cx (post_value_type ce e) ca sh head original snap u` mp_tac >>
+      qpat_assum `vv_storage_live H cx snap head u` mp_tac >>
+      qpat_assum `stmt_state_rel H ctx func ce cx ee t` mp_tac >>
+      qpat_assum `ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _` mp_tac >>
+      qpat_assum `FST (read_result cx original ee) = _` mp_tac >>
+      qpat_assum `!w. eval_operand p.ptr_operand u = SOME w ==> _` mp_tac >>
+      qpat_assum `snap = LocatedValue _ p` mp_tac >>
+      qpat_assum `lowered_value_type ce e = expr_type e` mp_tac >>
+      qpat_assum `post_value_type ce e = expr_type e` mp_tac >>
+      qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv` mp_tac >>
+      qpat_assum `p.ptr_location <> LocMemory` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+      gvs[Excl "vv_storage_live_def"] >>
+      `vv_holds ce cx (expr_type e) original (LocatedValue (expr_type e) p) ee t /\
+       vv_at ce cx (expr_type e) ca cb ee original (LocatedValue (expr_type e) p) t /\
+       vv_storage_live H cx (LocatedValue (expr_type e) p) ee t` by
+        (irule bodyFullExtCallRequestSnapshotWordTheory.extcall_capture_nonmemory_transport >>
+         simp[Excl "vv_storage_live_def"] >>
+         conj_tac >- (qexistsl_tac [`ctx`, `func`] >> simp[]) >>
+         qexistsl_tac [`head`, `u`, `sh`] >> simp[Excl "vv_storage_live_def"]) >>
+      fs[loweringPostsTheory.vv_storage_live_def]) >>
+  `!l. op <> Label l` by
+    (qpat_assum `exprReasonOperand$reason_uniform_shape _ _ _ _` mp_tac >>
+     qpat_assum `compile_expr ce (expr_type e) e ca = _` mp_tac >>
+     qpat_assum `vv = StackValue tag op` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[exprReasonOperandTheory.reason_uniform_shape_def] >>
+     metis_tac[exprReasonOperandTheory.reason_result_shape_def]) >>
+  qexistsl_tac [`Value value`, `ca`] >>
+  simp[vyperStateTheory.read_result_def, return_def] >>
+  conj_tac >- (irule extcall_request_pure_head_footprint >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
+      qpat_assum `vv = StackValue tag op` mp_tac >>
+      qpat_assum `sh.cs_next_var <= cb.cs_next_var` mp_tac >>
+      qpat_assum `sh = sm` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> simp[contextTheory.vv_operand_def] >>
+      metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_holds ce cx (lowered_value_type ce e) (Value value) (StackValue tag op) ee t /\
+    vv_at ce cx (expr_type e) ca cb ee (Value value) (StackValue tag op) t` by
+    (match_mp_tac extcall_request_saved_head_capture >> simp[] >>
+     qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
+     qpat_assum `vv = StackValue tag op` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[contextTheory.vv_operand_def]) >>
+  simp[loweringPostsTheory.vv_storage_live_def]
+QED
+
 Theorem extcall_request_positionals_counted_horizon[local]:
   !xs ca cb ea r0 done kont av.
   expr_body_pre ce cx env
@@ -1173,252 +1454,31 @@ Proof
           qexistsl_tac [`raw`, `cut`, `sv`, `dv'`] >>
           simp[] >> rpt gen_tac >> strip_tac >>
           qpat_x_assum `!p_1' p_2. _` drule >> simp[]) >>
-      `val_wf tvt value /\ val_wf dv value` by
-        metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
-      qpat_assum `if is_word_type _ then _ else _` mp_tac >>
-      IF_CASES_TAC >> strip_tac
-      >- (`unwrap_value ce vv sm = (op,sh)` by
-            (`vv_holds ce cx (post_value_type ce h) v vv (mid with gas_obs := []) t` by
-               fs[vv_post_def] >>
-             drule_all bodyFullExtCallRequestSnapshotWordTheory.extcall_request_word_snapshot_unwrap >>
-             strip_tac >>
-             qpat_x_assum `compile_snapshot_vv ce F _ sm = _` mp_tac >>
-             asm_rewrite_tac[] >>
-             simp[comp_bind_def, comp_return_def] >>
-             pairarg_tac >> gvs[]) >>
-          `!x. op = Var x ==> not_fresh_at sh x` by
-            (drule_at (Pos hd) exprOperandVarTheory.compiler_unwrap_value_var >>
-             Cases_on `vv` >> fs[contextTheory.vv_operand_def] >> metis_tac[]) >>
-          qexistsl_tac [`Value value`, `ca`] >>
-          simp[vyperStateTheory.read_result_def, return_def] >>
-          reverse conj_tac
-          >- (conj_tac
-              >- (simp[contextTheory.vv_operand_def] >>
-                  metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-              `!l. op <> Label l` by
-                (irule exprReasonOperandTheory.lower_compile_expr_not_label >>
-                 qexistsl_tac [`ce`, `h`, `env`, `ca`, `sh`, `expr_type h`] >>
-                 simp[lower_value_def, comp_bind_def] >>
-                 fs[expr_body_pre_def, expr_sim_inv_def]) >>
-              `ee.scopes = (mid with gas_obs := []).scopes` by
-                (qpat_assum `ee with <|outcomes := NONE; gas_obs := []; storage_trace := []|> = _`
-                   (mp_tac o Q.AP_TERM `\z:evaluation_state. z.scopes`) >> simp[]) >>
-              match_mp_tac (Q.INST [`root` |-> `ea`,
-                `head` |-> `mid with gas_obs := []`, `sv` |-> `tvt`]
-                extcall_request_saved_head_capture) >>
-              simp[]) >>
-          irule extcall_request_pure_head_footprint >> metis_tac[])
-      >- (`exprReasonOperand$reason_uniform_shape compile_expr ce (expr_type h) h` by
-        (irule exprReasonOperandTheory.compile_expr_reason_uniform >>
-         qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]) >>
-      `!l. vv_operand vv <> Label l` by
-        (qpat_assum `exprReasonOperand$reason_uniform_shape _ _ _ _` mp_tac >>
-         qpat_assum `compile_expr ce (expr_type h) h ca = _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         Cases_on `vv` >>
-         simp[exprReasonOperandTheory.reason_uniform_shape_def,
-              contextTheory.vv_operand_def] >>
-         metis_tac[exprReasonOperandTheory.reason_result_shape_def]) >>
-      `ee.scopes = mid.scopes /\ ee.accounts = mid.accounts /\
-       ee.tStorage = mid.tStorage /\ ee.immutables = mid.immutables` by
-        (qpat_assum `ee with <|outcomes := NONE; gas_obs := []; storage_trace := []|> = _`
-          (fn th => map_every (mp_tac o (fn f => AP_TERM f th))
-            [``\z:evaluation_state. z.scopes``, ``\z:evaluation_state. z.accounts``,
-             ``\z:evaluation_state. z.tStorage``, ``\z:evaluation_state. z.immutables``]) >> simp[]) >>
-      `FST (read_result cx v ee) = FST (read_result cx v (mid with gas_obs := []))` by
-        (map_every (fn pat => qpat_assum pat mp_tac)
-           [`ee.scopes = mid.scopes`, `ee.accounts = mid.accounts`,
-            `ee.tStorage = mid.tStorage`, `ee.immutables = mid.immutables`] >>
-         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-         Cases_on `v` >> simp[vyperStateTheory.read_result_def, return_def, raise_def] >>
-         rename1 `read_place cx place` >> Cases_on `place`
-         >- (rename1 `StoragePlace tr slot vt` >> Cases_on `tr` >>
-             simp[vyperStateTheory.read_place_def, vyperStateTheory.read_storage_slot_def,
-                  vyperStateTheory.get_storage_backend_def, vyperStateTheory.get_accounts_def,
-                  vyperStateTheory.get_transient_storage_def, bind_def, return_def,
-                  vyperStateTheory.lift_option_def] >>
-             rpt (BasicProvers.TOP_CASE_TAC >> simp[bind_def, return_def, raise_def]))
-         >- (rename1 `MemoryPlace id path` >>
-             simp[vyperStateTheory.read_place_def, vyperStateTheory.get_scopes_def,
-                  bind_def, return_def] >>
-             Cases_on `lookup_scopes id mid.scopes` >>
-             simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
-                  bind_def, return_def, raise_def] >>
-             Cases_on `read_memory_path x path` >>
-             simp[vyperStateTheory.lift_sum_def, return_def, raise_def]) >>
-         rename1 `ImmutablePlace src id path` >>
-         simp[vyperStateTheory.read_place_def, vyperStateTheory.get_immutables_def,
-              vyperStateTheory.get_address_immutables_def, bind_def, return_def] >>
-         Cases_on `ALOOKUP mid.immutables cx.txn.target` >>
-         simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
-              bind_def, return_def, raise_def] >>
-         Cases_on `FLOOKUP (get_source_immutables src x) id` >>
-         simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
-              bind_def, return_def, raise_def] >>
-         Cases_on `evaluate_subscripts (FST x') (SND x') path` >>
-         simp[vyperStateTheory.lift_sum_def, return_def, raise_def]) >>
-      `read_result cx v ee = (INL value,ee)` by
-        (qpat_assum `FST (read_result cx v ee) = _` mp_tac >>
-         qpat_assum `read_result cx v (mid with gas_obs := []) = _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-         Cases_on `read_result cx v ee` >>
-         imp_res_tac vyperStateTheory.read_result_state >> gvs[]) >>
-      qexistsl_tac [`v`, `ca`] >> simp[] >>
-      conj_tac
-      >- (qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
-          qpat_assum `vv = LocatedValue tag p` mp_tac >>
-          qpat_assum `sh = sm` mp_tac >>
-          qpat_assum `sh.cs_next_var <= cb.cs_next_var` mp_tac >>
-          POP_ASSUM_LIST (K all_tac) >>
-          simp[contextTheory.vv_operand_def] >>
-          metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-      gen_tac >> strip_tac >>
-      `vv_post H ctx func ce cx h ea ca sh r0 (mid with gas_obs := []) v vv u` by
-        metis_tac[] >>
-      `!w. eval_operand p.ptr_operand u = SOME w ==>
-           eval_operand p.ptr_operand t' = SOME w` by
-        (qpat_assum `!l. vv_operand vv <> Label l` mp_tac >>
-         qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
-         qpat_assum `vv = LocatedValue tag p` mp_tac >>
-         qpat_assum `sh = sm` mp_tac >>
-         qpat_assum `wb_frame ce (mid with gas_obs := []) ee sh u t'` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-         Cases_on `p.ptr_operand` >>
-         gvs[contextTheory.vv_operand_def, venomStateTheory.eval_operand_def, wb_frame_def] >>
-         metis_tac[]) >>
-      `~is_word_type (expr_type h) /\
-       arg_type_fits (lowered_value_type ce h) (expr_type h)` by
-        (fs[ext_call_arg_value_def, contextTheory.vv_type_def] >>
-         metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type]) >>
-      `p.ptr_location <> LocMemory ==>
-       post_value_type ce h = lowered_value_type ce h` by
-        metis_tac[abiEncodeMaterializeTheory.materialize_compiled_nonword_capture_layout] >>
-      Cases_on `p.ptr_location = LocMemory`
-      >- (`?w. eval_operand p.ptr_operand u = SOME w /\
-                 val_in_memory dv value (w2n w) u.vs_memory` by
-            (qpat_assum `vv_holds ce cx (lowered_value_type ce h) v snap _ u` mp_tac >>
-             qpat_assum `read_result cx v (mid with gas_obs := []) = _` mp_tac >>
-             qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type ce h) = SOME dv` mp_tac >>
-             qpat_assum `snap = LocatedValue _ p` mp_tac >>
-             qpat_assum `p.ptr_location = LocMemory` mp_tac >>
-             POP_ASSUM_LIST (K all_tac) >>
-             simp[vv_holds_def, expr_val_rel_def] >> metis_tac[]) >>
-          `!aid row. FLOOKUP u.vs_allocas aid = SOME row ==>
-                     FLOOKUP t'.vs_allocas aid = SOME row` by fs[wb_frame_def] >>
-          `!n b sz. local_region ce ee.scopes t' n b sz <=>
-                     local_region ce (mid with gas_obs := []).scopes u n b sz` by
-            (qpat_assum `wb_frame ce (mid with gas_obs := []) ee sh u t'` mp_tac >>
-             qpat_assum `local_ptrs_reserved ce sh` mp_tac >>
-             qpat_assum `vv_post H ctx func ce cx h ea ca sh r0 _ v vv u` mp_tac >>
-             qpat_assum `ee.scopes = mid.scopes` mp_tac >>
-             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-             fs[vv_post_def] >>
-             `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) u` by
-               simp[exprLoweringPropsTheory.stmt_state_rel_start_gas_obs] >>
-             drule wordArgsPtrTheory.wb_frame_local_regions >>
-             simp[] >> disch_then drule >> simp[] >>
-             disch_then (qspecl_then [`t'`, `ee`, `ee`] mp_tac) >> simp[]) >>
-          `val_in_memory dv value (w2n w) t'.vs_memory /\
-           vv_at ce cx (expr_type h) ca cb ee v
-             (LocatedValue (lowered_value_type ce h) p) t'` by
-            (irule bodyFullExtCallRequestSnapshotWordTheory.extcall_capture_located_memory_transport >>
-             conj_tac >- simp[] >>
-             conj_tac >- (qexists_tac `tvt` >> simp[]) >>
-             conj_tac >- simp[] >>
-             qexistsl_tac [`sh`, `mid with gas_obs := []`, `func`, `u`, `sh`] >>
-             simp[] >>
-             qpat_assum `vv_at ce cx (post_value_type ce h) ca sh _ v snap u` mp_tac >>
-             qpat_assum `post_value_type ce h = expr_type h` mp_tac >>
-             qpat_assum `snap = LocatedValue _ p` mp_tac >>
-             qpat_assum `sh = sm` mp_tac >> qpat_assum `u = t` mp_tac >>
-             POP_ASSUM_LIST (K all_tac) >> simp[]) >>
-          `~is_word_type (lowered_value_type ce h)` by
-            (qpat_assum `~is_word_type (vv_type (ext_call_arg_value _ vv))` mp_tac >>
-             qpat_assum `vv = LocatedValue tag p` mp_tac >>
-             POP_ASSUM_LIST (K all_tac) >>
-             simp[ext_call_arg_value_def, contextTheory.vv_type_def]) >>
-          simp[vv_holds_def, expr_val_rel_def] >>
-          qexists_tac `w` >> simp[]) >>
-      `lowered_value_type ce h = expr_type h` by metis_tac[] >>
-      `tag = expr_type h` by
-        (qpat_assum `exprReasonOperand$reason_uniform_shape _ _ _ _` mp_tac >>
-         qpat_assum `compile_expr ce (expr_type h) h ca = _` mp_tac >>
-         qpat_assum `vv = LocatedValue tag p` mp_tac >>
-         qpat_assum `lowered_value_type ce h = expr_type h` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[exprReasonOperandTheory.reason_uniform_shape_def] >>
-         metis_tac[exprReasonOperandTheory.reason_result_shape_def]) >>
-      `vv_storage_live H cx snap (mid with gas_obs := []) u` by
-        (qpat_assum `vv_post H ctx func ce cx h ea ca sh r0 _ v vv u` mp_tac >>
-         qpat_assum `~expr_has_effect h` mp_tac >>
-         qpat_assum `vv = LocatedValue tag p` mp_tac >>
-         qpat_assum `snap = LocatedValue _ p` mp_tac >>
-         qpat_assum `tag = expr_type h` mp_tac >>
-         qpat_assum `lowered_value_type ce h = expr_type h` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> simp[vv_post_def]) >>
-      `stmt_state_rel H ctx func ce cx ee t'` by metis_tac[] >>
-      qpat_assum `vv_holds ce cx (lowered_value_type ce h) v snap _ u` mp_tac >>
-      qpat_assum `vv_at ce cx (post_value_type ce h) ca sh _ v snap u` mp_tac >>
-      qpat_assum `vv_storage_live H cx snap _ u` mp_tac >>
-      qpat_assum `stmt_state_rel H ctx func ce cx ee t'` mp_tac >>
-      qpat_assum `ee with <|outcomes := NONE; gas_obs := []; storage_trace := []|> = _` mp_tac >>
-      qpat_assum `FST (read_result cx v ee) = _` mp_tac >>
-      qpat_assum `!w. eval_operand p.ptr_operand u = SOME w ==> _` mp_tac >>
-      qpat_assum `snap = LocatedValue _ p` mp_tac >>
-      qpat_assum `lowered_value_type ce h = expr_type h` mp_tac >>
-      qpat_assum `post_value_type ce h = expr_type h` mp_tac >>
-      qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type ce h) = SOME dv` mp_tac >>
-      qpat_assum `p.ptr_location <> LocMemory` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-      gvs[Excl "vv_storage_live_def"] >>
-      `vv_storage_live H cx (LocatedValue (expr_type h) p)
-         (mid with gas_obs := []) u` by
-        (qpat_assum `vv_storage_live H cx _ mid u` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[loweringPostsTheory.vv_storage_live_def,
-              vyperStorageBackendTheory.get_storage_def]) >>
-      `vv_holds ce cx (expr_type h) v (LocatedValue (expr_type h) p) ee t' /\
-       vv_at ce cx (expr_type h) ca cb ee v (LocatedValue (expr_type h) p) t' /\
-       vv_storage_live H cx (LocatedValue (expr_type h) p) ee t'` by
-        (irule bodyFullExtCallRequestSnapshotWordTheory.extcall_capture_nonmemory_transport >>
-         simp[Excl "vv_storage_live_def"] >>
-         conj_tac >- (qexistsl_tac [`ctx`, `func`] >> simp[]) >>
-         qexistsl_tac [`mid with gas_obs := []`, `u`, `sh`] >>
-         simp[Excl "vv_storage_live_def"]) >>
-      fs[loweringPostsTheory.vv_storage_live_def]) >>
-      `exprReasonOperand$reason_uniform_shape compile_expr ce (expr_type h) h` by
-        (irule exprReasonOperandTheory.compile_expr_reason_uniform >>
-         qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]) >>
-      `!l. op <> Label l` by
-        (qpat_assum `exprReasonOperand$reason_uniform_shape _ _ _ _` mp_tac >>
-         qpat_assum `compile_expr ce (expr_type h) h ca = _` mp_tac >>
-         qpat_assum `vv = StackValue tag op` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[exprReasonOperandTheory.reason_uniform_shape_def] >>
-         metis_tac[exprReasonOperandTheory.reason_result_shape_def]) >>
-      `ee.scopes = (mid with gas_obs := []).scopes` by
-        (qpat_assum `ee with <|outcomes := NONE; gas_obs := []; storage_trace := []|> = _`
-          (mp_tac o Q.AP_TERM `\z:evaluation_state. z.scopes`) >> simp[]) >>
-      qexistsl_tac [`Value value`, `ca`] >>
-      simp[vyperStateTheory.read_result_def, return_def] >>
-      conj_tac >- (irule extcall_request_pure_head_footprint >> metis_tac[]) >>
-      conj_tac >-
-        (qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
-         qpat_assum `vv = StackValue tag op` mp_tac >>
-         qpat_assum `sh.cs_next_var <= cb.cs_next_var` mp_tac >>
-         qpat_assum `sh = sm` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> simp[contextTheory.vv_operand_def] >>
-         metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-      `!H. valid_horizon cx st0 H ee.storage_trace ==>
-        vv_holds ce cx (lowered_value_type ce h) (Value value) (StackValue tag op) ee t' /\
-        vv_at ce cx (expr_type h) ca cb ee (Value value) (StackValue tag op) t'` by
-        (match_mp_tac (Q.INST [`root` |-> `ea`,
-            `head` |-> `mid with gas_obs := []`, `sv` |-> `tvt`]
-            extcall_request_saved_head_capture) >> simp[] >>
-         qpat_assum `!x. vv_operand vv = Var x ==> _` mp_tac >>
-         qpat_assum `vv = StackValue tag op` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> simp[contextTheory.vv_operand_def]) >>
-      simp[loweringPostsTheory.vv_storage_live_def]) >>
+      `?raw cut sv' dv'.
+        ca.cs_next_id <= cut.cs_next_id /\ cut.cs_next_id <= cb.cs_next_id /\
+        ca.cs_next_var <= cut.cs_next_var /\ cut.cs_next_var <= cb.cs_next_var /\
+        evaluate_type (get_tenv cx) (post_value_type ce h) = SOME sv' /\
+        evaluate_type (get_tenv cx) (lowered_value_type ce h) = SOME dv' /\
+        value_has_type sv' value /\ val_wf sv' value /\
+        value_has_type dv' value /\ val_wf dv' value /\
+        val_footprint sv' value = val_footprint dv' value /\
+        read_result cx raw ee = (INL value,ee) /\
+        (!x. vv_operand snap = Var x ==> not_fresh_at cb x) /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==>
+          vv_holds ce cx (lowered_value_type ce h) raw snap ee t' /\
+          vv_at ce cx (post_value_type ce h) cut cb ee raw snap t' /\
+          vv_storage_live H cx snap ee t')` suffices_by simp[] >>
+      irule extcall_request_saved_capture >>
+      simp[] >>
+      qpat_assum `wb_frame ce (mid with gas_obs := []) ee sh u t'` (irule_at Any) >>
+      qpat_assum `expr_body_pre ce cx env h ea` (irule_at Any) >>
+      qpat_assum `read_result cx v (mid with gas_obs := []) = _` (irule_at Any) >>
+      qexistsl_tac [`r0`, `func`, `ctx`] >>
+      simp[] >>
+      Cases_on `is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce h) vv))` >>
+      gvs[] >> qexists_tac `t` >>
+      qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+      disch_then (mp_tac o REWRITE_RULE [vv_post_def]) >> simp[]) >>
   reverse conj_tac
   >- (conj_tac
       >- (`expr_body_pre ce cx env h (ea with gas_obs := gs)` by simp[] >>
