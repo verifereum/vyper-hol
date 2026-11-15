@@ -381,10 +381,38 @@ Proof
     (qpat_assum `stmt_state_rel H ctx func cenv cx ee u`
        (mp_tac o SRULE [stmt_state_rel_def, state_rel_def]) >> simp[]) >>
   qpat_assum `!x. vv_operand _ = Var x ==> not_fresh_at sm x`
-    (assume_tac o SRULE [contextTheory.vv_operand_def]) >>
-  TRY (drule_all extcall_request_saved_stack_endpoint >>
-    disch_then (fn th => map_every assume_tac (CONJUNCTS th) >> strip_assume_tac th)) >>
-  simp[] >>
+    (assume_tac o SRULE [contextTheory.vv_operand_def])
+  >| [
+    rename1 `vv_at cenv cx _ sa sm mid _ (StackValue saved_tag saved_op) t` >>
+    mp_tac (Q.INST [`op` |-> `saved_op`]
+      (INST_TYPE [alpha |-> ``:256``]
+        extcall_request_saved_stack_endpoint)) >>
+    (impl_tac >- simp[contextTheory.vv_operand_def]) >>
+    disch_then (map_every assume_tac o CONJUNCTS),
+    mp_tac (Q.INST [`D` |-> `DF H`]
+      (INST_TYPE [alpha |-> ``:256``]
+        extcall_request_saved_located_endpoint)) >>
+    (impl_tac >-
+      simp[contextTheory.vv_operand_def, contextTheory.vv_location_def,
+           vv_storage_live_def]) >>
+    disch_then (map_every assume_tac o CONJUNCTS o
+      SRULE [contextTheory.vv_operand_def, contextTheory.vv_location_def,
+             vv_storage_live_def, arithmeticTheory.ADD_COMM]),
+    rename1 `compile_expr cenv (expr_type e) e sa = (_,saved_end)` >>
+    qpat_assum `lowered_value_type cenv e = expr_type e` (fn eq =>
+      mp_tac (REWRITE_RULE [eq] (Q.INST [`D` |-> `DF H`]
+        (INST_TYPE [alpha |-> ``:256``]
+          extcall_request_saved_located_endpoint)))) >>
+    (impl_tac >-
+      (simp[contextTheory.vv_operand_def, contextTheory.vv_location_def,
+            vv_storage_live_def] >>
+       qexistsl_tac [`sa`, `saved_end`] >> simp[])) >>
+    disch_then (map_every assume_tac o CONJUNCTS o
+      SRULE [contextTheory.vv_operand_def, contextTheory.vv_location_def,
+             vv_storage_live_def, arithmeticTheory.ADD_COMM])
+  ] >>
+  simp[contextTheory.vv_operand_def, contextTheory.vv_location_def,
+       vv_storage_live_def, arithmeticTheory.ADD_COMM] >>
   rpt conj_tac
   >>~- ([`LIST_REL _ (ZIP (xs,tail_svs)) vs (* g *)`],
     irule LIST_REL_mono >>
@@ -395,65 +423,15 @@ Proof
     qpat_assum `sa.cs_next_id <= sm.cs_next_id` mp_tac >>
     rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[] >>
     imp_res_tac exprSimCalldataSliceTheory.vv_at_start_mono >>
-    metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  TRY (first_assum ACCEPT_TAC) >>
-  TRY (rename1 `cenv.ce_is_ctor /\ vv_location (StackValue _ _) = _ ==> _` >>
-       simp[contextTheory.vv_location_def])
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS])
   >>~- ([`s0.vs_alloca_next <= u.vs_alloca_next (* g *)`],
-       metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS])
   >>~- ([`!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _ (* g *)`],
-       metis_tac[])
-  >> TRY (FIRST (map (fn th => irule (DISCH_ALL th) ORELSE MATCH_MP_TAC (DISCH_ALL th)) (CONJUNCTS
-       (SRULE [] (UNDISCH (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
-         extcall_request_saved_located_endpoint))))))) >>
-  TRY (qpat_assum `lowered_value_type cenv e = expr_type e` (fn eq =>
-    FIRST (map (fn th => irule (REWRITE_RULE [eq] (DISCH_ALL th)) ORELSE
-      MATCH_MP_TAC (GEN_ALL (REWRITE_RULE [eq] (DISCH_ALL th)))) (CONJUNCTS
-       (SRULE [] (UNDISCH (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
-         extcall_request_saved_located_endpoint)))))))) >>
-  TRY (simp[]) >>
-  TRY (qpat_assum `pure_frame cenv func mid sm t u` (irule_at Any)) >>
-  TRY (qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2` (irule_at Any)) >>
-  TRY (qpat_assum `ghost_inv_at (DF H) lo d cenv cx ee G2 tn2 u` (irule_at Any)) >>
-  TRY (simp[contextTheory.vv_operand_def, contextTheory.vv_location_def]) >>
-  TRY (qpat_assum `stmt_state_rel H ctx func cenv cx ee u` (irule_at Any)) >>
-  TRY (rename1 `vv_at cenv cx _ sa sm mid saved_raw _ t` >>
-       qexists_tac `saved_raw` >> simp[] >> NO_TAC)
-  >>~- ([`?ctx' H0. dead_lo_ok H0 (DF H) lo cenv cx /\ stmt_state_rel H0 ctx' func cenv cx ee u`],
-     qexists_tac `ctx` >> qexists_tac `H` >>
-     conj_tac >- (qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H` ACCEPT_TAC)) >>
-     first_assum ACCEPT_TAC) >>
-  TRY (qpat_assum `vv_at cenv cx (lowered_value_type cenv e) sa sm mid raw' _ t` (irule_at Any)) >>
-  TRY (qpat_assum `ci_mono sm sb` (irule_at Any)) >>
-  TRY (qexists_tac `v` >> simp[])
-  >> (fn g as (_,goal) => if length (#1 (strip_exists goal)) = 2 then
-    (qpat_assum `compile_expr cenv (expr_type e) e sa = (_,sm0)` (irule_at Any) >>
-    simp[] >>
-    qpat_assum `ci_mono sm sb` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
-    rpt strip_tac >> decide_tac) g else ALL_TAC g)
-  >> (fn g as (_,goal) => if is_exists goal then
-    (qpat_assum `vv_at cenv cx (expr_type e) sa sm mid raw' _ t` (irule_at Any) >>
-    qpat_assum `compile_expr cenv (expr_type e) e sa = (_,sm0)` (irule_at Any) >>
-    simp[] >>
-    qpat_assum `cenv.ce_is_ctor /\ vv_location _ = SOME LocCode ==> _`
-      (mp_tac o SRULE [contextTheory.vv_location_def, contextTheory.vv_operand_def]) >>
-    metis_tac[]) g else ALL_TAC g)
-  >> qpat_assum `lowered_value_type cenv e = expr_type e` (fn eq =>
-    MATCH_MP_TAC (GEN_ALL (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]
-      (REWRITE_RULE [eq] (DISCH_ALL (List.last (CONJUNCTS
-        (SRULE [] (UNDISCH (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
-          extcall_request_saved_located_endpoint)))))))))))
-  >> simp[] >>
-  qpat_assum `pure_frame cenv func mid sm t u` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2` (irule_at Any) >>
-  qpat_assum `ghost_inv_at (DF H) lo d cenv cx ee G2 tn2 u` (irule_at Any) >>
-  simp[contextTheory.vv_operand_def, contextTheory.vv_location_def] >>
-  qpat_assum `stmt_state_rel H ctx func cenv cx ee u` (irule_at Any) >>
-  qpat_assum `vv_at cenv cx (expr_type e) sa sm mid raw' _ t` (irule_at Any) >>
-  qpat_assum `compile_expr cenv (expr_type e) e sa = (_,sm0)` (irule_at Any) >>
+    metis_tac[])
+  >>~- ([`?raw. read_result cx raw ee = (INL v,ee) /\ _ (* g *)`],
+    first_assum ACCEPT_TAC)
+  >> qpat_assum `compile_expr cenv (expr_type e) e sa = (_,_)` (irule_at Any) >>
   simp[] >>
-  qpat_assum `cenv.ce_is_ctor /\ vv_location _ = SOME LocCode ==> _`
-    (mp_tac o SRULE [contextTheory.vv_location_def, contextTheory.vv_operand_def]) >>
-  qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H` mp_tac) >>
-  metis_tac[]
+  qpat_assum `ci_mono sm sb` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
+  rpt strip_tac >> decide_tac
 QED
