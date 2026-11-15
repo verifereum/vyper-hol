@@ -4,7 +4,7 @@ Ancestors
   codegenEntryRel codegenAsmProgOk asmFrameRel frameJointTrace asmSem symbolResolve
   frameOutcome callTrace vfmExecution frameHistoryCfg frameOriginHistory
   frameJointTransition venomExecProps blockSimHelpers fnSimSpec
-  asmOptimizer codegenEntrySim codegenSymRel
+  asmOptimizer codegenEntrySim codegenSymRel dftDefs unitMemInv finite_map
   list rich_list pred_set words arithmetic
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
@@ -119,19 +119,89 @@ val focus_joint_motive : term = ``
 val focus_dft_packet_step_goal : term = ``
   \packet_rel.
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
-    (root_entry:venom_state) packet es0 raw_slots sites unused
+    (root_entry:venom_state) packet acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d cpl es0 raw_slots sites unused
     stk PG G tn fn inst s oms om hs h ev q8'.
     packet_rel N C7 C8 root_sf root_tf root_entry packet
+      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
       (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
     LENGTH raw_slots = LENGTH sites /\
     PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
     (inst.inst_opcode = GAS ==> s.vs_gas_readings <> []) /\
     joint_transition C8 (JointConfig stk PG G tn fn inst s oms om hs h) ev q8' ==>
-    ?packet' raw_slots' sites' unused'.
+    (?packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' p' d'
+      raw_slots' sites' unused'.
       packet_rel N C7 C8 root_sf root_tf root_entry
-        packet' q8' raw_slots' sites' unused' /\
+        packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' rooted_eval p' d'
+        q8' raw_slots' sites' unused' /\
       LENGTH raw_slots' = LENGTH sites' /\
-      PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0)
+      PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0)) /\
+    ( (inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+       inst.inst_opcode = INVOKE) /\ ~in_revert_forward fn s ==>
+      ?sf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q z
+        cuts levels Mcut Ecut.
+        FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE) /\
+        LAST order = d /\
+        FLOOKUP blocks (p,d) =
+          SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME(be,hbe),count,OK s,F,NONE) /\
+        q = EL count rho /\ q < LENGTH xs /\ EL q xs = inst /\
+        z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+        (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+          MEM r (TAKE count rho)) /\
+        MAP (\(ai,ds,ei,qi,zi). ai) cuts =
+          REVERSE (GENLIST (\i. DROP i p) (SUC (LENGTH p))) /\
+        LENGTH cuts = LENGTH levels /\
+        (!i ai ds ei qi zi.
+          i < LENGTH cuts /\ EL i cuts = (ai,ds,ei,qi,zi) ==>
+          ?sfi tfi inci enti orderi resi nresti bbi bti psi xsi ysi rhoi
+            ini hi bei counti fronti closedi resti later.
+            FLOOKUP acts ai = SOME (sfi,tfi,inci,enti,orderi,resi,nresti) /\
+            FLOOKUP blocks (ai,ei) =
+              SOME (bbi,bti,psi,xsi,ysi,rhoi,ini,hi,bei,counti,fronti,closedi,resti) /\
+            orderi = ds ++ ei::later /\
+            (if SUC i = LENGTH cuts then
+              ai = p /\ ei = d /\ qi = q /\ zi = z
+            else
+              ?cid call_h b0 done_at_call child_entry ret.
+                EL (SUC i) (MAP (\(aj,djs,ej,qj,zj). aj) cuts) = (ei,cid)::ai /\
+                FLOOKUP calls (ai,ei,cid) =
+                  SOME (qi,call_h,b0,done_at_call,child_entry,ret) /\
+                qi < LENGTH xsi /\ (EL qi xsi).inst_id = cid /\
+                zi = DROP (phi_prefix_length bbi.bb_instructions) psi ++ TAKE qi xsi /\
+                EVERY (\x. ~is_terminator x.inst_opcode) (TAKE qi xsi) /\
+                (!r. r < qi /\ (EL r xsi).inst_opcode = INVOKE ==>
+                  MEM r done_at_call)) /\
+            EL i levels =
+              (sfi,
+               MAP (\f.
+                 (FST (THE (FLOOKUP blocks (ai,f))),f,
+                  DROP (phi_prefix_length
+                    (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)
+                    (FST (THE (FLOOKUP blocks (ai,f)))).bb_instructions)) ds ++
+                 [(bbi,ei,zi)],
+               if SUC i = LENGTH cuts then NONE else SOME (EL qi xsi))) /\
+        Mcut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP ms_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP ms_tab (ai,ei))))) cuts) /\
+        Ecut = FLAT (MAP (\(ai,ds,ei,qi,zi).
+          FLAT (MAP (\f. FLAT (THE (FLOOKUP es_tab (ai,f)))) ds) ++
+          FLAT (TAKE qi (THE (FLOOKUP es_tab (ai,ei))))) cuts) /\
+        LENGTH Mcut = LENGTH Ecut /\
+        (!F gs tail n u.
+          N <= F /\ LIST_REL (\slot w. slot = NONE \/ slot = SOME w) Mcut gs /\
+          LENGTH Mcut < n /\
+          mem_inv (\ctx src_fn src_inst src_state.
+            gas_cut n (root_entry with vs_gas_readings := gs ++ tail) src_state ==>
+              static_mem_ok cpl.cp_max_static_eom ctx src_fn src_inst src_state)
+            C7 (root_entry with vs_gas_readings := gs ++ tail) /\
+          rooted_eval F C7 levels (root_entry with vs_gas_readings := gs ++ tail) =
+            (Ecut,OK u) ==>
+          static_mem_ok cpl.cp_max_static_eom C7 sf inst u /\
+          ~in_revert_forward sf u /\
+          (inv_memory_observation inst.inst_opcode ==>
+            (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op s) /\
+            u.vs_initial_fmp = s.vs_initial_fmp)))
 ``;
 
 val focus_cfg_cursor_step_goal : term = ``
