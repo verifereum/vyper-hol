@@ -2787,7 +2787,88 @@ Proof
        exprSimRawCallTheory.raw_call_optional_gas_run) >>
   disch_then drule_all >>
   disch_then (qx_choose_then `rg` (qx_choose_then `gw` strip_assume_tac)) >>
-  FAIL_TAC "gas run joined"
+  qpat_assum `run_inst_seq (emitted_insts s3 s5) r = OK rg`
+    (mp_then (Pat `run_inst_seq _ _ = _`) mp_tac
+       exprSimRawCallTheory.raw_call_optional_gas_path) >>
+  disch_then drule_all >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func ce cx ee rg` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func ce cx ee r` by metis_tac[] >>
+     qpat_assum `stmt_state_rel H ctx func ce cx ee r`
+       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
+          exprSimRawCallTheory.raw_call_optional_gas_run) >>
+     disch_then drule_all >> strip_tac >> gvs[]) >>
+  `wb_frame ce es ee sa s0 rg` by
+    (irule (INST_TYPE [``:'a`` |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >>
+     simp[] >> reverse conj_tac >- (qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >> simp[]) >>
+     qexistsl_tac [`ee`, `s3`, `r`] >>
+     simp[] >> gvs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `!op w. safe_operand s3 op /\ eval_operand op r = SOME w ==>
+     eval_operand op rg = SOME w` by
+    (qpat_assum `wb_frame ce ee ee s3 r rg` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     strip_tac >> Cases >> simp[exprSafeOperandTheory.safe_operand_def,
+       venomStateTheory.eval_operand_def] >>
+     metis_tac[exprSimWordArgsTheory.wb_frame_vars]) >>
+  `sa.cs_next_var <= s5.cs_next_var /\ sa.cs_next_id <= s5.cs_next_id /\
+   s3.cs_next_var <= s5.cs_next_var /\ s3.cs_next_id <= s5.cs_next_id` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `rg.vs_alloca_next = r.vs_alloca_next /\
+   contract_storage rg = contract_storage r /\
+   contract_transient rg = contract_transient r` by
+    (qpat_assum `(case go of NONE => _ | SOME g => _) = (gas,s5)` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts s3 s5) r = OK rg` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `go` >> simp[] >> rpt strip_tac >> gvs[]
+     >- (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+         gvs[exprLoweringPropsTheory.run_inst_seq_def,
+           exprSimHashTheory.step_GAS,
+           venomStateTheory.update_var_def, venomStateTheory.contract_storage_def,
+           venomStateTheory.contract_transient_def]) >>
+     gvs[exprLoweringPropsTheory.emitted_insts_def,
+         exprLoweringPropsTheory.run_inst_seq_def]) >>
+  `safe_operand s3 ao` by
+    (simp[exprSafeOperandTheory.safe_operand_def] >>
+     rpt strip_tac >>
+     `s1.cs_next_var <= s3.cs_next_var` by
+       (gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  irule exprSimRawCallTheory.raw_call_implicit_path_suffix >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`if IS_NONE go then 1 else 0`, `rg with vs_inst_idx := LENGTH s5.cs_current_insts`] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  qpat_assum `!target_v vs' kw target ee t. _` irule >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+    exprSimRawCallCalldataTheory.raw_call_wb_frame_inst_idx] >>
+  conj_tac
+  >- (qpat_assum `!v'. ext_call_kwarg EKGas opts kw = SOME v' ==> _` mp_tac >>
+      qpat_assum `(case go of NONE => _ | SOME g => _) = (gas,s5)` mp_tac >>
+      qpat_assum `IS_SOME go <=> _` mp_tac >>
+      qpat_assum `eval_operand gas rg = SOME gw` mp_tac >>
+      qpat_assum `!op w. safe_operand s3 op /\ _ ==> _` mp_tac >>
+      qpat_assum `!g. go = SOME g ==> safe_operand s3 g` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `go` >> simp[] >> metis_tac[optionTheory.SOME_11]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!v'. ext_call_kwarg EKValue opts kw = SOME v' ==> _` drule >>
+      strip_tac >> qexistsl_tac [`op`, `w`] >> simp[] >>
+      qpat_assum `safe_operand s3 (case vo of NONE => _ | SOME op => op)` mp_tac >>
+      gvs[] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  conj_tac >- metis_tac[exprSafeOperandTheory.safe_operand_mono] >>
+  conj_tac
+  >- (qpat_assum `(case go of NONE => _ | SOME g => _) = (gas,s5)` mp_tac >>
+      qpat_assum `!g. go = SOME g ==> safe_operand s3 g` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >>
+      metis_tac[exprSafeOperandTheory.emit_op_safe_operand]) >>
+  conj_tac >- metis_tac[exprSafeOperandTheory.safe_operand_mono] >>
+  conj_tac >- metis_tac[exprSafeOperandTheory.safe_operand_mono] >>
+  FAIL_TAC "gas PACK"
 QED
 
 Theorem extcall_request_setup:
