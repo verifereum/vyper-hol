@@ -1,5 +1,6 @@
 Theory frameAllocationOwnership
 Ancestors
+  concretizeLayoutCutSafe o1SafeUpto gasOracleReplay
   frameOriginCache frameOriginHistory frameOriginUpdates frameOriginReachable
   ptrDiscipline venomExecSemantics venomState venomMemProps
   ptrDisciplineEmptyTaint contextCodegenRel removeUnusedSsaProofs
@@ -206,6 +207,60 @@ QED
 
 (* With DALLOCA, every cache of a reachable frame and its callers lies below
    the dynamic region. *)
+Theorem frame_reachable_saved_below_fmp_upto:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
+    ctx_has_dalloca ctx ==>
+    EVERY (\f. allocas_below_fmp f.cf_state) stk
+Proof
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[]
+  >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >>
+      irule gas_cut_readings_mono >> first_assum (irule_at Any) >> simp[] >>
+      irule step_inst_noninvoke_readings_le >> metis_tac[])
+  >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >>
+      irule gas_cut_readings_mono >> first_assum (irule_at Any) >>
+      drule enters_block_readings >> simp[] >> strip_tac >>
+      irule step_inst_noninvoke_readings_le >>
+      `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
+      metis_tac[])
+  >- (`gas_cut ncut vs0 s` by
+        (drule enters_block_readings >> drule gas_setup_callee_readings >>
+         rpt strip_tac >> gvs[gas_cut_def]) >>
+      conj_tac >- metis_tac[ptr_discipline_upto_at] >>
+      qpat_x_assum `_ ==> EVERY _ _` irule >> simp[]) >>
+  `LENGTH s'.vs_gas_readings <= LENGTH s.vs_gas_readings` by
+    (drule_all return_readings_le >> simp[]) >>
+  `gas_cut ncut vs0 s` by
+    (irule gas_cut_readings_mono >>
+     qexists_tac `s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx` >> simp[]) >>
+  qpat_x_assum `_ ==> _ /\ _` mp_tac >> simp[]
+QED
+
+Theorem frame_reachable_caches_below_upto:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
+  ctx_has_dalloca ctx ==>
+  !k aid b sz.
+    k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
+    FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
+      MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
+    b + sz <= w2n s.vs_initial_fmp
+Proof
+  strip_tac >>
+  `allocas_below_fmp s` by metis_tac[ptr_discipline_upto_at] >>
+  drule_all frame_reachable_saved_below_fmp_upto >> strip_tac >>
+  drule frame_reachable_initial_fmp >> strip_tac >>
+  rpt gen_tac >> Cases_on `k` >> simp[]
+  >- (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+  strip_tac >>
+  `allocas_below_fmp (EL n stk).cf_state /\
+   (EL n stk).cf_state.vs_initial_fmp = vs0.vs_initial_fmp` by fs[EVERY_EL] >>
+  fs[allocas_below_fmp_def] >>
+  `FLOOKUP (EL n stk).cf_state.vs_allocas aid = SOME (b,sz)` by gvs[EL_MAP] >>
+  metis_tac[]
+QED
+
 Theorem frame_reachable_caches_below:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline lo ctx vs0 /\
   ctx_has_dalloca ctx ==>
@@ -215,21 +270,7 @@ Theorem frame_reachable_caches_below:
       MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
     b + sz <= w2n s.vs_initial_fmp
 Proof
-  strip_tac >>
-  `!stk PG G tn fn inst s. frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-     allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `allocas_below_fmp s` by metis_tac[] >>
-  drule_all frame_reachable_saved_below_fmp >> strip_tac >>
-  drule frame_reachable_initial_fmp >> strip_tac >>
-  qpat_x_assum `!stk PG G tn fn inst s. _` kall_tac >>
-  rpt gen_tac >> Cases_on `k` >> simp[]
-  >- (fs[allocas_below_fmp_def] >> metis_tac[]) >>
-  strip_tac >>
-  `allocas_below_fmp (EL n stk).cf_state /\
-   (EL n stk).cf_state.vs_initial_fmp = vs0.vs_initial_fmp` by fs[EVERY_EL] >>
-  fs[allocas_below_fmp_def] >>
-  `FLOOKUP (EL n stk).cf_state.vs_allocas aid = SOME (b,sz)` by gvs[EL_MAP] >>
-  metis_tac[]
+  metis_tac[frame_reachable_caches_below_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
 
 Theorem resolved_dalloca_output:
@@ -263,8 +304,8 @@ QED
 
 (* DALLOCA allocates at the free memory pointer, which a disciplined run
    keeps at or above the initial one. *)
-Theorem frame_dalloca_floor:
-  frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline lo ctx vs0 /\
+Theorem frame_dalloca_floor_upto:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ctx_has_dalloca ctx /\ inst.inst_opcode = DALLOCA /\
   step_inst fuel ctx inst s = OK s' /\ inst.inst_outputs = [out] /\
   lookup_var out s' = SOME b ==>
@@ -272,15 +313,26 @@ Theorem frame_dalloca_floor:
 Proof
   strip_tac >>
   `b = s.vs_fmp` by metis_tac[resolved_dalloca_output] >>
-  `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `allocas_below_fmp s` by metis_tac[ptr_discipline_upto_at] >>
   `s.vs_initial_fmp = vs0.vs_initial_fmp` by metis_tac[frame_reachable_initial_fmp] >>
   gvs[allocas_below_fmp_def]
 QED
 
-Theorem frame_allocation_ownership:
+Theorem frame_dalloca_floor:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline lo ctx vs0 /\
+  ctx_has_dalloca ctx /\ inst.inst_opcode = DALLOCA /\
+  step_inst fuel ctx inst s = OK s' /\ inst.inst_outputs = [out] /\
+  lookup_var out s' = SOME b ==>
+  w2n vs0.vs_initial_fmp <= w2n b
+Proof
+  metis_tac[frame_dalloca_floor_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem frame_allocation_ownership_upto:
   !vs0 ctx stk PG G tn fn inst s.
     frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-    (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) ==>
+    (ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) ==>
     frame_sites (dyn_site ctx vs0) stk PG G s /\ saved_sites (dyn_site ctx vs0) stk
 Proof
   ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
@@ -292,39 +344,79 @@ Proof
   >> suspend "ret"
 QED
 
-Resume frame_allocation_ownership[next]:
+Resume frame_allocation_ownership_upto[next]:
   rpt strip_tac >> gvs[] >>
+  `ctx_has_dalloca ctx ==> gas_cut ncut vs0 s` by
+    (strip_tac >> irule gas_cut_readings_mono >>
+     qexists_tac `s' with vs_inst_idx := SUC s.vs_inst_idx` >> simp[] >>
+     irule step_inst_noninvoke_readings_le >> metis_tac[]) >>
+  fs[] >>
   `inst.inst_opcode = DALLOCA ==>
    !site. out_prov PG G inst s' = SOME site ==> dyn_site ctx vs0 site` by
     (rpt strip_tac >>
      `ctx_has_dalloca ctx` by metis_tac[frame_reachable_dalloca] >>
+     fs[] >>
      qpat_x_assum `out_prov _ _ _ _ = _` mp_tac >>
      simp[out_prov_def, dyn_site_def] >> rpt CASE_TAC >> rw[] >>
-     `ptr_discipline lo ctx vs0` by metis_tac[] >>
-     drule_all frame_dalloca_floor >> simp[]) >>
+     drule_all frame_dalloca_floor_upto >> simp[]) >>
   metis_tac[frame_sites_step]
 QED
 
-Resume frame_allocation_ownership[block]:
+Resume frame_allocation_ownership_upto[block]:
   rpt strip_tac >> gvs[] >> simp[] >>
   `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by
     (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> gas_cut ncut vs0 s` by
+    (strip_tac >> fs[] >> irule gas_cut_readings_mono >> first_assum (irule_at Any) >>
+     drule enters_block_readings >> simp[] >> strip_tac >>
+     irule step_inst_noninvoke_readings_le >> metis_tac[]) >>
+  fs[] >>
   `s'.vs_allocas = s.vs_allocas` by
     (gvs[step_inst_non_invoke] >> metis_tac[step_inst_base_preserves_allocas]) >>
   metis_tac[frame_sites_transport, frame_sites_entry]
 QED
 
-Resume frame_allocation_ownership[call]:
-  rpt strip_tac >> gvs[] >> simp[saved_sites_def] >>
+Resume frame_allocation_ownership_upto[call]:
+  rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> gas_cut ncut vs0 s` by
+    (strip_tac >> drule enters_block_readings >> drule gas_setup_callee_readings >>
+     rpt strip_tac >> gvs[gas_cut_def]) >>
+  gvs[] >> simp[saved_sites_def] >>
   metis_tac[frame_sites_call]
 QED
 
-Resume frame_allocation_ownership[ret]:
-  rpt strip_tac >> gvs[saved_sites_def] >> simp[] >>
+Resume frame_allocation_ownership_upto[ret]:
+  rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> gas_cut ncut vs0 s` by
+    (strip_tac >> irule gas_cut_readings_mono >>
+     qexists_tac `s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx` >> simp[] >>
+     drule_all return_readings_le >> simp[]) >>
+  gvs[saved_sites_def] >> simp[] >>
   metis_tac[frame_sites_return]
 QED
 
-Finalise frame_allocation_ownership
+Finalise frame_allocation_ownership_upto
+
+Theorem frame_allocation_ownership:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) ==>
+    frame_sites (dyn_site ctx vs0) stk PG G s /\ saved_sites (dyn_site ctx vs0) stk
+Proof
+  metis_tac[frame_allocation_ownership_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem frame_parameter_owner_upto:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  (ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  MEM (SOME site) PG ==> saved_has_site stk site
+Proof
+  strip_tac >> drule_all frame_allocation_ownership_upto >>
+  simp[frame_sites_def, param_sites_def, dyn_site_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[]
+QED
 
 Theorem frame_parameter_owner:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
@@ -332,8 +424,19 @@ Theorem frame_parameter_owner:
   (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
   MEM (SOME site) PG ==> saved_has_site stk site
 Proof
-  strip_tac >> drule_all frame_allocation_ownership >>
-  simp[frame_sites_def, param_sites_def, dyn_site_def] >> strip_tac >>
+  metis_tac[frame_parameter_owner_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem frame_provenance_owner_upto:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  (ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP G v = SOME site ==>
+  cache_has_site s site \/ saved_has_site stk site
+Proof
+  strip_tac >> drule_all frame_allocation_ownership_upto >>
+  simp[frame_sites_def, prov_sites_def, dyn_site_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[]
 QED
 
@@ -344,9 +447,7 @@ Theorem frame_provenance_owner:
   FLOOKUP G v = SOME site ==>
   cache_has_site s site \/ saved_has_site stk site
 Proof
-  strip_tac >> drule_all frame_allocation_ownership >>
-  simp[frame_sites_def, prov_sites_def, dyn_site_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[]
+  metis_tac[frame_provenance_owner_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
 
 Theorem saved_sites_suffix:
@@ -357,13 +458,23 @@ Proof
   Induct >> simp[saved_sites_def] >> Cases_on `n` >> simp[]
 QED
 
+Theorem frame_saved_owners_upto:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  (ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\ n < LENGTH stk ==>
+  frame_sites (dyn_site ctx vs0) (DROP (SUC n) stk) (EL n stk).cf_params
+    (EL n stk).cf_prov (EL n stk).cf_state
+Proof
+  metis_tac[frame_allocation_ownership_upto, saved_sites_suffix]
+QED
+
 Theorem frame_saved_owners:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
   (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\ n < LENGTH stk ==>
   frame_sites (dyn_site ctx vs0) (DROP (SUC n) stk) (EL n stk).cf_params
     (EL n stk).cf_prov (EL n stk).cf_state
 Proof
-  metis_tac[frame_allocation_ownership, saved_sites_suffix]
+  metis_tac[frame_saved_owners_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
 
 (* A parameter tag is preserved by copying but never by ALLOCA.  This is
@@ -432,9 +543,10 @@ Proof
   >> rpt strip_tac >> gvs[] >> metis_tac[parameter_origin_sites_restrict]
 QED
 
-Theorem joint_incoming_allocation_owner:
+Theorem joint_incoming_allocation_owner_upto:
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
-  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\
   (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
   FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid. k < LENGTH stk /\
@@ -443,5 +555,16 @@ Proof
   strip_tac >> drule joint_origin_history_erasure >> strip_tac >>
   drule frame_parameter_origin_sites >> strip_tac >>
   `MEM (SOME site) PG` by metis_tac[parameter_origin_sites_def] >>
-  metis_tac[frame_parameter_owner, origin_frame_erasure, saved_has_site_def]
+  metis_tac[frame_parameter_owner_upto, origin_frame_erasure, saved_has_site_def]
+QED
+
+Theorem joint_incoming_allocation_owner:
+  joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
+  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP om v = SOME (OriginParameter p,site) ==>
+  ?k aid. k < LENGTH stk /\
+    FLOOKUP (EL k stk).cf_state.vs_allocas aid = SOME site
+Proof
+  metis_tac[joint_incoming_allocation_owner_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED

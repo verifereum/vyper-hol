@@ -17,7 +17,9 @@ Theorem layout_stage_selected_run_fuel:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
@@ -57,7 +59,9 @@ Theorem layout_stage_selected_run:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
@@ -97,7 +101,9 @@ QED
 (* A source segment from the initial config is a joint trace with one
    coherent annotation sequence. *)
 Theorem layout_stage_segment_annotations[local]:
-  joint_segment C q0 w qe /\ joint_initial vs0 C q0 /\ ~ctx_has_dalloca C ==>
+  joint_segment C q0 w qe /\ joint_initial vs0 C q0 /\
+  (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\
+    gas_cut ncut vs0 (joint_state qe)) ==>
   ?ass.
     selected_segment C q0 w 0 q0 w qe /\
     joint_trace vs0 C q0 (MAP FST w) (MAP SND w) qe /\
@@ -112,7 +118,7 @@ Proof
   strip_tac >>
   `joint_trace vs0 C q0 (MAP FST w) (MAP SND w) qe` by
     (simp[joint_trace_def] >> metis_tac[layout_segment_chain]) >>
-  drule_all joint_trace_coherent_annotations >> strip_tac >>
+  drule_all joint_trace_coherent_annotations_upto >> strip_tac >>
   qexists `ass` >> simp[] >>
   simp[selected_segment_def, joint_segment_def] >>
   rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >>
@@ -125,7 +131,7 @@ Theorem layout_stage_source_decoration:
   joint_initial vs0 C q0 /\ decoration_entry fn p q0 /\
   ALL_DISTINCT (fn_labels fn) /\
   EVERY (\f. ALL_DISTINCT (fn_labels f)) C.ctx_functions /\
-  ~ctx_has_dalloca C ==>
+  ptr_discipline lo C vs0 ==>
   ?path qe d ass.
     decorated_run C fn s r q0 0 path qe d /\
     selected_segment C q0 path 0 q0 path qe /\
@@ -142,6 +148,10 @@ Proof
   disch_then (qspecl_then [`q0`, `0`, `p`] mp_tac) >>
   simp[] >> strip_tac >>
   `joint_segment C q0 w qe` by metis_tac[cj 3 decorated_execution_segment] >>
+  `ctx_has_dalloca C ==>
+     ptr_discipline_upto lo (SUC (LENGTH vs0.vs_gas_readings)) C vs0 /\
+     gas_cut (SUC (LENGTH vs0.vs_gas_readings)) vs0 (joint_state qe)` by
+    simp[ptr_discipline_upto_whole] >>
   drule_all layout_stage_segment_annotations >> strip_tac >>
   qexistsl [`w`, `qe`, `d`, `ass`] >> fs[]
 QED
@@ -155,7 +165,8 @@ Theorem layout_stage_terminating_events:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
-  ~ctx_has_dalloca C /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -279,8 +290,10 @@ Theorem layout_stage_terminating_context:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
-  ~ctx_has_dalloca C /\
+
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -320,6 +333,8 @@ Theorem layout_stage_prefix_simulation[local]:
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   lookup_function name C'.ctx_functions = SOME fn' /\ fn_entry_label fn = SOME lbl /\
   s = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   finite_run_prefix C fn s es /\ LENGTH es = n ==>
   finite_run_prefix C' fn' s es
@@ -346,6 +361,15 @@ Proof
   drule (cj 2 finite_prefix_decoration_complete) >>
   disch_then (qspecl_then [`q0`, `0`, `p`] mp_tac) >> simp[] >> strip_tac >>
   `joint_segment C q0 w qe` by metis_tac[cj 2 decorated_prefix_segment] >>
+  drule (cj 2 decorated_prefix_end) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choosel_then [`fe`, `ie`, `se`] strip_assume_tac)) >>
+  `n <> 0` by (strip_tac >> fs[LENGTH_NIL]) >>
+  `joint_state qe = se` by
+    (Cases_on `qe` >> fs[decoration_at_def, joint_state_def]) >>
+  `gas_cut n vs (joint_state qe)` by fs[gas_cut_def, LENGTH_DROP] >>
+  `ctx_has_dalloca C ==>
+     ptr_discipline_upto lo n C vs /\ gas_cut n vs (joint_state qe)` by simp[] >>
   drule_all layout_stage_segment_annotations >> strip_tac >>
   `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
   `vs.vs_allocas = FEMPTY /\ s.vs_allocas = FEMPTY` by
@@ -360,13 +384,6 @@ Proof
   `fn2 = fn'` by fs[] >> qpat_x_assum `fn2 = fn'` SUBST_ALL_TAC >>
   `activation_depth q0 = 0` by
     simp[Abbr `q0`, frameActivationCacheTheory.activation_depth_def] >>
-  drule (cj 2 decorated_prefix_end) >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (qx_choosel_then [`fe`, `ie`, `se`] strip_assume_tac)) >>
-  `n <> 0` by (strip_tac >> fs[LENGTH_NIL]) >>
-  `joint_state qe = se` by
-    (Cases_on `qe` >> fs[decoration_at_def, joint_state_def]) >>
-  `gas_cut n vs (joint_state qe)` by fs[gas_cut_def, LENGTH_DROP] >>
   `layout_cut_safe D lo n vs C qe` by fs[layout_cut_safe_def] >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     metis_tac[o1_ctx_shape_instructions_wf] >>
@@ -403,6 +420,8 @@ Theorem layout_stage_prefix_events:
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl /\
   s = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   n <= LENGTH (gas_events_blocks fuel C fn s) ==>
   ?fuel' fn'. C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME fn' /\
@@ -440,7 +459,8 @@ Theorem layout_stage_terminating_context_fuel:
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
-  ~ctx_has_dalloca C /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\

@@ -3,6 +3,7 @@
  * The last trace configuration supplies reads, not an extra event. *)
 Theory frameRelocationBinding
 Ancestors
+  concretizeLayoutCutSafe o1SafeUpto
   frameRelocationDemand frameDemandTaint frameJointDemand frameJointTaint
   frameJointRevert o1PassContract
   frameActivationCache frameJointTrace frameJointTransition ptrDiscipline
@@ -225,9 +226,9 @@ Proof
 QED
 
 (* Observed bytes below the dynamic region lie in a live cache. *)
-Theorem joint_observed_read_cached:
+Theorem joint_observed_read_cached_upto:
   joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==> a < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q) /\ (ctx_has_dalloca C ==> a < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
   joint_observed_read (EL j (q0::qs)) a /\ lo <= a ==>
   ?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
     b <= a /\ a < b + sz
@@ -238,8 +239,21 @@ Proof
     (Cases_on `EL j (q0::qs)` >> simp[]) >>
   `a IN joint_reads (EL j (q0::qs)) /\ ~in_revert_forward fn s` by
     gvs[joint_observed_read_def, joint_read_exempt_def] >>
-  drule_all joint_read_owner_birth_above >> strip_tac >>
+  drule_all joint_read_owner_birth_above_upto >> strip_tac >>
   first_x_assum (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem joint_observed_read_cached:
+  joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==> a < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
+  joint_observed_read (EL j (q0::qs)) a /\ lo <= a ==>
+  ?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
+    b <= a /\ a < b + sz
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    joint_observed_read_cached_upto) >>
+  simp[ptr_discipline_upto_whole]
 QED
 
 Theorem joint_initial_fmp_trace:
@@ -257,12 +271,23 @@ QED
 
 (* With DALLOCA every live cache, saved frames included, lies below the
    initial free memory pointer. *)
+Theorem joint_cache_below_initial_fmp_upto:
+  joint_trace vs0 C q0 es qs q /\ EVERY wf_function C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q) /\ ctx_has_dalloca C /\ k <= LENGTH es /\
+  activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
+  b + sz <= w2n vs0.vs_initial_fmp
+Proof
+  strip_tac >> drule_all joint_trace_reachable_at >> strip_tac >>
+  `gas_cut ncut vs0 (joint_state (EL k (q0::qs)))` by
+    metis_tac[trace_config_gas_cut] >>
+  Cases_on `EL k (q0::qs)` >> gvs[joint_state_def] >> metis_tac[frameDemandOwnershipTheory.joint_config_cache_below_upto]
+QED
+
 Theorem joint_cache_below_initial_fmp:
   joint_trace vs0 C q0 es qs q /\ EVERY wf_function C.ctx_functions /\
   ptr_discipline lo C vs0 /\ ctx_has_dalloca C /\ k <= LENGTH es /\
   activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
   b + sz <= w2n vs0.vs_initial_fmp
 Proof
-  strip_tac >> drule_all joint_trace_reachable_at >> strip_tac >>
-  Cases_on `EL k (q0::qs)` >> gvs[] >> metis_tac[frameDemandOwnershipTheory.joint_config_cache_below]
+  metis_tac[joint_cache_below_initial_fmp_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED

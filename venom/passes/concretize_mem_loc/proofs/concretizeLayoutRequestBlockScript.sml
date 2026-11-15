@@ -92,7 +92,7 @@ Proof
 QED
 
 Theorem layout_request_next_certificate_fuel:
-  o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\
   layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\

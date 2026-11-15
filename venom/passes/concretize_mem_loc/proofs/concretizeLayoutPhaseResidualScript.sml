@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseResidual
-Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutPhaseAdministration
   concretizeLayoutLocalAssertions concretizeLayoutLocalBump
   concretizeLayoutLocalExtcodeHash concretizeLayoutLocalExtcodeCopy
@@ -207,7 +207,7 @@ Theorem layout_dalloca_trace_step:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ fixed_region_reserved lo C /\
   (ctx_has_dalloca C ==>
      ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
@@ -246,10 +246,11 @@ Proof
     (qpat_x_assum `joint_config_reachable _ _ _` mp_tac >> simp[] >>
      strip_tac >> drule_all joint_reachable_dalloca >> simp[]) >>
   `w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (`frame_reachable vs0 C stk PG G tn fn inst s` by
-       (gvs[joint_config_reachable_def] >>
-        metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-     fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]) >>
+    (`g.lop_cursor <= LENGTH es` by decide_tac >>
+     `frame_reachable vs0 C stk PG G tn fn inst s /\ gas_cut ncut vs0 s` by
+       metis_tac[layout_cut_safe_frame] >>
+     fs[layout_cut_safe_def, ptr_discipline_upto_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `w2n s.vs_initial_fmp = w2n vs0.vs_initial_fmp` by
     (`g.lop_cursor <= LENGTH es` by simp[] >>
      drule_all frameRelocationBindingTheory.joint_initial_fmp_trace >>
@@ -273,6 +274,7 @@ Proof
         (SPEC_ALL concretize_dalloca_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >> simp[] >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
