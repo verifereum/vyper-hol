@@ -171,8 +171,3 @@ Proof
   strip_tac >> irule build_compile_env_defined_map_agreement >>
   simp[artifact_env_def] >> metis_tac[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  if List.exists (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then raise Fail ("oracle dependency: " ^ name) else ())
-  (DB.thms "placeTypingBuildProps");

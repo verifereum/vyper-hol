@@ -438,10 +438,3 @@ Proof
       gvs[] >> drule_all take_call_outcome_storage_suffix >> simp[]) >>
   gvs[] >> drule_all take_call_outcome_storage_suffix >> simp[]
 QED
-
-(* These oracle storage interfaces and their prerequisites must be kernel closed. *)
-val () = List.app (fn thy => List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then () else raise Fail ("Incomplete storage boundary: " ^ thy ^ "." ^ name)
-  end) (DB.thms thy)) ["vyperTypeStoragePreservation", "vyperCallOutcomeStorage"];

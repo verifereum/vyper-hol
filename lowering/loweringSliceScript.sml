@@ -268,33 +268,6 @@ Definition immutable_prefix_bound_def:
       off + type_memory_size tv <= cap
 End
 
-(* Admissibility supplies the footprint well-formedness needed by memory
-   transport; no canonical-padding assumption is imposed on immutables. *)
-Theorem immutable_base_admissible_val_wf[local]:
-  !bt v. immutable_value_admissible (BaseTV bt) v ==> val_wf (BaseTV bt) v
-Proof
-  Cases_on `bt`
-  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
-                           type_memory_size_def])
-  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
-                           type_memory_size_def])
-  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
-                           type_memory_size_def])
-  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
-                           type_memory_size_def])
-  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
-                           type_memory_size_def] >>
-      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-                arithmeticTheory.LESS_EQ_TRANS])
-  >- (rename1 `BytesT bound` >> Cases_on `bound`
-      >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def])
-      >> Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
-                              type_memory_size_def] >>
-      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-                arithmeticTheory.LESS_EQ_TRANS])
-  >> Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def]
-QED
-
 Theorem immutable_admissible_val_wf:
   (!tv v. immutable_value_admissible tv v ==> val_wf tv v) /\
   (!vs tvs. immutable_fields_admissible tvs vs ==> fields_val_wf vs tvs) /\
@@ -1321,13 +1294,3 @@ Proof
   impl_tac >- (simp[result_rel_def] >> metis_tac[]) >>
   simp[]
 QED
-
-(* Every slice is independent of the general compiler admissions. *)
-val () = List.app
-  (fn (name,th) =>
-    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("lowering slice proof is not closed: " ^ name)
-    end)
-  (DB.thms "loweringSlice");

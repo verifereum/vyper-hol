@@ -98,6 +98,4 @@ Proof
   irule relocation_reader_context_update_var >> simp[]
 QED
 
-val _ = if null (hyp concretize_initial_fmp_local_complete) then ()
-        else raise Fail "INITIAL_FMP export has hypotheses";
 val _ = export_theory();

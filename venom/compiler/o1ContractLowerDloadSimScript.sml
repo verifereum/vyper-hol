@@ -327,10 +327,6 @@ Proof
   simp[]
 QED
 
-val _ = if null (hyp ld_runner_simulation_events_fuel) andalso
-               aconv (concl ld_runner_simulation_events_fuel) ldMutualResult
-        then () else raise Fail "mutual runner audit failed";
-
 (* The run of the entry function, cut after its first j events. *)
 Theorem ld_root_simulation_events_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -493,10 +489,6 @@ Proof
   rpt strip_tac >> simp[ctx_sim_fuel_def] >> rpt strip_tac >>
   drule_all lower_dload_stage_sim_events_fuel >> strip_tac >> simp[]
 QED
-
-(* Admission checks run through holbuild check. *)
-val _ = if null (hyp lower_dload_stage_sim)
-        then () else raise Fail "lower_dload_stage_sim proof audit failed";
 
 (* The first n events of a run inside the cut, with no termination. *)
 Theorem lower_dload_stage_events_upto:

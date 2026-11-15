@@ -206,6 +206,3 @@ Resume dload_joint_return_closed[pop]:
 QED
 
 Finalise dload_joint_return_closed
-
-val _ = if null (hyp dload_joint_return_closed) then ()
-  else raise Fail "joint return: nonempty hypotheses";

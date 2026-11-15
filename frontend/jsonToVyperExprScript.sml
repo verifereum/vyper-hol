@@ -1,7 +1,7 @@
 Theory jsonToVyperExpr
 Ancestors
   ASCIInumbers integer alist jsonAST vyperAST jsonToVyperType vyperConstEval
-  vyperPinFold
+  vyperOriginFold vyperPinFold
 Libs
   intLib
 
@@ -206,9 +206,16 @@ End
 
 (* Compile-time keyword values (flags, max_outsize, method_id) are evaluated
    from their translated source expressions. *)
+Definition pin_fold_value_def:
+  pin_fold_value e =
+    case origin_fold_value e of
+    | Literal ty l => SOME (evaluate_literal l)
+    | _ => NONE
+End
+
 Definition kwarg_bool_def:
   kwarg_bool key (kwargs : (identifier # expr) list) default =
-    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+    case OPTION_BIND (ALOOKUP kwargs key) pin_fold_value of
       SOME (BoolV b) => b
     | _ => default
 End
@@ -216,7 +223,7 @@ End
 
 Definition kwarg_num_def:
   kwarg_num key (kwargs : (identifier # expr) list) (default : num) =
-    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+    case OPTION_BIND (ALOOKUP kwargs key) pin_fold_value of
       SOME (IntV n) => if n >= 0 then Num n else default
     | _ => default
 End
@@ -234,7 +241,7 @@ End
 
 Definition kwarg_method_id_def:
   kwarg_method_id key (kwargs : (identifier # expr) list) =
-    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+    case OPTION_BIND (ALOOKUP kwargs key) pin_fold_value of
       SOME (BytesV bs) => if LENGTH bs = 4 then SOME bs else NONE
     | _ => NONE
 End
@@ -253,7 +260,7 @@ Definition kwargs_checked_def:
                              "is_static_call"; "revert_on_failure";
                              "raw_args"; "unwrap_tuple"; "ensure_tuple";
                              "method_id"; "skip_contract_check"] ⇒
-                      IS_SOME (eval_constant v)) kwargs
+                      IS_SOME (pin_fold_value v)) kwargs
     then e else rejected_expr
 End
 
@@ -314,11 +321,15 @@ Definition fold_constant_def:
     | NONE => e
 End
 
+Definition fold_pin_constant_def:
+  fold_pin_constant e =
+    case origin_fold_value e of
+    | Literal ty l => Literal ty l
+    | _ => e
+End
+
 Definition exponent_operand_def:
-  exponent_operand op e =
-    if op = JBop_Pow then
-      (case pin_fold_expr e of Literal ty l => Literal ty l | _ => e)
-    else e
+  exponent_operand op e = if op = JBop_Pow then fold_pin_constant e else e
 End
 
 Definition make_builtin_call_def:
@@ -331,13 +342,23 @@ Definition make_builtin_call_def:
     else if name = "slice" then
       (* The length is a compile-time value when it can be: the checker
          bounds the result by a literal length. *)
-      (let slice_args = (case args of [src; start; len] => [src; start; fold_constant len]
+      (let slice_args = (case args of [src; start; len] => [src; start; fold_pin_constant len]
                                     | _ => args) in
        case ret_ty of JT_String n => Builtin ty (Slice n) slice_args
                     | JT_Bytes n => Builtin ty (Slice n) slice_args
                     | _ => Builtin ty (Slice 0) slice_args)
     else if name = "keccak256" then Builtin ty Keccak256 args
-    else if name = "sha256" then Builtin ty Sha256 args
+    else if name = "sha256" then
+      (let original = Builtin ty Sha256 args in
+       let args' = MAP origin_fold_value args in
+       case pin_literal_values args' of
+       | SOME vs =>
+           (case pin_fold_result ty original
+              (evaluate_builtin empty_evaluation_context empty_accounts
+                ty Sha256 (MAP expr_type args') vs) of
+            | Literal lty l => Literal lty l
+            | _ => original)
+       | NONE => original)
     else if name = "floor" then Builtin ty Floor args
     else if name = "ceil" then Builtin ty Ceil args
     else if name = "blockhash" then Builtin ty BlockHash args
@@ -414,9 +435,24 @@ Definition make_builtin_call_def:
       Call ty (CreateTarget RawCreate (IS_SOME salt_opt) rof
         (create_keyword_order RawCreate (IS_SOME salt_opt) (LENGTH args) kwargs))
         (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE)
+    else if name = "shift" then
+      (let original = Call ty (IntCall (NONE,"shift")) args NONE in
+       case MAP origin_fold_value args of
+       | [Literal _ (IntL i); Literal _ (IntL bits)] =>
+           if -256 <= bits /\ bits <= 256 then
+             if bits < 0 then
+               Literal ty (IntL (int_shift_right (Num (-bits)) i))
+             else
+               (case pin_fold_result ty original
+                  (wrapped_int_op (if i < 0 then Signed 256 else Unsigned 256)
+                    (int_shift_left (Num bits) i) : value + error) of
+                | Literal lty l => Literal lty l
+                | _ => original)
+           else original
+       | _ => original)
     else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then
-      (case args of
+      fold_pin_constant (case args of
          (v::d::_) =>
            (case denomination_of_expr d of
               SOME dn => Builtin ty (AsWeiValue dn) [v]
@@ -424,8 +460,9 @@ Definition make_builtin_call_def:
        | (v::_) => Builtin ty (AsWeiValue Wei) [v]
        | _ => Builtin ty (AsWeiValue Wei) [])
     else if name = "uint2str" then
-      (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
-                    | _ => Builtin ty (Uint2Str 0) args)
+      fold_pin_constant
+        (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
+                      | _ => Builtin ty (Uint2Str 0) args)
     else if name = "abi_decode" ∨ name = "_abi_decode" then
       kwargs_checked kwargs (
       let unwrap = kwarg_bool "unwrap_tuple" kwargs T in
@@ -440,7 +477,7 @@ Definition make_builtin_call_def:
     else if name = "extract32" then
       TypeBuiltin ty Extract32 ty args
     else if name = "method_id" then
-      fold_constant (Builtin ty MethodId args)
+      fold_pin_constant (Builtin ty MethodId args)
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
           | JT_Struct _ sname =>
@@ -593,28 +630,53 @@ Definition expr_constants_def:
 End
 
 Definition expr_all_import_maps_def:
-  expr_all_import_maps ctx = SND (SND (SND (SND (SND (SND (SND (SND ctx)))))))
+  expr_all_import_maps ctx = FST (SND (SND (SND (SND (SND (SND (SND (SND ctx))))))))
+End
+
+Definition expr_origins_def:
+  expr_origins ctx = SND (SND (SND (SND (SND (SND (SND (SND (SND ctx))))))))
 End
 
 Definition expr_with_local_types_def:
   expr_with_local_types ctx local_types =
     (expr_main_src_id ctx,
-     (expr_current_nsid ctx,
-      (expr_import_map ctx,
-       (expr_const_names ctx,
-        (local_types, (expr_toplevel_types ctx,
-          (expr_override_map ctx,
-           (expr_constants ctx, expr_all_import_maps ctx))))))))
+     expr_current_nsid ctx,
+     expr_import_map ctx,
+     expr_const_names ctx,
+     local_types,
+     expr_toplevel_types ctx,
+     expr_override_map ctx,
+     expr_constants ctx,
+     expr_all_import_maps ctx,
+     expr_origins ctx)
 End
 
 Definition expr_with_constants_def:
   expr_with_constants ctx constants =
     (expr_main_src_id ctx,
-     (expr_current_nsid ctx,
-      (expr_import_map ctx,
-       (expr_const_names ctx,
-        (expr_local_types ctx, (expr_toplevel_types ctx,
-          (expr_override_map ctx, (constants, expr_all_import_maps ctx))))))))
+     expr_current_nsid ctx,
+     expr_import_map ctx,
+     expr_const_names ctx,
+     expr_local_types ctx,
+     expr_toplevel_types ctx,
+     expr_override_map ctx,
+     constants,
+     expr_all_import_maps ctx,
+     expr_origins ctx)
+End
+
+Definition expr_with_origins_def:
+  expr_with_origins ctx origins =
+    (expr_main_src_id ctx,
+     expr_current_nsid ctx,
+     expr_import_map ctx,
+     expr_const_names ctx,
+     expr_local_types ctx,
+     expr_toplevel_types ctx,
+     expr_override_map ctx,
+     expr_constants ctx,
+     expr_all_import_maps ctx,
+     origins)
 End
 
 Definition lookup_local_type_def:
@@ -861,11 +923,11 @@ End
 
 Definition translate_boolop_def:
   translate_boolop JBoolop_And es =
-    (case pin_bool_values (MAP pin_fold_expr es) of
+    (case pin_bool_values (MAP origin_fold_value es) of
      | SOME bs => Literal (BaseT BoolT) (BoolL (EVERY I bs))
      | NONE => boolop_and es) /\
   translate_boolop JBoolop_Or es =
-    (case pin_bool_values (MAP pin_fold_expr es) of
+    (case pin_bool_values (MAP origin_fold_value es) of
      | SOME bs => Literal (BaseT BoolT) (BoolL (EXISTS I bs))
      | NONE => boolop_or es)
 End
@@ -960,7 +1022,7 @@ End
 (* The length is a compile-time value, not a runtime operand. *)
 Definition calldata_slice_length_def:
   calldata_slice_length e =
-    case eval_constant e of
+    case pin_fold_value e of
     | SOME (IntV i) =>
         if 0 < i /\ i < &(2 ** 256) then SOME (Num i) else NONE
     | _ => NONE
@@ -1030,86 +1092,277 @@ Definition external_argument_types_def:
     external_argument_types sig_ctx tys args
 End
 
-Definition translate_expr_def:
-  (translate_expr ctx (JE_Int v ty) =
+Definition origin_hex_byte_def:
+  origin_hex_byte (b : word8) =
+    let n = w2n b in
+    MAP (\d. CHR (if d < 10 then ORD #"0" + d else ORD #"a" + d - 10))
+      [n DIV 16; n MOD 16]
+End
+
+Definition origin_hex_bytes_def:
+  origin_hex_bytes bs = "0x" ++ FLAT (MAP origin_hex_byte bs)
+End
+
+Definition origin_int_string_def:
+  origin_int_string (i : int) =
+    (if i < 0 then "-" else "") ++ num_to_dec_string (Num (ABS i))
+End
+
+Definition canonical_literal_origin_def:
+  canonical_literal_origin (Literal ty (IntL i)) = SOME (JE_Int i JT_None) /\
+  canonical_literal_origin (Literal ty (DecimalL i)) =
+    SOME (JE_Decimal (origin_int_string i ++ "e-10")) /\
+  canonical_literal_origin (Literal ty (BoolL b)) = SOME (JE_Bool b) /\
+  canonical_literal_origin (Literal ty (StringL s)) = SOME (JE_Str (LENGTH s) s) /\
+  canonical_literal_origin (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) =
+    SOME (JE_Bytes n (origin_hex_bytes bs)) /\
+  canonical_literal_origin (Literal ty (BytesL bs)) =
+    SOME (JE_Hex (origin_hex_bytes bs) JT_None) /\
+  canonical_literal_origin _ = NONE
+End
+
+Definition origin_node_kind_def:
+  origin_node_kind (JE_Int _ _) = SOME 0 /\
+  origin_node_kind (JE_Decimal _) = SOME 1 /\
+  origin_node_kind (JE_Str _ _) = SOME 2 /\
+  origin_node_kind (JE_GenericStr _) = SOME 2 /\
+  origin_node_kind (JE_Bytes _ _) = SOME 3 /\
+  origin_node_kind (JE_HexBytes _ _) = SOME 8 /\
+  origin_node_kind (JE_Hex _ _) = SOME 4 /\
+  origin_node_kind (JE_Bool _) = SOME 5 /\
+  origin_node_kind (JE_List _ _) = SOME 6 /\
+  origin_node_kind (JE_Tuple _ _) = SOME 7 /\
+  origin_node_kind _ = NONE
+End
+
+Definition origin_numeric_def:
+  origin_numeric (JE_Int i _) = SOME (i * 10 ** 10) /\
+  origin_numeric (JE_Decimal s) = SOME (decimal_string_to_int s) /\
+  origin_numeric (JE_Bool b) = SOME (if b then 10 ** 10 else 0) /\
+  origin_numeric _ = NONE
+End
+
+Definition origin_text_def:
+  origin_text (JE_Hex s _) = SOME s /\
+  origin_text (JE_Str _ s) = SOME s /\
+  origin_text (JE_GenericStr s) = SOME s /\
+  origin_text _ = NONE
+End
+
+Definition origin_bytes_def:
+  origin_bytes (JE_Bytes _ s) =
+    SOME (hex_string_to_bytes (FILTER isHexDigit (strip_0x s))) /\
+  origin_bytes (JE_HexBytes _ s) =
+    SOME (hex_string_to_bytes (FILTER isHexDigit (strip_0x s))) /\
+  origin_bytes _ = NONE
+End
+
+Definition origin_same_value_def:
+  origin_same_value l r =
+    case (origin_numeric l, origin_numeric r) of
+    | (SOME x,SOME y) => x = y
+    | _ => case (origin_text l, origin_text r) of
+           | (SOME x,SOME y) => x = y
+           | _ => case (origin_bytes l, origin_bytes r) of
+                  | (SOME x,SOME y) => x = y
+                  | _ => F
+End
+
+Definition origin_homogeneous_def:
+  origin_homogeneous [] = T /\
+  origin_homogeneous (e::es) =
+    (IS_SOME (origin_node_kind e) /\
+     EVERY (\x. origin_node_kind x = origin_node_kind e) es)
+End
+
+Definition origin_membership_def:
+  origin_membership op (SOME l) (SOME (JE_List es _)) =
+    (if MEM op [JBop_In; JBop_NotIn] /\
+        (case origin_node_kind l of SOME n => n < 6 \/ n = 8 | _ => F) /\
+        EVERY (\x. case origin_node_kind x of SOME n => n < 6 \/ n = 8 | _ => F) es /\
+        origin_homogeneous es
+     then SOME (if op = JBop_In then EXISTS (origin_same_value l) es
+                else ~EXISTS (origin_same_value l) es)
+     else NONE) /\
+  origin_membership _ _ _ = NONE
+End
+
+Definition origin_select_def:
+  origin_select (SOME (JE_List es _)) (Literal _ (IntL i)) =
+    (if origin_homogeneous es /\ 0 <= i /\ Num i < LENGTH es
+     then SOME (EL (Num i) es) else NONE) /\
+  origin_select _ _ = NONE
+End
+
+Definition origin_retype_def:
+  origin_retype ty (Literal _ l) = Literal ty l /\
+  origin_retype (ArrayT elem bd) (Builtin old (MakeArray (SOME _) _) es) =
+    Builtin (ArrayT elem bd) (MakeArray (SOME elem) bd)
+      (origin_retypes elem es) /\
+  origin_retype ty e = e /\
+  origin_retypes ty [] = [] /\
+  origin_retypes ty (e::es) = origin_retype ty e :: origin_retypes ty es
+End
+
+Definition expr_origin_key_def:
+  expr_origin_key ctx (JE_Name name tc src jt) =
+    (if MEM name (expr_const_names ctx)
+     then SOME (expr_current_nsid ctx,name) else NONE) /\
+  expr_origin_key ctx
+    (JE_Attribute obj attr result_tc btn btc src jt) =
+    (case obj of
+     | JE_Name alias tc sid _ =>
+         if tc = SOME "module" \/
+            (tc = NONE /\ IS_SOME (ALOOKUP (expr_import_map ctx) alias))
+         then SOME (resolve_module_alias ctx alias sid,attr) else NONE
+     | _ => OPTION_MAP (\m. (SOME m,attr))
+              (resolve_module_expr (expr_all_import_maps ctx)
+                 (expr_import_map ctx) obj)) /\
+  expr_origin_key _ _ = NONE
+End
+
+Definition lookup_origin_pair_def:
+  lookup_origin_pair ctx source =
+    OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
+End
+
+Definition translate_expr_with_policy_def:
+  (translate_expr_with_policy resolve ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
 
-  (translate_expr ctx (JE_Decimal s) =
+  (translate_expr_with_policy resolve ctx (JE_Decimal s) =
     Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
 
-  (translate_expr ctx (JE_Str len s) =
+  (translate_expr_with_policy resolve ctx (JE_Str len s) =
     Literal (BaseT (StringT len)) (StringL s)) /\
 
-  (translate_expr ctx (JE_GenericStr s) =
+  (translate_expr_with_policy resolve ctx (JE_GenericStr s) =
     Literal (BaseT (StringT (STRLEN s))) (StringL s)) /\
 
-  (translate_expr ctx (JE_Bytes len hex) =
+  (translate_expr_with_policy resolve ctx (JE_Bytes len hex) =
     Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
-  (translate_expr ctx (JE_Hex hex typ) =
+  (translate_expr_with_policy resolve ctx (JE_HexBytes len hex) =
+    Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
+
+  (translate_expr_with_policy resolve ctx (JE_Hex hex typ) =
     let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
     let ty = case typ of
                JT_None => BaseT (BytesT (Fixed (LENGTH bytes)))
              | _ => translate_type (expr_type_ctx ctx) typ in
     Literal ty (BytesL bytes)) /\
 
-  (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
+  (translate_expr_with_policy resolve ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
-  (translate_expr ctx JE_Ellipsis = Literal (BaseT BoolT) (BoolL T)) /\
+  (translate_expr_with_policy resolve ctx JE_Ellipsis = Literal (BaseT BoolT) (BoolL T)) /\
 
-  (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
+  (translate_expr_with_policy resolve ctx
+     (JE_Name id tc src_id_opt ret_ty) =
     let ty = translate_type (expr_type_ctx ctx) ret_ty in
-    if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
+    if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else
+    if resolve then
+      case lookup_origin_pair ctx (JE_Name id tc src_id_opt ret_ty) of
+      | SOME (value,origin) => origin_retype ty value
+      | NONE => make_name ctx ty id
+    else make_name ctx ty id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx
-      (JE_Attribute e attr result_tc base_type_name base_typeclass
-        attr_src_id_opt ret_ty) =
-    translate_attribute ctx e (translate_expr ctx e) attr result_tc
-      base_type_name base_typeclass attr_src_id_opt ret_ty) /\
+  (translate_expr_with_policy resolve ctx
+     (JE_Attribute e attr tc btn btc src jt) =
+    let original = translate_attribute ctx e
+      (translate_expr_with_policy resolve ctx e) attr tc btn btc src jt in
+    if resolve then
+      case lookup_origin_pair ctx (JE_Attribute e attr tc btn btc src jt) of
+      | SOME (value,origin) => origin_retype (translate_type (expr_type_ctx ctx) jt) value
+      | NONE => original
+    else original) /\
 
   (* Subscript *)
   (* A tuple index is a compile-time value. *)
-  (translate_expr ctx (JE_Subscript arr idx ret_ty) =
-    let arr' = translate_expr ctx arr in
-    let idx' = translate_expr ctx idx in
-    Subscript (translate_type (expr_type_ctx ctx) ret_ty) arr'
-      (case expr_type arr' of TupleT _ => fold_constant idx' | _ => idx')) /\
+  (translate_expr_with_policy resolve ctx (JE_Subscript arr idx jt) =
+    let arr' = translate_expr_with_policy resolve ctx arr in
+    let idx' = translate_expr_with_policy resolve ctx idx in
+    let ty = translate_type (expr_type_ctx ctx) jt in
+    let original = Subscript ty arr'
+      (case expr_type arr' of TupleT _ => fold_pin_constant idx' | _ => idx') in
+    let arr_value = origin_fold_value
+      (translate_expr_with_policy T ctx arr) in
+    let index_value = origin_fold_value
+      (translate_expr_with_policy T ctx idx) in
+    let arr_checked = origin_retype (expr_type arr_value) arr_value in
+    if pin_literal_tree arr_checked /\ IS_SOME (origin_select
+        (resolved_origin_expr T ctx arr arr_value) index_value) then
+      let elem_ty = case expr_type arr_checked of ArrayT elem _ => elem | _ => ty in
+      case pin_fold_subscript elem_ty arr_checked index_value of
+      | Subscript _ _ _ => original
+      | selected =>
+          let retyped = origin_retype ty selected in
+          if pin_literal_tree retyped /\ expr_type retyped = ty
+          then retyped else original
+    else original) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
-  (translate_expr ctx (JE_NamedExpr target value) =
+  (translate_expr_with_policy resolve ctx (JE_NamedExpr target value) =
     Literal (BaseT BoolT) (BoolL T)) /\
 
   (* BinOp *)
   (* The checker needs a literal exponent unless the base is one, so a
      compile-time exponent is folded. *)
-  (translate_expr ctx (JE_BinOp l op r ret_ty) =
+  (translate_expr_with_policy resolve ctx (JE_BinOp l op r ret_ty) =
     Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op))
-      [translate_expr ctx l; exponent_operand op (translate_expr ctx r)]) /\
+      [translate_expr_with_policy resolve ctx l;
+       exponent_operand op (translate_expr_with_policy resolve ctx r)]) /\
 
-  (translate_expr ctx (JE_Compare l op r) =
-    Builtin (BaseT BoolT) (Bop (translate_binop op))
-      [translate_expr ctx l; translate_expr ctx r]) /\
+  (translate_expr_with_policy resolve ctx (JE_Compare l op r) =
+    let l' = translate_expr_with_policy resolve ctx l in
+    let r' = translate_expr_with_policy resolve ctx r in
+    let original = Builtin (BaseT BoolT) (Bop (translate_binop op)) [l';r'] in
+    if ~MEM op [JBop_In; JBop_NotIn; JBop_Eq; JBop_NotEq] then original else
+    let lv = origin_fold_value
+      (translate_expr_with_policy T ctx l) in
+    let rv = origin_fold_value
+      (translate_expr_with_policy T ctx r) in
+    let lo = resolved_origin_expr T ctx l lv in
+    let ro = resolved_origin_expr T ctx r rv in
+    if MEM op [JBop_In; JBop_NotIn] then
+      case origin_membership op lo ro of
+      | SOME b => Literal (BaseT BoolT) (BoolL b)
+      | NONE => original
+    else
+      case (lo, ro) of
+      | (SOME left, SOME right) =>
+          (case origin_node_kind left of
+           | SOME k =>
+               if (k < 6 \/ k = 8) /\ origin_node_kind right = SOME k then
+                 (case pin_fold_expr
+                   (Builtin (BaseT BoolT) (Bop (translate_binop op)) [lv;rv]) of
+                  | Literal ty value => Literal ty value
+                  | _ => original)
+               else original
+           | NONE => original)
+      | _ => original) /\
+
 
   (* BoolOp - convert to nested IfExp *)
-  (translate_expr ctx (JE_BoolOp op es) =
-    translate_boolop op (translate_expr_list ctx es)) /\
+  (translate_expr_with_policy resolve ctx (JE_BoolOp op es) =
+    translate_boolop op
+      (translate_expr_list_with_policy resolve ctx es)) /\
 
   (* UnaryOp *)
-  (translate_expr ctx (JE_UnaryOp op e ret_ty) =
-    translate_unary ctx op (translate_expr ctx e) ret_ty) /\
+  (translate_expr_with_policy resolve ctx (JE_UnaryOp op e ret_ty) =
+    translate_unary ctx op (translate_expr_with_policy resolve ctx e) ret_ty) /\
 
   (* IfExp (ternary) *)
-  (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
-    IfExp (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
+  (translate_expr_with_policy resolve ctx (JE_IfExp test body orelse ret_ty) =
+    IfExp (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr_with_policy resolve ctx test) (translate_expr_with_policy resolve ctx body) (translate_expr_with_policy resolve ctx orelse)) /\
 
   (* Tuple: Vyper types a tuple literal by its context (e.g. the parameter
      it is passed to), so members may be wider than the elements. *)
-  (translate_expr ctx (JE_Tuple es ty) =
-    let es' = translate_expr_list ctx es in
+  (translate_expr_with_policy resolve ctx (JE_Tuple es ty) =
+    let es' = translate_expr_list_with_policy resolve ctx es in
     let tys = (case translate_type (expr_type_ctx ctx) ty of
                | TupleT tys =>
                    if LENGTH tys = LENGTH es' /\ ~MEM NoneT tys then tys
@@ -1118,32 +1371,45 @@ Definition translate_expr_def:
     Builtin (TupleT tys) (MakeArray NONE (Fixed (LENGTH es'))) es') /\
 
   (* List - array literal *)
-  (translate_expr ctx (JE_List es ty) =
-    translate_list ctx ty (translate_expr_list ctx es)) /\
+  (translate_expr_with_policy resolve ctx (JE_List es ty) =
+    translate_list ctx ty (translate_expr_list_with_policy resolve ctx es)) /\
 
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
   (* JE_Call now includes source_id for module calls *)
-  (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
+  (translate_expr_with_policy resolve ctx (JE_Call func args kwargs ret_ty src_id_opt) =
     if is_calldata_len_call func args kwargs then
       Builtin (BaseT (UintT 256)) CalldataLen []
     else if is_calldata_slice_call func args then
-      (let args' = translate_expr_list ctx args in
+      (let args' = translate_expr_list_with_policy resolve ctx args in
        case calldata_slice_bound args' kwargs of
        | SOME n => Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n)
                      [EL 1 args']
        | NONE => rejected_expr)
     else if is_raw_call_calldata_call func args then
-      let kwargs' = translate_kwargs ctx kwargs in
+      let kwargs' = translate_kwargs_with_policy resolve ctx kwargs in
       kwargs_checked kwargs' (
       Call (translate_type (expr_type_ctx ctx) ret_ty)
         (RawCallCalldataTarget (raw_call_flags_of_kwargs kwargs'))
-        (translate_expr ctx (HD args) :: MAP SND (ext_call_kwargs kwargs')) NONE)
-    else let args' = translate_expr_list ctx args in
-    let kwargs' = translate_kwargs ctx kwargs in
+        (translate_expr_with_policy resolve ctx (HD args) :: MAP SND (ext_call_kwargs kwargs')) NONE)
+    else let args' =
+      case (func,args) of
+      | (JE_Name name tc _ _, [topics;data]) =>
+          if name = "raw_log" /\ tc <> SOME "interface" then
+            let topics_value = translate_expr_with_policy T ctx topics in
+            let topics_ty = expr_type topics_value in
+            let candidate = origin_retype topics_ty (origin_fold_value topics_value) in
+            [(if IS_SOME (resolved_origin_expr T ctx topics candidate) /\
+                  pin_literal_tree candidate /\ expr_type candidate = topics_ty
+              then candidate
+              else translate_expr_with_policy resolve ctx topics);
+             translate_expr_with_policy resolve ctx data]
+          else translate_expr_list_with_policy resolve ctx args
+      | _ => translate_expr_list_with_policy resolve ctx args in
+    let kwargs' = translate_kwargs_with_policy resolve ctx kwargs in
     let translated_pop_target =
       case func of
       | JE_Attribute obj fname _ _ _ _ _ =>
-          if fname = "pop" then expr_base_target (translate_expr ctx obj)
+          if fname = "pop" then expr_base_target (translate_expr_with_policy resolve ctx obj)
           else NONE
       | _ => NONE in
     translate_call ctx func args' kwargs' ret_ty src_id_opt
@@ -1151,60 +1417,125 @@ Definition translate_expr_def:
 
   (* ExtCall - mutating external call (is_static = F).
      Operands: target :: positional args ++ keyword args in source order. *)
-  (translate_expr ctx
+  (translate_expr_with_policy resolve ctx
       (JE_ExtCall func_name func_src arg_types ret_ty target args keywords) =
-    let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
-    let skip_check = kwarg_bool "skip_contract_check" (translate_kwargs ctx keywords) F in
+    let kws = ext_call_kwargs (translate_kwargs_with_policy resolve ctx keywords) in
+    let skip_check = kwarg_bool "skip_contract_check" (translate_kwargs_with_policy resolve ctx keywords) F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
-    let args' = translate_expr_list ctx args in
+    let args' = translate_expr_list_with_policy resolve ctx args in
     (* Vyper records the full declared parameter list in argument_types, even
        when trailing defaulted parameters are omitted.  ExtCall carries the
        effective ABI signature selected at this call site. *)
-    kwargs_checked (translate_kwargs ctx keywords) (
+    kwargs_checked (translate_kwargs_with_policy resolve ctx keywords) (
     Call ret_ty'
       (ExtCall F skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
          ret_ty') (MAP FST kws))
-      (translate_expr ctx target :: args' ++ MAP SND kws) NONE)) /\
+      (translate_expr_with_policy resolve ctx target :: args' ++ MAP SND kws) NONE)) /\
 
   (* StaticCall - read-only external call (is_static = T); same operand
      layout as ExtCall, and Vyper rejects value= here. *)
-  (translate_expr ctx
+  (translate_expr_with_policy resolve ctx
       (JE_StaticCall func_name func_src arg_types ret_ty target args keywords) =
-    let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
-    let skip_check = kwarg_bool "skip_contract_check" (translate_kwargs ctx keywords) F in
+    let kws = ext_call_kwargs (translate_kwargs_with_policy resolve ctx keywords) in
+    let skip_check = kwarg_bool "skip_contract_check" (translate_kwargs_with_policy resolve ctx keywords) F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
-    let args' = translate_expr_list ctx args in
+    let args' = translate_expr_list_with_policy resolve ctx args in
     (* See ExtCall above: retain only the effective ABI argument types. *)
-    kwargs_checked (translate_kwargs ctx keywords) (
+    kwargs_checked (translate_kwargs_with_policy resolve ctx keywords) (
     Call ret_ty'
       (ExtCall T skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
          ret_ty') (MAP FST kws))
-      (translate_expr ctx target :: args' ++ MAP SND kws) NONE)) /\
+      (translate_expr_with_policy resolve ctx target :: args' ++ MAP SND kws) NONE)) /\
 
   (* Helper for translating expression lists *)
-  (translate_expr_list ctx [] = []) /\
-  (translate_expr_list ctx (e::es) = translate_expr ctx e :: translate_expr_list ctx es) /\
+  (translate_expr_list_with_policy resolve ctx [] = []) /\
+  (translate_expr_list_with_policy resolve ctx (e::es) = translate_expr_with_policy resolve ctx e :: translate_expr_list_with_policy resolve ctx es) /\
 
   (* Helper for translating keywords *)
-  (translate_kwargs ctx [] = []) /\
-  (translate_kwargs ctx (JKeyword k v :: rest) = (k, translate_expr ctx v) :: translate_kwargs ctx rest)
+  (translate_kwargs_with_policy resolve ctx [] = []) /\
+  (translate_kwargs_with_policy resolve ctx (JKeyword k v :: rest) = (k, translate_expr_with_policy resolve ctx v) :: translate_kwargs_with_policy resolve ctx rest) /\
+
+  (resolved_origin_expr resolve ctx source value =
+    case source of
+    | JE_Name _ _ _ _ => OPTION_MAP SND (lookup_origin_pair ctx source)
+    | JE_Attribute _ _ _ _ _ _ _ => OPTION_MAP SND (lookup_origin_pair ctx source)
+    | JE_Hex raw jt => SOME (JE_Hex raw jt)
+    | JE_HexBytes n raw => SOME (JE_HexBytes n raw)
+    | JE_List es jt =>
+        (case value of
+         | Builtin _ (MakeArray _ _) values =>
+             OPTION_MAP (\origins. JE_List origins jt)
+               (resolved_origin_list resolve ctx es values)
+         | _ => NONE)
+    | JE_Tuple es jt =>
+        (case value of
+         | Builtin _ (MakeArray _ _) values =>
+             OPTION_MAP (\origins. JE_Tuple origins jt)
+               (resolved_origin_list resolve ctx es values)
+         | _ => NONE)
+    | JE_Subscript arr idx jt =>
+        if ~pin_literal_tree value then NONE else
+        let arr' = origin_fold_value
+          (translate_expr_with_policy resolve ctx arr) in
+        let idx' = origin_fold_value
+          (translate_expr_with_policy resolve ctx idx) in
+        origin_select (resolved_origin_expr resolve ctx arr arr') idx'
+    | _ => canonical_literal_origin value) /\
+  (resolved_origin_list resolve ctx [] [] = SOME []) /\
+  (resolved_origin_list resolve ctx (e::es) (v::vs) =
+    OPTION_BIND (resolved_origin_expr resolve ctx e
+      (origin_fold_value v))
+      (\origin. OPTION_MAP (CONS origin)
+         (resolved_origin_list resolve ctx es vs))) /\
+  (resolved_origin_list resolve ctx _ _ = NONE)
 Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL (_, e) => json_expr_size e
-    | INR (INL (_, es)) => list_size json_expr_size es
-    | INR (INR (_, kws)) => list_size json_keyword_size kws)`
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_, _, e) => json_expr_size e
+    | INR (INL (_, _, es)) => list_size json_expr_size es
+    | INR (INR (INL (_, _, kws))) => list_size json_keyword_size kws
+    | INR (INR (INR (INL (_, _, e, value)))) => json_expr_size e
+    | INR (INR (INR (INR (_, _, es, values)))) => list_size json_expr_size es)`
   >> rw[]
   >> imp_res_tac find_keyword_size
   >> gvs[]
   >> drule is_raw_call_calldata_call_nonempty
   >> Cases_on `args` >> gvs[]
 End
+
+
+Definition translate_expr_api_def:
+  translate_expr ctx e = translate_expr_with_policy F ctx e
+End
+
+Definition translate_expr_list_api_def:
+  translate_expr_list ctx es = translate_expr_list_with_policy F ctx es
+End
+
+Definition translate_kwargs_api_def:
+  translate_kwargs ctx kws = translate_kwargs_with_policy F ctx kws
+End
+
+Definition translate_origin_expr_api_def:
+  translate_origin_expr ctx e value = resolved_origin_expr F ctx e value
+End
+
+Definition translate_origin_list_api_def:
+  translate_origin_list ctx es values = resolved_origin_list F ctx es values
+End
+
+Theorem translate_expr_def =
+  PURE_REWRITE_RULE
+    [boolTheory.COND_CLAUSES, GSYM translate_expr_api_def,
+     GSYM translate_expr_list_api_def, GSYM translate_kwargs_api_def,
+     GSYM translate_origin_expr_api_def, GSYM translate_origin_list_api_def]
+    (LIST_CONJ (map (GEN_ALL o Q.INST [`resolve` |-> `F`] o SPEC_ALL)
+      (CONJUNCTS translate_expr_with_policy_def)));
 
 
 (* ===== Assignment Target Translation ===== *)
@@ -1249,14 +1580,14 @@ End
    arguments; array iteration takes it from the array type. *)
 Definition constant_count_def:
   constant_count e =
-    case eval_constant e of
+    case pin_fold_value e of
     | SOME (IntV i) => if 0 <= i then SOME (Num i) else NONE
     | _ => NONE
 End
 
 Definition range_count_def:
   range_count (s : expr) e =
-    case (eval_constant s, eval_constant e) of
+    case (pin_fold_value s, pin_fold_value e) of
     | (SOME (IntV i), SOME (IntV j)) => if i <= j then Num (j - i) else 0
     | _ => 0
 End
@@ -1278,7 +1609,7 @@ End
 (* Declaration validation rejects a range whose bound does not evaluate. *)
 Definition iter_bound_resolved_def:
   (iter_bound_resolved ctx (JIter_Range args b) =
-     EVERY (λe. IS_SOME (eval_constant (translate_expr ctx e)))
+     EVERY (λe. IS_SOME (pin_fold_value (translate_expr ctx e)))
        (case b of SOME b => [b] | NONE => args)) /\
   (iter_bound_resolved ctx (JIter_Array _ _) = T)
 End
@@ -1293,12 +1624,12 @@ Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [e] bound) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (case bound of
-             NONE => fold_constant (translate_expr ctx e)
+             NONE => fold_pin_constant (translate_expr ctx e)
            | SOME _ => translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) bound) =
     case bound of
-      NONE => Range (fold_constant (translate_expr ctx s))
-                    (fold_constant (translate_expr ctx e))
+      NONE => Range (fold_pin_constant (translate_expr ctx s))
+                    (fold_pin_constant (translate_expr ctx e))
     | SOME _ => Range (translate_expr ctx s) (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Array e _) =
     Array (translate_expr ctx e))

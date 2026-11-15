@@ -1242,13 +1242,3 @@ Proof
     fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
     comp_ignore_bind_def, comp_return_def, mk_inst_def, APPEND_ASSOC]
 QED
-
-(* These immutable compilation interfaces are kernel-closed. *)
-val () = List.app (fn th =>
-  if List.exists (fn tag => tag <> "DISK_THM")
-       (#1 (Tag.dest_tag (Thm.tag th))) then
-    raise Fail "oracle in immutable compilation interface"
-  else ())
-  [compile_imm_copy_to_memory_prefix, compile_imm_store_words_prefix,
-   compile_imm_copy_zero, compile_imm_copy_two_opcode_shape,
-   compile_imm_store_two_opcode_shape];

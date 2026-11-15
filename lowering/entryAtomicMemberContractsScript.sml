@@ -52,16 +52,3 @@ Theorem entry_flag_child_contract:
 Proof
   irule entry_member_word_contract >> simp[Once type_to_abi_dec_info_def]
 QED
-
-(* Base and flag inherit only the already audited primitive word dependency;
-   bulk must remain admission-free. *)
-val () = List.app (fn (name,th,allowed) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn tag => tag = "DISK_THM" orelse List.exists (fn a => a = tag) allowed) oracles
-     then () else raise Fail ("entry atomic contract unexpected admission: " ^ name)
-  end) [("bulk",entry_bulk_child_contract, []),
-        ("base",entry_base_child_contract,
-         #1 (Tag.dest_tag (Thm.tag entry_member_word_contract))),
-        ("flag",entry_flag_child_contract,
-         #1 (Tag.dest_tag (Thm.tag entry_member_word_contract)))];

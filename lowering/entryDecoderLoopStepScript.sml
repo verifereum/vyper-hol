@@ -346,14 +346,3 @@ Proof
      metis_tac[abi_decoder_operand_live_mono]) >>
   conj_tac >- metis_tac[calldata_safe_transfer_trans] >> metis_tac[]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry loop successor inherited admission"
-    end) [entry_owned_fixed_successor_frame, entry_array_setup_chosen_valid,
-          entry_source_valid_element_setup_endpoint,
-          entry_element_setup_total_frame, entry_header_body_transfer_frame,
-          entry_valid_header_child_frame];

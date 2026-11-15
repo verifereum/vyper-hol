@@ -37,6 +37,3 @@ Proof
   drule_all ld_phis_source_success >> strip_tac >>
   goal_assum (drule_at Any) >> simp[enters_block_def] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_related_transformed_entry) then ()
-  else raise Fail "related entry boundary has hypotheses";

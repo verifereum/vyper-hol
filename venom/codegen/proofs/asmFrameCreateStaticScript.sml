@@ -79,3 +79,55 @@ Proof
          asm_create_static_memory] >>
   rpt IF_CASES_TAC >> gvs[]
 QED
+
+(* The static-frame counterpart of the non-static creation budget: after the
+   upfront charge, the reserved 63/64 is consumed and the frame faults, so the
+   caller keeps at least a 64th of what remains past any budget B >= k. *)
+Theorem asm_create_static_budget:
+  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
+  c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  w2n (EL 2 c.stack) <= 2 * max_code_size /\
+  k = static_gas (if two then Create2 else Create) +
+    init_code_word_cost * word_size (w2n (EL 2 c.stack)) +
+    (if two then keccak256_per_word_cost * word_size (w2n (EL 2 c.stack)) else 0) +
+    memory_expansion_cost (buffer_length c.memory)
+      (if 0 < w2n (EL 2 c.stack)
+       then word_size (w2n (EL 1 c.stack) + w2n (EL 2 c.stack)) * 32 else 0) /\
+  k <= B /\ B <= c.msgParams.gasLimit - c.gasUsed /\
+  step_create two s = (r,t) ==>
+  r = INR (SOME WriteInStaticContext) /\
+  ?p. t.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
+    (c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+      p.msgParams.gasLimit - p.gasUsed
+Proof
+  strip_tac >>
+  qpat_x_assum `k = _` (assume_tac o GSYM) >>
+  `!off b. LENGTH (buffer_take off (w2n (EL 2 c.stack)) b) <=
+           2 * max_code_size` by
+    (rpt gen_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
+     first_assum (irule_at Any) >>
+     simp[vfmBufferTheory.buffer_take_to_list, listTheory.LENGTH_TAKE_EQ]) >>
+  `(c.msgParams.gasLimit - (k + c.gasUsed)) DIV 64 <=
+   c.msgParams.gasLimit - (k + c.gasUsed)` by
+    (irule arithmeticTheory.DIV_LESS_EQ >> simp[]) >>
+  `c.gasUsed <= c.msgParams.gasLimit` by gvs[wf_state_def, wf_context_def] >>
+  `c.gasUsed + k <= c.msgParams.gasLimit` by decide_tac >>
+  qpat_x_assum `step_create _ _ = _` mp_tac >>
+  simp[step_create_def, pop_stack_def, memory_expansion_info_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `consume_gas charge _` >>
+  `charge = k` by
+    (Cases_on `two` >> fs[Abbr `charge`, listTheory.EL_TAKE]) >>
+  qpat_x_assum `Abbrev (charge = _)` kall_tac >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `_ = k` kall_tac >>
+  simp[Once consume_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def,
+       assert_def, return_def, fail_def] >>
+  simp[SRULE[bind_def, ignore_bind_def, assert_def, return_def, fail_def]
+         asm_create_static_memory] >>
+  Cases_on `two` >> simp[listTheory.EL_TAKE] >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> simp[] >>
+  irule arithmeticTheory.DIV_LE_MONOTONE >> simp[] >> decide_tac
+QED

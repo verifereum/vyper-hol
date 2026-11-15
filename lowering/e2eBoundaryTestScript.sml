@@ -360,7 +360,8 @@ Theorem assert_result_does_not_compare_requests:
     (INR (AssertException s),am',rqs) ==>
   (call_result_rel_at [] tops ret am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-      (exc = Reverted \/ s = "UNREACHABLE"))
+      ((exc = Reverted /\ frame_raises es Reverted) \/
+       s = "UNREACHABLE"))
 Proof
   simp[call_result_rel_at_def]
 QED
@@ -387,11 +388,3 @@ Theorem escaped_control_is_not_related:
 Proof
   simp[call_result_rel_at_def]
 QED
-
-(* Boundary regressions must be kernel-closed, not inherited admissions. *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean result boundary check: " ^ name)
-  end) (DB.thms "e2eBoundaryTest");

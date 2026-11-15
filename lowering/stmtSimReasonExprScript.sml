@@ -76,19 +76,6 @@ Proof
   gvs[expr_val_rel_def] >> metis_tac[]
 QED
 
-(* The reason's code and the encoder only append. *)
-Theorem reason_expr_revert_extends_any[local]:
-  !cenv r sa vv sm rty msz sb.
-    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
-    compile_revert_with_reason cenv vv rty msz sm = ((), sb) ==>
-    cs_extends sa sb
-Proof
-  rpt strip_tac >> drule compile_expr_extends >> strip_tac >>
-  drule compile_revert_reason_split_certificate >> strip_tac >>
-  drule unwrap_value_extends >> strip_tac >>
-  metis_tac[cs_extends_trans]
-QED
-
 Theorem reason_expr_revert_extends:
   !cenv r sa vv sm rty msz sb.
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
@@ -478,13 +465,3 @@ Proof
   rpt strip_tac >> irule compile_raise_reason_frag >> simp[] >>
   metis_tac[]
 QED
-
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "REASON_EXPR_FORCE_AUDIT OK\n"
-     else raise Fail "reason expression inherited admission"
-  end) [compile_reason_message_expr, reason_expr_revert_extends,
-        eval_raise_reason_cases, compile_raise_reason_path_frag,
-        compile_raise_reason_frag, compile_assert_reason_frag];

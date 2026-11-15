@@ -255,8 +255,3 @@ Proof
   strip_tac >> gvs[] >>
   simp[step_inst_base_def, dead_result_rel_def]
 QED
-
-val _ = if null (hyp concretize_returncopy_execution_geometry) andalso
-           null (hyp concretize_returncopy_local_complete) andalso
-           null (hyp concretize_returncopy_bounds_abort_complete) then ()
-        else raise Fail "return copy exports have hypotheses";

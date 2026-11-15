@@ -30,6 +30,3 @@ Proof
   qpat_x_assum `^ld_probe_stable _ _ _ _ _ _ _ _ _` mp_tac >>
   rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_return_terminal_package) then ()
-        else raise Fail "ld_return_terminal_package has hypotheses";

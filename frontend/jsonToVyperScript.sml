@@ -555,17 +555,17 @@ End
 Definition module_expr_ctx_def:
   module_expr_ctx all_import_maps main_src_id nsid body toplevel_types
       override_map constants =
-    (main_src_id,
-     (nsid,
-      (build_import_map (collect_imports body),
-       (collect_consts_and_immutables body,
-        ([], (toplevel_types, (override_map, (constants, all_import_maps))))))))
+    (main_src_id, nsid, build_import_map (collect_imports body),
+     collect_consts_and_immutables body, [], toplevel_types, override_map,
+     constants, all_import_maps,
+     ([] : ((num option # string) # (expr # json_expr)) list))
 End
 
-(* One pass over a module's constants evaluates each one not yet evaluated,
-   using the constants evaluated so far.  An initializer that does not
-   evaluate (a decimal, an array, a runtime value) leaves its constant a
-   top-level name for the semantics to evaluate. *)
+(* Retired scalar-only producer: module_constants, imported_constants,
+   evaluated_constants and annotated_constants do not supply production
+   decoding. Use evaluated_origin_constants and scalar_origin_constants below
+   to preserve source origins, declaration types and closed array trees.
+   This older API records only Literals; other initializers stay names. *)
 Definition module_constants_def:
   module_constants ctx [] = expr_constants ctx ∧
   module_constants ctx (JTL_VariableDecl name _ _ _ _ _ _ (SOME init) :: rest) =
@@ -573,9 +573,9 @@ Definition module_constants_def:
      then module_constants ctx rest else
      let e = translate_expr ctx init in
      let constants =
-       case OPTION_BIND (eval_constant e) constant_literal of
-       | SOME l => ((expr_current_nsid ctx, name), l) :: expr_constants ctx
-       | NONE => expr_constants ctx in
+       case origin_fold_value e of
+       | Literal ty l => ((expr_current_nsid ctx, name), l) :: expr_constants ctx
+       | _ => expr_constants ctx in
      module_constants (expr_with_constants ctx constants) rest) ∧
   module_constants ctx (_ :: rest) = module_constants ctx rest
 End
@@ -612,6 +612,60 @@ Definition annotated_constants_def:
               imports))
       all_import_maps main_src_id toplevels imports []
 End
+
+Definition scalar_origin_constants_def:
+  scalar_origin_constants [] = [] /\
+  scalar_origin_constants ((key,(Literal ty l,origin))::rest) =
+    (key,l) :: scalar_origin_constants rest /\
+  scalar_origin_constants (_::rest) = scalar_origin_constants rest
+End
+
+Definition module_origin_constants_def:
+  module_origin_constants ctx [] = expr_origins ctx /\
+  module_origin_constants ctx
+      (JTL_VariableDecl name jt ann pub imm trans flag (SOME init)::rest) =
+    (let ctx = expr_with_constants ctx
+       (scalar_origin_constants (expr_origins ctx)) in
+     if IS_SOME (ALOOKUP (expr_origins ctx) (expr_current_nsid ctx,name)) then
+       module_origin_constants ctx rest
+     else
+       let declared_ty = translate_type (expr_type_ctx ctx) jt in
+       let value = origin_retype declared_ty (origin_fold_value
+         (translate_expr_with_policy T ctx init)) in
+       let origins =
+         case resolved_origin_expr T ctx init value of
+         | SOME origin =>
+             if pin_literal_tree value /\ expr_type value = declared_ty then
+               ((expr_current_nsid ctx,name),
+                 (value,origin)) :: expr_origins ctx
+             else expr_origins ctx
+         | NONE => expr_origins ctx in
+       module_origin_constants (expr_with_origins ctx origins) rest) /\
+  module_origin_constants ctx (_::rest) = module_origin_constants ctx rest
+End
+
+Definition imported_origin_constants_def:
+  imported_origin_constants im main origins [] = origins /\
+  imported_origin_constants im main origins
+    (JImportedModule sid _ _ _ body::rest) =
+    imported_origin_constants im main
+      (module_origin_constants
+        (expr_with_origins
+          (module_expr_ctx im main (SOME (source_id_to_module_id sid))
+            body [] [] (scalar_origin_constants origins)) origins) body) rest
+End
+
+Definition evaluated_origin_constants_def:
+  evaluated_origin_constants (fuel:num) im main tops imports origins =
+    let origins' = module_origin_constants
+      (expr_with_origins (module_expr_ctx im main NONE tops [] [] (scalar_origin_constants origins))
+        (imported_origin_constants im main origins imports)) tops in
+    if fuel = 0 \/ LENGTH origins' = LENGTH origins then origins'
+    else evaluated_origin_constants (fuel-1) im main tops imports origins'
+End
+
+
+
 
 Definition arg_type_valid_def:
   arg_type_valid nominal_index all_import_maps ctx (JArg _ inferred ann) =
@@ -695,21 +749,21 @@ Definition module_decl_types_valid_def:
 End
 
 Definition imported_decl_types_valid_def:
-  imported_decl_types_valid nominal_index all_import_maps constants main_src_id [] = T ∧
-  imported_decl_types_valid nominal_index all_import_maps constants main_src_id
+  imported_decl_types_valid nominal_index all_import_maps constants origins main_src_id [] = T ∧
+  imported_decl_types_valid nominal_index all_import_maps constants origins main_src_id
       (JImportedModule src_id _ _ _ body :: rest) =
-    (let ctx = module_expr_ctx all_import_maps main_src_id
-                 (SOME (source_id_to_module_id src_id)) body [] [] constants in
+    (let ctx = expr_with_origins (module_expr_ctx all_import_maps main_src_id
+                 (SOME (source_id_to_module_id src_id)) body [] [] (scalar_origin_constants origins)) origins in
      module_decl_types_valid nominal_index all_import_maps ctx body ∧
-     imported_decl_types_valid nominal_index all_import_maps constants main_src_id rest)
+     imported_decl_types_valid nominal_index all_import_maps constants origins main_src_id rest)
 End
 
 Definition all_decl_types_valid_def:
-  all_decl_types_valid nominal_index all_import_maps constants main_src_id
+  all_decl_types_valid nominal_index all_import_maps constants origins main_src_id
       toplevels imports =
-    (let ctx = module_expr_ctx all_import_maps main_src_id NONE toplevels [] [] constants in
+    (let ctx = expr_with_origins (module_expr_ctx all_import_maps main_src_id NONE toplevels [] [] constants) origins in
      module_decl_types_valid nominal_index all_import_maps ctx toplevels ∧
-     imported_decl_types_valid nominal_index all_import_maps constants main_src_id imports)
+     imported_decl_types_valid nominal_index all_import_maps constants origins main_src_id imports)
 End
 
 (* Canonical top-level value types are computed before expression bodies. *)
@@ -725,21 +779,21 @@ Definition collect_toplevel_types_def:
 End
 
 Definition collect_imported_toplevel_types_def:
-  collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id [] = [] ∧
-  collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id
+  collect_imported_toplevel_types nominal_index all_import_maps constants origins main_src_id [] = [] ∧
+  collect_imported_toplevel_types nominal_index all_import_maps constants origins main_src_id
       (JImportedModule src_id _ _ _ body :: rest) =
-    let ctx = module_expr_ctx all_import_maps main_src_id
-                (SOME (source_id_to_module_id src_id)) body [] [] constants in
+    let ctx = expr_with_origins (module_expr_ctx all_import_maps main_src_id
+                (SOME (source_id_to_module_id src_id)) body [] [] (scalar_origin_constants origins)) origins in
     collect_toplevel_types nominal_index all_import_maps ctx body ++
-    collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id rest
+    collect_imported_toplevel_types nominal_index all_import_maps constants origins main_src_id rest
 End
 
 Definition build_all_toplevel_types_def:
-  build_all_toplevel_types nominal_index all_import_maps constants main_src_id
+  build_all_toplevel_types nominal_index all_import_maps constants origins main_src_id
       toplevels imports =
-    let ctx = module_expr_ctx all_import_maps main_src_id NONE toplevels [] [] constants in
+    let ctx = expr_with_origins (module_expr_ctx all_import_maps main_src_id NONE toplevels [] [] constants) origins in
     collect_toplevel_types nominal_index all_import_maps ctx toplevels ++
-    collect_imported_toplevel_types nominal_index all_import_maps constants main_src_id imports
+    collect_imported_toplevel_types nominal_index all_import_maps constants origins main_src_id imports
 End
 
 Definition filter_some_def:
@@ -1055,9 +1109,9 @@ End
 
 Definition translate_module_def:
   translate_module nominal_index all_import_maps all_toplevel_types override_map
-      constants (JModule main_src_id nr_default toplevels) =
-    let expr_ctx = module_expr_ctx all_import_maps main_src_id NONE toplevels
-                     all_toplevel_types override_map constants in
+      constants origins (JModule main_src_id nr_default toplevels) =
+    let expr_ctx = expr_with_origins (module_expr_ctx all_import_maps main_src_id NONE toplevels
+                     all_toplevel_types override_map constants) origins in
     let type_ctx = expr_type_ctx expr_ctx in
     filter_some
       (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default)
@@ -1073,11 +1127,11 @@ End
    ellipsis-bodied function stubs are not executable module implementations. *)
 Definition translate_imported_module_def:
   translate_imported_module nominal_index all_import_maps all_toplevel_types
-      override_map constants main_src_id
+      override_map constants origins main_src_id
       (JImportedModule src_id path _ nr_default body) =
     let nsid = source_id_to_module_id src_id in
-    let expr_ctx = module_expr_ctx all_import_maps main_src_id (SOME nsid) body
-                     all_toplevel_types override_map constants in
+    let expr_ctx = expr_with_origins (module_expr_ctx all_import_maps main_src_id (SOME nsid) body
+                     all_toplevel_types override_map constants) origins in
     let type_ctx = expr_type_ctx expr_ctx in
     let declaration_only = is_interface_path path in
     (SOME nsid, filter_some
@@ -1089,13 +1143,13 @@ End
 
 Definition translate_imported_modules_def:
   translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      override_map constants main_src_id [] = [] ∧
+      override_map constants origins main_src_id [] = [] ∧
   translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      override_map constants main_src_id (imp::imports) =
+      override_map constants origins main_src_id (imp::imports) =
     translate_imported_module nominal_index all_import_maps all_toplevel_types
-      override_map constants main_src_id imp ::
+      override_map constants origins main_src_id imp ::
     translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      override_map constants main_src_id imports
+      override_map constants origins main_src_id imports
 End
 
 (* ===== Annotate Storage Slots ===== *)
@@ -1225,20 +1279,24 @@ Definition translate_annotated_ast_canonical_def:
     let import_map = compact_index_import_map main_index in
     let nominal_index = build_nominal_index toplevels imports in
     let override_map = build_override_map toplevels imports in
-    let constants = annotated_constants all_import_maps main_src_id toplevels imports in
-    if ¬all_decl_types_valid nominal_index all_import_maps constants main_src_id
+    let origins = evaluated_origin_constants
+      (LENGTH toplevels + SUM (MAP
+        (\m. case m of JImportedModule _ _ _ _ body => LENGTH body) imports))
+      all_import_maps main_src_id toplevels imports [] in
+    let constants = scalar_origin_constants origins in
+    if ¬all_decl_types_valid nominal_index all_import_maps constants origins main_src_id
         toplevels imports ∨
        ¬abstract_overrides_valid toplevels imports override_map ∨
        ¬module_override_declarations_valid toplevels ∨
        ¬imported_override_declarations_valid imports
     then NONE else
     let all_toplevel_types = build_all_toplevel_types nominal_index
-      all_import_maps constants main_src_id toplevels imports in
+      all_import_maps constants origins main_src_id toplevels imports in
     let sources =
       (NONE, translate_module nominal_index all_import_maps all_toplevel_types
-        override_map constants main) ::
+        override_map constants origins main) ::
       translate_imported_modules nominal_index all_import_maps
-        all_toplevel_types override_map constants main_src_id imports in
+        all_toplevel_types override_map constants origins main_src_id imports in
     let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
     SOME (sources, exports,
           layout_import_map all_import_maps imports import_map toplevels)

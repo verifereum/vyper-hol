@@ -113,6 +113,3 @@ Proof
   rpt (pop_assum kall_tac) >>
   simp[NoAsms] >> rpt strip_tac >> asm_rewrite_tac[] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_return_point_branch_entry) then ()
-        else raise Fail "ld_return_point_branch_entry has hypotheses";

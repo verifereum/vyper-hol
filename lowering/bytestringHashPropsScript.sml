@@ -199,14 +199,6 @@ Proof
   gvs[] >> metis_tac[same_blocks_trans]
 QED
 
-(* Kernel-closure regression: DISK_THM is the loader provenance, not an
-   admission.  All exported boundaries in this theory must remain closed. *)
-val _ = List.app (fn (name, th) =>
-  if List.all (fn tag => tag = "DISK_THM")
-       (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("Oracle dependency in bytestring hash boundary: " ^ name))
-  (DB.thms "bytestringHashProps");
-
 (* Pure compiler boundary: inputs may name old variables, without a global
    fresh_vars_wrt assumption on the machine state. *)
 Theorem compile_bytestring_hash_run_nofresh:

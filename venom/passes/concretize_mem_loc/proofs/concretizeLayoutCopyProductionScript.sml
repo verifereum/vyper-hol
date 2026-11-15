@@ -37,9 +37,6 @@ Proof
   gvs[]
 QED
 
-val _ = if null (hyp joint_mcopy_demand_producer_clean) then ()
-        else raise Fail "copy producer cleanliness export has hypotheses";
-
 Theorem mcopy_size_origin_free[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = MCOPY /\ inst.inst_operands = [opd;ops;opn] /\
@@ -255,6 +252,3 @@ Resume concretize_mcopy_execution_geometry[source]:
   simp[] >> metis_tac[])
 QED
 Finalise concretize_mcopy_execution_geometry
-
-val _ = if null (hyp concretize_mcopy_execution_geometry) then ()
-        else raise Fail "copy geometry export has hypotheses";

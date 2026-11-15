@@ -98,6 +98,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    ALOOKUP cx.sources cx.txn.target = SOME [(NONE, tops)] /\
     (cx.in_deploy ==> supported_program_deploy tops) /\
     (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -139,6 +140,16 @@ Proof
      simp[check_contract_def, check_module_def, EVERY_MEM] >>
      metis_tac[]) >>
   gvs[check_toplevel_decl_def]
+QED
+
+Theorem body_inv_copies_subscript_base:
+  !tops ctx cenv cx obj idx.
+    body_inv tops ctx cenv cx ==>
+    copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
+Proof
+  rw[body_inv_def, cenv_module_pins_def,
+     exprLoweringTheory.copies_subscript_base_def,
+     vyperInterpreterTheory.subscript_reads_base_def]
 QED
 
 Theorem cenv_module_pins_immutable_section_layout:

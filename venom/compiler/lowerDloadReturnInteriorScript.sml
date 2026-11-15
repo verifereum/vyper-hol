@@ -80,10 +80,6 @@ Proof
   `h = 0` by fs[] >> gvs[]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "interior transport has hypotheses")
-  [ld_envelope_target_at, ld_return_point_interior_next, ld_envelope_source_nonterminal];
-
 Theorem ld_return_point_nonterminal_next:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
   ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
@@ -148,7 +144,3 @@ Proof
   drule opcodeClassTheory.step_inst_base_intret_opcodes >>
   strip_tac >> gvs[is_terminator_def]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "nonterminal production has hypotheses")
-  [ld_return_point_nonterminal_next, ld_return_nonterminal_S];

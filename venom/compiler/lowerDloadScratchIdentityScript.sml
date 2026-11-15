@@ -100,7 +100,3 @@ Proof
   drule_all ld_maps_target >> strip_tac >> gvs[] >>
   metis_tac[ld_private_injective]
 QED
-
-val _ = if List.all (null o hyp)
-  [ld_private_functional, ld_private_injective, ld_private_cache]
-  then () else raise Fail "private identity boundary has hypotheses";

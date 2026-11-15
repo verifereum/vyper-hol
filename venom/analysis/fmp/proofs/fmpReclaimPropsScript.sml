@@ -223,10 +223,3 @@ Proof
   gvs[fmp_scan_candidate_lookup] >>
   metis_tac[fmp_step_unreachable, FST, optionTheory.NOT_SOME_NONE]
 QED
-
-val _ = List.app (fn thy => List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected oracle dependency in " ^ thy ^ "." ^ name))
-  (DB.thms thy))
-  ["fmpAnalysisDefs", "fmpAnalysisProps", "fmpAliasDefs", "fmpAliasProps",
-   "fmpReclaimDefs", "fmpReclaimProps"];

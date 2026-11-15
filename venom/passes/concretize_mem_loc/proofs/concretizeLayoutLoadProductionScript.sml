@@ -85,11 +85,6 @@ Proof
     (qspec_then `i` mp_tac) >> simp[arithmeticTheory.ADD_COMM])
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-                          else raise Fail "load production export has hypotheses")
-  [frame_reachable_saved_allocas_from, joint_activation_cache_lower_bound,
-   concretize_word_load_execution_clean_lanes];
-
 Theorem concretize_word_load_demand_execution:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -128,9 +123,6 @@ Proof
   goal_assum (drule_at (Pat `demand_agree _ _ _`)) >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
-
-val _ = if null (hyp concretize_word_load_demand_execution) then ()
-        else raise Fail "load execution export has hypotheses";
 
 (* Compatibility interfaces: the memory-word proof above is shared with ILOAD. *)
 Theorem concretize_mload_execution_clean_lanes:

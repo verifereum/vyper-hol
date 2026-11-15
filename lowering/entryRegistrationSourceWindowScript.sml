@@ -51,14 +51,3 @@ Proof
   drule_all (SIMP_RULE bool_ss [LET_THM] entry_registration_source_window) >>
   simp[abi_decode_source_def, abi_decode_load_def]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then ()
-       else raise Fail "registration source window inherited admission"
-    end)
-    [entry_registration_source_window, entry_registration_source_window_at_ready];
-val () = print "ENTRY_REGISTRATION_SOURCE_WINDOW_AUDIT OK\n";

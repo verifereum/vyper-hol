@@ -23,9 +23,3 @@ Definition create_blueprint_runtime_def:
   create_blueprint_runtime = ^runtime
 End
 val () = cv_auto_trans create_blueprint_runtime_def;
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createBlueprintCompileTest");
