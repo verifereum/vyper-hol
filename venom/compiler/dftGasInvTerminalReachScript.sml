@@ -14,18 +14,19 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem inv_reachable_dret_exact:
+Theorem inv_reachable_dret_exact_static:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
-  ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  ctx_labels_bound C initial.vs_labels /\ o1_initial_state_ok initial /\
+  initial.vs_fmp = initial.vs_initial_fmp /\ code_layout_valid initial /\
   ev_reachable orc initial C' p d fn' inst t /\ inst.inst_opcode = DRET ==>
   ?fn bb bb'. MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
     ev_reachable orc initial C p d fn inst t /\
     lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb'
 Proof
-  strip_tac >> drule inv_paired_history >> disch_then (qspec_then `C` mp_tac) >>
+  strip_tac >> drule inv_paired_history_static >> disch_then (qspec_then `C` mp_tac) >>
   simp[] >> strip_tac >>
   drule_all inv_paired_prefix_cut >> strip_tac
   >- gvs[is_pseudo_def] >>
@@ -46,4 +47,21 @@ Proof
     (irule inv_ev_prefix_reachable >>
      qexistsl_tac [`bb`, `startinst`, `LENGTH srcpre`, `s0`] >> simp[]) >>
   qexistsl_tac [`fn`, `bb`, `bb'`] >> metis_tac[]
+QED
+
+Theorem inv_reachable_dret_exact:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  ev_reachable orc initial C' p d fn' inst t /\ inst.inst_opcode = DRET ==>
+  ?fn bb bb'. MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+    ev_reachable orc initial C p d fn inst t /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb'
+Proof
+  strip_tac >>
+  qpat_x_assum `o1_run_state_ok initial`
+    (strip_assume_tac o PURE_REWRITE_RULE [o1_run_state_ok_def]) >>
+  drule_all inv_reachable_dret_exact_static >> simp[]
 QED

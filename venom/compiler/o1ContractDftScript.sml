@@ -9,6 +9,7 @@
  *)
 Theory o1ContractDft
 Ancestors
+  dftWaveStaticGasContract
   o1DftStepAt o1DftStageSim o1DftStageSsa
   o1PassContract venomPassSchedule venomCompilerTypes
 
