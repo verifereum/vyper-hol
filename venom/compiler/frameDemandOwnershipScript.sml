@@ -1,5 +1,6 @@
 Theory frameDemandOwnership
 Ancestors
+  concretizeLayoutCutSafe o1SafeUpto gasOracleReplay
   frameActivationCache frameAllocationOwnership frameAllocationEffects
   frameJointTransition frameJointTrace frameOriginCache frameOriginHistory
   frameOriginReachable ptrDisciplineEmptyTaint ptrDiscipline
@@ -138,6 +139,26 @@ QED
 
 (* With DALLOCA every live cache, saved frames included, lies below the
    initial free memory pointer. *)
+Theorem joint_config_cache_below_upto:
+  joint_config_reachable vs0 ctx
+    (JointConfig stk PG G tn current inst s oms om hs h) /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\ ctx_has_dalloca ctx /\
+  activation_cache (JointConfig stk PG G tn current inst s oms om hs h)
+    d owner aid (b,sz) ==>
+  b + sz <= w2n vs0.vs_initial_fmp
+Proof
+  strip_tac >> fs[joint_config_reachable_def] >>
+  drule joint_origin_history_erasure >> strip_tac >>
+  drule origin_frame_erasure >> strip_tac >>
+  drule_then (qspecl_then [`ncut`,`lo`] mp_tac) frame_reachable_caches_below_upto >>
+  simp[] >> strip_tac >>
+  drule frame_reachable_initial_fmp >> strip_tac >>
+  gvs[activation_cache_def]
+  >- (first_x_assum (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`SUC (LENGTH stk - SUC d)`,`aid`,`b`,`sz`] mp_tac) >>
+  simp[EL_MAP]
+QED
+
 Theorem joint_config_cache_below:
   joint_config_reachable vs0 ctx
     (JointConfig stk PG G tn current inst s oms om hs h) /\
@@ -146,16 +167,28 @@ Theorem joint_config_cache_below:
     d owner aid (b,sz) ==>
   b + sz <= w2n vs0.vs_initial_fmp
 Proof
+  metis_tac[joint_config_cache_below_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem joint_provenance_activation_owner_upto:
+  joint_config_reachable vs0 ctx
+    (JointConfig stk PG G tn current inst s oms om hs h) /\
+  (ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP G v = SOME site ==>
+  ?d owner aid. activation_cache
+    (JointConfig stk PG G tn current inst s oms om hs h) d owner aid site
+Proof
   strip_tac >> fs[joint_config_reachable_def] >>
   drule joint_origin_history_erasure >> strip_tac >>
   drule origin_frame_erasure >> strip_tac >>
-  drule_then (qspec_then `lo` mp_tac) frame_reachable_caches_below >>
-  simp[] >> strip_tac >>
-  drule frame_reachable_initial_fmp >> strip_tac >>
-  gvs[activation_cache_def]
-  >- (first_x_assum (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]) >>
-  first_x_assum (qspecl_then [`SUC (LENGTH stk - SUC d)`,`aid`,`b`,`sz`] mp_tac) >>
-  simp[EL_MAP]
+  drule_all frame_provenance_owner_upto >> strip_tac
+  >- (gvs[cache_has_site_def] >> qexistsl_tac [`LENGTH stk`,`current`,`aid`] >>
+      simp[activation_cache_current]) >>
+  gvs[saved_has_site_def] >>
+  qexistsl_tac [`LENGTH stk - SUC k`,`(EL k stk).cf_fn`,`aid`] >>
+  simp[activation_cache_saved]
 QED
 
 Theorem joint_provenance_activation_owner:
@@ -167,15 +200,7 @@ Theorem joint_provenance_activation_owner:
   ?d owner aid. activation_cache
     (JointConfig stk PG G tn current inst s oms om hs h) d owner aid site
 Proof
-  strip_tac >> fs[joint_config_reachable_def] >>
-  drule joint_origin_history_erasure >> strip_tac >>
-  drule origin_frame_erasure >> strip_tac >>
-  drule_all frame_provenance_owner >> strip_tac
-  >- (gvs[cache_has_site_def] >> qexistsl_tac [`LENGTH stk`,`current`,`aid`] >>
-      simp[activation_cache_current]) >>
-  gvs[saved_has_site_def] >>
-  qexistsl_tac [`LENGTH stk - SUC k`,`(EL k stk).cf_fn`,`aid`] >>
-  simp[activation_cache_saved]
+  metis_tac[joint_provenance_activation_owner_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
 
 Theorem joint_provenance_birth:

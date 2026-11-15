@@ -1,5 +1,6 @@
 Theory frameWriteOwnership
 Ancestors
+  concretizeLayoutCutSafe o1SafeUpto
   frameReadOwnership frameActivationSeparation frameDemandOwnership
   frameJointDemand frameJointTransition ptrDiscipline memLocDefs
   finite_map list pred_set arithmetic
@@ -30,10 +31,10 @@ Proof
   gvs[joint_transition_return] >> simp[step_writes_source_subset]
 QED
 
-Theorem joint_write_owner_identity:
+Theorem joint_write_owner_identity_upto:
   joint_config_reachable vs0 C
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
-  vs0.vs_allocas = FEMPTY /\ (ctx_has_dalloca C ==> ptr_discipline lo C vs0) /\
+  vs0.vs_allocas = FEMPTY /\ (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s) /\
   joint_transition C
     (JointConfig stk PG G tn fn inst s oms om hs h) ev q' /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
@@ -50,13 +51,30 @@ Proof
   drule_all access_ok_write_site >> strip_tac >>
   rename1 `FLOOKUP G v = SOME (b0,sz0)` >>
   `ctx_has_dalloca C ==> FST (b0,sz0) < w2n vs0.vs_initial_fmp` by
-    (strip_tac >> `ptr_discipline lo C vs0` by metis_tac[] >>
-     drule_all joint_config_cache_below >> simp[] >> decide_tac) >>
-  drule_all joint_provenance_activation_owner >> strip_tac >>
+    (strip_tac >> `ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s` by metis_tac[] >>
+     drule_all joint_config_cache_below_upto >> simp[] >> decide_tac) >>
+  drule_all joint_provenance_activation_owner_upto >> strip_tac >>
   `d = d' /\ owner = owner' /\ aid = aid' /\ b = b0 /\ sz = sz0` by
     (irule joint_activation_cache_byte_unique >>
      (conj_tac >- (qexists_tac `byte` >> simp[])) >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>
      simp[]) >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem joint_write_owner_identity:
+  joint_config_reachable vs0 C
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  vs0.vs_allocas = FEMPTY /\ (ctx_has_dalloca C ==> ptr_discipline lo C vs0) /\
+  joint_transition C
+    (JointConfig stk PG G tn fn inst s oms om hs h) ev q' /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  lo <= byte /\
+  byte IN joint_writes (JointConfig stk PG G tn fn inst s oms om hs h) ev /\
+  activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+    d owner aid (b,sz) /\ b <= byte /\ byte < b + sz ==>
+  ?ops v. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+    FLOOKUP G v = SOME (b,sz)
+Proof
+  metis_tac[joint_write_owner_identity_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
