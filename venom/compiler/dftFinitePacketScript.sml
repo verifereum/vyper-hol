@@ -626,10 +626,7 @@ Proof
   `phi_prefix_length ps - LENGTH ps = 0` by decide_tac >> simp[]
 QED
 
-(* Unfinished source projection: preserve its term and tactic without
-   executing or exporting a theorem until the proof is completed. *)
-fun pending_dft_packet_source_projection () =
- (``
+Theorem dft_packet_source_projection:
   (!N C7 C8 root_sf root_tf root_entry packet acts blocks calls
       ms_tab es_tab ks_tab rooted_eval p d stk PG G tn fn inst s oms om hs h.
     dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
@@ -724,8 +721,8 @@ fun pending_dft_packet_source_projection () =
           (inv_memory_observation inst.inst_opcode ==>
             (!op. MEM op inst.inst_operands ==> eval_operand op u = eval_operand op s) /\
             u.vs_initial_fmp = s.vs_initial_fmp)))
- ``,
- (disch_then (CONJUNCTS_THEN2 (mk_asm "cursor") (mk_asm "reach")) >>
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "cursor") (mk_asm "reach")) >>
   rpt gen_tac >> strip_tac >> disch_tac >>
   asm "cursor" drule >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -762,7 +759,45 @@ fun pending_dft_packet_source_projection () =
   qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
     FLOOKUP blocks (a,e) = _ ==> ?sf tf inc entry order res nrest sp. _`
     rev_drule >> strip_tac >>
-  FAIL_TAC "row extracted"));
+  ntac 2 (qpat_x_assum `FLOOKUP acts p = SOME _` mp_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    disch_then (map_every SUBST_ALL_TAC o CONJUNCTS)) >>
+  qpat_x_assum `FLOOKUP blocks (p,d) = SOME _` mp_tac >>
+  asm_simp_tac (srw_ss()) [] >>
+  disch_then (map_every SUBST_ALL_TAC o CONJUNCTS) >>
+  rename1 `static_mem_ok cpl.cp_max_static_eom C7 sf inst u` >>
+  rename1 `z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs` >>
+  rename1 `lookup_block st.vs_current_bb tf.fn_blocks = SOME bt` >>
+  drule_all dft_packet_cut_instruction >> disch_tac >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = _ ==> _` (qspec_then `p` drule) >> strip_tac >>
+  `EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+      bb.bb_instructions) = inst` by metis_tac[] >>
+  `MEM ((p,d,inst.inst_id),sf,inst,u)
+    (dftGasFromListTraceDefs$trace_blocks [] 0 fuel C7 root_sf
+      (root_entry with vs_gas_readings := gs ++ tail))` by
+    (qpat_x_assum `dftGasFromListTraceDefs$trace_blocks [] 0 fuel _ _ _ = _`
+      (fn th => pure_rewrite_tac [th]) >> simp[]) >>
+  `raw_reachable (root_entry with vs_gas_readings := gs ++ tail) C7 sf inst u` by
+    (asm "reach" irule >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (drule_all dft_packet_cut_mem_inv >> simp[]) >>
+  `active_inst sf inst u` by metis_tac[raw_reachable_active] >>
+  `wf_function sf` by metis_tac[dft_fn_rel_def] >>
+  `MEM inst bb.bb_instructions` by metis_tac[EL_MEM, MEM_APPEND] >>
+  `u.vs_current_bb = bb.bb_label` by
+    (irule dft_packet_active_block >> metis_tac[]) >>
+  `st.vs_current_bb = bt.bb_label` by
+    metis_tac[simplifyCfgDefsTheory.lookup_block_member_label] >>
+  `active_inst tf inst st` by
+    (simp[contextCodegenRelTheory.active_inst_def] >>
+     qexists_tac `bt` >>
+     qpat_x_assum `get_instruction bt _ = SOME inst` mp_tac >>
+     simp_tac (srw_ss()) [venomInstTheory.get_instruction_def] >>
+     strip_tac >>
+     metis_tac[simplifyCfgDefsTheory.lookup_block_member_label]) >>
+  metis_tac[inv_forward_active]
+QED
 Theorem dft_packet_guard_from_block[local]:
   !xs i. from_block xs i /\
     (inv_memory_observation i.inst_opcode \/ is_fallible i \/
