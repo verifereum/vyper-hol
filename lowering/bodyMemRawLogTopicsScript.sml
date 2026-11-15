@@ -34,9 +34,11 @@ Proof
   `wb_args_shape cenv expr_type topics` by
     (irule typed_stack_args_shape >> qexistsl_tac [`cx`, `env`, `es`] >>
      simp[] >> rpt strip_tac >> res_tac >> simp[is_word_type_def]) >>
-  irule lower_typed_args_sim_mem >> simp[] >>
-  qexists_tac `expr_sim_inv cenv cx env` >> simp[] >>
-  qexists_tac `expr_type` >> simp[]
+  mp_tac (Q.SPECL [`topics`, `ctx`, `func`, `cenv`, `cx`, `expr_type`,
+    `expr_sim_inv cenv cx env`, `st0`, `es`, `sa`, `ops`, `sb`, `s0`]
+    lower_typed_args_sim_mem) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def, gas_summary_at_def] >> metis_tac[]
 QED
 
 Theorem raw_log_marked_data_ready_mem:
