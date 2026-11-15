@@ -25,34 +25,29 @@ Proof
   rpt gen_tac >> strip_tac >>
   rw[body_stmt_mem_ok_def] >>
   `tops' = tops` by fs[body_inv_def] >> gvs[] >>
-  drule_all append_narrow_annotation >> strip_tac >>
+  drule_all bodyAppendStorageFactsTheory.append_narrow_annotation >> strip_tac >>
   `supported_storage_type tops elem /\ ~is_bytestring_type elem /\
-   ~is_word_type elem` by metis_tac[append_storage_element_domain] >>
+   ~is_word_type elem` by
+    metis_tac[bodyAppendStorageFactsTheory.append_storage_element_domain] >>
   Cases_on `nid` >>
-  drule_at (Pat `supported_variable_decl _ _ = _`) append_aggregate_target_layout >>
+  drule_at (Pat `supported_variable_decl _ _ = _`)
+    bodyAppendStorageFactsTheory.append_aggregate_target_layout >>
   simp[] >> disch_then drule_all >> strip_tac >>
   `supported_pure_expr tops e /\ supported_expr tops e` by
     (fs[supported_stmt_def] >> metis_tac[supportedExprsTheory.supported_expr_def]) >>
   drule append_typing_target >> strip_tac >>
-  `expr_body_pre cenv' cx env e es` by metis_tac[body_append_expr_pre] >>
+  `!observations. expr_body_pre cenv' cx env e
+     (es with storage_trace := observations)` by
+    metis_tac[body_append_expr_pre, expr_body_pre_storage_trace] >>
   `body_expr_mem_ok cx e` by metis_tac[] >>
-  `expr_sim_mem ctx' func cenv' cx elem e es` by
+  `!observations. expr_sim_mem ctx' func cenv' cx elem e
+     (es with storage_trace := observations)` by
     metis_tac[body_expr_mem_ok_def] >>
   `type_memory_bytes cenv' elem < 2 ** 64` by
     metis_tac[body_append_element_alloc_bound] >>
   `get_module_code cx q = SOME tops` by
     (drule supported_variable_decl_mem >> strip_tac >> gvs[body_inv_def]) >>
   qmatch_asmsub_abbrev_tac `StorageVarDecl tr (ArrayT elem (Dynamic dn))` >>
-  `storage_var_info cx q r = SOME (tr,rslot,ArrayTV tv (Dynamic dn))` by
-    gvs[storage_var_info_def, evaluate_type_def] >>
-  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
-  `0 < type_slot_size (ArrayTV tv (Dynamic dn))` by simp[type_slot_size_def] >>
-  drule_all topcopy_region >> strip_tac >>
-  `rslot < dimword (:256)` by decide_tac >>
-  `w2n (n2w rslot : 256 word) = rslot` by simp[] >>
-  `declared_storage_region cx q r [] =
-    SOME (tr,n2w rslot,ArrayTV tv (Dynamic dn))` by
-    metis_tac[declared_storage_region_ordinary] >>
   `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
   `dn < dimword (:256)` by
     (`dn <= dn * type_slot_size tv` by
@@ -62,17 +57,8 @@ Proof
   `lowered_value_type cenv' e = elem` by
     metis_tac[append_aggregate_lowered_type, supported_pure_int_calls] >>
   drule_all body_append_root_metadata >> strip_tac >>
-  `(storage_vars_rel cenv' cx /\ transient_vars_rel cenv' cx) ==>
-    stmt_frag_mem d ctx' func cx lctx RetQ cenv'
-      (stmt_env cenv' lctx ret_ty (Append (TopLevelNameTarget (q,r)) e))
-      (eval_stmt cx (Append (TopLevelNameTarget (q,r)) e)) es`
-    suffices_by
-      (strip_tac >> rewrite_tac[stmt_frag_mem_def] >>
-       rpt gen_tac >> strip_tac >>
-       `storage_vars_rel cenv' cx /\ transient_vars_rel cenv' cx` by
-         fs[stmt_state_rel_def, state_rel_def] >>
-       qpat_x_assum `_ ==> stmt_frag_mem _ _ _ _ _ _ _ _ _ _`
-         (mp_tac o REWRITE_RULE [stmt_frag_mem_def]) >> simp[] >> metis_tac[]) >>
+  irule bodyMemAppendAdapterTheory.stmt_frag_mem_storage_rel_discharge >>
+  conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   strip_tac >> drule_all append_storage_compiler_location >> strip_tac >>
   `acyclic_struct_metadata cenv'.ce_struct_fields` by fs[body_inv_def] >>
   `sfields_tenv_consistent cenv'.ce_struct_fields (get_tenv cx) /\
@@ -85,20 +71,9 @@ Proof
    cenv'.ce_hashmap_info (q,r) = NONE /\
    cenv'.ce_module_dynarray_capacity (q,r) = dn` by
     metis_tac[body_append_root_metadata] >>
-  `w2n (n2w rslot:bytes32) + type_slot_size (ArrayTV tv (Dynamic dn)) <=
-   dimword (:256)` by simp[] >>
-  `!mid' n' subs' slot' tv'.
-    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
-    (slot',tv') <> (n2w rslot,ArrayTV tv (Dynamic dn)) ==>
-    ranges_disjoint (w2n (n2w rslot:bytes32))
-      (type_slot_size (ArrayTV tv (Dynamic dn)))
-      (w2n slot') (type_slot_size tv')` by
-    (rpt strip_tac >> fs[Abbr `tr`] >>
-     qpat_x_assum `!mid' n' subs' k' tv'. _` irule >>
-     simp[] >> metis_tac[]) >>
-  `!gs v es1.
+  `!observations gs v es1.
     (do result <- eval_expr cx e; read_result cx result od)
-      (es with gas_obs := gs) = (INL v,es1) ==>
+      (es with <|gas_obs := gs; storage_trace := observations|>) = (INL v,es1) ==>
     value_has_type tv v /\ ?writes. encode_value tv v = SOME writes` by
     (rpt strip_tac >>
      `value_has_type tv v` by metis_tac[topcopy_rhs_value_typed] >>

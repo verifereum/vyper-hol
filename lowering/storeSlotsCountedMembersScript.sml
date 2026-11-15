@@ -7,40 +7,6 @@ Ancestors
   venomState venomInst venomExecSemantics emitHelperProps exprLoweringProps
   words arithmetic list rich_list valueEncoding valueEncodingProps vyperValue
 
-Theorem store_slots_lit_offset_path_mem:
-  !ptr off sa op sb s w func ctx.
-  compile_lit_byte_offset ptr off sa = (op,sb) /\
-  eval_operand ptr s = SOME w /\ fn_has_code sa sb func /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      eval_operand op t = SOME (w + n2w off) /\
-      t.vs_memory = s.vs_memory /\
-      (!dst len. typed_copy_state_frame sa dst len s t) /\
-      t.vs_alloca_next = s.vs_alloca_next /\
-      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
-Proof
-  map_every qx_gen_tac [`ptr0`, `off`, `sa`, `op`, `sb`, `s`, `w`, `func`, `ctx`] >>
-  Cases_on `off = 0`
-  >- (simp[compile_lit_byte_offset_def, comp_return_def] >>
-      rpt strip_tac >> gvs[] >> qexists_tac `s` >>
-      simp[gas_marked_path_def, fragGasPathMemTheory.gas_path_mem_rules,
-           typed_copy_state_frame_def, typed_copy_frame_def,
-           WORD_ADD_0, venom_state_component_equality]) >>
-  Cases_on `ptr0`
-  >- (simp[compile_lit_byte_offset_def, comp_return_def, eval_operand_def] >>
-      rpt strip_tac >> gvs[] >> qexists_tac `s` >>
-      simp[gas_marked_path_def, fragGasPathMemTheory.gas_path_mem_rules,
-           eval_operand_def, typed_copy_state_frame_def, typed_copy_frame_def,
-           WORD_ADD_0, venom_state_component_equality]) >>
-  simp[compile_lit_byte_offset_def, compile_with_byte_offset_def] >> strip_tac >>
-  irule store_slots_emit_op_path_mem >>
-  qpat_assum `emit_op ADD _ _ = _` (irule_at Any) >>
-  gvs[is_terminator_def, below_frontier_no_ranges, step_inst_base_opcode_eqs,
-      mk_inst_def, exec_pure2_def, eval_operand_def]
-QED
-
 Theorem store_slots_member_offset_run_mem:
   compile_lit_byte_offset src mo sa = (ms,a) /\
   compile_lit_byte_offset slot so a = (ds,b) /\
@@ -101,13 +67,13 @@ Proof
    (!x. ms = Var x \/ ds = Var x ==> not_fresh_at b x)` by
     metis_tac[store_slots_lit_offset_fresh, typed_copy_operand_fresh_mono] >>
   qpat_assum `compile_lit_byte_offset src _ _ = _` mp_tac >>
-  disch_then (mp_then Any mp_tac store_slots_lit_offset_path_mem) >>
+  disch_then (mp_then Any mp_tac storeSlotsMemoryPathsTheory.store_slots_lit_offset_path_mem) >>
   disch_then (qspecl_then [`s`, `sw`, `func`, `ctx`] mp_tac) >>
   simp[] >> disch_then (qx_choose_then `q1` strip_assume_tac) >>
   `eval_operand slot q1 = SOME dw` by
     metis_tac[typed_copy_state_frame_operand] >>
   qpat_assum `compile_lit_byte_offset slot _ _ = _` mp_tac >>
-  disch_then (mp_then Any mp_tac store_slots_lit_offset_path_mem) >>
+  disch_then (mp_then Any mp_tac storeSlotsMemoryPathsTheory.store_slots_lit_offset_path_mem) >>
   disch_then (qspecl_then [`q1`, `dw`, `func`, `ctx`] mp_tac) >>
   simp[] >> disch_then (qx_choose_then `q2` strip_assume_tac) >>
   `eval_operand ms q2 = SOME (sw + n2w mo)` by

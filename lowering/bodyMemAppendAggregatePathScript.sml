@@ -2558,6 +2558,74 @@ QED
 Finalise append_storage_aggregate_abort_path
 
 
+Theorem append_storage_aggregate_static_path_mem:
+  compile_dynarray_append cenv bop vop 1 (type_slot_size tv) dt vt cap F
+    (if tr then LocTransient else LocStorage) sa = ((),sf) /\
+  fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
+  cap < dimword (:256) /\ len < cap /\
+  len = w2n (if tr then tload slot s else sload slot s) /\
+  evaluate_type tenv dt = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  0 < type_slot_size tv /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  val_in_memory tv v (w2n b) s.vs_memory /\
+  w2n b + type_memory_size tv < dimword (:256) /\
+  w2n b + type_memory_size tv <= s.vs_alloca_next /\
+  w2n (slot+1w+n2w len*n2w (type_slot_size tv)) +
+    type_slot_size tv <= dimword (:256) /\
+  eval_operand bop s = SOME slot /\ eval_operand vop s = SOME b /\
+  (!x. bop = Var x \/ vop = Var x ==> not_fresh_at sa x) /\
+  ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+    stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  strip_tac >>
+  drule (iffLR append_storage_copy_suffix_parts) >>
+  disch_then (qx_choosel_then [`lop`, `valid`, `dop`, `off`, `pop`, `nop`, `u`,
+    `s1`, `s2`, `s3`, `s4`, `s5`, `s6`, `s7`, `s8`] strip_assume_tac) >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
+   ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\
+   ci_mono s6 s7 /\ ci_mono s7 s8 /\ ci_mono s8 sf` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
+      exprLoweringPropsTheory.ci_mono_emit_void,
+      cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
+  `cs_extends sa s6 /\ cs_extends s6 s7 /\ cs_extends s7 sf` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa s6 func /\ fn_has_code s6 s7 func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all append_storage_aggregate_prefix_layout >> strip_tac >>
+  `!x. bop = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all append_storage_aggregate_prefix_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_marked_path T ctx func s 0 (OK pre)` >>
+  suspend "exit"
+QED
+
+Resume append_storage_aggregate_static_path_mem[exit]:
+  `pre.vs_memory = s.vs_memory /\ pre.vs_call_ctx = s.vs_call_ctx /\
+   pre.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `state_frame pre = _` mp_tac >>
+     simp[stateFrameTheory.state_frame_def, venom_state_component_equality]) >>
+  `eval_operand vop pre = SOME b` by
+    (Cases_on `vop` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `!x. vop = Var x \/ pop = Var x ==> not_fresh_at s6 x` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `?r. gas_marked_path T ctx func pre 0 r /\ exit_result r /\
+     stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r` by
+    (irule placeStoreSlotsTheory.place_store_slots_static_exit_mem >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
+  qexists_tac `r` >> simp[] >>
+  metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Finalise append_storage_aggregate_static_path_mem
+
 Theorem append_storage_aggregate_suffix_mem:
   compile_dynarray_append cenv bop vop 1 stride dt vt cap F
     (if tr then LocTransient else LocStorage) sa = ((),sf) /\
