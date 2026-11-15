@@ -110,6 +110,8 @@ Theorem layout_canonical_base_nonterm_pending:
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
   strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    (irule layout_cut_safe_whole_run >> simp[]) >>
   `MEM fn C.ctx_functions /\ MEM i (fn_insts fn) /\ fn_ptr_ok P fn` by
     (drule_all layout_canonical_ordinary_environment >> strip_tac >> simp[]) >>
   `inst_wf i` by (fs[EVERY_MEM] >> metis_tac[]) >>
