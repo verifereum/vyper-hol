@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem target_saved_storage_oracles:
-  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) <=>
+  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) <=>
   read_storage_slot cx tr w tv es = (INL v,es)
 Proof
   Cases_on `tr` >> simp[read_storage_slot_def, get_storage_backend_eq, bind_def,
@@ -47,8 +47,8 @@ QED
 
 
 Theorem target_saved_read_oracles:
-  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) <=>
+  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) <=>
   read_result cx r es = (INL v,es)
 Proof
   Cases_on `r` >> simp[read_result_def, return_def, raise_def] >>
@@ -88,12 +88,12 @@ Proof
 QED
 
 Theorem target_saved_regions_oracles:
-  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) r vv s <=>
+  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) r vv s <=>
    vv_at cenv cx ty sa sb es r vv s) /\
-  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) r vv s <=>
+  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) r vv s <=>
    vv_own cenv cx ty sa sb es r vv s) /\
-  (vv_storage_live cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) s <=>
-   vv_storage_live cx vv es s)
+  (vv_storage_live H cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) s <=>
+   vv_storage_live H cx vv es s)
 Proof
   Cases_on `vv` >>
   simp[vv_at_def, vv_own_def, target_saved_read_oracles,
@@ -101,7 +101,7 @@ Proof
 QED
 
 Theorem target_saved_holds_oracles:
-  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) s <=>
+  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) s <=>
   vv_holds cenv cx ty r vv es s
 Proof
   Cases_on `vv` >>
@@ -179,9 +179,9 @@ Theorem target_saved_holds_frame:
   wb_frame cenv es es sm s u /\
   (!w. eval_operand (vv_operand vv) s = SOME w ==>
        eval_operand (vv_operand vv) u = SOME w) /\
-  vv_storage_live cx vv es s /\
-  storage_rel cx cx.txn.target es u /\
-  transient_rel cx cx.txn.target es u ==>
+  vv_storage_live H cx vv es s /\
+  storage_rel H cx.txn.target es u /\
+  transient_rel H cx.txn.target es u ==>
   vv_holds cenv cx ty r vv es u
 Proof
   Cases_on `vv`
@@ -196,12 +196,12 @@ Proof
   >- (gvs[storage_holds_def] >>
       irule storage_range_agree_of_live >>
       conj_tac >- gvs[storage_range_agree_def] >>
-      qexistsl_tac [`cx`, `F`] >>
+      qexistsl_tac [`H`, `F`] >>
       gvs[storage_rel_def, get_storage_def, vfmStateTheory.lookup_account_def])
   >- (gvs[storage_holds_def] >>
       irule storage_range_agree_of_live >>
       conj_tac >- gvs[storage_range_agree_def] >>
-      qexistsl_tac [`cx`, `T`] >>
+      qexistsl_tac [`H`, `T`] >>
       gvs[transient_rel_def, get_storage_def])
   >- (gvs[vv_location_def, immutable_holds_def] >> metis_tac[]) >>
   rpt gen_tac >> disch_tac >>
@@ -209,11 +209,11 @@ Proof
 QED
 
 Theorem target_saved_storage_live_frame:
-  vv_storage_live cx vv es s /\
+  vv_storage_live H cx vv es s /\
   (?w. eval_operand (vv_operand vv) s = SOME w) /\
   (!w. eval_operand (vv_operand vv) s = SOME w ==>
        eval_operand (vv_operand vv) u = SOME w) ==>
-  vv_storage_live cx vv es u
+  vv_storage_live H cx vv es u
 Proof
   Cases_on `vv` >> simp[vv_operand_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
@@ -229,17 +229,17 @@ QED
 
 
 Theorem target_saved_post_transport:
-  vv_post ctx func cenv cx e es sa sm s0 es1 r vv s /\
-  target_post ctx func cenv cx es1 sm sb s ee pv vt op u /\
-  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|> /\
+  vv_post H ctx func cenv cx e es sa sm s0 es1 r vv s /\
+  target_post H ctx func cenv cx es1 sm sb s ee pv vt op u /\
+  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|> /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!l. vv_operand vv <> Label l) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  vv_storage_live cx vv es1 s ==>
-  vv_post ctx func cenv cx e ee sa sb u ee r vv u /\
+  vv_storage_live H cx vv es1 s ==>
+  vv_post H ctx func cenv cx e ee sa sb u ee r vv u /\
   wb_frame cenv es ee sa s0 u
 Proof
   strip_tac >> gvs[] >>
@@ -252,28 +252,32 @@ Proof
         eval_operand (vv_operand vv) u = SOME w` by
     (rpt strip_tac >> irule eval_operand_frame >> simp[] >>
      qexistsl_tac [`sm`, `s`] >> gvs[wb_frame_def]) >>
-  `storage_rel cx cx.txn.target es1 u /\
-   transient_rel cx cx.txn.target es1 u` by
+  `storage_rel H cx.txn.target es1 u /\
+   transient_rel H cx.txn.target es1 u` by
     (gvs[target_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
          state_rel_def, storage_rel_def, transient_rel_def]) >>
-  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) sa s0 u` by
-    (irule wb_frame_trans >>
-     simp[] >> conj_tac >- metis_tac[] >>
-     qexistsl_tac [`es1`, `sm`, `s`] >>
-     gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) sa s0 u` by
+    (irule wb_frame_trans >> simp[] >> conj_tac >-
+      (qexistsl_tac [`es1`, `sm`, `s`] >>
+       gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
+     metis_tac[]) >>
   simp[] >>
   gvs[vv_post_def] >>
   simp[SRULE [] target_saved_holds_oracles,
        SRULE [] target_saved_regions_oracles] >>
   rpt conj_tac
   >- gvs[target_post_def]
+  >- gvs[target_post_def]
   >- (irule target_saved_holds_frame >>
-      simp[] >> qexistsl_tac [`s`, `sa`, `sm`] >> simp[])
+      simp[] >> qexistsl_tac [`H`, `s`, `sa`, `sm`] >> simp[])
   >- (irule (cj 1 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule (cj 2 target_saved_value_region_frame) >>
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule target_saved_storage_live_frame >>
-      metis_tac[target_saved_operand_exists]) >>
+      qexists_tac `s` >>
+      conj_tac >- simp[] >>
+      conj_tac >- (drule target_saved_operand_exists >> simp[]) >>
+      Cases_on `vv` >> gvs[get_storage_def]) >>
   simp[exprSimPropsTheory.locals_kept_refl]
 QED

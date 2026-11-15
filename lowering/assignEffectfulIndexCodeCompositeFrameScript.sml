@@ -59,11 +59,11 @@ QED
 
 Theorem snapshot_code_types[local]:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
   p.ptr_location = LocCode /\
   (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
     type_memory_bytes cenv t = type_memory_size tvt) ==>
-  t = expr_type e /\ stmt_state_rel ctx func cenv cx es' s /\
+  t = expr_type e /\ stmt_state_rel H ctx func cenv cx es' s /\
   ?a tv. eval_operand p.ptr_operand s = SOME a /\
     immutable_holds cenv cx t (Value v) a es' s /\
     evaluate_type (get_tenv cx) t = SOME tv /\
@@ -72,11 +72,11 @@ Theorem snapshot_code_types[local]:
     (type_memory_bytes cenv t + 31) DIV 32 = type_slot_size tv
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `t = expr_type e /\ stmt_state_rel ctx func cenv cx es' s` by
+  `t = expr_type e /\ stmt_state_rel H ctx func cenv cx es' s` by
     gvs[vv_post_def, vv_holds_def] >> simp[] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
        immutable_holds cenv cx t (Value v) a es' s` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      gvs[vv_post_def, vv_holds_def]) >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
@@ -114,7 +114,7 @@ Proof
 QED
 
 Theorem snapshot_runtime_contents_frame[local]:
-  stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es u /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -141,7 +141,7 @@ Proof
 QED
 
 Theorem snapshot_code_contents_frame[local]:
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   immutable_holds cenv cx t (Value v) a es u /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -176,17 +176,19 @@ Theorem snapshot_code_composite_frame:
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
       type_memory_bytes cenv t = type_memory_size tvt) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?z. gas_marked_path F ctx func s 0 (OK z) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op z /\
       (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP z.vs_allocas aid = SOME entry) /\
       alloca_frame cenv es' sm s cenv es' z /\
       ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
-      z.vs_inst_idx = LENGTH sb.cs_current_insts
+      z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+      z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all snapshot_code_layout >> strip_tac >>
@@ -196,7 +198,9 @@ Proof
   rename1 `eval_operand buf.buf_operand u = SOME w` >>
   `sm.cs_next_var <= mid.cs_next_var /\ mid.cs_next_id <= sb.cs_next_id` by
     fs[ci_mono_def] >>
-  `u.vs_labels = s.vs_labels` by
+  `u.vs_labels = s.vs_labels /\
+   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `(u with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -242,7 +246,7 @@ Resume snapshot_code_composite_frame[endpoint]:
   `cenv.ce_is_ctor ==> regions_disjoint (w2n a) (type_memory_size tv)
        (w2n w) (type_memory_size tv)` by
     (strip_tac >> irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[] >>
      qexists_tac `inst` >> simp[] >> metis_tac[]) >>
   `val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
@@ -257,12 +261,12 @@ Resume snapshot_code_composite_frame[endpoint]:
   `sm.cs_next_id < sb.cs_next_id` by decide_tac >>
   `eval_operand buf.buf_operand z = SOME w` by
     (fs[eval_operand_def] >> metis_tac[]) >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v op z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v op z` by
     (irule copy_buffer_post_transport >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[] >> (conj_tac >- metis_tac[]) >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      qexistsl_tac [`mid`, `tv`] >> gvs[] >>
@@ -284,7 +288,9 @@ Resume snapshot_code_composite_frame[endpoint]:
            qexists_tac `aid` >> simp[]) >>
         gvs[regions_disjoint_def]) >>
      metis_tac[]) >>
-  `z.vs_allocas = u.vs_allocas /\ z.vs_halted = u.vs_halted` by
+  `z.vs_allocas = u.vs_allocas /\ z.vs_halted = u.vs_halted /\
+   z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
+   z.vs_requests = u.vs_requests /\ z.vs_call_ctx = u.vs_call_ctx` by
     (qpat_x_assum `copy_static z = copy_static u` mp_tac >>
      simp[copy_static_def, venom_state_component_equality]) >>
   qexists_tac `z` >> simp[] >>
