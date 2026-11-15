@@ -4,6 +4,8 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
+  dallocaBounds dallocaCalldata dallocaCreateCopy dallocaCreateBlueprint
+  dallocaBlueprintArgs dallocaCreateGeometry
   bodyMemStorageCopyStage
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
