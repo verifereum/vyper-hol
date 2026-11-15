@@ -3506,7 +3506,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_ExtCall]:
   simp_tac (srw_ss()) [Once well_typed_expr_def]
 QED
 
-Theorem contract_storage_well_formed_stk[local]:
+Theorem contract_storage_well_formed_stk:
   contract_storage_well_formed (cx with stk updated_by f) st <=>
   contract_storage_well_formed cx st
 Proof
