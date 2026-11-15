@@ -45,7 +45,8 @@ Theorem tuple_place_flag_unpack_outcome_open:
     (\H res ff r. expr_exit res r)
 Proof
   strip_tac >>
-  drule_all tuple_place_compiler_flag_prefix_head >> strip_tac >>
+  mp_tac (Q.INST [`es1` |-> `ee`] tuple_place_compiler_flag_prefix_head) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `ltys <> []` by
     (imp_res_tac vyperTypeArgFitsTheory.arg_types_fit_LENGTH >>
      fs[listTheory.LIST_REL_EL_EQN] >> Cases_on `ltys` >> fs[]) >>

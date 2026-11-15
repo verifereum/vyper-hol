@@ -61,8 +61,9 @@ Proof
   `local_ptrs_reserved cenv sb` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      goal_assum (drule_at Any) >> simp[]) >>
-  simp[] >> conj_tac
-  >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  simp[] >>
+  conj_tac >- (qexists_tac `H'` >> first_assum ACCEPT_TAC) >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   rpt strip_tac >>
   `MEM (EL j elems) elems` by (irule listTheory.EL_MEM >> simp[]) >>
   `?x. EL j elems = Var x` by gvs[listTheory.EVERY_MEM] >>

@@ -89,8 +89,9 @@ Proof
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
   `!n b sz. local_region cenv ee.scopes s n b sz <=>
              local_region cenv es.scopes s0 n b sz` by
-    (irule tuple_place_pointer_local_regions >>
-     fs[tuple_place_head_def] >> goal_assum (drule_at Any) >> metis_tac[]) >>
+    (drule tuple_place_head_witness >> strip_tac >>
+     fs[tuple_place_head_def] >>
+     drule_all tuple_place_pointer_local_regions >> simp[]) >>
   fs[tuple_place_head_def, tuplePlacePrefixCertTheory.tuple_place_snapshot_def]
   >- (disj2_tac >> disj2_tac >> disj1_tac >>
       qexistsl [`aid`, `b`, `sz`] >> simp[] >>
@@ -364,8 +365,9 @@ Proof
   strip_tac >>
   `!n lb lsz. local_region cenv ee.scopes s n lb lsz <=>
     local_region cenv es.scopes s0 n lb lsz` by
-    (irule tuple_place_pointer_local_regions >>
-     fs[tuple_place_head_def] >> goal_assum (drule_at Any) >> metis_tac[]) >>
+    (drule tuple_place_head_witness >> strip_tac >>
+     fs[tuple_place_head_def] >>
+     drule_all tuple_place_pointer_local_regions >> simp[]) >>
   `sp.cs_next_id <= sa.cs_next_id` by
     (qspec_then `bt` mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
      disch_then (qspecl_then [`cenv`, `sp`] mp_tac) >>

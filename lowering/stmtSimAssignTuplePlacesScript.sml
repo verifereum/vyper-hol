@@ -31,7 +31,7 @@ Ancestors
   stmtReasonVvMemory stmtSimAssignTuple stmtSimForced stmtSimProps
   gasSummaryCompose gasSummary fragGasPath fragGasMode freshWrites
   vyperStorageFootprint vyperStorageTrace
-Libs monadsyntax
+Libs monadsyntax horizonTypeLib
 
 Theorem compile_assign_tuple_places_stmt_frag:
   !ctx func cx lctx RetQ cenv ty env tops gs e es tys tvs ltys ltvs.
@@ -81,9 +81,9 @@ Proof
   impl_tac >- metis_tac[] >> strip_tac >>
   rewrite_tac[eval_assign_tuple_action] >>
   irule gas_outcome_bind_value >>
+  conj_tac
+  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   goal_assum (drule_at Any) >> rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
   >~ [`exit_result _`]
   >- (rpt gen_tac >> strip_tac >>
       Cases_on `res` >> fs[expr_exit_def] >>
@@ -137,9 +137,11 @@ Proof
      (ArrayV (TupleV vs)) op t /\
    t.vs_current_bb = su.cs_current_bb /\ t.vs_inst_idx = LENGTH su.cs_current_insts` by
     metis_tac[] >>
-  `?H. valid_horizon cx st0 H mid.storage_trace` by metis_tac[] >>
-  drule_all (SRULE [] (Q.INST [`ee` |-> `mid with gas_obs := []`]
-    tuple_place_flag_unpack_outcome_open)) >> strip_tac >>
+  mp_tac (Q.INST [`ee` |-> `mid with gas_obs := []`,
+    `sv` |-> `t`, `sf` |-> `cs'`,
+    `flag` |-> `is_memory_view e /\ vv_location vv = SOME LocMemory`]
+    tuple_place_flag_unpack_outcome_open) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   irule exprSimSubscriptMapTheory.gas_outcome_conseq >>
   goal_assum (drule_at Any) >> rpt conj_tac
   >~ [`stmt_exit _ _ _ _`]
@@ -153,11 +155,19 @@ Proof
   reverse conj_tac
   >- (`MAP FDOM mid.scopes = MAP FDOM es.scopes` by
         (drule eval_read_preserves_scopes_dom >> simp[]) >>
-      irule alloca_frame_expr_prefix >>
+      irule (horizonTypeLib.at_horizon_named "H" alloca_frame_expr_prefix) >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- (qexistsl [`ctx`, `cx`, `func`] >> simp[]) >>
-      qexistsl [`mid`, `su`, `t`] >> gvs[] >>
-      first_assum ACCEPT_TAC) >>
+      reverse conj_tac
+      >- (qexistsl [`H0`, `ctx`, `cx`, `func`] >>
+          `valid_horizon cx st0 H0 es.storage_trace` by
+            (drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
+             `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+               (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+                simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+                     vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+             simp[] >> metis_tac[]) >>
+          metis_tac[]) >>
+      qexistsl [`mid with gas_obs := []`, `su`, `t`] >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   `not_fresh_at su x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >> metis_tac[]
