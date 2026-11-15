@@ -378,6 +378,9 @@ Theorem result_state_memory_frame:
   !func cenv cx es s t ctx.
     stmt_state_rel H ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
     (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p t = lookup_var p s) /\
@@ -411,7 +414,7 @@ Proof
     (irule fmp_room_fields >> qexists_tac `s` >>
      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
        (fn th => once_rewrite_tac[th]) >>
-     gvs[stmt_state_rel_def]) >>
+     gvs[stmt_state_rel_def] >> first_assum ACCEPT_TAC) >>
   `immutable_alloca_sep func cenv cx es t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
