@@ -131,12 +131,13 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
     (irule forced_then_admissible >> goal_assum (drule_at Any)) >>
   irule for_expr_endpoint_outcome_mem >>
   simp range_frame_rules >> conj_tac
-  >- (rpt strip_tac >> qpat_x_assum `expr_exit _ _` mp_tac >>
+  >- (rpt strip_tac >> conj_tac >- (qpat_x_assum `expr_exit _ _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >>
       Cases_on `ex` >> Cases_on `r'` >>
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >>
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
   qexistsl_tac [`cenv`,`op1`,`sa`,`s1`,`fty`] >>
   simp[] >> rpt gen_tac >> strip_tac >>
   rename1 `expr_post _ _ _ _ _ e1 es sa s1 s0 ee1 v1 op1 t1` >>
@@ -180,12 +181,13 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
      pure_rewrite_tac[expr_post_def] >> strip_tac >> simp[]) >>
   qunabbrev_tac `suffix` >>
   irule for_expr_endpoint_outcome_mem >> simp range_frame_rules >> conj_tac
-  >- (rpt strip_tac >> qpat_x_assum `expr_exit _ _` mp_tac >>
+  >- (rpt strip_tac >> conj_tac >- (qpat_x_assum `expr_exit _ _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >>
       Cases_on `ex` >> Cases_on `r'` >>
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >>
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
   qexistsl_tac [`cenv`,`op2`,`s1`,`s2`,`fty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   rename1 `expr_post _ _ _ _ _ e2 ee1 s1 s2 t1 ee2 v2 op2 t2` >>
@@ -488,7 +490,8 @@ Resume compile_for_range_checked_frag_active_mem[loop_ready]:
       cc.vs_alloca_next <= s.vs_alloca_next /\
       (!x v. not_fresh_at s2 x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+       halt_exit H cx ee res r)` by
     (irule for_loop_mem >> ntac 5 (conj_tac >- simp[]) >>
      conj_tac >- (qexists_tac `lctx` >> simp[]) >>
      ntac 2 (conj_tac >- simp[]) >>
