@@ -91,6 +91,6 @@ Proof
     (gen_tac >> irule emit_abort_zero_path_ptr >> simp[] >>
      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[] >>
      irule ptr_inst_ok_abort_zero >> simp[]) >>
-  simp[exit_result_def, stmt_exit_ptr_def] >> gvs[]
+  simp[exit_result_def, stmt_exit_ptr_def, halt_exit_def] >> gvs[]
 QED
 
