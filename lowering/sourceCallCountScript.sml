@@ -2858,6 +2858,163 @@ Proof
        vyperABITheory.decode_abi_value_def, AllCaseEqs()]
 QED
 
+(* Parser abbreviation only: no additional semantic constant. *)
+val _ = overload_on ("source_exhausted_safe",
+  ``\f. !s r t. accounts_runtime_well_typed s.accounts /\
+       s.outcomes = SOME [] /\ f s = (r,t) ==>
+       accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+       r <> INR (Error (RuntimeError "create outcome accounts"))``);
+
+Theorem source_exhausted_bind_safety[local]:
+  source_exhausted_safe f /\
+  (!s v t. f s = (INL v,t) ==> source_exhausted_safe (g v)) ==>
+  source_exhausted_safe (bind f g)
+Proof
+  simp_tac bool_ss [] >> ntac 2 strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [vyperStateTheory.bind_def] >>
+  Cases_on `f s` >> rename1 `f s = (a,u)` >>
+  qpat_x_assum `source_exhausted_safe f`
+    (qspecl_then [`s`, `a`, `u`] mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `a` >> simp[] >>
+  strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`s`, `x`, `u`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`u`, `r`, `t`] mp_tac) >> simp[]
+QED
+
+Theorem source_exhausted_try_safety[local]:
+  source_exhausted_safe f /\
+  (!s e t. f s = (INR e,t) ==> source_exhausted_safe (h e)) ==>
+  source_exhausted_safe (try f h)
+Proof
+  simp_tac bool_ss [] >> ntac 2 strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `try _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [vyperStateTheory.try_def] >>
+  Cases_on `f s` >> rename1 `f s = (a,u)` >>
+  qpat_x_assum `source_exhausted_safe f`
+    (qspecl_then [`s`, `a`, `u`] mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `a` >> simp[] >>
+  strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`s`, `y`, `u`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`u`, `r`, `t`] mp_tac) >> simp[]
+QED
+
+Theorem source_exhausted_finally_safety[local]:
+  source_exhausted_safe f /\ source_exhausted_safe g ==>
+  source_exhausted_safe (finally f g)
+Proof
+  simp_tac bool_ss [] >> ntac 2 strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [vyperStateTheory.finally_def] >>
+  Cases_on `f s` >> rename1 `f s = (a,u)` >>
+  qpat_x_assum `source_exhausted_safe f`
+    (qspecl_then [`s`, `a`, `u`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `source_exhausted_safe g` (qspec_then `u` mp_tac) >>
+  Cases_on `g u` >> rename1 `g u = (b,w)` >>
+  disch_then (qspecl_then [`b`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `a` >> Cases_on `b` >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem source_exhausted_finally_unless_halt_safety[local]:
+  source_exhausted_safe f /\ source_exhausted_safe g ==>
+  source_exhausted_safe (finally_unless_halt f g)
+Proof
+  simp_tac bool_ss [] >> ntac 2 strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [vyperStateTheory.finally_unless_halt_def] >>
+  Cases_on `f s` >> rename1 `f s = (a,u)` >>
+  qpat_x_assum `source_exhausted_safe f`
+    (qspecl_then [`s`, `a`, `u`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `source_exhausted_safe g` (qspec_then `u` mp_tac) >>
+  Cases_on `g u` >> rename1 `g u = (b,w)` >>
+  disch_then (qspecl_then [`b`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `a` >> Cases_on `b` >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rpt (CASE_TAC >> gvs[]) >> strip_tac >> gvs[]
+QED
+
+(* Select only the computation in the expanded parser abbreviation. *)
+fun exhausted_computation tm =
+  let val body = snd (strip_forall tm)
+      val pre = fst (dest_imp body)
+      val equation = List.last (strip_conj pre)
+  in rator (lhs equation) end;
+
+fun exhausted_at c = STRIP_QUANT_CONV
+  (LAND_CONV (RAND_CONV (RAND_CONV (LAND_CONV (RATOR_CONV c)))));
+
+val exhausted_safety_leaves = CONJUNCTS source_exhausted_place_safety @
+  CONJUNCTS source_exhausted_effect_safety;
+val exhausted_safety_rules =
+  [source_exhausted_bind_safety, source_exhausted_try_safety,
+   source_exhausted_finally_safety, source_exhausted_finally_unless_halt_safety];
+val exhausted_safety_net = List.foldl (fn ((tm,tac),net) => Net.insert (tm,tac) net)
+  Net.empty
+  (map (fn th => (exhausted_computation (concl th), MATCH_ACCEPT_TAC th))
+      exhausted_safety_leaves @
+   map (fn th => (exhausted_computation (snd (dest_imp (concl (BETA_RULE th)))),
+      MATCH_MP_TAC (BETA_RULE th) >> conj_tac)) exhausted_safety_rules);
+
+fun EXHAUSTED_SAFETY_STEP g = FIRST
+  [evalWalkLib.IH_TAC {stop = K false, normalise = BETA_RULE},
+   (fn goal as (_,w) => FIRST
+      (Net.match (exhausted_computation w) exhausted_safety_net) goal),
+   CONV_TAC (exhausted_at (CHANGED_CONV evalWalkLib.head_conv)),
+   CONV_TAC (exhausted_at (evalWalkLib.unfold_conv
+     [vyperStateTheory.ignore_bind_def, switch_BoolV_def,
+      vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def])),
+   CHANGED_TAC (simp [vyperStateTheory.return_def, vyperStateTheory.raise_def]),
+   evalWalkLib.HEAD_CASE_TAC,
+   gen_tac, DISCH_THEN STRIP_ASSUME_TAC] g;
+
+Theorem source_exhausted_assert_reason_safety[local]:
+  source_exhausted_safe f /\
+  (!s v t. f s = (INL v,t) ==> source_exhausted_safe h) ==>
+  source_exhausted_safe
+    (bind f (\pv. switch_BoolV cx pv (return ())
+      (bind h (\stv. bind (read_result cx stv) (\sv.
+        bind (lift_option_type (dest_StringV sv) "not StringV")
+          (\str. raise (AssertException str)))))))
+Proof
+  strip_tac >> MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- first_assum MATCH_ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `source_exhausted_safe h` by
+    (first_x_assum drule >> simp[]) >>
+  qpat_x_assum `!s v t. f s = _ ==> _` kall_tac >>
+  CONV_TAC (exhausted_at (BETA_CONV THENC REWR_CONV switch_BoolV_def)) >>
+  MATCH_MP_TAC (BETA_RULE source_exhausted_bind_safety) >> conj_tac
+  >- MATCH_ACCEPT_TAC source_exhausted_read_result_safety >>
+  rpt gen_tac >> strip_tac >>
+  rpt EXHAUSTED_SAFETY_STEP
+QED
+
+Theorem source_exhausted_eval_safety_mutual[local]:
+  (!cx stmt. source_exhausted_safe (eval_stmt cx stmt)) /\
+  (!cx stmts. source_exhausted_safe (eval_stmts cx stmts)) /\
+  (!cx it. source_exhausted_safe (eval_iterator cx it)) /\
+  (!cx tyv id fbody vs. source_exhausted_safe (eval_for cx tyv id fbody vs)) /\
+  (!cx e. source_exhausted_safe (eval_expr cx e)) /\
+  (!cx es. source_exhausted_safe (eval_exprs cx es)) /\
+  (!cx t. source_exhausted_safe (eval_base_place cx t)) /\
+  (!cx t. source_exhausted_safe (eval_target_place cx t)) /\
+  (!cx g v. source_exhausted_safe (assign_tuple_targets cx g v)) /\
+  (!cx gs vs. source_exhausted_safe (assign_tuple_target_list cx gs vs)) /\
+  (!cx es. source_exhausted_safe (eval_expr_results cx es))
+Proof
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+QED
+
 Theorem eval_outcome_probe_replay_mutual:
   (!cx stmt st0 os res_p st_p.
     eval_stmt cx stmt (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
