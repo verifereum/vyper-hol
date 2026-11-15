@@ -13,7 +13,7 @@ Ancestors
   removeUnused
   concretizeMemLoc
   (* lower dload/dloadbytes *)
-  lowerDload
+  lowerDload lowerDloadCoverageOrdinary
   (* branch optimization *)
   branchOpt
   (* single use expansion *)

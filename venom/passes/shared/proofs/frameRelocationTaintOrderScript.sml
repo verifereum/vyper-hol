@@ -108,3 +108,26 @@ Proof
     (Cases_on `op` >> gvs[relocation_taint_le_def, op_taint_def]) >>
   metis_tac[SUBSET_TRANS]
 QED
+
+Theorem relocation_taint_le_reset_write:
+  relocation_taint_le R tn un /\
+  (!a b. next a b /\ a IN written ==> b IN writtenT) /\
+  (!a b. next a b /\ a NOTIN written ==> R a b) ==>
+  relocation_taint_le next
+    (tn with <|t_mem := tn.t_mem DIFF written;
+       t_var := tn.t_var |+ (v,{});
+       t_stor := if reset then {} else tn.t_stor;
+       t_trans := if reset then {} else tn.t_trans|>)
+    (un with <|t_mem := un.t_mem DIFF writtenT;
+       t_var := un.t_var |+ (v,{});
+       t_stor := if reset then {} else un.t_stor;
+       t_trans := if reset then {} else un.t_trans|>)
+Proof
+  strip_tac >> fs[relocation_taint_le_def] >>
+  simp[relocation_taint_le_def] >> conj_tac
+  >- (fs[demand_taint_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
+      IF_CASES_TAC >> simp[] >> fs[op_taint_def]) >>
+  Cases_on `reset` >> simp[]
+QED

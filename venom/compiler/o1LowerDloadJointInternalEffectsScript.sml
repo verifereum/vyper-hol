@@ -60,21 +60,7 @@ Proof
   gvs[ld_shared_agree_def]
 QED
 
-(* Check that both concrete effect shapes enter the combined boundary;
-   payload relations remain semantic obligations, not framing assumptions. *)
-Theorem ld_internal_effect_update_shapes[local]:
-  (?ms ims ls. istore off v s =
-     s with <|vs_memory := ms; vs_immutables := ims; vs_logs := ls|>) /\
-  (?ms ims ls. (s with vs_logs := s.vs_logs ++ [ev]) =
-     s with <|vs_memory := ms; vs_immutables := ims; vs_logs := ls|>)
-Proof
-  conj_tac
-  >- (qexistsl_tac [`(mstore off v s).vs_memory`,
-                   `s.vs_immutables |+ (off,v)`,`s.vs_logs`] >>
-      simp[istore_def, mstore_def, venom_state_component_equality]) >>
-  qexistsl_tac [`s.vs_memory`,`s.vs_immutables`,`s.vs_logs ++ [ev]`] >>
-  simp[venom_state_component_equality]
-QED
+
 
 Theorem ld_shared_istore:
   ld_shared_agree D A tn s t /\ word_agree_except m v w ==>

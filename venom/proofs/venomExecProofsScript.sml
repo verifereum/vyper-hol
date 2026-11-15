@@ -325,14 +325,7 @@ Proof
   impl_tac >- gvs[] >> gvs[]
 QED
 
-(* bind_outputs preserves vs_prev_bb *)
-Triviality foldl_update_var_prev_bb:
-  !kvs s.
-    (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_prev_bb =
-    s.vs_prev_bb
-Proof
-  Induct >> simp[] >> Cases >> simp[update_var_def]
-QED
+
 
 (* step_inst_base returns Error for INVOKE *)
 Theorem step_inst_base_OK_not_INVOKE:
@@ -455,11 +448,7 @@ QED
 Theorem FIND_MEM = venomInstTheory.FIND_MEM
 Theorem FIND_P = venomInstTheory.FIND_P
 
-Triviality FIND_NONE:
-  !P l. FIND P l = NONE ==> ~EXISTS P l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rw[] >> gvs[]
-QED
+
 
 (* ==========================================================================
    Lookup Helpers

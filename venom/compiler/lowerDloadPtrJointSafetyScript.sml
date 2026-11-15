@@ -578,18 +578,18 @@ val normal = ``\ds PH H un g j t.
     ir_supply_covers_fn q f /\
     (?q'. lower_dload_function_supply q f = (g,q')) /\
     (!k. k < LENGTH cs ==>
-      let c = EL k cs; d = EL k ds in
-      dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
+
+      dload_live_layout lo (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
         (DROP (SUC k) fs) /\
-      dload_equal_environment c.cf_state d.cf_state /\
-      c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
-      c.cf_inst = d.cf_inst /\
-      (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-        (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-      (?qc. ir_supply_covers_fn qc c.cf_fn /\
-        (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
-        dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))``;
+      dload_equal_environment (EL k cs).cf_state (EL k ds).cf_state /\
+      (EL k cs).cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+      (EL k cs).cf_inst = (EL k ds).cf_inst /\
+      (!a. a IN set (fn_ir_vars (EL k cs).cf_fn) ==>
+        (lookup_var a (EL k cs).cf_state = NONE <=> lookup_var a (EL k ds).cf_state = NONE)) /\
+      (?qc. ir_supply_covers_fn qc (EL k cs).cf_fn /\
+        (?qc'. lower_dload_function_supply qc (EL k cs).cf_fn = ((EL k ds).cf_fn,qc')) /\
+        dload_control_match qc (EL k cs).cf_fn (EL k ds).cf_fn (EL k cs).cf_state (EL k ds).cf_state
+          (EL k cs).cf_inst [(EL k cs).cf_inst] 0))``;
 
 Theorem dload_normal_safety:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\

@@ -312,3 +312,61 @@ QED
    recursive summary must retain entry setup, aligned stack certificates,
    source annotated reachability at exit, and source completed callee run.
 *)
+
+Theorem ld_revert_entry_supply_collision_witness:
+
+
+  revert_forward_pair (<| bb_label := "entry"; bb_instructions :=
+    [mk_inst 0 ASSIGN [Lit 0w] ["formal_var_0"];
+     mk_inst 1 DLOAD [Lit 0w] ["loaded"];
+     mk_inst 2 DLOADBYTES [Lit 0w; Lit 0w; Lit 0w] [];
+     mk_inst 3 RETURNDATACOPY [Lit 0w; Var "formal_var_0"; Lit 0w] [];
+     mk_inst 4 REVERT [Lit 0w; Lit 0w] []] |>) 3 4 /\
+  ~revert_forward_pair (FST (lower_dload_block_supply (<| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
+    irs_used_inst_ids := []; irs_used_vars := []; irs_used_labels := [] |>) (<| bb_label := "entry"; bb_instructions :=
+    [mk_inst 0 ASSIGN [Lit 0w] ["formal_var_0"];
+     mk_inst 1 DLOAD [Lit 0w] ["loaded"];
+     mk_inst 2 DLOADBYTES [Lit 0w; Lit 0w; Lit 0w] [];
+     mk_inst 3 RETURNDATACOPY [Lit 0w; Var "formal_var_0"; Lit 0w] [];
+     mk_inst 4 REVERT [Lit 0w; Lit 0w] []] |>))) 7 8 /\
+  revert_forward_pair
+    (FST (lower_dload_block_supply
+      ((<| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
+    irs_used_inst_ids := []; irs_used_vars := []; irs_used_labels := [] |>) with irs_used_vars := ["formal_var_0"; "loaded"]) (<| bb_label := "entry"; bb_instructions :=
+    [mk_inst 0 ASSIGN [Lit 0w] ["formal_var_0"];
+     mk_inst 1 DLOAD [Lit 0w] ["loaded"];
+     mk_inst 2 DLOADBYTES [Lit 0w; Lit 0w; Lit 0w] [];
+     mk_inst 3 RETURNDATACOPY [Lit 0w; Var "formal_var_0"; Lit 0w] [];
+     mk_inst 4 REVERT [Lit 0w; Lit 0w] []] |>))) 7 8
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  conj_tac
+  >- (CONV_TAC EVAL >> conj_tac
+      >- (rpt strip_tac >>
+          `F` by (qpat_x_assum `3 < k` mp_tac >>
+                  qpat_x_assum `k < 4` mp_tac >> decide_tac)) >>
+      simp_tac (srw_ss()) [] >>
+      CONV_TAC EVAL) >>
+  conj_tac
+  >- (CONV_TAC EVAL >>
+      simp_tac (srw_ss()) [] >> CONV_TAC EVAL) >>
+  CONV_TAC EVAL >> conj_tac
+  >- (rpt strip_tac >>
+      `F` by (qpat_x_assum `7 < k` mp_tac >>
+              qpat_x_assum `k < 8` mp_tac >> decide_tac)) >>
+  simp_tac (srw_ss()) [] >> CONV_TAC EVAL
+QED
+
+Theorem ld_internal_effect_update_shapes:
+  (?ms ims ls. istore off v s =
+     s with <|vs_memory := ms; vs_immutables := ims; vs_logs := ls|>) /\
+  (?ms ims ls. (s with vs_logs := s.vs_logs ++ [ev]) =
+     s with <|vs_memory := ms; vs_immutables := ims; vs_logs := ls|>)
+Proof
+  conj_tac
+  >- (qexistsl_tac [`(mstore off v s).vs_memory`,
+                   `s.vs_immutables |+ (off,v)`,`s.vs_logs`] >>
+      simp[istore_def, mstore_def, venom_state_component_equality]) >>
+  qexistsl_tac [`s.vs_memory`,`s.vs_immutables`,`s.vs_logs ++ [ev]`] >>
+  simp[venom_state_component_equality]
+QED

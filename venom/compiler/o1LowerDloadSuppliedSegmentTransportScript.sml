@@ -48,15 +48,15 @@ Theorem ld_joint_supply_dloadbytes_transport:
   code_layout_valid t /\
   w2n x + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword(:256) ==>
   ?q. eval_operand dst t = SOME q /\
-    let t2 = update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t;
-        t3 = write_memory_with_expansion (w2n q)
-          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) t2
-    in LENGTH es = 2 /\ step_inst fuel C' (EL 0 es) t = OK t2 /\
-       step_inst fuel C' (EL 1 es) t2 = OK t3 /\
+     LENGTH es = 2 /\ step_inst fuel C' (EL 0 es) t = OK (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t) /\
+       step_inst fuel C' (EL 1 es) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t) = OK (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)) /\
        ld_env_agree sites fn (occurrence_step a HP H inst s1)
-         (step_taint inst s s1 tn) s1 t3 /\
+         (step_taint inst s s1 tn) s1 (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)) /\
        ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
-         s1.vs_memory t3.vs_memory
+         s1.vs_memory (write_memory_with_expansion (w2n q)
+          (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t)).vs_memory
 Proof
   strip_tac >>
   drule_all ld_joint_dloadbytes_destination >>
@@ -120,24 +120,51 @@ Theorem ld_joint_supply_dload_transport:
   b+32 < dimword(:256) /\
   ld_joint_geometry sites X1 lo owners /\
   FLOOKUP X1 key = SOME ((EL 0 es).inst_id,b) ==>
-  let t1 = update_var av (n2w b)
+   LENGTH es = 4 /\
+     step_inst fuel C' (EL 0 es) t = OK (update_var av (n2w b)
         (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
            t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
                     vs_alloca_next := t.vs_alloca_next+32|>
-         else t);
-      t2 = update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) t1;
-      bs = TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w);
-      t3 = write_memory_with_expansion b bs t2;
-      t4 = update_var out (word_of_bytes T (0w:bytes32) bs) t3
-  in LENGTH es = 4 /\
-     step_inst fuel C' (EL 0 es) t = OK t1 /\
-     step_inst fuel C' (EL 1 es) t1 = OK t2 /\
-     step_inst fuel C' (EL 2 es) t2 = OK t3 /\
-     step_inst fuel C' (EL 3 es) t3 = OK t4 /\
+         else t)) /\
+     step_inst fuel C' (EL 1 es) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t)) = OK (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))) /\
+     step_inst fuel C' (EL 2 es) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))) = OK (write_memory_with_expansion b (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t)))) /\
+     step_inst fuel C' (EL 3 es) (write_memory_with_expansion b (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t)))) = OK (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))) /\
      ld_env_agree sites fn (occurrence_step a HP H inst s1)
-       (step_taint inst s s1 tn) s1 t4 /\
+       (step_taint inst s s1 tn) s1 (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))) /\
      ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
-       s1.vs_memory t4.vs_memory
+       s1.vs_memory (update_var out (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w))) (write_memory_with_expansion b (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w)) (update_var bv (x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)) (update_var av (n2w b)
+        (if FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE then
+           t with <|vs_allocas := t.vs_allocas |+ ((EL 0 es).inst_id,(b,32));
+                    vs_alloca_next := t.vs_alloca_next+32|>
+         else t))))).vs_memory
 Proof
   strip_tac >> (
   `eval_operand off t = SOME x` by

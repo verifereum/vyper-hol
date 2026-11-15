@@ -690,21 +690,8 @@ val ld_recursive_clause_goals =
     val (clauses, _) = dest_imp body
   in map (subst [p |-> ld_recursive_candidate]) (strip_conj clauses) end;
 
-Theorem ld_recursive_candidate_weaken[local]:
-  (^ld_entry_history_candidate) vs0 CT stk un gn j t ==>
-  (^ld_recursive_candidate) vs0 CT stk un gn j t
-Proof
-  BETA_TAC >>
-  rpt (FIRST [disch_then ACCEPT_TAC,
-              disch_then (ACCEPT_TAC o CONJUNCT2),
-              ho_match_mp_tac MONO_OR, ho_match_mp_tac MONO_AND,
-              ho_match_mp_tac MONO_EXISTS, ho_match_mp_tac MONO_ALL,
-              ho_match_mp_tac MONO_IMP, conj_tac, gen_tac]) >>
-  simp[]
-QED
 
-(* Only the operational binding is used below.  The historical entry clause
-   is consumed through ld_recursive_candidate_weaken, never rebound. *)
+
 (* Literal saved-clause interface, extracted only from the operational quote. *)
 val ld_recursive_saved =
   let
@@ -995,44 +982,11 @@ Proof
   BETA_TAC >> pure_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
-(* Entry diagnostic: the raw supply boundary needs separation from the source
-   variables. Both DLOAD and DLOADBYTES occur before the forwarding copy. *)
-Theorem ld_revert_entry_supply_collision_probe[local]:
-  let bb = <| bb_label := "entry"; bb_instructions :=
-    [mk_inst 0 ASSIGN [Lit 0w] ["formal_var_0"];
-     mk_inst 1 DLOAD [Lit 0w] ["loaded"];
-     mk_inst 2 DLOADBYTES [Lit 0w; Lit 0w; Lit 0w] [];
-     mk_inst 3 RETURNDATACOPY [Lit 0w; Var "formal_var_0"; Lit 0w] [];
-     mk_inst 4 REVERT [Lit 0w; Lit 0w] []] |> in
-  let a = <| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
-    irs_used_inst_ids := []; irs_used_vars := []; irs_used_labels := [] |> in
-  revert_forward_pair bb 3 4 /\
-  ~revert_forward_pair (FST (lower_dload_block_supply a bb)) 7 8 /\
-  revert_forward_pair
-    (FST (lower_dload_block_supply
-      (a with irs_used_vars := ["formal_var_0"; "loaded"]) bb)) 7 8
-Proof
-  simp_tac bool_ss [LET_THM] >>
-  conj_tac
-  >- (CONV_TAC EVAL >> conj_tac
-      >- (rpt strip_tac >>
-          `F` by (qpat_x_assum `3 < k` mp_tac >>
-                  qpat_x_assum `k < 4` mp_tac >> decide_tac)) >>
-      simp_tac (srw_ss()) [] >>
-      CONV_TAC EVAL) >>
-  conj_tac
-  >- (CONV_TAC EVAL >>
-      simp_tac (srw_ss()) [] >> CONV_TAC EVAL) >>
-  CONV_TAC EVAL >> conj_tac
-  >- (rpt strip_tac >>
-      `F` by (qpat_x_assum `7 < k` mp_tac >>
-              qpat_x_assum `k < 8` mp_tac >> decide_tac)) >>
-  simp_tac (srw_ss()) [] >> CONV_TAC EVAL
-QED
+
 
 (* EXCEPTIONAL ENTRY AUDIT (not a theorem or an assumed closure).
 
-   The collision probe above refutes transport for arbitrary raw supplies:
+   The collision witness in lowerDloadCallBoundaryTest refutes transport for arbitrary raw supplies:
    ASSIGN formal_var_0 = 0; DLOAD 0 -> loaded; DLOADBYTES 0 0 0;
    RETURNDATACOPY 0 formal_var_0 0; REVERT 0 0.
    Empty used-vars lets the inserted ALLOCA overwrite formal_var_0. Source
@@ -5859,11 +5813,7 @@ Proof
   fs[fn_labels_def]
 QED
 
-Theorem ld_restriction_reassociate[local]:
-  ((b /\ r) /\ s) /\ a <=> ((b /\ s) /\ a) /\ r
-Proof
-  metis_tac[]
-QED
+
 
 fun ld_under_exists_conv 0 c = c
   | ld_under_exists_conv n c = QUANT_CONV (ld_under_exists_conv (n-1) c);

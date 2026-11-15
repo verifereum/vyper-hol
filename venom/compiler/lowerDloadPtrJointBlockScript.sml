@@ -36,18 +36,18 @@ Theorem dload_joint_block_closed:
     ir_supply_covers_fn q f /\
     (?q'. lower_dload_function_supply q f = (g,q')) /\
     (!k. k < LENGTH cs ==>
-      let c = EL k cs; d = EL k ds in
-      dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
+
+      dload_live_layout lo (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
         (DROP (SUC k) fs) /\
-      dload_equal_environment c.cf_state d.cf_state /\
-      c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
-      c.cf_inst = d.cf_inst /\
-      (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-        (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-      (?qc. ir_supply_covers_fn qc c.cf_fn /\
-        (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
-        dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))) \/
+      dload_equal_environment (EL k cs).cf_state (EL k ds).cf_state /\
+      (EL k cs).cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+      (EL k cs).cf_inst = (EL k ds).cf_inst /\
+      (!a. a IN set (fn_ir_vars (EL k cs).cf_fn) ==>
+        (lookup_var a (EL k cs).cf_state = NONE <=> lookup_var a (EL k ds).cf_state = NONE)) /\
+      (?qc. ir_supply_covers_fn qc (EL k cs).cf_fn /\
+        (?qc'. lower_dload_function_supply qc (EL k cs).cf_fn = ((EL k ds).cf_fn,qc')) /\
+        dload_control_match qc (EL k cs).cf_fn (EL k ds).cf_fn (EL k cs).cf_state (EL k ds).cf_state
+          (EL k cs).cf_inst [(EL k cs).cf_inst] 0))) \/
     dload_terminal_mode lo P vs C ds H un g j t) /\
   active_inst g j t /\ is_terminator j.inst_opcode /\
   step_inst fuel C' j t = OK t1 /\ ~t1.vs_halted /\
@@ -78,18 +78,18 @@ Theorem dload_joint_block_closed:
     ir_supply_covers_fn q f /\
     (?q'. lower_dload_function_supply q f = (g,q')) /\
     (!k. k < LENGTH cs ==>
-      let c = EL k cs; d = EL k ds in
-      dload_live_layout lo c.cf_state.vs_alloca_next d.cf_state.vs_alloca_next
+
+      dload_live_layout lo (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
         (DROP (SUC k) fs) /\
-      dload_equal_environment c.cf_state d.cf_state /\
-      c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
-      c.cf_inst = d.cf_inst /\
-      (!a. a IN set (fn_ir_vars c.cf_fn) ==>
-        (lookup_var a c.cf_state = NONE <=> lookup_var a d.cf_state = NONE)) /\
-      (?qc. ir_supply_covers_fn qc c.cf_fn /\
-        (?qc'. lower_dload_function_supply qc c.cf_fn = (d.cf_fn,qc')) /\
-        dload_control_match qc c.cf_fn d.cf_fn c.cf_state d.cf_state
-          c.cf_inst [c.cf_inst] 0))) \/
+      dload_equal_environment (EL k cs).cf_state (EL k ds).cf_state /\
+      (EL k cs).cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+      (EL k cs).cf_inst = (EL k ds).cf_inst /\
+      (!a. a IN set (fn_ir_vars (EL k cs).cf_fn) ==>
+        (lookup_var a (EL k cs).cf_state = NONE <=> lookup_var a (EL k ds).cf_state = NONE)) /\
+      (?qc. ir_supply_covers_fn qc (EL k cs).cf_fn /\
+        (?qc'. lower_dload_function_supply qc (EL k cs).cf_fn = ((EL k ds).cf_fn,qc')) /\
+        dload_control_match qc (EL k cs).cf_fn (EL k ds).cf_fn (EL k cs).cf_state (EL k ds).cf_state
+          (EL k cs).cf_inst [(EL k cs).cf_inst] 0))) \/
     dload_terminal_mode lo P vs C ds (entry_prov g t1 H)
       (entry_taint_vars g t1 un) g j' t2
 Proof
@@ -134,7 +134,7 @@ Resume dload_joint_block_closed[normal]:
     w IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by
     (rpt strip_tac >> metis_tac[dload_original_phi_input_tracked]) >>
   drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    dload_normal_branch_block >> disch_then drule >>
+    (BETA_RULE (PURE_REWRITE_RULE [LET_THM] dload_normal_branch_block)) >> disch_then drule >>
   disch_then (drule_at (Pat `dload_control_match _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `active_inst _ _ _`)) >>
