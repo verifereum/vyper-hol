@@ -1,7 +1,7 @@
 (* Issue #337: tuple indices are literal, unlike array indices. *)
 Theory vyperTupleSubscriptTest
 Ancestors
-  finite_map integer list vyperAST vyperTypeSystem jsonToVyperExpr jsonToVyper
+  finite_map integer list vyperAST vyperTypeSystem jsonToVyperExpr
 Libs
   jsonASTLib vyperConstEvalLib vyperCheckContractLib
 
@@ -199,7 +199,7 @@ val folded_tuple = decode_subscript
   ("{\"typeclass\":\"tuple\",\"member_types\":[" ^ uint_json ^ "," ^ uint_json ^ "]}")
   computed_index_json;
 val translated_tuple = rhs (concl (EVAL
-  ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^folded_tuple``));
+  ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^folded_tuple``));
 val () = if aconv translated_tuple
   ``Subscript (BaseT (UintT 256))
       (Name (TupleT [BaseT (UintT 256); BaseT (UintT 256)]) "xs")
@@ -210,7 +210,7 @@ val folded_array = decode_subscript
   ("{\"typeclass\":\"static_array\",\"value_type\":" ^ uint_json ^ ",\"length\":2}")
   computed_index_json;
 val translated_array = rhs (concl (EVAL
-  ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^folded_array``));
+  ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^folded_array``));
 val () = if can (find_term (aconv ``Bop Add``)) translated_array
   then () else raise Fail "array index expression was unexpectedly folded";
 
@@ -221,7 +221,7 @@ fun check_index label source expected accepted = let
     ("{\"typeclass\":\"tuple\",\"member_types\":[" ^ uint_json ^ "," ^ uint_json ^ "]}")
     source
   val translated = rhs (concl (EVAL
-    ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^decoded``))
+    ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^decoded``))
   val index = case strip_comb translated of
       (_, [_, _, index]) => index
     | _ => raise Fail ("expected translated subscript: " ^ label)

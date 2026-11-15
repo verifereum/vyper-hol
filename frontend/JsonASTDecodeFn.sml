@@ -148,7 +148,6 @@ val JE_Decimal_tm = jastk "JE_Decimal"
 val JE_Str_tm = jastk "JE_Str"
 val JE_GenericStr_tm = jastk "JE_GenericStr"
 val JE_Bytes_tm = jastk "JE_Bytes"
-val JE_HexBytes_tm = jastk "JE_HexBytes"
 val JE_Hex_tm = jastk "JE_Hex"
 val JE_Bool_tm = jastk "JE_Bool"
 val JE_Ellipsis_tm = jastk "JE_Ellipsis"
@@ -174,7 +173,6 @@ fun mk_JE_Decimal s = mk_comb(JE_Decimal_tm, fromMLstring s)
 fun mk_JE_Str (len, v) = list_mk_comb(JE_Str_tm, [len, fromMLstring v])
 fun mk_JE_GenericStr v = mk_comb(JE_GenericStr_tm, fromMLstring v)
 fun mk_JE_Bytes (len, v) = list_mk_comb(JE_Bytes_tm, [len, fromMLstring v])
-fun mk_JE_HexBytes (len, v) = list_mk_comb(JE_HexBytes_tm, [len, fromMLstring v])
 fun mk_JE_Hex (s, ty) = list_mk_comb(JE_Hex_tm, [fromMLstring s, ty])
 fun mk_JE_Bool b = mk_comb(JE_Bool_tm, mk_bool b)
 fun mk_JE_Name (s, tc_opt, src_id_opt, ty) =
@@ -591,11 +589,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* Bytes/HexBytes literal *)
   check (field "ast_type" string)
         (fn s => s = "Bytes" orelse s = "HexBytes") "not bytes" $
-    JSONDecode.map (fn (kind, len, v) =>
-      if kind = "HexBytes" then mk_JE_HexBytes (len, v)
-      else mk_JE_Bytes (len, v)) $
-    tuple3 (field "ast_type" string,
-            field "type" (check (field "name" string) (fn s => s = "Bytes") "not Bytes type" $
+    JSONDecode.map (fn (len, v) => mk_JE_Bytes(len, v)) $
+    tuple2 (field "type" (check (field "name" string) (fn s => s = "Bytes") "not Bytes type" $
                           field "length" numtm),
             field "value" string),
 
@@ -1207,8 +1202,7 @@ fun dynamic_operand_type decls expr =
                      if is_unbounded_dynamic (at 3) then SOME bound else NONE)
             | NONE => NONE)
        | NONE => concrete (at 3))
-    else if (aconv head JE_Bytes_tm orelse aconv head JE_HexBytes_tm)
-            andalso List.length xs = 2 then
+    else if aconv head JE_Bytes_tm andalso List.length xs = 2 then
       SOME (mk_JT_Bytes (at 0))
     else if aconv head JE_Str_tm andalso List.length xs = 2 then
       SOME (mk_JT_String (at 0))
