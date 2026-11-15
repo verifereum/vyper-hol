@@ -5,6 +5,8 @@ Ancestors
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
   dftGasFromListReplayBoundary dftGasFromListTraceDefs dftGasFromListTraceNames
   dftGasToListTrace dftGasToListAgreement gasOracleReplay
+  dftGasToListReachWitness dftGasToListVisitReplay
+  dftGasFromListLocator dftGasFromListContextReach
   dftRunRel dftDefs o1PassContract contextRawReachable gasEvents gasCount
   venomExecSemantics venomState venomInst list sorting
 
@@ -253,6 +255,35 @@ Proof
        dftGasToListTraceTheory.trace_function_def, trace_events_def] >>
   strip_tac >> drule (cj 3 native_trace_oracle_agreement) >>
   disch_then (qspec_then `s.vs_gas_readings` mp_tac) >> simp[]
+QED
+
+Theorem fixed_shared_oracle_replay:
+  !C C' orc readings s.
+  EVERY wf_function C.ctx_functions /\ EVERY wf_function C'.ctx_functions /\
+  (!n. agrees orc readings
+    (trace_events (dftGasToListTrace$trace_context orc n C s))) /\
+  (!n. trace_agrees orc (dftGasFromListTraceDefs$trace_context n C' s)) ==>
+  (!f. gas_res_rel (run_context f C (s with vs_gas_readings := readings))
+    (ev_context orc f C s)) /\
+  (!f. gas_res_rel (run_context f C' s) (ev_context orc f C' s)) /\
+  (!p d fn inst t. ev_reachable orc s C p d fn inst t ==>
+    ?ws. raw_reachable (s with vs_gas_readings := readings) C fn inst
+      (t with vs_gas_readings := ws)) /\
+  (!fn inst t. raw_reachable s C' fn inst t ==>
+    ?p d. ev_reachable orc s C' p d fn inst
+      (t with vs_gas_readings := s.vs_gas_readings))
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (gen_tac >> metis_tac[replay_context, residual_result_gas_rel]) >>
+  conj_tac
+  >- (gen_tac >> irule trace_context_gas_res >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all ev_reachable_trace_witness >>
+      strip_tac >> qexists_tac `DROP n readings` >>
+      irule replay_context_visit >> metis_tac[]) >>
+  rpt strip_tac >> drule_all raw_reachable_trace >> strip_tac >>
+  qexistsl_tac [`p`, `d`] >> irule trace_context_reachable >>
+  metis_tac[]
 QED
 
 Theorem stopped_invoke_native_row:
