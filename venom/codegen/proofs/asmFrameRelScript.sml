@@ -176,3 +176,42 @@ Proof
   Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
   PairCases_on `h` >> gvs[asm_evm_rel_def, next_opcode_def, EL_APPEND1]
 QED
+
+(* The existing frame relation observes the real prefix; assembly keeps
+   an additional unread suffix for the enclosing replay. *)
+Definition asm_frame_rel_tail_def:
+  asm_frame_rel_tail tail prog data es0 a es <=>
+    asm_frame_rel prog data es0
+      (a with as_gas_readings := gas_readings es) es /\
+    a.as_gas_readings = gas_readings es ++ tail
+End
+
+(* Terminating assembly steps retain the suffix after the real readings. *)
+Definition asm_frame_step_ok_tail_def:
+  asm_frame_step_ok_tail tail prog data es0 a es <=>
+    (?r es'. run_call es = SOME (r, es') /\
+      frame_resource_starved es0 r es' /\ call_requests es = []) \/
+    case asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+                  (EL a.as_pc prog) a of
+      AsmOK a1 =>
+        ?es1. run_call es1 = run_call es /\
+          asm_frame_rel_tail tail prog data es0 a1 es1
+    | AsmHalt a1 =>
+        ?r es'. run_call es = SOME (r, es') /\
+          frame_outcome es0 r es' NONE a1.as_returndata a1.as_logs /\
+          es'.rollback.accounts = a1.as_accounts /\
+          es'.rollback.toDelete = a1.as_pending_deletions /\
+          es'.rollback.tStorage = a1.as_transient /\
+          a1.as_requests = call_requests es0 /\ a1.as_gas_readings = tail
+    | AsmRevert a1 =>
+        ?r es'. run_call es = SOME (r, es') /\
+          (?lgs. frame_outcome es0 r es' (SOME Reverted) a1.as_returndata lgs) /\
+          call_requests es = [] /\ frame_inst_raises es0 Reverted Revert /\
+          a1.as_gas_readings = tail
+    | AsmFault a1 =>
+        ?r es'. run_call es = SOME (r, es') /\
+          (?exc lgs. exc <> Reverted /\
+            frame_outcome es0 r es' (SOME exc) [] lgs) /\
+          call_requests es = [] /\ a1.as_gas_readings = tail
+    | AsmError _ => T
+End

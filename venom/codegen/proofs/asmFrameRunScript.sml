@@ -93,3 +93,12 @@ Proof
         mp_tac) >> simp[]) >>
   DISJ2_TAC >> metis_tac[]
 QED
+
+(* Carry the real frame simulation through an arbitrary unread suffix. *)
+Theorem asm_frame_step_tail:
+  asm_frame_prog_ok prog /\ asm_frame_rel_tail tail prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) ==>
+  asm_frame_step_ok_tail tail prog data es0 a es
+Proof
+  cheat
+QED
