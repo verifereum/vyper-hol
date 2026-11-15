@@ -2,9 +2,17 @@ Theory vyperCreateSelfdestruct
 Ancestors
   vyperCreate vyperInterpreter vyperSmallStep[ignore_grammar]
   vyperAST vyperContext vyperState vyperValue vyperValueOperation vyperEvalPureExpr
-  constSubst vyperPinFold vyperPinFoldProps list vfmExecution vfmState finite_set finite_map
+  constSubst vyperPinFold vyperOriginFold vyperPinFoldProps jsonToVyper jsonToVyperCV
+  list vfmExecution vfmState finite_set finite_map
 Libs
-  wordsLib cv_transLib vyperConstEvalLib
+  wordsLib cv_transLib vyperConstEvalLib jsonASTLib
+
+fun holbuild_extra_deps (_ : string list) = ()
+val () = holbuild_extra_deps [
+  "../tests/fixtures/check_contract/constant_mixed_bytes_offset.json",
+  "../tests/fixtures/check_contract/constant_mixed_high_offset.json",
+  "../tests/fixtures/check_contract/constant_blueprint_flag_offset.json",
+  "../tests/fixtures/check_contract/constant_blueprint_gwei_offset.json"];
 
 (* Constructor SELFDESTRUCT must see an empty original account even though the
    live account has already received its nonce-one creation prelude. *)
@@ -255,7 +263,7 @@ Proof
   strip_tac >> simp_tac bool_ss [blueprint_runtime_offset_rejected_def, LET_THM] >>
   irule blueprint_prefix_rejected >>
   simp[blueprint_literal_offset_def, subst_consts_expr_def,
-       pin_fold_expr_def, is_int_literal_def] >>
+       origin_fold_value_def, is_int_literal_def] >>
   qexists_tac `[BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)]` >>
   simp[blueprint_runtime_pure_prefix, blueprint_runtime_state_def,
        blueprint_runtime_prefix_guard]
@@ -372,7 +380,7 @@ Theorem blueprint_flag_runtime_mode[local]:
      blueprint_flag_offset]
 Proof
   simp[blueprint_literal_offset_def, blueprint_flag_offset_def,
-       subst_consts_expr_def, pin_fold_expr_def, is_int_literal_def]
+       subst_consts_expr_def, origin_fold_value_def, is_int_literal_def]
 QED
 
 Definition blueprint_flag_runtime_rejected_def:
@@ -413,7 +421,7 @@ End
 val () = cv_auto_trans blueprint_high_wei_offset_def;
 
 Theorem blueprint_high_wei_normal_form[local]:
-  pin_fold_expr blueprint_high_wei_offset =
+  origin_fold_value blueprint_high_wei_offset =
     Literal (BaseT (UintT 256))
       (IntL (&(((2 ** 256 - 1) DIV 10 ** 9) * 10 ** 9)))
 Proof
@@ -459,7 +467,7 @@ Proof
   simp_tac bool_ss [blueprint_high_wei_prefix_def, LET_THM,
                     blueprint_high_wei_literal_mode] >>
   conj_tac
-  >- (irule (MATCH_MP pin_fold_expr_literal_sound blueprint_high_wei_normal_form
+  >- (irule (MATCH_MP origin_fold_value_literal_sound blueprint_high_wei_normal_form
               |> REWRITE_RULE [evaluate_literal_def])) >>
   simp[check_create_blueprint_def, vyperStateTheory.bind_def,
        vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_def,
@@ -601,7 +609,7 @@ Proof
     vyperStateTheory.read_result_def, vyperStateTheory.return_def,
     vyperValueOperationTheory.evaluate_literal_def]) >>
   simp[blueprint_test_nested_source_check, blueprint_literal_offset_def,
-       subst_consts_expr_def, pin_fold_expr_def, is_int_literal_def]
+       subst_consts_expr_def, origin_fold_value_def, is_int_literal_def]
 QED
 
 (* The prefix deploys an empty-runtime target, then fails its source check.
@@ -659,7 +667,7 @@ Proof
   Cases_on `salted` >>
   simp[blueprint_test_expr_def, evaluate_def, blueprint_nested_deployment,
        blueprint_literal_offset_def, subst_consts_expr_def,
-       pin_fold_expr_def, is_int_literal_def,
+       origin_fold_value_def, is_int_literal_def,
        SRULE [LET_THM] (Q.INST [`salted` |-> `F`] blueprint_empty_source_check),
        SRULE [LET_THM] (Q.INST [`salted` |-> `T`] blueprint_empty_source_check),
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
@@ -787,6 +795,58 @@ Proof
   conj_tac >- CONV_TAC cv_eval >>
   CONV_TAC cv_eval
 QED
+
+(* Exercise the source query and CREATE using offsets from whole decoded
+   compiler modules, including the flag declaration and original JSON classes. *)
+fun decoded_blueprint_offset name = let
+  val () = print ("Translate blueprint fixture: " ^ name ^ "\n")
+  val json = JSONDecode.decodeFile JSONDecode.raw
+    ("../tests/fixtures/check_contract/" ^ name)
+  val ast = JSONDecode.decode jsonASTLib.annotated_ast json
+  val translated = rhs (concl (cv_eval ``translate_annotated_ast ^ast``))
+  val (sources, _) = pairSyntax.dest_pair (optionSyntax.dest_some translated)
+  val call = find_term (can (match_term
+    ``Call ty (CreateTarget kind salted rof ctor) es cont``)) sources
+  val args = #2 (strip_comb call)
+  val offset = List.nth (#1 (listSyntax.dest_list (List.nth (args, 2))), 2)
+  val cx = ``blueprint_test_context with sources := [(41w, ^sources)]``
+in (cx, offset) end;
+
+fun decoded_blueprint_check name literal value error = let
+  val (cx, offset) = decoded_blueprint_offset name
+  val expected_value = numSyntax.mk_numeral value
+  val literal_tm = if literal then ``T`` else ``F``
+  val error_tm = stringSyntax.fromMLstring error
+  val () = print ("Evaluate blueprint fixture: " ^ name ^ "\n")
+  val th = (REWRITE_CONV [vyperSmallStepTheory.eval_expr_eq_cont_cps] THENC cv_eval)
+    ``blueprint_literal_offset ^cx F
+        [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); ^offset] =
+          ^literal_tm /\
+      eval_expr ^cx ^offset (blueprint_test_state [0w]) =
+        (INL (Value (IntV (& ^expected_value))), blueprint_test_state [0w]) /\
+      eval_expr ^cx (blueprint_test_offset_expr ^offset)
+        (blueprint_test_state [0w]) =
+        (INR (Error (RuntimeError ^error_tm)), blueprint_test_state [0w])``
+  val () = if aconv (rhs (concl th)) ``T`` then ()
+           else raise Fail (name ^ ": blueprint source mode/value/result mismatch")
+in EQT_ELIM th end;
+
+val max_uint = Arbnum.-
+  (Arbnum.pow (Arbnum.fromInt 2, Arbnum.fromInt 256), Arbnum.one);
+Theorem decoded_mixed_bytes_offset_uses_runtime_guard =
+  decoded_blueprint_check "constant_mixed_bytes_offset.json" false Arbnum.one
+    "create source has no deployable code";
+Theorem decoded_mixed_high_offset_uses_runtime_guard =
+  decoded_blueprint_check "constant_mixed_high_offset.json" false max_uint
+    "create source has no deployable code";
+Theorem decoded_full_flag_offset_uses_runtime_guard =
+  decoded_blueprint_check "constant_blueprint_flag_offset.json" false max_uint
+    "create source has no deployable code";
+val billion = Arbnum.fromInt 1000000000;
+Theorem decoded_folded_gwei_offset_uses_literal_guard =
+  decoded_blueprint_check "constant_blueprint_gwei_offset.json" true
+    (Arbnum.* (Arbnum.div (max_uint, billion), billion))
+    "create initcode too large";
 
 (* The constructor tuple is (DynArray[uint256,3],uint256), whose array-length
    word is 64 bytes into its ABI encoding. This loader returns that word from

@@ -18,7 +18,7 @@ Ancestors
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
   vyperContext vyperState vyperEvmBoundary vyperRuntimeAccounts
-  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar] constSubst vyperPinFold
+  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar] constSubst vyperOriginFold
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -239,7 +239,7 @@ Definition blueprint_literal_offset_def:
         let env = case get_module_code cx NONE of
                     SOME tops => module_consts_env tops []
                   | NONE => [] in
-        is_int_literal (pin_fold_expr (subst_consts_expr env e))
+        is_int_literal (origin_fold_value (subst_consts_expr env e))
 End
 
 Definition blueprint_prefix_size_def:
