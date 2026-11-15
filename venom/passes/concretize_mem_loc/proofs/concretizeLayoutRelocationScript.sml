@@ -114,9 +114,9 @@ Resume relocation_cached_pair_noncollision_static[distinct]:
      qexistsl_tac [`byte`, `a`] >> simp[] >> metis_tac[]) >> decide_tac
 QED
 
-Finalise relocation_cached_pair_noncollision_static
+Finalise relocation_cached_pair_noncollision_static[local]
 
-Theorem relocation_cached_pair_noncollision[local]:
+Theorem relocation_cached_pair_noncollision:
   joint_trace vs0 C q0 es qs q /\
   joint_observed_read (EL j (q0::qs)) a /\
   byte IN joint_writes (EL n (q0::qs)) (EL n es) /\
