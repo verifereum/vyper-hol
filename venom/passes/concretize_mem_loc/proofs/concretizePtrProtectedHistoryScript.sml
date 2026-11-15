@@ -106,7 +106,9 @@ Proof
      (EL w h).po_inst (EL w h).po_state)` by
     fs[ptr_chrono_write_def] >>
   irule (Q.INST [`C` |-> `C`, `P` |-> `P`, `lo` |-> `lo`, `vs` |-> `vs`]
-    (SPEC_ALL ptr_owner_write_byte_seed)) >> simp[]
+    (SPEC_ALL ptr_owner_write_byte_seed)) >> simp[] >> conj_tac
+  >- (qexists `P` >> simp[]) >>
+  qexists `lo` >> simp[]
 QED
 
 Theorem ptr_endpoint_actual_protected_history:
@@ -182,5 +184,7 @@ Proof
     (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF]
        step_writes_source_subset) >> simp[]) >>
   irule (Q.INST [`C` |-> `C`, `P` |-> `P`, `lo` |-> `lo`, `vs` |-> `vs`]
-    (SPEC_ALL ptr_owner_write_byte_seed)) >> simp[]
+    (SPEC_ALL ptr_owner_write_byte_seed)) >> simp[] >> conj_tac
+  >- (qexists `P` >> simp[]) >>
+  qexists `lo` >> simp[]
 QED
