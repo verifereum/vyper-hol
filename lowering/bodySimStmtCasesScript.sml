@@ -1140,30 +1140,6 @@ Proof
   qexists_tac `[]` >> simp[]
 QED
 
-Theorem body_assign_copy_region[local]:
-  !cx mid id tr off tvt.
-    storage_layout_safe cx /\
-    storage_var_info cx mid id = SOME (tr,off,tvt) /\
-    0 < type_slot_size tvt ==>
-    off + type_slot_size tvt <= dimword (:256) /\
-    (!mid' n' subs' k' tv'.
-      declared_storage_region cx mid' n' subs' = SOME (tr,k',tv') /\
-      (k',tv') <> (n2w off,tvt) ==>
-      ranges_disjoint off (type_slot_size tvt) (w2n k') (type_slot_size tv'))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `off + type_slot_size tvt <= dimword (:256)` by
-    (drule storage_layout_safe_layout >>
-     simp[well_formed_layout_def] >> metis_tac[]) >>
-  `off < dimword (:256)` by decide_tac >>
-  `w2n (n2w off : 256 word) = off` by simp[] >>
-  drule declared_storage_region_ordinary >> strip_tac >>
-  simp[] >> rpt strip_tac >>
-  `(mid,id,[]) <> (mid',n',subs')` by
-    (strip_tac >> gvs[]) >>
-  drule_all storage_layout_safe_region_separation >> simp[]
-QED
-
 Theorem body_assign_copy_target[local]:
   !tops ctx cenv cx src id mut ty ast_slot env es ret_ty e env'.
     body_inv tops ctx cenv cx /\
@@ -1385,11 +1361,7 @@ Proof
   drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
   `0 < type_slot_size tvt` by
     gvs[valueEncodingPropsTheory.type_memory_size_slots] >>
-  `storage_layout_safe cx /\ env_consistent env cx es` by
-    fs[expr_sim_inv_def] >>
-  `storage_var_info cx NONE id = SOME (tr,off,tvt)` by
-    simp[storage_var_info_def] >>
-  drule_all body_assign_copy_region >> strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `expr_sim ctx func cenv cx (expr_type e) e es` by
     metis_tac[body_expr_ok_def] >>
   `!ann t args. e = TypeBuiltin ann Empty t args ==> t = expr_type e` by

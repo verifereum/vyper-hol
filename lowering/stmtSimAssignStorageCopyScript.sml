@@ -9,6 +9,7 @@ Ancestors
   abiTypeBoundProps vyperABI vyperStorageCoverage placeStoreStorage placeStaticCopyExit
   exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
+  gasStorage gasSummaryCompose gasExemptCert vyperStorageFootprint vyperStorageTrace
   stmtSimProps stmtSimForced
   exprSimProps
   stmtSimDefs
@@ -1245,15 +1246,6 @@ Proof
   fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]
 QED
 
-(* Storage writes keep the call context. *)
-Theorem storage_fold_call_ctx[local]:
-  !l s f g tr.
-    (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_call_ctx =
-    s.vs_call_ctx
-Proof
-  Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
-QED
-
 Theorem storage_fold_memory[local]:
   !l s f g tr.
     (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
@@ -1572,6 +1564,80 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+(* A bad natural root invalidates the selected trace after the RHS,
+   including when its write fails in a static context. *)
+Theorem assign_toplevel_bad_slot_outcome:
+  !ctx func cx st0 e es s0 tr slot tvt P Q RetQ.
+    ~(slot + type_slot_size tvt <= dimword (:256)) /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      (\H res ee t. ?v. res = INL v /\ P H v ee t)
+      (\H res ee r. expr_exit res r) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
+      (bind (bind (eval_expr cx e) (read_result cx))
+        (\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+          (write_storage_slot cx tr (n2w slot) tvt v))) (es,s0) Q
+      (\H res ee r. !tail.
+        stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. storage_trace_frame
+    (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+      (write_storage_slot cx tr (n2w slot) tvt v))` by
+    (gen_tac >> irule storage_trace_frame_ignore_bind >>
+     simp[storage_trace_frame_event, storage_trace_frame_write_storage_slot]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
+  >- suspend "summary" >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
+  irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Resume assign_toplevel_bad_slot_outcome[summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
+  qexists_tac `marks` >>
+  (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+   >- (disj1_tac >> irule gas_bad_storage_at_bind_left >> simp[] >>
+       metis_tac[gas_bad_storage_at_counted_prefix])) >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[storage_trace_domain_def]
+  >- suspend "success" >>
+  suspend "exception"
+QED
+
+Resume assign_toplevel_bad_slot_outcome[success]:
+  fs[] >>
+  `?v. res = INL v` by metis_tac[] >>
+  pop_assum strip_assume_tac >> gvs[] >> disj1_tac >>
+  irule (SRULE [] (Q.INST [`right` |-> `[]`] gas_bad_storage_at_bind_right)) >>
+  goal_assum (drule_at Any) >>
+  rewrite_tac[gas_bad_storage_at_def] >> gen_tac >>
+  simp[ignore_bind_def, bind_def, record_storage_event_def, return_def] >>
+  Cases_on `cx.txn.is_static` >>
+  simp[write_storage_slot_eq] >>
+  Cases_on `encode_value tvt v` >> simp[] >> Cases_on `tr` >>
+  fs[storage_trace_domain_def, valid_horizon_def, storage_observations_ok_def,
+     storage_roots_fit_def, EVERY_APPEND, set_storage_def]
+QED
+
+Resume assign_toplevel_bad_slot_outcome[exception]:
+  fs[] >>
+  `expr_exit res r` by metis_tac[] >>
+  Cases_on `res` >- fs[expr_exit_def] >> rename1 `INR ex` >>
+  disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >>
+  conj_tac >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> simp[stmt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
+QED
+
+Finalise assign_toplevel_bad_slot_outcome
+
 Theorem assign_storage_empty_stmt_frag[local]:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
@@ -1839,7 +1905,8 @@ QED
 
 
 (* Assignment to a non-word ABI-static storage or transient variable.
-   The region fits the slot space and is apart from other declared regions. *)
+   The final horizon supplies region separation; invalid natural roots
+   produce a bad-storage outcome after evaluating the RHS. *)
 Theorem compile_assign_storage_copy_stmt_frag:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt.
@@ -1857,12 +1924,6 @@ Theorem compile_assign_storage_copy_stmt_frag:
     type_memory_bytes cenv typ = type_memory_size tvt /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME typ /\
-    slot + type_slot_size tvt <= dimword (:256) /\
-    (!mid' n' subs' k' tv'.
-       declared_storage_region cx mid' n' subs' = SOME (tr, k', tv') /\
-       (k', tv') <> (n2w slot, tvt) ==>
-       ranges_disjoint slot (type_slot_size tvt)
-                       (w2n k') (type_slot_size tv')) /\
     (!gs v es1.
        (do result <- eval_expr cx e; read_result cx result od)
          (es with gas_obs := gs) = (INL v, es1) ==>
@@ -1899,6 +1960,19 @@ Proof
     metis_tac[fn_has_code_split] >>
   drule_all eval_assign_toplevel_action >>
   disch_then (qspec_then `e` assume_tac) >>
+  reverse (Cases_on `slot + type_slot_size tvt <= dimword (:256)`)
+  >- (qpat_x_assum `eval_stmt _ _ = _` SUBST_ALL_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`st0`, `sa`, `sB`, `op`, `s0`] mp_tac) >>
+      (impl_tac >- (fs[] >> metis_tac[forced_then_admissible])) >>
+      disch_tac >>
+      drule_all (BETA_RULE (Q.INST
+        [`P` |-> `\H v ee t. expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+          t.vs_current_bb = sB.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sB.cs_current_insts`]
+        (SPEC_ALL assign_toplevel_bad_slot_outcome))) >>
+      disch_then MATCH_ACCEPT_TAC) >>
   match_mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `st0`, `lctx`, `RetQ`, `cenv`,
       `cenv`, `sa`, `sb`, `s0`,
       `Assign (BaseTarget (TopLevelNameTarget (src, id))) e`, `e`,
