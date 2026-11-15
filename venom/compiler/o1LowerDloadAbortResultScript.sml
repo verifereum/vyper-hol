@@ -47,9 +47,13 @@ Proof
   `op_taint tn sz_op = {}` by
     (fs[taint_ok_def] >>
      first_x_assum (qspec_then `sz_op` mp_tac) >> simp[]) >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
   `eval_operand sz_op s = eval_operand sz_op t` by
     (drule ld_joint_nonaddress_operand >>
-     disch_then (qspec_then `sz_op` mp_tac) >>
+     disch_then (qspecl_then [`sz_op`, `SUC (LENGTH vs.vs_gas_readings)`] mp_tac) >>
      impl_tac
      >- (simp[pointerConfinedDefsTheory.is_pointer_preserving_op_def,
               unitShapeDefsTheory.retpc_use_ok_def,
