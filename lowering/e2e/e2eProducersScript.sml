@@ -20,6 +20,8 @@ Ancestors
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
 
+val _ = Parse.hide "tops";
+
 (* The program reads its own code: self.code occurs in a function body or a
    default argument (the only places code is generated from), as
    slice(self.code, ...) needs, which lowers to CODESIZE and a CODECOPY from

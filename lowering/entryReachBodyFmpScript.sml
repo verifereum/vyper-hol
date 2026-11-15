@@ -3,6 +3,8 @@ Ancestors
   loweringShapeProps loweringShapeSource o1PipelineCorrect ptrDiscipline
   exprLoweringProps supportedProgram supportedNames moduleLowering list
 
+val _ = Parse.hide "tops";
+
 Theorem entry_runtime_no_dalloca:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops ==> ~ctx_has_dalloca unit.cu_context
