@@ -35,7 +35,7 @@ QED
 Theorem as_wei_value_prefix_ghosts:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
   emitted_insts sa sb = xs ++ ys /\
-  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   ?G' tn'.
     (!D. inst_seq_ptr D lo ctx fn PG G tn xs s G' tn') /\
@@ -114,7 +114,7 @@ QED
 
 Theorem as_wei_value_canonical_ghosts:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
-  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   ?G' tn'.
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn') /\
@@ -156,7 +156,7 @@ Theorem as_wei_value_success_origin:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
   fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?G' tn'.
@@ -226,7 +226,7 @@ Theorem as_wei_value_success_full:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
   fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   sc.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sc /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
@@ -282,7 +282,7 @@ Theorem as_wei_value_abort_origin:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
   fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t ==>
   ?G' tn'.
@@ -396,7 +396,7 @@ Theorem as_wei_value_abort_full:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
   fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   sc.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sc /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
