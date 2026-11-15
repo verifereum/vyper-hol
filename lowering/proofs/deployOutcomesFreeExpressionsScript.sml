@@ -43,32 +43,6 @@ val safe_generators = map
 val safe_simp = simp (safe_generators @
   [outcomes_free_fresh, outcomes_free_new_block, outcomes_free_lower_abi_decode]);
 
-Theorem outcomes_free_typed_callback[local]:
-  (!env e ce ty s. expr_size e < bound /\
-    (well_typed_expr env e \/ (?vt. type_place_expr env e = SOME vt)) /\
-    ~supported_expr_exists constructor_call_root e /\
-    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
-      i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
-      i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s) ==>
-    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
-      i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
-      i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE)
-      (state_insts (SND (f ce ty e s)))) ==>
-  !env e ce ty s.
-    (well_typed_expr env e \/ (?vt. type_place_expr env e = SOME vt)) /\
-    ~supported_expr_exists constructor_call_root e /\
-    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
-      i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
-      i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s) ==>
-    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
-      i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
-      i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE)
-      (state_insts (SND (expr_child_callback bound f ce ty e s)))
-Proof
-  rpt strip_tac >> simp[expr_child_callback_def] >>
-  IF_CASES_TAC >> simp[outcomes_free_invalid_expr_call] >> metis_tac[]
-QED
-
 Theorem outcomes_free_target_generators[local]:
   Q = (\s. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
     i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\

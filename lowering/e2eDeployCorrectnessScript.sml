@@ -187,16 +187,6 @@ Proof
   fs[deploy_result_rel_def]
 QED
 
-(* An exempt source result is an exempt Error. *)
-Theorem deploy_source_exempt_error[local]:
-  !tops res.
-    deploy_source_exempt tops res ==>
-    ?e. res = INR (Error e) /\ unspecified_behaviour_exempt tops e
-Proof
-  rpt gen_tac >> Cases_on `res` >- simp[deploy_source_exempt_def] >>
-  Cases_on `y` >> simp[deploy_source_exempt_def]
-QED
-
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code. *)
 Theorem e2e_deploy_correctness_asm_opt:
