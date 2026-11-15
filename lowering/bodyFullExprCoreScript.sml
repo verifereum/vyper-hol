@@ -980,9 +980,6 @@ Proof
      rpt strip_tac >>
      qpat_assum `!x. not_fresh_at sh2 x ==> lookup_var x _ = _ /\ _`
        (qspec_then `z` mp_tac) >> simp[]) >>
-  conj_tac >-
-    (qpat_x_assum `(if bop = Eq then emit_op EQ _ _ else _) = (op,sb)` mp_tac >>
-     simp[NoAsms, LET_THM]) >>
   simp[exprSimWordArgsTheory.wb_frame_gas_obs] >>
   qpat_assum `ghost_inv_at (DF H) lo d cenv cx mid' G1' tn1' t'` mp_tac >>
   simp[NoAsms, ghost_inv_at_def] >> strip_tac >> simp[])
