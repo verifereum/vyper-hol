@@ -292,33 +292,54 @@ Proof
   rpt gen_tac >> simp[package_external_fn_def, set_external_package_target_def]
 QED
 
+Theorem default_encode_layout_cong[local]:
+  !sf ce ty ce'.
+    ce'.ce_struct_fields = ce.ce_struct_fields /\
+    ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+    type_to_abi_enc_info sf ce' ty = type_to_abi_enc_info sf ce ty
+Proof
+  recInduct type_to_abi_enc_info_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  simp[Ntimes type_to_abi_enc_info_def 2]
+  >- (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
+      first_x_assum drule >> simp[])
+  >- (irule MAP_CONG >> simp[])
+  >> Cases_on `FLOOKUP sf (nsid_to_string nsid)` >> simp[] >>
+  irule MAP_CONG >> simp[pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
 Theorem default_target_return_abi[local]:
   update_cenv_ret_abi
     (ce with <|ce_nonreentrant := nr; ce_target := target|>) ret =
   (update_cenv_ret_abi ce ret) with
     <|ce_nonreentrant := nr; ce_target := target|>
 Proof
-  `!sf ce ty ce'.
-    ce'.ce_struct_fields = ce.ce_struct_fields /\
-    ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
-    type_to_abi_enc_info sf ce' ty = type_to_abi_enc_info sf ce ty` by
-    (recInduct type_to_abi_enc_info_ind >> rpt strip_tac >>
-     drule type_memory_bytes_frame >> strip_tac >>
-     simp[Ntimes type_to_abi_enc_info_def 2]
-     >- (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
-         first_x_assum drule >> simp[])
-     >- (irule MAP_CONG >> simp[])
-     >> Cases_on `FLOOKUP sf (nsid_to_string nsid)` >> simp[] >>
-     irule MAP_CONG >> simp[pairTheory.FORALL_PROD] >> metis_tac[]) >>
   `!ty. type_to_abi_enc_info ce.ce_struct_fields
     (ce with <|ce_nonreentrant := nr; ce_target := target|>) ty =
     type_to_abi_enc_info ce.ce_struct_fields ce ty` by
-    (gen_tac >> first_x_assum irule >> simp[]) >>
+    (gen_tac >> irule default_encode_layout_cong >> simp[]) >>
   `!ty. type_to_abi_dec_info ce.ce_struct_fields
     (ce with <|ce_nonreentrant := nr; ce_target := target|>) ty =
     type_to_abi_dec_info ce.ce_struct_fields ce ty` by
     (gen_tac >> irule type_to_abi_dec_info_layout_cong >> simp[]) >>
   simp[update_cenv_ret_abi_def] >> Cases_on `ce` >> simp[]
+QED
+
+Theorem default_return_abi_idempotent[local]:
+  update_cenv_ret_abi (update_cenv_ret_abi ce ret) ret =
+  update_cenv_ret_abi ce ret
+Proof
+  `!ty. type_to_abi_enc_info ce.ce_struct_fields
+    (update_cenv_ret_abi ce ret) ty =
+    type_to_abi_enc_info ce.ce_struct_fields ce ty` by
+    (gen_tac >> irule default_encode_layout_cong >>
+     simp[update_cenv_ret_abi_def]) >>
+  `!ty. type_to_abi_dec_info ce.ce_struct_fields
+    (update_cenv_ret_abi ce ret) ty =
+    type_to_abi_dec_info ce.ce_struct_fields ce ty` by
+    (gen_tac >> irule type_to_abi_dec_info_layout_cong >>
+     simp[update_cenv_ret_abi_def]) >>
+  fs[update_cenv_ret_abi_def]
 QED
 
 Theorem default_empty_package_return_layout:
@@ -344,7 +365,7 @@ Proof
     set_external_package_target_def, set_fallback_package_target_def,
     build_positional_args_def, min_calldata_size_def] >>
   Cases_on `ret = NoneT` >>
-  simp[update_cenv_nonreentrant_def] >>
+  simp[update_cenv_nonreentrant_def, default_return_abi_idempotent] >>
   rpt strip_tac >> gvs[] >>
   simp[default_target_return_abi, update_cenv_ret_abi_def,
        build_compile_env_def, allocate_args_def] >>
