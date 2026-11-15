@@ -441,7 +441,8 @@ Proof
       BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def]) >>
   rename1 `SOME decl` >> PairCases_on `decl` >> Cases_on `decl0` >> simp[] >>
   irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def] >>
-  gen_tac >> irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def]
+  gen_tac >> irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def] >>
+  simp[ignore_bind_def, bind_def, record_storage_event_def, return_def]
 QED
 
 Theorem outcomes_replace_result_array_length:
