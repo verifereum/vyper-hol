@@ -58,6 +58,7 @@ Ancestors
   exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple exprCallBounds
   builtinCreate context
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
+  ctxLookupAgreeHelpers execMemoryLengthBase
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs valueLoadProps
@@ -555,19 +556,53 @@ Theorem fmp_room_fields:
   !func ss ss' ctx.
     fmp_room ctx func ss /\
     ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next /\
-    ss'.vs_fmp = ss.vs_fmp ==>
+    ss'.vs_fmp = ss.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      ss'.vs_initial_fmp = ss.vs_initial_fmp /\
+      LENGTH ss.vs_memory <= LENGTH ss'.vs_memory) ==>
     fmp_room ctx func ss'
 Proof
-  rw[fmp_room_def, pending_alloca_size_def] >> gvs[]
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >>
+  res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem fmp_room_mstore:
+  fmp_room ctx func s ==> fmp_room ctx func (mstore off value s)
+Proof
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> rpt conj_tac
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- simp[mstore_def]
+  >- (disch_tac >> conj_tac >- simp[mstore_def] >>
+      simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem fmp_room_write_memory:
+  fmp_room ctx func s ==>
+  fmp_room ctx func (write_memory_with_expansion off bytes s)
+Proof
+  strip_tac >> irule fmp_room_fields >> qexists_tac `s` >> rpt conj_tac
+  >- simp[write_memory_with_expansion_def]
+  >- simp[write_memory_with_expansion_def]
+  >- simp[write_memory_with_expansion_def]
+  >- (disch_tac >> conj_tac >- simp[write_memory_with_expansion_def] >>
+      simp[venomMemPropsTheory.write_memory_with_expansion_nondecreasing]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem fmp_room_fields_cong:
   !ctx func s s'.
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp ==>
+    s'.vs_fmp = s.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      s'.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s'.vs_memory = LENGTH s.vs_memory) ==>
     (fmp_room ctx func s' <=> fmp_room ctx func s)
 Proof
-  metis_tac[fmp_room_fields]
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >> metis_tac[]
 QED
 
 (* state_rel re-established by a step that keeps the allocations gives
@@ -578,14 +613,18 @@ Theorem stmt_state_rel_allocas_frame:
     stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' ==>
+    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      s'.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH s'.vs_memory) ==>
     stmt_state_rel H ctx func cenv cx es' s'
 Proof
   gen_tac >>
   rw[stmt_state_rel_def]
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
   >- (irule alloca_room_fields >> qexists_tac `s` >> simp[])
-  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[]) >>
+  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
   gvs[] >> res_tac
 QED
 
@@ -663,9 +702,13 @@ Theorem fmp_room_static_charge:
     fmp_room ctx func s /\
     t.vs_alloca_next + pending_alloca_size func t <=
       s.vs_alloca_next + pending_alloca_size func s /\
-    t.vs_fmp = s.vs_fmp ==> fmp_room ctx func t
+    t.vs_fmp = s.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==> fmp_room ctx func t
 Proof
-  rw[fmp_room_def] >> res_tac >> gvs[]
+  rw[fmp_room_def] >> res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
 Theorem fmp_room_exec_alloca:
@@ -5097,6 +5140,26 @@ Proof
 QED
 
 (* ===== Structural Properties ===== *)
+
+Theorem run_inst_seq_initial_fmp:
+  run_inst_seq is s = OK t ==> t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_initial_fmp`
+    run_inst_seq_preserves_field)) >>
+  qexists_tac `is` >> simp[] >>
+  metis_tac[step_inst_base_initial_fmp]
+QED
+
+Theorem run_inst_seq_memory_length:
+  !is s t. run_inst_seq is s = OK t ==>
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
+  drule_all step_base_memory_length >> strip_tac >>
+  first_x_assum drule_all >> decide_tac
+QED
 
 Theorem step_inst_base_ok_jmp_ctxs[local]:
   !inst s s'.
