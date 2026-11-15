@@ -54,6 +54,7 @@
 
 Theory exprLoweringProps
 Ancestors
+  ptrDiscipline
   exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple exprCallBounds
   builtinCreate context
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
