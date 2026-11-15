@@ -2,7 +2,8 @@
 Theory abiDecodePtrSupportedTarget
 Ancestors
   abiDecodePtrSupportExpr abiDecodePtrSupportStmt abiDecodePtrTarget
-  supportedProgram supportedDecls supportedExprForms supportedTypes gasContext bodySim
+  supportedProgram supportedDecls supportedExprForms supportedExprTraverse
+  supportedTypes gasContext bodySim
   vyperAST list
 
 Theorem abi_decode_target_root_shape[local]:
