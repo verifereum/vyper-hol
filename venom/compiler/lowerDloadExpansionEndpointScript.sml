@@ -70,8 +70,8 @@ Proof
     (qspec_then `SUC n` mp_tac) >> gvs[]
 QED
 
-Theorem ld_dloadbytes_endpoint:
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+Theorem ld_dloadbytes_endpoint_static:
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
   ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
   mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
@@ -126,7 +126,7 @@ Proof
      gvs[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
   drule_all ld_dloadbytes_envelope_temporary >> strip_tac >>
   `h = 1` by gvs[] >> qpat_x_assum `h = 1` SUBST_ALL_TAC >>
-  drule_all ld_sync_dloadbytes_effect >>
+  drule_all ld_sync_dloadbytes_effect_static >>
   disch_then (qx_choose_then `ss` (qx_choose_then `H'`
     (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
   `t0.vs_inst_idx = p` by (drule_all ld_sync_envelope_position >> simp[]) >>
@@ -173,8 +173,8 @@ Proof
   metis_tac[]
 QED
 
-Theorem ld_dload_endpoint:
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+Theorem ld_dload_endpoint_static:
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
   ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
   mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
@@ -245,7 +245,7 @@ Proof
     eval_operand (Label "code_end") s = SOME bw /\
     w2n ow + (LENGTH s.vs_code - LENGTH s.vs_data_section) < dimword(:256)` by
     (qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac ld_sync_dload_code_offset) >> simp[]) >>
+       (mp_then Any mp_tac ld_sync_dload_code_offset_static) >> simp[]) >>
   `bw = basew` by gvs[eval_operand_def] >>
   drule ld_sync_memory >> strip_tac >>
   `t0.vs_code = s.vs_code` by gvs[ld_nonghost_def] >>
@@ -289,7 +289,7 @@ Proof
   suspend "assemble"
 QED
 
-Resume ld_dload_endpoint[assemble]:
+Resume ld_dload_endpoint_static[assemble]:
   qpat_x_assum `eval_operand off s = _` kall_tac >>
   qpat_x_assum `eval_operand off t0 = _` kall_tac >>
   rpt (qpat_x_assum `eval_operand (Label _) _ = _` kall_tac) >>
@@ -359,7 +359,7 @@ Resume ld_dload_endpoint[assemble]:
   suspend "successor"
 QED
 
-Resume ld_dload_endpoint[successor]:
+Resume ld_dload_endpoint_static[successor]:
   gen_tac >> strip_tac >>
   `?Y. ld_envelope f.lf_supply fn g.lf_src g.lf_src.vs_inst_idx Y
          g.lf_tgt.vs_inst_idx` by
@@ -381,7 +381,115 @@ Resume ld_dload_endpoint[successor]:
   qpat_x_assum `ld_envelope _ _ g.lf_src _ _ _` mp_tac >> simp[] >> metis_tac[]
 QED
 
-Finalise ld_dload_endpoint
+Finalise ld_dload_endpoint_static
+
+Theorem ld_dloadbytes_endpoint:
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
+  ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
+  mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    lookup_function fn.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+                  (EL k (f::fs)).lf_fn.fn_name names) /\
+  fn' = ld_image f /\ ir_supply_covers_fn f.lf_supply fn /\
+  ~in_revert_forward fn s /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\ SUC h = LENGTH X /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
+  step_inst fuel C' (EL h X) t = OK u ==>
+  ?ss Ar g.
+    Ar = A /\ step_inst 0 C inst s = OK ss /\
+    u.vs_inst_idx = t.vs_inst_idx /\
+    (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = p + LENGTH X /\
+    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
+    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
+    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+    g.lf_tgt = (u with vs_inst_idx := p + LENGTH X) /\
+    g.lf_tv = (step_taint inst s ss tn).t_var /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
+    ld_vars P Ar g /\ ld_maps Ar g /\
+    ld_memory lo Ar (step_taint inst s ss tn) ss u /\
+    ld_nonghost (step_taint inst s ss tn) ss u /\
+    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
+    EVERY (ld_maps Ar) fs /\
+    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
+    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+      j IN P f.lf_fn.fn_name) (g::fs) /\
+    (!j k. j < k /\ k < LENGTH (g::fs) ==>
+      list_precedes (EL j (g::fs)).lf_fn.fn_name
+                    (EL k (g::fs)).lf_fn.fn_name names) /\
+    (!next. active_inst fn next g.lf_src ==>
+      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+Proof
+  strip_tac >> irule ld_dloadbytes_endpoint_static >>
+  simp[] >> rpt conj_tac >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
+
+Theorem ld_dload_endpoint:
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
+  ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
+  mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    lookup_function fn.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+                  (EL k (f::fs)).lf_fn.fn_name names) /\
+  fn' = ld_image f /\ ir_supply_covers_fn f.lf_supply fn /\
+  ~in_revert_forward fn s /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\ SUC h = LENGTH X /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
+  step_inst fuel C' (EL h X) t = OK u ==>
+  ?ss Ar g.
+    Ar = A /\ step_inst 0 C inst s = OK ss /\
+    u.vs_inst_idx = t.vs_inst_idx /\
+    (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = p + LENGTH X /\
+    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
+    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
+    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+    g.lf_tgt = (u with vs_inst_idx := p + LENGTH X) /\
+    g.lf_tv = (step_taint inst s ss tn).t_var /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
+    ld_vars P Ar g /\ ld_maps Ar g /\
+    ld_memory lo Ar (step_taint inst s ss tn) ss u /\
+    ld_nonghost (step_taint inst s ss tn) ss u /\
+    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
+    EVERY (ld_maps Ar) fs /\
+    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
+    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+      j IN P f.lf_fn.fn_name) (g::fs) /\
+    (!j k. j < k /\ k < LENGTH (g::fs) ==>
+      list_precedes (EL j (g::fs)).lf_fn.fn_name
+                    (EL k (g::fs)).lf_fn.fn_name names) /\
+    (!next. active_inst fn next g.lf_src ==>
+      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+Proof
+  strip_tac >> irule ld_dload_endpoint_static >>
+  simp[] >> rpt conj_tac >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
+QED
 
 val _ = app (fn th => if null (hyp th) then ()
   else raise Fail "expansion endpoint boundary has hypotheses")

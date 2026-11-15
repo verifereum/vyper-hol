@@ -517,20 +517,20 @@ Proof
   metis_tac[fcg_postorder_callee_before_caller]
 QED
 
-Theorem gas_raw_variant_trans[local]:
+Theorem gas_raw_variant_trans:
   gas_variant s1 s2 /\ raw_variant fmp s2 s3 ==> raw_variant fmp s1 s3
 Proof
   rw[raw_variant_def] >> metis_tac[gas_variant_trans]
 QED
 
-Theorem raw_gas_variant_trans[local]:
+Theorem raw_gas_variant_trans:
   raw_variant fmp s1 s2 /\ gas_variant s2 s3 ==> raw_variant fmp s1 s3
 Proof
   rw[raw_variant_def, gas_variant_def] >>
   gvs[venomStateTheory.venom_state_component_equality]
 QED
 
-Theorem raw_variant_run_state_ok[local]:
+Theorem raw_variant_run_state_ok:
   raw_variant fmp vs_in vs_out /\ o1_run_state_ok vs_out ==>
   o1_run_state_ok vs_in
 Proof
@@ -539,7 +539,7 @@ Proof
   gvs[o1_run_state_ok_def, o1_initial_state_ok_def, lowerDloadDefsTheory.code_layout_valid_def]
 QED
 
-Theorem gas_variant_initial_fmp[local]:
+Theorem gas_variant_initial_fmp:
   gas_variant s s' ==> s'.vs_initial_fmp = s.vs_initial_fmp
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
@@ -578,7 +578,7 @@ Proof
 QED
 
 (* The walk passes from FmpLowering on keep the static layout. *)
-Theorem o1_walk_stages_max_live_eom[local]:
+Theorem o1_walk_stages_max_live_eom:
   (!k. k < LENGTH o1_fn_passes ==>
        ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
          (stage k) (stage (SUC k))) ==>

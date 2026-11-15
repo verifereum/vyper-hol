@@ -16,6 +16,7 @@ Ancestors
   contextCodegenRel fmpReclaimDefs fmpAnalysisDefs passSimulationDefs
   venomExecProofs venomInstProofs venomStepProps venomWf venomExecSemantics
   venomState venomInst finite_map words list
+  dftGasRequestObservation o1LowerDloadShared o1LowerDloadRequestForward
 
 Theorem fmp_stage_block_entry:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -136,11 +137,52 @@ Proof
 QED
 
 Theorem dead_result_stage_result[local]:
-  dead_result_rel D r r' ==>
+  dead_result_rel D r r' /\
+  (!a se a' te. r = Abort a se /\ r' = Abort a' te ==>
+     LIST_REL (request_agree_except D) se.vs_requests te.vs_requests) ==>
   fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r r'
 Proof
   Cases_on `r` >> Cases_on `r'` >>
   simp[fmp_stage_result_def, dead_result_rel_def]
+QED
+
+Theorem fmp_step_abort_requests[local]:
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode <> INVOKE /\
+  step_inst k C inst s = Abort a se /\
+  step_inst k' C' inst t = Abort a' te ==>
+  LIST_REL (request_agree_except D) se.vs_requests te.vs_requests
+Proof
+  strip_tac >>
+  `se.vs_requests = s.vs_requests /\ te.vs_requests = t.vs_requests` by
+    metis_tac[dftGasRequestObservationTheory.step_inst_abort_requests] >>
+  gvs[fmp_stage_rel_def, ld_shared_agree_def]
+QED
+
+Theorem fmp_forward_abort_requests[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ~s.vs_halted /\ inst.inst_opcode = RETURNDATACOPY /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb s.vs_inst_idx j /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  exec_block k C bb s = Abort a se /\
+  exec_block k C' bb' t = Abort a' te ==>
+  LIST_REL (request_agree_except D) se.vs_requests te.vs_requests
+Proof
+  strip_tac >> drule_all fmpStageOpFrameForwardFetchTheory.fmp_forward_fetch >>
+  strip_tac >> gvs[] >>
+  `se.vs_requests = s.vs_requests` by
+    (irule ld_forward_fetch_abort_requests >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `te.vs_requests = t.vs_requests` by
+    (irule ld_forward_fetch_abort_requests >>
+     goal_assum (drule_at Any) >> qexistsl_tac [`bb`, `j`, `s`] >>
+     simp[arithmeticTheory.ADD_COMM]) >>
+  gvs[fmp_stage_rel_def, ld_shared_agree_def]
 QED
 
 (* The source's next instruction after a non-terminator's OK step. *)
@@ -421,7 +463,8 @@ Proof
         (irule exec_block_source_stop >> gvs[] >> metis_tac[]) >>
       `dead_result_rel D q r'` by (Cases_on `q` >> gvs[]) >>
       `exec_block k C' bb' t = r'` by metis_tac[target_dead_run] >>
-      gvs[] >> irule dead_result_stage_result >> simp[]) >>
+      gvs[] >> irule dead_result_stage_result >> simp[] >>
+      rpt strip_tac >> metis_tac[fmp_step_abort_requests]) >>
   gvs[] >> rename1 `step_inst k C' inst t1 = OK t3` >>
   `exec_block k C bb s = Halt s1` by
      (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
@@ -491,7 +534,8 @@ Proof
         (irule exec_block_source_stop >> gvs[] >> metis_tac[]) >>
       `dead_result_rel D q r'` by (Cases_on `q` >> gvs[]) >>
       `exec_block k C' bb' t = r'` by metis_tac[target_dead_run] >>
-      gvs[] >> irule dead_result_stage_result >> simp[]) >>
+      gvs[] >> irule dead_result_stage_result >> simp[] >>
+      rpt strip_tac >> gvs[]) >>
   qpat_x_assum `?s1. q = OK s1` (qx_choose_then `s1` SUBST_ALL_TAC) >>
   qpat_x_assum `exec_result_CASE (OK s1) _ _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -566,7 +610,11 @@ Proof
   Cases_on `in_revert_forward fn s`
   >- (drule_all revert_forward_rdc >> strip_tac >>
       drule_all fmp_stage_revert_forward >> strip_tac >> gvs[] >>
-      metis_tac[dead_result_stage_result]) >>
+      `?j. revert_forward_pair bb s.vs_inst_idx j` by
+        (gvs[in_revert_forward_def, revert_forward_at_def]
+         >- metis_tac[] >> gvs[revert_forward_pair_def]) >>
+      irule dead_result_stage_result >> simp[] >> rpt strip_tac >>
+      metis_tac[fmp_forward_abort_requests]) >>
   Cases_on `inst.inst_opcode = PHI`
   >- gvs[venomExecProofsTheory.step_inst_phi_error, terminates_def] >>
   Cases_on `inst.inst_opcode = RETPC_PARAM`
@@ -626,7 +674,8 @@ Proof
           `exec_block k C' bb' t = r'` by
             (irule exec_block_target_dead_rel >> metis_tac[]) >>
           gvs[] >>
-          irule dead_result_stage_result >> simp[]) >>
+          irule dead_result_stage_result >> simp[] >>
+          rpt strip_tac >> metis_tac[fmp_step_abort_requests]) >>
       (* OK *)
       qpat_x_assum `?s1. q = OK s1` (qx_choose_then `s1` SUBST_ALL_TAC) >>
       qpat_x_assum `exec_result_CASE (OK s1) _ _ _ _ _`

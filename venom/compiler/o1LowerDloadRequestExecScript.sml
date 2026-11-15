@@ -40,8 +40,11 @@ val ldForwardEndpoint = ``
     exec_block fuel C' bb' t = Abort reason t1 /\
     LIST_REL (request_agree_except D) s1.vs_requests t1.vs_requests``;
 
-Theorem ld_request_runner_exec_conditional:
-  ^ldAbortEndpoint /\ ^ldForwardEndpoint ==> ^ldRequestExecClause
+val ldRequestExecClauseStatic = fst (dest_conj (snd (dest_conj (fst (dest_imp
+  (concl ld_request_runner_induction_static))))));
+
+Theorem ld_request_runner_exec_conditional_static:
+  ^ldAbortEndpoint /\ ^ldForwardEndpoint ==> ^ldRequestExecClauseStatic
 Proof
   strip_tac >>
   qabbrev_tac `RR = ^ldRequestPacket` >>
@@ -67,7 +70,7 @@ Proof
   simp[Once exec_block_def, terminates_def]
 QED
 
-Resume ld_request_runner_exec_conditional[ok]:
+Resume ld_request_runner_exec_conditional_static[ok]:
   `~v.vs_halted` by metis_tac[ld_step_ok_halted] >>
   Cases_on `is_terminator i.inst_opcode`
   >- (drule_all ld_runner_branch_endpoint >> strip_tac >>
@@ -86,7 +89,7 @@ Resume ld_request_runner_exec_conditional[ok]:
     (spose_not_then assume_tac >>
      fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
      gvs[] >> fs[is_terminator_def]) >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue_static) >>
   strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
@@ -109,7 +112,7 @@ Resume ld_request_runner_exec_conditional[ok]:
   gvs[] >> qexists_tac `m` >> simp[]
 QED
 
-Resume ld_request_runner_exec_conditional[halt]:
+Resume ld_request_runner_exec_conditional_static[halt]:
   rename1 `step_inst fuel C i s = Halt se` >>
   `exec_block fuel C bb s = Halt se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -125,7 +128,7 @@ Resume ld_request_runner_exec_conditional[halt]:
   gvs[Abbr `RR`, ld_request_result_rel_halt]
 QED
 
-Resume ld_request_runner_exec_conditional[abort]:
+Resume ld_request_runner_exec_conditional_static[abort]:
   rename1 `step_inst fuel C i s = Abort reason se` >>
   `exec_block fuel C bb s = Abort reason se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -139,7 +142,7 @@ Resume ld_request_runner_exec_conditional[abort]:
   qexists_tac `fuel` >> gvs[Abbr `RR`, ld_request_result_rel_abort]
 QED
 
-Resume ld_request_runner_exec_conditional[ret]:
+Resume ld_request_runner_exec_conditional_static[ret]:
   rename1 `step_inst fuel C i s = IntRet ir se` >>
   `exec_block fuel C bb s = IntRet ir se` by simp[Once exec_block_def] >>
   Cases_on `i.inst_opcode = INVOKE`
@@ -149,18 +152,18 @@ Resume ld_request_runner_exec_conditional[ret]:
      drule occ_frame_reachable_annotation >> simp[]) >>
   `MEM i (fn_insts fn)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
-  `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
+  `pre_fmp_opcode i.inst_opcode /\ no_dret fn` by
     (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
-        o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
+        o1_fn_shape_def, pre_fmp_ops_def] >> metis_tac[]) >>
   `i.inst_opcode = RET` by
     (drule step_inst_intret_opcodes >>
-     fs[no_dret_def, EVERY_MEM] >> strip_tac >>
+     fs[no_dret_def, EVERY_MEM, pre_fmp_opcode_def] >> strip_tac >>
      gvs[is_raw_fmp_opcode_def]) >>
   drule_all ld_runner_ret_endpoint >> strip_tac >>
   qexists_tac `fuel` >> fs[Abbr `RR`] >> metis_tac[]
 QED
 
-Resume ld_request_runner_exec_conditional[call_ok]:
+Resume ld_request_runner_exec_conditional_static[call_ok]:
   gvs[terminates_def] >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
@@ -199,7 +202,18 @@ Resume ld_request_runner_exec_conditional[call_ok]:
     simp[Once exec_block_def] >>
   qexists_tac `MAX m m'` >> simp[]
 QED
-Finalise ld_request_runner_exec_conditional
+Finalise ld_request_runner_exec_conditional_static
+
+Theorem ld_request_runner_exec_conditional:
+  ^ldAbortEndpoint /\ ^ldForwardEndpoint ==> ^ldRequestExecClause
+Proof
+  strip_tac >> Cases_on `o1_run_state_ok vs`
+  >- (qpat_assum `o1_run_state_ok vs`
+        (strip_assume_tac o REWRITE_RULE [o1_run_state_ok_def]) >>
+      mp_tac ld_request_runner_exec_conditional_static >>
+      asm_rewrite_tac [])
+  >> simp[]
+QED
 
 val _ = if null (hyp ld_request_runner_exec_conditional)
         then () else raise Fail "request exec clause has kernel hypotheses";

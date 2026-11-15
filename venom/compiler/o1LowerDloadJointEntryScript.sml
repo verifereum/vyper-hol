@@ -109,8 +109,8 @@ Proof
   gvs[] >> simp[TAKE_LENGTH_TOO_LONG]
 QED
 
-Theorem ld_joint_entry:
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+Theorem ld_joint_entry_static:
+  dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   o1_src_inv D C vs /\ ptr_discipline lo C vs /\
   C.ctx_entry = SOME name /\
   lookup_function name C.ctx_functions = SOME fn /\
@@ -186,4 +186,24 @@ Proof
   simp[ld_joint_frame_def, ld_joint_local_fields_def, ld_joint_allocas_def,
        o1LowerDloadEnvironmentTheory.ld_env_initial,
        o1LowerDloadEnvironmentTheory.ld_params_initial]
+QED
+
+Theorem ld_joint_entry:
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_src_inv D C vs /\ ptr_discipline lo C vs /\
+  C.ctx_entry = SOME name /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl /\
+  lookup_function name C'.ctx_functions = SOME fn' /\
+  ir_supply_covers_fn u fn /\
+  lower_dload_function_supply u fn = (fn',u') /\
+  enters_block fn
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s1 /\
+  active_inst fn inst s1 ==>
+  enters_block fn'
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s1 /\
+  ld_joint_boundary vs C C' lo D [] [] FEMPTY entry_taint fn inst s1 s1
+    1 0 [] FEMPTY [] FEMPTY FEMPTY FEMPTY []
+Proof
+  strip_tac >> irule ld_joint_entry_static >> gvs[o1_run_state_ok_def] >> metis_tac[]
 QED

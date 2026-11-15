@@ -57,10 +57,10 @@ Proof
   fs[revert_forward_pair_def] >> decide_tac
 QED
 
-Theorem ld_owned_forwarding:
+Theorem ld_owned_forwarding_static:
   (ctx_has_dalloca C' ==> ctx_has_dalloca C) /\
   (?stk PG G tn fn inst s t0 A frames N X p h.
-    ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+    ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
     ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
     ld_global lo A frames /\
     EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
@@ -96,4 +96,34 @@ Proof
      disch_then (qspec_then `Sigma` mp_tac) >>
      (impl_tac >- fs[]) >> fs[]) >>
   drule_all (SRULE [] ld_selected_forwarding) >> gvs[]
+QED
+
+Theorem ld_owned_forwarding:
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) /\
+  (?stk PG G tn fn inst s t0 A frames N X p h.
+    ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+    ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+    ld_global lo A frames /\
+    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
+    (!j k. j < k /\ k < LENGTH frames ==>
+      list_precedes (EL j frames).lf_fn.fn_name
+                    (EL k frames).lf_fn.fn_name names) /\
+    fn' = ld_image (HD frames) /\
+    ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+    ld_prefix C' fn' X p h t0 t /\ ti = EL h X /\
+    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+      j IN P f.lf_fn.fn_name) frames /\
+    (!g. MEM g (TL frames) ==>
+      FRANGE g.lf_H SUBSET ld_slots A (TL frames) /\
+      (!a. MEM (SOME a) g.lf_Q ==> a IN ld_slots A (TL frames))) /\
+    in_revert_forward fn s) ==>
+  ^ld_forward C' fn' ti t
+Proof
+  strip_tac >>
+  mp_tac (BETA_RULE ld_owned_forwarding_static) >>
+  (impl_tac >- (
+    conj_tac >- asm_rewrite_tac [] >>
+    qexistsl_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`t0`,`A`,`frames`,`N`,`X`,`p`,`h`] >>
+    gvs[o1_run_state_ok_def] >> metis_tac[])) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> disch_then ACCEPT_TAC
 QED

@@ -130,16 +130,25 @@ val ldIndFuel = Term.subst (ListPair.map (fn (v,t) => v |-> t)
   (ldIndVars,[ldPstepFuel,ldPexecFuel,ldPrunFuel])) ldIndBody;
 val ldClausesFuel = strip_conj (fst (dest_imp ldIndFuel));
 
+(* First-three-conjunct packet siblings; result and joint relations are shared. *)
+val ldStaticSubst = [``o1_run_state_ok vs`` |->
+  ``(o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs)``];
+val ldAStatic = Term.subst ldStaticSubst ldA;
+val ldIndStatic = Term.subst ldStaticSubst ldInd;
+val ldClausesStatic = strip_conj (fst (dest_imp ldIndStatic));
+val ldIndFuelStatic = Term.subst ldStaticSubst ldIndFuel;
+val ldClausesFuelStatic = strip_conj (fst (dest_imp ldIndFuelStatic));
+
 Theorem ld_runner_packet_terminates:
   ^ldR stk PG fn a U HP ts A0 r r' ==> terminates r'
 Proof
   Cases_on `r` >> simp[terminates_def] >> rpt strip_tac >> gvs[terminates_def]
 QED
 
-Theorem ld_runner_run_clause:
-  ^(List.nth(ldClauses,2))
+Theorem ld_runner_run_clause_static:
+  ^(List.nth(ldClausesStatic,2))
 Proof
-  qabbrev_tac `RR = ^ldR` >> qabbrev_tac `AA = ^ldA` >>
+  qabbrev_tac `RR = ^ldR` >> qabbrev_tac `AA = ^ldAStatic` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[] >>
@@ -194,7 +203,7 @@ Proof
   >> fs[terminates_def]
 QED
 
-Resume ld_runner_run_clause[halt]:
+Resume ld_runner_run_clause_static[halt]:
   `?te. bt = Halt te` by fs[Abbr `RR`] >>
   qpat_x_assum `Abbrev (Halt v = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
@@ -205,7 +214,7 @@ Resume ld_runner_run_clause[halt]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_runner_run_clause[abort]:
+Resume ld_runner_run_clause_static[abort]:
   `?te. bt = Abort a' te` by fs[Abbr `RR`] >>
   qpat_x_assum `Abbrev (Abort _ _ = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
@@ -216,7 +225,7 @@ Resume ld_runner_run_clause[abort]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_runner_run_clause[return]:
+Resume ld_runner_run_clause_static[return]:
   `?jr tr. bt = IntRet jr tr` by
     (fs[Abbr `RR`] >> metis_tac[]) >>
   qpat_x_assum `Abbrev (IntRet _ _ = _)`
@@ -228,7 +237,7 @@ Resume ld_runner_run_clause[return]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_runner_run_clause[branch]:
+Resume ld_runner_run_clause_static[branch]:
   qpat_x_assum `Abbrev (OK v = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `~v.vs_halted` by metis_tac[exec_block_OK_not_halted] >>
@@ -279,23 +288,23 @@ Resume ld_runner_run_clause[branch]:
     simp[Once run_blocks_def] >>
   qexists_tac `SUC (MAX m m')` >> simp[]
 QED
-Finalise ld_runner_run_clause
+Finalise ld_runner_run_clause_static
 
-Theorem ld_runner_conditional_induction:
-  ^(mk_imp(list_mk_conj [List.nth(ldClauses,0), List.nth(ldClauses,1)],
-           snd(dest_imp ldInd)))
+Theorem ld_runner_conditional_induction_static:
+  ^(mk_imp(list_mk_conj [List.nth(ldClausesStatic,0), List.nth(ldClausesStatic,1)],
+           snd(dest_imp ldIndStatic)))
 Proof
   strip_tac >> irule run_defs_ind >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  MATCH_ACCEPT_TAC ld_runner_run_clause
+  MATCH_ACCEPT_TAC ld_runner_run_clause_static
 
 QED
 
-Theorem ld_runner_run_clause_fuel:
-  ^(List.nth(ldClausesFuel,2))
+Theorem ld_runner_run_clause_static_fuel:
+  ^(List.nth(ldClausesFuelStatic,2))
 Proof
-  qabbrev_tac `RR = ^ldR` >> qabbrev_tac `AA = ^ldA` >>
+  qabbrev_tac `RR = ^ldR` >> qabbrev_tac `AA = ^ldAStatic` >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[] >>
@@ -350,7 +359,7 @@ Proof
   >> fs[terminates_def]
 QED
 
-Resume ld_runner_run_clause_fuel[halt]:
+Resume ld_runner_run_clause_static_fuel[halt]:
   `?te. bt = Halt te` by fs[Abbr `RR`] >>
   qpat_x_assum `Abbrev (Halt v = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
@@ -360,7 +369,7 @@ Resume ld_runner_run_clause_fuel[halt]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_runner_run_clause_fuel[abort]:
+Resume ld_runner_run_clause_static_fuel[abort]:
   `?te. bt = Abort a' te` by fs[Abbr `RR`] >>
   qpat_x_assum `Abbrev (Abort _ _ = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
@@ -370,7 +379,7 @@ Resume ld_runner_run_clause_fuel[abort]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_runner_run_clause_fuel[return]:
+Resume ld_runner_run_clause_static_fuel[return]:
   `?jr tr. bt = IntRet jr tr` by
     (fs[Abbr `RR`] >> metis_tac[]) >>
   qpat_x_assum `Abbrev (IntRet _ _ = _)`
@@ -381,7 +390,7 @@ Resume ld_runner_run_clause_fuel[return]:
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
   qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
-Resume ld_runner_run_clause_fuel[branch]:
+Resume ld_runner_run_clause_static_fuel[branch]:
   qpat_x_assum `Abbrev (OK v = _)`
     (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `~v.vs_halted` by metis_tac[exec_block_OK_not_halted] >>
@@ -415,14 +424,56 @@ Resume ld_runner_run_clause_fuel[branch]:
     simp[Once run_blocks_def] >>
   simp[]
 QED
-Finalise ld_runner_run_clause_fuel
+Finalise ld_runner_run_clause_static_fuel
+
+Theorem ld_runner_conditional_induction_static_fuel:
+  ^(mk_imp(list_mk_conj [List.nth(ldClausesFuelStatic,0), List.nth(ldClausesFuelStatic,1)],
+           snd(dest_imp ldIndFuelStatic)))
+Proof
+  strip_tac >> irule run_defs_ind >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  MATCH_ACCEPT_TAC ld_runner_run_clause_static_fuel
+QED
+
+Theorem ld_runner_run_clause:
+  ^(List.nth(ldClauses,2))
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (mp_tac ld_runner_run_clause_static >>
+      fs[o1_run_state_ok_def] >> simp[])
+  >> simp[]
+QED
+
+Theorem ld_runner_conditional_induction:
+  ^(mk_imp(list_mk_conj [List.nth(ldClauses,0), List.nth(ldClauses,1)],
+           snd(dest_imp ldInd)))
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (qpat_assum `o1_run_state_ok vs`
+        (strip_assume_tac o REWRITE_RULE [o1_run_state_ok_def]) >>
+      mp_tac ld_runner_conditional_induction_static >>
+      asm_rewrite_tac [])
+  >> simp[]
+QED
+
+Theorem ld_runner_run_clause_fuel:
+  ^(List.nth(ldClausesFuel,2))
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (mp_tac ld_runner_run_clause_static_fuel >>
+      fs[o1_run_state_ok_def] >> simp[])
+  >> simp[]
+QED
 
 Theorem ld_runner_conditional_induction_fuel:
   ^(mk_imp(list_mk_conj [List.nth(ldClausesFuel,0), List.nth(ldClausesFuel,1)],
            snd(dest_imp ldIndFuel)))
 Proof
-  strip_tac >> irule run_defs_ind >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  MATCH_ACCEPT_TAC ld_runner_run_clause_fuel
+  Cases_on `o1_run_state_ok vs`
+  >- (qpat_assum `o1_run_state_ok vs`
+        (strip_assume_tac o REWRITE_RULE [o1_run_state_ok_def]) >>
+      mp_tac ld_runner_conditional_induction_static_fuel >>
+      asm_rewrite_tac [])
+  >> simp[]
 QED

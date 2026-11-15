@@ -84,8 +84,8 @@ val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "interior transport has hypotheses")
   [ld_envelope_target_at, ld_return_point_interior_next, ld_envelope_source_nonterminal];
 
-Theorem ld_return_point_nonterminal_next:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+Theorem ld_return_point_nonterminal_next_static:
+  ^ld_covered_ambient_static lo C C' vs0 Sigma names fn fn' /\
   ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
   get_instruction bb t.vs_inst_idx = SOME ti /\
   ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
@@ -96,7 +96,7 @@ Theorem ld_return_point_nonterminal_next:
 Proof
   qabbrev_tac `Guard1 = ^ld_probe_guard C' j bb (u with vs_inst_idx := SUC t.vs_inst_idx)` >>
   strip_tac >> qmatch_goalsub_abbrev_tac `Goal` >>
-  drule_all ld_point_alignment >> strip_tac >>
+  drule_all ld_point_alignment_static >> strip_tac >>
   qpat_x_assum `^ld_probe_point _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `ti = EL h X` by metis_tac[optionTheory.SOME_11] >>
   `o1_ctx_shape C` by fs[] >>
@@ -123,17 +123,32 @@ Proof
   `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[ld_sync_def] >>
   `^ld_probe_guard C' j bb (u with vs_inst_idx := SUC t.vs_inst_idx)` by
     metis_tac[markerTheory.Abbrev_def] >>
-  drule_all ld_return_point_endpoint_next >> simp[NoAsms, Abbr `Goal`]
+  drule_all ld_return_point_endpoint_next_static >> simp[NoAsms, Abbr `Goal`]
 QED
 
-Theorem ld_return_nonterminal_S:
+Theorem ld_return_point_nonterminal_next:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb t /\
+  get_instruction bb t.vs_inst_idx = SOME ti /\
+  ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
+  step_inst_base ti t = OK u /\
+  ^ld_probe_guard C' j bb (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_probe_point lo P C C' vs0 stk fn fn' cs fs f0 A0 Sigma names bb
+    (u with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> irule ld_return_point_nonterminal_next_static >>
+  simp[] >> rpt conj_tac >> gvs[o1PassContractTheory.o1_run_state_ok_def] >>
+  metis_tac[]
+QED
+
+Theorem ld_return_nonterminal_S_static:
   ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
   step_inst_base ti t = z /\
   ((?u. z = OK u) \/ (?rt u. z = IntRet rt u)) ==>
-  ^ld_probe_S ^ld_covered_ambient ^ld_probe_point ^ld_probe_terminal
+  ^ld_probe_S ^ld_covered_ambient_static ^ld_probe_point ^ld_probe_terminal
     k ctx ti t z
 Proof
-  qabbrev_tac `Ambient = ^ld_covered_ambient` >>
+  qabbrev_tac `Ambient = ^ld_covered_ambient_static` >>
   qabbrev_tac `Point = ^ld_probe_point` >>
   qabbrev_tac `Terminal = ^ld_probe_terminal` >>
   strip_tac
@@ -143,10 +158,28 @@ Proof
       `^ld_probe_guard ctx j bb (u with vs_inst_idx := SUC t.vs_inst_idx)` by
         (simp[NoAsms] >> metis_tac[]) >>
       qunabbrev_tac `Ambient` >> qunabbrev_tac `Point` >>
-      drule_all ld_return_point_nonterminal_next >> simp[NoAsms]) >>
+      drule_all ld_return_point_nonterminal_next_static >> simp[NoAsms]) >>
   qpat_x_assum `z = IntRet rt u` SUBST_ALL_TAC >>
   drule opcodeClassTheory.step_inst_base_intret_opcodes >>
   strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem ld_return_nonterminal_S:
+  ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
+  step_inst_base ti t = z /\
+  ((?u. z = OK u) \/ (?rt u. z = IntRet rt u)) ==>
+  ^ld_probe_S ^ld_covered_ambient ^ld_probe_point ^ld_probe_terminal
+    k ctx ti t z
+Proof
+  disch_tac >>
+  mp_tac (Q.INST [`ti` |-> `ti`, `t` |-> `t`, `z` |-> `z`]
+    ld_return_nonterminal_S_static) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  simp[NoAsms] >> disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[o1PassContractTheory.o1_run_state_ok_def] >>
+  (reverse conj_tac >- gvs[o1PassContractTheory.o1_run_state_ok_def]) >>
+  goal_assum (drule_at (Pat `ld_sync`)) >> simp[] >>
+  qexistsl_tac [`X`, `p`, `h`] >> simp[] >> metis_tac[]
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()

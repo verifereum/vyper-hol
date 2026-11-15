@@ -321,7 +321,9 @@ Definition fmp_stage_ctx_def:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom <=>
     ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
       (o1_walk_view rpolicy 3) C C' /\
-    o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs' /\
+    o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs' /\ vs'.vs_fmp = vs'.vs_initial_fmp /\
+    code_layout_valid vs' /\
     vs = vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |> /\
     o1_inv D 3 C vs /\ fmp_variant_room (SOME fmp) C' vs' /\
     max_live_eom C = SOME eom
@@ -350,7 +352,9 @@ Definition fmp_stage_result_def:
   fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r r' <=>
     case r of
       Halt se => dead_result_rel D r r'
-    | Abort ab se => dead_result_rel D r r'
+    | Abort ab se => dead_result_rel D r r' /\
+        !ab' te. r' = Abort ab' te ==>
+          LIST_REL (request_agree_except D) se.vs_requests te.vs_requests
     | Error e => F
     | IntRet ir se =>
         ?ri sr G tn sm lo tr fn' ri' kr jr.
@@ -407,6 +411,8 @@ Definition fmp_invoke_sim_def:
                 (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo
                 (t1 with vs_inst_idx := SUC t.vs_inst_idx) ts
         | Halt se => dead_result_rel D r r'
-        | Abort ab se => dead_result_rel D r r'
+        | Abort ab se => dead_result_rel D r r' /\
+            !ab' te. r' = Abort ab' te ==>
+              LIST_REL (request_agree_except D) se.vs_requests te.vs_requests
         | _ => F
 End

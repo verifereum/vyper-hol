@@ -19,18 +19,23 @@ val ldRequestRun = List.nth (strip_conj (snd (dest_imp
   (concl ld_request_runner_induction))), 2);
 val ldRequestRunClosed = list_mk_forall (free_vars ldRequestRun, ldRequestRun);
 
-Theorem lower_dload_stage_abort_rq_conditional:
-  ^ldRequestRunClosed ==>
+val ldRequestRunStatic = List.nth (strip_conj (snd (dest_imp
+  (concl ld_request_runner_induction_static))), 2);
+val ldRequestRunClosedStatic = list_mk_forall
+  (free_vars ldRequestRunStatic, ldRequestRunStatic);
+
+Theorem lower_dload_stage_abort_rq_conditional_static:
+  ^ldRequestRunClosedStatic ==>
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    dead_wf D /\ o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_abort_rq D C C' vs vs
 Proof
   disch_then (assume_tac o SIMP_RULE bool_ss []) >>
   rpt strip_tac >> simp[ctx_abort_rq_def] >> rpt strip_tac >>
   `terminates (Abort a t)` by simp[terminates_def] >>
-  drule_all lower_dload_stage_root_entry >> strip_tac >>
+  drule_all lower_dload_stage_root_entry_static >> strip_tac >>
   `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
   `fn.fn_name = name` by
     (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
@@ -49,15 +54,42 @@ QED
 (* All recursive clauses retain the strengthened terminal observation. *)
 val ldRequestConclusion = snd (dest_imp (concl ld_request_runner_induction));
 
-Theorem ld_request_runner_simulation:
-  ^ldRequestConclusion
+val ldRequestConclusionStatic = snd (dest_imp
+  (concl ld_request_runner_induction_static));
+
+Theorem ld_request_runner_simulation_static:
+  ^ldRequestConclusionStatic
 Proof
-  MATCH_MP_TAC ld_request_runner_induction >>
-  conj_tac >- MATCH_ACCEPT_TAC ld_request_runner_step_clause >>
+  MATCH_MP_TAC ld_request_runner_induction_static >>
+  conj_tac >- MATCH_ACCEPT_TAC ld_request_runner_step_clause_static >>
   conj_tac
-  >- (MATCH_MP_TAC ld_request_runner_exec_conditional >> conj_tac
+  >- (MATCH_MP_TAC ld_request_runner_exec_conditional_static >> conj_tac
       >- (rpt strip_tac >> drule_all ld_runner_abort_endpoint_requests >>
           metis_tac[]) >>
       MATCH_ACCEPT_TAC ld_runner_forward_endpoint_requests) >>
-  MATCH_ACCEPT_TAC ld_request_runner_run_clause
+  MATCH_ACCEPT_TAC ld_request_runner_run_clause_static
+QED
+
+Theorem ld_request_runner_simulation:
+  ^ldRequestConclusion
+Proof
+  Cases_on `o1_run_state_ok vs`
+  >- (mp_tac ld_request_runner_simulation_static >>
+      fs[o1_run_state_ok_def] >> simp[])
+  >> simp[]
+QED
+
+Theorem lower_dload_stage_abort_rq_conditional:
+  ^ldRequestRunClosed ==>
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    ctx_abort_rq D C C' vs vs
+Proof
+  disch_tac >>
+  mp_tac lower_dload_stage_abort_rq_conditional_static >>
+  (impl_tac >- (rpt gen_tac >>
+    MATCH_ACCEPT_TAC (cj 3 ld_request_runner_simulation_static))) >>
+  simp[o1_run_state_ok_def] >> metis_tac[]
 QED
