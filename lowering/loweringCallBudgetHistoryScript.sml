@@ -8,7 +8,7 @@ Ancestors
   ptrDiscipline ptrSafeRun gasOutcomeFull gasEvents gasExplicitSites
   sourceCallCount sourceCallCountEntryReplay sourceCallCountMonotone
   sourceCallCountWitness loweringStateRelDefs compileVyper vyperCompiler
-  o1PassContract fragGasOriginPtr contextRawReachable
+  o1PassContract fragGasOriginPtr contextRawReachable sourceUnitExecution
   vyperLoweringCorrect e2eDefs exprSimHypsDefs lowerDloadDefs
   list rich_list arithmetic pred_set
   concretizePtrCoverageStaticMemReachability
@@ -243,24 +243,53 @@ Inductive lower_budget_path:
         (gas_events_step fuel ctx p.bp_fn.fn_name i p.bp_state)) q)
 End
 
-(* A proposition about an ACTUAL source continuation and current target
- * cursor/call stack, not a top-level premise and not a second counter.
- * Every actual future prefix is covered; physical count<=k and residual
- * may be zero. Internal correspondence must show T<=C+1 with C<k.
- * The final extra precompile must abort the whole nested execution.
- * Direct allocation-count/next-allocation bounds retain the stricter
- * internal matched-effect consequence without exposing a charge mask.
- * That proof obligation is not a new public predicate or premise.
- * C includes the remaining source continuation, not merely the current
- * expression if target execution can continue into later statements.
+(* One existing checked path/focus and its fully expanded recorder history.
+ * An exit stops at the last actual non-INVOKE instruction, including a
+ * nested Halt/Abort; outer exit ghosts need not equal the leaf ghosts.
+ *)
+Definition lower_budget_certificate_def:
+  lower_budget_certificate (D,lo,explicit,ctx) root h_cert marks out <=>
+    case out of
+      INL (leaf,leaf_pg,leaf_g,leaf_tn,end_state) =>
+        gas_origin_ptr_focus
+          (D,lo,explicit,ctx,root.bp_fn,root.bp_params)
+          (root.bp_state,root.bp_prov,root.bp_taint) marks
+          (leaf,leaf_pg,leaf_g,leaf_tn,end_state) /\
+        ?q. lower_budget_path T (D,lo,explicit,ctx) root h_cert marks q /\
+          q.bp_fn = leaf /\ q.bp_params = leaf_pg /\
+          q.bp_prov = leaf_g /\ q.bp_taint = leaf_tn /\
+          q.bp_state = end_state
+    | INR (r,G',tn') =>
+        gas_origin_ptr_path
+          (D,lo,explicit,ctx,root.bp_fn,root.bp_params)
+          (root.bp_state,root.bp_prov,root.bp_taint) marks (r,G',tn') /\
+        ?q premarks.
+          lower_budget_path T (D,lo,explicit,ctx) root h_cert premarks q /\
+          ((r = OK q.bp_state /\ q.bp_stack = [] /\
+            q.bp_fn = root.bp_fn /\ q.bp_params = root.bp_params /\
+            q.bp_prov = G' /\ q.bp_taint = tn' /\ marks = premarks) \/
+           (exit_result r /\
+            ?i fuel.
+              active_inst q.bp_fn i q.bp_state /\ i.inst_opcode <> INVOKE /\
+              marks = premarks ++ MAP (\key. key IN explicit)
+                (gas_events_step fuel ctx q.bp_fn.fn_name i q.bp_state) /\
+              ((step_inst fuel ctx i q.bp_state = r /\
+                (!ret t. r = IntRet ret t ==> q.bp_stack = [])) \/
+               (?t. step_inst fuel ctx i q.bp_state = OK t /\
+                 is_terminator i.inst_opcode /\ t.vs_halted /\ r = Halt t))))
+End
+
+(* Only prefixes of the selected certified instruction history are bounded.
+ * HOL4 IS_PREFIX takes the complete list first, candidate prefix second.
  *)
 Definition lower_budget_continuation_def:
-  lower_budget_continuation k C es (D,lo,explicit,ctx) root <=>
+  lower_budget_continuation k C es (D,lo,explicit,ctx) root h_cert <=>
     es.outcomes = SOME root.bp_state.vs_outcomes /\
     ((!obs. entry_calls_within k root.bp_state.vs_outcomes
         (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) ==>
       !h marks q.
-        lower_budget_path F (D,lo,explicit,ctx) root h marks q ==>
+        lower_budget_path T (D,lo,explicit,ctx) root h marks q /\
+        IS_PREFIX h_cert h ==>
         ?remaining pair.
           lower_history_count h + remaining = k /\
           LENGTH (FILTER lower_event_allocates h) <= k /\
@@ -272,25 +301,45 @@ Definition lower_budget_continuation_def:
             ?fn i s op sz t. lower_alloc_record h n fn i s op sz t))
 End
 
-(* C is the WHOLE remaining source continuation. source is the fragment
- * whose old GAS/storage/result judgement is being strengthened. A proof
- * producing this judgement must relate that actual C to the compiler's
- * continuation; this definition is never an aligned-run top premise.
- *
- * The second conjunct bounds EVERY unchecked history from this exact
- * target start, not a separately selected path. Thus checked histories
- * belonging to the first conjunct's good/bad/exempt witness use the same
- * per-instruction fuel/memory/pointer checks by forget_checks. There is
- * no new GAS horizon, oracle padding or replacement result witness.
+(* certificates exposes the SAME witnesses selected in the three source
+ * arms. A producer must supply the graph; an unrelated short history
+ * cannot serve as the normal exit certificate.
  *)
 Definition gas_outcome_full_budget_def:
   gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
-      tops cx st0 source (es,s,G,tn) Q R <=>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG)
-      tops cx st0 source (es,s,G,tn) Q R /\
-    (!H. lower_budget_continuation k C es (DF H,lo,explicit,ctx)
-      <| bp_stack := []; bp_params := PG; bp_prov := G;
-         bp_taint := tn; bp_fn := func; bp_state := s |>)
+      tops cx st0 source (es,s,G,tn) Q R certificates <=>
+    (?marks.
+      (gas_bad_storage_at cx st0 source es s marks /\
+       ?H leaf leaf_pg leaf_g leaf_tn finish h_cert.
+         (storage_trace_domain cx st0 es.storage_trace ==>
+          valid_horizon cx st0 H es.storage_trace) /\
+         (H,h_cert,marks,INL (leaf,leaf_pg,leaf_g,leaf_tn,finish)) IN certificates) \/
+      (?res ee r G' tn'.
+        (!tail. source (es with gas_obs :=
+          gas_explicit marks s.vs_gas_readings ++ tail) =
+          (res,ee with gas_obs := tail)) /\
+        storage_trace_domain cx st0 ee.storage_trace /\
+        !H. valid_horizon cx st0 H ee.storage_trace ==>
+          (?h_cert. (H,h_cert,marks,INR (r,G',tn')) IN certificates) /\
+          ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
+           (exit_result r /\ R H res (ee with gas_obs := []) (G',tn') r))) \/
+      (?err ee leaf leaf_pg leaf_g leaf_tn finish.
+        gas_exempt_cert T tops (ctx,func)
+          (ignore_bind source (return ()))
+          (es,s) marks (err,ee) (leaf,finish) /\
+        ?H h_cert.
+          (storage_trace_domain cx st0 es.storage_trace ==>
+           valid_horizon cx st0 H es.storage_trace) /\
+          (H,h_cert,marks,INL (leaf,leaf_pg,leaf_g,leaf_tn,finish)) IN certificates)) /\
+    (!H h_cert marks out.
+      (H,h_cert,marks,out) IN certificates ==>
+      lower_budget_certificate (DF H,lo,explicit,ctx)
+        <| bp_stack := []; bp_params := PG; bp_prov := G;
+           bp_taint := tn; bp_fn := func; bp_state := s |>
+        h_cert marks out /\
+      lower_budget_continuation k C es (DF H,lo,explicit,ctx)
+        <| bp_stack := []; bp_params := PG; bp_prov := G;
+           bp_taint := tn; bp_fn := func; bp_state := s |> h_cert)
 End
 
 
@@ -321,18 +370,19 @@ val call_budget_headers = [
     (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
       LENGTH (FILTER lower_event_allocates h) <= lower_history_count h)``),
   ("gas_outcome_full_budget_forget",
-   ``!k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R.
+   ``!k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R certificates.
     gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
-      tops cx st0 source (es,s,G,tn) Q R ==>
+      tops cx st0 source (es,s,G,tn) Q R certificates ==>
     gas_outcome_full (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R``),
   ("gas_outcome_full_budget_prefix",
    ``!k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
-    H h marks q.
+    certificates H h_cert cert_marks out h marks q.
     gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
-      tops cx st0 source (es,s,G,tn) Q R /\
+      tops cx st0 source (es,s,G,tn) Q R certificates /\
     (!obs. entry_calls_within k s.vs_outcomes
       (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) /\
+    (H,h_cert,cert_marks,out) IN certificates /\ IS_PREFIX h_cert h /\
     lower_budget_path T (DF H,lo,explicit,ctx)
       <| bp_stack := []; bp_params := PG; bp_prov := G;
          bp_taint := tn; bp_fn := func; bp_state := s |>
@@ -459,29 +509,74 @@ val call_budget_headers = [
       32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 ==>
-    !D explicit fn marks leaf leaf_pg leaf_g leaf_tn finish inst.
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-      gas_origin_ptr_focus (D,0,explicit,unit.cu_context,fn,[])
-        ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                     vs_inst_idx := 0 |>),FEMPTY,entry_taint)
-        marks (leaf,leaf_pg,leaf_g,leaf_tn,finish) /\
-      active_inst leaf inst finish ==>
-      ?p h q remaining pair.
-        p = <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
-          bp_taint := entry_taint; bp_fn := fn;
-          bp_state := (vs with <| vs_prev_bb := NONE;
-            vs_current_bb := "__entry"; vs_inst_idx := 0 |>) |> /\
-        lower_budget_path T (D,0,explicit,unit.cu_context) p h marks q /\
-        q.bp_fn = leaf /\ q.bp_params = leaf_pg /\ q.bp_prov = leaf_g /\
-        q.bp_taint = leaf_tn /\ q.bp_state = finish /\
-        lower_history_count h + remaining = k /\
-        LENGTH (FILTER lower_event_allocates h) <= k /\
-        (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
-          SUC (LENGTH (FILTER lower_event_allocates h)) <= k) /\
-        lower_history_pairs h pair /\ lower_history_current h pair q /\
-        (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
-          ?af ai pre op sz post.
-            lower_alloc_record h n af ai pre op sz post)``),
+    ?shadow_ctx func shadow_func certificates marks.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      (((!tail.
+           ~(source_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
+             call_outcomes_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
+        ?(H : (bool # bytes32 # type_value) list # num list)
+           leaf leaf_pg leaf_g leaf_tn finish.
+          (?h_cert. (H,h_cert,marks,
+              INL (leaf,leaf_pg,leaf_g,leaf_tn,finish)) IN certificates)) \/
+       ?res am' rqs obs.
+         (!tail. call_external_trace (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx =
+            (res, am', rqs, obs)) /\
+         ((source_exempt tops (res, am', rqs) /\
+           ?(H : (bool # bytes32 # type_value) list # num list)
+              leaf leaf_pg leaf_g leaf_tn finish.
+             (?h_cert. (H,h_cert,marks,
+              INL (leaf,leaf_pg,leaf_g,leaf_tn,finish)) IN certificates)) \/
+          (?r. exit_result r /\
+             storage_trace_domain
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               (initial_state am []) obs /\
+             !H. valid_horizon
+                   (initial_evaluation_context am.sources am.layouts tx NONE)
+                   (initial_state am []) H obs ==>
+               (?h_cert G' tn'. (H,h_cert,marks,INR (r,G',tn')) IN certificates) /\
+               external_call_result_rel H tops ret tx (res, am', rqs) r /\
+               (!fuel. ptr_safe_blocks
+                 (cx_dead H
+                   (initial_evaluation_context am.sources am.layouts tx NONE))
+                 0 fuel unit.cu_context func [] FEMPTY entry_taint
+                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                             vs_inst_idx := 0 |>))))) /\
+      (!H h_cert cert_marks out.
+        (H,h_cert,cert_marks,out) IN certificates ==>
+        lower_budget_certificate
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+           0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context)
+          <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+                   bp_taint := entry_taint; bp_fn := func;
+                   bp_state := (vs with <| vs_prev_bb := NONE;
+                     vs_current_bb := "__entry"; vs_inst_idx := 0 |>) |> h_cert cert_marks out /\
+        !h marks' q.
+          lower_budget_path T
+            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+             0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context)
+            <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+                   bp_taint := entry_taint; bp_fn := func;
+                   bp_state := (vs with <| vs_prev_bb := NONE;
+                     vs_current_bb := "__entry"; vs_inst_idx := 0 |>) |> h marks' q /\
+          IS_PREFIX h_cert h ==>
+          ?remaining pair.
+            lower_history_count h + remaining = k /\
+            LENGTH (FILTER lower_event_allocates h) <= k /\
+            (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
+              SUC (LENGTH (FILTER lower_event_allocates h)) <= k) /\
+            lower_history_pairs h pair /\ lower_history_current h pair q /\
+            (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
+              ?af ai pre op sz post.
+                lower_alloc_record h n af ai pre op sz post))``),
   ("lower_budget_raw_variant_entry",
    ``!tops am tx fmp vs_in vs.
     gas_variant vs_in
@@ -849,22 +944,48 @@ Proof
 QED
 
 Theorem gas_outcome_full_budget_forget:
-  !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R.
+  !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R certificates.
     gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
-      tops cx st0 source (es,s,G,tn) Q R ==>
+      tops cx st0 source (es,s,G,tn) Q R certificates ==>
     gas_outcome_full (DF,lo,explicit,ctx,func,PG)
       tops cx st0 source (es,s,G,tn) Q R
 Proof
-  simp[gas_outcome_full_budget_def]
+  rw[gas_outcome_full_budget_def] >>
+  simp[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (rename1 `(H,h_cert,marks,INL (leaf,leaf_pg,leaf_g,leaf_tn,end_state)) IN certificates` >>
+      disj1_tac >> simp[] >>
+      qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `end_state`] >>
+      simp[] >>
+      qpat_x_assum `!H h_cert marks out. _`
+        (qspecl_then [`H`, `h_cert`, `marks`,
+          `INL (leaf,leaf_pg,leaf_g,leaf_tn,end_state)`] mp_tac) >>
+      simp[lower_budget_certificate_def])
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[] >>
+      gen_tac >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+      qpat_x_assum `!H h_cert marks out. _`
+        (qspecl_then [`H`, `h_cert`, `marks`, `INR (r,G',tn')`] mp_tac) >>
+      simp[lower_budget_certificate_def])
+  >- (rename1 `(H,h_cert,marks,INL (leaf,leaf_pg,leaf_g,leaf_tn,end_state)) IN certificates` >>
+      disj2_tac >> disj2_tac >>
+      qexistsl_tac [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `end_state`] >>
+      simp[] >> qexists_tac `H` >> simp[] >>
+      qpat_x_assum `!H h_cert marks out. _`
+        (qspecl_then [`H`, `h_cert`, `marks`,
+          `INL (leaf,leaf_pg,leaf_g,leaf_tn,end_state)`] mp_tac) >>
+      simp[lower_budget_certificate_def])
 QED
 
 Theorem gas_outcome_full_budget_prefix:
   !k C DF lo explicit ctx func PG tops cx st0 source es s G tn Q R
-    H h marks q.
+    certificates H h_cert cert_marks out h marks q.
     gas_outcome_full_budget k C (DF,lo,explicit,ctx,func,PG)
-      tops cx st0 source (es,s,G,tn) Q R /\
+      tops cx st0 source (es,s,G,tn) Q R certificates /\
     (!obs. entry_calls_within k s.vs_outcomes
       (\xs. SOME (C (es with <| outcomes := SOME xs; gas_obs := obs |>)))) /\
+    (H,h_cert,cert_marks,out) IN certificates /\ IS_PREFIX h_cert h /\
     lower_budget_path T (DF H,lo,explicit,ctx)
       <| bp_stack := []; bp_params := PG; bp_prov := G;
          bp_taint := tn; bp_fn := func; bp_state := s |>
@@ -879,7 +1000,7 @@ Theorem gas_outcome_full_budget_prefix:
         ?fn i pre op sz post. lower_alloc_record h n fn i pre op sz post)
 Proof
   rw[gas_outcome_full_budget_def, lower_budget_continuation_def] >>
-  metis_tac[lower_budget_path_forget_checks]
+  metis_tac[]
 QED
 
 Theorem lower_budget_raw_variant_entry:
