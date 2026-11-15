@@ -335,7 +335,7 @@ Proof
   Cases_on `salted` >> CONV_TAC cv_eval
 QED
 
-Theorem blueprint_invalid_source_result[local]:
+Theorem blueprint_invalid_source_result:
   eval_expr blueprint_test_context
     (blueprint_test_expr blueprint_test_nested_create F salted rof 0
       [blueprint_test_nested_create]) (blueprint_test_state []) =
