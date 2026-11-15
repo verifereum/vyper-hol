@@ -451,14 +451,9 @@ Proof
       expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-     rewrite_tac[expr_sim_def] >>
-     disch_then (qspecl_then [`st0`, `sA`, `sB`, `op`, `salloc`] mp_tac) >>
-     (impl_tac >- (simp[] >> metis_tac[])) >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
-     metis_tac[]) >>
+     simp[expr_sim_def] >> disch_then irule >> simp[] >> metis_tac[]) >>
   `~block_is_terminated sb` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,

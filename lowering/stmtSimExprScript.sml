@@ -181,7 +181,7 @@ Proof
       drule_all expr_stmt_marked_exec >> strip_tac >>
       first_x_assum (irule_at Any) >> disj2_tac >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      Cases_on `res` >> gs[stmt_exit_def] >>
+      Cases_on `res` >> gs[stmt_exit_def, halt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[expr_stmt_exempt]

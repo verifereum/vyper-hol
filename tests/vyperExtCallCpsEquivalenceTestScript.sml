@@ -22,7 +22,8 @@ Theorem activated_CPS_consumes_counterexample:
     (vyperSmallStep$eval_expr_cps empty_evaluation_context counter_expr counter_state
       vyperSmallStep$DoneK)) =
     (INR (Error (RevertData [])),
-     counter_state with <|outcomes := SOME []; requests := [counter_request]|>)
+     counter_state with <|outcomes := SOME []; requests := [counter_request];
+       storage_trace := [StorageOutcome counter_request counter_outcome]|>)
 Proof
   simp[GSYM eval_expr_eq_cont_cps, activated_ExtCall_consumes_counterexample]
 QED
@@ -33,7 +34,8 @@ Theorem activated_CPS_CV_consumes_counterexample:
     (vyperSmallStep$eval_expr_cps empty_evaluation_context counter_expr counter_state
       vyperSmallStep$DoneK)) =
     (INR (Error (RevertData [])),
-     counter_state with <|outcomes := SOME []; requests := [counter_request]|>)
+     counter_state with <|outcomes := SOME []; requests := [counter_request];
+       storage_trace := [StorageOutcome counter_request counter_outcome]|>)
 Proof
   simp[counter_expr_def, counter_state_def, counter_outcome_def,
        counter_request_def, counter_calldata, failed_outcome_def,
