@@ -150,26 +150,26 @@ Proof
        `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
          metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
        disj2_tac >> disj1_tac >>
-       irule (Q.INST [`Exit` |->
-         `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-                         halt_exit H cx ee res r`]
-         (SPEC_ALL (INST_TYPE [alpha |-> ``:value``] forced_then_summary))) >>
-       qexistsl_tac
-         [`\v ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
-                    !H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t`,
-          `cx`, `st0`] >>
-       BETA_TAC >> rpt conj_tac
-       >~ [`!ex ee r. expr_exit (INR ex) r /\ _ ==> _`]
-       >- (rpt strip_tac >> metis_tac[])
-       >~ [`!v ee t. _ ==> ?res ee' r. _`]
-       >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+       MATCH_MP_TAC (Q.SPECL
+         [`memory`, `ctx`, `func`, `bind (eval_expr cx e) (read_result cx)`, `k`, `marks`, `es`, `s0`,
+          `\v ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
+                      !H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t`,
+          `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+                          halt_exit H cx ee res r`,
+          `\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==> Q H res ee t`,
+          `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> R H res ee r`]
+         (INST_TYPE [alpha |-> ``:value``] forced_then_summary)) >>
+       BETA_TAC >> conj_tac
+       >- (simp[gas_summary_at_def] >>
+           qexistsl_tac [`res`, `es_end`, `r`] >> gs[] >>
+           metis_tac[sumTheory.INL_11]) >>
+       conj_tac
+       >- (rpt gen_tac >> strip_tac >>
            rename1 `gas_marked_path _ _ _ tt 0 _` >>
            qpat_x_assum `!v ee t. _ ==> ?res ee' r. _`
              (qspecl_then [`v`, `ee`, `tt`] mp_tac) >>
-           impl_tac >- metis_tac[] >> simp[] >> metis_tac[]) >>
-       simp[gas_summary_at_def] >>
-       qexistsl_tac [`res`, `es_end`, `r`] >> gs[] >>
-       metis_tac[sumTheory.INL_11])) >>
+           impl_tac >- metis_tac[] >> simp[]) >>
+       rpt strip_tac >> metis_tac[])) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
@@ -293,26 +293,26 @@ Proof
        `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
          metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
        disj2_tac >> disj1_tac >>
-       irule (Q.INST [`Exit` |->
-         `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-                         halt_exit H cx ee res r`]
-         (SPEC_ALL (INST_TYPE [alpha |-> ``:eval_result``] forced_then_summary))) >>
-       qexistsl_tac
-         [`\tv ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
-                     !H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t`,
-          `cx`, `st0`] >>
-       BETA_TAC >> rpt conj_tac
-       >~ [`!ex ee r. expr_exit (INR ex) r /\ _ ==> _`]
-       >- (rpt strip_tac >> metis_tac[])
-       >~ [`!v ee t. _ ==> ?res ee' r. _`]
-       >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+       MATCH_MP_TAC (Q.SPECL
+         [`memory`, `ctx`, `func`, `eval_expr cx e`, `k`, `marks`, `es`, `s0`,
+          `\tv ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
+                      !H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t`,
+          `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+                          halt_exit H cx ee res r`,
+          `\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==> Q H res ee t`,
+          `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> R H res ee r`]
+         (INST_TYPE [alpha |-> ``:eval_result``] forced_then_summary)) >>
+       BETA_TAC >> conj_tac
+       >- (simp[gas_summary_at_def] >>
+           qexistsl_tac [`res`, `es_end`, `r`] >> gs[] >>
+           metis_tac[sumTheory.INL_11]) >>
+       conj_tac
+       >- (rpt gen_tac >> strip_tac >>
            rename1 `gas_marked_path _ _ _ tt 0 _` >>
            qpat_x_assum `!tv ee t. _ ==> ?res ee' r. _`
              (qspecl_then [`v`, `ee`, `tt`] mp_tac) >>
-           impl_tac >- metis_tac[] >> simp[] >> metis_tac[]) >>
-       simp[gas_summary_at_def] >>
-       qexistsl_tac [`res`, `es_end`, `r`] >> gs[] >>
-       metis_tac[sumTheory.INL_11])) >>
+           impl_tac >- metis_tac[] >> simp[]) >>
+       rpt strip_tac >> metis_tac[])) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_result] >>
