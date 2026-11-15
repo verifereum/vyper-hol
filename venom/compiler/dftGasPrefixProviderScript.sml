@@ -2080,6 +2080,36 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES] >> disch_then (mp_tac o cj 4) >> metis_tac[]
 QED
 
+Theorem native_suffix_stopping_decomposition:
+  !xs b C t. terminates (dft_exec_suffix b C xs t) ==>
+  ?done z later tz.
+    xs = done ++ z::later /\
+    EVERY (\i. ~is_terminator i.inst_opcode) done /\
+    FOLDR (dft_exec_cons b C) OK done t = OK tz /\
+    tz.vs_inst_idx = t.vs_inst_idx + LENGTH done /\
+    dft_exec_suffix b C xs t = dft_exec_suffix b C [z] tz /\
+    (is_terminator z.inst_opcode \/ ~(?u. step_inst b C z tz = OK u))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[dftIndexedExecTheory.dft_exec_suffix_def, passSimulationDefsTheory.terminates_def] >>
+  strip_tac >>
+  Cases_on `is_terminator h.inst_opcode \/ ~(?u. step_inst b C h t = OK u)`
+  >- (qexistsl_tac [`[]`, `h`, `xs`, `t`] >> simp[] >>
+      Cases_on `step_inst b C h t` >>
+      gvs[dftIndexedExecTheory.dft_exec_suffix_def]) >>
+  gvs[] >>
+  rename1 `step_inst b C h t = OK u` >>
+  qpat_x_assum `!b C t. _` (qspecl_then
+    [`b`, `C`, `u with vs_inst_idx := SUC t.vs_inst_idx`] mp_tac) >>
+  impl_tac
+  >- gvs[dftIndexedExecTheory.dft_exec_suffix_def] >>
+  strip_tac >>
+  qexistsl_tac [`h::done`, `z`, `later`, `tz`] >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  simp[Once dftIndexedExecTheory.dft_exec_suffix_def] >>
+  decide_tac
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
