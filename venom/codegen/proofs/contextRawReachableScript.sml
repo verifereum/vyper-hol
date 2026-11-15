@@ -51,6 +51,19 @@ Inductive frag_reachable:
      frag_reachable ctx fn0 s0 callee inst s1)
 End
 
+Theorem frag_reachable_trans:
+  !ctx fn1 s1 fn2 inst2 s2.
+    frag_reachable ctx fn1 s1 fn2 inst2 s2 ==>
+    !fn0 s0.
+      (!inst1. active_inst fn1 inst1 s1 ==>
+         frag_reachable ctx fn0 s0 fn1 inst1 s1) ==>
+      frag_reachable ctx fn0 s0 fn2 inst2 s2
+Proof
+  ho_match_mp_tac frag_reachable_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> metis_tac[frag_reachable_rules]
+QED
+
 Theorem frag_reachable_members:
   !ctx fn0 s0 fn inst s.
     frag_reachable ctx fn0 s0 fn inst s ==>

@@ -44,10 +44,11 @@ fixtures.
 
 P2 is ported. These still differ from the oracle with it:
 
-- `raw-system/rl_const_topics`: the HOL checker rejects a constant
-  `DynArray` as `raw_log` topics (only a literal list is accepted), as
-  `raw_log_rejects_constant_topics` in `tests/vyperRawSystemTypingTestScript.sml`
-  records.
+- `raw-system/rl_const_topics`: the frontend now expands constant topics
+  to a literal array with the reference's bound before checking. The raw
+  checker still rejects a top-level name, as `raw_log_rejects_constant_topics`
+  records; `raw_log_constant_topics_frontend_accepted` checks the translated
+  contract. This bytecode fixture remains pending its parity port.
 - `builtin-forms/concat_wide_local`
 
 ## P4 (direct ABI encoder)

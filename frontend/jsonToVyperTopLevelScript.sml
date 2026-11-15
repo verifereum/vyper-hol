@@ -54,16 +54,19 @@ Termination
 End
 
 Definition translate_var_mutability_def:
-  translate_var_mutability ctx is_immutable is_transient is_constant const_val =
+  translate_var_mutability ctx declared_ty is_immutable is_transient is_constant const_val =
     if is_immutable then Immutable
     else if is_transient then Transient
     else if is_constant then
       (case const_val of
          SOME e =>
            let original = translate_expr ctx e in
-           Constant (case pin_fold_expr original of
-                     Literal ty l => Literal ty l
-                   | _ => original)
+           let candidate = origin_retype declared_ty
+             (origin_fold_value (translate_expr_with_policy T ctx e)) in
+           Constant (if IS_SOME (resolved_origin_expr T ctx e candidate) /\
+                        pin_literal_tree candidate /\ expr_type candidate = declared_ty then
+                       candidate
+                     else original)
        | NONE => Storage)
     else Storage
 End
@@ -115,14 +118,13 @@ Definition translate_toplevel_def:
       (translate_stmts nominal_index all_import_maps body_ctx body))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient is_reentrant const_val) =
+    let declared_ty = canonical_decl_type nominal_index all_import_maps expr_ctx ty ann_ty in
     SOME (VariableDecl
       (if is_public then Public (nr_default /\ ~is_reentrant /\
         ~is_immutable /\ const_val = NONE) else Private)
-      (translate_var_mutability expr_ctx is_immutable is_transient
+      (translate_var_mutability expr_ctx declared_ty is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
-      name
-      (canonical_decl_type nominal_index all_import_maps expr_ctx ty ann_ty)
-      NONE)) /\
+      name declared_ty NONE)) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_HashMapDecl name key_ty val_ty is_public is_transient is_reentrant) =
     SOME (HashMapDecl
