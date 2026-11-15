@@ -15,15 +15,8 @@ Ancestors
   venomPassDispatcher venomFnScheduleRunner venomPassSchedule
   venomCompilerTypes venomState venomInst o1ComposeSupport fmpStepContract
   fmpStageRunner fmpStageCoverage list
-  o1RequestContract fcgDefs ctxLookupAgreeHelpers
-
-(* Functions without raw FMP operations only acquire a sealed signature. *)
-Theorem fmp_resolve_targets_some[local]:
-  !targets t. fmp_resolve_targets ctx targets /\ MEM t targets ==>
-              IS_SOME (lookup_function t ctx.ctx_functions)
-Proof
-  Induct >> rw[fmp_resolve_targets_def] >> gvs[]
-QED
+  o1RequestContract fcgDefs ctxLookupAgreeHelpers fmpAnalysisProps
+  fmpStageFmpStepsCallAbi
 
 (* The analysis gives an FMP-free function with sealed F/F callees no
    need and no publication. *)
@@ -42,8 +35,7 @@ Proof
   drule fmp_join_target_info_unneeded >> impl_tac
   >- (rpt strip_tac >>
       gvs[fmp_function_targets_def, AllCaseEqs()] >>
-      drule_all fmp_resolve_targets_some >>
-      simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+      drule_all fmp_resolve_targets_lookup >> strip_tac >>
       rename1 `lookup_function t ctx.ctx_functions = SOME g` >>
       drule_all fmp_collect_invokes_targets >> strip_tac >>
       `g.fn_fmp_signature =
@@ -80,17 +72,6 @@ Proof
   drule_all fmp_info_valid_seal_only >> strip_tac >> gvs[] >>
   gvs[fmp_checked_seal_def, fmp_seal_def, AllCaseEqs()] >>
   simp[venomInstTheory.ir_function_component_equality]
-QED
-
-(* The walk passes after FmpLowering all keep the FMP convention. *)
-Theorem fn_steps_after_fmp_signature:
-  fn_steps rpolicy (DROP 4 o1_fn_passes) g g' ==>
-  g'.fn_fmp_signature = g.fn_fmp_signature
-Proof
-  simp[o1_fn_passes_def, fn_steps_def, fn_pass_step_def,
-       fn_pass_effects_hold_def, fn_abi_effect_holds_def,
-       fn_pass_abi_effect_def, fn_fmp_convention_eq_def, fn_pass_tag_def] >>
-  rw[] >> gvs[]
 QED
 
 (* A callee named by an output function of the stage resolves there. *)
@@ -148,7 +129,7 @@ Proof
       fs[o1_walk_view_def, walk_view_def] >>
       first_x_assum drule_all >> strip_tac >> gvs[] >>
       drule fn_steps_from_fn_steps >> strip_tac >>
-      drule fn_steps_after_fmp_signature >> metis_tac[]) >>
+      drule fmp_call_later_signature >> metis_tac[]) >>
   simp[]
 QED
 
