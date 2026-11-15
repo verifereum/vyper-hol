@@ -131,6 +131,6 @@ Proof
       irule guarded_clean_write_restrict >> simp[] >>
       goal_assum (drule_at Any) >>
       irule local_rel_gas_readings >> goal_assum (drule_at Any))) >>
-  simp[reader_clean_ghosts] >>
+  gvs[] >>
   irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[]
 QED
