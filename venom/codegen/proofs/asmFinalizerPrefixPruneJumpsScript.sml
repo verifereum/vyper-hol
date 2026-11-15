@@ -1,6 +1,6 @@
 Theory asmFinalizerPrefixPruneJumps
 Ancestors
-  asmFinalizerPrefixSplice asmOptPruneJumps asmSplice asmSymPc
+  asmFinalizerPrefixJumpDelete asmOptPruneJumps asmSplice asmSymPc
   finalizerContract asmSymSem asmOptimizer asmWf
 
 (* S, U and T are quotation abbreviations, not logical definitions. *)
