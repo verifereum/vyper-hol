@@ -6,7 +6,7 @@ Ancestors
   exprSimHyps allocLimits vyperValue words venomMemProps
   fragExec context compileEnv list exprSimHypsDefs vyperABI vyperAST
   exprOperandVar exprLowering exprLoweringProps freshWrites calldataDynOwned
-  abiCallerAbiBound combinatorics supportedTypes
+  abiCallerAbiBound supportedTypes
 
 Theorem abi_decode_body_machine_bounds:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode b) (TupleT tys) args) es /\
@@ -27,8 +27,8 @@ Proof
         rename1 `BaseT bt` >> Cases_on `bt` >>
         simp[type_memory_bytes_def] >>
         rename1 `BytesT bd` >> Cases_on `bd` >> simp[type_memory_bytes_def]) >>
-     mp_tac (Q.SPEC `MAP (type_memory_bytes ce) tys` list_length_le_sum) >>
-     simp[EVERY_MAP] >> metis_tac[]) >>
+     qpat_x_assum `EVERY (\ty. 0 < type_memory_bytes ce ty) tys` mp_tac >>
+     qid_spec_tac `tys` >> Induct >> simp[] >> rpt strip_tac >> fs[] >> decide_tac) >>
   `alloc_limits_expr ce (TypeBuiltin ann (AbiDecode b) (TupleT tys) args)` by
     fs[expr_body_pre_def] >>
   drule alloc_limits_abi_decode_output >>
