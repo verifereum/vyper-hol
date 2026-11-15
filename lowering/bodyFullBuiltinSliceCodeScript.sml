@@ -1293,4 +1293,3 @@ Resume slice_builtin_some_vv_full[self_operands]:
 QED
 
 Finalise slice_builtin_some_vv_full
-
