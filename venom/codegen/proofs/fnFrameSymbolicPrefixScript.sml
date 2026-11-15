@@ -1523,8 +1523,96 @@ Theorem normal_frame_symbolic_joint_progress:
         LENGTH bb.bb_instructions - t.vs_inst_idx <
           LENGTH bb.bb_instructions - s.vs_inst_idx))
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `normal_frame_symbolic_plan _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [normal_frame_symbolic_plan_def])
+  >- suspend "active" >>
+  Cases_on `s.vs_inst_idx < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`
+  >- suspend "parameter" >>
+  `s.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
+    (fs[entry_frame_symbolic_plan_def, entry_frame_plan_def] >> gvs[] >> decide_tac) >>
+  drule_all entry_frame_symbolic_plan_ready >>
+  disch_then (qx_choosel_then [`m`, `ready`, `rss`] strip_assume_tac) >>
+  suspend "ready"
 QED
+
+Resume normal_frame_symbolic_joint_progress[active]:
+  rpt strip_tac >>
+  qpat_assum `joint_transition _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [joint_transition_cases]) >> gvs[]
+  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_next_progress >>
+      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[])
+  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_block_progress >>
+      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[])
+  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_call_progress >>
+      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[]) >>
+  drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_return_progress >>
+  simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[]
+QED
+
+Resume normal_frame_symbolic_joint_progress[parameter]:
+  rpt strip_tac >>
+  `entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0` by
+    fs[entry_frame_symbolic_plan_def] >>
+  qpat_assum `joint_transition _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [joint_transition_cases]) >> gvs[] >>
+  drule_all entry_frame_active_param >> strip_tac >> gvs[]
+  >- (drule_all entry_frame_symbolic_plan_next >>
+      disch_then (qspec_then `fuel` strip_assume_tac) >>
+      gvs[] >> suspend "parameter_finish")
+  >- (qmatch_asmsub_abbrev_tac `is_param_opcode opc` >>
+      Cases_on `opc` >> fs[is_param_opcode_def, is_terminator_def])
+  >- gvs[is_param_opcode_def] >>
+  drule_all entry_frame_symbolic_plan_next >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >> gvs[]
+QED
+
+Resume normal_frame_symbolic_joint_progress[parameter_finish]:
+  rpt strip_tac >>
+  `post.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow] >>
+  qexistsl_tac [`0`, `ast`, `ss`] >> simp[asm_steps_def, asmSpliceTheory.sym_steps_def] >>
+  conj_tac
+  >- (simp[normal_frame_symbolic_plan_def] >>
+      qexistsl_tac [`saved`, `ra`, `rest`, `mem0`, `sentry`, `ret`, `srest`, `labs0`] >>
+      simp[] >> metis_tac[]) >>
+  fs[active_inst_def] >> qexists_tac `bb` >> simp[] >>
+  irule venomExecProofsTheory.MEM_lookup_block >> simp[] >>
+  fs[entry_frame_plan_def] >>
+  `codegen_ready_fn fn` by metis_tac[body_fn_shape] >>
+  fs[codegen_ready_fn_def, venomWfTheory.wf_function_def, fn_labels_def]
+QED
+
+Resume normal_frame_symbolic_joint_progress[ready]:
+  rpt strip_tac >>
+  qpat_assum `joint_transition _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [joint_transition_cases]) >> gvs[]
+  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_next_progress >>
+      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
+      disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose")
+  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_block_progress >>
+      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
+      disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose")
+  >- (drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_call_progress >>
+      simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
+      disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose") >>
+  drule_at (Pat `joint_transition _ _ _ _`) active_frame_symbolic_return_progress >>
+  simp[] >> disch_then drule >> simp[] >> disch_then drule >> simp[] >>
+  disch_then drule >> simp[] >> strip_tac >> suspend "ready_compose"
+QED
+
+Resume normal_frame_symbolic_joint_progress[ready_compose]:
+  markerLib.RESUME_TAC >>
+  (rpt strip_tac >>
+   qexistsl_tac [`m + n`, `ast1`, `ss1`] >>
+   conj_tac
+   >- (irule blockSimHelpersTheory.asm_steps_compose_ok >> qexists_tac `ready` >> simp[]) >>
+   conj_tac
+   >- (irule sym_steps_compose >> qexists_tac `rss` >> simp[]) >>
+   simp[])
+QED
+
+Finalise normal_frame_symbolic_joint_progress
 
 Theorem normal_frame_symbolic_trace_prefix:
   !j.
