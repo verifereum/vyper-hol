@@ -2549,7 +2549,7 @@ QED
 
 Finalise source_replay_cut_wrappers[local]
 
-val _ = clear_overloads_on "source_wrapper_cut_at";
+(* Keep the parser-only cut notation through the mutual lift. *)
 
 Theorem source_create_empty_cut_state[local]:
   !salt value code rof k st re se.
@@ -4280,6 +4280,147 @@ Proof
   imp_res_tac eval_stmts_preserves_scopes_len >>
   gvs[] >> metis_tac[LENGTH_NIL]
 QED
+
+Theorem source_replay_cut_bind_reachable[local]:
+  !f g s os.
+    source_wrapper_cut_at f s os /\
+    (!v u pre.
+      f (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (INL v,u) /\
+      u.outcomes = SOME (pre ++ [probe_failed_outcome]) ==>
+      source_wrapper_cut_at (g v) u pre) /\
+    (!v. outcomes_suffix (g v) /\ storage_trace_frame (g v) /\
+         source_exhausted_safe (g v)) ==>
+    source_wrapper_cut_at (bind f g) s os
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+  rename1 `f (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (rf,sf)` >>
+  qpat_x_assum `!r t. (rf,sf) = (r,t) ==> _`
+    (qspecl_then [`rf`,`sf`] mp_tac) >> simp_tac bool_ss [] >> strip_tac
+  >- suspend "unconsumed"
+  >- suspend "ordinary"
+  >> suspend "create"
+QED
+
+Resume source_replay_cut_bind_reachable[unconsumed]:
+  reverse (Cases_on `rf`)
+  >- (gvs[vyperStateTheory.bind_def] >> disj1_tac >>
+      qexists_tac `pre` >> simp[vyperStateTheory.bind_def]) >>
+  gvs[vyperStateTheory.bind_def] >>
+  qpat_assum `!tail. f _ = _`
+    (qspec_then `[]` (fn th => rewrite_tac[REWRITE_RULE [APPEND_NIL] th])) >>
+  gvs[]
+QED
+
+Resume source_replay_cut_bind_reachable[ordinary]:
+  disj2_tac >> disj1_tac >> conj_tac
+  >- (Cases_on `rf` >> gvs[vyperStateTheory.bind_def] >>
+      rename1 `g v sf = (r,t)` >>
+      qpat_x_assum `!v. outcomes_suffix (g v) /\ _`
+        (qspec_then `v` mp_tac) >>
+      simp[outcomes_suffix_def] >> strip_tac >>
+      qpat_x_assum `!st. outcome_suffix _ _`
+        (qspec_then `sf` mp_tac) >> simp[outcome_suffix_def]) >>
+  qpat_assum `bind f g _ = (r,t)` (fn th => rewrite_tac[GSYM th]) >>
+  conj_tac >> irule source_replay_bind_transport >> simp[] >>
+  qpat_x_assum `!v u pre. _` kall_tac >>
+  qpat_x_assum `!v. _` kall_tac >> metis_tac[]
+QED
+
+Resume source_replay_cut_bind_reachable[create]:
+  `r = INR (Error (RuntimeError "create outcome accounts")) /\ t = sf` by
+    gvs[vyperStateTheory.bind_def] >>
+  disj2_tac >> disj2_tac >> gvs[] >>
+  conj_tac
+  >- (Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+      rename1 `f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,se)` >>
+      Cases_on `re` >> gvs[vyperStateTheory.bind_def] >>
+      rename1 `g v se` >>
+      qpat_x_assum `!v. outcomes_suffix (g v) /\ _`
+        (qspec_then `v` strip_assume_tac) >>
+      Cases_on `g v se` >>
+      qpat_x_assum `source_exhausted_safe (g v)`
+        (qspecl_then [`se`,`q`,`r`] mp_tac) >> simp[]) >>
+  conj_tac
+  >- (irule source_replay_bind_transport >> simp[]) >>
+  rpt gen_tac >>
+  Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+  rename1 `f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,se)` >>
+  reverse (Cases_on `re`) >> gvs[vyperStateTheory.bind_def]
+  >- (rpt strip_tac >> gvs[]) >>
+  strip_tac >>
+  qpat_x_assum `!v. outcomes_suffix (g v) /\ _`
+    (qspec_then `x` strip_assume_tac) >>
+  qpat_x_assum `source_exhausted_safe (g x)`
+    (qspecl_then [`se`,`q`,`u`] mp_tac) >> simp[]
+QED
+Finalise source_replay_cut_bind_reachable[local]
+
+Theorem source_replay_frame_cut[local]:
+  !f s os. outcomes_frame f /\ outcomes_suffix f /\ outcome_prefix_causal f ==>
+    source_wrapper_cut_at f s os
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  disj1_tac >> irule source_replay_unconsumed_cut >>
+  simp[] >> drule_all outcomes_frame_result >> simp[]
+QED
+
+Theorem eval_outcome_probe_cut_mutual[local]:
+  (!cx stmt s os. source_wrapper_cut_at (eval_stmt cx stmt) s os) /\
+  (!cx stmts s os. source_wrapper_cut_at (eval_stmts cx stmts) s os) /\
+  (!cx it s os. source_wrapper_cut_at (eval_iterator cx it) s os) /\
+  (!cx tyv id fbody vs s os.
+    source_wrapper_cut_at (eval_for cx tyv id fbody vs) s os) /\
+  (!cx e s os. source_wrapper_cut_at (eval_expr cx e) s os) /\
+  (!cx es s os. source_wrapper_cut_at (eval_exprs cx es) s os) /\
+  (!cx t s os. source_wrapper_cut_at (eval_base_place cx t) s os) /\
+  (!cx t s os. source_wrapper_cut_at (eval_target_place cx t) s os) /\
+  (!cx g v s os. source_wrapper_cut_at (assign_tuple_targets cx g v) s os) /\
+  (!cx gs vs s os. source_wrapper_cut_at (assign_tuple_target_list cx gs vs) s os) /\
+  (!cx es s os. source_wrapper_cut_at (eval_expr_results cx es) s os)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[Once evaluate_def])
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[Once evaluate_def])
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[Once evaluate_def])
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[Once evaluate_def])
+  >- (ntac 2 gen_tac >> strip_tac >>
+      rewrite_tac[cj 5 evaluate_def] >>
+      ho_match_mp_tac source_replay_cut_bind >>
+      conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+      conj_tac
+      >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+          conj_tac >- simp[] >> conj_tac
+          >- (irule outcomes_suffix_frame >> simp[]) >>
+          rpt PREFIX_STEP) >>
+      conj_tac
+      >- (gen_tac >> irule outcomes_suffix_frame >> simp[]) >>
+      conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          irule source_replay_bind_transport >> simp[] >>
+          gen_tac >> irule storage_trace_frame_bind_all >>
+          simp[storage_trace_frame_read_result, storage_trace_frame_raise]) >>
+      gen_tac >>
+      `source_exhausted_safe
+        (bind (read_result cx tv)
+          (\v. (raise (ReturnException v) : evaluation_state -> unit evaluation_result)))` by
+        rpt EXHAUSTED_SAFETY_STEP >>
+      qpat_x_assum `!s os r t. _` kall_tac >>
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `source_exhausted_safe _`
+        (qspecl_then [`s`,`r`,`t`] mp_tac) >> simp[]) >>
+  FAIL_TAC "next cut constructor"
+QED
+
+val _ = clear_overloads_on "source_wrapper_cut_at";
 
 Theorem eval_outcome_probe_replay_mutual:
   (!cx stmt st0 os res_p st_p.
