@@ -281,10 +281,11 @@ Resume compile_abi_encode_tuple_vv_case[success]:
      qpat_x_assum `!H. _ ==> abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
      rewrite_tac[abi_args_post_def] >> strip_tac >>
      irule exprSimAbiEncodeNonwordCaseTheory.abi_encode_vv_post_fields_transport >>
-     rpt conj_tac >>
-     FIRST [simp[] >> NO_TAC,
-            qexists `initial` >> fs[] >> NO_TAC,
-            first_assum (irule_at Any) >> NO_TAC]) >>
+     rpt conj_tac
+     >- simp[]
+     >- first_assum ACCEPT_TAC
+     >- (qexists `initial` >> fs[]) >>
+     qexists `storage_trace_horizon ee.storage_trace` >> first_assum ACCEPT_TAC) >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   qexists `[]` >> simp[gas_summary_at_def] >>

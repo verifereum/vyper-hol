@@ -104,30 +104,21 @@ Theorem abi_encode_tuple_relabel_resources:
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\ local_ptrs_reserved ce st /\
   LENGTH ids = LENGTH staged.cs_current_insts ==>
-  let n = abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) in
-  let m = case mid of NONE => 0 | SOME _ => 4 in
-  let mw = case mid of NONE => 0 | SOME _ => 32 in
-  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+m) in
-  let rs = s with vs_current_bb := L in
-  let rst = start_relabel L ids staged in
-  let rr = start_swap staged L ids ready in
-  let re = start_swap staged L ids body_end in
-  let a = abi_builtin_allocate_state rst.cs_next_id outsz rs in
-  ?p. abi_encoder_window_input ei ct rv sb n rs.vs_memory /\
-    alloca_inv a /\ alloca_room (ctx with ctx_functions := [obs]) obs a /\
-    ((FLOOKUP rs.vs_allocas rst.cs_next_id = NONE /\ p = rs.vs_alloca_next) \/
-      FLOOKUP rs.vs_allocas rst.cs_next_id = SOME (p,outsz)) /\
-    outsz < dimword (:256) /\ p < dimword (:256) /\
+  ?p. abi_encoder_window_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) (s with vs_current_bb := L).vs_memory /\
+    alloca_inv (abi_builtin_allocate_state (start_relabel L ids staged).cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) (s with vs_current_bb := L)) /\ alloca_room (ctx with ctx_functions := [obs]) obs (abi_builtin_allocate_state (start_relabel L ids staged).cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) (s with vs_current_bb := L)) /\
+    ((FLOOKUP (s with vs_current_bb := L).vs_allocas (start_relabel L ids staged).cs_next_id = NONE /\ p = (s with vs_current_bb := L).vs_alloca_next) \/
+      FLOOKUP (s with vs_current_bb := L).vs_allocas (start_relabel L ids staged).cs_next_id = SOME (p,(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))))) /\
+    (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) < dimword (:256) /\ p < dimword (:256) /\
     (mid <> NONE ==> p+32 < dimword (:256)) /\
-    sb+n <= a.vs_alloca_next /\ p+32+m+LENGTH (enc ct rv) <= a.vs_alloca_next /\
-    venomMemDefs$regions_disjoint (sb,n) (p+32+m,LENGTH (enc ct rv)) /\
-    (sb+n <= p+32 \/ p+32+mw <= sb) /\
-    venomMemDefs$regions_disjoint (p+32,m) (p+32+m,LENGTH (enc ct rv)) /\
+    sb+(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) <= (abi_builtin_allocate_state (start_relabel L ids staged).cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) (s with vs_current_bb := L)).vs_alloca_next /\ p+32+(case mid of NONE => 0 | SOME _ => 4)+LENGTH (enc ct rv) <= (abi_builtin_allocate_state (start_relabel L ids staged).cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) (s with vs_current_bb := L)).vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) (p+32+(case mid of NONE => 0 | SOME _ => 4),LENGTH (enc ct rv)) /\
+    (sb+(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) <= p+32 \/ p+32+(case mid of NONE => 0 | SOME _ => 32) <= sb) /\
+    venomMemDefs$regions_disjoint (p+32,(case mid of NONE => 0 | SOME _ => 4)) (p+32+(case mid of NONE => 0 | SOME _ => 4),LENGTH (enc ct rv)) /\
     (!inst b sz. MEM inst (fn_insts obs) /\ inst.inst_opcode = ALLOCA /\
-      inst.inst_id IN frag_ids rr re /\ FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==>
-      sz = 32 /\ venomMemDefs$regions_disjoint (sb,n) (b,sz) /\
-      venomMemDefs$regions_disjoint (p+32+m,LENGTH (enc ct rv)) (b,sz) /\
-      venomMemDefs$regions_disjoint (p+32,m) (b,sz))
+      inst.inst_id IN frag_ids (start_swap staged L ids ready) (start_swap staged L ids body_end) /\ FLOOKUP (abi_builtin_allocate_state (start_relabel L ids staged).cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) (s with vs_current_bb := L)).vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) (b,sz) /\
+      venomMemDefs$regions_disjoint (p+32+(case mid of NONE => 0 | SOME _ => 4),LENGTH (enc ct rv)) (b,sz) /\
+      venomMemDefs$regions_disjoint (p+32,(case mid of NONE => 0 | SOME _ => 4)) (b,sz))
 Proof
   strip_tac >>
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
@@ -307,13 +298,12 @@ Theorem abi_encode_tuple_raw_phases:
   ~s.vs_halted /\ s.vs_current_bb = staged.cs_current_bb /\
   s.vs_inst_idx = LENGTH staged.cs_current_insts ==>
   ?p raw. run_inst_seq (emitted_insts staged final) s = OK raw /\
-    let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
-    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    abi_encode_exec_frame func s actual /\
+    ~(raw with vs_inst_idx := LENGTH final.cs_current_insts).vs_halted /\ (raw with vs_inst_idx := LENGTH final.cs_current_insts).vs_current_bb = final.cs_current_bb /\
+    (raw with vs_inst_idx := LENGTH final.cs_current_insts).vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_exec_frame func s (raw with vs_inst_idx := LENGTH final.cs_current_insts) /\
     abi_encode_staged_observation H ctx func ce cx es' staged (FST ops) mid
       (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
-        (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
+        (case mid of NONE => 0 | SOME _ => 4))) p ct rv s (raw with vs_inst_idx := LENGTH final.cs_current_insts)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>

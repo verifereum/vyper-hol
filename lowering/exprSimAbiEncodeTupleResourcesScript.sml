@@ -19,17 +19,15 @@ Theorem abi_encode_args_tuple_allocation_resources:
   abi_args_post H ctx func ce cx es sa st s0 es' args ops vs initial /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce st ==>
-  let n = abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) in
-  let a = abi_builtin_allocate_state st.cs_next_id n initial in
   ?sb. ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ sb = initial.vs_alloca_next) \/
-         FLOOKUP initial.vs_allocas st.cs_next_id = SOME (sb,n)) /\
-    sb+n < dimword (:256) /\ alloca_inv a /\ alloca_room ctx func a /\
-    FLOOKUP a.vs_allocas st.cs_next_id = SOME (sb,n) /\ sb+n <= a.vs_alloca_next /\
-    a.vs_alloca_next < dimword (:256) /\
+         FLOOKUP initial.vs_allocas st.cs_next_id = SOME (sb,(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))))) /\
+    sb+(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) < dimword (:256) /\ alloca_inv (abi_builtin_allocate_state st.cs_next_id (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial) /\ alloca_room ctx func (abi_builtin_allocate_state st.cs_next_id (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial) /\
+    FLOOKUP (abi_builtin_allocate_state st.cs_next_id (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_allocas st.cs_next_id = SOME (sb,(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)))) /\ sb+(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) <= (abi_builtin_allocate_state st.cs_next_id (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
+    (abi_builtin_allocate_state st.cs_next_id (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_alloca_next < dimword (:256) /\
     (!k tv w. k < LENGTH args /\
       evaluate_type (get_tenv cx) (lowered_value_type ce (EL k args)) = SOME tv /\
       ~is_word_type (lowered_value_type ce (EL k args)) /\ eval_operand (EL k ops) initial = SOME w ==>
-      venomMemDefs$regions_disjoint (w2n w,val_footprint tv (EL k vs)) (sb,n))
+      venomMemDefs$regions_disjoint (w2n w,val_footprint tv (EL k vs)) (sb,(abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)))))
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule abi_args_post_lengths >> strip_tac >>
@@ -126,21 +124,30 @@ Theorem abi_encode_args_registered_phase_rows:
   fn_has_code ready body_end obs /\ fn_inst_ids_distinct obs /\ fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\ local_ptrs_reserved ce st ==>
-  let n = abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) in
-  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
-    (case mid of NONE => 0 | SOME _ => 4)) in
-  let a = abi_builtin_allocate_state staged.cs_next_id outsz s in
-  ?sb p. alloca_inv a /\ alloca_room ctx func a /\ outsz < dimword (:256) /\
-    FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,n) /\ sb+n <= s.vs_alloca_next /\
-    FLOOKUP a.vs_allocas st.cs_next_id = SOME (sb,n) /\ sb+n <= a.vs_alloca_next /\
-    FLOOKUP a.vs_allocas staged.cs_next_id = SOME (p,outsz) /\
-    p+outsz <= a.vs_alloca_next /\ a.vs_alloca_next < dimword (:256) /\
+  ?sb p. alloca_inv (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s) /\ alloca_room ctx func (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s) /\ (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) < dimword (:256) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) /\ sb+(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) <= s.vs_alloca_next /\
+    FLOOKUP (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s).vs_allocas st.cs_next_id = SOME (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) /\ sb+(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) <= (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s).vs_alloca_next /\
+    FLOOKUP (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s).vs_allocas staged.cs_next_id = SOME (p,(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4)))) /\
+    p+(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) <= (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s).vs_alloca_next /\ (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s).vs_alloca_next < dimword (:256) /\
     ((FLOOKUP s.vs_allocas staged.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
-      FLOOKUP s.vs_allocas staged.cs_next_id = SOME (p,outsz)) /\
-    venomMemDefs$regions_disjoint (sb,n) (p,outsz) /\
+      FLOOKUP s.vs_allocas staged.cs_next_id = SOME (p,(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))))) /\
+    venomMemDefs$regions_disjoint (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) (p,(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4)))) /\
     (!inst b sz. MEM inst (fn_insts obs) /\ inst.inst_opcode = ALLOCA /\
-      inst.inst_id IN frag_ids ready body_end /\ FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==>
-      sz = 32 /\ venomMemDefs$regions_disjoint (sb,n) (b,sz))
+      inst.inst_id IN frag_ids ready body_end /\ FLOOKUP (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
+    (case mid of NONE => 0 | SOME _ => 4))) s).vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) (b,sz))
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_at (Pat `expr_body_pre _ _ _ _ _`) abi_encode_args_tuple_allocation_resources >>
@@ -298,28 +305,22 @@ Theorem abi_encode_args_phase_resources:
   obs.fn_name = func.fn_name /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\ local_ptrs_reserved ce st ==>
-  let n = abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) in
-  let bytes = enc ct rv in
-  let m = case mid of NONE => 0 | SOME _ => 4 in
-  let mw = case mid of NONE => 0 | SOME _ => 32 in
-  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+m) in
-  let a = abi_builtin_allocate_state staged.cs_next_id outsz s in
-  ?p. abi_encoder_window_input ei ct rv sb n s.vs_memory /\
-    alloca_inv a /\ alloca_room ctx func a /\
-    alloca_room (ctx with ctx_functions := [obs]) obs a /\
+  ?p. abi_encoder_window_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
+    alloca_inv (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) s) /\ alloca_room ctx func (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) s) /\
+    alloca_room (ctx with ctx_functions := [obs]) obs (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) s) /\
     ((FLOOKUP s.vs_allocas staged.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
-      FLOOKUP s.vs_allocas staged.cs_next_id = SOME (p,outsz)) /\
-    outsz < dimword (:256) /\ p < dimword (:256) /\
+      FLOOKUP s.vs_allocas staged.cs_next_id = SOME (p,(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))))) /\
+    (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) < dimword (:256) /\ p < dimword (:256) /\
     (mid <> NONE ==> p+32 < dimword (:256)) /\
-    sb+n <= a.vs_alloca_next /\ p+32+m+LENGTH bytes <= a.vs_alloca_next /\
-    venomMemDefs$regions_disjoint (sb,n) (p+32+m,LENGTH bytes) /\
-    (sb+n <= p+32 \/ p+32+mw <= sb) /\
-    venomMemDefs$regions_disjoint (p+32,m) (p+32+m,LENGTH bytes) /\
+    sb+(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) <= (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) s).vs_alloca_next /\ p+32+(case mid of NONE => 0 | SOME _ => 4)+LENGTH (enc ct rv) <= (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) s).vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) (p+32+(case mid of NONE => 0 | SOME _ => 4),LENGTH (enc ct rv)) /\
+    (sb+(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) <= p+32 \/ p+32+(case mid of NONE => 0 | SOME _ => 32) <= sb) /\
+    venomMemDefs$regions_disjoint (p+32,(case mid of NONE => 0 | SOME _ => 4)) (p+32+(case mid of NONE => 0 | SOME _ => 4),LENGTH (enc ct rv)) /\
     (!inst b sz. MEM inst (fn_insts obs) /\ inst.inst_opcode = ALLOCA /\
-      inst.inst_id IN frag_ids ready body_end /\ FLOOKUP a.vs_allocas inst.inst_id = SOME (b,sz) ==>
-      sz = 32 /\ venomMemDefs$regions_disjoint (sb,n) (b,sz) /\
-      venomMemDefs$regions_disjoint (p+32+m,LENGTH bytes) (b,sz) /\
-      venomMemDefs$regions_disjoint (p+32,m) (b,sz))
+      inst.inst_id IN frag_ids ready body_end /\ FLOOKUP (abi_builtin_allocate_state staged.cs_next_id (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+(case mid of NONE => 0 | SOME _ => 4))) s).vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,(abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))) (b,sz) /\
+      venomMemDefs$regions_disjoint (p+32+(case mid of NONE => 0 | SOME _ => 4),LENGTH (enc ct rv)) (b,sz) /\
+      venomMemDefs$regions_disjoint (p+32,(case mid of NONE => 0 | SOME _ => 4)) (b,sz))
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_at (Pat `abi_args_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)

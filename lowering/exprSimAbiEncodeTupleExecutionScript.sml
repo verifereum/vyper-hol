@@ -36,11 +36,9 @@ Theorem abi_encode_args_producer_phases:
     initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?avs p actual.
     vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
-    let bytes = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) in
-    let m = case mid of NONE => 0 | SOME _ => 4 in
     eval_operand (FST ops) actual = SOME (n2w p) /\
-    mload p actual = n2w (LENGTH bytes+m) /\
-    mem_bytes_at (p+32+m) (LENGTH bytes) actual.vs_memory = bytes /\
+    mload p actual = n2w (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs))+(case mid of NONE => 0 | SOME _ => 4)) /\
+    mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4)) (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs))) actual.vs_memory = (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs)) /\
     (case mid of NONE => T | SOME selector =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
