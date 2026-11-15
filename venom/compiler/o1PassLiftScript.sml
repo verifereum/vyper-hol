@@ -1019,6 +1019,7 @@ QED
 Theorem static_codegen_ranges:
   generate_context_plan ctx9 = SOME cpl /\
   static_mem_ok cpl.cp_max_static_eom ctx7 fn7 inst7 s7 /\
+  cpl.cp_initial_fmp <= w2n s7.vs_initial_fmp /\
   ~in_revert_forward fn7 s7 /\
   (inst_mem_ranges inst9 s9 = [] \/
    inst_mem_ranges inst9 s9 = inst_mem_ranges inst7 s7) /\
@@ -1027,10 +1028,10 @@ Theorem static_codegen_ranges:
   context_source_memory_writes_disjoint cpl inst9 s9
 Proof
   rpt strip_tac >>
-  `static_mem_ok cpl.cp_max_static_eom ctx9 fn9 inst9 s9` by
-    fs[static_mem_ok_def] >>
   `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
-     ctx9 fn9 inst9 s9` by metis_tac[static_mem_ok_lowered] >>
+     ctx7 fn7 inst7 s7` by metis_tac[static_mem_ok_lowered] >>
+  `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
+     ctx9 fn9 inst9 s9` by fs[lowered_mem_ok_def] >>
   drule generate_context_plan_spill_gap >> strip_tac >>
   metis_tac[lowered_reads_disjoint, lowered_writes_disjoint]
 QED
@@ -1038,6 +1039,7 @@ QED
 Theorem mem_corr_static_codegen_ranges:
   generate_context_plan ctx9 = SOME cpl /\
   static_mem_ok cpl.cp_max_static_eom ctx7 fn7 inst7 s7 /\
+  cpl.cp_initial_fmp <= w2n s7.vs_initial_fmp /\
   ~in_revert_forward fn7 s7 /\
   mem_corr inst7 s7 inst9 s9 /\
   ~in_revert_forward fn9 s9 ==>
