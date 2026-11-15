@@ -500,6 +500,38 @@ Proof
   simp[update_var_def]
 QED
 
+Theorem native_trace_block_suffix_cong[local]:
+  !xs s bb bb'.
+    DROP s.vs_inst_idx bb.bb_instructions = xs /\
+    DROP s.vs_inst_idx bb'.bb_instructions = xs ==>
+    dftGasFromListTraceDefs$trace_block p d fuel C fn bb s =
+    dftGasFromListTraceDefs$trace_block p d fuel C fn bb' s
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (`LENGTH bb.bb_instructions <= s.vs_inst_idx /\
+       LENGTH bb'.bb_instructions <= s.vs_inst_idx` by
+        gvs[DROP_EQ_NIL] >>
+      simp[Once dftGasFromListTraceDefsTheory.trace_defs, get_instruction_def] >>
+      simp[Once dftGasFromListTraceDefsTheory.trace_defs, get_instruction_def]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   s.vs_inst_idx < LENGTH bb'.bb_instructions` by
+    (qpat_x_assum `DROP _ bb.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     qpat_x_assum `DROP _ bb'.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   EL s.vs_inst_idx bb'.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = xs /\
+   DROP (SUC s.vs_inst_idx) bb'.bb_instructions = xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  once_rewrite_tac[dftGasFromListTraceDefsTheory.trace_defs] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >>
+  Cases_on `is_terminator h.inst_opcode` >> simp[] >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem crossed_returning_packet_constructor:
   let q = (d,call.inst_id)::p;
       e = (p,d,gas.inst_id);
@@ -633,7 +665,41 @@ Proof
   qabbrev_tac `keys = e::(Kc ++ Kr)` >>
   qabbrev_tac `sites = (fn.fn_name,gas.inst_id)::(Sc ++ Sr)` >>
   qabbrev_tac `slots = MAP (ALOOKUP obs) keys` >>
-  strip_tac >> cheat
+  strip_tac >>
+  `step_inst b C' call a = OK qt` by
+    (simp[Once step_inst_def, Abbr `Tc`] >> gvs[]) >>
+  `step_inst b C' gas aI = OK (update_var out w0 (aI with vs_gas_readings := r0))` by
+    (drule_all dftBlockSimTheory.step_inst_gas_single >>
+     disch_then (qspecl_then [`aI`, `b`, `C'`] mp_tac) >> simp[]) >>
+  `get_instruction bt j = SOME call /\
+   get_instruction bt (SUC j) = SOME gas` by
+    simp[Abbr `bt`, get_instruction_def, EL_APPEND_EQN] >>
+  `aI.vs_inst_idx = SUC j` by simp[Abbr `aI`] >>
+  `target = Tr` by
+    (simp[Abbr `target`, Once exec_block_def] >>
+     simp[is_terminator_def] >>
+     `qt with vs_inst_idx := SUC j = aI` by simp[Abbr `aI`] >>
+     asm_rewrite_tac[] >>
+     simp[Once exec_block_def] >>
+     simp[is_terminator_def] >>
+     `((update_var out w0 (aI with vs_gas_readings := r0)) with
+        vs_inst_idx := SUC aI.vs_inst_idx) = aR` by
+       simp[Abbr `aI`, Abbr `aR`] >>
+     asm_rewrite_tac[] >>
+     simp[Abbr `Tr`, Abbr `aR`] >>
+     irule venomExecProofsTheory.exec_block_same_suffix >>
+     `j - SUC (SUC j) = 0 /\ SUC (SUC j) - (j + 2) = 0` by decide_tac >>
+     simp[Abbr `bt`, Abbr `br`, DROP_APPEND]) >>
+  `obs = Oc ++ [(e,w0)] ++ obsr` by
+    (simp[Abbr `obs`, Once dftGasFromListTraceDefsTheory.trace_defs] >>
+     simp[trace_gas_def, visit_gas_def, is_terminator_def] >>
+     `dftGasFromListTraceDefs$trace_step p d b C' fn' call a =
+       dftGasFromListTraceDefs$trace_blocks q d b C' callee' ct` by
+       (simp[Once dftGasFromListTraceDefsTheory.trace_defs, Abbr `q`] >> gvs[]) >>
+     asm_rewrite_tac[] >>
+     simp[GSYM trace_gas_def, GSYM (markerTheory.Abbrev_def)] >>
+     cheat) >>
+  cheat
 QED
 
 Theorem dft_blocks_gas_prefix_sound:
