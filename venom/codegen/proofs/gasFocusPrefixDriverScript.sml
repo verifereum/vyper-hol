@@ -100,7 +100,7 @@ val focus_block_rank : term = ``
    preservation theorem is claimed for arbitrary component predicates. *)
 val focus_joint_motive : term = ``
   \packet_rel cursor_rel frame_rel
-    rpolicy unit cpl prog vs0 es0 ast0 result final data tail
+    fin rpolicy unit cpl prog prog' vs0 es0 ast0 result final
     (C7:venom_context) C8 C9
     (root_sf:ir_function) (root_tf:ir_function) (root_entry:venom_state)
     packet
@@ -119,15 +119,22 @@ val focus_joint_motive : term = ``
     (es_tab : (((num # num) list # num), (string # num) list list) fmap)
     (ks_tab : (((num # num) list # num), gas_event list list) fmap)
     rooted_eval p d cursors
-    q8 q0 evs qs q9 n ast es raw_slots sites unused.
+    q8 q0 evs qs q9 n ast ss raw_slots sites unused.
     ?N:num. packet_rel N C7 C8 root_sf root_tf root_entry packet
       acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
     cursor_rel C8 C9 cursors q8 q9 /\
-    frame_rel rpolicy unit cpl prog vs0 es0 q9 ast /\
+    frame_rel (asm_data_env prog vs0.vs_code)
+      rpolicy unit cpl prog vs0 es0 q9 ast ss /\
     joint_trace vs0 C9 q0 evs qs q9 /\
     asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
       prog n ast0 = AsmOK ast /\
-    asm_frame_rel_tail tail prog data es0 ast es /\
+    sym_steps prog (asm_data_env prog vs0.vs_code) n
+      (sym_init ast0) = SymOK ss /\
+    ast0 = entry_asm_state vs0 es0 /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    codegen_asm_entry_rel cpl prog vs0 ast0 /\
+    asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+      (ast0 with as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
     run_call es0 = SOME (result,final) /\
     ~frame_resource_starved es0 result final /\
     LENGTH raw_slots = LENGTH sites /\
