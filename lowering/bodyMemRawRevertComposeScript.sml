@@ -8,6 +8,7 @@ Ancestors
   exprOperandVar compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem vyperTyping vyperValue vyperContext
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants words list
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem raw_revert_vv_sim_mem:
   expr_body_pre cenv cx env (Call ann RawRevert [e] dflt) es /\
@@ -37,21 +38,46 @@ Proof
      simp[expr_vv_res_ok_def, expr_res_ok_def]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `data`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `data`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> BETA_TAC >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> qexists_tac `marks` >> disj1_tac >>
       rewrite_tac[eval_raw_revert_action] >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      gvs[] >- suspend "success" >> suspend "exception") >>
-  qexists_tac `marks` >> disj2_tac >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_bind_all, storage_trace_frame_lifts,
+           storage_trace_frame_raise]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `es_end`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disch_then kall_tac >> qexists_tac `marks` >> disj1_tac >>
+          rewrite_tac[eval_raw_revert_action] >>
+          irule gas_bad_storage_at_bind_left >>
+          simp[storage_trace_frame_bind_all, storage_trace_frame_lifts,
+               storage_trace_frame_raise] >>
+          irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def] >>
+      disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (assume_tac o SIMP_RULE (srw_ss()) []) >>
+      first_assum drule >> strip_tac >> gvs[] >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[eval_raw_revert_action]
+      >- suspend "success" >> suspend "exception") >>
+  strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   rewrite_tac[eval_raw_revert_action, ignore_bind_bind_unit] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
 
 Resume raw_revert_vv_sim_mem[success]:
+  qpat_x_assum
+    `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   `bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL v, es_end with gas_obs := [])` by
@@ -89,7 +115,7 @@ Resume raw_revert_vv_sim_mem[success]:
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RevertData bs))`, `es_end`,
                 `Abort Revert_abort w`] >>
-  simp[exit_result_def, expr_exit_def] >>
+  simp[exit_result_def, expr_exit_def, halt_exit_def] >>
   irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
          |> REWRITE_RULE [APPEND_NIL]) >>
   qexistsl_tac [`es_end`, `t`, `BytesV bs`] >> simp[] >>
@@ -102,9 +128,10 @@ Resume raw_revert_vv_sim_mem[exception]:
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  disj2_tac >>
   qpat_x_assum `expr_exit _ _` mp_tac >>
-  Cases_on `r` >> Cases_on `y` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+  Cases_on `r` >> Cases_on `y` >> gvs[expr_exit_def, halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def, halt_exit_def]
 QED
 
 Finalise raw_revert_vv_sim_mem

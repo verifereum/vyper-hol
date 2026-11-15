@@ -549,6 +549,10 @@ Resume aug_place_memory_write_state_rel[lift_local_store]:
     (qunabbrev_tac `t` >> irule local_mstore_immutables_at >>
      conj_tac >- (qexistsl_tac [`id`, `sz`] >> simp[]) >>
      metis_tac[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+    LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    simp[Abbr `t`, venomMemPropsTheory.mstore_memory_nondecreasing] >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `t`]
 QED
 

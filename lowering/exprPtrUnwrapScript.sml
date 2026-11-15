@@ -17,7 +17,7 @@ Ancestors
   exprPtrUnwrapMarked exprPtrUnwrapIdentity gasOutcomeMarkedPtr exprSimSource exprLoweringProps
   exprOperandVar exprSimUnwrap fragExec pair gasSummaryComposePtr
   fragGasSeqPtr vyperEvalExprPreservesScopesDom gasSummaryComposePtrAll
-  exprSimAggregateChildren typedMemoryCopy exprSimHypsDefs valueCopyBytes
+  exprSimAggregateChildren typedMemoryCopy exprSimHypsDefs valueCopyBytes exprStackPtr
 Libs
   pairLib
 
@@ -135,7 +135,12 @@ Proof
   >- simp[vyperStorageTraceTheory.storage_trace_frame_read_result]
   >~ [`gas_outcome_ptr _ _ _ _ _ _ (read_result cx _) _ _ _`]
   >- suspend "read" >>
-  gvs[expr_exit_exception_exists]
+  gvs[] >>
+  qpat_x_assum `expr_exit res r`
+    (strip_assume_tac o ONCE_REWRITE_RULE [GSYM expr_exit_exception_exists]) >>
+  gvs[halt_exit_def] >>
+  Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
 QED
 
 Resume expr_sim_ptr_of_vv[read]:
@@ -213,15 +218,5 @@ Theorem expr_vv_sim_ptr_stack:
     (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty e es
 Proof
-  rw[expr_vv_sim_ptr_def] >>
-  qpat_x_assum `!sa. ?t op sb. _` (qspec_then `sa` strip_assume_tac) >> gvs[] >>
-  `lower_value compile_expr cenv ty e sa = (op, sb)` by
-    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[eval_expr_force_admissible] >>
-  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`st0`, `sa`, `sb`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  simp[] >> strip_tac >>
-  irule expr_stack_outcome_ptr >> conj_tac >> first_assum ACCEPT_TAC
+  metis_tac[exprStackPtrTheory.expr_vv_sim_stack_ptr]
 QED

@@ -13,3 +13,5 @@ Ancestors
   vyperTypeEntryDefaults
   vyperTypeSelectedEntrySoundness
   vyperTypeDeploymentSoundness
+  vyperDeployConstantsFold
+  vyperRuntimeImmutables

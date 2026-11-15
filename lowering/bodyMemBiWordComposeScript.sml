@@ -239,20 +239,28 @@ Resume compile_typed_word_builtin_sim_mem[normal]:
      qexistsl_tac [`cenv`,`env`] >> conj_tac
      >- (rpt gen_tac >> strip_tac >> conj_tac
          >- (irule expr_body_pre_builtin_typed_arg >> simp[] >> conj_tac
-             >- (strip_tac >> gvs[EVERY_MEM] >> first_x_assum drule >>
-                 simp[word_value_type_def]) >>
+             >- (strip_tac >>
+                 qpat_assum `EVERY (\e. word_value_type (expr_type e)) args`
+                   (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+                 disch_then (qspec_then `e` mp_tac) >>
+                 asm_simp_tac (srw_ss()) [word_value_type_def]) >>
              qexistsl_tac [`ann`,`args`,`bt`,`es`] >> simp[]) >>
-         gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >> simp[]) >>
+         qpat_assum `EVERY (\e. word_value_type (expr_type e)) args`
+           (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+         disch_then (qspec_then `e` mp_tac) >>
+         asm_simp_tac (srw_ss()) [] >>
+         metis_tac[word_value_type_word]) >> simp[]) >>
   `!H. valid_horizon cx st0 H es_end.storage_trace ==>
      wb_args_post H ctx func cenv cx es sa s0 (es_end with gas_obs := []) xs vs t /\
      (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t)` by
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        drule >> strip_tac >>
-     drule_all typed_args_post_word >> simp[]) >>
-  qpat_x_assum `!vs ee. _` drule >>
-  disch_then (qspec_then `es_end with gas_obs := []`
-    (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+     drule_all typed_args_post_word >> strip_tac >>
+     fs[EVERY_MEM, EXISTS_MEM]) >>
+  qpat_x_assum `!vs ee. LIST_REL _ args vs ==> _`
+    (qspecl_then [`vs`, `es_end with gas_obs := []`] mp_tac) >>
+  asm_simp_tac (srw_ss()) [] >> disch_tac >>
   `gas_summary_at T (ctx,func) []
      (\st. (builtin_result cx st.accounts ann bt (MAP expr_type args) vs,st))
      (es_end with gas_obs := [],t)
@@ -264,13 +272,23 @@ Resume compile_typed_word_builtin_sim_mem[normal]:
        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
      (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==>
        expr_exit res r)` by
-    (irule (Q.INST [`H0` |-> `storage_trace_horizon es_end.storage_trace`]
-              word_builtin_continuation_summary_mem) >> simp[] >>
+    (irule (Q.INST [`H0` |-> `storage_trace_horizon (es_end : evaluation_state).storage_trace`,
+                   `ee` |-> `es_end : evaluation_state`]
+              (INST_TYPE [alpha |-> ``:256``]
+                word_builtin_continuation_summary_mem)) >> simp[] >>
      qexistsl_tac [`code`,`sm`,`xs`] >> simp[] >>
-     rpt strip_tac >> first_x_assum irule >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> wb_args_post _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     fs[EVERY_MEM, EXISTS_MEM]) >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  `res <> INR HaltException` by
+    (qpat_assum `gas_marked_exec _ _ (\st. _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[builtin_result_def] >> CASE_TAC >> rpt strip_tac >> gvs[]) >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   asm_simp_tac (srw_ss()) [eval_expr_builtin_action, gas_summary_at_def] >>
   qexistsl_tac [`res`,`es_end'`,`r`] >>
@@ -278,7 +296,7 @@ Resume compile_typed_word_builtin_sim_mem[normal]:
    >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                 |> REWRITE_RULE [APPEND_NIL]) >>
        qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _` (irule_at Any) >>
-       gvs[]) >> gvs[] >> metis_tac[])
+       gvs[]) >> gvs[halt_exit_def] >> metis_tac[])
 QED
 Resume compile_typed_word_builtin_sim_mem[exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -288,7 +306,7 @@ Resume compile_typed_word_builtin_sim_mem[exit]:
   asm_simp_tac (srw_ss()) [eval_expr_builtin_action, gas_summary_at_def] >>
   qexistsl_tac [`INR y`,`es_end`,`r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume compile_typed_word_builtin_sim_mem[exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>

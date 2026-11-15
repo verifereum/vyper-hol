@@ -5,7 +5,7 @@ Ancestors
   tuplePlaceSnapshot valueEncodingProps
 
 Theorem assign_effectful_target_snapshot_value:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt r s /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sa.cs_next_id /\
   (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
     b + sz <= lb \/ lb + lsz <= b) /\

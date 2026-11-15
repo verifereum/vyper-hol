@@ -63,7 +63,7 @@ Proof
    isPREFIX (emitted_insts sm sb) (DROP a.vs_inst_idx bb.bb_instructions) /\
    MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString sm.cs_next_var)]) (fn_insts fn)` by
-    simp[Abbr `a`, bytes_ghost_cursor, stmt_state_rel_inst_idx,
+    simp[Abbr `a`, ghost_inv_at_inst_idx, stmt_state_rel_inst_idx,
       hash_eval_operand_inst_idx, ptr_covers_inst_idx] >>
   `eval_operand (Lit (n2w m)) a = SOME (n2w m) /\
    op_taint tn2 (Lit (n2w m)) = {} /\

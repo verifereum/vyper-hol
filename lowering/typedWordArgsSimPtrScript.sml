@@ -93,7 +93,7 @@ Theorem lower_typed_args_sim_ptr:
         typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee ghosts r. wb_args_exit rr r)
+      (\H rr ee ghosts r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct
   >- (rpt strip_tac >> gvs[lower_word_args_nil] >>
@@ -128,7 +128,7 @@ Proof
   >- suspend "head_bind"
   >- (rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> Cases_on `res` >>
-  fs[exprSimWordArgsTheory.wb_args_exit_def] >>
+  fs[exprSimWordArgsTheory.wb_args_exit_def, halt_exit_def] >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 
 QED

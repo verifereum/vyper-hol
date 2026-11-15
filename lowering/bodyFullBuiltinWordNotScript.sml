@@ -36,10 +36,11 @@ Theorem word_not_typed_suffix[local]:
    else compile_invert x ann cenv) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand x s = SOME (typed_val_to_w256 tv v) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ op_taint tn x = {} /\
+  allocas_from lo s /\ op_taint tn x = {} /\
   local_ptrs_reserved cenv sa /\
   (!y sz. cenv.ce_return_buf = SOME (PtrVar (Var y) sz) ==>
     not_fresh_at sa y) /\
@@ -66,6 +67,7 @@ Theorem word_not_typed_suffix[local]:
       lookup_var y t = lookup_var y s /\
       FLOOKUP G' y = FLOOKUP G y /\
       op_taint tn' (Var y) = op_taint tn (Var y)) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
@@ -167,6 +169,10 @@ Proof
      irule exprLoweringPropsTheory.stmt_state_rel_update_var >>
      simp[Abbr `out`] >> irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
      qexists_tac `sa` >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp z)` by
+    (simp[Abbr `z`, Abbr `u`, update_var_def,
+       ptrDisciplineTheory.allocas_below_fmp_def] >>
+     metis_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
   qexistsl_tac [`v'`, `z`, `step_prov PG G inst u`,
     `step_taint inst s u tn`] >> simp[] >>
   conj_tac

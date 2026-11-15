@@ -35,7 +35,7 @@ Theorem compile_abi_encode_args_sim_live:
          EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct_on `args`
   >- (rpt strip_tac >>
@@ -170,7 +170,7 @@ Theorem compile_abi_encode_args_sim:
          (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >>
   drule_all compile_abi_encode_args_sim_live >>
@@ -199,7 +199,7 @@ Theorem compile_abi_encode_args_case_gas_sim:
          EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >>
   irule compile_abi_encode_args_sim_live >> simp[] >>
