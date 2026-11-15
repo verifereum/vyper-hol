@@ -10,11 +10,13 @@ JSON with the native runner (tools/build_native_json_parity.py) and compares.
 Run it with the canonical oracle venv's `vyper` first on PATH (see
 bytecode/README.md). Programs Python Vyper rejects are
 discarded; programs the HOL frontend, check_contract or the compiler rejects
-are coverage gaps, counted separately from divergences. check_contract runs
+are coverage gaps, counted separately from divergences, and so are
+mismatches on programs outside supported_program ("outside"). check_contract runs
 through `holbuild run` on bytecode/native/check_programs.sml,
 after the driver brings vyperCheckContractFrontendLib up to date with
 `holbuild build`. Every program that is not a PASS is kept in the output
-directory with its JSON, oracle, native bytes and verdict.
+directory with its JSON, oracle, native bytes and verdict. The exit status
+is non-zero if any program is a divergence or a runner error.
 
 Vyper's bytecode at the pin depends on PYTHONHASHSEED for some programs, so
 the oracle uses seed 0, and a mismatch counts as a divergence only if seeds
@@ -118,7 +120,9 @@ class Program:
         if calls and rng.random() < 0.15:
             fname, argtys, _ = rng.choice(calls)
             return f"self.{fname}({', '.join(self.expr(t, env, depth - 1) for t in argtys)})"
-        if rng.random() < 0.1:
+        # Aggregate ternaries place their branch buffers unlike Vyper
+        # (vyper-hol#933, #936), a held byte-only gap.
+        if ty not in (SARRAY, DARRAY) and rng.random() < 0.1:
             return f"({sub()} if {self.expr('bool', env, depth - 1)} else {sub()})"
         if ty == "uint256" and rng.random() < 0.2:
             arrays = [n for n, t in env.items() if t in (SARRAY, DARRAY)]
@@ -352,8 +356,8 @@ def export(source: Path):
 def classify(line):
     """Map a runner line to (name, category, detail)."""
     tag, rest = line.split(" ", 1)
-    name, _, detail = rest.partition(": ")
-    name = name.split(" ")[0]
+    head, _, detail = rest.partition(": ")
+    name, *fields = head.split(" ")
     if tag == "PASS":
         return name, "pass", ""
     if tag == "REJECT":
@@ -361,7 +365,8 @@ def classify(line):
     if detail == "compiler returned NONE":
         return name, "compiler-gap", detail
     if detail.startswith(("deploy differs", "runtime differs")):
-        return name, "divergence", detail
+        # Outside supported_program the bytes carry no proof obligation.
+        return name, "outside" if "sp=F" in fields else "divergence", detail
     return name, "runner-error", detail
 
 
@@ -453,11 +458,8 @@ def main():
             vyper_errors[error[0][:100]] += 1
             source.unlink()
     exported = sorted(work.glob("*.hex"))
-    chunks = [[p.with_suffix(".json") for p in exported[i::args.jobs]] for i in range(args.jobs)]
-    with ThreadPoolExecutor(args.jobs) as pool:
-        unchecked = {}
-        for rejects in pool.map(checker_rejects, [c for c in chunks if c]):
-            unchecked.update(rejects)
+    # One checker process: concurrent `holbuild run`s contend for the project lock.
+    unchecked = checker_rejects([p.with_suffix(".json") for p in exported]) if exported else {}
     lines, status = run_native(work)
     with ThreadPoolExecutor(args.jobs) as pool:
         checked = list(pool.map(lambda l: checked_verdict(l, work), lines))
@@ -465,7 +467,7 @@ def main():
     for source in exported:  # programs after a runner crash
         verdicts.setdefault(source.stem, ("runner-error", f"no runner verdict (runner exit {status})"))
     for name, reason in unchecked.items():
-        if verdicts[name][0] != "frontend-gap":
+        if verdicts[name][0] not in ("frontend-gap", "runner-error"):
             verdicts[name] = ("checker-gap", f"{reason[:200]} (runner: {verdicts[name][1] or 'pass'})")
     counts.update(category for category, _ in verdicts.values())
     for name, (category, detail) in verdicts.items():
@@ -485,10 +487,12 @@ def main():
     print(json.dumps({"seed": args.seed, "generated": args.count, **counts}, indent=2))
     for error, n in vyper_errors.most_common(5):
         print(f"vyper-reject x{n}: {error}")
-    for category in ("divergence", "runner-error", "compiler-gap", "frontend-gap", "checker-gap"):
+    for category in ("divergence", "runner-error", "outside", "compiler-gap", "frontend-gap", "checker-gap"):
         details = Counter(d.split(" (")[0] for c, d in verdicts.values() if c == category)
         for detail, n in details.most_common(5):
             print(f"{category} x{n}: {detail[:160]}")
+    if counts["divergence"] or counts["runner-error"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

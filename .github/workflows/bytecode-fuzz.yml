@@ -1,0 +1,80 @@
+name: bytecode-fuzz
+
+# Random programs compiled natively and by the patched pinned Vyper
+# (tools/bytecode_fuzz.py). Each scheduled run uses a new seed, its run number;
+# a divergence or runner error fails the run and keeps the programs as an
+# artefact. Byte mismatches outside supported_program are reported as
+# `outside` and don't fail it.
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: 'Generator seed (default: the run number)'
+        required: false
+      count:
+        description: 'Programs to generate'
+        required: false
+        default: '300'
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 180
+    # The cache login is a secret of the bazel-cache environment, which every
+    # branch of this repository may deploy to.
+    environment: bazel-cache
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11.17'
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build native JSON bytecode parity runner
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python3 tools/build_native_json_parity.py
+
+      - name: Install patched pinned Vyper
+        run: |
+          python -m pip install uv==0.10.11
+          pin=$(tr -d '[:space:]' < VYPER_PIN)
+          git clone https://github.com/vyperlang/vyper.git vyper-src
+          git -C vyper-src checkout --detach "$pin"
+          sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-patched" \
+            --vyper-repo vyper-src
+
+      - name: Fuzz
+        env:
+          SEED: ${{ inputs.seed || github.run_number }}
+          COUNT: ${{ inputs.count || '300' }}
+        run: |
+          PATH="$RUNNER_TEMP/vyper-patched/venv/bin:$PATH" \
+            python3 tools/bytecode_fuzz.py --count "$COUNT" --seed "$SEED" \
+            --jobs "$(nproc)" --minimize --out "$RUNNER_TEMP/fuzz"
+
+      - name: Upload the programs that did not pass
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bytecode-fuzz-${{ github.run_number }}
+          path: ${{ runner.temp }}/fuzz
+          if-no-files-found: ignore
+          retention-days: 30

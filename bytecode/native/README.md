@@ -103,8 +103,10 @@ bytecode/native/bytecode_parity_json.exe DIR NAME...   # some fixtures
 ```
 
 Each fixture prints `PASS`, `FAIL` (the bytes differ, the compiler returned
-`NONE`, or it stopped), or `REJECT` (the frontend rejected the program, or
-it has more than one module). The exit status is non-zero unless every
+`NONE`, or it stopped), or `REJECT` (the frontend could not decode or
+rejected the program, or it has more than one module). A fixture that
+reaches the compiler also prints `sp=T` or `sp=F`: whether the program is in
+`supported_program` and `supported_program_deploy`. The exit status is non-zero unless every
 fixture passes. With `NATIVE_PARITY_DUMP=<dir>`, the native bytes of each
 compiled fixture are written to `<dir>/<name>.hex`; `<dir>` must not be `DIR`. Fixtures listed in
 `../pending-5127-port.md` fail until their port lands; to check only the
@@ -133,11 +135,23 @@ the hidden `tests/.emit/` directory, which holbuild doesn't scan.
 `--no-holbuild`, the script first builds `compilerNativeEmitTheory` and
 `vyperTestEmitTheory`.
 
-`tools/bytecode_fuzz.py` uses this runner. It generates random programs,
+`tools/native_export_parity.py` runs it over every single-module contract
+the upstream Vyper test exports (`tools/vyper_test_exports.py`) deploy at
+the oracle's profile. The exported bytes carry metadata, constructor
+arguments and immutables, so it compiles each source again with the patched
+pinned Vyper, as the witness suites are compiled (no metadata, Venom,
+`-O none`, prague), and compares against those bytes. A mismatch on a
+program in `supported_program` fails the check unless
+`export-known-mismatches.txt` lists it with its cause; CI's `export-parity`
+job runs it on every PR and keeps the per-contract report.
+
+`tools/bytecode_fuzz.py` uses this runner too, nightly in
+`.github/workflows/bytecode-fuzz.yml`. It generates random programs,
 exports each one with the pinned compiler as the witness suites do, and
 compares the result. Programs that `check_programs.sml` rejects are counted
-as `checker-gap`, not as divergences. With `--minimize`, it also reduces
-each divergence to `<name>.min.vy`.
+as `checker-gap`, and byte mismatches on programs outside
+`supported_program` as `outside`; neither is a divergence or fails the run.
+With `--minimize`, it also reduces each divergence to `<name>.min.vy`.
 
 ## What the generator exports
 
