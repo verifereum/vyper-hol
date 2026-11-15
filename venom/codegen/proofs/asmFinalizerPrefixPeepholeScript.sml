@@ -2,6 +2,7 @@ Theory asmFinalizerPrefixPeephole
 Ancestors
   asmSplice asmSymPc asmSymSem asmOptimizer asmWf asmOptPeephole list
   asmFinalizerPrefixPeepFixed asmFinalizerPrefixPeepSwap
+  asmFinalizerPrefixPeepComm
 
 (* The ordered walk is parametric in its contextual semantic relation. *)
 Theorem peephole_walk_relation[local]:
@@ -203,3 +204,13 @@ Resume peephole_prefix_transport_from_comm_window[dup_swap]:
 QED
 
 Finalise peephole_prefix_transport_from_comm_window
+
+
+Theorem peephole_prefix_transport_conditional:
+  ^single_site /\ ^transport_laws ==>
+    !p q c. asm_static_wf p /\ stack_peephole_opts p = SOME(q,c) ==>
+      ^transport p q
+Proof
+  match_mp_tac peephole_prefix_transport_from_comm_window >>
+  MATCH_ACCEPT_TAC swap1_commutative_bounded_window
+QED
