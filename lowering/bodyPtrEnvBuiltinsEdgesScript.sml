@@ -90,7 +90,7 @@ Theorem scalar_builtin_counted_edge:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u ==>
@@ -259,7 +259,7 @@ Theorem scalar_builtin_counted_suffix:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u ==>
@@ -290,7 +290,7 @@ Theorem scalar_builtin_outcome_prefix:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u /\
@@ -313,7 +313,7 @@ Theorem emit_scalar_builtin_counted_suffix:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!a. MEM a args ==> op_taint tn a = {}) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc args

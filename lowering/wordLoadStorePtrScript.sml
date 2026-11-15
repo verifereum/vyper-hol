@@ -9,7 +9,7 @@ Ancestors
   fragGasSeqPtr pred_set
 
 Theorem ifexp_materialize_mstore_check:
-  ptr_covers G tn p s 32 /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn p s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn
     (mk_inst id MSTORE [Var p; v] []) s
 Proof
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem ifexp_copy_store_phase:
-  ~ctx_has_dalloca ctx /\ ptr_covers G tn addr s 32 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn addr s 32 /\
   eval_operand (Var addr) s = SOME d /\ eval_operand value s = SOME w ==>
   ?t tn'.
     run_inst_seq [mk_inst id MSTORE [Var addr;value] []] s = OK t /\
@@ -147,7 +147,7 @@ Theorem mload_then_mstore_ok:
     ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
     lookup_var src s = SOME a /\ tmp <> dst /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id MLOAD [Var src] [tmp]) s /\
     ptr_inst_ok D 0 fuel ctx fn
@@ -160,8 +160,8 @@ Theorem mload_then_mstore_ok:
 Proof
   rpt strip_tac
   >- (irule ptr_inst_ok_mload >> simp[]) >>
-  irule ptr_inst_ok_mstore >> simp[] >> conj_tac
-  >- (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def] >> metis_tac[]) >>
+  irule ifexp_materialize_mstore_check >>
+  conj_tac >- (gvs[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   irule mload_preserves_ptr_covers >> simp[]
 QED
 

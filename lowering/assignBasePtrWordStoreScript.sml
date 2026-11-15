@@ -1,7 +1,7 @@
 (* Counted word-store edges at the supplied continuation state. *)
 Theory assignBasePtrWordStore
 Ancestors
-  fragExecPtr fragGasSeqPtr emitHelper venomInst ptrSafeRun ptrDiscipline
+  wordLoadStorePtr fragExecPtr fragGasSeqPtr emitHelper venomInst ptrSafeRun ptrDiscipline
   venomExecSemantics venomState memLocDefs contextCodegenRel codegenRel
 
 Theorem assign_base_mstore_edge_ptr:
@@ -11,7 +11,7 @@ Theorem assign_base_mstore_edge_ptr:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id MSTORE [Var dst; src] []) /\
     ptr_covers G tn dst s 32 /\ op_taint tn src = {} /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst id MSTORE [Var dst; src] []) s = OK u ==>
     gas_path_ptr_edge D 0 ctx fn PG G tn s 0
       (step_prov PG G (mk_inst id MSTORE [Var dst; src] []) u)
@@ -21,7 +21,7 @@ Proof
   rpt strip_tac >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id MSTORE [Var dst; src] []) s` by
-    (irule ptr_inst_ok_mstore >> simp[]) >>
+    (irule ifexp_materialize_mstore_check >> simp[]) >>
   mp_tac (Q.INST
     [`i` |-> `mk_inst id MSTORE [Var dst; src] []`,
      `lo` |-> `0`] straight_line_ptr_edge) >>
@@ -54,7 +54,7 @@ Theorem assign_base_storage_word_edge_ptr:
       SOME (mk_inst id opc [addr; src] []) /\
     (opc = SSTORE \/ opc = TSTORE) /\
     op_taint tn addr = {} /\
-    ~ctx_has_dalloca ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     step_inst_base (mk_inst id opc [addr; src] []) s = OK u ==>
     gas_path_ptr_edge D 0 ctx fn PG G tn s 0
       (step_prov PG G (mk_inst id opc [addr; src] []) u)
