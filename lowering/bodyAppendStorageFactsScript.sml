@@ -4,7 +4,7 @@ Ancestors
   bodySim allocLimits supportedExprForms supportedTypes vyperValue vyperTypeSystem
   compileVyper compileEnv loweringStateRelDefs vyperAST words supportedDecls vyperInterpreter
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv
-  exprSimHypsDefs finite_map vyperTypeInvariants supportedStmts supportedProgram
+  exprSimHypsDefs finite_map vyperTypeInvariants
 
 Theorem body_append_element_alloc_bound:
   stmt_exprs_ok cenv (Append target e) ==>
@@ -225,40 +225,6 @@ Proof
     simp[assignable_type_def, well_formed_type_def] >>
   drule_all append_capacity_word_bound >> strip_tac >>
   metis_tac[]
-QED
-
-Theorem append_narrow_annotation:
-  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
-  supported_variable_decl tops nid =
-    SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-  ~supported_full_word_type elem ==> expr_type e = elem
-Proof
-  strip_tac >>
-  `~supported_storage_dynamic_array tops nid` by
-    (strip_tac >> drule supported_append_storage_decl >> strip_tac >> gvs[]) >>
-  gvs[supported_stmt_def]
-QED
-
-
-Theorem append_storage_element_domain:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops nid =
-    SOME (vis,mut,ArrayT elem (Dynamic dn),SOME slot) /\
-  (mut = Storage \/ mut = Transient) ==>
-  supported_storage_type tops elem /\ ~is_bytestring_type elem /\
-  (~supported_full_word_type elem ==> ~is_word_type elem)
-Proof
-  Cases_on `nid` >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >>
-  `supported_program tops` by fs[body_inv_def] >>
-  drule_all supported_program_declaration >> strip_tac >>
-  `supported_storage_type tops elem` by
-    (Cases_on `vis` >>
-     gvs[supported_declaration_header_def, supported_storage_array_depth]) >>
-  simp[] >>
-  Cases_on `elem` >>
-  gvs[supported_storage_type_def, Once supported_nested_type_def,
-      supported_full_word_type_def, is_word_type_def, is_bytestring_type_def]
 QED
 
 (* A word type takes no wider type (type_widens_to). *)
