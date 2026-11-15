@@ -11,6 +11,7 @@ Ancestors
   vyperTyping vyperValue vyperValueOperation compileEnv vyperAST vyperTypeSystem
   venomExecSemantics venomState freshWrites emitHelperProps emitHelper
   integer_word words arithmeticProps list rich_list finite_map convertScalarProps valueEncoding
+  varsExt fragGasFresh
 
 (* Fixed bytes0 is represented by a zero word.  In particular SAR 256 is
    defined, so this case does not need a dynamic buffer loader. *)
@@ -160,7 +161,7 @@ Proof
   simp[lookup_var_def]
 QED
 
-Theorem scalar_convert_typed_run:
+Theorem scalar_convert_typed_run_raw[local]:
   valid_conversion src dst /\ ~is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME tv /\
   evaluate_type (get_tenv cx) dst = SOME tout /\ value_has_type tv v /\
@@ -195,7 +196,7 @@ Proof
       simp[]) >>
   rpt strip_tac >> gvs[]
 QED
-Resume scalar_convert_typed_run[dispatch]:
+Resume scalar_convert_typed_run_raw[dispatch]:
   `is_word_type src` by (irule (cj 1 bodyPtrTypeBuiltinsScalarSemanticTheory.scalar_source_word_types) >> simp[] >>
     qexistsl [`dst`, `get_tenv cx`] >> simp[]) >>
   Cases_on `src` >> gvs[is_word_type_def]
@@ -210,4 +211,55 @@ Resume scalar_convert_typed_run[dispatch]:
       irule scalar_address_flag_source_run >> simp[] >> metis_tac[]) >>
   irule scalar_address_flag_source_run >> simp[] >> metis_tac[]
 QED
-Finalise scalar_convert_typed_run
+Finalise scalar_convert_typed_run_raw
+
+Theorem scalar_convert_typed_run:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  evaluate_type (get_tenv cx) src = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tout /\ value_has_type tv v /\
+  (!name n. dst = FlagT name /\ FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) ==>
+    cenv.ce_flag_n_members (nsid_to_string name) = n) /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  eval_operand x s = SOME (typed_val_to_w256 tv v) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ ~s.vs_halted ==>
+  ((!vout. convert_result cx src dst v = INL vout ==>
+     ?dtv t. evaluate_type (get_tenv cx) dst = SOME dtv /\
+       value_has_type dtv vout /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand out t = SOME (typed_val_to_w256 dtv vout) /\
+       (t with vs_vars := s.vs_vars) = s /\
+       (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)) /\
+   (!exc. convert_result cx src dst v = INR exc ==>
+     (?msg. exc = Error (RuntimeError msg)) /\
+     ?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t))
+Proof
+  strip_tac >>
+  `eval_operand x (drop_fresh sa s) = SOME (typed_val_to_w256 tv v)` by
+    (Cases_on `x` >> gvs[eval_operand_def, lookup_var_drop_fresh, drop_fresh_def]) >>
+  `fresh_vars_wrt sa (drop_fresh sa s) /\ ~(drop_fresh sa s).vs_halted` by
+    simp[fresh_vars_wrt_drop_fresh, drop_fresh_def] >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    (drule_all bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh >>
+     disch_then (qspecl_then [`x`,`cenv`] mp_tac) >>
+     simp[straight_fresh_def] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
+    (drule writes_fresh_path_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+    (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh]) >>
+  drule_at (Pat `compile_type_convert _ _ _ = _`) scalar_convert_typed_run_raw >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  conj_tac
+  >- (rpt strip_tac >> qpat_x_assum `!vout. _` drule >> strip_tac >>
+      gvs[vars_ext_result_def] >>
+      `eval_operand out t' = SOME (typed_val_to_w256 tout vout)` by
+        metis_tac[vars_ext_def, eval_operand_vars_ext, optionTheory.NOT_NONE_SOME] >>
+      qpat_x_assum `run_inst_seq _ (drop_fresh _ _) = _` kall_tac >>
+      drule_all scalar_convert_physical_frame >> strip_tac >> metis_tac[]) >>
+  rpt strip_tac >> qpat_x_assum `!exc. _` drule >> strip_tac >>
+  gvs[vars_ext_result_def] >> metis_tac[]
+QED

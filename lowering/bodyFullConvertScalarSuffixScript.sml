@@ -42,7 +42,7 @@ Theorem scalar_convert_origin_path:
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op src dst) sa = (out,sb) /\
   eval_operand x s = SOME (typed_val_to_w256 tv v) /\
-  (!z. x = Var z ==> not_fresh_at sa z) /\ fresh_vars_wrt sa s /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
