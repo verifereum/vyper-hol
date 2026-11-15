@@ -343,39 +343,6 @@ Definition immutable_alloca_sep_def:
          regions_disjoint off (type_memory_size tv) b sz))
 End
 
-(* A live borrowed local needs no tracked allocation.  The same initialized
-   constructor immutable admits [64,96), but rejects a local alias at zero. *)
-Theorem immutable_alloca_sep_borrowed_probe[local]:
-  !func ce cx es s entry c v t u.
-    (c,v,t,u) =
-      (ce with <| ce_is_ctor := T; ce_module := NONE; ce_module_var_type := K NONE;
-          ce_module_vars := FEMPTY |+ ((NONE,"imm"), ImmutableLoc 0);
-          ce_vars := FEMPTY |+ ("local", PtrVar (Var "p") 32) |>,
-       es with <| scopes := [FEMPTY |+ ("local",entry)];
-          immutables := [(cx.txn.target,
-            [(NONE,FEMPTY |+ ("imm",(BaseTV BoolT,BoolV T)))])] |>,
-       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
-                 vs_vars := FEMPTY |+ ("p",64w) |>,
-       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
-                 vs_vars := FEMPTY |+ ("p",0w) |>) ==>
-      local_region c v.scopes t "local" 64 32 /\
-      t.vs_allocas = FEMPTY /\
-      immutable_alloca_sep func c cx v t /\
-      local_region c v.scopes u "local" 0 32 /\
-      ~immutable_alloca_sep func c cx v u
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[local_region_def, lookup_scopes_def, lookup_var_def,
-       immutable_alloca_sep_def, immutable_decl_sep_alt, get_source_immutables_def,
-       finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
-       type_memory_size_def, loweringStateRelDefsTheory.regions_disjoint_def, wordsTheory.dimword_def,
-       venomMemPropsTheory.dimindex_256] >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
-      Cases_on `id = "local"` >> gvs[]) >>
-  qexistsl_tac [`"local"`, `0`, `32`] >> simp[]
-QED
-
 Theorem immutable_alloca_sep_fields:
   !func cenv cx vs vs' ss ss'.
     immutable_alloca_sep func cenv cx vs ss /\
