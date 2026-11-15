@@ -1538,6 +1538,59 @@ QED
 
 Finalise native_silent_swap_observations
 
+Theorem native_gas_ordinary_success:
+  let bgx = bb with bb_instructions := REPLICATE j pad ++ g::x::rest;
+      bxg = bb with bb_instructions := REPLICATE j pad ++ x::g::rest in
+  a.vs_inst_idx = j /\ g.inst_opcode = GAS /\ g.inst_outputs = [out] /\
+  inst_wf g /\ inst_wf x /\ dft_gas_swap_pair g x /\
+  x.inst_opcode <> GAS /\ x.inst_opcode <> INVOKE /\
+  step_inst 0 C x a = OK u ==>
+  !n w ws.
+    exec_block n C bgx (a with vs_gas_readings := w::ws) =
+    exec_block n C bxg (a with vs_gas_readings := w::ws) /\
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bgx
+      (a with vs_gas_readings := w::ws)) =
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bxg
+      (a with vs_gas_readings := w::ws)) /\
+    gas_events_block n C fn.fn_name bgx (a with vs_gas_readings := w::ws) =
+    gas_events_block n C fn.fn_name bxg (a with vs_gas_readings := w::ws)
+Proof
+  simp_tac pure_ss [LET_THM] >> strip_tac >> rpt gen_tac >>
+  qabbrev_tac `bgx = bb with bb_instructions := REPLICATE j pad ++ g::x::rest` >>
+  qabbrev_tac `bxg = bb with bb_instructions := REPLICATE j pad ++ x::g::rest` >>
+  `~is_terminator g.inst_opcode /\ ~is_terminator x.inst_opcode` by
+    fs[dft_gas_swap_pair_def] >>
+  `step_inst n C x a = OK u` by metis_tac[step_inst_non_invoke] >>
+  `step_inst n C x (a with vs_gas_readings := w::ws) =
+    OK (u with vs_gas_readings := w::ws)` by
+    metis_tac[dft_nonconsuming_ok_oracle] >>
+  drule_all dft_gas_noninvoke_ok_diamond >> strip_tac >>
+  `step_inst n C x (sg with vs_inst_idx := SUC j) =
+      OK (st with vs_inst_idx := SUC j) /\
+   step_inst n C g ((u with vs_gas_readings := w::ws) with vs_inst_idx := SUC j) =
+      OK (st with vs_inst_idx := SUC j)` by
+    metis_tac[dftIndexedExecTheory.dft_step_ok_idx] >>
+  `get_instruction bgx j = SOME g /\ get_instruction bgx (SUC j) = SOME x /\
+   get_instruction bxg j = SOME x /\ get_instruction bxg (SUC j) = SOME g` by
+    simp[Abbr `bgx`, Abbr `bxg`, get_instruction_def, EL_APPEND_EQN] >>
+  `u.vs_gas_readings = a.vs_gas_readings` by metis_tac[dft_nonconsuming_ok_readings] >>
+  once_rewrite_tac[exec_block_def, cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                   gas_events_block_def] >>
+  simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def,
+       gas_events_step_def, trace_gas_def] >>
+  once_rewrite_tac[exec_block_def, cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                   gas_events_block_def] >>
+  simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def,
+       gas_events_step_def, trace_gas_def] >>
+  rpt conj_tac
+  >- (irule venomExecProofsTheory.exec_block_same_suffix >>
+      simp[Abbr `bgx`, Abbr `bxg`, DROP_APPEND])
+  >- (AP_TERM_TAC >> AP_TERM_TAC >> irule native_trace_block_suffix_cong >>
+      simp[Abbr `bgx`, Abbr `bxg`, DROP_APPEND]) >>
+  irule gas_events_block_suffix_cong >>
+  simp[Abbr `bgx`, Abbr `bxg`, DROP_APPEND]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
