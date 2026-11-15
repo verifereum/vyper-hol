@@ -19,7 +19,7 @@ Theorem ricf_located_event_destination_access:
   i < LENGTH (EL cb original.fn_blocks).bb_instructions /\
   old = EL i (EL cb original.fn_blocks).bb_instructions /\
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
   FLOOKUP B (a,ai.inst_id) = SOME (db,z) /\
   access_ok lo G original old s /\ ~in_revert_forward original s ==>
   ((!off len k. MEM (off,len) (source_memory_read_ranges old s) /\ k < z ==>
@@ -77,7 +77,7 @@ Theorem ricf_located_event_destination_ordinary_ranges:
   i < LENGTH (EL cb original.fn_blocks).bb_instructions /\
   old = EL i (EL cb original.fn_blocks).bb_instructions /\
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
   FLOOKUP B (a,ai.inst_id) = SOME (db,z) /\
   access_ok lo G original old s /\ ~in_revert_forward original s ==>
   ((~(old.inst_opcode = MCOPY /\
