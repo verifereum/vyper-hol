@@ -8,7 +8,7 @@ Ancestors
   bodyMemStorageCopyStage
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
-  entryChecksProps externalEntryChecks
+  entryChecksProps
   entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
