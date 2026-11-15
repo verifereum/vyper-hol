@@ -303,7 +303,7 @@ QED
 
 (* The ADD of the field's offset, as a 0-GAS counted path from the base's
    post at sm to the field's post at sb. *)
-Theorem target_attr_add_path:
+Theorem target_attr_add_path[local]:
   !ctx func cenv cx es sa sm sb s0 es1 pv vt rb dst off pv' vt' t w0.
     target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\

@@ -1,7 +1,8 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: Return. *)
 Theory bodyIntCallFamStmtReturn
 Ancestors
-  bodyIntCallReturnInactive
+  bodyIntCallReturnInactive bodyIntCallReturnUnlockCompose
+  bodyIntCallReturnUnlockBare bodyIntCallReturnUnlockEndpoint
   bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackExit
   bodyIntCallFamStmtReturnProducer bodyIntCallFamStmtReturnMemoryEndpoint
   bodySim stmtSimReturn stmtSimDefs loweringPosts compileEnv loweringStateRelDefs ctorReturnFrame
@@ -50,7 +51,7 @@ Proof
   fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
      returns_stack_count_def, vyperValueTheory.evaluate_type_def] >>
   qpat_assum `~FST fp.jc_root_ce.ce_nonreentrant` (fn nr =>
-    simp[MATCH_MP return_unlock_state_inactive nr, intret_q_def, result_rel_def]) >>
+    simp[MATCH_MP return_unlock_state_inactive nr, intret_q_inactive, result_rel_def]) >>
   simp[intret_vals_match_def, state_rel_gas_obs] >>
   irule constructor_exit_state_rel >> qexists_tac `ce` >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_gas_obs]
@@ -65,7 +66,13 @@ Theorem intcall_return_unlock_nonreentrant:
   FST fp.jc_root_ce.ce_nonreentrant ==>
   intcall_stmts_producer fp [Return eo]
 Proof
-  cheat
+  strip_tac >> Cases_on `eo`
+  >- (irule intcall_bare_return_unlock_producer >> simp[]) >>
+  rename1 `Return (SOME e)` >>
+  irule intcall_valued_return_from_endpoint >> reverse conj_tac
+  >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  irule intcall_return_unlock_endpoint >> metis_tac[]
 QED
 
 Theorem intcall_return_stmt_step:

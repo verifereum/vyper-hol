@@ -28,7 +28,8 @@
 
 Theory fragFuelAbi
 Ancestors
-  fragFuel fragFuelContextBase fragFuelContext fragFuelLoopAbiEncStatic
+  fragFuel fragFuelContextBase fragFuelContext fragFuelExprHelpers
+  fragFuelBuiltins fragFuelLoopAbiEncStatic
   fragFuelLoopAbiEncDyn fragFuelLoopAbiDecDyn compileEnv emitHelper context
   venomInst abiEncoder builtinAbi builtinCreate builtinSimple builtinMisc
 Libs
@@ -94,14 +95,6 @@ Theorem opcode_case3[local]:
   if lo = CALLDATALOAD then a else if lo = DLOAD then b else c
 Proof
   Cases_on `lo` >> simp[]
-QED
-
-(* compile_select, used by floor and ceil (proved by another theory too). *)
-Theorem fuel_ok_compile_select[local]:
-  !c t e Wv E. fuel_ok Wv {} E (compile_select c t e)
-Proof
-  rpt gen_tac >> simp_tac std_ss [compile_select_def] >>
-  fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def]
 QED
 
 (* ===== Clamps and straight-line helpers ===== *)

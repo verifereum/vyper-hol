@@ -5,69 +5,6 @@ Ancestors
   asmSymSem asmSem planExec codegenSymRel doSwapSim reorderSpillFresh planSpillBounds
   generatedReorderSim allocMono
 
-Theorem sym_step_dup_name:
-  d <= 15 ==>
-  sym_step p env (AsmOp (dup_name (d+1))) ss = sym_dup d ss
-Proof
-  strip_tac >>
-  `d < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0)))))))))))))))` by decide_tac >>
-  pop_assum mp_tac >>
-  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
-  strip_tac >> gvs[]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >- simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-  >> simp[sym_step_def, sym_step_op_def, dup_name_def, dup_table_def]
-QED
-
-Theorem sym_step_swap_name:
-  0 < d /\ d <= 16 ==>
-  sym_step p env (AsmOp (swap_name d)) ss = sym_swap d ss
-Proof
-  strip_tac >>
-  `d < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
-  pop_assum mp_tac >>
-  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
-  strip_tac >> gvs[]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >- simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-  >> simp[sym_step_def, sym_step_op_def, swap_name_def, dup_table_def, swap_table_def]
-QED
-
-Theorem sym_steps_singleton:
-  asm_block_at p ss.sym_base.as_pc [inst] ==>
-  sym_steps p env 1 ss = sym_step p env inst ss
-Proof
-  simp[asm_block_at_def, asmSpliceTheory.sym_steps_compute] >>
-  Cases_on `sym_step p env inst ss` >>
-  simp[asmSpliceTheory.sym_steps_compute]
-QED
-
 Theorem sym_kinds_ok_base_change:
   sym_kinds_ok cplan fn ret srest ps ss ==>
   sym_kinds_ok cplan fn ret srest ps (ss with sym_base := newbase)
@@ -123,7 +60,7 @@ Theorem sym_exec_swap:
     last.sym_mem_labels = ss.sym_mem_labels
 Proof
   simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
-  metis_tac[sym_steps_singleton, sym_step_swap_name, sym_swap_kind_step]
+  metis_tac[sym_steps_single, sym_step_swap_name, sym_swap_kind_step]
 QED
 
 Theorem sym_exec_dup:
@@ -138,7 +75,9 @@ Theorem sym_exec_dup:
     last.sym_mem_labels = ss.sym_mem_labels
 Proof
   simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
-  metis_tac[sym_steps_singleton, sym_step_dup_name, sym_dup_kind_step]
+  `sym_step p env (AsmOp (dup_name (d+1))) ss = sym_dup d ss` by
+    simp[sym_step_dup_name] >>
+  metis_tac[sym_steps_single, sym_dup_kind_step]
 QED
 
 Theorem sym_do_swap_small:
@@ -944,7 +883,7 @@ Theorem sym_exec_swap_one_stack:
     last.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
   rw[execute_plan_def, exec_stack_op_def] >>
-  drule sym_steps_singleton >>
+  drule sym_steps_single >>
   simp[sym_step_swap_name, sym_swap_one_stack]
 QED
 
@@ -1261,8 +1200,8 @@ Theorem sym_exec_dup_sixteen_stack:
     mid.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
   rw[execute_plan_def, exec_stack_op_def] >>
-  drule sym_steps_singleton >>
-  simp[SRULE [] (Q.INST [`d` |-> `15`] sym_step_dup_name), sym_dup_sixteen_stack]
+  drule sym_steps_single >>
+  simp[SRULE [] (Q.INST [`n` |-> `16`] sym_step_dup_name), sym_dup_sixteen_stack]
 QED
 
 Theorem asm_block_at_dup_sixteen[local]:
@@ -1423,7 +1362,7 @@ Theorem sym_exec_swap_carried_end:
     last.sym_mem_labels = ss.sym_mem_labels /\
     last.sym_base.as_pc = ss.sym_base.as_pc+1
 Proof
-  rw[execute_plan_def, exec_stack_op_def] >> drule sym_steps_singleton >>
+  rw[execute_plan_def, exec_stack_op_def] >> drule sym_steps_single >>
   simp[sym_step_swap_name, SRULE [] sym_swap_carried_end]
 QED
 

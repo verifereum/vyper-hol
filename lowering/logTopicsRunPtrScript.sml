@@ -214,9 +214,31 @@ Theorem compile_split_log_topics_seq_ptr:
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>
+  `LIST_REL (log_arg_rel cenv cx sa sm es s)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) xs vs`
+       (mp_then Any mp_tac split_log_ops_data_rel) >>
+     disch_then drule >> strip_tac >>
+     irule LIST_REL_mono >>
+     qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) (SND _) _`
+       (irule_at Any) >> simp[]) >>
+  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+     ?aty tv. supported_scalar_type aty /\
+       log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
+       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+       encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs` by
+    (irule LIST_REL_mono >>
+     qexists_tac `\arg v. log_arg_rel cenv cx sa sm es s arg v /\
+       supported_scalar_type (SND arg) /\
+       ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v` >>
+     simp[] >> qx_gen_tac `arg` >> qx_gen_tac `v` >> strip_tac >>
+     qexistsl_tac [`SND arg`, `tv`] >> simp[]) >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   `LENGTH vs = LENGTH xs` by metis_tac[LIST_REL_LENGTH] >>
-  drule_all log_indexed_selection_rel >> strip_tac >>
+  qpat_assum `LIST_REL (\arg v. ptr_val_ok _ _ _ _ _ _ _) xs vs`
+    (mp_then Any mp_tac log_indexed_selection_rel) >>
+  disch_then drule >> strip_tac >>
   qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) xs vs`
     (mp_then Any mp_tac log_indexed_selection_rel) >>
   disch_then drule >> strip_tac >>
@@ -256,11 +278,17 @@ Theorem compile_split_log_topics_path_ptr:
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      ptr_val_ok cx aty v (FST arg) G tn s /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
-  LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs /\
+  LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
+    ptr_val_ok cx (SND arg) v (FST arg) G tn s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -287,11 +315,79 @@ Theorem compile_split_log_topics_path_ptr:
     (!limit_st. sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
       fresh_vars_wrt limit_st t)
 Proof
-  strip_tac >> drule_all compile_split_log_topics_seq_ptr >>
+  strip_tac >>
+  qpat_assum `LIST_REL (\arg v. supported_scalar_type _ /\ _) xs vs` mp_tac >>
+  simp_tac bool_ss [LIST_REL_EL_EQN] >> strip_tac >>
+  `?f. !n. n < LENGTH xs ==>
+    supported_scalar_type (f n) /\
+    log_arg_rel cenv cx sa sm es s (FST (EL n xs),f n) (EL n vs) /\
+    (?tv. evaluate_type (get_tenv cx) (f n) = SOME tv /\ value_has_type tv (EL n vs)) /\
+    ptr_val_ok cx (f n) (EL n vs) (FST (EL n xs)) G tn s /\
+    (is_bytestring_type (f n) <=> is_bytestring_type (SND (EL n xs))) /\
+    encode_event_topic (f n) (EL n vs) = encode_event_topic (SND (EL n xs)) (EL n vs)` by
+    (simp[GSYM SKOLEM_THM] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  qabbrev_tac `axs = GENLIST (\n. (FST (EL n xs),f n)) (LENGTH xs)` >>
+  `LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
+    supported_scalar_type (SND arg) /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) axs vs /\
+   LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) axs vs /\
+   LIST_REL (\a b. FST a = FST b /\
+     (is_bytestring_type (SND a) <=> is_bytestring_type (SND b))) axs xs /\
+   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
+     (!l. FST p <> Label l)) axs /\ LENGTH axs = LENGTH xs` by
+    (gvs[LIST_REL_EL_EQN, EVERY_EL, Abbr `axs`, EL_GENLIST] >> metis_tac[]) >>
+  `FST (split_log_ops axs flags) = FST (split_log_ops xs flags)` by
+    metis_tac[stmtSimLogTraceTheory.split_log_ops_view] >>
+  `!ats bts vals fs.
+    LIST_REL (\p v. encode_event_topic (FST p) v = encode_event_topic (SND p) v)
+      (ZIP (ats,bts)) vals /\ LENGTH ats = LENGTH bts ==>
+    encode_indexed_event_topics fs ats vals = encode_indexed_event_topics fs bts vals` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> Induct >>
+     rpt gen_tac >>
+     Cases_on `bts` >> Cases_on `vals` >>
+     namedCases_on `fs` ["", "flag rest"] >>
+     simp[encode_indexed_event_topics_def] >>
+     Cases_on `flag` >> simp[encode_indexed_event_topics_def] >>
+     metis_tac[]) >>
+  `encode_indexed_event_topics flags (MAP SND axs) vs = SOME topics` by
+    (first_x_assum (qspecl_then [`MAP SND axs`,`MAP SND xs`,`vs`,`flags`] mp_tac) >>
+     impl_tac
+     >- (gvs[LIST_REL_EL_EQN, Abbr `axs`, EL_GENLIST, EL_MAP, EL_ZIP] >> metis_tac[]) >>
+     simp[]) >>
+  `LENGTH flags = LENGTH axs /\
+   compile_log_topic_ops (FST (split_log_ops axs flags)) sm = (ops,sb)` by simp[] >>
+  drule_all (Q.INST [`xs` |-> `axs`] compile_split_log_topics_seq_ptr) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
+      (!l. FST p <> Label l)) (SND (split_log_ops xs flags))` by
+    (qspecl_then [`xs`,`flags`] mp_tac split_log_ops_select >>
+     impl_tac >- simp[] >> strip_tac >>
+     gvs[EVERY_MEM, MEM_MAP, MEM_FILTER, MEM_ZIP] >>
+     rpt strip_tac >> gvs[] >> metis_tac[EL_MEM]) >>
+  `sm.cs_next_id <= sb.cs_next_id` by
+    (irule (cj 3 compile_log_topic_ops_frontier) >> goal_assum (drule_at Any) >>
+     qspecl_then [`xs`,`flags`] mp_tac split_log_ops_select >>
+     impl_tac >- simp[] >> strip_tac >>
+     gvs[EVERY_MEM, MEM_MAP, MEM_FILTER, MEM_ZIP] >>
+     rpt strip_tac >> gvs[] >> metis_tac[EL_MEM]) >>
+  `LIST_REL (log_arg_rel cenv cx sa sb es t)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ arg v /\ _) (SND (split_log_ops xs flags)) _` mp_tac >>
+     simp_tac bool_ss [LIST_REL_EL_EQN] >> strip_tac >>
+     simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     gvs[EVERY_EL] >> metis_tac[log_arg_rel_frame]) >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_assum `t with vs_vars := s.vs_vars = s`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+  `LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) Gf tnf t)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule log_readonly_ptr_args >> qexistsl_tac [`G`,`s`,`sm`,`tn`] >>
+     simp[] >> gvs[LIST_REL_EL_EQN] >> metis_tac[]) >>
   `ghost_inv d cenv cx es Gf tnf t` by
-    (irule ghost_inv_readonly_transport >> goal_assum (drule_at Any) >> simp[] >>
-     qpat_x_assum `t with vs_vars := s.vs_vars = s`
+    (irule ghost_inv_readonly_transport >>
+     qexistsl_tac [`G`,`s`,`sm`,`tn`] >> simp[] >>
+     qpat_assum `t with vs_vars := s.vs_vars = s`
        (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
   `ghost_kept cenv es sa0 G0 tn0 s0 Gf tnf` by
     (irule ghost_kept_readonly_transport >> goal_assum (drule_at Any) >>
@@ -317,9 +413,9 @@ Resume compile_split_log_topics_path_ptr[path]:
 QED
 Resume compile_split_log_topics_path_ptr[endpoint]:
   conj_tac >- gvs[] >>
-  conj_tac
-  >- (qpat_x_assum `LIST_REL (\arg v. ptr_val_ok _ _ _ _ _ _ _) _ _` kall_tac >>
-      irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- gvs[LIST_REL_EL_EQN] >>
+  conj_tac >- gvs[LIST_REL_EL_EQN] >>
+  conj_tac >- gvs[LIST_REL_EL_EQN] >>
   conj_tac
   >- (irule ghost_inv_readonly_transport >> goal_assum (drule_at Any) >>
       qexists_tac `sm` >> gvs[lookup_var_def]) >>
@@ -329,10 +425,6 @@ Resume compile_split_log_topics_path_ptr[endpoint]:
   conj_tac
   >- (qpat_x_assum `t with vs_vars := s.vs_vars = s`
         (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
-  conj_tac
-  >- (`t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|> =
-       (t with vs_vars := s.vs_vars) with vs_inst_idx := s.vs_inst_idx` by simp[] >>
-      pop_assum SUBST1_TAC >> asm_rewrite_tac[] >> simp[]) >>
   gvs[lookup_var_def] >>
   simp[fresh_vars_wrt_def] >> metis_tac[fresh_vars_wrt_def]
 QED

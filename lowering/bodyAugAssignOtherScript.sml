@@ -118,7 +118,7 @@ Proof
   ACCEPT_TAC immutable_deploy_augassign_frag
 QED
 
-Theorem aug_storage_decl_some[local]:
+Theorem aug_storage_decl_some:
   !ts vis mut id ty init.
     MEM (VariableDecl vis mut id ty init) ts /\
     (mut = Storage \/ mut = Transient) ==>

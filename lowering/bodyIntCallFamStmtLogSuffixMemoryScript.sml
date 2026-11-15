@@ -10,7 +10,7 @@ Ancestors
 
 Theorem intcall_log_suffix_resources:
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\
@@ -18,7 +18,6 @@ Theorem intcall_log_suffix_resources:
   allocas_above lo t /\ s.vs_alloca_next <= t.vs_alloca_next
 Proof
   strip_tac >>
-  `log_eval_view ce args sa xs sm` by simp[log_eval_view_def, LIST_REL_EL_EQN] >>
   drule_all log_success_suffix_code >> strip_tac >>
   irule intcall_noninvoke_run_resources >> simp[] >>
   qexists_tac `emitted_insts sm sb` >> simp[EVERY_MEM] >>
@@ -30,9 +29,12 @@ Theorem intcall_log_topics_memory:
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   run_inst_seq (emitted_insts sm st) s = OK u ==>
   u.vs_memory = s.vs_memory

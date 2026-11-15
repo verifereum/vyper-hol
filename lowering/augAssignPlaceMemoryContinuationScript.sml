@@ -14,7 +14,7 @@ Theorem aug_place_target_mem_continuation:
   type_place_target env bt = SOME (Type ty) /\
   compile_get_target_ptr compile_expr cenv bt sa = (r,sp) /\
   fn_has_code sa sp func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
   gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   alloca_history func s0 /\ ~s0.vs_halted /\

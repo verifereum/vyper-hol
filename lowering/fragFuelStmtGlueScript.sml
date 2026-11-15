@@ -22,18 +22,6 @@ Ancestors
 Libs
   fragFuelLib
 
-Theorem comp_bind_return[local]:
-  !x f. comp_bind (comp_return x) f = f x
-Proof
-  rw[FUN_EQ_THM, comp_bind_def, comp_return_def]
-QED
-
-Theorem comp_bind_assoc[local]:
-  !m g k. comp_bind (comp_bind m g) k = comp_bind m (\x. comp_bind (g x) k)
-Proof
-  rw[FUN_EQ_THM, comp_bind_def] >> rpt (pairarg_tac >> fs[])
-QED
-
 Theorem fuel_okS_E_mono[local]:
   !P Wv L E E' m. fuel_okS P Wv L E m /\ E SUBSET E' ==> fuel_okS P Wv L E' m
 Proof

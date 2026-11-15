@@ -23,8 +23,8 @@ Theorem intcall_stmt_return_callee_exit:
 Proof
   rpt gen_tac >> disch_then (fn th =>
     mp_tac (CONJUNCT2 th) >>
-    simp[MATCH_MP return_unlock_state_inactive (CONJUNCT1 th),
-         intcall_stmt_exit_def, intret_q_def]) >> strip_tac
+    simp[MATCH_MP return_unlock_state_inactive (CONJUNCT1 th), CONJUNCT1 th,
+         intcall_stmt_exit_def, intret_q_inactive]) >> strip_tac
   >- (Cases_on `r` >> gvs[expr_exit_def]) >>
   gvs[result_rel_def] >>
   rename1 `state_rel _ _ _ _ landed` >>
@@ -52,5 +52,5 @@ Proof
     (irule state_rel_empty_scopes_env >> qexistsl [`ce`, `fp.jc_func`] >>
      fs[bodySimTheory.same_frame_def, compile_env_component_equality]) >>
   qpat_assum `~FST _` (fn nr => simp[MATCH_MP return_unlock_state_inactive nr,
-    intcall_stmt_exit_def, intret_q_def, result_rel_def, intret_vals_match_def])
+    intcall_stmt_exit_def, intret_q_inactive, result_rel_def, intret_vals_match_def])
 QED

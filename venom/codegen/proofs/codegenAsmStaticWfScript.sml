@@ -22,12 +22,6 @@ Proof
   simp[plan_ref_def, MEM_APPEND] >> metis_tac[]
 QED
 
-Theorem asm_label_refs_append:
-  asm_label_refs (xs ++ ys) = asm_label_refs xs ++ asm_label_refs ys
-Proof
-  simp[asm_label_refs_def, MAP_APPEND, FLAT_APPEND]
-QED
-
 Theorem exec_stack_op_label_refs:
   MEM l (asm_label_refs (exec_stack_op fmp op)) <=> plan_ref l [op]
 Proof
@@ -50,7 +44,7 @@ Theorem execute_plan_label_refs:
 Proof
   Induct_on `ops`
   >- simp[execute_plan_def, asm_label_refs_def, plan_ref_def]
-  >> gvs[execute_plan_def, asm_label_refs_append,
+  >> gvs[execute_plan_def, label_refs_append,
          exec_stack_op_label_refs, plan_ref_def]
   >> metis_tac[]
 QED
@@ -1045,7 +1039,7 @@ Theorem data_segment_bytes_no_refs:
 Proof
   pure_rewrite_tac[asmIRTheory.data_segment_asm_def] >>
   Induct_on `segs` >- simp[asm_label_refs_def] >>
-  rw[asm_label_refs_append] >> simp[data_section_bytes_no_refs]
+  rw[label_refs_append] >> simp[data_section_bytes_no_refs]
 QED
 
 Theorem data_segment_header_mem:
@@ -1070,7 +1064,7 @@ Theorem codegen_assembly_label_refs_closed:
 Proof
   simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >>
   gvs[sym_unit_static_ok_def, unit_shape_ok_def,
-      asm_label_refs_append, data_segment_bytes_no_refs, asm_label_refs_data_header,
+      label_refs_append, data_segment_bytes_no_refs, asm_label_refs_data_header,
       execute_plan_label_refs] >>
   rpt strip_tac >>
   drule_all context_plan_refs >> strip_tac

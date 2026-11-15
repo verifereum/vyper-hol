@@ -392,7 +392,6 @@ Theorem sym_body_invoke_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\
@@ -516,7 +515,6 @@ Theorem sym_body_abort_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode <> INVOKE /\ (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -789,7 +787,6 @@ Theorem sym_body_jump_continue:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   is_terminator inst.inst_opcode /\
   step_inst fuel ctx inst vs = OK vs1 /\ vs1 = jump_to t vs /\
@@ -821,8 +818,6 @@ Proof
   disch_then (fn th => leaf_matches 4 irule (anchored_leaf_core false
     ["sym_frame_inv", "fn_frame_inv", "generate_block_plan", "lineage_entry"] th)) >>
   qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-  `~vs1.vs_call_ctx.cc_static` by
-    (qpat_x_assum `vs1 = _` SUBST1_TAC >> simp[venomStateTheory.jump_to_def]) >>
   metis_tac[]
 QED
 
@@ -1020,7 +1015,6 @@ Theorem sym_body_jmp_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = JMP /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1041,7 +1035,6 @@ Theorem sym_body_jnz_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1062,7 +1055,6 @@ Theorem sym_body_nonterm_prefix:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -1136,7 +1128,6 @@ Theorem sym_body_terminator:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   is_terminator inst.inst_opcode /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1161,7 +1152,6 @@ Theorem sym_body_nonok:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -1228,7 +1218,6 @@ Theorem sym_body_nonterm_result:
         growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
         block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
         ra pc_ret rest mem0 /\
-      ~vs.vs_call_ctx.cc_static /\
       label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
       sym_unit_static_ok unit /\ asm_static_wf prog /\
       (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
@@ -1242,7 +1231,6 @@ Theorem sym_body_nonterm_result:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
-  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
   LENGTH (compute_operands inst) <= 16 /\
@@ -1274,7 +1262,6 @@ Theorem sym_body_run:
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
       ra pc_ret rest mem0 /\
-    ~vs.vs_call_ctx.cc_static /\
     label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
     sym_unit_static_ok unit /\ asm_static_wf prog /\
     (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
@@ -1312,7 +1299,6 @@ Theorem sym_block_body_frame_sim:
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
       ra pc_ret rest mem0 /\
-    ~vs.vs_call_ctx.cc_static /\
     (* ----- The symbolic side ----- *)
     label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
     sym_unit_static_ok unit /\ asm_static_wf prog /\

@@ -136,6 +136,33 @@ Proof
   drule_all starve_handle_fault >> metis_tac[]
 QED
 
+(* Any non-abort fault: either resource exhaustion or a clean single-frame
+   fault with empty return data. *)
+Theorem starve_handle_fault_or[local]:
+  !es ctxt rb exc.
+    es.contexts = [(ctxt, rb)] /\
+    (!a. ctxt.msgParams.outputTo <> Code a) /\
+    exc <> Reverted /\ ~vfm_abort (SOME exc) ==>
+    (?es1 exc1. handle_step (SOME exc) es = (INR (SOME exc1), es1) /\
+                (exc1 = OutOfGas \/ exc1 = StackOverflow)) \/
+    ?es1 exc1. handle_step (SOME exc) es = (INR (SOME exc1), es1) /\
+               exc1 <> Reverted /\ ~vfm_abort (SOME exc1) /\
+               LENGTH es1.contexts = 1 /\ (FST (HD es1.contexts)).returnData = []
+Proof
+  rpt strip_tac >> drule_all starve_handle_fault >> strip_tac
+  >- (disj1_tac >> qexistsl [`es1`, `OutOfGas`] >> simp[]) >>
+  disj2_tac >> qexistsl [`es1`, `exc`] >> simp[]
+QED
+
+Theorem starve_arm_weaken[local]:
+  !A P Q r.
+    (A \/ case r of AsmOK as1 => P as1 | AsmError _ => T | _ => F) ==>
+    (A \/ case r of AsmOK as1 => P as1 | AsmError _ => T
+                   | AsmFault as1 => Q | _ => F)
+Proof
+  rpt gen_tac >> Cases_on `r` >> simp[]
+QED
+
 Theorem starve_push_step:
   !prog as es op v gas_cost.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
@@ -773,17 +800,22 @@ Proof
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
 QED
 
-(* The assembly's static check is off when the EVM frame isn't static. *)
-val starve_nonstatic_tac : tactic =
-  `~as.as_call_ctx.cc_static` by
-    (Cases_on `es.contexts` >> gvs[] >> PairCases_on `h` >>
-     drule_all asm_evm_rel_static >> gvs[]);
+(* The assembly's static flag is the EVM frame's. *)
+val starve_static_iff_tac : tactic =
+  `ctxt.msgParams.static <=> as.as_call_ctx.cc_static` by
+    (drule_all asm_evm_rel_static >> simp[]);
+
+(* Split on the static flag; a static frame faults on both sides (the EVM
+   possibly running out of gas first). *)
+val starve_static_split_tac : tactic =
+  Cases_on `as.as_call_ctx.cc_static` >> fs[]
+  >- (rpt (IF_CASES_TAC >> simp[]) >>
+      irule starve_handle_fault_or >> simp[]);
 
 Theorem starve_tstore:
   !prog as es.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
-    ~(FST (HD es.contexts)).msgParams.static /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     EL as.as_pc prog = AsmOp "TSTORE" ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\
@@ -792,13 +824,17 @@ Theorem starve_tstore:
       AsmOK as1 => ?es1. step es = (INL (), es1) /\
                          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
     | AsmError _ => T
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\
+                      exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+                      LENGTH es1.contexts = 1 /\
+                      (FST (HD es1.contexts)).returnData = []
     | _ => F
 Proof
-  rpt strip_tac >> starve_nonstatic_tac >>
+  rpt strip_tac >>
   Cases_on `as.as_stack` >> simp[asm_tstore_def, LET_THM] >>
   Cases_on `t` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
-  drule_all asm_evm_step_setup >> strip_tac >>
+  drule_all asm_evm_step_setup >> strip_tac >> starve_static_iff_tac >>
   `op = TStore` by
     (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
      gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
@@ -810,7 +846,8 @@ Proof
        lookup_transient_storage_def, update_transient_storage_def,
        vfmStateTheory.update_storage_def,
        bind_def, ignore_bind_def, get_current_context_def, return_def,
-       set_current_context_def, assert_def, fail_def, LET_THM] >> fs[] >>
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  starve_static_split_tac >>
   IF_CASES_TAC
   >- (simp[] >> disj2_tac >>
       simp[inc_pc_or_jump_def, LET_THM, bind_def,
@@ -1193,7 +1230,6 @@ Theorem starve_log:
   !prog as es name n.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\ as.as_pc < LENGTH prog /\
-    ~(FST (HD es.contexts)).msgParams.static /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     EL as.as_pc prog = AsmOp name /\ ALOOKUP log_table name = SOME n ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\
@@ -1202,12 +1238,16 @@ Theorem starve_log:
       AsmOK as1 => ?es1. step es = (INL (), es1) /\
                          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
     | AsmError _ => T
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\
+                      exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+                      LENGTH es1.contexts = 1 /\
+                      (FST (HD es1.contexts)).returnData = []
     | _ => F
 Proof
-  rpt strip_tac >> starve_nonstatic_tac >> simp[asm_log_def, LET_THM] >>
+  rpt strip_tac >> simp[asm_log_def, LET_THM] >>
   Cases_on `LENGTH as.as_stack < n + 2` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
-  drule_all asm_evm_step_setup >> strip_tac >>
+  drule_all asm_evm_step_setup >> strip_tac >> starve_static_iff_tac >>
   drule starve_log_opcode >> disch_then (qspec_then `SND (compute_label_offsets prog)` strip_assume_tac) >>
   `op = Log n` by (irule opcode_wf_inj >> gvs[]) >> gvs[] >>
   simp[step_def, handle_def, bind_def, ignore_bind_def,
@@ -1217,7 +1257,7 @@ Proof
        read_memory_def, push_logs_def, get_callee_def, get_static_def,
        assert_not_static_def, vfmConstantsTheory.word_size_def,
        assert_def, fail_def, LET_THM] >>
-  fs[] >> IF_CASES_TAC
+  starve_static_split_tac >> IF_CASES_TAC
   >- (simp[] >> disj2_tac >>
       simp[inc_pc_or_jump_def, LET_THM, opcode_def,
            bind_def, get_current_context_def, return_def,
@@ -1258,7 +1298,7 @@ Theorem starve_sstore:
   !prog as es.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
-    as.as_pc < LENGTH prog /\ ~(FST (HD es.contexts)).msgParams.static /\
+    as.as_pc < LENGTH prog /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     EL as.as_pc prog = AsmOp "SSTORE" ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\
@@ -1267,13 +1307,17 @@ Theorem starve_sstore:
       AsmOK as1 => ?es1. step es = (INL (), es1) /\
                          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
     | AsmError _ => T
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\
+                      exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+                      LENGTH es1.contexts = 1 /\
+                      (FST (HD es1.contexts)).returnData = []
     | _ => F
 Proof
-  rpt strip_tac >> starve_nonstatic_tac >>
+  rpt strip_tac >>
   Cases_on `as.as_stack` >> simp[asm_sstore_def, LET_THM] >>
   Cases_on `t` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
-  drule_all asm_evm_step_setup >> strip_tac >>
+  drule_all asm_evm_step_setup >> strip_tac >> starve_static_iff_tac >>
   `op = SStore` by
     (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
      gvs[encode_inst_def] >> EVAL_TAC) >> gvs[] >>
@@ -1287,7 +1331,7 @@ Proof
        assert_not_static_def, assert_def, fail_def, LET_THM,
        bind_def, ignore_bind_def, get_current_context_def,
        return_def, set_current_context_def] >>
-  fs[] >> IF_CASES_TAC
+  starve_static_split_tac >> IF_CASES_TAC
   >- (simp[] >> IF_CASES_TAC
       >- (simp[write_storage_def, get_callee_def, get_accounts_def,
                update_accounts_def, bind_def, ignore_bind_def,
@@ -1450,7 +1494,7 @@ Theorem starve_memory_dispatch:
   !prog as es name r.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
-    as.as_pc < LENGTH prog /\ ~(FST (HD es.contexts)).msgParams.static /\
+    as.as_pc < LENGTH prog /\
     EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     asm_step_memory name as = SOME r ==>
@@ -1460,23 +1504,27 @@ Theorem starve_memory_dispatch:
       AsmOK as1 => ?es1. step es = (INL (), es1) /\
                          asm_evm_rel prog as1 es1 /\ LENGTH es1.contexts = 1
     | AsmError _ => T
+    | AsmFault as1 => ?es1 exc. step es = (INR (SOME exc), es1) /\
+                      exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+                      LENGTH es1.contexts = 1 /\
+                      (FST (HD es1.contexts)).returnData = []
     | _ => F
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `asm_step_memory _ _ = _` mp_tac >>
   simp[asm_step_memory_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
-  >- (irule starve_pop >> simp[])
-  >- (irule starve_mload >> simp[])
-  >- (irule starve_mstore >> simp[])
-  >- (irule starve_mstore8 >> simp[])
-  >- (irule starve_mcopy >> simp[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_pop >> simp[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_mload >> simp[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_mstore >> simp[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_mstore8 >> simp[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_mcopy >> simp[])
   >- (simp[asm_push_val_def] >> drule_all starve_msize >> simp[] >> metis_tac[])
-  >- (irule starve_sload >> simp[] >> metis_tac[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_sload >> simp[] >> metis_tac[])
   >- (irule starve_sstore >> simp[] >> metis_tac[])
-  >- (irule starve_tload >> simp[])
+  >- (ho_match_mp_tac starve_arm_weaken >> irule starve_tload >> simp[])
   >- (irule starve_tstore >> simp[])
-  >> irule starve_sha3 >> simp[]
+  >> ho_match_mp_tac starve_arm_weaken >> irule starve_sha3 >> simp[]
 QED
 
 Theorem starve_stop:
@@ -2361,7 +2409,6 @@ Theorem starve_op_dispatch:
     asm_encoding_wf prog /\
     asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
     LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
-    ~(FST (HD es.contexts)).msgParams.static /\
     (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
          !j. j <= i ==> ~is_data_inst (EL j prog)) /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
@@ -2427,7 +2474,6 @@ Theorem asm_evm_step_starve:
     asm_encoding_wf prog /\
     asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
     LENGTH es.contexts = 1 /\ (?d. es.msdomain = Collect d) /\
-    ~(FST (HD es.contexts)).msgParams.static /\
     (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
          !j. j <= i ==> ~is_data_inst (EL j prog)) /\
     as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\

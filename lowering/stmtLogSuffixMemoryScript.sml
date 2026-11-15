@@ -78,9 +78,16 @@ Theorem log_success_suffix_mem_ok:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
     supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
@@ -108,6 +115,9 @@ Proof
      `!a b c:num. a + (b+c) = a+c+b` by decide_tac >>
      asm_rewrite_tac[]) >>
   drule_all compile_split_log_topics_mem_ok >> strip_tac >>
+  `LIST_REL (log_arg_rel ce cx sa sm es s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (gvs[LIST_REL_EL_EQN] >> metis_tac[]) >>
   drule_all compile_split_log_topics_run >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   `u.vs_alloca_next = s.vs_alloca_next` by metis_tac[] >>
@@ -118,7 +128,7 @@ Proof
   >- suspend "empty" >>
   drule_all split_log_ops_data_types >> strip_tac >>
   `EVERY (supported_scalar_type o SND) xs` by
-    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ arg v /\ _) xs vs` mp_tac >>
+    (qpat_assum `LIST_REL (\arg v. supported_scalar_type _ /\ _) xs vs` mp_tac >>
      simp_tac (srw_ss()) [listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >>
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
   drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
@@ -171,7 +181,13 @@ Resume log_success_suffix_mem_ok[data]:
      drule_all compile_log_store_data_shape >> strip_tac >>
      drule abi_encoder_counters >> strip_tac >>
      imp_res_tac log_output_buffer_shape >> decide_tac) >>
-  drule_all log_mem_selected_typed >> strip_tac >>
+  `LIST_REL (\arg v. log_arg_rel ce cx sa st es u arg v /\
+    supported_scalar_type (SND arg) /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ sm _ s arg v /\ _) _ _` mp_tac >>
+     qpat_assum `LIST_REL (log_arg_rel _ _ _ st _ u) _ _` mp_tac >>
+     simp_tac bool_ss [LIST_REL_EL_EQN] >> metis_tac[]) >>
   `local_ptrs_reserved ce st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[Excl "enc_def"]) >>
   `fresh_vars_wrt limit_st u` by (drule_all log_topics_fresh >> simp[Excl "enc_def"]) >>
@@ -182,11 +198,8 @@ Resume log_success_suffix_mem_ok[data]:
      qpat_assum `!e. MEM e (SND (split_log_ops xs flags)) ==> _ /\ _`
        (drule_then strip_assume_tac) >>
      `?v. log_arg_rel ce cx sa sm es s arg v` by
-       (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ sm _ s arg v /\ _) xs vs`
-          (mp_then Any mp_tac split_log_ops_data_rel) >>
-        disch_then drule >> strip_tac >>
-        qpat_x_assum `LIST_REL (\arg v. log_arg_rel _ _ _ sm _ s arg v /\ _) _ _` mp_tac >>
-        simp[LIST_REL_EL_EQN] >> strip_tac >>
+       (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ sm _ s arg v /\ _) (SND _) _` mp_tac >>
+        simp_tac bool_ss [LIST_REL_EL_EQN] >> strip_tac >>
         fs[MEM_EL] >> metis_tac[]) >>
      `?w. eval_operand (FST arg) s = SOME w` by
        (Cases_on `arg` >> fs[log_arg_rel_def, expr_val_rel_def]) >>

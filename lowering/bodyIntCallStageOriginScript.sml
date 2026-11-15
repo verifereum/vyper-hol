@@ -1,92 +1,71 @@
 (* Static origins of staged memory arguments, independent of execution. *)
 Theory bodyIntCallStageOrigin
 Ancestors
-  exprLowering exprLoweringProps loweringHalt context compileEnv
+  bodyIntCallStageCompile exprLowering exprLoweringProps loweringHalt context
+  compileEnv
   list arithmetic
 Libs
   monadsyntax
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem stage_intcall_args_length:
-  !vals flags tys a ops b.
-    LENGTH vals = LENGTH flags /\ LENGTH vals = LENGTH tys /\
-    compile_stage_intcall_args ce vals flags tys a = (ops,b) ==>
-    LENGTH ops = LENGTH vals
+  !es flags tys a ops b.
+    compile_stage_intcall_args cfn ce es flags tys a = (ops,b) ==>
+    LENGTH ops = LENGTH es
 Proof
-  Induct_on `vals` >> rpt gen_tac
+  Induct_on `es` >> rpt gen_tac
   >- simp[compile_stage_intcall_args_def, comp_return_def] >>
-  Cases_on `flags` >> Cases_on `tys` >> simp[] >>
-  rename1 `compile_stage_intcall_args ce (h::vals) (flag::flags) (ty::tys)` >>
-  Cases_on `flag` >>
+  namedCases_on `flags` ["", "flag fs"] >>
+  namedCases_on `tys` ["", "ty ts"] >>
+  TRY (Cases_on `flag`) >>
   simp[Once compile_stage_intcall_args_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> fs[]) >> rpt strip_tac >> gvs[] >>
   metis_tac[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem stage_intcall_memory_origin:
-  !vals flags tys a ops b i.
-    LENGTH vals = LENGTH flags /\ LENGTH vals = LENGTH tys /\
-    compile_stage_intcall_args ce vals flags tys a = (ops,b) /\
-    i < LENGTH vals /\ ~EL i flags ==>
+  !es flags tys a ops b i.
+    (!ce' ty' e' s'. ci_mono s' (SND (cfn ce' ty' e' s'))) /\
+    LENGTH es <= LENGTH flags /\ LENGTH es <= LENGTH tys /\
+    compile_stage_intcall_args cfn ce es flags tys a = (ops,b) /\
+    i < LENGTH es /\ ~EL i flags ==>
     ?pre post buf.
       compile_alloc_buffer (MAX 32 (type_memory_bytes ce (EL i tys))) pre =
         (buf,post) /\
       EL i ops = buf.buf_operand /\
       a.cs_next_id <= pre.cs_next_id /\ pre.cs_next_id < b.cs_next_id
 Proof
-  Induct_on `vals` >> rpt gen_tac >- simp[] >>
-  Cases_on `flags` >> Cases_on `tys` >> simp[] >>
-  rename1 `compile_stage_intcall_args ce (h::vals) (flag::flags) (ty::tys)` >>
-  Cases_on `flag` >>
-  simp[Once compile_stage_intcall_args_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> fs[]) >> rpt strip_tac >> gvs[]
-  >- (Cases_on `i` >> gvs[] >>
-      qspecl_then [`ce`, `h`, `a`] mp_tac ci_mono_unwrap_value >>
-      simp[ci_mono_def] >> strip_tac >>
-      first_x_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
-      simp[] >> disch_then drule_all >> strip_tac >>
-      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
-  rename1 `compile_alloc_buffer _ pre = (buf,post)` >>
-  rename1 `compile_stage_intcall_args ce vals flags tys tail = (rest,b)` >>
-  `a.cs_next_id <= pre.cs_next_id` by
-    (qspecl_then [`ce`, `h`, `a`] mp_tac ci_mono_unwrap_value >>
-     simp[ci_mono_def]) >>
-  `post.cs_next_id = pre.cs_next_id + 1` by
-    metis_tac[compile_alloc_buffer_parts] >>
-  `tail.cs_next_id <= b.cs_next_id` by
-    (qspecl_then [`ce`, `vals`, `flags`, `tys`, `tail`] mp_tac
-       ci_mono_compile_stage_intcall_args >> simp[ci_mono_def]) >>
-  `post.cs_next_id <= tail.cs_next_id` by suspend "store_mono" >>
+  Induct_on `es` >> rpt gen_tac >- simp[] >>
+  namedCases_on `flags` ["", "flag fs"] >>
+  namedCases_on `tys` ["", "ty ts"] >> simp[] >> strip_tac >>
+  Cases_on `flag`
+  >- (drule intcall_stage_word_parts >> strip_tac >> gvs[] >>
+      Cases_on `i` >> gvs[] >> rename1 `n < LENGTH es` >>
+      `ci_mono a s1` by
+        metis_tac[pairTheory.SND] >>
+      `ci_mono s1 sm` by
+        (qspecl_then [`ce`,`vv`,`s1`] mp_tac ci_mono_unwrap_value >> simp[]) >>
+      last_x_assum (qspecl_then [`fs`,`ts`,`sm`,`rest`,`b`,`n`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[ci_mono_def] >>
+      qexistsl_tac [`pre`,`post`,`buf`] >> simp[]) >>
+  drule intcall_stage_memory_parts >> strip_tac >> gvs[] >>
+  `ci_mono a s1` by
+    metis_tac[pairTheory.SND] >>
+  `ci_mono s2 s3` by
+    (qspecl_then [`ce`,`vv`,`s2`] mp_tac ci_mono_unwrap_value >> simp[]) >>
+  `ci_mono s3 s4` by
+    (qspecl_then [`ce`,`op`,`buf.buf_operand`,`ty`,`vv_type vv`,`s3`] mp_tac
+       ci_mono_compile_store_memory >> simp[]) >>
+  `ci_mono s4 b` by
+    (qspecl_then [`cfn`,`ce`,`es`,`fs`,`ts`,`s4`] mp_tac
+       ci_mono_compile_stage_intcall_args >> simp[]) >>
+  `s2.cs_next_id = s1.cs_next_id + 1` by metis_tac[compile_alloc_buffer_parts] >>
   Cases_on `i` >> gvs[]
-  >- (goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
-  first_x_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[] >> decide_tac
+  >- (gvs[ci_mono_def] >> qexistsl_tac [`s1`,`s2`,`buf`] >> simp[]) >>
+  rename1 `n < LENGTH es` >>
+  last_x_assum (qspecl_then [`fs`,`ts`,`s4`,`rest`,`b`,`n`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[ci_mono_def] >>
+  qexistsl_tac [`pre`,`post`,`buf'`] >> simp[]
 QED
-*)
-
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Resume stage_intcall_memory_origin[store_mono]:
-  Cases_on `is_word_type ty` >> fs[]
-  >- (qspecl_then [`MSTORE`, `[buf.buf_operand; val_op]`, `post`]
-        mp_tac ci_mono_emit_void >> simp[ci_mono_def]) >>
-  qpat_x_assum `(if _ then _ else _) post = _` mp_tac >>
-  IF_CASES_TAC >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]
-  >- (rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
-      qspecl_then [`val_op`, `buf.buf_operand`, `post`]
-        mp_tac ci_mono_compile_store_bytestring >> simp[ci_mono_def]) >>
-  strip_tac >> metis_tac[ci_mono_compile_store_memory, ci_mono_def, pairTheory.SND]
-QED
-*)
-
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Finalise stage_intcall_memory_origin
-*)

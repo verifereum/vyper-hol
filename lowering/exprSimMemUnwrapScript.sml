@@ -33,7 +33,7 @@ Proof
 QED
 
 (* One emitted instruction that writes only its output, memory-checked. *)
-Theorem emit_op_path_mem[local]:
+Theorem emit_op_path_mem:
   !ctx func cenv cx es opc args sa op sb s0 w.
     emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -206,7 +206,7 @@ Proof
 QED
 
 (* A constructor's immutable word lies below the allocation frontier. *)
-Theorem ctor_immutable_word_frontier[local]:
+Theorem ctor_immutable_word_frontier:
   stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   is_word_type t /\ immutable_holds cenv cx t tv w es s' ==>
   w2n w + 32 <= s.vs_alloca_next
@@ -218,7 +218,7 @@ Proof
 QED
 
 (* The constructor's immutable word load, memory-checked. *)
-Theorem compile_imm_load_word_ctor_path_mem[local]:
+Theorem compile_imm_load_word_ctor_path_mem:
   !ctx func cenv cx es pop sm op sb s0 w.
     compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
     local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\

@@ -71,9 +71,10 @@ Proof
   `supported_expr fp.jc_tops e1 /\ supported_expr fp.jc_tops e2` by
     simp[supported_expr_def] >>
   `expr_body_pre ce fp.jc_cx env e1 es` by
-    (irule bodyExprPreFactsTheory.stmt_expr_body_pre >>
+    (irule bodyExprPreFactsTheory.stmt_expr_body_pre_alloc >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
-        supported_stmt_expr_exists_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+        supported_stmt_expr_exists_def, allocLimitsTheory.alloc_limits_stmt_def,
+        allocLimitsTheory.alloc_limits_iterator_def] >>
      qpat_assum `supported_expr _ e1`
        (strip_assume_tac o MATCH_MP bodyExprPreFactsTheory.supported_expr_body_calls) >>
      fs[body_inv_def, gasContextTheory.cx_tops_def,
@@ -107,9 +108,10 @@ Proof
          intcall_stmt_exit_def]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   `expr_body_pre ce fp.jc_cx env e2 (mid with gas_obs := [])` by
-    (irule bodyExprPreFactsTheory.stmt_expr_body_pre >>
+    (irule bodyExprPreFactsTheory.stmt_expr_body_pre_alloc >>
      fs[intcall_expr_cont_def, intcall_expr_res_def, stmt_exprs_ok_def,
-        supported_stmt_expr_exists_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+        supported_stmt_expr_exists_def, allocLimitsTheory.alloc_limits_stmt_def,
+        allocLimitsTheory.alloc_limits_iterator_def] >>
      qpat_assum `supported_expr _ e2`
        (strip_assume_tac o MATCH_MP bodyExprPreFactsTheory.supported_expr_body_calls) >>
      fs[body_inv_def, gasContextTheory.cx_tops_def,

@@ -116,7 +116,7 @@ Definition initial_codegen_state_rel_def:
     vs.vs_return_pc_token = 0w
 End
 
-(* First function, fresh non-static frame, live state, exact deployed code,
+(* First function, fresh frame (static or not), live state, exact deployed code,
    concrete labels, and the outcomes actually traced from our frame's run. *)
 Definition initial_ctx_rel_def:
   initial_ctx_rel cp prog ctx vs es <=>
@@ -125,7 +125,6 @@ Definition initial_ctx_rel_def:
       initial_state_rel cp prog 0 fn vs es /\
       initial_codegen_state_rel cp vs /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
-      ~ctxt.msgParams.static /\
       ctxt.msgParams.code = assemble prog ++ vs.vs_data_section /\
       (ctxt.msgParams.code <> [] /\ ~vs.vs_call_ctx.cc_created_in_tx ==>
        account_already_created

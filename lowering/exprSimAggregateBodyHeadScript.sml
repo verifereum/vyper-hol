@@ -8,6 +8,7 @@ Ancestors
   vyperInterpreter vyperState venomState emitHelper exprOperandVar freshWrites
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
   exprBopSimProps exprSimProps tupleMemoryFrame valueEncodingProps
+  aggregateEvaluatedLayout valueCopyBytes vyperTypeArgFits
 Libs
   monadsyntax
 
@@ -272,3 +273,130 @@ Resume aggregate_body_tuple_head_path[pure_frame]:
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 Finalise aggregate_body_tuple_head_path
+
+(* aggregate_body_tuple_head_path with the head stored at a member type mty
+   the element fits: its own type, or a String or Bytes of another bound,
+   which compile_store_memory stores as the same byte copy. *)
+Theorem aggregate_body_tuple_head_path_fits:
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  compile_store_memory ce op dst mty (lowered_value_type ce e) su = ((),st) /\
+  arg_type_fits (expr_type e) mty /\
+  (mty = expr_type e \/
+   is_bytestring_type mty /\ is_bytestring_type (expr_type e)) /\
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tvv) mid (OK r) /\
+  vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
+  (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
+    acyclic_struct_metadata ce.ce_struct_fields) /\
+  fn_has_code sa st func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
+  inst.inst_id < sa.cs_next_id /\
+  (!ee. expr_sim_inv ce cx env ee ==> not_local_ptr ce ee.scopes x) /\
+  not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
+  FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
+  evaluate_type (get_tenv cx) mty = SOME tv /\
+  off + type_memory_size tv <= asz /\ b+asz < dimword (:256) /\
+  (ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?v q.
+    read_result cx tvv (mid with gas_obs := []) =
+      (INL v,mid with gas_obs := []) /\
+    expr_sim_inv ce cx env (mid with gas_obs := []) /\
+    gas_marked_path F ctx func r 0 (OK q) /\
+    ~q.vs_halted /\ q.vs_current_bb = st.cs_current_bb /\
+    q.vs_inst_idx = LENGTH st.cs_current_insts /\
+    value_has_type tv v /\ val_in_memory tv v (b+off) q.vs_memory /\
+    stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+    (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
+      lookup_var z q = SOME a) /\
+    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+      FLOOKUP q.vs_allocas aid = SOME a) /\
+    (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      aid < sa.cs_next_id /\
+      (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+        p+n <= lo \/ lo+sz <= p) /\
+      (p+n <= b+off \/ b+off+type_memory_size tv <= p) ==>
+      mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    (!p n. b <= p /\ p+n <= b+asz /\
+      (p+n <= b+off \/ b+off+type_memory_size tv <= p) ==>
+      mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    locals_kept ce es (mid with gas_obs := []) s0 q /\
+    (~expr_has_effect e ==>
+      (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+        mem_bytes_at lo sz q.vs_memory = mem_bytes_at lo sz s0.vs_memory) /\
+      (!p n. (p+n <= b \/ b+asz <= p) /\
+        (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= i.inst_id /\
+          FLOOKUP q.vs_allocas i.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL tvv,mid with gas_obs := [])` by
+    metis_tac[aggregate_body_marked_replay] >>
+  `expr_body_pre ce cx env e
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    simp[expr_body_pre_gas_obs] >>
+  drule_all expr_body_pre_runtime_typed >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME etv` >>
+  Cases_on `mty = expr_type e`
+  >- (qpat_x_assum `mty = _` SUBST_ALL_TAC >>
+      `tv = etv` by fs[] >> qpat_x_assum `tv = _` SUBST_ALL_TAC >>
+      drule_all aggregate_body_tuple_head_path >> strip_tac >>
+      qexistsl_tac [`v`, `q`] >> asm_rewrite_tac[] >> metis_tac[]) >>
+  `is_bytestring_type mty /\ is_bytestring_type (expr_type e)` by fs[] >>
+  `~is_word_type mty /\ ~is_word_type (expr_type e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su =
+     ((),st)` by
+    (qpat_x_assum `compile_store_memory _ _ _ mty _ _ = _` mp_tac >>
+     simp[contextTheory.compile_store_memory_def]) >>
+  `type_memory_size etv <= type_memory_size tv` by
+    metis_tac[cj 1 aggregateEvaluatedLayoutTheory.arg_fits_evaluated_memory_size] >>
+  `off + type_memory_size etv <= asz` by decide_tac >>
+  `ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size etv)` by
+    (rpt strip_tac >>
+     qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> simp[regions_disjoint_def] >> decide_tac) >>
+  drule_all aggregate_body_tuple_head_path >> strip_tac >>
+  `value_has_type etv v` by metis_tac[] >>
+  `value_has_type tv v` by
+    metis_tac[cj 1 vyperTypeArgFitsTheory.arg_type_fits_value_has_type] >>
+  qexistsl_tac [`v`, `q`] >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+      metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_x_assum `!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ _ ==> _`
+        irule >>
+      rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- (qexists_tac `aid` >> asm_rewrite_tac[]) >>
+      qpat_x_assum `p + n <= b + off \/ _` mp_tac >>
+      qpat_x_assum `type_memory_size etv <= _` mp_tac >>
+      rpt (pop_assum kall_tac) >> decide_tac) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `!p n. b <= p /\ _ ==> _` irule >>
+  qpat_x_assum `p + n <= b + off \/ _` mp_tac >>
+  qpat_x_assum `type_memory_size etv <= _` mp_tac >>
+  qpat_x_assum `p + n <= b + asz` mp_tac >> qpat_x_assum `b <= p` mp_tac >>
+  rpt (pop_assum kall_tac) >> decide_tac
+QED

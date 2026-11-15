@@ -128,7 +128,6 @@ Theorem memory_place_write_stmt_state:
   (!name b len a n. local_region cenv ee.scopes r name b len /\ b <= a /\
     a+n <= b+len /\ (a+n <= w2n w \/ w2n w+type_memory_size dtv <= a) ==>
     mem_bytes_at a n t.vs_memory = mem_bytes_at a n r.vs_memory) /\
-  LENGTH r.vs_memory <= LENGTH t.vs_memory /\
   (cenv.ce_is_ctor ==> !nm tv iv off.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
@@ -264,14 +263,20 @@ Resume memory_place_write_stmt_state[regions]:
   qexists_tac `e0` >> simp[] >> metis_tac[]
 QED
 Resume memory_place_write_stmt_state[immutables]:
-  irule immutables_rel_mem_agree >> qexists_tac `r` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (qpat_x_assum `_ = r` mp_tac >>
-      rpt (first_x_assum kall_tac) >> simp[venom_state_component_equality]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ ee r` mp_tac >>
-  simp[stmt_state_rel_def, state_rel_def]
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee r` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  `t.vs_data_section = r.vs_data_section` by
+    (qpat_x_assum `_ = r` mp_tac >>
+     rpt (first_x_assum kall_tac) >> simp[venom_state_component_equality]) >>
+  Cases_on `cenv.ce_is_ctor`
+  >- (fs[immutables_rel_def] >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!name tv v byte_offset. _ ==> _ /\ _` drule_all >> strip_tac >>
+      `mem_bytes_at byte_offset (type_memory_size tv) t.vs_memory =
+       mem_bytes_at byte_offset (type_memory_size tv) r.vs_memory` by metis_tac[] >>
+      simp[] >> irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+      conj_tac >- metis_tac[immutable_admissible_val_wf] >>
+      qexistsl_tac [`type_memory_size tv`, `r.vs_memory`] >> simp[]) >>
+  fs[immutables_rel_def] >> metis_tac[]
 QED
 Resume memory_place_write_stmt_state[state_frame]:
   irule state_rel_frame >>

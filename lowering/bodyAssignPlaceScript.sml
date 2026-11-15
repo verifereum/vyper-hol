@@ -44,7 +44,7 @@ Ancestors
      with cx_tops_module.
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
      acyclic_struct_metadata: body_inv_def. *)
-Theorem assign_place_typing[local]:
+Theorem assign_place_typing:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
   well_typed_expr env e /\
   ?dty. type_place_target env t = SOME (Type dty) /\
@@ -56,7 +56,7 @@ Proof
   rename1 `SOME pt` >> Cases_on `pt` >> gvs[]
 QED
 
-Theorem body_inv_mcopy[local]:
+Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
   rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
@@ -99,7 +99,7 @@ Proof
   metis_tac[body_target_idx_case, target_case_all]
 QED
 
-Theorem body_assign_place_rhs_pre[local]:
+Theorem body_assign_place_rhs_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -202,7 +202,7 @@ Proof
   metis_tac[call_evaluation_safe_append_left, target_indices_pre_def]
 QED
 
-Theorem body_assign_place_indices_pre[local]:
+Theorem body_assign_place_indices_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -372,6 +372,19 @@ Proof
   fs[bare_global_assignable_complete_def]
 QED
 
+Theorem target_indices_pre_int_calls_local[local]:
+  !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
+       EVERY (\c. FST c = NONE) (int_calls_target bt)
+Proof
+  `(!e:expr. T) /\
+   !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
+        EVERY (\c. FST c = NONE) (int_calls_target bt)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_pre_def, int_calls_expr_def] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!es. expr_sim_inv _ _ _ _ ==> _` drule >>
+  simp[exprSimHypsDefsTheory.expr_body_pre_def, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
 (* An effectful target with any RHS, a widened one included: since Assign
    reads the RHS first, the effectful-index root covers both. *)
 Theorem body_assign_place_effectful_case:
@@ -457,7 +470,19 @@ Proof
     metis_tac[body_inv_mcopy, body_inv_def] >>
   `assign_alloc_ok cenv t e` by
     fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
-  Cases_on `supported_target_pure tops t`
-  >- metis_tac[compile_assign_place_case] >>
-  metis_tac[assign_place_effectful_index_case]
+  Cases_on `expr_can_mutate cenv (target_to_expr t)`
+  >- (`~supported_target_pure tops t` by
+        metis_tac[assignPlacePureFactsTheory.supported_target_pure_not_mutate] >>
+      metis_tac[assign_place_effectful_index_case]) >>
+  `cx_tops cx = tops /\ get_module_code cx NONE = SOME tops /\
+   cenv.ce_func_mutability = build_func_mutability tops` by
+    (fs[body_inv_def, cenv_module_pins_def] >>
+     metis_tac[gasContextTheory.cx_tops_module]) >>
+  `!vis mut nr rr fn args dflts ret body.
+     MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
+     function_mutability_ok [(NONE, tops)] vis mut nr dflts body` by
+    fs[body_inv_def] >>
+  `EVERY (\c. FST c = NONE) (int_calls_target t)` by
+    metis_tac[target_indices_pre_int_calls_local] >>
+  irule compile_assign_place_case >> simp[] >> metis_tac[]
 QED

@@ -230,7 +230,7 @@ Proof
   rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_immutables >> gvs[]
 QED
 
-Theorem unlock_if_nr_immutables[local]:
+Theorem unlock_if_nr_immutables:
   unlock_if_nr cx nr is_view st = (res,st') ==> st'.immutables = st.immutables
 Proof
   Cases_on `nr /\ ~is_view` >>

@@ -6,7 +6,7 @@ Ancestors
   bodyBinopFamiliesMemory bodyBinopFragMemory stmtSimAugAssignPlaceMemory
   vyperState exprSimWordArgs
 
-Theorem aug_place_rhs_mem_continuation[local]:
+Theorem aug_place_rhs_mem_continuation:
   expr_sim_mem ctx func cenv cx ty e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

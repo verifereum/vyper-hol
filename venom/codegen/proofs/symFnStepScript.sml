@@ -272,7 +272,6 @@ Theorem sym_entry_body_inv:
       (LENGTH (HD fn.fn_blocks).bb_instructions) 0
       (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
     vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
-    ~vs.vs_call_ctx.cc_static /\
     asm_block_at prog pc_bb (execute_plan cp.cp_initial_fmp
       (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
     as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
@@ -332,7 +331,6 @@ Theorem sym_nonentry_body_inv:
       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
       fn_has_retpc callee) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
-    ~vs.vs_call_ctx.cc_static /\
     codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
     fn_entry_inv Inv ctx fn vs /\
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
@@ -862,9 +860,6 @@ QED
 
 Resume sym_fn_entry_block_step[entry_body_finish]:
   strip_tac >>
-  `~vs_p.vs_call_ctx.cc_static` by
-    (qpat_assum `~vs.vs_call_ctx.cc_static` mp_tac >>
-     qpat_assum `vs_p.vs_call_ctx = _` (fn th => rewrite_tac[th])) >>
   drule_all sym_block_body_frame_sim >>
   suspend "entry_body_result"
 QED
@@ -935,12 +930,6 @@ QED
 
 Resume sym_fn_block_frame_step[frame_body_match]:
   strip_tac >>
-  `~(s' with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_call_ctx.cc_static` by
-    (qpat_assum `~vs.vs_call_ctx.cc_static` mp_tac >>
-     qpat_assum `eval_phis _ _ = OK _`
-       (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx`` o
-        MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
-     simp[]) >>
   drule_all sym_block_body_frame_sim >>
   suspend "frame_result"
 QED

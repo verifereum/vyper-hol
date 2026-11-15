@@ -86,10 +86,10 @@ Proof
 QED
 
 Theorem package_internal_fn_ctor_exit[local]:
-  !tops use_trans nkey_map imm_len src target.
+  !tops use_trans nkey_map is_ctor imm_len src target.
     (FST (SND (set_internal_package_target target
-                 (package_internal_fn tops use_trans nkey_map F imm_len src)))).
-      ce_ctor_exit_label = NONE
+                 (package_internal_fn tops use_trans nkey_map is_ctor imm_len
+                    src)))).ce_ctor_exit_label = NONE
 Proof
   rpt gen_tac >> PairCases_on `src` >>
   simp[package_internal_fn_def, set_internal_package_target_def,
@@ -97,32 +97,31 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-(* Each runtime internal function's code is a closed fragment, from any
-   state. *)
+(* Each internal function's code is a closed fragment, from any state, for
+   any constructor flag and immutables length. *)
 Theorem package_internal_fns_fuel:
-  !tops use_trans nkey_map target srcs.
+  !tops ut nkm ic il target srcs.
     EVERY (\(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
              is_view, is_ctor, imm_len, body, ret_type).
              ?Wv. fuel_okS (\st. T) Wv {} {}
                     (compile_internal_function cenv params has_ret_buf is_nr
                        nkey use_trans is_view is_ctor imm_len body ret_type))
       (MAP (set_internal_package_target target o
-            package_internal_fn tops use_trans nkey_map F 0) srcs)
+            package_internal_fn tops ut nkm ic il) srcs)
 Proof
   rpt gen_tac >> simp[EVERY_MAP, EVERY_MEM] >> qx_gen_tac `src` >> strip_tac >>
-  qspecl_then [`tops`, `use_trans`, `nkey_map`, `0`, `src`, `target`] mp_tac
+  qspecl_then [`tops`, `ut`, `nkm`, `ic`, `il`, `src`, `target`] mp_tac
     package_internal_fn_ctor_exit >>
-  qspecl_then [`tops`, `use_trans`, `nkey_map`, `F`, `0`, `src`, `target`]
+  qspecl_then [`tops`, `ut`, `nkm`, `ic`, `il`, `src`, `target`]
     mp_tac package_internal_fn_cenv_ptrs_below >>
   Cases_on `set_internal_package_target target
-              (package_internal_fn tops use_trans nkey_map F 0 src)` >>
+              (package_internal_fn tops ut nkm ic il src)` >>
   PairCases_on `r` >> simp[] >> rpt strip_tac >>
   qexists_tac `UNIV` >>
   drule cenv_ptrs_below_pre >> disch_then (SUBST1_TAC o SYM) >>
   irule fuel_okS_compile_internal_function >> simp[] >>
   rpt strip_tac >> irule (CONJUNCT2 fuel_okS_compile_stmt) >> simp[]
 QED
-
 
 (* ===== A generated unit ===== *)
 
@@ -171,49 +170,6 @@ Proof
                `r`, `st1`, `ctx`, `data`, `Wv`] mp_tac
     extract_context_fuel_stable >>
   impl_tac >- simp[next_stable_def] >> simp[]
-QED
-
-(* grouped_runtime_entry_prefix_shape of loweringShapeProps, which is local
-   there. *)
-Theorem grouped_prefix_shape[local]:
-  !groups fallback_fn.
-    EVERY external_group_shape_ok groups /\ fallback_shape_ok fallback_fn ==>
-    shape_step F jump_label_ok (\st. T)
-      (do fallback_lbl <- fresh_label "fallback";
-          jobs <- compile_group_dispatch_linear groups fallback_lbl;
-          compile_external_jobs jobs;
-          new_block fallback_lbl;
-          (case fallback_fn of
-             NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
-           | SOME (ce,pay,nr,key,trans,view,stmts,ret) =>
-               compile_fallback_body ce pay nr key trans view stmts ret)
-       od) (\u st. T)
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule shape_step_bind >>
-  qexists_tac `\lbl st. T /\ compiler_label lbl /\ label_sfx "fallback" lbl` >>
-  reverse conj_tac
-  >- (ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_def]) >>
-  qx_gen_tac `lbl` >> BETA_TAC >>
-  reverse (Cases_on `compiler_label lbl /\ label_sfx "fallback" lbl`)
-  >- simp[shape_step_def] >>
-  `~label_sfx "dispatch" lbl` by
-    (strip_tac >> `lbl <> lbl` suffices_by simp[] >>
-     irule label_sfx_distinct >> qexistsl_tac [`"fallback"`, `"dispatch"`] >>
-     simp[]) >>
-  irule shape_step_bind >>
-  qexists_tac `\jobs st. EVERY (external_job_shape_ok st) jobs` >> reverse conj_tac
-  >- (irule shape_step_conseq >>
-      qexistsl_tac [`jump_label_ok`, `\st. T`,
-        `\jobs st. EVERY (external_job_shape_ok st) jobs`] >> simp[] >>
-      irule compile_group_dispatch_linear_shape >> fs[jump_label_ok_def]) >>
-  qx_gen_tac `jobs` >> BETA_TAC >>
-  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> reverse conj_tac
-  >- irule compile_external_jobs_shape >>
-  gen_tac >> BETA_TAC >>
-  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> reverse conj_tac
-  >- (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def, jump_label_ok_def]) >>
-  gen_tac >> BETA_TAC >> irule runtime_fallback_shape >> simp[]
 QED
 
 (* A unit generated as entry code then the internal functions, by a
@@ -330,9 +286,9 @@ Proof
              compile_fallback_body fb_cenv fb_pay fb_nr fb_key fb_trans
                fb_view fb_body fb_ty)
       od) (\u st. T)` by
-    (irule grouped_prefix_shape >> simp[EVERY_MAP, EVERY_MEM]) >>
+    (irule grouped_runtime_entry_prefix_shape >> simp[EVERY_MAP, EVERY_MEM]) >>
   qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
-               `rpolicy.rpol_target`, `ints`] assume_tac package_internal_fns_fuel >>
+               `F`, `0`, `rpolicy.rpol_target`, `ints`] assume_tac package_internal_fns_fuel >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   qpat_x_assum `classify_functions tops = _` (fn th => REWRITE_TAC [th]) >>

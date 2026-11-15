@@ -105,17 +105,6 @@ Proof
   gvs[stmt_exits_in_def] >> metis_tac[]
 QED
 
-(* Modular distance decreases even when the index increment wraps. *)
-Theorem iter_distance_decreases[local]:
-  !(i:256 word) len.
-    i <> len ==> w2n (len - (i + 1w)) < w2n (len - i)
-Proof
-  rpt strip_tac >>
-  `len - (i + 1w) = (len - i) - 1w` by wordsLib.WORD_DECIDE_TAC >>
-  pure_asm_rewrite_tac [] >> irule wordsTheory.WORD_PRED_THM >>
-  simp[wordsTheory.WORD_EQ_SUB_ZERO]
-QED
-
 (* One non-exiting round preserves length and advances the equality counter.
    Fixed outcomes and external exits are carried by fuel_outcome and Q. *)
 Theorem iter_equality_cycle[local]:
@@ -142,7 +131,7 @@ Proof
   gen_tac >> BETA_TAC >> strip_tac
   >- simp[] >>
   disj2_tac >> asm_rewrite_tac[] >>
-  metis_tac[iter_distance_decreases]
+  metis_tac[loop_distance_decreases]
 QED
 
 Theorem iter_cond_outcome[local]:

@@ -23,18 +23,6 @@ Libs
 
 (* ===== Jump tables ===== *)
 
-Theorem emit_frag_inst[local]:
-  fn_has_code st (st with cs_current_insts := st.cs_current_insts ++ [inst]) fn /\
-  at_point st s ==>
-  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-       get_instruction bb s.vs_inst_idx = SOME inst
-Proof
-  rw[at_point_def] >>
-  drule_then (qspec_then `[inst]` mp_tac) fn_has_code_same_block >>
-  simp[] >> strip_tac >> qexists_tac `bb` >> simp[] >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[]
-QED
-
 Theorem extract_labels_MAP_Label[simp]:
   !ls. extract_labels (MAP Label ls) = SOME ls
 Proof

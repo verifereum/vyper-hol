@@ -19,7 +19,7 @@ Proof
   simp[pairTheory.UNCURRY, ci_mono_comp_return]
 QED
 
-Theorem extrequest_external_mono[local]:
+Theorem extrequest_external_mono:
   !ce addr vals tys mem abi mid cap min rmem stat value gas skip hd def rt dty
    enc dec sa.
     ci_mono sa (SND (compile_external_call_kwargs ce addr vals tys mem abi mid
