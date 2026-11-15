@@ -2,6 +2,7 @@
 Theory bodyFullBuiltinWordPowCompose
 Ancestors
   bodyFullPreds bodySimFull bodyFullShared gasOutcomeFullCompose
+  bodyInvNoDalloca contextRawReachable unitMemInv
   exprSimWordBuiltins exprSimSource gasShadowCompileStmtHelpers
   fragGasSeqPtr bodyFullGhostFrame bodyFullBuiltinWordPowPost wordArgsPtr
   gasExemptCert vyperStorageTrace exprSimWordArgs exprLoweringProps
@@ -9,13 +10,27 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+Theorem pow_compose_reachable_no_wrap:
+  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions ==>
+  !t fn inst u. frag_reachable ctx func t fn inst u ==>
+    dalloca_no_wrap inst u
+Proof
+  rpt strip_tac >>
+  drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
+  drule bodyInvNoDallocaTheory.body_inv_no_dalloca >>
+  simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
+  strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
+  simp[unitMemInvTheory.dalloca_no_wrap_def]
+QED
+
 Theorem pow_mod256_sim_full_from_suffix:
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb x y op t G1 tn1 ann ts (va:bytes32) (vb:bytes32).
     compile_pow_mod256 x y sm = (op,sb) /\
     eval_operand x t = SOME va /\ eval_operand y t = SOME vb /\
     op_taint tn1 x = {} /\ op_taint tn1 y = {} /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sm /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ local_ptrs_reserved cenv sm /\
     (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
     (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -34,6 +49,7 @@ Theorem pow_mod256_sim_full_from_suffix:
       t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t' /\
       t'.vs_alloca_next = t.vs_alloca_next /\ t'.vs_allocas = t.vs_allocas /\
+      t'.vs_fmp = t.vs_fmp /\
       t'.vs_memory = t.vs_memory /\ t'.vs_call_ctx = t.vs_call_ctx /\
       t'.vs_accounts = t.vs_accounts /\ t'.vs_transient = t.vs_transient /\
       t'.vs_immutables = t.vs_immutables /\
@@ -128,7 +144,7 @@ Proof
       simp[] >>
       `gas_admissible (bind (eval_expr cx x0) (read_result cx)) expr_res_ok es` by
         metis_tac[expr_body_pre_gas_admissible] >>
-      simp[] >> strip_tac >>
+      (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
         (fn th => assume_tac th) >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full cfg cxt cx st0 src start Qchild Rchild` >>
@@ -229,8 +245,11 @@ Proof
                  metis_tac[CONJUNCT2 exprLoweringPropsTheory.compile_expr_grows] >>
                conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
                conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-               irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-               qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+               conj_tac
+               >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+                   qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+               rpt strip_tac >>
+               irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
            strip_tac >>
            qmatch_asmsub_abbrev_tac `gas_outcome_full cfg cxt cx st0 src (mid,t,G1,tn1) Qsecond Rsecond` >>
            `gas_outcome_full cfg cxt cx st0 src (mid,t,G1,tn1)
@@ -472,7 +491,9 @@ Proof
                    >- (qexists_tac `storage_trace_horizon mid.storage_trace` >>
                        first_assum ACCEPT_TAC) >>
                    qexistsl_tac [`storage_trace_horizon mid.storage_trace`, `H`,
-                     `mid`, `s1`, `s2`, `t`, `t'`, `v`, `v'`, `x`, `y`] >> simp[]) >>
+                     `mid`, `s1`, `s2`, `t`, `t'`, `v`, `v'`, `x`, `y`] >> simp[])
+               >~ [`allocas_below_fmp u`]
+               >- metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
                qpat_x_assum `~is_word_type (expr_type (Builtin _ PowMod256 _))`
                  (mp_tac o SIMP_RULE (srw_ss())
                    [vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def]) >>

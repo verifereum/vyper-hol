@@ -90,10 +90,11 @@ Theorem rounding_inst_transition[local]:
     sa = (op,sb) /\
   MEM i (emitted_insts sa sb) /\
   (!a. MEM a i.inst_operands ==> op_prov G a = NONE /\ op_taint tn a = {}) /\
-  step_inst_base i s = OK t /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  step_inst_base i s = OK t /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?G1 tn1. G1 = step_prov PG G i t /\ tn1 = step_taint i s t tn /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
   t.vs_alloca_next = s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables /\
   t.vs_requests = s.vs_requests /\ t.vs_memory = s.vs_memory /\
@@ -127,15 +128,19 @@ Proof
     venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   simp_tac (srw_ss()) [AllCaseEqs()] >> strip_tac >>
   gvs[] >>
+  fs[allocas_below_fmp_def] >>
+  rpt (conj_tac >- simp[update_var_def, allocas_below_fmp_def]) >>
+  conj_tac >- (strip_tac >> fs[update_var_def] >> metis_tac[]) >>
   rpt (conj_tac >- simp[update_var_def]) >>
   conj_tac >-
    (simp[ptr_inst_ok_def, step_inst_non_invoke, update_var_def,
          access_ok_def, taint_ok_def, source_memory_write_ranges_def,
          source_memory_read_ranges_def, step_inst_inst_idx_indep,
-         is_terminator_def, exec_result_map_def, allocas_from_def] >>
+         is_terminator_def, exec_result_map_def, allocas_from_def,
+         allocas_below_fmp_def] >>
     fs[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, FLOOKUP_DEF] >>
     rpt strip_tac >> gvs[] >>
-    fs[allocas_from_def, FLOOKUP_DEF] >> metis_tac[]) >>
+    fs[allocas_from_def, allocas_below_fmp_def, FLOOKUP_DEF] >> metis_tac[]) >>
   pure_rewrite_tac [step_prov_def, out_prov_def, step_taint_def,
     venomInstTheory.instruction_accessors,
     venomInstTheory.instruction_accfupds, combinTheory.K_THM,
@@ -160,7 +165,7 @@ Theorem rounding_suffix_success_full:
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   local_ptrs_reserved cenv sa /\
@@ -248,7 +253,7 @@ Resume rounding_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G1 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn1 (Var _)` >>
   `op_prov G1 x = NONE /\ op_taint tn1 x = {}` by metis_tac[] >>
-  `allocas_from lo s1` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s1` by (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `op_prov G1 (Var (STRING #"%" (toString (sa.cs_next_var + 0)))) = NONE /\
    op_taint tn1 (Var (STRING #"%" (toString (sa.cs_next_var + 0)))) = {}` by
     (qpat_assum `!v. MEM v i0.inst_outputs ==> _`
@@ -265,7 +270,7 @@ Resume rounding_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G2 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn2 (Var _)` >>
   `op_prov G2 x = NONE /\ op_taint tn2 x = {}` by metis_tac[] >>
-  `allocas_from lo s2` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s2` by (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `op_prov G2 (Var (STRING #"%" (toString (sa.cs_next_var + 1)))) = NONE /\
    op_taint tn2 (Var (STRING #"%" (toString (sa.cs_next_var + 1)))) = {}` by
     (qpat_assum `!v. MEM v i1.inst_outputs ==> _`
@@ -282,7 +287,7 @@ Resume rounding_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G3 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn3 (Var _)` >>
   `op_prov G3 x = NONE /\ op_taint tn3 x = {}` by metis_tac[] >>
-  `allocas_from lo s3` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s3` by (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `op_prov G3 (Var (STRING #"%" (toString (sa.cs_next_var + 2)))) = NONE /\
    op_taint tn3 (Var (STRING #"%" (toString (sa.cs_next_var + 2)))) = {}` by
     (qpat_assum `!v. MEM v i2.inst_outputs ==> _`
@@ -301,7 +306,7 @@ Resume rounding_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G4 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn4 (Var _)` >>
   `op_prov G4 x = NONE /\ op_taint tn4 x = {}` by metis_tac[] >>
-  `allocas_from lo s4` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s4` by (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `op_prov G4 (Var (STRING #"%" (toString (sa.cs_next_var + 3)))) = NONE /\
    op_taint tn4 (Var (STRING #"%" (toString (sa.cs_next_var + 3)))) = {}` by
     (qpat_assum `!v. MEM v i3.inst_outputs ==> _`
@@ -320,7 +325,7 @@ Resume rounding_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G5 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn5 (Var _)` >>
   `op_prov G5 x = NONE /\ op_taint tn5 x = {}` by metis_tac[] >>
-  `allocas_from lo s5` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo s5` by (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `op_prov G5 (Var (STRING #"%" (toString (sa.cs_next_var + 4)))) = NONE /\
    op_taint tn5 (Var (STRING #"%" (toString (sa.cs_next_var + 4)))) = {}` by
     (qpat_assum `!v. MEM v i4.inst_outputs ==> _`
@@ -339,7 +344,7 @@ Resume rounding_suffix_success_full[ghosts]:
   qmatch_asmsub_abbrev_tac `op_prov G6 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn6 (Var _)` >>
   `op_prov G6 x = NONE /\ op_taint tn6 x = {}` by metis_tac[] >>
-  `allocas_from lo t` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `allocas_from lo t` by (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `op_prov G6 (Var (STRING #"%" (toString (sa.cs_next_var + 5)))) = NONE /\
    op_taint tn6 (Var (STRING #"%" (toString (sa.cs_next_var + 5)))) = {}` by
     (qpat_assum `!v. MEM v i5.inst_outputs ==> _`
