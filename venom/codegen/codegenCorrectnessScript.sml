@@ -70,7 +70,7 @@ Ancestors
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
   frameGas venomRunBounded frameStep codegenEntryBounded
-  codegenAsmProgOk asmFrameRel
+  codegenAsmProgOk asmFrameRel venomRetProps
   asmFrameGas asmFrameSurplus gasCount
 Libs
   BasicProvers
@@ -114,34 +114,6 @@ End
 (* The obsolete single-function codegen unfolding is intentionally absent:
    context codegen is exposed through [codegen_assembly] and the selected
    region is located by [ops_contain_at]. *)
-
-(* run_blocks never returns OK — it always terminates with
-   Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
-   step either recurses (smaller fuel) or passes through non-OK. *)
-Theorem run_blocks_never_ok[local]:
-  !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
-Proof
-  Induct >- simp[Once run_blocks_def] >>
-  simp[Once run_blocks_unfold] >>
-  rpt gen_tac >> every_case_tac
-QED
-
-(* run_function never returns OK — unfolds to run_blocks. *)
-Theorem run_function_never_ok[local]:
-  !fuel ctx fn vs vs1. run_function fuel ctx fn vs <> OK vs1
-Proof
-  simp[run_function_def] >>
-  rpt gen_tac >> every_case_tac >> simp[run_blocks_never_ok]
-QED
-
-(* run_context also never returns OK — it either dispatches to
-   run_function (which never returns OK) or returns Error. *)
-Theorem run_context_never_ok[local]:
-  !fuel ctx vs vs1. run_context fuel ctx vs <> OK vs1
-Proof
-  rpt gen_tac >> simp[Once run_context_def] >>
-  every_case_tac >> simp[run_function_never_ok]
-QED
 
 (* ===== Whole-Context Frame Interface ===== *)
 
@@ -200,7 +172,7 @@ Proof
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   simp[venom_frame_rel_def] >>
   Cases_on `run_context fuel unit.cu_context vs` >>
-  gvs[run_context_never_ok]
+  gvs[run_context_not_ok]
   >- (res_tac >> gvs[venom_asm_terminal_rel_def]) >>
   rename1 `Abort a _` >> Cases_on `a` >>
   res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
