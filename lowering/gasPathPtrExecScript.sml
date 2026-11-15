@@ -7,6 +7,7 @@
  *
  * TOP-LEVEL:
  *   gas_path_ptr_exec -- the piece
+ *   gas_path_ptr_exit_unique -- exits have the same endpoint and ghost
  *   gas_path_ptr_safe_run -- pointer safety back along a path that goes
  *     on, in a function without PHIs
  *)
@@ -252,6 +253,36 @@ Proof
   rpt gen_tac >> strip_tac >>
   conj_tac >- metis_tac[gas_path_ptr_edge_erase, gas_path_rules] >>
   disj2_tac >> simp[] >> metis_tac[ptr_edge_exit]
+QED
+
+Theorem gas_path_ptr_exit_unique:
+  gas_path_ptr D1 lo ctx fn PG G tn s n1 G1 tn1 r1 /\
+  gas_path_ptr D2 lo ctx fn PG G tn s n2 G2 tn2 r2 /\
+  exit_result r1 /\ exit_result r2 ==>
+  G1 = G2 /\ tn1 = tn2 /\ r1 = r2
+Proof
+  strip_tac >>
+  `?f1. run_from f1 ctx fn s = r1 /\
+        ghost_run f1 ctx fn PG G tn s = (G1,tn1)` by
+    metis_tac[gas_path_ptr_exec, exit_result_def] >>
+  `?f2. run_from f2 ctx fn s = r2 /\
+        ghost_run f2 ctx fn PG G tn s = (G2,tn2)` by
+    metis_tac[gas_path_ptr_exec, exit_result_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >-
+    gvs[run_from_frame_run, frame_run_def, exit_result_def] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  `(!e. block_run f1 ctx fn bb s <> Error e) /\
+   (!e. block_run f2 ctx fn bb s <> Error e)` by
+    gvs[run_from_frame_run, frame_run_def, exit_result_not_error] >>
+  `block_run (f1 + f2) ctx fn bb s = block_run f1 ctx fn bb s /\
+   block_run (f1 + f2) ctx fn bb s = block_run f2 ctx fn bb s` by
+    (conj_tac >> irule block_run_fuel_mono >> simp[]) >>
+  `ghost_block (f1 + f2) ctx fn PG G tn bb s =
+     ghost_block f1 ctx fn PG G tn bb s /\
+   ghost_block (f1 + f2) ctx fn PG G tn bb s =
+     ghost_block f2 ctx fn PG G tn bb s` by
+    (conj_tac >> irule (cj 2 ghost_fuel_mono_up) >> simp[]) >>
+  fs[run_from_frame_run, frame_run_def, ghost_run_def] >> metis_tac[]
 QED
 
 (* One edge that goes on at t, in a function without PHIs: pointer safety

@@ -15,7 +15,8 @@ Theorem as_wei_value_continuation_full:
   lower_value compile_expr cenv (expr_type e) e sa = (x,s1) /\
   compile_as_wei_value_int x (denomination_multiplier dn) F s1 = (op,sb) /\
   sa.cs_next_var <= s1.cs_next_var /\
-  fn_has_code s1 sb func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  fn_has_code s1 sb func /\ local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   storage_trace_domain cx st0 mid.storage_trace /\
@@ -27,6 +28,7 @@ Theorem as_wei_value_continuation_full:
     expr_store_bound cx (expr_type e) v x t /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     s0.vs_alloca_next <= t.vs_alloca_next /\
     ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
     ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
@@ -41,11 +43,13 @@ Theorem as_wei_value_continuation_full:
       expr_store_bound cx (BaseT (UintT 256)) w op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func u /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
       s0.vs_alloca_next <= u.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn u /\
       ptr_val_ok cx (BaseT (UintT 256)) w op G tn u) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-    (\H res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -184,7 +188,9 @@ Proof
             (qpat_x_assum `EL _ (DROP _ _) = _` mp_tac >> simp[EL_APPEND_EQN]) >>
           `MEM inst (emitted_insts s1 sb)` by metis_tac[EL_MEM] >>
           fs[EVERY_MEM] >> metis_tac[]) >>
-      qpat_assum `ss' = t with vs_vars := _` (fn th => rewrite_tac[Once th]) >> simp[]) >>
+      qpat_assum `ss' = t with vs_vars := _` (fn th => rewrite_tac[Once th]) >>
+      simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
+      metis_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
   first_x_assum drule >> strip_tac >>
   drule_all (as_wei_value_abort_full |> Q.INST [`es'` |-> `mid`, `es` |-> `mid`] |> SIMP_RULE (srw_ss()) []) >>
   disch_then (qspecl_then [`mid`, `explicit`, `d`, `cx`, `PG`] strip_assume_tac) >>
@@ -201,5 +207,5 @@ Proof
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   simp[] >> rpt strip_tac >>
-  simp[expr_exit_def, exit_result_def] >> metis_tac[]
+  simp[expr_exit_def, exit_result_def, exprSimDefsTheory.halt_exit_def] >> metis_tac[]
 QED

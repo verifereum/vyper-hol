@@ -61,7 +61,9 @@ Theorem snapshot_storage_unwrap_mem[local]:
       pure_frame cenv func ee sm s z /\ alloca_history func z /\
       s.vs_alloca_next <= z.vs_alloca_next /\ ~z.vs_halted /\
       z.vs_current_bb = sb.cs_current_bb /\
-      z.vs_inst_idx = LENGTH sb.cs_current_insts
+      z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+      z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
@@ -93,6 +95,9 @@ Proof
          simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
      metis_tac[]) >>
   drule copy_static_fields >> strip_tac >>
+  `z.vs_requests = s.vs_requests` by
+    (qpat_x_assum `copy_static z = copy_static u` mp_tac >>
+     simp[copy_static_def, venom_state_component_equality]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   conj_tac
   >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -177,7 +182,9 @@ Theorem snapshot_code_unwrap_mem[local]:
       pure_frame cenv func ee sm s z /\ alloca_history func z /\
       s.vs_alloca_next <= z.vs_alloca_next /\ ~z.vs_halted /\
       z.vs_current_bb = sb.cs_current_bb /\
-      z.vs_inst_idx = LENGTH sb.cs_current_insts
+      z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+      z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all snapshot_code_layout >> strip_tac >>
@@ -215,6 +222,9 @@ Proof
      conj_tac >- (qexistsl_tac [`w2n w`, `type_memory_bytes cenv t`, `u`] >>
        simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >> metis_tac[]) >>
   drule copy_static_fields >> strip_tac >>
+  `z.vs_requests = s.vs_requests` by
+    (qpat_x_assum `copy_static z = copy_static u` mp_tac >>
+     simp[copy_static_def, venom_state_component_equality]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   conj_tac >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
     irule gas_path_mem_then >> qexists_tac `u` >> simp[]) >>
@@ -296,7 +306,9 @@ Theorem snapshot_nonmemory_unwrap_mem:
       pure_frame cenv func ee sm s z /\ alloca_history func z /\
       s.vs_alloca_next <= z.vs_alloca_next /\ ~z.vs_halted /\
       z.vs_current_bb = sb.cs_current_bb /\
-      z.vs_inst_idx = LENGTH sb.cs_current_insts
+      z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+      z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >> drule_all vv_post_read_result >> strip_tac >>
   Cases_on `p.ptr_location` >> gvs[]

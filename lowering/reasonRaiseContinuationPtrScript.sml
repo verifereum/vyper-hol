@@ -4,6 +4,7 @@ Ancestors bodyPtrDefs stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   exprSimMemorySource exprSimUnwrapProps exprSimUnwrap stmtSimReason
   list rich_list finite_map pred_set fragExec localPtrsProps loweringSlice
   stmtSimIfProps gasOutcome gasSummary gasSummaryCompose gasSummaryComposePtr
+  gasPathPtrExec gasStorage
   gasContext gasExemptCert gasCount fragGasPath fragGasPathPtr fragGasSeqPtr fragGasMode
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv vyperInterpreter vyperState vyperValue vyperExprNoControl
@@ -186,7 +187,8 @@ QED
 Theorem compile_raise_reason_path_frag_ptr:
  (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
  expr_vv_sim_ptr d ctx PG func cenv cx (expr_type r) r es /\
- (!sa vv sm sb s0 ee tv t G tn str.
+ (!(H:(bool # bytes32 # type_value) list # num list)
+   sa vv sm sb s0 ee tv t G tn str.
    compile_expr cenv (expr_type r) r sa = (vv,sm) /\
    compile_revert_with_reason cenv vv (expr_type r) (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
    fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\
@@ -212,47 +214,103 @@ Proof
   qpat_x_assum `expr_vv_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_ptr_def]) >>
   disch_then drule >> simp[] >>
-  disch_then (qspecl_then [`s0`, `G0`, `tn0`] mp_tac) >> simp[] >>
-  simp[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
-  >- (qpat_x_assum `?res es_end G tn r. _` strip_assume_tac >> gvs[]
-      >- suspend "normal"
-      >> suspend "exception") >>
-  qexists_tac `marks` >> disj2_tac >>
-  qpat_x_assum `?err ee leaf finish. _` strip_assume_tac >>
+  disch_then (qspecl_then [`st0`, `s0`, `G0`, `tn0`] mp_tac) >> simp[] >>
+  rewrite_tac[gas_outcome_ptr_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[eval_raise_reason_bind] >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageTraceTheory.storage_trace_frame_lifts,
+           vyperStorageTraceTheory.storage_trace_frame_raise])
+  >- (qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_ptr_at_def]) >>
+      Cases_on `?H. valid_horizon cx st0 H es_end.storage_trace`
+      >- (pop_assum (qx_choose_then `H1` assume_tac) >>
+          qpat_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+            (drule_then strip_assume_tac) >>
+          qpat_x_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+            assume_tac >>
+          gvs[exit_result_def]
+          >- suspend "normal"
+          >> suspend "exception") >>
+      qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[eval_raise_reason_bind] >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageTraceTheory.storage_trace_frame_lifts,
+           vyperStorageTraceTheory.storage_trace_frame_raise] >>
+      irule gas_bad_storage_at_no_horizon >> fs[] >> metis_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   drule raise_reason_raw_exempt >> metis_tac[]
 QED
 
 Resume compile_raise_reason_path_frag_ptr[normal]:
   markerLib.RESUME_TAC >>
+  qpat_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H1` (drule_then strip_assume_tac)) >>
   `~t.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
   drule_all raise_reason_raw_string >> strip_tac >>
-  `?gin gout. eval_expr cx r (es with gas_obs := gin) =
-     (INL tv, (es_end with gas_obs := []) with gas_obs := gout)` by
-    (qexistsl_tac [`gas_explicit marks s0.vs_gas_readings ++ []`, `[]`] >>
-     simp[]) >>
-  qpat_x_assum `!sa' vv' sm' sb' s0' ee tv t G tn str. _`
-    (drule_all_then strip_assume_tac o SRULE [PULL_EXISTS]) >>
-  qexists_tac `marks` >> disj1_tac >>
+  qpat_assum `!H sa' vv' sm' sb' s0' ee tv t G tn str. _`
+    mp_tac >>
+  disch_then (qspec_then `H1` mp_tac) >>
+  disch_then (qspecl_then [`sa`, `vv`, `sm`, `sb`, `s0`,
+    `es_end with gas_obs := []`, `tv`, `t`, `G`, `tn`, `str`] mp_tac) >>
+  (impl_tac >- (simp[] >>
+      qexistsl_tac [`gas_explicit marks s0.vs_gas_readings ++ []`, `[]`] >>
+      simp[])) >>
+  disch_then (qx_choosel_then [`Gf`, `tnf`, `u`] assume_tac) >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR (AssertException str)`, `es_end`, `Gf`, `tnf`,
                 `Abort Revert_abort u`] >>
   conj_tac
   >- (gen_tac >> rewrite_tac[eval_raise_reason_bind] >> simp[Once bind_def]) >>
-  conj_tac
+  qx_gen_tac `H2` >> strip_tac >> BETA_TAC >>
+  qpat_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H2` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H sa' vv' sm' sb' s0' ee tv t G tn str. _`
+    mp_tac >>
+  disch_then (qspecl_then [`H2`, `sa`, `vv`, `sm`, `sb`, `s0`,
+    `es_end with gas_obs := []`, `tv`, `t`, `G`, `tn`, `str`] mp_tac) >>
+  (impl_tac >- (simp[] >>
+      qexistsl_tac [`gas_explicit marks s0.vs_gas_readings ++ []`, `[]`] >>
+      simp[])) >>
+  disch_then (qx_choosel_then [`Gf2`, `tnf2`, `u2`] assume_tac) >>
+  `Gf2 = Gf /\ tnf2 = tnf /\
+   Abort Revert_abort u2 = Abort Revert_abort u` by
+    (qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _
+       (Abort Revert_abort u2)` mp_tac >>
+     qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _
+       (Abort Revert_abort u)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[gas_path_ptr_exit_unique, exit_result_def]) >>
+  gvs[] >> conj_tac
   >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
-  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def]
+  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
 
 Resume compile_raise_reason_path_frag_ptr[exception]:
   markerLib.RESUME_TAC >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `G`, `tn`, `r''`] >>
   conj_tac
   >- (gen_tac >> rewrite_tac[eval_raise_reason_bind] >> simp[Once bind_def]) >>
+  qx_gen_tac `H2` >> strip_tac >> BETA_TAC >>
+  `gas_path_ptr (cx_dead H2 cx) 0 ctx func PG G0 tn0 s0
+     (LENGTH marks) G tn r'' /\
+   halt_exit H2 cx (es_end with gas_obs := [])
+     (INR y : eval_result + exception) r''` by
+    (qpat_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H2` (mp_tac o REWRITE_RULE [halt_exit_def])) >>
+     simp[halt_exit_def]) >>
   conj_tac >- simp[] >>
   disj2_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type]
+  conj_tac >- metis_tac[expr_exit_INR_type] >> fs[halt_exit_def]
 QED
 
 Finalise compile_raise_reason_path_frag_ptr
