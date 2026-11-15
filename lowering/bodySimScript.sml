@@ -39,7 +39,7 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
-  immutableLocationProps exprSimMapDefs nonreentrantLowering
+  immutableLocationProps exprSimMapDefs context
 Libs
   monadsyntax
 
