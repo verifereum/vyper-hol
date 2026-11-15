@@ -578,6 +578,22 @@ Definition dft_focus_packet_rel_def:
                       (root_entry with vs_gas_readings := gs ++ tail)))))
 End
 
+Theorem dft_packet_setup_readings:
+  (!callee args.
+    setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
+      setup_callee callee args b0) /\
+  setup_callee ctf args b0 = SOME child_entry ==>
+  setup_callee ctf args u =
+    SOME (child_entry with vs_gas_readings := u.vs_gas_readings)
+Proof
+  strip_tac >>
+  first_x_assum (qspecl_then [`ctf`, `args`] mp_tac) >>
+  simp[gasOracleReplayTheory.gas_setup_callee] >>
+  Cases_on `setup_callee ctf args u` >> simp[] >> strip_tac >>
+  drule gasOracleReplayTheory.gas_setup_callee_readings >>
+  simp[venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
     (root_entry:venom_state) packet
