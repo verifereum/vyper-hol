@@ -733,7 +733,8 @@ Theorem array_code_loop_counted[local]:
       storage_well_formed_on cx ee (FST H) /\
       array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >> drule array_code_return_pc >> strip_tac >>
   drule_all array_return_pc_transport >> strip_tac >>
@@ -850,10 +851,13 @@ Theorem array_outcome_stmt_post:
       storage_well_formed_on cx ee (FST H) /\
       array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) ==>
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r) ==>
   gas_outcome F tops (ctx,func) cx st0 source (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv st st' es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   strip_tac >> qhdtm_x_assum `gas_outcome` mp_tac >>
   rewrite_tac[gas_outcome_def] >>
@@ -870,7 +874,8 @@ Proof
                cenv_top_ext_refl, array_caller_frame_def] >>
           fs[array_caller_frame_def]) >>
       disj2_tac >> rpt strip_tac >>
-      first_x_assum (qspec_then `H` mp_tac) >> simp[] >> strip_tac >> gvs[]) >>
+      first_x_assum (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+      gvs[exprSimDefsTheory.halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >> first_assum (irule_at Any)
 QED
 
