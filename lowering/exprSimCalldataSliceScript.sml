@@ -301,8 +301,8 @@ Proof
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
   conj_tac
-  >- (irule fmp_room_fields >> qexists_tac `s` >>
-      asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+  >- (irule fmp_room_mstore >> irule fmp_room_write_memory >>
+      fs[stmt_state_rel_def]) >>
   simp[] >>
   qpat_x_assum `immutable_base_zero cenv (mstore _ _ _)` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
@@ -1218,7 +1218,8 @@ Proof
      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
           vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
   simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule slice_expr_exit_INR_cast >> simp[]) >>
+  >- (rpt strip_tac >> fs[halt_exit_def] >>
+      irule slice_expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es s0` by
@@ -1243,12 +1244,15 @@ Proof
     (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>
+  `builtin_result cx ee.accounts ann bt [expr_type e] [v] <> INR HaltException` by
+    (simp[builtin_result_def] >> CASE_TAC >> simp[]) >>
   qexists_tac `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+  gvs[halt_exit_def]
 QED
 
 Theorem compile_calldata_slice_call_case:

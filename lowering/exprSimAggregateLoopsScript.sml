@@ -603,7 +603,12 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexists_tac `q` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
-  metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport, expr_post_def]
+  `stmt_state_rel H' ctx func ce cx es' s` by
+    (qpat_x_assum `expr_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+  irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  qexists_tac `s` >> simp[]
 QED
 
 Theorem aggregate_tuple_exec_end_gas_obs[local]:

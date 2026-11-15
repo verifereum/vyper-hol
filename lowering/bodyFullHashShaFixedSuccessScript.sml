@@ -69,7 +69,7 @@ Proof
    isPREFIX (emitted_insts sm sb) (DROP a.vs_inst_idx bb.bb_instructions) /\
    MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString sm.cs_next_var)]) (fn_insts fn)` by
-    simp[Abbr `a`, bytes_ghost_cursor, stmt_state_rel_inst_idx,
+    simp[Abbr `a`, ghost_inv_at_inst_idx, stmt_state_rel_inst_idx,
       hash_eval_operand_inst_idx, ptr_covers_inst_idx] >>
   `eval_operand (Lit (n2w m)) a = SOME (n2w m) /\
    op_taint tn2 (Lit (n2w m)) = {} /\
@@ -141,6 +141,6 @@ Resume sha_fixed_success_frame_at[compose]:
   >- (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK t`
         (mp_tac o MATCH_MP run_inst_seq_append) >>
       disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
-  gvs[Abbr `a`, hash_eval_operand_inst_idx, bytes_ghost_cursor]
+  gvs[Abbr `a`, hash_eval_operand_inst_idx, ghost_inv_at_inst_idx]
 QED
 Finalise sha_fixed_success_frame_at

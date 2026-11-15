@@ -386,13 +386,18 @@ Resume literal_expr_sim_mem[normal]:
              (simp[vyperASTTheory.expr_type_def] >> NO_TAC), decide_tac]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `(\res fin r. _) _ _ _` (assume_tac o BETA_RULE) >>
-  BETA_TAC >> first_assum ACCEPT_TAC
+  `res2 <> INR HaltException` by
+    (qpat_assum `gas_marked_exec _ _ (vyperState$return _) _ _ res2 _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[vyperStateTheory.return_def] >> rpt strip_tac >> gvs[]) >>
+  BETA_TAC >> fs[exprSimDefsTheory.halt_exit_def] >> first_assum ACCEPT_TAC
 QED
 Resume literal_expr_sim_mem[exit]:
   `wb_args_exit res r` by
     (qpat_assum `(\res ee r. _) _ _ _` (mp_tac o BETA_RULE) >>
      disch_then (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then ACCEPT_TAC) >>
+     (impl_tac >- simp[]) >> strip_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `res`
   >- (qpat_x_assum `wb_args_exit (INL _) _` mp_tac >> simp[wb_args_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -402,7 +407,10 @@ Resume literal_expr_sim_mem[exit]:
   >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
   BETA_TAC >> gen_tac >> BETA_TAC >> strip_tac >>
-  qpat_x_assum `wb_args_exit (INR _) _` mp_tac >> simp[wb_args_exit_def]
+  qpat_assum `(\res ee r. _) _ _ _` (mp_tac o BETA_RULE) >>
+  disch_then (qspec_then `H` mp_tac) >>
+  fs[wb_args_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
 Resume literal_expr_sim_mem[exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>

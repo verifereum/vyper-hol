@@ -18,7 +18,7 @@ Theorem modular_suffix_full:
     eval_operand z t = SOME vc /\
     op_taint tn1 x = {} /\ op_taint tn1 y = {} /\ op_taint tn1 z = {} /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sm /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ local_ptrs_reserved cenv sm /\
     (!q sz. cenv.ce_return_buf = SOME (PtrVar (Var q) sz) ==> not_fresh_at sm q) /\
     (!q sz. cenv.ce_return_pc = SOME (PtrVar (Var q) sz) ==> not_fresh_at sm q) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -47,6 +47,7 @@ Theorem modular_suffix_full:
         ~t'.vs_halted /\ t'.vs_current_bb = sb.cs_current_bb /\
         t'.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t' /\
         t'.vs_alloca_next = t.vs_alloca_next /\ t'.vs_allocas = t.vs_allocas /\
+      t'.vs_fmp = t.vs_fmp /\
         t'.vs_memory = t.vs_memory /\ t'.vs_call_ctx = t.vs_call_ctx /\
         t'.vs_accounts = t.vs_accounts /\ t'.vs_transient = t.vs_transient /\
         t'.vs_immutables = t.vs_immutables /\
@@ -149,7 +150,8 @@ Proof
      simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def,
        Abbr `j`, Abbr `opc`, mk_inst_def] >>
-     gvs[Abbr `u`, Abbr `t1`, update_var_def, allocas_from_def] >>
+     gvs[Abbr `u`, Abbr `t1`, update_var_def, allocas_from_def,
+         allocas_below_fmp_def] >>
      metis_tac[]) >>
   `out_taint tn1 j t1 = {} /\ written_taint tn1 j t1 = {}` by
     (conj_tac

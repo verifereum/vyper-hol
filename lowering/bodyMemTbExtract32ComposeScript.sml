@@ -2,7 +2,7 @@
 Theory bodyMemTbExtract32Compose
 Ancestors
   exprSimExtract32Counted exprSimExtract32Post exprSimExtract32Source exprBopSimProps
-  vyperStorageTrace vyperStorageFootprint
+  vyperStorageTrace vyperStorageFootprint exprSimSliceCompose stmtSimProps
   bodyMemTbExtract32Encoding bodyMemTbExtract32WordSuffix bodyDeclMemoryCompose bodyMemTbExtract32Bind bodyMemTbExtract32Action bodyMemTbExtract32TypedSuffix bodyMemoryPreds exprSimDefs
   exprSimMemoryStack exprSimSource exprSimProps exprSimMemDefs bodyMemTbExtract32Source
   exprSimDefs exprSimHypsDefs gasNormalPrefix fragGasMode fragGasPath context
@@ -97,13 +97,9 @@ Proof
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
     (SPEC_ALL extract32_outcome_bind_marked)) >>
   conj_tac
-  >- (`!(res:value + exception) r.
-         (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
-         expr_exit res r` by
-        (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
-      qpat_x_assum `gas_outcome _ _ _ _ _ (bind (eval_expr cx src) _) _ _ _` mp_tac >>
-      CONV_TAC (DEPTH_CONV BETA_CONV) >>
-      pop_assum (fn th => rewrite_tac[th, ETA_AX])) >>
+  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt gen_tac >> strip_tac >> Cases_on `res` >>
+      fs[expr_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   reverse conj_tac
   >- (gen_tac >> BETA_TAC >>
       simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
@@ -215,13 +211,9 @@ Resume compile_extract32_sim_mem[stage1]:
     alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next`]
     (SPEC_ALL extract32_outcome_bind_marked)) >>
   conj_tac
-  >- (`!(res:value + exception) r.
-         (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
-         expr_exit res r` by
-        (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
-      qpat_x_assum `gas_outcome _ _ _ _ _ (bind (eval_expr cx off) _) _ _ _` mp_tac >>
-      CONV_TAC (DEPTH_CONV BETA_CONV) >>
-      pop_assum (fn th => rewrite_tac[th, ETA_AX])) >>
+  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt gen_tac >> strip_tac >> Cases_on `res` >>
+      fs[expr_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   reverse conj_tac
   >- (gen_tac >> BETA_TAC >>
       simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
@@ -440,6 +432,6 @@ Resume compile_extract32_sim_mem[suffix_revert]:
   >- simp[gas_marked_exec_def, gas_marked_path_def,
           vyperContextTheory.evaluate_type_builtin_def,
           lift_sum_def, bind_def, return_def, raise_def]
-  >- (disj2_tac >> simp[expr_exit_def, exit_result_def])
+  >- (disj2_tac >> simp[expr_exit_def, halt_exit_def, exit_result_def])
 QED
 Finalise compile_extract32_sim_mem

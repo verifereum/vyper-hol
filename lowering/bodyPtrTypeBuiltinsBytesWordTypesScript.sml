@@ -12,7 +12,9 @@ Theorem bytestring_scalar_type_partition:
      (dst = BaseT AddressT /\ n <= 32) \/
      (dst = BaseT DecimalT /\ n <= 32) \/
      (?m. dst = BaseT (BytesT (Fixed m)) /\ n <= m))) \/
-  (?n m. src = BaseT (StringT n) /\ dst = BaseT (BytesT (Fixed m)) /\ n <= m)
+  (?n. src = BaseT (StringT n) /\
+    ((dst = BaseT BoolT /\ n <= 32) \/
+     (?m. dst = BaseT (BytesT (Fixed m)) /\ n <= m)))
 Proof
   Cases_on `src` >> Cases_on `dst` >>
   gvs[is_bytestring_type_def, valid_conversion_def] >>

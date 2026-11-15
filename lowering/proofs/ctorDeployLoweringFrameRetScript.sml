@@ -207,7 +207,8 @@ QED
 Theorem ctor_unlock_gas_path[local]:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st = ((),st') /\ (nr ==> ut) /\ st.cs_current_insts = [] /\
-  fn_has_code st st' func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  fn_has_code st st' func /\ ~s.vs_halted /\
+  (nr ==> ~s.vs_call_ctx.cc_static) /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   gas_path ctx func s 0
     (OK ((if nr then tstore (n2w nkey) 0w s else s) with
@@ -235,7 +236,7 @@ Theorem constructor_exit_gas_path:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+  (nr ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
           storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
           nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
@@ -259,7 +260,8 @@ Proof
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `nr ==> ~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `gas_path ctx func s 0 (OK s1)` by
     (simp[Abbr `s1`] >> irule ctor_unlock_gas_path >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -313,7 +315,8 @@ Theorem constructor_exit_gas_path_horizons:
   compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
   fn_has_code st_exit st_final func /\ fn_inst_ids_distinct func /\
   rt + cap < dimword(:256) /\
-  (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256)) /\
+  (nr ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
+          nkey < dimword (:256)) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
   (!H. P H ==>
@@ -331,7 +334,7 @@ Proof
      constructor_return_q H func cenv cx rt cap nr nkey NoneV
        (es with scopes := []) (Halt f)` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >>
-     `nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+     `nr ==> ut /\ ~cx.txn.is_static /\ cx.nonreentrant_slot = SOME nkey /\
         storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
         nkey < dimword (:256)` by (strip_tac >> fs[]) >>
      drule_all constructor_exit_gas_path >> strip_tac >>
@@ -416,7 +419,8 @@ Proof
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `Halt final`] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def] >>
-  simp[exit_result_def, stmt_exit_def] >> rpt strip_tac >> disj2_tac >>
+  simp[exit_result_def, stmt_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  rpt strip_tac >> disj2_tac >>
   res_tac >>
   `constructor_return_q H func cenv cx rt cap F nkey NoneV
      ((es with scopes := []) with gas_obs := tail) (Halt final)` by
