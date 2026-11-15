@@ -1591,6 +1591,183 @@ Proof
   simp[Abbr `bgx`, Abbr `bxg`, DROP_APPEND]
 QED
 
+Theorem native_gas_ordinary_stopped_packets:
+  let bgx = bb with bb_instructions := REPLICATE j pad ++ g::x::rest;
+      bxg = bb with bb_instructions := REPLICATE j pad ++ x::g::rest;
+      e = (p,d,g.inst_id);
+      site = (fn.fn_name,g.inst_id);
+      O1 = trace_gas (dftGasFromListTraceDefs$trace_block p d b C fn bxg a);
+      O2 = trace_gas (dftGasFromListTraceDefs$trace_block p d b C fn bgx a);
+      M1 = MAP (ALOOKUP O1) [e];
+      M2 = MAP (ALOOKUP O2) [] in
+  a.vs_inst_idx = j /\ g.inst_opcode = GAS /\ g.inst_outputs = [out] /\
+  inst_wf g /\ inst_wf x /\ dft_gas_swap_pair g x /\
+  x.inst_opcode <> GAS /\ x.inst_opcode <> INVOKE /\
+  ~(?u. step_inst 0 C x a = OK u) ==>
+  (terminates (exec_block b C bxg a) /\
+   gas_count_block b C bxg a <= LENGTH a.vs_gas_readings ==>
+   ALL_DISTINCT [e] /\
+   EVERY (block_region p d (MAP (\i. i.inst_id) (g::x::rest))) [e] /\
+   LENGTH [e] = LENGTH [site] /\
+   PERM (MAP THE (FILTER IS_SOME M1) ++ a.vs_gas_readings) a.vs_gas_readings /\
+   (!u. exec_block b C bxg a = OK u ==> EVERY IS_SOME M1 /\ a.vs_gas_readings = u.vs_gas_readings) /\
+   (!v u. exec_block b C bxg a = IntRet v u ==> EVERY IS_SOME M1 /\ a.vs_gas_readings = u.vs_gas_readings) /\
+   (!gobs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M1 gobs ==>
+     (!n. ?k. k <= LENGTH [e] /\
+       trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bgx
+         (a with vs_gas_readings := gobs ++ tail)) = ZIP (TAKE k [e],TAKE k gobs) /\
+       gas_events_block n C fn.fn_name bgx (a with vs_gas_readings := gobs ++ tail) = TAKE k [site]) /\
+     ((?n. terminates (exec_block n C bgx (a with vs_gas_readings := gobs ++ tail))) ==>
+       terminates (exec_block b C bgx (a with vs_gas_readings := gobs ++ tail)) /\
+       dft_res_rel (restore_result [] (exec_block b C bgx (a with vs_gas_readings := gobs ++ tail)))
+                   (restore_result [] (exec_block b C bxg a)) /\
+       (!u. exec_block b C bxg a = OK u ==>
+         gas_events_block b C fn.fn_name bgx (a with vs_gas_readings := gobs ++ tail) = [site] /\
+         residual_result tail (exec_block b C bxg a) (exec_block b C bgx (a with vs_gas_readings := gobs ++ tail))) /\
+       (!v u. exec_block b C bxg a = IntRet v u ==>
+         gas_events_block b C fn.fn_name bgx (a with vs_gas_readings := gobs ++ tail) = [site] /\
+         residual_result tail (exec_block b C bxg a) (exec_block b C bgx (a with vs_gas_readings := gobs ++ tail)))))) /\
+  (terminates (exec_block b C bgx a) /\
+   gas_count_block b C bgx a <= LENGTH a.vs_gas_readings ==>
+   ALL_DISTINCT ([]:gas_event list) /\
+   EVERY (block_region p d (MAP (\i. i.inst_id) (x::g::rest))) [] /\
+   LENGTH ([]:gas_event list) = LENGTH ([]:(string # num) list) /\
+   PERM (MAP THE (FILTER IS_SOME M2) ++ a.vs_gas_readings) a.vs_gas_readings /\
+   (!u. exec_block b C bgx a = OK u ==> EVERY IS_SOME M2 /\ a.vs_gas_readings = u.vs_gas_readings) /\
+   (!v u. exec_block b C bgx a = IntRet v u ==> EVERY IS_SOME M2 /\ a.vs_gas_readings = u.vs_gas_readings) /\
+   (!gobs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M2 gobs ==>
+     (!n. ?k. k <= LENGTH ([]:gas_event list) /\
+       trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bxg
+         (a with vs_gas_readings := gobs ++ tail)) = ZIP (TAKE k ([]:gas_event list),TAKE k gobs) /\
+       gas_events_block n C fn.fn_name bxg (a with vs_gas_readings := gobs ++ tail) = TAKE k ([]:(string # num) list)) /\
+     ((?n. terminates (exec_block n C bxg (a with vs_gas_readings := gobs ++ tail))) ==>
+       terminates (exec_block b C bxg (a with vs_gas_readings := gobs ++ tail)) /\
+       dft_res_rel (restore_result [] (exec_block b C bxg (a with vs_gas_readings := gobs ++ tail)))
+                   (restore_result [] (exec_block b C bgx a)) /\
+       (!u. exec_block b C bgx a = OK u ==>
+         gas_events_block b C fn.fn_name bxg (a with vs_gas_readings := gobs ++ tail) = [] /\
+         residual_result tail (exec_block b C bgx a) (exec_block b C bxg (a with vs_gas_readings := gobs ++ tail))) /\
+       (!v u. exec_block b C bgx a = IntRet v u ==>
+         gas_events_block b C fn.fn_name bxg (a with vs_gas_readings := gobs ++ tail) = [] /\
+         residual_result tail (exec_block b C bgx a) (exec_block b C bxg (a with vs_gas_readings := gobs ++ tail))))))
+Proof
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  qabbrev_tac `bgx = bb with bb_instructions := REPLICATE j pad ++ g::x::rest` >>
+  qabbrev_tac `bxg = bb with bb_instructions := REPLICATE j pad ++ x::g::rest` >>
+  `~is_terminator g.inst_opcode /\ ~is_terminator x.inst_opcode` by
+    fs[dft_gas_swap_pair_def] >>
+  drule_all dft_independent_gas_output >> strip_tac >>
+  `get_instruction bgx j = SOME g /\ get_instruction bgx (SUC j) = SOME x /\
+   get_instruction bxg j = SOME x /\ get_instruction bxg (SUC j) = SOME g` by
+    simp[Abbr `bgx`, Abbr `bxg`, get_instruction_def, EL_APPEND_EQN] >>
+  `(!t. step_inst 0 C x a <> Halt t) /\
+   (!v t. step_inst 0 C x a <> IntRet v t)` by
+    metis_tac[dft_swap_nonterminator_no_intret, dft_swap_nonterminator_halt_invoke] >>
+  `!n s. step_inst n C g s = OK (update_var out
+      (case s.vs_gas_readings of [] => 0w | w::_ => w)
+      (s with vs_gas_readings := DROP 1 s.vs_gas_readings))` by
+    metis_tac[step_inst_gas_single] >>
+  Cases_on `step_inst 0 C x a` >> gvs[]
+  >- suspend "abort"
+  >> suspend "error"
+QED
+
+Resume native_gas_ordinary_stopped_packets[abort]:
+  rename1 `step_inst 0 C x a = Abort ab t` >>
+  `!n. step_inst n C x a = Abort ab t` by
+    metis_tac[step_inst_non_invoke] >>
+  `!n readings. step_inst n C x (a with vs_gas_readings := readings) =
+      Abort ab (t with vs_gas_readings := readings)` by
+    (rpt gen_tac >> drule_all dft_nonconsuming_oracle_frame >>
+     disch_then (qspecl_then [`a`, `readings`, `n`, `C`] mp_tac) >>
+     simp[stateEquivTheory.lift_result_def] >>
+     Cases_on `step_inst n C x (a with vs_gas_readings := readings)` >>
+     simp[stateEquivTheory.lift_result_def]) >>
+  `!n readings value idx. step_inst n C x
+      ((update_var out value (a with vs_gas_readings := readings)) with vs_inst_idx := idx) =
+      Abort ab ((update_var out value (t with vs_gas_readings := readings)) with vs_inst_idx := idx)` by
+    (rpt gen_tac >>
+     simp[runInstsPropsTheory.step_inst_idx_indep,
+          dftCommutationTheory.step_inst_frame,
+          dftCommutationTheory.map_result_state_def,
+          instIdxIndepTheory.exec_result_map_def]) >>
+  fs[] >>
+  `!n readings. exec_block n C bgx (a with vs_gas_readings := readings) =
+      Abort ab ((update_var out (case readings of [] => 0w | w::_ => w)
+        (t with vs_gas_readings := DROP 1 readings)) with vs_inst_idx := SUC a.vs_inst_idx)` by
+    (rpt gen_tac >> simp[Once exec_block_def] >>
+     once_rewrite_tac[exec_block_def] >> simp[]) >>
+  `!n readings. exec_block n C bxg (a with vs_gas_readings := readings) =
+      Abort ab (t with vs_gas_readings := readings)` by simp[Once exec_block_def] >>
+  `exec_block b C bxg a = Abort ab t` by simp[Once exec_block_def] >>
+  `?z. exec_block b C bgx a = Abort ab z` by
+    (qpat_assum `!n readings. exec_block n C bgx _ = _`
+       (qspecl_then [`b`, `a.vs_gas_readings`] (mp_tac o SRULE [])) >>
+     strip_tac >> goal_assum (drule_at Any)) >>
+  `!n readings. trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bxg
+      (a with vs_gas_readings := readings)) = [] /\
+    gas_events_block n C fn.fn_name bxg (a with vs_gas_readings := readings) = []` by
+    (rpt gen_tac >>
+     simp[Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs),
+          dftGasFromListTraceDefsTheory.trace_step_noninvoke,
+          Once gas_events_block_def, gas_events_step_def, trace_gas_def, visit_gas_def]) >>
+  `!n readings. trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bgx
+      (a with vs_gas_readings := readings)) =
+      [((p,d,g.inst_id),case readings of [] => 0w | w::_ => w)] /\
+    gas_events_block n C fn.fn_name bgx (a with vs_gas_readings := readings) =
+      [(fn.fn_name,g.inst_id)]` by
+    (rpt gen_tac >>
+     once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs, gas_events_block_def] >>
+     simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, gas_events_step_def,
+          trace_gas_def, visit_gas_def] >>
+     once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs, gas_events_block_def] >>
+     simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, gas_events_step_def,
+          trace_gas_def, visit_gas_def]) >>
+  `trace_gas (dftGasFromListTraceDefs$trace_block p d b C fn bxg a) = []` by
+    (qpat_assum `!n readings. trace_gas _ = [] /\ _`
+       (qspecl_then [`b`, `a.vs_gas_readings`] (mp_tac o SRULE [])) >> metis_tac[]) >>
+  simp[block_region_def, passSimulationDefsTheory.terminates_def,
+       restore_result_def, dft_res_rel_def] >>
+  rpt strip_tac >> gvs[] >> qexists_tac `1` >> simp[]
+QED
+
+Resume native_gas_ordinary_stopped_packets[error]:
+  rename1 `step_inst 0 C x a = Error err` >>
+  `!n. step_inst n C x a = Error err` by
+    metis_tac[step_inst_non_invoke] >>
+  `!n readings. ?err'. step_inst n C x (a with vs_gas_readings := readings) = Error err'` by
+    (rpt gen_tac >> drule_all dft_nonconsuming_oracle_frame >>
+     disch_then (qspecl_then [`a`, `readings`, `n`, `C`] mp_tac) >>
+     simp[stateEquivTheory.lift_result_def] >>
+     Cases_on `step_inst n C x (a with vs_gas_readings := readings)` >>
+     simp[stateEquivTheory.lift_result_def]) >>
+  `!n readings value idx. ?err'. step_inst n C x
+      ((update_var out value (a with vs_gas_readings := readings)) with vs_inst_idx := idx) =
+      Error err'` by
+    (rpt gen_tac >>
+     qpat_x_assum `!n readings. ?err'. _`
+       (qspecl_then [`n`, `readings`] strip_assume_tac) >>
+     simp[runInstsPropsTheory.step_inst_idx_indep,
+          dftCommutationTheory.step_inst_frame,
+          dftCommutationTheory.map_result_state_def,
+          instIdxIndepTheory.exec_result_map_def]) >>
+  fs[] >>
+  `exec_block b C bxg a = Error err` by simp[Once exec_block_def] >>
+  `!n readings. ?err'. exec_block n C bgx (a with vs_gas_readings := readings) = Error err'` by
+    (rpt gen_tac >> simp[Once exec_block_def] >>
+     once_rewrite_tac[exec_block_def] >> simp[] >>
+     qpat_x_assum `!n readings value idx. ?err'. _`
+       (qspecl_then [`n`, `DROP 1 readings`,
+                     `case readings of [] => 0w | w::_ => w`, `SUC a.vs_inst_idx`]
+         strip_assume_tac) >> simp[]) >>
+  `?err'. exec_block b C bgx a = Error err'` by
+    (qpat_assum `!n readings. ?err'. exec_block _ _ _ _ = _`
+       (qspecl_then [`b`, `a.vs_gas_readings`] (mp_tac o SRULE [])) >> simp[]) >>
+  simp[passSimulationDefsTheory.terminates_def]
+QED
+
+Finalise native_gas_ordinary_stopped_packets
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
