@@ -781,6 +781,16 @@ Proof
        sstore_def, arithmeticTheory.ADD1]
 QED
 
+Theorem allocas_below_fmp_return_unlock_state[local,simp]:
+  !cenv s.
+    allocas_below_fmp (return_unlock_state cenv s) = allocas_below_fmp s
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+  simp[allocas_below_fmp_def, return_unlock_state_def, tstore_def, sstore_def]
+QED
+
 (* A literal guard store is a straight-line step: no memory, no pointer,
    no GAS mark, and no variable taint. *)
 Theorem return_unlock_origin_ptr:
@@ -788,7 +798,7 @@ Theorem return_unlock_origin_ptr:
   ~s.vs_halted /\
   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
     ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn'. G' = G /\ tn'.t_var = tn.t_var /\ tn'.t_mem = tn.t_mem /\
@@ -860,7 +870,8 @@ Theorem emitted_ret_origin_ptr[local]:
   fn_has_code sa sb func /\ eval_operands ops s = SOME vals /\
   lookup_var rpc s = SOME pc /\
   EVERY (\op. op_taint tn op = {}) (ops ++ [Var rpc]) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
@@ -905,7 +916,7 @@ Theorem compile_return_none_int_origin_ptr:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
   compile_stmt cenv lctx ty (Return NONE) sa = ((), sb) /\
   fn_has_code sa sb func /\ ret_pc_ok cenv sa s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
     ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
   op_taint tn (Var rpc) = {} /\ ~s.vs_halted /\
@@ -932,7 +943,8 @@ Proof
   qexistsl_tac [`G'`, `tn'`] >> gen_tac >>
   `?pc. lookup_var rpc s = SOME pc` by metis_tac[ret_pc_ok_def] >>
   qabbrev_tac `s1 = return_unlock_state cenv s` >>
-  `lookup_var rpc s1 = SOME pc /\ allocas_from lo s1 /\ ~s1.vs_halted /\
+  `lookup_var rpc s1 = SOME pc /\ allocas_from lo s1 /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp s1) /\ ~s1.vs_halted /\
    s1.vs_current_bb = su.cs_current_bb /\
    s1.vs_inst_idx = LENGTH su.cs_current_insts` by
     (simp[Abbr `s1`, lookup_var_def, return_unlock_frames,
@@ -995,7 +1007,7 @@ Proof
   TRY (simp[Once evaluate_def, raise_def] >> NO_TAC) >>
   TRY (fs[] >> NO_TAC) >>
   qexistsl_tac [`G'`, `r`, `tn'`] >>
-  simp[Abbr `r`, exit_result_def] >>
+  simp[Abbr `r`, exit_result_def, halt_exit_def] >>
   rpt strip_tac >> res_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def, intret_vals_match_def] >>
   TRY disj2_tac >> qexists_tac `s0` >> simp[] >>
@@ -1035,16 +1047,19 @@ Proof
   rpt gen_tac >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >>
-  first_x_assum (qspec_then `tail` mp_tac) >>
-  simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
-  disj2_tac >> gvs[intret_q_def, result_rel_def] >>
-  `return_unlock_state cenv' s = return_unlock_state cenv s` by
-    simp[return_unlock_state_def] >>
-  qexistsl_tac [`s`, `i`] >> simp[] >>
-  drule_all (Q.INST
-    [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
-    constructor_exit_state_rel) >> simp[]
+  simp[] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (gen_tac >>
+      first_x_assum (qspec_then `tail` mp_tac) >>
+      simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
+      disj2_tac >> gvs[intret_q_def, result_rel_def] >>
+      `return_unlock_state cenv' s = return_unlock_state cenv s` by
+        simp[return_unlock_state_def] >>
+      qexistsl_tac [`s`, `i`] >> simp[] >>
+      drule_all (Q.INST
+        [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
+        constructor_exit_state_rel) >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* A word return releases the guard and then RETs the value and the PC. *)
@@ -1139,7 +1154,7 @@ Theorem return_word_suffix_origin_ptr[local]:
   fn_has_code sm su func /\ fn_has_code su sb func /\
   eval_operand op s = SOME w /\ lookup_var rpc s = SOME pc /\
   op_taint tn op = {} /\ op_taint tn (Var rpc) = {} /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
     ~s.vs_call_ctx.cc_static) /\ allocas_from lo s /\
   ~s.vs_halted /\
@@ -1157,7 +1172,8 @@ Proof
   drule compile_return_unlock_shape >> strip_tac >>
   qabbrev_tac `s1 = return_unlock_state cenv s` >>
   `lookup_var rpc s1 = SOME pc /\ eval_operand op s1 = SOME w /\
-   allocas_from lo s1 /\ ~s1.vs_halted /\
+   allocas_from lo s1 /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp s1) /\ ~s1.vs_halted /\
    s1.vs_current_bb = su.cs_current_bb /\
    s1.vs_inst_idx = LENGTH su.cs_current_insts` by
     (simp[Abbr `s1`, lookup_var_def, return_unlock_frames,
@@ -1225,7 +1241,7 @@ Proof
   pure_rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
                            `shadow_op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   `eval_stmt cx (Return (SOME e)) =
    bind (bind (eval_expr cx e) (read_result cx))
      (\v. raise (ReturnException v))` by
@@ -1238,6 +1254,7 @@ Proof
      expr_post H ctx func cenv cx e es sa sm s0 mid v shadow_op t /\
      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
      ptr_val_ok cx (post_value_type cenv e) v shadow_op G1 tn1 t /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted` >>
   rpt conj_tac
@@ -1253,9 +1270,8 @@ Proof
   >~ [`gas_outcome_full _ _ _ _ (bind (eval_expr _ _) _)`]
   >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> gvs[] >>
-      Cases_on `res` >> gvs[expr_exit_def, stmt_exit_ptr_def] >>
-      gen_tac >> disj1_tac >>
-      Cases_on `r` >> gvs[expr_exit_def] >>
+      Cases_on `res` >> Cases_on `r` >>
+      gvs[expr_exit_def, stmt_exit_ptr_def, halt_exit_def] >>
       Cases_on `y` >> gvs[expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
   (* the value is on hand: release and RET *)
@@ -1267,6 +1283,7 @@ Proof
        expr_post H0 ctx func cenv cx e es sa sm s0 mid v shadow_op t /\
        ghost_inv_at (DF H0) lo d cenv cx mid G1 tn1 t /\
        ptr_val_ok cx (post_value_type cenv e) v shadow_op G1 tn1 t /\
+       (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
        t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted` by
     metis_tac[] >>
@@ -1291,7 +1308,8 @@ Proof
     `IntRet <|iret_values := [typed_val_to_w256 tv v];
               iret_adopt_fmp := NONE|> (return_unlock_state cenv t)`,
     `tn'`, `v`] >>
-  qpat_assum `~t.vs_halted` (fn th => simp[th, exit_result_def, raise_def]) >>
+  qpat_assum `~t.vs_halted`
+    (fn th => simp[th, exit_result_def, raise_def, halt_exit_def]) >>
   rpt strip_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def] >>
   TRY disj2_tac >> qexists_tac `t` >> simp[] >>
@@ -1342,14 +1360,17 @@ Proof
   rpt gen_tac >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >>
-  first_x_assum (qspec_then `tail` mp_tac) >>
-  simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
-  disj2_tac >> gvs[intret_q_def, result_rel_def] >>
-  `return_unlock_state cenv' s = return_unlock_state cenv s` by
-    fs[return_unlock_state_def] >>
-  qexistsl_tac [`s`, `i`] >> simp[] >>
-  drule_all (Q.INST
-    [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
-    constructor_exit_state_rel) >> simp[]
+  simp[] >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (gen_tac >>
+      first_x_assum (qspec_then `tail` mp_tac) >>
+      simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
+      disj2_tac >> gvs[intret_q_def, result_rel_def] >>
+      `return_unlock_state cenv' s = return_unlock_state cenv s` by
+        fs[return_unlock_state_def] >>
+      qexistsl_tac [`s`, `i`] >> simp[] >>
+      drule_all (Q.INST
+        [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
+        constructor_exit_state_rel) >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
