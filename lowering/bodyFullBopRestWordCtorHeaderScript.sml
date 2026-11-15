@@ -15,18 +15,18 @@ Theorem rest_word_membership_ctor_header_layout[local]:
     compile_array_membership_loop needle (vv_operand vv) len
       (elem_size_in_location cenv LocCode ety) (word_scale LocCode)
       (compile_ptr_load T cenv.ce_imm_alloca LocCode) (SOME cap) is_in sm = (op,sb) /\
-    let width = (if IS_SOME cenv.ce_imm_alloca then 2 else 1);
-        stage = "%" ++ toString sa.cs_next_var;
-        dst = "%" ++ toString (sa.cs_next_var+width-1);
-        code = (case cenv.ce_imm_alloca of NONE =>
-          [mk_inst sa.cs_next_id ILOAD [vv_operand vv] [dst]]
+    len = Var ("%" ++ toString (sa.cs_next_var+(if IS_SOME cenv.ce_imm_alloca then 2 else 1)-1)) /\
+    sm = sa with <|
+      cs_next_var := sa.cs_next_var+(if IS_SOME cenv.ce_imm_alloca then 2 else 1);
+      cs_next_id := sa.cs_next_id+(if IS_SOME cenv.ce_imm_alloca then 2 else 1);
+      cs_current_insts := sa.cs_current_insts ++
+        (case cenv.ce_imm_alloca of NONE =>
+          [mk_inst sa.cs_next_id ILOAD [vv_operand vv]
+            ["%" ++ toString (sa.cs_next_var+(if IS_SOME cenv.ce_imm_alloca then 2 else 1)-1)]]
          | SOME ib =>
-          [mk_inst sa.cs_next_id ADD [vv_operand vv;ib] [stage];
-           mk_inst (sa.cs_next_id+1) ILOAD [Var stage] [dst]]) in
-    len = Var dst /\
-    sm = sa with <| cs_next_var := sa.cs_next_var+width;
-      cs_next_id := sa.cs_next_id+width;
-      cs_current_insts := sa.cs_current_insts ++ code |> /\
+          [mk_inst sa.cs_next_id ADD [vv_operand vv;ib] ["%" ++ toString sa.cs_next_var];
+           mk_inst (sa.cs_next_id+1) ILOAD [Var ("%" ++ toString sa.cs_next_var)]
+            ["%" ++ toString (sa.cs_next_var+(if IS_SOME cenv.ce_imm_alloca then 2 else 1)-1)]]) |> /\
     cs_extends sa sm
 Proof
   strip_tac >>

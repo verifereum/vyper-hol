@@ -10,26 +10,31 @@ Theorem rest_word_membership_ctor_body_prefix:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
   fn_has_code sa sb fn ==>
-  let q = (case bound_opt of NONE => 0 | SOME cap => 2);
-      j = (case bound_opt of NONE => 0 | SOME cap => 3);
-      delta = (if 0 < skip then 1 else 0);
-      product = "%" ++ toString (sa.cs_next_var+3+q);
-      offset = (if 0 < skip then "%" ++ toString (sa.cs_next_var+4+q) else product);
-      address = "%" ++ toString (sa.cs_next_var+4+q+delta);
-      stage = "%" ++ toString (sa.cs_next_var+5+q+delta);
-      dst = "%" ++ toString (sa.cs_next_var+4+q+delta+(if IS_SOME imm then 2 else 1));
-      code = [mk_inst (sa.cs_next_id+6+j) MUL
-      [Var ("%" ++ toString (sa.cs_next_var+1)); Lit (n2w stride)] [product]] ++
-    (if 0 < skip then [mk_inst (sa.cs_next_id+7+j) ADD
-      [Lit (n2w skip);Var product] [offset]] else []) ++
-    [mk_inst (sa.cs_next_id+7+j+delta) ADD [arr;Var offset] [address]] ++
-    (case imm of NONE =>
-      [mk_inst (sa.cs_next_id+8+j+delta) ILOAD [Var address] [dst]]
-     | SOME ib =>
-      [mk_inst (sa.cs_next_id+8+j+delta) ADD [Var address;ib] [stage];
-       mk_inst (sa.cs_next_id+9+j+delta) ILOAD [Var stage] [dst]]) in
   ?bb. lookup_block (fresh_label_output "in_body" (sa.cs_next_label+2))
-     fn.fn_blocks = SOME bb /\ isPREFIX code bb.bb_instructions
+     fn.fn_blocks = SOME bb /\
+    isPREFIX
+      ([mk_inst (sa.cs_next_id+6+(case bound_opt of NONE => 0 | SOME cap => 3)) MUL
+        [Var ("%" ++ toString (sa.cs_next_var+1)); Lit (n2w stride)]
+        ["%" ++ toString (sa.cs_next_var+3+(case bound_opt of NONE => 0 | SOME cap => 2))]] ++
+       (if 0 < skip then
+         [mk_inst (sa.cs_next_id+7+(case bound_opt of NONE => 0 | SOME cap => 3)) ADD
+           [Lit (n2w skip); Var ("%" ++ toString (sa.cs_next_var+3+(case bound_opt of NONE => 0 | SOME cap => 2)))]
+           ["%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2))]] else []) ++
+       [mk_inst (sa.cs_next_id+7+(case bound_opt of NONE => 0 | SOME cap => 3)+(if 0 < skip then 1 else 0)) ADD
+         [arr; Var (if 0 < skip then "%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2))
+                   else "%" ++ toString (sa.cs_next_var+3+(case bound_opt of NONE => 0 | SOME cap => 2)))]
+         ["%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0))]] ++
+       (case imm of NONE =>
+         [mk_inst (sa.cs_next_id+8+(case bound_opt of NONE => 0 | SOME cap => 3)+(if 0 < skip then 1 else 0)) ILOAD
+           [Var ("%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0)))]
+           ["%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0)+(if IS_SOME imm then 2 else 1))]]
+        | SOME ib =>
+         [mk_inst (sa.cs_next_id+8+(case bound_opt of NONE => 0 | SOME cap => 3)+(if 0 < skip then 1 else 0)) ADD
+           [Var ("%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0))); ib]
+           ["%" ++ toString (sa.cs_next_var+5+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0))];
+          mk_inst (sa.cs_next_id+9+(case bound_opt of NONE => 0 | SOME cap => 3)+(if 0 < skip then 1 else 0)) ILOAD
+           [Var ("%" ++ toString (sa.cs_next_var+5+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0)))]
+           ["%" ++ toString (sa.cs_next_var+4+(case bound_opt of NONE => 0 | SOME cap => 2)+(if 0 < skip then 1 else 0)+(if IS_SOME imm then 2 else 1))]])) bb.bb_instructions
 Proof
   strip_tac >> Cases_on `bound_opt`
   >- (gvs[SRULE [] membership_loop_layout] >>

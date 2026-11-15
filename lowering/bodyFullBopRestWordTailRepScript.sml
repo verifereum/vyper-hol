@@ -309,9 +309,11 @@ QED
 
 Resume rest_word_membership_tail_clean_reads[ctor_elements]:
   `!i. i < array_length (ArrayTV et pbd) av ==>
-    let a = w2n w + (case pbd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
-      a + 32 <= lo /\ mem_word_taint (Tu H).t_mem a = {} /\
-      mload a u = typed_val_to_w256 et (THE (array_index (ArrayTV et pbd) av (&i)))` by
+    w2n w + (case pbd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 + 32 <= lo /\
+    mem_word_taint (Tu H).t_mem
+      (w2n w + (case pbd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) = {} /\
+    mload (w2n w + (case pbd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) u =
+      typed_val_to_w256 et (THE (array_index (ArrayTV et pbd) av (&i)))` by
     metis_tac[rest_word_membership_robust_indices] >>
   Cases_on `bd` >> gvs[] >>
   Cases_on `av` >> gvs[value_has_type_def, array_length_def, array_index_def]
@@ -380,10 +382,12 @@ Resume rest_word_membership_tail_clean_reads[memory_reads]:
      gvs[value_has_type_def, valueEncodingDefsTheory.val_in_memory_def]) >>
   conj_tac
   >- (`!i. i < array_length (ArrayTV et bd) av ==>
-        let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
-          a + 32 <= w2n w + type_memory_size (ArrayTV et bd) /\
-          mem_word_taint (Tu H).t_mem a = {} /\
-          mload a u = typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))` by
+        w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 + 32 <=
+          w2n w + type_memory_size (ArrayTV et bd) /\
+        mem_word_taint (Tu H).t_mem
+          (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) = {} /\
+        mload (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) u =
+          typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))` by
         metis_tac[rest_word_membership_robust_indices, arithmeticTheory.LESS_EQ_REFL] >>
       gvs[]) >>
   gen_tac >> disch_tac >> gvs[] >>
