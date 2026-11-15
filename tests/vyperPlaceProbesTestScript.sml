@@ -120,7 +120,7 @@ Proof
       vyperValueOperationTheory.array_index_def, oEL_def] >> EVAL_TAC
 QED
 
-Theorem nested_pop_region_probe[local]:
+Theorem nested_pop_region_probe:
   let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
       before = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1; IntV 2])]);
       middle = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1])]);
@@ -145,7 +145,7 @@ Proof
     wordsTheory.dimword_def]
 QED
 
-Theorem unrelated_pop_region_probe[local]:
+Theorem unrelated_pop_region_probe:
   let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
       before = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1]);
                                  ArrayV (DynArrayV [IntV 2])]);
