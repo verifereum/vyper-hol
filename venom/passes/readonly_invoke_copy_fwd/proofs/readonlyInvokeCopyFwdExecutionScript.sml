@@ -94,7 +94,7 @@ Proof
        (irule ricf_heterogeneous_map_origins_next >> metis_tac[]) >>
      Cases_on `inst.inst_opcode = ALLOCA`
      >- (irule ricf_heterogeneous_map_origins_sites_step >>
-         drule occ_frame_reachable_annotation >>
+         drule occ_frame_reachable_annotation_static >>
          fs[ricf_heterogeneous_source_ledger_def, occurrence_annotation_ok_def] >>
          metis_tac[]) >>
      fs[occurrence_sites_step_def]) >>
@@ -107,7 +107,7 @@ Proof
        (irule ricf_heterogeneous_saved_map_origins_next >> metis_tac[]) >>
      Cases_on `inst.inst_opcode = ALLOCA`
      >- (irule ricf_heterogeneous_saved_map_origins_sites_step >>
-         drule occ_frame_reachable_annotation >>
+         drule occ_frame_reachable_annotation_static >>
          fs[ricf_heterogeneous_source_ledger_def, occurrence_annotation_ok_def] >>
          metis_tac[]) >>
      fs[occurrence_sites_step_def]) >>

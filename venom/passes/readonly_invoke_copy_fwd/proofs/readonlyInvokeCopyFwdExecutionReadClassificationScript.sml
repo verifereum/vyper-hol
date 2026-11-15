@@ -33,8 +33,8 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
    ricf_heterogeneous_support_origins vs C a fn U stk B E` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
     metis_tac[ptr_discipline_fn_ptr_ok] >>
   `MEM fn C.ctx_functions` by
@@ -77,7 +77,7 @@ Proof
        ricf_located_event_original_read_exclusion) >>
      impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   `occurrence_natural_geometry lo a U B stk s /\
-   occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+   occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G` by
     (fs[occurrence_annotation_ok_def] >>
      metis_tac[occ_frame_reachable_geometry, ptr_discipline_def]) >>
   metis_tac[occurrence_geometry_op_positive_key]
@@ -102,8 +102,8 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
   `occurrence_natural_geometry lo a U B stk s /\
-   occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
-    (drule occ_frame_reachable_annotation >>
+   occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
+    (drule occ_frame_reachable_annotation_static >>
      simp[occurrence_annotation_ok_def] >> strip_tac >>
      metis_tac[occ_frame_reachable_geometry, ptr_discipline_def,
        occ_frame_reachable_projection]) >>
@@ -131,8 +131,8 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
   `occurrence_natural_geometry lo a U B stk s /\
-   occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
-    (drule occ_frame_reachable_annotation >>
+   occurrence_env_ok (dimword (:256)) B (a::MAP (\u. u.of_owner) U) H G /\ access_ok lo G fn inst s` by
+    (drule occ_frame_reachable_annotation_static >>
      simp[occurrence_annotation_ok_def] >> strip_tac >>
      metis_tac[occ_frame_reachable_geometry, ptr_discipline_def,
        occ_frame_reachable_projection]) >>
@@ -189,8 +189,8 @@ Proof
     metis_tac[access_ok_read_site_bounds] >>
   `sz <> 0` by decide_tac >>
   `?id. FLOOKUP B id = SOME (db,sz)` by
-    (drule occ_frame_reachable_annotation >>
-     simp[occurrence_annotation_ok_def, occurrence_env_ok_def] >> strip_tac >>
+    (drule occ_frame_reachable_annotation_static >>
+     simp[occurrence_annotation_ok_def, occurrence_env_ok_ceil] >> strip_tac >>
      `name IN FDOM G` by fs[FLOOKUP_DEF] >>
      `name IN FDOM H` by metis_tac[] >>
      `?id. FLOOKUP H name = SOME id` by fs[FLOOKUP_DEF] >> metis_tac[]) >>

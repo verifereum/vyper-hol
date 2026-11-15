@@ -144,7 +144,7 @@ Proof
    ricf_support_agree B E rt s t` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   `s.vs_allocas = t.vs_allocas /\ s.vs_alloca_next = t.vs_alloca_next` by
     (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
      drule taint_agree_allocation_fields >> simp[ricf_opaque_view_def]) >>
@@ -286,7 +286,7 @@ Proof
     (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
      drule taint_agree_allocation_fields >> simp[ricf_opaque_view_def]) >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   `u = update_var out (n2w b) s` by
     gvs[step_inst_def, step_inst_base_opcode_eqs, exec_alloca_def] >>
   `step_inst fuel Ct inst t = OK (update_var out (n2w b) t)` by

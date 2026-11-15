@@ -193,7 +193,7 @@ Proof
     (strip_assume_tac o PURE_REWRITE_RULE [ricf_heterogeneous_source_ledger_def]) >>
   drule_all ricf_located_event_operands_available >> strip_tac >> gvs[] >>
   qabbrev_tac `u = mcopy (db MOD dimword (:256)) (sb MOD dimword (:256)) (w2n z) s` >>
-  `MEM fn C.ctx_functions` by metis_tac[occ_frame_reachable_annotation] >>
+  `MEM fn C.ctx_functions` by metis_tac[occ_frame_reachable_annotation_static] >>
   `MEM (EL b fn.fn_blocks) fn.fn_blocks /\
    e.rfe_index < LENGTH (EL b fn.fn_blocks).bb_instructions` by
     (drule_all ricf_located_event_source_block >> strip_tac >>
@@ -266,7 +266,7 @@ Proof
      drule_all ricf_located_event_source_descriptor >> strip_tac >> gvs[] >>
      metis_tac[ssa_alloca_output_unique, MEM]) >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+    (drule occ_frame_reachable_annotation_static >> simp[occurrence_annotation_ok_def]) >>
   `occurrence_allocas_ok B p.rpe_owner p.rpe_before` by simp[] >>
   `FLOOKUP B p.rpe_dst = SOME (p.rpe_db,p.rpe_size) /\
     FLOOKUP B p.rpe_src = SOME (p.rpe_sb,p.rpe_size)` by

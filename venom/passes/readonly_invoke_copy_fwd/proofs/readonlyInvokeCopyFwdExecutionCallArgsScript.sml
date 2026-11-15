@@ -72,7 +72,7 @@ Proof
     FLOOKUP s.vs_allocas sa.inst_id = SOME (sb,w2n sz) /\
     FLOOKUP G sv = SOME (sb,w2n sz)` by
     metis_tac[ircf_alias_site_value_elim, ircf_alias_refl] >>
-  drule occ_frame_reachable_annotation >>
+  drule occ_frame_reachable_annotation_static >>
   simp[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
   strip_tac >> simp[eval_operand_def] >> metis_tac[]
 QED
@@ -298,8 +298,8 @@ Proof
      `def = sa` by
        metis_tac[dfg_build_function_correct, ssa_unique_output, MEM] >>
      gvs[]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation_static] >>
   `FLOOKUP s.vs_allocas da.inst_id = SOME (p.rpe_db,p.rpe_size) /\
    FLOOKUP s.vs_allocas sa.inst_id = SOME (p.rpe_sb,p.rpe_size) /\
    (!k. k < LENGTH ops /\ op_prov G (EL k ops) = SOME (p.rpe_db,p.rpe_size)
