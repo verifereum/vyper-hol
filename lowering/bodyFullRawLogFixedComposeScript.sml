@@ -8,6 +8,7 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint loweringPosts bodyPtrDefs
   loweringShapeDefs vyperInterpreter vyperState vyperValue vyperEvent
   venomState words list rich_list arithmetic finite_map pred_set
+  contextRawReachable ptrDiscipline unitMemInv
 
 (* Reanchor the scalar child's frame across the scratch allocation. *)
 Theorem raw_log_fixed_data_reanchor:
@@ -293,7 +294,14 @@ Proof
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sd`, `sm`, `shadow_sd`, `shadow_sm`, `data_op`,
     `u`, `Gu`, `tnu`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum drule >> simp[])) >>
+  (impl_tac >- (simp[] >>
+    qx_genl_tac [`f`, `i`, `t`] >> strip_tac >>
+    drule_all frag_reachable_members >> strip_tac >>
+    qpat_x_assum `~ctx_has_dalloca ctx` mp_tac >>
+    qpat_x_assum `MEM i (fn_insts f)` mp_tac >>
+    qpat_x_assum `MEM f ctx.ctx_functions` mp_tac >>
+    rpt (pop_assum kall_tac) >>
+    simp[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[])) >>
   strip_tac >>
   asm_x "alloc_endpoint" kall_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qdata _` >>

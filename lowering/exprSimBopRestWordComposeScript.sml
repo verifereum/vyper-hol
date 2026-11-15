@@ -198,7 +198,7 @@ Theorem rest_word_mixed_outcome:
       expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es sa ct s0 ee v out q /\
       q.vs_current_bb = ct.cs_current_bb /\ q.vs_inst_idx = LENGTH ct.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (bind (eval_expr cx e1) (read_result cx)) expr_res_ok es` by
@@ -250,7 +250,9 @@ Resume rest_word_mixed_outcome[left_exit]:
   qexistsl [`INR exc`, `es_end`, `r`] >> conj_tac
   >- (pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
       irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gnvs[] >> first_assum ACCEPT_TAC
+  disj2_tac >> gnvs[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    drule >> simp[]
 QED
 
 Resume rest_word_mixed_outcome[left_exempt]:
@@ -335,13 +337,13 @@ Resume rest_word_mixed_outcome[right_exit]:
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v1) _ _` (irule_at Any) >>
       BETA_TAC >> irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
       irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >>
+  disj2_tac >> rpt strip_tac >>
   qpat_x_assum `(\res ee r. _) _ _ _`
-    (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac o
+    (qspec_then `H` mp_tac o
      SIMP_RULE (srw_ss()) []) >>
   simp[] >> strip_tac >>
   Cases_on `exc` >> Cases_on `r` >>
-  gvs[exprSimDefsTheory.expr_exit_def] >>
+  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> gvs[exprSimDefsTheory.expr_exit_def]
 QED
 

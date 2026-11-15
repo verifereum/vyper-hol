@@ -79,11 +79,14 @@ Theorem ordinary_guard_error_storage_suffix:
   ~accounts_runtime_well_typed co.co_accounts ==>
   take_call_outcome target data value st =
     (INR (Error (RuntimeError "call outcome accounts")),
-     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>) /\
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+       storage_trace := st.storage_trace ++ [StorageOutcome rq co]|>) /\
   contract_storage_well_formed cx
-    (st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>) /\
+    (st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+      storage_trace := st.storage_trace ++ [StorageOutcome rq co]|>) /\
   oracle_storage_ok cx
-    (st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>) /\
+    (st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+      storage_trace := st.storage_trace ++ [StorageOutcome rq co]|>) /\
   outcome_suffix st.outcomes (SOME rest)
 Proof
   strip_tac >> drule_all take_call_outcome_ordinary >> strip_tac >> fs[] >>

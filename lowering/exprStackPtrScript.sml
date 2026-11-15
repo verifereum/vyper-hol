@@ -13,14 +13,14 @@ Theorem expr_stack_outcome_ptr:
       expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ HG H v ee G tn u)
-    (\H res ee gt r. expr_exit res r) ==>
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0 (eval_expr cx e)
     (es,s0,G0,tn0)
     (\H res ee G tn u. ?v. res = INL (Value v) /\
       vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ HG H v ee G tn u)
-    (\H res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `!s. SND (eval_expr cx e s) = SND (bind (eval_expr cx e) (read_result cx) s)`
@@ -36,10 +36,12 @@ Proof
       conj_tac
       >- (gen_tac >> qpat_x_assum `!tail. _` (qspec_then `tail` assume_tac) >>
           drule_all eval_expr_force_value >> simp[]) >>
-      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[expr_exit_success_map] >>
-      gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-          read_result_def, return_def, vv_own_def] >>
-      first_assum ACCEPT_TAC) >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      gvs[expr_exit_success_map]
+      >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+              read_result_def, return_def, vv_own_def] >>
+          first_assum ACCEPT_TAC) >>
+      disj2_tac >> Cases_on `res` >> gvs[halt_exit_def]) >>
   disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED

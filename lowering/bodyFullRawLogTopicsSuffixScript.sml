@@ -6,6 +6,7 @@ Ancestors
   gasShadowState loweringPosts bodyPtrDefs fragGasOriginPtr
   vyperInterpreter vyperState vyperAST list exprLowering compileEnv
   exprSimWordArgs stmtSimProps vyperTypeArgFits
+  contextRawReachable ptrDiscipline unitMemInv
 
 Theorem raw_log_topics_suffix_full_under_compose:
   (!tops ctx func cenv cx env ann n pre e rest data dflt
@@ -208,7 +209,10 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`op`,`s`,`G0`,`tn0`] mp_tac) >>
   impl_tac
-  >- (simp[] >> irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
+  >- (simp[] >> conj_tac
+      >- (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
+      rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+      fs[ctx_has_dalloca_def, dalloca_no_wrap_def, EXISTS_MEM] >> metis_tac[]) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
   rewrite_tac[eval_exprs_cons_action] >>

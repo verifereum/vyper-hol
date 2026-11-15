@@ -58,6 +58,6 @@ Proof
      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[] >>
      gvs[] >> simp[below_frontier_REVERT, eval_operand_def] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-   gvs[expr_exit_def])
+   gvs[expr_exit_def, halt_exit_def])
 QED
 

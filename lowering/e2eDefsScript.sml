@@ -197,6 +197,8 @@ Definition call_state_rel_def:
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
+      tx.created_in_tx =
+        account_empty (lookup_account tx.target es.originalAccounts) /\
       buffer_to_list ctxt.msgParams.data = tx.calldata /\
       ctxt.msgParams.code = tx.code /\
       tx_block_fields_rel tx es.txParams /\

@@ -151,7 +151,8 @@ Resume compile_for_range_lit_frag_mem[loop]:
        cc.vs_alloca_next <= s.vs_alloca_next /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
        (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-     (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
+     (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)` by
     (irule for_loop_mem >>
      ntac 5 (conj_tac >- simp[]) >>
      conj_tac >- (qexists_tac `lctx` >> simp[]) >>

@@ -38,7 +38,9 @@ Theorem activated_exhaustion_records_request:
   eval_expr empty_evaluation_context counter_expr
     (empty_state with outcomes := SOME []) =
     (INR (Error (RevertData [])),
-     empty_state with <|outcomes := SOME []; requests := [counter_request]|>)
+     empty_state with <|outcomes := SOME []; requests := [counter_request];
+       storage_trace := [StorageOutcome counter_request
+         (failed_outcome counter_request)]|>)
 Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
 QED
@@ -68,13 +70,18 @@ QED
 (* A computed precompile takes its success from the next outcome and
    records no request. *)
 Theorem activated_precompile_consumes_without_recording:
+  let rq = call_outcome_request 2w [38w;18w;31w;240w] NONE empty_state in
   SND (eval_expr empty_evaluation_context sha256_expr counter_state) =
-    counter_state with outcomes := SOME [] /\
+    counter_state with <|outcomes := SOME [];
+      storage_trace := [StorageOutcome rq (failed_outcome rq)]|> /\
   ~ISL (FST (eval_expr empty_evaluation_context sha256_expr counter_state)) /\
   SND (eval_expr empty_evaluation_context sha256_expr
          (counter_state with outcomes :=
             SOME [counter_outcome with co_success := T])) =
-    counter_state with outcomes := SOME [] /\
+    counter_state with <|outcomes := SOME [];
+      storage_trace := [StorageOutcome rq (failed_outcome rq with
+        <|co_success := T;
+          co_returnData := word_to_bytes (SHA_256_bytes [38w;18w;31w;240w]) T|>)]|> /\
   ISL (FST (eval_expr empty_evaluation_context sha256_expr
               (counter_state with outcomes :=
                  SOME [counter_outcome with co_success := T])))
@@ -93,7 +100,8 @@ Theorem activated_skip_check_makes_call:
       [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
     counter_state =
     (INR (Error (RevertData [])),
-     counter_state with <|outcomes := SOME []; requests := [counter_request]|>)
+     counter_state with <|outcomes := SOME []; requests := [counter_request];
+       storage_trace := [StorageOutcome counter_request counter_outcome]|>)
 Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
 QED

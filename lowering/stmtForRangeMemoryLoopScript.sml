@@ -38,7 +38,8 @@ Theorem for_body_outcome_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb1 t /\ alloca_history func t /\
       s2.vs_alloca_next <= t.vs_alloca_next)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+       halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `bc.ce_return_pc = cenv.ce_return_pc /\ bc.ce_return_buf = cenv.ce_return_buf` by
@@ -296,7 +297,8 @@ Theorem for_iteration_mem:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\H res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 esk.storage_trace`)
@@ -457,7 +459,8 @@ Theorem for_loop_mem:
          cc.vs_alloca_next <= s.vs_alloca_next /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+       halt_exit H cx ee res r)
 Proof
   rpt gen_tac >>
   map_every qid_spec_tac [`w`, `cc`, `esk`, `k`, `m`] >>
@@ -542,7 +545,8 @@ Resume for_loop_mem[step]:
   qmatch_asmsub_abbrev_tac `gas_outcome T tops cf cx st0 round start Step StepExit` >>
   qabbrev_tac `Done = (\H ee t. Final H (INL ()) ee t)` >>
   qabbrev_tac `Next = (\H ee t. Step H (INL F) ee t)` >>
-  qabbrev_tac `R = (\H ex ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)` >>
+  qabbrev_tac `R = (\H ex ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit H cx ee (INR ex) r)` >>
   `gas_outcome T tops cf cx st0 source start
      (\H res ee t. res = INL () /\ Done H ee t)
      (\H res ee r. ?ex. res = INR ex /\ R H ex ee r)` suffices_by
@@ -550,7 +554,7 @@ Resume for_loop_mem[step]:
      irule for_outcome_consequence_mem >>
      qhdtm_x_assum `gas_outcome` (irule_at Any) >>
      simp[Abbr `Done`, Abbr `Final`, Abbr `R`, Abbr `Exit`] >>
-     rpt gen_tac >> strip_tac >> gvs[]) >>
+     rpt gen_tac >> strip_tac >> gvs[exprSimDefsTheory.halt_exit_def]) >>
   simp[Abbr `source`, Abbr `start`, Abbr `cf`, Abbr `tops`,
        eval_for_cons_value_round] >>
   irule gas_outcome_bool_round >>
@@ -623,7 +627,7 @@ Resume for_loop_mem[step]:
    >- (simp[Abbr `Exit`, Abbr `R`] >> rpt gen_tac >> strip_tac >>
        Cases_on `res`
        >- (Cases_on `x` >> metis_tac[stmt_exit_loop_ctl]) >>
-       metis_tac[])) >>
+       fs[exprSimDefsTheory.halt_exit_def])) >>
   simp[Abbr `Done`, Abbr `Final`] >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED

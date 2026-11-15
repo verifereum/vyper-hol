@@ -312,7 +312,7 @@ Theorem comparison_terminal_summary[local]:
         es sa sb s0 ee v op z /\
       z.vs_current_bb = sh.cs_current_bb /\
       z.vs_inst_idx = LENGTH sh.cs_current_insts + LENGTH (emitted_insts sh sb))
-    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit res r)
+    R
 Proof
   strip_tac >>
   `ee with gas_obs := [] = ee` by
@@ -333,7 +333,8 @@ Theorem comparison_operand_outcome_suffix[local]:
      storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==>
      R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!gs v ee t.
@@ -421,7 +422,7 @@ QED
 
 Resume comparison_operand_outcome_suffix[exit]:
   Cases_on `res`
-  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
         (drule_then mp_tac) >> simp[]) >>
   rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -622,7 +623,7 @@ Proof
           irule expr_sim_suffix >>
           qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
           qpat_assum `lower_value _ _ _ e2 _ = _` (irule_at Any) >>
-          simp[] >>
+          simp[halt_exit_def] >>
           (conj_tac >- (irule expr_body_pre_gas_admissible >>
              qexistsl_tac [`cenv`, `env`] >> simp[])) >>
           map_every qx_gen_tac [`gs2`, `v2`, `ee2`, `t2`] >> strip_tac >>
@@ -808,7 +809,7 @@ Proof
       irule expr_sim_suffix >>
       qpat_assum `expr_sim _ _ _ _ _ e2 _` (irule_at Any) >>
       qpat_assum `lower_value _ _ _ e2 _ = _` (irule_at Any) >>
-      simp[] >>
+      simp[halt_exit_def] >>
       (conj_tac >- (irule expr_body_pre_gas_admissible >>
          qexistsl_tac [`cenv`, `env`] >> simp[])) >>
       map_every qx_gen_tac [`gs2`, `v2`, `ee2`, `t2`] >> strip_tac >>

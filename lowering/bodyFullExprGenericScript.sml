@@ -74,7 +74,10 @@ Proof
       >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
               read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
       irule vv_store_bound_stack_value >> simp[]) >>
-  rpt strip_tac >> gvs[expr_exit_success_map]
+  rpt strip_tac >> gvs[AllCaseEqs(), expr_exit_success_map, halt_exit_def] >>
+  rename1 `expr_exit (INR exc) result` >>
+  Cases_on `result` >> Cases_on `exc` >> gvs[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
 QED
 
 Theorem gas_shadow_compiles_alloc_buffer:

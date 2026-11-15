@@ -881,7 +881,8 @@ Theorem dynarray_code_loop_counted[local]:
       storage_well_formed_on cx ee (FST H) /\
       array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >>
   `bc.ce_return_pc = cenv.ce_return_pc` by
