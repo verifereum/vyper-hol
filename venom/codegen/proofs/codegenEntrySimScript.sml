@@ -269,7 +269,7 @@ QED
    remaining gen_fn_simulation premises come from codegen_context_obligations,
    codegen_reachability_package and initial_ctx_rel's label agreement. *)
 
-Theorem entry_fn_entry_state_rel_tail[local]:
+Theorem entry_fn_entry_state_rel_tail:
   initial_ctx_rel_tail tail cp prog ctx vs es /\
   ctx.ctx_functions = fe :: rest /\
   get_params (HD fe.fn_blocks).bb_instructions = [] /\
