@@ -54,12 +54,12 @@ Proof
   (impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[])) >> strip_tac >>
   asm_rewrite_tac[] >>
   irule gas_outcome_bind_value >>
+  conj_tac
+  >- (gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
   goal_assum (drule_at Any) >>
   reverse conj_tac
-  >- (conj_tac
-      >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >>
-          metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-      gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
+  >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def, halt_exit_def] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   rpt gen_tac >> strip_tac >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -117,15 +117,28 @@ Proof
      drule method_id_runtime_typed_post_run_mem_any_block >>
      disch_then (qspecl_then [`sb`, `op`, `fixed`, `bty`] mp_tac) >>
      (impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[])) >>
-     strip_tac >> asm_simp_tac (srw_ss()) [] >> metis_tac[]) >>
+     strip_tac >> asm_simp_tac (srw_ss()) [] >>
+     rename1 `builtin_result _ _ _ _ _ _ = INL r2` >>
+     qexists_tac `r2` >>
+     qpat_assum `expr_type e = BaseT bty`
+       (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+     fs[]) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> ?t2 r2. _`
     (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
   strip_tac >> rename1 `run_inst_seq _ t = OK t'` >>
-  rename1 `builtin_result _ _ _ _ _ = INL r` >>
+  rename1 `builtin_result _ _ _ _ _ _ = INL r` >>
   `expr_post H0 ctx func cenv cx e es sa sm s0 (mid with gas_obs := []) v x t` by
     (first_x_assum (qspec_then `H0` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  `t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+   s0.vs_alloca_next <= t.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       ?v'. INL v = INL v' /\ _`
+       (qspec_then `H0` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
@@ -151,6 +164,12 @@ Proof
   simp[gas_marked_exec_def] >>
   `t'.vs_current_bb = sb.cs_current_bb` by
     (drule_all run_inst_seq_preserves_entry_control >> fs[same_blocks_def]) >>
+  conj_tac
+  >- (qpat_assum `expr_type e = BaseT bty`
+        (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+      qpat_assum `sb.cs_current_insts = _`
+        (fn th => RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [th])) >>
+      fs[] >> first_assum ACCEPT_TAC) >>
   disj1_tac >> qx_gen_tac `H2` >> strip_tac >>
   first_assum (qspec_then `H2` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
@@ -167,7 +186,7 @@ Proof
   Cases_on `fixed` >>
   gvs[expr_type_def, lowered_value_type_def, vv_store_bound_def,
       eval_operand_def, mk_ptr_def, is_word_type_def] >>
-  metis_tac[]
+  decide_tac
 QED
 
 Theorem method_id_literal_dynamic_vv_sim_mem:
