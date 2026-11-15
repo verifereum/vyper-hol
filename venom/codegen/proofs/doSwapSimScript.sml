@@ -6071,6 +6071,71 @@ QED
 
 
 
+(* Boundary probes cover shallow DUP16, k=1, k=16, k=17 and k=25.
+   Every temporary offset is restored exactly once, and hardware depths
+   remain in range in both restoration schedules. *)
+Theorem do_dup_boundary_ops:
+  EVERY (\dist.
+    let ps = (init_plan_state 0) with ps_stack := REPLICATE 50 (Var "probe");
+        ops = FST (do_dup dist ps);
+        spills = FLAT (MAP (\op. case op of SOSpill off => [off] | _ => []) ops);
+        restores = FLAT (MAP (\op. case op of SORestore off => [off] | _ => []) ops)
+    in
+      LENGTH spills = dist - 15 /\
+      ALL_DISTINCT restores /\
+      EVERY (\off. MEM off spills) restores /\
+      EVERY (\off. MEM off restores) spills /\
+      FILTER (\op. case op of SODup _ => T | _ => F) ops = [SODup 16] /\
+      EVERY (\op. case op of
+        SODup n => 1 <= n /\ n <= 16
+      | SOSwap n => 1 <= n /\ n <= 16
+      | _ => T) ops)
+    [15; 16; 31; 32; 40]
+Proof
+  CONV_TAC EVAL
+QED
+
+(* Probe: layout well-formedness does not imply stack/spill disjointness. *)
+Theorem do_dup_overlap_alignment_probe:
+  !lo.
+    let ps = (init_plan_state 0) with <|
+          ps_stack := Var "deep" :: REPLICATE 15 (Var "middle") ++ [Var "old"];
+          ps_spilled := FEMPTY |+ (Var "old", 0);
+          ps_alloc := (init_spill_alloc 0) with sa_next_offset := 32 |>;
+        ops = FST (do_dup 16 ps)
+    in
+      spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+      prefix_spill_wf initial_fmp lo ops ps /\
+      (apply_prefix_ops initial_fmp lo ops ps).ps_spilled <>
+        (SND (do_dup 16 ps)).ps_spilled
+Proof
+  gen_tac >> CONV_TAC (computeLib.RESTR_EVAL_CONV [``spill_lookup``]) >>
+  simp[FLOOKUP_UPDATE, DOMSUB_FUPDATE_THM, FLOOKUP_DEF] >>
+  simp[spill_lookup_def, FLOOKUP_UPDATE, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
+Theorem emit_one_input_overlap_alignment_probe:
+  !lo.
+    let ps = (init_plan_state 0) with <|
+          ps_stack := Var "deep" :: REPLICATE 15 (Var "middle") ++ [Var "old"];
+          ps_spilled := FEMPTY |+ (Var "old", 0);
+          ps_alloc := (init_spill_alloc 0) with sa_next_offset := 32 |>;
+        result = emit_one_input ADD ["deep"] (Var "deep") ps;
+        ops = FST result;
+        ps' = SND result
+    in
+      spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+      prefix_spill_wf initial_fmp lo ops ps /\
+      ~(?l. Var "deep" = Label l /\ ADD = INVOKE) /\
+      (apply_prefix_ops initial_fmp lo ops ps).ps_spilled <> ps'.ps_spilled
+Proof
+  gen_tac >> CONV_TAC (computeLib.RESTR_EVAL_CONV [``spill_lookup``]) >>
+  simp[FLOOKUP_UPDATE, DOMSUB_FUPDATE_THM, FLOOKUP_DEF] >>
+  simp[spill_lookup_def, FLOOKUP_UPDATE, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
 Theorem simple_op_spilled_unchanged[local]:
   !op lo ps. (apply_simple_op lo op ps).ps_spilled = ps.ps_spilled
 Proof
