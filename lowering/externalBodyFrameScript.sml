@@ -644,11 +644,10 @@ Proof
 QED
 
 Theorem external_selected_return_buffer_ok:
-  !tops rpolicy unit tx calldata ret mut args fbody lbl cenv0 pos_args
+  !tops rpolicy unit tx ret mut args fbody lbl cenv0 pos_args
    min_cds is_payable nkey ut iv rt st cenv sa.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
-    valid_vyper_call tops tx calldata ret /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     set_external_package_target rpolicy.rpol_target
@@ -660,7 +659,10 @@ Theorem external_selected_return_buffer_ok:
     (stmts_valued_return fbody /\ cenv.ce_is_external /\
      ~cenv.ce_raw_return ==> return_buffer_ok cenv)
 Proof
-  rpt gen_tac >> strip_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tx.function_name = "__default__"`
+  >- (drule_all external_default_return_buffer_ok >> simp[]) >>
+  strip_tac >>
   qpat_x_assum `set_external_package_target _ _ = _`
     (fn th => mp_tac (Q.ISPEC `[]:expr list`
        (MATCH_MP set_external_package_target_dflts th))) >>
@@ -670,7 +672,6 @@ Proof
   `same_frame cenv cenv` by simp[] >>
   `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by
     (drule_all external_package_raw_flag >> simp[]) >>
-  `tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   `MEM (mut,F,F,tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
     (irule supported_headers_external_plain_member >>
@@ -706,7 +707,6 @@ Theorem external_body_frame:
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
@@ -781,9 +781,11 @@ Proof
   drule_all external_package_alloc_env_agree >> strip_tac >>
   `?rr:bool. fn_allocs_ok tops
      (mut,F,rr,tx.function_name,args,[],ret,fbody)` by
-    (`tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
-     `supported_declaration_headers tops` by fs[supported_program_def] >>
-     drule_all supported_headers_external_member >> strip_tac >>
+    (`module_consts_env tops [] = []` by
+       metis_tac[supported_program_def, supported_declaration_headers_def,
+                 supported_headers_module_consts_env] >>
+     drule lookup_function_external_classified >>
+     simp[subst_consts_fn_empty] >> strip_tac >>
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
      metis_tac[]) >>
