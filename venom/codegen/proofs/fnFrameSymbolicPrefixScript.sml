@@ -7,7 +7,8 @@ Ancestors
   symBlockBody symFnStep fnBlockStepHelpers stepWriteFootprintBase
   fnEntryPlan fnEntryStep fnBlockBodyHelpers stackOpSim fnFrameBoundaryEntryParams fnEntryParams
   asmDataEnv asmSymBridge asmSymSem asmSem
-  fnBlockBodyClasses fnBlockBodySteps fnBlockBody fnFrameBoundaryInvoke frameRel contextCodegenRel
+  fnBlockBodyClasses fnBlockBodySteps fnBlockBody fnFrameDeepJnz
+  fnFrameBoundaryInvoke fnFrameBoundaryGenRet frameRel contextCodegenRel
   stackPlanTypes stackPlanGen planExec unitShapeDefs
   frameJointTrace frameJointTransition frameOriginHistory
   venomInstProps venomExecSemantics venomState venomInst fcgDefs
@@ -264,6 +265,133 @@ Proof
   fs[codegen_asm_entry_rel_def]
 QED
 
+Theorem body_plan_symbolic_jnz_step:
+  body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
+      ra pc_ret rest mem0 /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
+    focus_s7_symbolic_context unit prog /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+    ?target n as1 off ss1.
+      0 < n /\
+      vs1 = jump_to target vs /\ MEM target (get_successors inst) /\
+      asm_steps lo o2pc prog n as = AsmOK as1 /\
+      fn_frame_inv ctx cpl lo fn ra rest mem0 ps_after vs1 as1 /\
+      (!at. MEM at ps_after.ps_stack \/ at IN FDOM ps_after.ps_spilled ==>
+         operand_val (frame_view fn ra vs1) lo at =
+         operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
+      FLOOKUP lo target = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc /\
+      sym_steps prog env n ss = SymOK ss1 /\
+      sym_frame_inv prog env ctx cpl fn ret srest labs0 ps_after as1 ss1
+Proof
+  strip_tac >>
+  `!at. MEM at ps_after.ps_stack \/ at IN FDOM ps_after.ps_spilled ==>
+     operand_val (frame_view fn ra vs1) lo at =
+     operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)` by
+    (drule_all body_plan_jnz_step >> strip_tac >> first_assum ACCEPT_TAC) >>
+  drule body_plan_inv_facts >> strip_tac >>
+  drule_all body_plan_inv_inst >> strip_tac >>
+  drule_all body_plan_inv_step >> strip_tac >>
+  drule_all body_plan_inv_static >> strip_tac >>
+  drule body_plan_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
+  `?c l1 l2. inst.inst_operands = [c; Label l1; Label l2] /\
+             inst.inst_outputs = []` by
+    (qpat_x_assum `inst_wf inst` mp_tac >>
+     qpat_x_assum `inst.inst_opcode = JNZ` mp_tac >>
+     rpt (pop_assum kall_tac) >> rw[venomWfTheory.inst_wf_def] >> gvs[]) >>
+  `~is_label_operand c` by
+    (qpat_x_assum `inst_shape_ok inst` mp_tac >>
+     qpat_x_assum `inst.inst_operands = _` mp_tac >>
+     qpat_x_assum `inst.inst_opcode = JNZ` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[inst_shape_ok_def, label_positions_ok_def]) >>
+  `is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
+  `MEM l1 (get_successors inst) /\ MEM l2 (get_successors inst)` by
+    (Cases_on `c` >> gvs[get_successors_def, get_label_def, is_label_operand_def]) >>
+  `MEM c (compute_operands inst)` by
+    (Cases_on `c` >> gvs[compute_operands_def, asmIRTheory.get_non_label_operands_def,
+      is_label_operand_def]) >>
+  suspend "selected"
+QED
+
+Resume body_plan_symbolic_jnz_step[selected]:
+  `eval_operand c vs = operand_val (frame_view fn ra vs) lo c` by
+    (`eval_operand c vs = eval_operand c (frame_view fn ra vs)` by
+       (irule eval_operand_frame_view_vs >> rpt strip_tac >>
+        `MEM (Var x) inst.inst_operands` by
+          (qpat_x_assum `inst.inst_operands = _` (fn th => rewrite_tac[th]) >>
+           qpat_x_assum `c = Var x` (fn th => rewrite_tac[GSYM th, MEM])) >>
+        drule_all opaque_use_ok_retpc_use >> strip_tac >>
+        gvs[retpc_use_ok_def]) >>
+     metis_tac[]) >>
+  drule_all body_plan_terminator_last >> strip_tac >>
+  mp_tac (Q.INST [`t` |-> `l1`] (SPEC_ALL body_plan_succ_placed)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`tb1`, `pd1`, `op1`, `pa1`, `off1`, `pc1`]
+    strip_assume_tac) >>
+  mp_tac (Q.INST [`t` |-> `l2`] (SPEC_ALL body_plan_succ_placed)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`tb2`, `pd2`, `op2`, `pa2`, `off2`, `pc2`]
+    strip_assume_tac) >>
+  suspend "placement"
+QED
+
+Resume body_plan_symbolic_jnz_step[placement]:
+  qhdtm_assum `body_plan_inv`
+    (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
+  qpat_x_assum `inst.inst_opcode = JNZ ==> _` drule >>
+  disch_then (qspecl_then [`c`, `l1`, `l2`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+       operand_equiv dfg c at ==>
+       operand_val (frame_view fn ra vs) lo c =
+       operand_val (frame_view fn ra vs) lo at` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op at. MEM op (compute_operands inst) /\ _ ==> _` irule >>
+     simp[] >> metis_tac[]) >>
+  drule_all gen_jnz_frame_sim_deep_exact >> strip_tac >>
+  suspend "symbolic"
+QED
+
+Resume body_plan_symbolic_jnz_step[symbolic]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `MEM (AsmLabel l1) prog /\ MEM (AsmLabel l2) prog` by
+    metis_tac[symBlockBodyTheory.placed_nonentry_sym_code_label] >>
+  `ssa_form fn` by fs[codegen_ready_fn_def] >>
+  `fn_shape_ok fn` by
+    (qpat_x_assum `unit_shape_ok unit` mp_tac >>
+     simp[unit_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  `label_flow_ok ctx /\ asm_static_wf prog` by
+    fs[focus_s7_symbolic_context_def] >>
+  `operand_val (frame_view fn ra vs) lo c = SOME w` by metis_tac[] >>
+  `1 <= LENGTH ps1.ps_stack` by gvs[] >>
+  drule_all sym_jnz_plan_frame_sim >> strip_tac >>
+  qpat_x_assum `ps' = ps_after` SUBST_ALL_TAC >>
+  suspend "package"
+QED
+
+Resume body_plan_symbolic_jnz_step[package]:
+  markerLib.RESUME_TAC >>
+  `as' = ac` by gvs[] >>
+  qpat_x_assum `as' = ac` SUBST_ALL_TAC
+  >- (qexistsl_tac [`l1`,
+        `LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) +
+           (if w = 0w then 4 else 2)`, `ac`, `off1`, `sy`] >>
+      qpat_x_assum `ac.as_pc = pc1` SUBST1_TAC >>
+      conj_tac >- (Cases_on `w = 0w` >> simp[]) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`l2`,
+    `LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) +
+       (if w = 0w then 4 else 2)`, `ac`, `off2`, `sy`] >>
+  qpat_x_assum `ac.as_pc = pc2` SUBST1_TAC >>
+  conj_tac >- (Cases_on `w = 0w` >> simp[]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise body_plan_symbolic_jnz_step
+
 Theorem entry_frame_symbolic_plan_next:
   entry_frame_symbolic_plan env rpolicy unit cpl prog fn entry s ast
     ra pc_ret rest mem0 ret srest labs0 ss /\
@@ -501,6 +629,67 @@ Resume block_step_symbolic_prefix[paired_prefix]:
 QED
 
 Finalise block_step_symbolic_prefix
+
+Theorem active_frame_symbolic_ret_boundary:
+  frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk fn entry ra rest mem0 sentry ret srest labs0 /\
+  frame_history vs0 unit.cu_context stk PG G tn fn inst s hs history /\
+  active_frame_symbolic_plan env rpolicy unit cpl prog fn s ast ra rest mem0 ret srest labs0 ss /\
+  active_inst fn inst s /\ inst.inst_opcode = RET /\
+  focus_s7_symbolic_context unit prog /\
+  step_inst fuel unit.cu_context inst s = IntRet rv send ==>
+  ?n asr ssr.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n ast = AsmOK asr /\
+    sym_steps prog env n ss = SymOK ssr /\
+    FLOOKUP (build_offset_to_pc prog) (w2n ra) = SOME asr.as_pc /\
+    asr.as_stack = REVERSE rv.iret_values ++ rest /\
+    fn_return_state_rel unit.cu_context cpl fn send entry asr /\
+    asm_sym_rel prog env asr ssr /\
+    ssr.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+    (!b. context_spill_byte cpl b /\ ~closure_spill_byte unit.cu_context cpl fn.fn_name b ==> FLOOKUP ssr.sym_mem_labels b = FLOOKUP labs0 b) /\
+    (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cpl b)
+Proof
+  rpt strip_tac >>
+  `mem0 = entry.as_memory /\
+   (entry.as_call_ctx, entry.as_tx_ctx, entry.as_block_ctx,
+    entry.as_code, entry.as_prev_hashes) =
+   (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+    vs0.vs_code, vs0.vs_prev_hashes)` by
+    (qpat_x_assum `frame_stack_symbolic_plan _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       mp_tac >> rpt (pop_assum kall_tac) >>
+     simp[Once frame_stack_symbolic_plan_cases] >> rpt strip_tac >>
+     fs[fn_entry_state_rel_def, shared_state_rel_def, fn_frame_inv_def,
+        contextCodegenRelTheory.context_venom_asm_rel_def, frame_view_def] >>
+     qpat_x_assum `setup_callee _ _ _ = SOME _`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [setup_callee_def, AllCaseEqs()]) >>
+     qpat_x_assum `_ = cvs` (assume_tac o SYM) >> simp[]) >>
+  fs[active_frame_symbolic_plan_def, focus_s7_symbolic_context_def] >>
+  drule_all body_plan_active_inst >> strip_tac >>
+  drule_all body_plan_inv_inst >> strip_tac >>
+  drule body_plan_inv_facts >> strip_tac >>
+  drule_all body_plan_inv_static >> strip_tac >>
+  drule_all body_plan_inv_step >> strip_tac >>
+  drule_all fnBlockBodyTheory.body_operands_le_16 >> strip_tac >>
+  `MEM inst (fn_insts (reachable_fn fn))` by
+    (irule reachable_fn_mem_inst >> metis_tac[body_plan_inv_def]) >>
+  `ps'.ps_stack = []` by metis_tac[] >>
+  drule body_plan_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
+  qpat_assum `body_plan_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
+  `fn_shape_ok fn` by fs[unit_shape_ok_def, EVERY_MEM] >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) sym_ret_frame_sim_deep >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  simp[] >>
+  disch_then (qspecl_then [`fuel`, `pc_ret`, `rv`, `send`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  drule_all ret_source_frame_boundary >>
+  disch_then (qspec_then `ra` strip_assume_tac) >>
+  drule frame_history_readonly >> strip_tac >>
+  qexistsl [`n`, `as'`, `ss'`] >>
+  simp[] >>
+  fs[fn_return_state_rel_def, shared_state_rel_def] >> metis_tac[]
+QED
 
 Theorem body_plan_symbolic_call_prepare:
   body_plan_inv rpolicy unit cpl prog unit.cu_context
