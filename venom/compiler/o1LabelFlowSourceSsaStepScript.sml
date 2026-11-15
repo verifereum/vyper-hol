@@ -1,6 +1,6 @@
 Theory o1LabelFlowSourceSsaStep
 Ancestors
-  o1SymStaticMakeSSA o1LabelFlowSourceBoundary
+  o1LabelReadinessSsa o1LabelFlowSourceBoundary
   o1ContractMakeSsaPtrOk
   o1FnScheduleDecompHelpers fmpStepBridge venomFnScheduleRunnerProps
   venomPassDispatcher o1PassContract unitShapeDefs list
@@ -44,7 +44,8 @@ Proof
   >- (gvs[] >>
       `EVERY (\i. ~MEM (Label "code_end") i.inst_operands) (fn_insts f)` by
         simp[EVERY_MEM] >>
-      drule_all make_ssa_current_fn_label_absent >> simp[EVERY_MEM]) >>
+      fs[EVERY_MEM] >>
+      metis_tac[o1LabelReadinessSsaTheory.make_ssa_current_fn_label_absent]) >>
   drule_all mssa_origin >> strip_tac >>
   `!j. MEM j (fn_insts q) ==>
     MEM j.inst_opcode [PHI; ASSIGN; NOP] \/
