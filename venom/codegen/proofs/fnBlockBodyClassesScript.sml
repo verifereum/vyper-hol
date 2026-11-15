@@ -1130,14 +1130,16 @@ Proof
      `bb.bb_label`, `spill_base`, `ps`, `vs`, `as`, `ops`, `ps'`, `r`, `ra`,
      `rest`, `mem0`, `nm`, `arg_ops`] mp_tac gen_invoke_frame_sim_deep_resource >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    Cases_on `q` >> gvs[cost_le_def] >> first_assum ACCEPT_TAC) >>
+    qpat_x_assum `!j callee rj cvs cas cra crest cpc. _` mp_tac >>
+    Cases_on `q` >> simp_tac (srw_ss()) [cost_le_def]) >>
   strip_tac >> rpt conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!vs'. step_inst fuel ctx inst vs = OK vs' ==> _` drule >>
       strip_tac >>
       qexistsl_tac [`ops`, `ps'`, `rest'`, `n`, `as'`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      Cases_on `q` >> gvs[cost_le_def])
+      qpat_x_assum `case OPTION_MAP _ q of NONE => T | SOME B => _` mp_tac >>
+      Cases_on `q` >> simp_tac (srw_ss()) [cost_le_def])
   >- (rpt strip_tac >>
       qpat_x_assum `!vs'. step_inst fuel ctx inst vs = Halt vs' ==> _`
         (qspec_then `vs1` mp_tac) >>
