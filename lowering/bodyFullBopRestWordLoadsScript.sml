@@ -2770,3 +2770,129 @@ Resume rest_word_membership_runtime_address_operand_joint_const[ghosts]:
 QED
 
 Finalise rest_word_membership_runtime_address_operand_joint_const
+
+Theorem rest_word_membership_header_joint_const:
+  vv_location vv = SOME loc /\ (~cenv.ce_is_ctor \/ loc <> LocCode) /\
+  (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient \/ loc = LocCode) /\
+  compile_var_array_membership cenv needle vv (ArrayT ety (Dynamic cap)) is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
+  (!H:'h. guard H ==> ~s.vs_halted /\ allocas_from lo s /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    eval_operand (vv_operand vv) s = SOME w /\ op_taint TF (vv_operand vv) = {} /\
+    (case loc of
+       LocMemory =>
+         (?x. vv_operand vv = Var x /\ ptr_covers G TF x s 32) /\
+         w2n w + 32 <= s.vs_alloca_next /\ mem_word_taint TF.t_mem (w2n w) = {} /\
+         mload (w2n w) s = n2w n
+     | LocStorage => key_taint TF.t_stor w = {} /\ sload w s = n2w n
+     | LocTransient => key_taint TF.t_trans w = {} /\ tload w s = n2w n
+     | LocCode => w2n w <= LENGTH s.vs_data_section /\
+         word_of_bytes T (0w:bytes32)
+           (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)) = n2w n
+     | _ => F)) ==>
+  ?len sm t GF TFF.
+    compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (vv_operand vv) sa = (len,sm) /\
+    compile_array_membership_loop needle (vv_operand vv) len
+      (elem_size_in_location cenv loc ety) (word_scale loc)
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) (SOME cap) is_in sm = (op,sb) /\
+    (!H:'h. guard H ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,TF) [] (OK t,GF,TFF) /\
+      membership_loop_frame sa G TF s GF TFF t /\
+      eval_operand len t = SOME (n2w n) /\ op_prov GF len = NONE /\ op_taint TFF len = {} /\
+      ~t.vs_halted /\ allocas_from lo t /\ t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_var_array_membership _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_var_array_membership_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_array_membership_loop _ _ len _ _ _ _ _ sm = _` >>
+  `fn_has_code sa sm fn` by
+    (irule (cj 1 fn_has_code_split) >> conj_tac
+     >- metis_tac[first_emission_ptr_load] >>
+     qexists_tac `sb` >> simp[] >> metis_tac[membership_bounded_loop_extends]) >>
+  `compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc =
+     compile_ptr_load F cenv.ce_imm_alloca loc` by
+    (Cases_on `loc` >> gvs[FUN_EQ_THM, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_imm_load_word_def]) >>
+  `compile_ptr_load F cenv.ce_imm_alloca loc (vv_operand vv) sa = (len,sm)` by metis_tac[] >>
+  drule_all membership_length_header_code >> strip_tac >>
+  drule membership_length_header_layout >>
+  disch_then (qspec_then `(case loc of LocMemory => MLOAD | LocStorage => SLOAD |
+    LocTransient => TLOAD | LocCalldata => CALLDATALOAD | LocCode => DLOAD)` mp_tac) >>
+  simp[] >> strip_tac >> simp[] >>
+  qabbrev_tac `dst = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `ins = mk_inst sa.cs_next_id
+    (case loc of LocMemory => MLOAD | LocStorage => SLOAD | LocTransient => TLOAD |
+      LocCalldata => CALLDATALOAD | LocCode => DLOAD) [vv_operand vv] [dst]` >>
+  qabbrev_tac `u = update_var dst (n2w n) s` >>
+  qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+    `step_prov PG G ins u`, `step_taint ins s u TF`] >>
+  gen_tac >> disch_tac >>
+  qpat_x_assum `!H. guard H ==> _` (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  `step_inst_base ins s = OK u` by
+    (Cases_on `loc` >>
+     asm_simp_tac bool_ss [Abbr `ins`, Abbr `u`, mk_inst_def,
+       step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
+       combinTheory.K_THM, opcode_case_def] >>
+     gvs[GSYM mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def]) >>
+  `ptr_inst_ok (DF H) lo 0 ctx fn G TF ins s` by suspend "checks" >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,fn,PG) (s,G,TF) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G ins u, step_taint ins s u TF)` by suspend "edge" >>
+  conj_tac
+  >- (drule (cj 2 gas_origin_ptr_path_rules) >>
+      disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >>
+      irule (cj 1 gas_origin_ptr_path_rules) >> simp[Abbr `u`, update_var_def]) >>
+  suspend "post"
+QED
+
+Resume rest_word_membership_header_joint_const[checks]:
+  markerLib.RESUME_TAC >>
+  Cases_on `loc` >> gvs[Abbr `ins`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
+    memLocDefsTheory.mem_read_ops_def, step_inst_non_invoke, Abbr `u`, update_var_def,
+    allocas_from_def] >>
+  gvs[bodyPtrDefsTheory.ptr_covers_def, eval_operand_def] >> first_assum ACCEPT_TAC
+QED
+
+Resume rest_word_membership_header_joint_const[edge]:
+  markerLib.RESUME_TAC >>
+  `ins.inst_opcode <> GAS /\ ins.inst_opcode <> INVOKE /\
+   ~is_terminator ins.inst_opcode /\
+   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s` by
+    (Cases_on `loc` >> gvs[Abbr `ins`, mk_inst_def, is_terminator_def,
+      unitTransformDefsTheory.inst_mem_below_frontier_def, inst_dload_in_section_def,
+      source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx = SOME ins` by simp[] >>
+  drule_all straight_line_origin_ptr_edge >> simp[]
+QED
+
+Resume rest_word_membership_header_joint_const[post]:
+  markerLib.RESUME_TAC >> gvs[]
+  >>~- ([`gas_origin_ptr_path _ _ _ _`],
+    `~(u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)).vs_halted` by
+      simp[Abbr `u`, update_var_def] >>
+    drule (cj 2 gas_origin_ptr_path_rules) >>
+    disch_then (qspec_then `[]` mp_tac) >> simp[] >>
+    disch_then match_mp_tac >>
+    irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  simp[Abbr `ins`, Abbr `u`, membership_loop_frame_def,
+    step_taint_def, set_var_taint_def, out_taint_def,
+    step_prov_def, set_prov_def, out_prov_def, op_prov_def,
+    mk_inst_def, update_var_def, eval_operand_def, lookup_var_def,
+    op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, allocas_from_def] >>
+  simp[mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+    step_writes_def, source_memory_write_ranges_def, written_taint_def,
+    new_site_bytes_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+    venom_state_component_equality] >>
+  rpt conj_tac >> gvs[allocas_from_def, FLOOKUP_DEF] >>
+  qx_gen_tac `protected` >> strip_tac >>
+  `protected <> dst` by
+    gvs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `dst`, stringTheory.STRCAT_EQNS] >>
+  simp[]
+QED
+
+Finalise rest_word_membership_header_joint_const
