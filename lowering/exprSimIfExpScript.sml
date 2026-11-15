@@ -2543,7 +2543,7 @@ Theorem ifexp_arm_outcome[local]:
          (~is_word_type (expr_type e) ==>
           vv_at cenv cx (expr_type e) sa sb ee tv
             (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t))
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
@@ -2862,9 +2862,11 @@ QED
 Theorem ifexp_root_condition_exit[local]:
   gas_marked_exec F (ctx,func)
     (vyperState$bind (eval_expr cx c) (read_result cx))
-    (es,s0) marks res mid r /\ expr_exit res r ==>
+    (es,s0) marks res mid r /\ expr_exit res r /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     halt_exit H cx (mid with gas_obs := []) res r) ==>
   gas_outcome F tops (ctx,func) cx st0 (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
   simp[gas_outcome_def, gas_summary_at_def] >>
@@ -2873,8 +2875,14 @@ Proof
   conj_tac
   >- (rewrite_tac[ifexp_root_eval_forced] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >>
-  Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
+  disj2_tac >> conj_tac
+  >- (Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
+      Cases_on `y` >> fs[expr_exit_def] >>
+      rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> halt_exit _ _ _ _ _` drule >>
+  simp[halt_exit_def] >>
+  Cases_on `r` >> fs[expr_exit_def] >>
   Cases_on `y` >> fs[expr_exit_def] >>
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
 QED
