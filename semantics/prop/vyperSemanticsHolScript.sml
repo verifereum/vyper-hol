@@ -1,5 +1,6 @@
 Theory vyperSemanticsHol
 Ancestors
+  vyperCallFiniteStorage
   vyperFiniteStoragePreservation
   vyperLogPreservation
   vyperEvalPureExpr

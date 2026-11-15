@@ -33,7 +33,8 @@ Theorem for_expr_endpoint_outcome_mem:
      (!tail. ?gs. bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gs) = (INL v,ee with gas_obs := tail)) ==>
      gas_outcome T (cx_tops cx) (ctx,func) cx st0 (k v) (ee,t) Q R) /\
-  (!H ex ee r. expr_exit (INR ex : value + exception) r ==>
+  (!H ex ee r. expr_exit (INR ex : value + exception) r /\
+     halt_exit H cx ee (INR ex : value + exception) r ==>
      R H (INR ex) ee r) ==>
   gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
@@ -54,7 +55,8 @@ Proof
   >- (BETA_TAC >> rpt strip_tac >> Cases_on `res`
       >- fs[exprSimDefsTheory.expr_exit_def] >>
       rename1 `INR ex` >> qexists_tac `ex` >> simp[] >>
-      qpat_x_assum `!H ex ee r. _ ==> R H _ ee r` irule >> simp[])
+      qpat_x_assum `!H ex ee r. _ ==> R H _ ee r` irule >>
+      fs[exprSimDefsTheory.halt_exit_def])
   >- (BETA_TAC >> rpt strip_tac >> qexists_tac `v` >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC
 QED

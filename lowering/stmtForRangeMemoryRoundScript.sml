@@ -167,7 +167,8 @@ Theorem for_round_outcome_mem:
     (esk with scopes :=
       (FEMPTY |+ (id, <|assignable := F; type := tyv;
                         value := v; popped := []|>)) :: esk.scopes,s)
-    B (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+    B (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+       halt_exit H cx ee res r) /\
   ~s.vs_halted /\
   (!res ee t gs.
      (?H. valid_horizon cx st0 H ee.storage_trace) /\
@@ -188,7 +189,8 @@ Theorem for_round_outcome_mem:
                      handle_loop_exception) pop_scope od)
     (esk,s) Q
     (\H res ee r. ?ex. res = INR ex /\
-                 !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+                 (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+                 halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -254,7 +256,9 @@ Resume for_round_outcome_mem[exit]:
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INR err`, `es_end with scopes := t`, `r`] >>
   simp[] >> disj2_tac >>
-  gvs[stmt_exit_def] >> metis_tac[]
+  gvs[stmt_exit_def, exprSimDefsTheory.halt_exit_def,
+      loweringStateRelDefsTheory.halt_rel_def,
+      loweringStateRelDefsTheory.accounts_rel_def] >> metis_tac[]
 QED
 
 Resume for_round_outcome_mem[exempt]:

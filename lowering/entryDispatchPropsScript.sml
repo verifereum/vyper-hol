@@ -36,6 +36,40 @@ Libs
 
 val _ = Parse.hide "body";
 
+Theorem collect_locals_subst_consts_stmts:
+  !E ss. collect_locals (subst_consts_stmts E ss) = collect_locals ss
+Proof
+  gen_tac >> recInduct collect_locals_ind >>
+  rw[subst_consts_stmt_def, collect_locals_def] >>
+  qmatch_goalsub_abbrev_tac `subst_consts_stmt E st` >>
+  Cases_on `st` >> gvs[subst_consts_stmt_def, collect_locals_def]
+QED
+
+Theorem build_compile_env_subst_consts_stmts:
+  build_compile_env tops vis mut name args ret
+    (subst_consts_stmts E ss) use_trans =
+  build_compile_env tops vis mut name args ret ss use_trans
+Proof
+  simp[build_compile_env_def, collect_locals_subst_consts_stmts]
+QED
+
+Theorem external_package_subst_consts:
+  (set_external_package_target target
+     (package_external_fn tops use_trans keys
+       (mut,nr,rr,name,args,defaults,ret,fbody)) =
+   (lbl,ce,pos_args,min_cds,pay,nr',key,tr,view,fbody,rt)) <=>
+  (set_external_package_target target
+     (package_external_fn tops use_trans keys
+       (subst_consts_fn E (mut,nr,rr,name,args,defaults,ret,fbody))) =
+   (lbl,ce,pos_args,min_cds,pay,nr',key,tr,view,
+    subst_consts_stmts E fbody,rt))
+Proof
+  `LENGTH (subst_consts_exprs E defaults) = LENGTH defaults` by
+    (Induct_on `defaults` >> simp[subst_consts_expr_def]) >>
+  simp[subst_consts_fn_def, package_external_fn_def,
+       build_compile_env_subst_consts_stmts, set_external_package_target_def]
+QED
+
 (* ===== The 4-byte selector ===== *)
 
 Theorem function_selector_length:
