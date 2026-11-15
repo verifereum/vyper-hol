@@ -3,7 +3,7 @@
    shared interfaces are fixed. *)
 Theory e2eWitness
 Ancestors
-  e2eWitnessCompute e2eProducers e2eDefs e2eDeployDefs
+  e2eWitnessCompute e2eDefs e2eDeployDefs
   supportedProgram immutableSectionRel alist integer_word option
 Libs
   computeLib wordsLib
