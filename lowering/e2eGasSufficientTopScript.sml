@@ -142,16 +142,16 @@ Proof
         terminates (run_context fuel unit.cu_context vi)` by
     (gen_tac >> strip_tac >>
      `initial_venom_state_rel tops am tx vi` by
-       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
-        disch_then SUBST_ALL_TAC >>
+       (qpat_assum `gas_variant vi vs`
+          (SUBST_ALL_TAC o REWRITE_RULE [gas_variant_def]) >>
         gvs[initial_venom_state_rel_def,
             vyperLoweringCorrectTheory.venom_env_rel_def]) >>
      `vi.vs_outcomes = vs.vs_outcomes` by
-       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
-        disch_then SUBST1_TAC >> simp[]) >>
+       (qpat_assum `gas_variant vi vs`
+          (SUBST1_TAC o REWRITE_RULE [gas_variant_def]) >> simp[]) >>
      `vi.vs_call_ctx = vs.vs_call_ctx` by
-       (qpat_assum `gas_variant vi vs` mp_tac >> simp[gas_variant_def] >>
-        disch_then SUBST1_TAC >> simp[]) >>
+       (qpat_assum `gas_variant vi vs`
+          (SUBST1_TAC o REWRITE_RULE [gas_variant_def]) >> simp[]) >>
      `valid_vyper_call tops tx vi.vs_call_ctx.cc_calldata ret /\
       call_outcomes_ok am tx vi.vs_outcomes /\
       !marks. ~source_exempt tops
