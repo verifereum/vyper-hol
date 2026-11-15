@@ -1,7 +1,8 @@
 (* Least-closure reflection through FMP lowering. *)
 Theory fmpStepOpaque
 Ancestors
-  fmpStepClosure fmpStepLayout fmpStepRewrite fmpStepReclaim
+  fmpStepClosure fmpStepLayout fmpStepRewrite
+  fmpStepRewriteSupply fmpStepRewriteOrigin fmpStepReclaim
   unitShapeDefs o1PassContract irSupply list venomInst
 
 Theorem copy_phi_var_in_ir_vars:

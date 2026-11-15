@@ -1,7 +1,8 @@
 (* Pointwise instruction invariants across rewriting and root installation. *)
 Theory fmpStepPredicateTransport
 Ancestors
-  fmpStepRewrite fmpLowerDefs o1PassContract venomInst list rich_list
+  fmpStepRewrite fmpStepRewriteSupply fmpStepRewriteOrigin fmpLowerDefs
+  o1PassContract venomInst list rich_list
 
 Theorem fmp_install_root_every:
   EVERY (\bb. EVERY P bb.bb_instructions) blocks /\
