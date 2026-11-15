@@ -634,18 +634,26 @@ Proof
 QED
 
 Theorem blueprint_empty_source_check[local]:
-  let st = blueprint_test_state [] with accounts :=
+  check_create_blueprint salted T
+    ([AddressV (vfmContext$address_for_create 41w 2); IntV 0] ++
+     (if salted then [BytesV (REPLICATE 32 0w)] else []) ++ [IntV 0])
+    (blueprint_test_state [] with accounts :=
      update_account (vfmContext$address_for_create 41w 2)
        (empty_account_state with nonce := 1)
        (update_account 41w
          (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
          (update_account 42w
            (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
-           empty_accounts)) in
-  check_create_blueprint salted T
-    ([AddressV (vfmContext$address_for_create 41w 2); IntV 0] ++
-     (if salted then [BytesV (REPLICATE 32 0w)] else []) ++ [IntV 0]) st =
-  (INR (Error (RuntimeError "create source has no deployable code")),st)
+           empty_accounts))) =
+  (INR (Error (RuntimeError "create source has no deployable code")),
+   blueprint_test_state [] with accounts :=
+     update_account (vfmContext$address_for_create 41w 2)
+       (empty_account_state with nonce := 1)
+       (update_account 41w
+         (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
+         (update_account 42w
+           (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
+           empty_accounts)))
 Proof
   Cases_on `salted` >> CONV_TAC cv_eval
 QED
@@ -668,8 +676,8 @@ Proof
   simp[blueprint_test_expr_def, evaluate_def, blueprint_nested_deployment,
        blueprint_literal_offset_def, subst_consts_expr_def,
        origin_fold_value_def, is_int_literal_def,
-       SRULE [LET_THM] (Q.INST [`salted` |-> `F`] blueprint_empty_source_check),
-       SRULE [LET_THM] (Q.INST [`salted` |-> `T`] blueprint_empty_source_check),
+       Q.INST [`salted` |-> `F`] blueprint_empty_source_check,
+       Q.INST [`salted` |-> `T`] blueprint_empty_source_check,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.read_result_def,
        vyperStateTheory.read_results_def, vyperValueOperationTheory.evaluate_literal_def] >>
