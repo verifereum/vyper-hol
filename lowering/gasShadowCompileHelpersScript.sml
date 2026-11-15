@@ -268,7 +268,7 @@ Theorem gas_shadow_compiles_create_ctor_tuple:
 Proof
   strip_tac >> Cases_on `sh` >>
   simp[compile_create_ctor_tuple_def, MAP_MAP_o, combinTheory.o_DEF,
-       SF ETA_ss, comp_ignore_bind_def] >>
+       SF ETA_ss, comp_ignore_bind_def, gas_shadow_lowered_value_type] >>
   (match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- (drule gas_shadow_compiles_multi_vvs >> metis_tac[COND_CLAUSES]) >>
    gen_tac >> BETA_TAC >>
@@ -331,6 +331,7 @@ Proof
   namedCases_on `rest` ["", "next more"] >>
   simp[compile_create_blueprint_args_def, comp_ignore_bind_def,
        MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss,
+       gas_shadow_lowered_value_type,
        gas_shadow_compiles_bind, gas_shadow_compiles_emit_inst,
        gas_shadow_compiles_return] >>
   drule gas_shadow_compiles_lower_value >> strip_tac >>
@@ -358,7 +359,7 @@ Proof
   drule gas_shadow_compiles_create_salt >> strip_tac >>
   Cases_on `sh` >> Cases_on `ctor_args = []` >>
   gvs[compile_raw_create_def, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss,
-      comp_ignore_bind_def] >>
+      comp_ignore_bind_def, gas_shadow_lowered_value_type] >>
   (rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- (simp[gas_shadow_compiles_create_snapshot, gas_shadow_compiles_emit_op] >>
            metis_tac[COND_CLAUSES]) >> gen_tac >> BETA_TAC) >>
