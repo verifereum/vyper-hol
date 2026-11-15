@@ -127,6 +127,7 @@ Proof
   strip_tac >>
   drule_all runtime_sym_jmp_if_not_terminated >> strip_tac >>
   imp_res_tac runtime_sym_new_block_result >> fs[] >>
+  `EVERY runtime_sym_inst (state_insts s2)` by fs[] >>
   drule_all runtime_sym_typed_array_tail >> simp[]
 QED
 
