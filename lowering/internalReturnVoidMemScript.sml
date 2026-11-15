@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem compile_internal_void_return_intret_mem:
-  cenv.ce_returns_count = 0 /\
+  ~cx.txn.is_static /\ cenv.ce_returns_count = 0 /\
   cenv.ce_return_pc = SOME (PtrVar rpc byte_size) /\
   compile_stmt cenv lctx ty (Return NONE) st = ((),st') /\
   fn_has_code st st' func /\ ~s.vs_halted /\
@@ -56,7 +56,7 @@ Theorem compile_internal_void_return_intret_mem:
 Proof
   strip_tac >>
   `~s.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all compile_internal_void_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >> irule intret_q_intro >> simp[] >>

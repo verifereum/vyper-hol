@@ -6,7 +6,7 @@ Ancestors
   stmtSimDefs exprLoweringProps loweringStateRelDefs venomExecSemantics venomState
 
 Theorem internal_return_void_boundary_mem:
-  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  ~cx.txn.is_static /\ cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_returns_count =
     returns_stack_count
       (\name. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name))
@@ -34,7 +34,7 @@ Proof
   `?pc. eval_operand (Var rpc) s0 = SOME pc` by
     gvs[ret_pc_ok_def, eval_operand_def] >>
   `~s0.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   gvs[] >> drule_all compile_internal_void_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >> irule intret_q_intro >> simp[] >>
