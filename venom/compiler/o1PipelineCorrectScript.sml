@@ -18,6 +18,8 @@ Ancestors
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
   venomRunBounded rawReachableFmp ctxLookupAgreeHelpers list
 
+val _ = Parse.clear_overloads_on "tops";
+
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
 Definition o1_pipeline_def:
