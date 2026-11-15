@@ -2,6 +2,7 @@
 Theory dftGasPrefixProvider
 Ancestors
   dftGasOracleKeyReplay dftGasToListReplay dftGasOracleDefs
+  dftGasSimSwap dftGasSimLocalBoundary
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
   dftGasFromListReplayBoundary dftGasFromListTraceDefs dftGasFromListTraceNames
   dftGasToListTrace dftGasToListAgreement gasOracleReplay
@@ -1295,6 +1296,97 @@ Proof
      qexists_tac `SUC k` >> simp[]) >>
    asm_rewrite_tac [])
 QED
+
+Theorem native_silent_swap_observations:
+  let bx = bb with bb_instructions := REPLICATE j pad ++ x::y::rest;
+      by = bb with bb_instructions := REPLICATE j pad ++ y::x::rest in
+  a.vs_inst_idx = j /\ dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  x.inst_opcode <> GAS /\ y.inst_opcode <> GAS /\
+  x.inst_opcode <> INVOKE /\ y.inst_opcode <> INVOKE ==>
+  !n C fn p d.
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn bx a) =
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn by a) /\
+    gas_events_block n C fn.fn_name bx a =
+    gas_events_block n C fn.fn_name by a
+Proof
+  simp_tac pure_ss [LET_THM] >> strip_tac >> rpt gen_tac >>
+  qabbrev_tac `bx = bb with bb_instructions := REPLICATE j pad ++ x::y::rest` >>
+  qabbrev_tac `by = bb with bb_instructions := REPLICATE j pad ++ y::x::rest` >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+   dft_gas_swap_pair y x` by
+    metis_tac[dft_gas_swap_pair_def, dft_gas_swap_pair_sym] >>
+  `get_instruction bx j = SOME x /\ get_instruction bx (SUC j) = SOME y /\
+   get_instruction by j = SOME y /\ get_instruction by (SUC j) = SOME x` by
+    simp[Abbr `bx`, Abbr `by`, get_instruction_def, EL_APPEND_EQN] >>
+  `!u v. step_inst n C x a = OK u /\
+    step_inst n C y (u with vs_inst_idx := SUC j) = OK v ==>
+    ?w z. step_inst n C y a = OK w /\
+      step_inst n C x (w with vs_inst_idx := SUC j) = OK z /\
+      (z with vs_inst_idx := SUC (SUC j)) =
+      (v with vs_inst_idx := SUC (SUC j))` by
+    (rpt strip_tac >>
+     `ev_step (\e. 0w) p d n C x a = OK u /\
+      ev_step (\e. 0w) p d n C y (u with vs_inst_idx := SUC a.vs_inst_idx) = OK v` by
+       simp[ev_step_ordinary] >>
+     drule_all ev_indexed_pair_success >> simp[ev_step_ordinary]) >>
+  Cases_on `?u v. step_inst n C x a = OK u /\
+    step_inst n C y (u with vs_inst_idx := SUC j) = OK v`
+  >- suspend "success"
+  >> suspend "stopped"
+QED
+
+Resume native_silent_swap_observations[success]:
+  qpat_x_assum `?u v. _` strip_assume_tac >>
+  qpat_x_assum `!u v. _` drule_all >> strip_tac >>
+  once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                   gas_events_block_def] >>
+  simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def,
+       gas_events_step_def] >>
+  once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                   gas_events_block_def] >>
+  simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def,
+       gas_events_step_def] >>
+  conj_tac
+  >- (AP_TERM_TAC >> irule native_trace_block_suffix_cong >>
+      simp[Abbr `bx`, Abbr `by`, DROP_APPEND]) >>
+  irule gas_events_block_suffix_cong >>
+  simp[Abbr `bx`, Abbr `by`, DROP_APPEND]
+QED
+
+Resume native_silent_swap_observations[stopped]:
+  `~?w z. step_inst n C y a = OK w /\
+    step_inst n C x (w with vs_inst_idx := SUC j) = OK z` by
+    (strip_tac >>
+     `ev_step (\e. 0w) p d n C y a = OK w /\
+      ev_step (\e. 0w) p d n C x (w with vs_inst_idx := SUC a.vs_inst_idx) = OK z` by
+       simp[ev_step_ordinary] >>
+     drule_all ev_indexed_pair_success >> simp[ev_step_ordinary] >>
+     metis_tac[]) >>
+  `!b i k. get_instruction b j = SOME i /\
+    get_instruction b (SUC j) = SOME k /\
+    i.inst_opcode <> GAS /\ k.inst_opcode <> GAS /\
+    i.inst_opcode <> INVOKE /\ k.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode /\
+    (~?u v. step_inst n C i a = OK u /\
+       step_inst n C k (u with vs_inst_idx := SUC j) = OK v) ==>
+    trace_gas (dftGasFromListTraceDefs$trace_block p d n C fn b a) = [] /\
+    gas_events_block n C fn.fn_name b a = []` by
+    (rpt strip_tac >>
+     once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                      gas_events_block_def] >>
+     simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def,
+          gas_events_step_def] >>
+     Cases_on `step_inst n C i a` >> gvs[] >>
+     rename1 `step_inst n C i a = OK u` >>
+     once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs,
+                      gas_events_block_def] >>
+     simp[dftGasFromListTraceDefsTheory.trace_step_noninvoke, visit_gas_def,
+          gas_events_step_def] >>
+     Cases_on `step_inst n C k (u with vs_inst_idx := SUC a.vs_inst_idx)` >> gvs[]) >>
+  gvs[]
+QED
+
+Finalise native_silent_swap_observations
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
