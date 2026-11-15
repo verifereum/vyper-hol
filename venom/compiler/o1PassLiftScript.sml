@@ -1031,7 +1031,8 @@ Proof
   `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
      ctx7 fn7 inst7 s7` by metis_tac[static_mem_ok_lowered] >>
   `lowered_mem_ok cpl.cp_max_static_eom cpl.cp_initial_fmp
-     ctx9 fn9 inst9 s9` by fs[lowered_mem_ok_def] >>
+     ctx9 fn9 inst9 s9` by
+    (fs[lowered_mem_ok_def] >> metis_tac[]) >>
   drule generate_context_plan_spill_gap >> strip_tac >>
   metis_tac[lowered_reads_disjoint, lowered_writes_disjoint]
 QED
