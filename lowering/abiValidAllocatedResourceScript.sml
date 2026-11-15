@@ -98,7 +98,11 @@ Resume abi_valid_allocated_scratch_free_resource[immutables]:
 QED
 
 Resume abi_valid_allocated_scratch_free_resource[state]:
-  rpt strip_tac >> irule stmt_state_rel_allocas_frame >> conj_tac
+  rpt strip_tac >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
+  irule stmt_state_rel_allocas_frame >> conj_tac
   >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
       reverse conj_tac >- fs[stmt_state_rel_def] >> rpt strip_tac >>
       `not_fresh_at st x` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
