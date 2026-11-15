@@ -796,6 +796,17 @@ Proof
      simp_tac (srw_ss()) [venomInstTheory.get_instruction_def] >>
      strip_tac >>
      metis_tac[simplifyCfgDefsTheory.lookup_block_member_label]) >>
+  qpat_x_assum `o1_ctx_shape C7` mp_tac >>
+  qpat_x_assum `MEM sf C7.ctx_functions` mp_tac >>
+  qpat_x_assum `tf = dft_fn sf` mp_tac >>
+  qpat_x_assum `dft_fn_rel sf tf` mp_tac >>
+  qpat_x_assum `active_inst sf inst u` mp_tac >>
+  qpat_x_assum `active_inst tf inst st` mp_tac >>
+  qpat_x_assum `u.vs_current_bb = bb.bb_label` mp_tac >>
+  qpat_x_assum `st.vs_current_bb = bt.bb_label` mp_tac >>
+  qpat_x_assum `bt.bb_label = bb.bb_label` mp_tac >>
+  qpat_x_assum `(_ \/ _) /\ ~in_revert_forward tf st` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
   metis_tac[inv_forward_active]
 QED
 Theorem dft_packet_guard_from_block[local]:
@@ -1232,6 +1243,410 @@ Proof
   qpat_x_assum `active_inst _ (EL q xs) _` kall_tac >>
   drule_all wf_active_lookup >> strip_tac >>
   gvs[]
+QED
+
+Theorem dft_packet_flat_length[local]:
+  !ord. (!e. MEM e ord ==> LENGTH (keys e) = LENGTH (masks e)) ==>
+    LENGTH (FLAT (MAP keys ord)) = LENGTH (FLAT (MAP masks ord))
+Proof
+  Induct >> simp[]
+QED
+
+Theorem dft_packet_flat_pair[local]:
+  !ord. (!e. MEM e ord ==> LENGTH (keys e) = LENGTH (masks e)) /\
+    MEM e ord /\ MEM kv (ZIP (keys e,masks e)) ==>
+    MEM kv (ZIP (FLAT (MAP keys ord),FLAT (MAP masks ord)))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  `LENGTH (keys h) = LENGTH (masks h)` by metis_tac[] >>
+  `LENGTH (FLAT (MAP keys ord)) = LENGTH (FLAT (MAP masks ord))` by
+    (irule dft_packet_flat_length >> metis_tac[]) >>
+  simp[GSYM ZIP_APPEND] >> metis_tac[]
+QED
+
+Theorem dft_packet_flat_aligned[local]:
+  !xs ys. LIST_REL (\x y. LENGTH x = LENGTH y) xs ys ==>
+    LENGTH (FLAT xs) = LENGTH (FLAT ys)
+Proof
+  Induct >> Cases_on `ys` >> simp[] >> gvs[rich_listTheory.LENGTH_FLAT]
+QED
+
+Theorem dft_packet_table_alignment[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused ==>
+  !a e. (a,e) IN FDOM blocks ==>
+    LENGTH (FLAT (THE (FLOOKUP ks_tab (a,e)))) =
+      LENGTH (FLAT (THE (FLOOKUP ms_tab (a,e))))
+Proof
+  rewrite_tac[dft_focus_packet_rel_def] >> strip_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM es_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ks_tab` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` (mp_tac o cj 5) >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  Cases_on `FLOOKUP blocks (a,e)` >- gvs[FLOOKUP_DEF] >>
+  PairCases_on `x` >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    _ ==> _` drule >> strip_tac >>
+  Cases_on `x8`
+  >- (qpat_x_assum `case NONE of NONE => _ | SOME v => _` mp_tac >>
+      simp[] >> strip_tac >> simp[]) >>
+  PairCases_on `x` >>
+  Cases_on `FLOOKUP ms_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  Cases_on `FLOOKUP es_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  Cases_on `FLOOKUP ks_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` drule >> simp[] >> strip_tac >>
+  metis_tac[dft_packet_flat_aligned]
+QED
+
+Theorem dft_packet_block_pair[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  AM = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+  AK = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) ==>
+  !a e rows keyrows kv.
+    FLOOKUP ms_tab (a,e) = SOME rows /\
+    FLOOKUP ks_tab (a,e) = SOME keyrows /\
+    MEM kv (ZIP (FLAT keyrows,FLAT rows)) ==>
+    MEM kv (ZIP (AK a,AM a))
+Proof
+  strip_tac >> drule dft_packet_table_alignment >> disch_tac >>
+  qpat_x_assum `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+  qpat_x_assum `!a e. (a,e) IN FDOM blocks ==> _` mp_tac >>
+  qpat_x_assum `AM = _` mp_tac >> qpat_x_assum `AK = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  ` (a,e) IN FDOM blocks` by metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  Cases_on `FLOOKUP blocks (a,e)` >- gvs[FLOOKUP_DEF] >>
+  PairCases_on `x` >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    _ ==> _` drule >> strip_tac >>
+  qpat_x_assum `!a sf tf inc entry order res nrest. _ ==> _` drule >> strip_tac >>
+  qpat_x_assum `!e. MEM e order <=> _` mp_tac >>
+  qpat_x_assum `FLOOKUP acts a = _` mp_tac >>
+  qpat_x_assum `!a e. (a,e) IN FDOM blocks ==> _` mp_tac >>
+  qpat_x_assum `MEM kv _` mp_tac >>
+  qpat_x_assum `FLOOKUP ms_tab (a,e) = _` mp_tac >>
+  qpat_x_assum `FLOOKUP ks_tab (a,e) = _` mp_tac >>
+  qpat_x_assum `MEM e order` mp_tac >>
+  qpat_x_assum `AM = _` mp_tac >> qpat_x_assum `AK = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  simp[] >> irule dft_packet_flat_pair >> simp[] >>
+  qexists_tac `e` >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_packet_row_pair[local]:
+  !rows keyrows q.
+    LIST_REL (\m k. LENGTH m = LENGTH k) rows keyrows /\
+    q < LENGTH rows /\ MEM kv (ZIP (EL q keyrows,EL q rows)) ==>
+    MEM kv (ZIP (FLAT keyrows,FLAT rows))
+Proof
+  Induct >> Cases_on `keyrows` >> simp[] >> rpt gen_tac >> strip_tac >>
+  drule dft_packet_flat_aligned >> disch_tac >>
+  simp[GSYM ZIP_APPEND] >> Cases_on `q` >> gvs[] >> metis_tac[]
+QED
+
+Theorem dft_packet_parent_pair[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  AM = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+  AK = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) ==>
+  !e cid a sf tf inc entry order res nrest kv.
+    FLOOKUP acts ((e,cid)::a) = SOME (sf,tf,inc,entry,order,res,nrest) /\
+    MEM kv (ZIP (AK ((e,cid)::a),AM ((e,cid)::a))) ==>
+    (?sf tf inc entry order res nrest.
+      FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest)) /\
+    MEM kv (ZIP (AK a,AM a))
+Proof
+  strip_tac >> drule dft_packet_block_pair >>
+  disch_then (qspecl_then [`AM`,`AK`] mp_tac) >>
+  qpat_assum `AM = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `AK = _` (fn th => rewrite_tac[GSYM th]) >> disch_tac >>
+  qpat_x_assum `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_assum `AM = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qpat_assum `AK = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _`
+    (mp_tac o cj 10) >>
+  qpat_x_assum `!a e cid q h b0 done_at_call child_entry ret.
+    FLOOKUP calls (a,e,cid) = _ ==> _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` (fn th => mp_tac (cj 1 th) >> mp_tac (cj 5 th) >> mp_tac (cj 1 (cj 7 th))) >>
+  qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM es_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ks_tab` mp_tac >>
+  qpat_x_assum `!a e rows keyrows kv. _ ==> MEM kv (ZIP (AK a,AM a))` mp_tac >>
+  qpat_x_assum `AM' = _` mp_tac >> qpat_x_assum `AK' = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> gnvs[] >>
+  qpat_x_assum `!a sf tf inc entry order res nrest. _ ==> _` drule >>
+  disch_then (qspecl_then [`e`,`cid`,`a`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!a e cid q h b0 done_at_call child_entry ret. _ ==> _` drule >>
+  strip_tac >>
+  conj_tac >- metis_tac[] >>
+  Cases_on `FLOOKUP ms_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  Cases_on `FLOOKUP es_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  Cases_on `FLOOKUP ks_tab (a,e)` >- gvs[FLOOKUP_DEF] >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> !sf tf inc entry order res nrest. _` drule >>
+  simp[] >> disch_then drule >> simp[] >> strip_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> LIST_REL _ _ _` drule >> simp[] >> disch_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> LENGTH ms = LENGTH xs` drule >> simp[] >> disch_tac >>
+  qpat_x_assum `!a e rows keyrows kv. _` irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  irule dft_packet_row_pair >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem dft_packet_activation_pair_root[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  AM = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+  AK = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) ==>
+  !a sf tf inc entry order res nrest kv.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) /\
+    MEM kv (ZIP (AK a,AM a)) ==>
+    MEM kv (ZIP (AK [],AM []))
+Proof
+  strip_tac >> drule dft_packet_parent_pair >>
+  disch_then (qspecl_then [`AM`,`AK`] mp_tac) >>
+  qpat_assum `AM = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `AK = _` (fn th => rewrite_tac[GSYM th]) >> disch_tac >>
+  qpat_x_assum `AM = _` kall_tac >> qpat_x_assum `AK = _` kall_tac >>
+  Induct >- simp[] >> rpt strip_tac >> PairCases_on `h` >>
+  qpat_x_assum `!e cid a sf tf inc entry order res nrest kv. _` drule >>
+  simp[] >> strip_tac >> metis_tac[]
+QED
+
+Theorem dft_packet_retained_pair_root:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
+  AM = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+  AK = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) ==>
+  !a e rows keyrows kv.
+    FLOOKUP ms_tab (a,e) = SOME rows /\
+    FLOOKUP ks_tab (a,e) = SOME keyrows /\
+    MEM kv (ZIP (FLAT keyrows,FLAT rows)) ==>
+    MEM kv (ZIP (AK [],AM []))
+Proof
+  strip_tac >> drule dft_packet_activation_pair_root >>
+  disch_then (qspecl_then [`AM`,`AK`] mp_tac) >>
+  qpat_assum `AM = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `AK = _` (fn th => rewrite_tac[GSYM th]) >> disch_tac >>
+  drule dft_packet_block_pair >>
+  disch_then (qspecl_then [`AM`,`AK`] mp_tac) >>
+  qpat_assum `AM = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `AK = _` (fn th => rewrite_tac[GSYM th]) >> disch_tac >>
+  qpat_x_assum `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _` (mp_tac o cj 1) >>
+  qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+  qpat_x_assum `!a e rows keyrows kv. _ ==> MEM kv (ZIP (AK a,AM a))` mp_tac >>
+  qpat_x_assum `!a sf tf inc entry order res nrest kv.
+    _ ==> MEM kv (ZIP (AK [],AM []))` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  Cases_on `FLOOKUP blocks (a,e)` >- gvs[FLOOKUP_DEF] >>
+  PairCases_on `x` >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    _ ==> _` drule >> strip_tac >> metis_tac[]
+QED
+
+Theorem dft_packet_trace_prefix_fresh[local]:
+  !visits j.
+    ALL_DISTINCT (MAP FST visits) /\ j < LENGTH visits ==>
+    ~MEM (FST (EL j visits)) (MAP FST (trace_gas (TAKE j visits)))
+Proof
+  rpt strip_tac >> drule dftGasFromListTraceNamesTheory.trace_gas_name_mem >>
+  rewrite_tac[GSYM MAP_TAKE, MEM_EL] >> strip_tac >>
+  gvs[LENGTH_TAKE, EL_TAKE] >>
+  `EL n (MAP FST visits) = EL j (MAP FST visits)` by simp[EL_MAP, EL_TAKE] >>
+  metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, arithmeticTheory.LESS_TRANS,
+    prim_recTheory.LESS_REFL]
+QED
+
+Theorem dft_packet_gas_fresh[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused ==>
+  ~MEM (p,d,inst.inst_id) (MAP FST obs)
+Proof
+  rewrite_tac[dft_focus_packet_rel_def] >> strip_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `(j,obs) = _` mp_tac >>
+  qpat_x_assum `LIST_REL dft_fn_rel _ _` mp_tac >>
+  qpat_x_assum `j' < LENGTH _` mp_tac >>
+  qpat_x_assum `EL j' _ = _` mp_tac >>
+  qpat_x_assum `obs' = _` mp_tac >>
+  qpat_x_assum `lookup_function nm C8.ctx_functions = SOME root_tf` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+  `EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id)
+    bb.bb_instructions)) f.fn_blocks) C8.ctx_functions` by
+    metis_tac[dft_ctx_block_ids_distinct] >>
+  `MEM root_tf C8.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+    root_tf.fn_blocks` by
+    (qpat_x_assum `EVERY _ C8.ctx_functions` mp_tac >>
+     pure_rewrite_tac [EVERY_MEM] >> disch_then (qspec_then `root_tf` mp_tac) >> simp[]) >>
+  `ALL_DISTINCT (MAP FST (trace_blocks [] 0 N C8 root_tf root_entry))` by
+    (irule (cj 3 dftGasFromListTraceNamesTheory.trace_names_distinct) >> simp[]) >>
+  drule_all dft_packet_trace_prefix_fresh >> simp[]
+QED
+
+Theorem dft_packet_fresh_pair_none[local]:
+  !keys slots obs key0 v.
+    PERM (MAP (\(key,slot). (key,THE slot))
+      (FILTER (\(key,slot). IS_SOME slot) (ZIP (keys,slots)))) obs /\
+    ~MEM key0 (MAP FST obs) /\ MEM (key0,v) (ZIP (keys,slots)) ==>
+    v = NONE
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[] >>
+  `MEM (key0,x) obs` by
+    (drule sortingTheory.PERM_MEM_EQ >>
+     disch_then (qspec_then `(key0,x)` (fn th => rewrite_tac[GSYM th])) >>
+     simp[MEM_MAP, MEM_FILTER] >> qexists_tac `(key0,SOME x)` >> simp[]) >>
+  gvs[MEM_MAP] >> metis_tac[pairTheory.FST]
+QED
+
+Theorem dft_packet_current_gas_key:
+  !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
+    rooted_eval p d stk PG G tn fn inst s oms om hs h raw_slots sites unused
+    AM AK bb bt ps xs ys rho in_state h0 be hbe count.
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  AM = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+  AK = (\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+    (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))) /\
+  FLOOKUP blocks (p,d) =
+    SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
+  inst.inst_opcode = GAS ==>
+  ~MEM (p,d,inst.inst_id) (MAP FST obs) /\
+  ?n. n < LENGTH (AK []) /\ EL n (AK []) = (p,d,inst.inst_id) /\
+    EL n (AM []) = NONE
+Proof
+  rpt gen_tac >> strip_tac >> drule dft_packet_gas_fresh >> disch_tac >>
+  conj_tac >- simp[] >>
+  drule dft_packet_retained_pair_root >>
+  disch_then (qspecl_then [`AM`,`AK`] mp_tac) >>
+  qpat_assum `AM = _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `AK = _` (fn th => rewrite_tac[GSYM th]) >> disch_tac >>
+  qpat_x_assum `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_assum `AM = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qpat_assum `AK = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> _` (fn th => mp_tac (cj 1 th) >> mp_tac (cj 5 th) >> mp_tac (cj 1 (cj 7 th))) >>
+  qpat_x_assum `!a e rows keyrows kv. _ ==> MEM kv (ZIP (AK [],AM []))` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ms_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM es_tab` mp_tac >>
+  qpat_x_assum `FDOM blocks = FDOM ks_tab` mp_tac >>
+  qpat_x_assum `PERM _ obs'` mp_tac >>
+  qpat_x_assum `LENGTH (AM' []) = LENGTH (AK' [])` mp_tac >>
+  qpat_x_assum `AM' = AM` mp_tac >> qpat_x_assum `AK' = AK` mp_tac >>
+  qpat_x_assum `(j,obs) = _` mp_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (p,d) = SOME (bb,bt,ps,xs,ys,_,_,_,SOME _,_,_,_,_)` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (p,d) = _` mp_tac >>
+  qpat_x_assum `case body_entry of NONE => _ | SOME v => _` mp_tac >>
+  qpat_x_assum `FLOOKUP acts p = _` mp_tac >>
+  qpat_x_assum `inst.inst_opcode = GAS` mp_tac >>
+  qpat_x_assum `~MEM _ (MAP FST obs)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    _ ==> _` drule >> strip_tac >>
+  `EL count' rho' < LENGTH xs /\
+   (EL count' ys).inst_id = (EL (EL count' rho') xs).inst_id /\
+   from_block [EL (EL count' rho') xs] (EL count' ys)` by
+    (qpat_x_assum `LIST_REL _ rho' ys` mp_tac >>
+     rewrite_tac[LIST_REL_EL_EQN] >> strip_tac >>
+     first_x_assum (qspec_then `count'` mp_tac) >> simp[]) >>
+  `(EL (EL count' rho') xs).inst_opcode = GAS` by
+    (qpat_x_assum `from_block _ _` mp_tac >>
+     qpat_x_assum `(EL count' ys).inst_opcode = GAS` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rw[dftStructuralTheory.from_block_def] >> gvs[] >>
+     drule dftShapeTheory.flip_operands_special_opcode >> simp[]) >>
+  Cases_on `FLOOKUP ms_tab (p,d)` >- gvs[FLOOKUP_DEF] >>
+  Cases_on `FLOOKUP es_tab (p,d)` >- gvs[FLOOKUP_DEF] >>
+  Cases_on `FLOOKUP ks_tab (p,d)` >- gvs[FLOOKUP_DEF] >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> !sf tf inc entry order res nrest. _` drule >>
+  simp[] >> disch_then assume_tac >>
+  qpat_x_assum `!q. q < LENGTH ys ==> _`
+    (qspec_then `EL count' rho'` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> LIST_REL _ _ _` drule >> simp[] >> disch_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys rho in_state h0 be hbe count front closed brest ms ess ks.
+    _ ==> LENGTH ms = LENGTH xs` drule >> simp[] >> disch_tac >>
+  `MEM ((p,d,(EL count' ys).inst_id),ALOOKUP obs (p,d,(EL count' ys).inst_id))
+    (ZIP (FLAT x'',FLAT x))` by
+    (irule dft_packet_row_pair >> goal_assum (drule_at Any) >>
+     qexists_tac `EL count' rho'` >> simp[]) >>
+  `MEM ((p,d,(EL count' ys).inst_id),ALOOKUP obs (p,d,(EL count' ys).inst_id))
+    (ZIP (AK [],AM []))` by
+    (qpat_x_assum `!a e rows keyrows kv. _` irule >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `MEM _ (ZIP (AK [],AM []))` mp_tac >>
+  qpat_x_assum `~MEM _ (MAP FST obs)` mp_tac >>
+  qpat_x_assum `PERM _ obs` mp_tac >>
+  qpat_x_assum `LENGTH (AM []) = LENGTH (AK [])` mp_tac >>
+  qpat_x_assum `(EL count' ys).inst_id = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  drule_all dft_packet_fresh_pair_none >> disch_tac >>
+  gvs[MEM_ZIP] >> metis_tac[]
+QED
+
+Theorem dft_packet_current_gas_copies_none:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused ==>
+  !a e rows keyrows v.
+    FLOOKUP ms_tab (a,e) = SOME rows /\
+    FLOOKUP ks_tab (a,e) = SOME keyrows /\
+    MEM ((p,d,inst.inst_id),v) (ZIP (FLAT keyrows,FLAT rows)) ==>
+    v = NONE
+Proof
+  strip_tac >> drule dft_packet_gas_fresh >> disch_tac >>
+  drule dft_packet_retained_pair_root >>
+  disch_then (qspecl_then
+    [`\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ms_tab (a,e))))
+      (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))`,
+     `\a. FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab (a,e))))
+      (FST (SND (SND (SND (SND (THE (FLOOKUP acts a))))))))`] mp_tac) >>
+  simp[] >> disch_tac >>
+  qpat_x_assum `dft_focus_packet_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) >>
+  qpat_x_assum `PERM _ obs'` mp_tac >>
+  qpat_x_assum `AM = _` mp_tac >> qpat_x_assum `AK = _` mp_tac >>
+  qpat_x_assum `(j,obs) = _` mp_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `~MEM _ (MAP FST obs)` mp_tac >>
+  qpat_x_assum `!a e rows keyrows kv. _ ==> MEM kv _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+  metis_tac[dft_packet_fresh_pair_none]
 QED
 
 Theorem dft_focus_packet_step:
