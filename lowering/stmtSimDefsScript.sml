@@ -79,7 +79,9 @@ Definition stmt_framed_frag_def:
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops cx) (ctx, func) cx st0 source (es, s0)
         (\H. stmt_post H ctx func cx lctx cenv cenv' sa sb es s0)
-        (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+        (\H res ee r.
+          (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+          halt_exit H cx ee res r)
 End
 
 Definition stmt_frag_def:
@@ -114,7 +116,9 @@ Definition stmt_frag_mem_def:
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           return_buf_frame d cenv'' sb t /\ alloca_history func t /\
           s0.vs_alloca_next <= t.vs_alloca_next)
-        (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+        (\H res ee r.
+          (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+          halt_exit H cx ee res r)
 End
 
 Definition alloca_prefix_def:

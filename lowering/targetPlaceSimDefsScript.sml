@@ -31,5 +31,5 @@ Definition target_sim_def:
           target_post H ctx func cenv cx es sa sb s0 ee pv vt op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 End

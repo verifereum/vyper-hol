@@ -60,7 +60,7 @@ Definition expr_map_sim_def:
           (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 End
 
 (* expr_body_pre for an expression naming a mapping, which
