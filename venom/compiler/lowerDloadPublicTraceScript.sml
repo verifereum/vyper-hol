@@ -120,7 +120,7 @@ Theorem ld_dloadbytes_destinations:
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
   tn.t_var = f.lf_tv /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   eval_operand dest f.lf_src = SOME dw /\
   eval_operand dest f.lf_tgt = SOME dw' /\
@@ -130,23 +130,27 @@ Theorem ld_dloadbytes_destinations:
   w2n nw = 0 \/
   (w2n dw = w2n dw' /\ w2n dw + w2n nw <= lo) \/
   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-    w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz)
+    w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz) \/
+  (w2n dw = w2n dw' /\ fl <= w2n dw /\ w2n dw + w2n nw < dimword(:256))
 Proof
-  strip_tac >> Cases_on `nw = 0w` >- simp[] >> simp[] >>
+  strip_tac >> Cases_on `w2n nw = 0` >- (disj1_tac >> first_assum ACCEPT_TAC) >>
   `MEM dest inst.inst_operands` by simp[] >>
   `op_taint tn dest = {}` by
     (irule ld_numeric_operand_untainted >>
      qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[]) >>
   `~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET]` by simp[] >>
   drule_all ld_write_address_observation >> strip_tac >>
-  `mem_write_ops inst = SOME <|iao_ofst := dest; iao_size := SOME len; iao_max_size := SOME len|>` by
-    simp[mem_write_ops_def] >>
   `MEM (w2n dw,w2n nw) (source_memory_write_ranges inst f.lf_src)` by
-    simp[source_memory_write_ranges_def, sized_source_write_range_def] >>
-  `0 < w2n nw` by (Cases_on `w2n nw` >> gvs[]) >>
-  drule ld_write_access_classified >> simp[] >>
-  disch_then (qspecl_then [`dw'`,`dw`,`w2n nw`] mp_tac) >>
-  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+    simp[source_memory_write_ranges_def, sized_source_write_range_def,
+         mem_write_ops_def] >>
+  `?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = dest` by
+    simp[mem_write_ops_def] >>
+  `0 < w2n nw` by decide_tac >>
+  `(op_prov f.lf_H ops.iao_ofst = NONE ==> dw = dw') /\
+   (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dw dw')` by
+    simp[] >>
+  drule_all (Q.INST [`n` |-> `w2n nw`] (cj 2 ld_access_dyn_cases)) >>
+  strip_tac >> metis_tac[]
 QED
 
 Theorem ld_envelope_supply_reserved:
@@ -342,8 +346,9 @@ Proof
       AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ld_sync_source_code_layout:
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+
+Theorem ld_sync_source_code_layout_static:
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
   code_layout_valid s
 Proof
@@ -354,8 +359,8 @@ Proof
   gvs[o1_run_state_ok_def, code_layout_valid_def]
 QED
 
-Theorem ld_sync_dload_code_offset:
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+Theorem ld_sync_dload_code_offset_static:
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
   mem_inv dload_offset_ok C vs0 /\
   ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [off]) \/
@@ -366,7 +371,7 @@ Theorem ld_sync_dload_code_offset:
     w2n ow + (LENGTH s.vs_code - LENGTH s.vs_data_section) < dimword(:256)
 Proof
   strip_tac >>
-  `code_layout_valid s` by (irule ld_sync_source_code_layout >> metis_tac[]) >>
+  `code_layout_valid s` by (irule ld_sync_source_code_layout_static >> metis_tac[]) >>
   `dload_offset_ok C fn inst s` by
     (irule ld_sync_source_mem_inv >> metis_tac[]) >>
   simp[] >>
@@ -401,9 +406,9 @@ Proof
   metis_tac[]
 QED
 
-Theorem ld_sync_dloadbytes_trace_evaluations:
+Theorem ld_sync_dloadbytes_trace_evaluations_static:
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ ptr_discipline lo C vs0 /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\ ptr_discipline lo C vs0 /\
   mem_inv dload_offset_ok C vs0 /\ ir_supply_covers_fn f.lf_supply fn /\
   ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
@@ -442,7 +447,7 @@ Proof
      disch_then drule >> simp[] >>
      disch_then (qspec_then `tn` mp_tac) >> simp[]) >>
   qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac ld_sync_dload_code_offset) >> simp[] >>
+    (mp_then Any mp_tac ld_sync_dload_code_offset_static) >> simp[] >>
   strip_tac >>
   `basew = basew'` by gvs[eval_operand_def] >>
   `t0.vs_code = s.vs_code` by
@@ -460,7 +465,9 @@ Theorem ld_sync_dloadbytes_destination_cases:
   (w2n nw = 0 \/
    (w2n dw = w2n dw' /\ w2n dw + w2n nw <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz)) /\
+     w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz) \/
+   (w2n dw = w2n dw' /\ dyn_floor C vs0 <= w2n dw /\
+    w2n dw + w2n nw < dimword(:256))) /\
   (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> lo <= b /\ lo <= c) /\
   (!k k' b c sz b' c' sz'.
     FLOOKUP A k = SOME (b,c,sz) /\ FLOOKUP A k' = SOME (b',c',sz') /\
@@ -483,11 +490,66 @@ Proof
   `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     (drule ld_alloc_target_no_wrap >> simp[]) >>
   conj_tac
-  >- (drule ld_dloadbytes_destinations >> simp[] >>
-      disch_then drule >> simp[] >>
-      disch_then (qspec_then `tn` mp_tac) >> simp[] >>
-      disch_then (qspec_then `lo` mp_tac) >> gvs[] >>
-      disch_then irule >> first_assum ACCEPT_TAC) >>
+  >- (`tn.t_var = f.lf_tv` by simp[] >>
+      qpat_x_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+      drule_all (Q.INST [`fl` |-> `dyn_floor C vs0`] ld_dloadbytes_destinations) >>
+      simp_tac (srw_ss()) [wordsTheory.w2n_11, wordsTheory.w2n_eq_0]) >>
   conj_tac >- metis_tac[ld_alloc_bounds] >>
   metis_tac[ld_alloc_separate]
+QED
+
+Theorem ld_sync_source_code_layout:
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  code_layout_valid s
+Proof
+  strip_tac >> irule ld_sync_source_code_layout_static >>
+  goal_assum (drule_at Any) >> gvs[o1_run_state_ok_def]
+QED
+
+Theorem ld_sync_dload_code_offset:
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  mem_inv dload_offset_ok C vs0 /\
+  ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [off]) \/
+   (inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len])) /\
+  eval_operand off s = SOME ow ==>
+  ?basew. code_layout_valid s /\
+    eval_operand (Label "code_end") s = SOME basew /\
+    w2n ow + (LENGTH s.vs_code - LENGTH s.vs_data_section) < dimword(:256)
+Proof
+  strip_tac >> irule ld_sync_dload_code_offset_static >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  gvs[o1_run_state_ok_def]
+QED
+
+Theorem ld_sync_dloadbytes_trace_evaluations:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_offset_ok C vs0 /\ ir_supply_covers_fn f.lf_supply fn /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
+  ld_prefix C' fn' X p 1 t0 t1 /\ step_inst fuel C' (EL 1 X) t1 = OK u ==>
+  ?ai ci z dw dw' ow nw basew.
+    X = [<|inst_id := ai; inst_opcode := ADD;
+           inst_operands := [off;Label "code_end"]; inst_outputs := [z]|>;
+         <|inst_id := ci; inst_opcode := CODECOPY;
+           inst_operands := [dest;Var z;len]; inst_outputs := []|>] /\
+    ~MEM z (fn_ir_vars fn) /\
+    eval_operand dest s = SOME dw /\ eval_operand off s = SOME ow /\
+    eval_operand len s = SOME nw /\
+    eval_operand dest t0 = SOME dw' /\
+    eval_operand off t0 = SOME ow /\ eval_operand len t0 = SOME nw /\
+    eval_operand dest t1 = SOME dw' /\
+    eval_operand (Var z) t1 = SOME (ow+basew) /\
+    eval_operand len t1 = SOME nw /\
+    code_layout_valid s /\ eval_operand (Label "code_end") s = SOME basew /\
+    t1.vs_code = s.vs_code /\
+    w2n ow + (LENGTH s.vs_code - LENGTH s.vs_data_section) < dimword(:256)
+Proof
+  strip_tac >> irule ld_sync_dloadbytes_trace_evaluations_static >>
+  goal_assum (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  gvs[o1_run_state_ok_def] >> metis_tac[]
 QED
