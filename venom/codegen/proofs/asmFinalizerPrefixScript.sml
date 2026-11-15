@@ -20,6 +20,7 @@ Theorem focus_finalizer_prefix_bridge:
     fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
     generate_context_plan unit.cu_context = SOME cpl /\
     codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    codegen_ready unit.cu_context /\
     vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
     codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
     asm_frame_rel_tail [] prog' vs0.vs_data_section es0
