@@ -12,7 +12,23 @@ Theorem cfg_norm_joint_chain_projection:
     LENGTH evs8 <= LENGTH evs /\
     cfg_norm_joint_cursors C8 C9 (schedules,current',saved') r8 r9
 Proof
-  cheat
+  map_every qid_spec_tac [`q8`, `q9`, `current`, `saved`, `qs`, `r9`] >>
+  Induct_on `evs`
+  >- (rpt gen_tac >> Cases_on `qs` >> simp[joint_chain_def] >>
+      rpt strip_tac >> gvs[] >>
+      qexistsl_tac [`current`, `saved`, `[]`, `q8`] >>
+      simp[joint_chain_def]) >>
+  rpt gen_tac >> Cases_on `qs` >> simp[joint_chain_def] >>
+  rpt strip_tac >> Cases_on `q8` >> Cases_on `q9` >>
+  drule_all cfg_norm_joint_cursors_step >> strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  rename1 `cfg_norm_joint_cursors C8 C9
+    (schedules,final,saved_final) r8 r9` >>
+  qexistsl_tac [`final`, `saved_final`]
+  >- (gvs[] >> qexistsl_tac [`evs8`, `qs8`, `r8`] >> simp[]) >>
+  rename1 `joint_transition C8 _ source_event source_next` >>
+  qexistsl_tac [`source_event::evs8`, `source_next::qs8`, `r8`] >>
+  simp[joint_chain_def]
 QED
 
 Theorem cfg_norm_joint_trace_projection:
@@ -32,5 +48,13 @@ Theorem cfg_norm_joint_trace_projection:
             cfg_norm_joint_cursors C8 C9
               (schedules,current',saved') r8 r9
 Proof
-  cheat
+  strip_tac >> drule_all cfg_norm_joint_cursors_initial >>
+  disch_then (qx_choose_then `schedules` assume_tac) >>
+  qexists_tac `schedules` >> rpt gen_tac >> strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexists_tac `current` >> simp[] >>
+  rpt gen_tac >> rewrite_tac[joint_trace_def] >> strip_tac >>
+  drule_all cfg_norm_joint_chain_projection >> strip_tac >>
+  qexistsl_tac [`current'`, `saved'`, `evs8`, `qs8`, `r8`] >>
+  simp[]
 QED
