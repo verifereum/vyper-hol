@@ -394,5 +394,6 @@ Theorem prefix_fixed_array_complete_checked_contract:
   (^CshiftChecked) ty tv ==>
   (^CshiftChecked) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
 Proof
-  cheat
+  mp_tac (Q.INST [`checked` |-> `T`] prefix_fixed_array_complete_mode_contract) >>
+  simp_tac bool_ss []
 QED

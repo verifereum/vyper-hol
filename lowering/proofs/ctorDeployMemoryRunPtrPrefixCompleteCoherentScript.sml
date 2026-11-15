@@ -240,7 +240,12 @@ Theorem prefix_dynamic_complete_checked[local]:
   (^CshiftChecked) ty tv ==>
   (^CshiftChecked) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
+    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
+  >- (BETA_TAC >> rule_assum_tac BETA_RULE >>
+      match_mp_tac (BETA_RULE prefix_dynamic_array_loop_complete_checked_contract) >> asm_rewrite_tac[]) >>
+  match_mp_tac prefix_bulk_complete_checked_contract >> asm_rewrite_tac[]
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward

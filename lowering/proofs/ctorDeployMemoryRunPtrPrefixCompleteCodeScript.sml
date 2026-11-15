@@ -306,7 +306,13 @@ QED
 Theorem prefix_members_complete_mode_nil:
   (^MshiftMode) checked [] []
 Proof
-  cheat
+  BETA_TAC >> rpt gen_tac >>
+  simp[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def,
+    comp_return_def, Excl "enc_def"] >> strip_tac >>
+  drule abi_decoder_members_lengths >> strip_tac >> gvs[Excl "enc_def"] >>
+  qexistsl [`initial`,`G`,`tn`,`{}`] >>
+  simp[val_in_memory_def, abi_encoder_registered_effect_refl, abi_decode_sim_refl,
+    gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules] >> metis_tac[]
 QED
 
 Theorem prefix_canonical_member_setup_mem_ok[local]:
@@ -494,7 +500,7 @@ Proof
         rpt (pop_assum kall_tac) >>
         simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
         gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
-     irule emitted_origin_ptr_path >> metis_tac[]) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,`B`] >>
   simp[Excl "enc_def"]
 QED
@@ -515,7 +521,7 @@ QED
 Theorem prefix_scalar_complete_checked_contract:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) T ty tv
 Proof
-  cheat
+  simp[prefix_scalar_complete_mode_contract]
 QED
 
 
@@ -614,7 +620,71 @@ Theorem prefix_members_complete_mode_cons:
   (^CshiftMode) checked ty tv /\ (^MshiftMode) checked tys tvs ==>
   (^MshiftMode) checked (ty::tys) (tv::tvs)
 Proof
-  cheat
+  disch_then (CONJUNCTS_THEN2 (mk_asm "child") (mk_asm "tail")) >>
+  BETA_TAC >> rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_decoder_members_lengths >> strip_tac >>
+  Cases_on `avs` >- gvs[] >> Cases_on `vs` >- gvs[] >>
+  rename1 `abi_decoder_members ce env sf (ty::tys) (tv::tvs) (av::avs') (v::vs')` >>
+  drule abi_decoder_member_cons_trace >> strip_tac >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_member_cons_code >> strip_tac >>
+  drule_all abi_decode_member_setup_shape >> strip_tac >>
+  drule_all abi_decoder_members_child_phi >> disch_then assume_tac >>
+  `middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var (Var dst)` by
+    (asm_x "child" kall_tac >> asm_x "tail" kall_tac >> Cases_on `src` >>
+     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+     metis_tac[not_fresh_at_def]) >>
+  `fn_has_code st middle func` by
+    (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
+  drule_all prefix_canonical_member_setup_complete_shift_code >>
+  disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
+  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
+  qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>
+  `abi_decode_sim ctx func initial prepared /\
+   abi_encoder_registered_effect {} [] initial prepared` by
+    (qunabbrev_tac `prepared` >>
+     drule_all prefix_member_setup_shift_execution_frame >> simp[]) >>
+  `checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\
+      alloca_history func prepared /\
+      !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+        (initial, G, tn) [] (OK prepared, H, qt)` by
+    (asm_x "child" kall_tac >> asm_x "tail" kall_tac >> strip_tac >>
+     `sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
+       (ListV (preavs ++ av::avs'))) <= LENGTH initial.vs_data_section /\
+       alloca_history func initial` by metis_tac[] >>
+     `run_inst_seq_mem_ok (emitted_insts st middle) initial` by
+       (irule prefix_canonical_member_setup_mem_ok >> metis_tac[]) >>
+     drule ctor_actual_member_setup_opcodes >> strip_tac >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts st middle)` by
+       (fs[EVERY_MEM] >> rpt strip_tac >>
+        qpat_x_assum `!e. MEM e _ ==> abi_decoder_reentry_opcode _` drule >>
+        simp[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+        fs[EVERY_MEM] >> metis_tac[is_alloca_op_def]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+       (emitted_insts st middle)` by fs[EVERY_CONJ] >>
+     drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+     `t.vs_allocas = initial.vs_allocas` by gvs[Abbr `prepared`] >>
+     `!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) []
+        (OK (t with vs_inst_idx := LENGTH middle.cs_current_insts), H, qt)` by
+       (`EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+            i.inst_opcode <> GAS) (emitted_insts st middle)` by
+          (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) _` mp_tac >>
+           rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
+        rpt gen_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> metis_tac[]) >>
+     drule_all ctor_checked_emitted_endpoint >>
+     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
+  `fn_has_code middle end_st func` by
+    (mp_tac (Q.SPECL [`middle`,`end_st`,`final`,`func`] fn_has_code_split) >> simp[]) >>
+  `?after_head Hh qh Bh. (^HshiftMode) checked ctx func site ids D N limit_st tv v
+    (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty)
+    middle end_st prepared H qt after_head Hh qh Bh Ddead lo PG` by
+    suspend "head" >>
+  pop_assum (strip_assume_tac o BETA_RULE) >>
+  suspend "tail_and_compose"
 QED
 
 Resume prefix_members_complete_mode_cons[head]:
@@ -678,7 +748,8 @@ Resume prefix_members_complete_mode_cons[empty_head]:
   drule prefix_empty_inline_code >> strip_tac >>
   drule_all abi_decoder_empty_metadata_value >> strip_tac >>
   qexistsl [`prepared`,`H`,`qt`,`{}`] >> BETA_TAC >>
-  simp[abi_encoder_registered_effect_refl, abi_decode_sim_refl, gas_path_mem_rules] >>
+  simp[abi_encoder_registered_effect_refl, abi_decode_sim_refl, gas_path_mem_rules,
+    cj 1 gas_origin_ptr_path_rules] >>
   metis_tac[]
 QED
 
@@ -818,6 +889,16 @@ Resume prefix_members_complete_mode_cons[support_and_ghost]:
   conj_tac >-
     (rpt strip_tac >>
      `not_fresh_at end_st x` by (fs[not_fresh_at_def] >> decide_tac) >> metis_tac[]) >>
+  conj_tac >-
+    (strip_tac >> rpt gen_tac >>
+     qpat_assum `checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ _` mp_tac >>
+     qpat_assum `checked ==> !D explicit.
+       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (prepared,_,_) _ _` mp_tac >>
+     qpat_assum `checked ==> !D explicit.
+       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (after_head,_,_) _ _` mp_tac >>
+     qpat_assum `checked` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[] >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
   strip_tac >>
   qpat_assum `checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ _` mp_tac >>
   qpat_assum `checked ==> gas_path_mem ctx func prepared 0 (OK after_head) /\ _` mp_tac >>
@@ -874,6 +955,24 @@ Resume prefix_members_complete_mode_cons[support]:
 QED
 
 Finalise prefix_members_complete_mode_cons
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
    joint gas-origin pointer path; the original proof below proves the rest.

@@ -321,5 +321,5 @@ QED
 Theorem prefix_bytestring_complete_checked_contract:
   type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) T ty tv
 Proof
-  cheat
+  simp[prefix_bytestring_complete_mode_contract]
 QED

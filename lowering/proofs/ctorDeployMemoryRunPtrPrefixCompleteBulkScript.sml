@@ -349,5 +349,5 @@ Theorem prefix_bulk_complete_checked_contract:
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
   (^CshiftMode) T (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
-  cheat
+  simp[prefix_bulk_complete_mode_contract]
 QED
