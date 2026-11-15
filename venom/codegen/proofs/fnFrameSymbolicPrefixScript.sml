@@ -1632,7 +1632,19 @@ Theorem normal_frame_symbolic_trace_prefix:
     normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
       (EL j (q0::qs)) ast ss
 Proof
-  cheat
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (Q.INST [`ctx` |-> `unit.cu_context`]
+    joint_trace_paired_prefix) >> simp[] >>
+  conj_tac
+  >- (irule normal_frame_symbolic_initial >>
+      fs[joint_trace_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `i < LENGTH evs` by decide_tac >>
+  drule_all joint_trace_edge_at >> strip_tac >>
+  Cases_on `EL i (q0::qs)` >>
+  Cases_on `EL (SUC i) (q0::qs)` >>
+  gvs[] >>
+  (metis_tac[normal_frame_symbolic_joint_progress])
 QED
 
 Theorem frame_stack_symbolic_plan_projection:
