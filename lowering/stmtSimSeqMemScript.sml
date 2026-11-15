@@ -136,7 +136,7 @@ Resume stmt_frag_cons_env_mem[exit]:
       Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
       >- (`?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
             metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-          qpat_x_assum `!H. valid_horizon _ _ H _ ==> !tail. _`
+          qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
             (qspec_then `H0` mp_tac) >> impl_tac >- gs[] >>
           simp[stmt_exit_loop_ctl]) >>
       head_out_of_domain_tac) >>
