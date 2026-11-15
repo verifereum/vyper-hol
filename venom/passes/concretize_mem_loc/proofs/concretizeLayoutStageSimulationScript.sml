@@ -333,6 +333,8 @@ Theorem layout_stage_prefix_simulation[local]:
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   lookup_function name C'.ctx_functions = SOME fn' /\ fn_entry_label fn = SOME lbl /\
   s = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   finite_run_prefix C fn s es /\ LENGTH es = n ==>
   finite_run_prefix C' fn' s es
@@ -418,6 +420,8 @@ Theorem layout_stage_prefix_events:
   C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl /\
   s = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp) /\
   o1_ptr_safe_upto D lo n C vs /\ alloca_frontier_upto n C vs /\
   n <= LENGTH (gas_events_blocks fuel C fn s) ==>
   ?fuel' fn'. C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME fn' /\
