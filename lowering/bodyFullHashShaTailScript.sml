@@ -3,7 +3,7 @@ Theory bodyFullHashShaTail
 Ancestors
   bodyFullHashShaFrame bodyFullHashKeccakBytes bodyPtrHashBuiltinsShaTailFrame bodyPtrHashBuiltinsShaTail
   bodyPtrDefs exprSimHash valueCopy valueEncoding venomExecSemantics
-  venomState ptrDiscipline finite_map pred_set words
+  venomState ptrDiscipline finite_map pred_set words ghostPcTransportPtr
 
 Theorem sha_ghost_inv_at_outcomes[local]:
   ghost_inv_at D lo d cenv cx (es with outcomes := os) G tn s <=>
@@ -49,7 +49,7 @@ Proof
     (irule sha256_tail_run >> simp[] >> metis_tac[]) >>
   `ghost_inv_at D lo d cenv cx es Gf tf t /\
    ghost_kept_at lo cenv es sa G tn s Gf tf` by suspend "frame" >>
-  simp[bytes_ghost_cursor, sha_ghost_inv_at_outcomes] >>
+  simp[ghost_inv_at_inst_idx, sha_ghost_inv_at_outcomes] >>
   gvs[op_taint_def, FLOOKUP_UPDATE, op_prov_def, FLOOKUP_DRESTRICT]
 QED
 
