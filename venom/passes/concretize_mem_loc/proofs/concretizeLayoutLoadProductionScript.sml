@@ -9,11 +9,11 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutAccessGeometry frameRelocation
   o1PassContract ptrDiscipline unitMemInv contextCodegenRel finite_map list pred_set words
 
 
-Theorem concretize_word_load_execution_clean_lanes:
+Theorem concretize_word_load_execution_clean_lanes_headroom_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -61,7 +61,7 @@ Proof
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
        w2n dst+32 <= b+sz /\
        w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    (irule concretize_memory_access_geometry >> simp[] >>
+    (irule concretize_memory_access_geometry_headroom_static >> simp[] >>
      conj_tac
      >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME (Lit 32w);
                     iao_max_size := SOME (Lit 32w) |>` >>
@@ -83,6 +83,84 @@ Proof
            source_memory_read_ranges_def, range_bytes_def] >> gvs[]) >>
   qpat_x_assum `!i. i < 32 ==> relocation_pair _ _ _ _ _`
     (qspec_then `i` mp_tac) >> simp[arithmeticTheory.ADD_COMM])
+QED
+
+Theorem concretize_word_load_execution_clean_lanes:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  MEM inst.inst_opcode [MLOAD;ILOAD] /\ inst.inst_operands = [opd] /\
+  inst.inst_outputs = [v] /\ eval_operand opd s = SOME dst ==>
+  ?dstT tpost. eval_operand opd t = SOME dstT /\
+    step_inst_base inst t = OK tpost /\
+    tpost = update_var v (mload (w2n dstT) t) t /\
+    post = update_var v (mload (w2n dst) s) s /\
+    (!i. i < 32 /\ w2n dst+i NOTIN tn.t_mem ==>
+      joint_relocation_demand lo (concretize_positions C') q0 es qs c
+        (w2n dst+i) (w2n dstT+i))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_word_load_execution_clean_lanes_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem concretize_word_load_demand_execution_headroom_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\ code_layout_valid vs0) /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
+  lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ~joint_read_exempt (EL c (q0::qs)) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  s.vs_labels = t.vs_labels /\
+  local_rel (\u. F)
+    (guarded_ptr (retpc_var fn)
+      (activation_lookup (0:num) (concretize_positions C')
+        (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) rv)
+    (guarded_bytes (retpc_var fn) rv tn)
+    (joint_relocation_demand lo (concretize_positions C') q0 es qs c) Obs s t /\
+  MEM inst.inst_opcode [MLOAD;ILOAD] /\ inst.inst_operands = [opd] /\
+  inst.inst_outputs = [v] /\ eval_operand opd s = SOME dst ==>
+  ?dstT tpost. eval_operand opd t = SOME dstT /\
+    step_inst_base inst t = OK tpost /\
+    tpost = update_var v (mload (w2n dstT) t) t /\
+    post = update_var v (mload (w2n dst) s) s /\
+    word_agree_except {i | i < 32 /\ w2n dst+i IN tn.t_mem}
+      (mload (w2n dst) s) (mload (w2n dstT) t)
+Proof
+  strip_tac >> drule_all concretize_word_load_execution_clean_lanes_headroom_static >> strip_tac >>
+  qexistsl_tac [`dstT`, `tpost`] >> asm_rewrite_tac[] >>
+  drule_then assume_tac local_rel_demand >>
+  irule demand_agree_mload >>
+  goal_assum (drule_at (Pat `demand_agree _ _ _`)) >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem concretize_word_load_demand_execution:
@@ -117,12 +195,9 @@ Theorem concretize_word_load_demand_execution:
     word_agree_except {i | i < 32 /\ w2n dst+i IN tn.t_mem}
       (mload (w2n dst) s) (mload (w2n dstT) t)
 Proof
-  strip_tac >> drule_all concretize_word_load_execution_clean_lanes >> strip_tac >>
-  qexistsl_tac [`dstT`, `tpost`] >> asm_rewrite_tac[] >>
-  drule_then assume_tac local_rel_demand >>
-  irule demand_agree_mload >>
-  goal_assum (drule_at (Pat `demand_agree _ _ _`)) >>
-  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_word_load_demand_execution_headroom_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 (* Compatibility interfaces: the memory-word proof above is shared with ILOAD. *)

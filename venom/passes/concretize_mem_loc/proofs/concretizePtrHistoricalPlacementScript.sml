@@ -62,12 +62,12 @@ Proof
   drule_all ptr_source_activations_registry_retained >> simp[]
 QED
 
-Theorem ptr_transcript_historical_placement:
+Theorem ptr_transcript_historical_placement_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
   ptr_stage_placements C' positions /\
   ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
   i <= j /\ j < LENGTH h /\
@@ -102,8 +102,39 @@ Proof
      gvs[ptr_owner_erases_def]) >>
   `FLOOKUP bj (token,aid) = SOME (b,sz)` by
     (drule_all ptr_transcript_birth_retained >> simp[]) >>
-  drule_all ptr_stage_placements_live_owner >> strip_tac >>
+  drule_all ptr_stage_placements_live_owner_static >> strip_tac >>
   `FLOOKUP rj token = SOME owner` by
     (drule_all (ptr_transcript_registry_retained |> Q.SPEC `j`) >> simp[]) >>
   qexistsl [`d`,`output`,`p`] >> gvs[]
+QED
+
+Theorem ptr_transcript_historical_placement:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
+  ptr_stage_placements C' positions /\
+  ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
+  i <= j /\ j < LENGTH h /\
+  EL i H = (tsi,ri,bi,PTi,TGi,si,ei) /\
+  EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  FLOOKUP TGi v = SOME (token,aid) /\
+  FLOOKUP (EL i h).po_prov v = SOME (b,sz) ==>
+  ?d owner output p.
+    d <= LENGTH (EL i h).po_stack /\
+    EL (LENGTH (EL i h).po_stack-d) tsi = token /\
+    FLOOKUP ri token = SOME owner /\
+    owner = (ptr_owner_view d (EL i h)).cf_fn /\
+    FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+    lookup_function owner.fn_name C'.ctx_functions = SOME output /\
+    MEM (Allocation aid,p,sz) output.fn_mems_used /\
+    FLOOKUP positions (Allocation aid) = SOME (p,sz) /\
+    FLOOKUP bi (token,aid) = SOME (b,sz) /\
+    FLOOKUP bj (token,aid) = SOME (b,sz) /\
+    FLOOKUP rj token = SOME owner
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_transcript_historical_placement_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

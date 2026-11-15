@@ -170,6 +170,40 @@ Proof
   gvs[ptr_lookup_transport_def]
 QED
 
+Theorem ptr_paired_current_range_static_bound_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ((mem_read_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
+   (mem_write_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_write_ranges a.po_inst a.po_state))) /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `n = 0` >- simp[] >>
+  drule_all ptr_paired_current_range_classification_static >> strip_tac
+  >- (drule_all ptr_stage_fixed_region_bound >> simp[])
+  >- (rpt disj2_tac >> gvs[]) >>
+  disj2_tac >> disj1_tac >>
+  `ptr_stage_placements C' positions` by
+    fs[concretizePtrPairedPrefixTheory.ptr_paired_prefix_def] >>
+  drule_all ptr_stage_placements_endpoint_bound >> simp[] >> decide_tac
+QED
+
 Theorem ptr_paired_current_range_static_bound:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -193,15 +227,9 @@ Theorem ptr_paired_current_range_static_bound:
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
   n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `n = 0` >- simp[] >>
-  drule_all ptr_paired_current_range_classification >> strip_tac
-  >- (drule_all ptr_stage_fixed_region_bound >> simp[])
-  >- (rpt disj2_tac >> gvs[]) >>
-  disj2_tac >> disj1_tac >>
-  `ptr_stage_placements C' positions` by
-    fs[concretizePtrPairedPrefixTheory.ptr_paired_prefix_def] >>
-  drule_all ptr_stage_placements_endpoint_bound >> simp[] >> decide_tac
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_static_bound_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_paired_read_range_static_bound:

@@ -13,12 +13,12 @@ Ancestors concretizePtrMstoreProducer concretizePtrMloadIntegrationAudit
   concretizePtrHistoricalPlacement concretizePtrPlacementBounds
   concretizePtrStagePlacements concretizePtrComparisonTransport
 
-Theorem ptr_paired_mload_endpoint_inputs_memory:
+Theorem ptr_paired_mload_endpoint_inputs_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -49,7 +49,7 @@ Proof
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
   `MEM a.po_fn C.ctx_functions` by
-    (drule_all ptr_frame_sizes >> simp[]) >>
+    (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -63,7 +63,7 @@ Proof
   suspend "inputs"
 QED
 
-Resume ptr_paired_mload_endpoint_inputs_memory[inputs]:
+Resume ptr_paired_mload_endpoint_inputs_memory_static[inputs]:
   `~retpc_var a.po_fn out` by
     (fs[fn_shape_ok_def, retpc_shape_ok_def] >>
      spose_not_then assume_tac >>
@@ -85,7 +85,7 @@ Resume ptr_paired_mload_endpoint_inputs_memory[inputs]:
   suspend "evaluations"
 QED
 
-Resume ptr_paired_mload_endpoint_inputs_memory[evaluations]:
+Resume ptr_paired_mload_endpoint_inputs_memory_static[evaluations]:
   `~in_revert_forward a.po_fn a.po_state` by suspend "nonrevert" >>
   `at.po_inst = a.po_inst` by
     (qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
@@ -108,7 +108,7 @@ Resume ptr_paired_mload_endpoint_inputs_memory[evaluations]:
   strip_tac >> suspend "transport"
 QED
 
-Resume ptr_paired_mload_endpoint_inputs_memory[nonrevert]:
+Resume ptr_paired_mload_endpoint_inputs_memory_static[nonrevert]:
   `ALL_DISTINCT (fn_labels a.po_fn)` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
   qpat_x_assum `active_inst a.po_fn a.po_inst a.po_state` mp_tac >>
@@ -121,7 +121,7 @@ Resume ptr_paired_mload_endpoint_inputs_memory[nonrevert]:
   drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
 QED
 
-Resume ptr_paired_mload_endpoint_inputs_memory[transport]:
+Resume ptr_paired_mload_endpoint_inputs_memory_static[transport]:
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
     (fs[ptr_paired_sample_def] >> metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
@@ -135,8 +135,69 @@ Resume ptr_paired_mload_endpoint_inputs_memory[transport]:
   Cases_on `op` >> gvs[is_label_operand_def]
 QED
 
-Finalise ptr_paired_mload_endpoint_inputs_memory
+Finalise ptr_paired_mload_endpoint_inputs_memory_static
 
+Theorem ptr_paired_mload_endpoint_inputs_memory:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt ==>
+  ?op out x y.
+    a.po_inst.inst_operands = [op] /\ a.po_inst.inst_outputs = [out] /\
+    ((?v. op = Var v) \/ (?w. op = Lit w)) /\
+    ~retpc_var a.po_fn out /\ ptr_nonopaque_operand a.po_fn op /\
+    eval_operand op a.po_state = SOME x /\
+    eval_operand op at.po_state = SOME y /\
+    ptrDiscipline$op_taint a.po_taint op = {} /\
+    ptr_lookup_transport births positions (op_prov TG op) {}
+      (SOME x) (SOME y) /\
+    ~in_revert_forward a.po_fn a.po_state
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_endpoint_inputs_memory_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+
+Theorem ptr_paired_mload_endpoint_inputs_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt ==>
+  ?op out x y.
+    a.po_inst.inst_operands = [op] /\ a.po_inst.inst_outputs = [out] /\
+    ((?v. op = Var v) \/ (?w. op = Lit w)) /\
+    ~retpc_var a.po_fn out /\ ptr_nonopaque_operand a.po_fn op /\
+    eval_operand op a.po_state = SOME x /\
+    eval_operand op at.po_state = SOME y /\
+    ptrDiscipline$op_taint a.po_taint op = {} /\
+    ptr_lookup_transport births positions (op_prov TG op) {}
+      (SOME x) (SOME y) /\
+    ~in_revert_forward a.po_fn a.po_state
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_mload_endpoint_inputs_memory_static >> simp[]
+QED
 
 Theorem ptr_paired_mload_endpoint_inputs:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -164,15 +225,16 @@ Theorem ptr_paired_mload_endpoint_inputs:
       (SOME x) (SOME y) /\
     ~in_revert_forward a.po_fn a.po_state
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
-  drule_all ptr_paired_mload_endpoint_inputs_memory >> simp[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_endpoint_inputs_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
-Theorem ptr_paired_current_range_classification_memory:
+Theorem ptr_paired_current_range_classification_memory_static:
   ptr_paired_memory_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -249,6 +311,75 @@ Proof
   qexistsl_tac [`token`,`aid`,`pa`] >> simp[] >> decide_tac)
 QED
 
+Theorem ptr_paired_current_range_classification_memory:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ((mem_read_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
+   (mem_write_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_write_ranges a.po_inst a.po_state))) /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\ n <> 0 /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\
+    (w2n x + n <= lo \/ dyn_floor C vs <= w2n x)) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP a.po_prov v = SOME (b,sz) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + n <= b+sz /\
+    pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_classification_memory_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_paired_current_range_classification_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ((mem_read_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
+   (mem_write_ops a.po_inst = SOME ops /\
+    MEM (w2n x,n) (source_memory_write_ranges a.po_inst a.po_state))) /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\ n <> 0 /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\
+    (w2n x + n <= lo \/ dyn_floor C vs <= w2n x)) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP a.po_prov v = SOME (b,sz) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + n <= b+sz /\
+    pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_current_range_classification_memory_static >> simp[]
+QED
+
 Theorem ptr_paired_current_range_classification:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -279,8 +410,43 @@ Theorem ptr_paired_current_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
-  drule_all ptr_paired_current_range_classification_memory >> simp[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_current_range_classification_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_paired_read_range_classification_memory_static:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\ n <> 0 /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\
+    (w2n x + n <= lo \/ dyn_floor C vs <= w2n x)) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP a.po_prov v = SOME (b,sz) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + n <= b+sz /\
+    pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
+Proof
+  strip_tac >> irule ptr_paired_current_range_classification_memory_static >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt conj_tac >> metis_tac[]
 QED
 
 Theorem ptr_paired_read_range_classification_memory:
@@ -311,10 +477,41 @@ Theorem ptr_paired_read_range_classification_memory:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  strip_tac >> irule ptr_paired_current_range_classification_memory >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  rpt conj_tac >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_read_range_classification_memory_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_paired_read_range_classification_static:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  mem_read_ops a.po_inst = SOME ops /\
+  eval_operand ops.iao_ofst a.po_state = SOME x /\
+  eval_operand ops.iao_ofst at.po_state = SOME y /\
+  MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\ n <> 0 /\
+  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\
+    (w2n x + n <= lo \/ dyn_floor C vs <= w2n x)) \/
+  (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP a.po_prov v = SOME (b,sz) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + n <= b+sz /\
+    pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_paired_read_range_classification_memory_static >> simp[]
 QED
 
 Theorem ptr_paired_read_range_classification:
@@ -345,8 +542,50 @@ Theorem ptr_paired_read_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> drule ptr_paired_prefix_memory >> strip_tac >>
-  drule_all ptr_paired_read_range_classification_memory >> simp[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_read_range_classification_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_paired_mload_address_classification_memory_static:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt /\
+  a.po_inst.inst_operands = [op] /\
+  eval_operand op a.po_state = SOME x /\ eval_operand op at.po_state = SOME y ==>
+  (op_prov TG op = NONE /\ y = x /\
+    (w2n x + 32 <= lo \/ dyn_floor C vs <= w2n x)) \/
+  (?v token aid b sz pa. op = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
+    FLOOKUP a.po_prov v = SOME (b,sz) /\
+    FLOOKUP births (token,aid) = SOME (b,sz) /\
+    FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+    b <= w2n x /\ w2n x + 32 <= b+sz /\
+    pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
+Proof
+  strip_tac >>
+  drule_all ptr_paired_mload_endpoint_inputs_memory_static >>
+  disch_then (qx_choose_then `op0` (qx_choose_then `out` (qx_choose_then `x0`
+    (qx_choose_then `y0` (map_every assume_tac o CONJUNCTS))))) >>
+  `ptr_lookup_transport births positions (op_prov TG op) {} (SOME x) (SOME y) /\
+   ~in_revert_forward a.po_fn a.po_state` by gvs[] >>
+  gnvs[] >>
+  irule (Q.INST [`ops` |-> `<|iao_ofst := op; iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w)|>`]
+    (SPEC_ALL ptr_paired_read_range_classification_memory_static) |> SIMP_RULE (srw_ss()) []) >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[mem_read_ops_def, source_memory_read_ranges_def] >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt conj_tac >> metis_tac[]
 QED
 
 Theorem ptr_paired_mload_address_classification_memory:
@@ -375,19 +614,9 @@ Theorem ptr_paired_mload_address_classification_memory:
     b <= w2n x /\ w2n x + 32 <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  strip_tac >>
-  drule_all ptr_paired_mload_endpoint_inputs_memory >>
-  disch_then (qx_choose_then `op0` (qx_choose_then `out` (qx_choose_then `x0`
-    (qx_choose_then `y0` (map_every assume_tac o CONJUNCTS))))) >>
-  `ptr_lookup_transport births positions (op_prov TG op) {} (SOME x) (SOME y) /\
-   ~in_revert_forward a.po_fn a.po_state` by gvs[] >>
-  gnvs[] >>
-  irule (Q.INST [`ops` |-> `<|iao_ofst := op; iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w)|>`]
-    (SPEC_ALL ptr_paired_read_range_classification_memory) |> SIMP_RULE (srw_ss()) []) >>
-  rpt (goal_assum (drule_at Any)) >>
-  simp[mem_read_ops_def, source_memory_read_ranges_def] >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  rpt conj_tac >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_mload_address_classification_memory_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_paired_mload_address_classification:

@@ -133,10 +133,10 @@ Proof
   fs[ptr_table_source_def]
 QED
 
-Theorem ptr_frame_table_source:
+Theorem ptr_frame_table_source_static:
   !vs ctx stk PG G tn fn inst s.
   frame_reachable vs ctx stk PG G tn fn inst s ==>
-  o1_run_state_ok vs /\ o1_ctx_shape ctx ==>
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ o1_ctx_shape ctx ==>
   MEM fn ctx.ctx_functions /\ ptr_table_source fn s /\
   EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ ptr_table_source f.cf_fn f.cf_state) stk
 Proof
@@ -169,6 +169,35 @@ Proof
   fs[ptr_table_source_def]
 QED
 
+Theorem ptr_frame_table_source:
+  !vs ctx stk PG G tn fn inst s.
+  frame_reachable vs ctx stk PG G tn fn inst s ==>
+  o1_run_state_ok vs /\ o1_ctx_shape ctx ==>
+  MEM fn ctx.ctx_functions /\ ptr_table_source fn s /\
+  EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ ptr_table_source f.cf_fn f.cf_state) stk
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_table_source_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_frame_current_mems_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+  ?g p. lookup_function fn.fn_name C'.ctx_functions = SOME g /\
+    MEM (Allocation aid,p,sz) g.fn_mems_used
+Proof
+  strip_tac >> drule_all ptr_frame_table_source_static >> strip_tac >>
+  `?i. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
+    metis_tac[ptr_table_source_def] >>
+  drule_all ptr_frame_current_allocation_size_static >> strip_tac >>
+  drule_all ptr_stage_alloca_mems >> gvs[]
+QED
+
 Theorem ptr_frame_current_mems:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -179,10 +208,27 @@ Theorem ptr_frame_current_mems:
   ?g p. lookup_function fn.fn_name C'.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  strip_tac >> drule_all ptr_frame_table_source >> strip_tac >>
-  `?i. MEM i (fn_insts fn) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_current_mems_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_frame_saved_mems_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  MEM f stk /\ FLOOKUP f.cf_state.vs_allocas aid = SOME (b,sz) ==>
+  ?g p. lookup_function f.cf_fn.fn_name C'.ctx_functions = SOME g /\
+    MEM (Allocation aid,p,sz) g.fn_mems_used
+Proof
+  strip_tac >> drule_all ptr_frame_table_source_static >> strip_tac >>
+  `MEM f.cf_fn C.ctx_functions /\ ptr_table_source f.cf_fn f.cf_state` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `?i. MEM i (fn_insts f.cf_fn) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
     metis_tac[ptr_table_source_def] >>
-  drule_all ptr_frame_current_allocation_size >> strip_tac >>
+  drule_all ptr_frame_saved_allocation_size_static >> strip_tac >>
   drule_all ptr_stage_alloca_mems >> gvs[]
 QED
 
@@ -196,13 +242,9 @@ Theorem ptr_frame_saved_mems:
   ?g p. lookup_function f.cf_fn.fn_name C'.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  strip_tac >> drule_all ptr_frame_table_source >> strip_tac >>
-  `MEM f.cf_fn C.ctx_functions /\ ptr_table_source f.cf_fn f.cf_state` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
-  `?i. MEM i (fn_insts f.cf_fn) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
-    metis_tac[ptr_table_source_def] >>
-  drule_all ptr_frame_saved_allocation_size >> strip_tac >>
-  drule_all ptr_stage_alloca_mems >> gvs[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_saved_mems_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_frame_owning_callee_demand:

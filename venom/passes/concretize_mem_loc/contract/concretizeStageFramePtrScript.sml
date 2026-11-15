@@ -30,10 +30,10 @@ Ancestors
 
 (* Safe coverage supplies paired endpoints; the exceptional forwarding
    interval uses the actual opener and ASSIGN chronology. *)
-Theorem concretize_stage_frame_ptr_ok:
+Theorem concretize_stage_frame_ptr_ok_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -51,7 +51,7 @@ Proof
   `eom <= w2n vs.vs_initial_fmp` by metis_tac[] >>
   `EVERY wf_function C'.ctx_functions /\
    EVERY (\fn. EVERY inst_wf (fn_insts fn)) C'.ctx_functions` by
-    (mp_tac ptr_stage_paired_bridge >>
+    (mp_tac ptr_stage_paired_bridge_static >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then (qx_choose_then `shape_R`
        (qx_choose_then `shape_lp`
@@ -77,7 +77,7 @@ Proof
      fs[EVERY_EL, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def,
         fn_insts_blocks_MEM, EVERY_MEM] >>
      metis_tac[MEM_EL, fn_insts_blocks_MEM]) >>
-  mp_tac ptr_dalloca_stage_frame_coverage_safe >>
+  mp_tac ptr_dalloca_stage_frame_coverage_safe_static >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qpat_assum `?names. callee_first names C.ctx_functions` strip_assume_tac >>
   `!stk PG G tn fn inst s.
@@ -90,7 +90,7 @@ Proof
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac
      >- (`access_ok eom G fn inst s /\ taint_ok fn tn inst s` by
            (mp_tac (Q.INST [`at` |-> `ptr_observe stk PG G tn fn inst s`]
-             ptr_dalloca_paired_frame_ptr) >>
+             ptr_dalloca_paired_frame_ptr_static) >>
             (impl_tac >- (simp[ptr_observe_def] >>
               rpt conj_tac >> first_assum ACCEPT_TAC)) >>
             simp[ptr_observe_def]) >>
@@ -119,7 +119,7 @@ Proof
     (qspecl_then [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac
   >- (mp_tac (Q.INST [`at` |-> `ptr_observe stk PG G tn fn inst s`]
-        ptr_dalloca_paired_frame_ptr) >>
+        ptr_dalloca_paired_frame_ptr_static) >>
       (impl_tac >- (simp[ptr_observe_def] >>
         rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       simp[ptr_observe_def]) >>
@@ -145,7 +145,7 @@ Proof
   suspend "closing_revert"
 QED
 
-Resume concretize_stage_frame_ptr_ok[closing_revert]:
+Resume concretize_stage_frame_ptr_ok_static[closing_revert]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
   `!b op. MEM b h /\ b.po_inst.inst_opcode = RETURNDATACOPY /\
     MEM op b.po_inst.inst_operands ==> op_taint b.po_taint op = {}` by
@@ -170,4 +170,26 @@ Resume concretize_stage_frame_ptr_ok[closing_revert]:
   simp[access_ok_def, taint_ok_def, about_to_revert_def] >> metis_tac[]
 QED
 
-Finalise concretize_stage_frame_ptr_ok
+Finalise concretize_stage_frame_ptr_ok_static
+
+Theorem concretize_stage_frame_ptr_ok:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  max_live_eom C' = SOME eom ==>
+  !stk PG G tn fn inst s.
+    frame_reachable vs C' stk PG G tn fn inst s ==>
+    access_ok eom G fn inst s /\ taint_ok fn tn inst s
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_frame_ptr_ok_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED

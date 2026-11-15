@@ -48,6 +48,44 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[ptr_concretize_zero_instruction]
 QED
 
+Theorem ptr_stage_live_zero_position_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\ ptr_discipline lo C vs /\
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  ptr_stage_placements C' positions /\ FLOOKUP TG v = SOME (token,aid) /\
+  FLOOKUP a.po_prov v = SOME (b,0) ==>
+  FLOOKUP positions (Allocation aid) = SOME (0,0)
+Proof
+  strip_tac >> drule_all ptr_stage_placements_live_owner_static >> strip_tac >>
+  `ptr_ledger_source_activations vs C h a tokens registry` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+     a.po_fn a.po_inst a.po_state` by
+    metis_tac[ptr_source_activations_sound, ptr_chrono_history_reachable,
+      ptr_observation_reachable_def] >>
+  drule_all ptr_frame_table_source_static >> strip_tac >>
+  `MEM owner C.ctx_functions /\ ptr_table_source owner (ptr_owner_view d a).cf_state /\
+   get_alloca_size owner (Allocation aid) = 0` by
+    (Cases_on `d = LENGTH a.po_stack`
+     >- (gvs[ptr_owner_view_def] >>
+         metis_tac[ptr_frame_current_allocation_size_static]) >>
+     `MEM (ptr_owner_view d a) a.po_stack` by
+       (simp[ptr_owner_view_def] >> irule EL_MEM >> decide_tac) >>
+     fs[EVERY_MEM] >> metis_tac[ptr_frame_saved_allocation_size_static]) >>
+  `?P. fn_ptr_ok P owner` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `?i. MEM i (fn_insts owner) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
+    metis_tac[ptr_table_source_def] >>
+  gvs[] >> drule_all ptr_stage_zero_instruction >> strip_tac >>
+  qpat_x_assum `ptr_stage_placements _ _` mp_tac >>
+  pure_rewrite_tac[ptr_stage_placements_def] >>
+  disch_then (qspecl_then [`Allocation i.inst_id`,`0`,`0`] mp_tac) >>
+  simp[] >> metis_tac[lookup_function_MEM]
+QED
+
 Theorem ptr_stage_live_zero_position:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -59,29 +97,7 @@ Theorem ptr_stage_live_zero_position:
   FLOOKUP a.po_prov v = SOME (b,0) ==>
   FLOOKUP positions (Allocation aid) = SOME (0,0)
 Proof
-  strip_tac >> drule_all ptr_stage_placements_live_owner >> strip_tac >>
-  `ptr_ledger_source_activations vs C h a tokens registry` by
-    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
-  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
-     a.po_fn a.po_inst a.po_state` by
-    metis_tac[ptr_source_activations_sound, ptr_chrono_history_reachable,
-      ptr_observation_reachable_def] >>
-  drule_all ptr_frame_table_source >> strip_tac >>
-  `MEM owner C.ctx_functions /\ ptr_table_source owner (ptr_owner_view d a).cf_state /\
-   get_alloca_size owner (Allocation aid) = 0` by
-    (Cases_on `d = LENGTH a.po_stack`
-     >- (gvs[ptr_owner_view_def] >>
-         metis_tac[ptr_frame_current_allocation_size]) >>
-     `MEM (ptr_owner_view d a) a.po_stack` by
-       (simp[ptr_owner_view_def] >> irule EL_MEM >> decide_tac) >>
-     fs[EVERY_MEM] >> metis_tac[ptr_frame_saved_allocation_size]) >>
-  `?P. fn_ptr_ok P owner` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
-  `?i. MEM i (fn_insts owner) /\ i.inst_opcode = ALLOCA /\ i.inst_id = aid` by
-    metis_tac[ptr_table_source_def] >>
-  gvs[] >> drule_all ptr_stage_zero_instruction >> strip_tac >>
-  qpat_x_assum `ptr_stage_placements _ _` mp_tac >>
-  pure_rewrite_tac[ptr_stage_placements_def] >>
-  disch_then (qspecl_then [`Allocation i.inst_id`,`0`,`0`] mp_tac) >>
-  simp[] >> metis_tac[lookup_function_MEM]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_stage_live_zero_position_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

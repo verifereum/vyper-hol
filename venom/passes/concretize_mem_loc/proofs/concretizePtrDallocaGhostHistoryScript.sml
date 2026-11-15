@@ -13,12 +13,12 @@ Ancestors
   frameAllocationOwnership venomExecSemantics venomWf o1PassContract contextCodegenRel
   list rich_list finite_map pred_set arithmetic
 
-Theorem ptr_dalloca_ghost_history:
+Theorem ptr_dalloca_ghost_history_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
   EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
@@ -283,7 +283,7 @@ Proof
        `en0` |-> `front_entries`, `v` |-> `read_u`, `token` |-> `read_token`,
        `aid` |-> `read_id`, `b` |-> `read_base`, `sz` |-> `read_size`,
        `pa` |-> `read_pos`, `k` |-> `read_ix`]
-       ptr_dalloca_frontier_demanded_reflection) >>
+       ptr_dalloca_frontier_demanded_reflection_static) >>
      (impl_tac >- asm_rewrite_tac[]) >>
      disch_then ACCEPT_TAC) >>
   `ptr_chrono_step C (EL n h) (EL (SUC n) h)` by
@@ -510,7 +510,7 @@ Proof
        (qspecl_then [`prior_j`,`prior_r`,`prior_u`,`prior_tok`,`prior_id`,`prior_base`,`prior_size`,`prior_pos`,`prior_ix`,`prior_ts`,`prior_rw`,`prior_bw`,`prior_PTw`,`prior_TGw`,`prior_sw`,`prior_ew`] mp_tac) >>
      (impl_tac >- (asm_rewrite_tac[] >> decide_tac)) >>
      disch_then ACCEPT_TAC) >>
-  mp_tac (Q.INST [`n0` |-> `n`] ptr_dalloca_memory_steps) >>
+  mp_tac (Q.INST [`n0` |-> `n`] ptr_dalloca_memory_steps_static) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!i. (i < lo \/ dyn_floor C vs <= i) /\
@@ -528,7 +528,7 @@ Proof
         `bj` |-> `snapshot2`, `PTj` |-> `snapshot3`, `TGj` |-> `snapshot4`,
         `sj` |-> `snapshot5`, `ej` |-> `snapshot6`,
         `PTnext` |-> `nextsnapshot3`, `TGnext` |-> `nextsnapshot4`,
-        `savednext` |-> `nextsnapshot5`] ptr_dalloca_historical_runtime_next) >>
+        `savednext` |-> `nextsnapshot5`] ptr_dalloca_historical_runtime_next_static) >>
       (impl_tac >- asm_rewrite_tac[]) >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
       `ptr_dalloca_ghost_sample lo (dyn_floor C vs) FEMPTY nextsnapshot2
@@ -619,7 +619,7 @@ Proof
           `owned_size`,`owned_pos`,`owned_ix`] mp_tac) >> simp[ADD_COMM]) >>
   Cases_on `(EL n h).po_inst.inst_opcode = INVOKE`
   >- (mp_tac (Q.INST [`a` |-> `EL n h`, `t` |-> `EL q ht`]
-        concretizePtrDallocaActualWritesTheory.ptr_dalloca_actual_event_context) >>
+        concretizePtrDallocaActualWritesTheory.ptr_dalloca_actual_event_context_static) >>
       (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
       `(EL q ht).po_inst = (EL n h).po_inst` by
         (qpat_assum `(EL q ht).po_inst = concretize_inst_with_positions _ _` mp_tac >>
@@ -630,7 +630,7 @@ Proof
         `bj` |-> `snapshot2`, `PTj` |-> `snapshot3`, `TGj` |-> `snapshot4`,
         `sj` |-> `snapshot5`, `ej` |-> `snapshot6`,
         `PTj'` |-> `nextsnapshot3`, `TGj'` |-> `nextsnapshot4`,
-        `sj'` |-> `nextsnapshot5`] ptr_dalloca_historical_runtime_call) >>
+        `sj'` |-> `nextsnapshot5`] ptr_dalloca_historical_runtime_call_static) >>
       (impl_tac >- asm_rewrite_tac[]) >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
       `LIST_REL (\p pt. !site. pt = SOME site ==> p = SOME site)
@@ -813,4 +813,73 @@ Proof
   qpat_assum `!u tok id rb sz pos ix. _`
     (qspecl_then [`owned_v`,`owned_token`,`owned_id`,`owned_base`,
       `owned_size`,`owned_pos`,`owned_ix`] mp_tac) >> simp[ADD_COMM]
+QED
+
+Theorem ptr_dalloca_ghost_history:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done ==>
+  !n q.
+    n < LENGTH h /\ q <= LENGTH done /\
+    (q = 0 \/ EL (q-1) done < n) /\
+    n <= EL q (done ++ [LENGTH h - 1]) ==>
+    !tsj rj bj PTj TGj sj ej. EL n H = (tsj,rj,bj,PTj,TGj,sj,ej) ==>
+    ptr_dalloca_ghost_sample lo (dyn_floor C vs) FEMPTY bj
+      (\token aid. F) (EL n h) (EL q ht) /\
+    (!v site. FLOOKUP (EL q ht).po_prov v = SOME site ==>
+      FLOOKUP TGj v = NONE) /\
+    (!v site. FLOOKUP TGj v = NONE /\
+      FLOOKUP (EL n h).po_prov v = SOME site ==>
+      FLOOKUP (EL q ht).po_prov v = SOME site) /\
+    LENGTH PTj = LENGTH (EL n h).po_params /\
+    LENGTH (EL n h).po_params = LENGTH (EL q ht).po_params /\
+    (!k site. k < LENGTH (EL n h).po_params ==>
+      (EL k (EL q ht).po_params = SOME site ==>
+        EL k (EL n h).po_params = SOME site /\ EL k PTj = NONE /\
+        EL k (EL n h).po_state.vs_params =
+          EL k (EL q ht).po_state.vs_params) /\
+      (EL k PTj = NONE /\ EL k (EL n h).po_params = SOME site ==>
+        EL k (EL q ht).po_params = SOME site)) /\
+    LENGTH sj = LENGTH (EL n h).po_stack /\
+    LIST_REL (\((pt,tg),f) ft.
+      ptr_dalloca_ghost_vars f.cf_prov f.cf_tvar f.cf_state
+        ft.cf_prov ft.cf_tvar ft.cf_state /\
+      (!v site. FLOOKUP ft.cf_prov v = SOME site ==> FLOOKUP tg v = NONE) /\
+      (!v site. FLOOKUP tg v = NONE /\ FLOOKUP f.cf_prov v = SOME site ==>
+        FLOOKUP ft.cf_prov v = SOME site) /\
+      f.cf_inst.inst_outputs = ft.cf_inst.inst_outputs /\
+      LENGTH pt = LENGTH f.cf_params /\ LENGTH f.cf_params = LENGTH ft.cf_params /\
+      (!k site. k < LENGTH f.cf_params ==>
+        (EL k ft.cf_params = SOME site ==>
+          EL k f.cf_params = SOME site /\ EL k pt = NONE /\
+          EL k f.cf_state.vs_params = EL k ft.cf_state.vs_params) /\
+        (EL k pt = NONE /\ EL k f.cf_params = SOME site ==>
+          EL k ft.cf_params = SOME site)))
+      (ZIP (sj,(EL n h).po_stack)) (EL q ht).po_stack /\
+    (!v token aid base size pos ix.
+      ~in_revert_forward (EL n h).po_fn (EL n h).po_state /\
+      (EL n h).po_inst.inst_opcode <> ASSIGN /\
+      MEM (Var v) (EL n h).po_inst.inst_operands /\
+      (inst_read_op (EL n h).po_inst = SOME (Var v) \/
+        (EL n h).po_inst.inst_opcode = INVOKE) /\
+      FLOOKUP TGj v = SOME (token,aid) /\
+      FLOOKUP (EL n h).po_prov v = SOME (base,size) /\
+      FLOOKUP bj (token,aid) = SOME (base,size) /\
+      FLOOKUP positions (Allocation aid) = SOME (pos,size) /\ ix < size ==>
+      pos+ix IN (EL q ht).po_taint.t_mem ==>
+        base+ix IN (EL n h).po_taint.t_mem)
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_ghost_history_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
