@@ -796,6 +796,17 @@ Proof
      simp_tac (srw_ss()) [venomInstTheory.get_instruction_def] >>
      strip_tac >>
      metis_tac[simplifyCfgDefsTheory.lookup_block_member_label]) >>
+  qpat_x_assum `o1_ctx_shape C7` mp_tac >>
+  qpat_x_assum `MEM sf C7.ctx_functions` mp_tac >>
+  qpat_x_assum `tf = dft_fn sf` mp_tac >>
+  qpat_x_assum `dft_fn_rel sf tf` mp_tac >>
+  qpat_x_assum `active_inst sf inst u` mp_tac >>
+  qpat_x_assum `active_inst tf inst st` mp_tac >>
+  qpat_x_assum `u.vs_current_bb = bb.bb_label` mp_tac >>
+  qpat_x_assum `st.vs_current_bb = bt.bb_label` mp_tac >>
+  qpat_x_assum `bt.bb_label = bb.bb_label` mp_tac >>
+  qpat_x_assum `(_ \/ _) /\ ~in_revert_forward tf st` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
   metis_tac[inv_forward_active]
 QED
 Theorem dft_packet_guard_from_block[local]:
@@ -1458,6 +1469,62 @@ Proof
   PairCases_on `x` >>
   qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
     _ ==> _` drule >> strip_tac >> metis_tac[]
+QED
+
+Theorem dft_packet_trace_prefix_fresh[local]:
+  !visits j.
+    ALL_DISTINCT (MAP FST visits) /\ j < LENGTH visits ==>
+    ~MEM (FST (EL j visits)) (MAP FST (trace_gas (TAKE j visits)))
+Proof
+  rpt strip_tac >> drule dftGasFromListTraceNamesTheory.trace_gas_name_mem >>
+  rewrite_tac[GSYM MAP_TAKE, MEM_EL] >> strip_tac >>
+  gvs[LENGTH_TAKE, EL_TAKE] >>
+  `EL n (MAP FST visits) = EL j (MAP FST visits)` by simp[EL_MAP, EL_TAKE] >>
+  metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, arithmeticTheory.LESS_TRANS,
+    prim_recTheory.LESS_REFL]
+QED
+
+Theorem dft_packet_gas_fresh[local]:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused ==>
+  ~MEM (p,d,inst.inst_id) (MAP FST obs)
+Proof
+  rewrite_tac[dft_focus_packet_rel_def] >> strip_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `(j,obs) = _` mp_tac >>
+  qpat_x_assum `LIST_REL dft_fn_rel _ _` mp_tac >>
+  qpat_x_assum `j' < LENGTH _` mp_tac >>
+  qpat_x_assum `EL j' _ = _` mp_tac >>
+  qpat_x_assum `obs' = _` mp_tac >>
+  qpat_x_assum `lookup_function nm C8.ctx_functions = SOME root_tf` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+  `EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id)
+    bb.bb_instructions)) f.fn_blocks) C8.ctx_functions` by
+    metis_tac[dft_ctx_block_ids_distinct] >>
+  `MEM root_tf C8.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+    root_tf.fn_blocks` by
+    (qpat_x_assum `EVERY _ C8.ctx_functions` mp_tac >>
+     pure_rewrite_tac [EVERY_MEM] >> disch_then (qspec_then `root_tf` mp_tac) >> simp[]) >>
+  `ALL_DISTINCT (MAP FST (trace_blocks [] 0 N C8 root_tf root_entry))` by
+    (irule (cj 3 dftGasFromListTraceNamesTheory.trace_names_distinct) >> simp[]) >>
+  drule_all dft_packet_trace_prefix_fresh >> simp[]
+QED
+
+Theorem dft_packet_fresh_pair_none[local]:
+  !keys slots obs key0 v.
+    PERM (MAP (\(key,slot). (key,THE slot))
+      (FILTER (\(key,slot). IS_SOME slot) (ZIP (keys,slots)))) obs /\
+    ~MEM key0 (MAP FST obs) /\ MEM (key0,v) (ZIP (keys,slots)) ==>
+    v = NONE
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[] >>
+  `MEM (key0,x) obs` by
+    (drule sortingTheory.PERM_MEM_EQ >>
+     disch_then (qspec_then `(key0,x)` (fn th => rewrite_tac[GSYM th])) >>
+     simp[MEM_MAP, MEM_FILTER] >> qexists_tac `(key0,SOME x)` >> simp[]) >>
+  gvs[MEM_MAP] >> metis_tac[pairTheory.FST]
 QED
 
 Theorem dft_focus_packet_step:
