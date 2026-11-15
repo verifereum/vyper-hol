@@ -248,6 +248,107 @@ Proof
   simp[DROP_LENGTH_APPEND]
 QED
 
+(* Completed child rows contribute their dynamic keys and consume exactly
+   their own readings. The caller prefix composes those retained rows. *)
+Theorem prefix_trace_keys:
+  !pre s bb u kgss kss tail fuel C func p d.
+    DROP s.vs_inst_idx bb.bb_instructions = pre /\
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    LIST_REL
+      (\i keys. if i.inst_opcode = GAS then keys = [(p,d,i.inst_id)]
+                else if i.inst_opcode = INVOKE then T else keys = [])
+      pre kss /\
+    LIST_REL (\keys gs. LENGTH keys = LENGTH gs) kss kgss /\
+    (!q v w.
+      q < LENGTH pre /\ (EL q pre).inst_opcode = INVOKE /\
+      FOLDR (dft_exec_cons fuel C) OK (TAKE q pre)
+        (s with vs_gas_readings := FLAT kgss ++ tail) = OK v /\
+      step_inst fuel C (EL q pre) v = OK w ==>
+      dftGasFromListTraceDefs$trace_gas
+        (dftGasFromListTraceDefs$trace_step p d fuel C func (EL q pre) v) =
+          ZIP (EL q kss, EL q kgss) /\
+      w.vs_gas_readings = FLAT (DROP (SUC q) kgss) ++ tail) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+    dftGasFromListTraceDefs$trace_gas
+      (dftGasFromListTraceDefs$trace_block p d fuel C func bb
+        (s with vs_gas_readings := FLAT kgss ++ tail)) =
+      ZIP (FLAT kss, FLAT kgss)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[DROP_EQ_NIL] >>
+      simp[Once trace_defs, get_instruction_def, trace_gas_def]) >>
+  Cases_on `kss` >- fs[] >>
+  rename1 `LIST_REL _ (h::pre) (headkeys::keyrows)` >>
+  Cases_on `kgss` >- fs[] >>
+  rename1 `LIST_REL _ (headkeys::keyrows) (headvals::valrows)` >>
+  fs[EVERY_DEF] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+      (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  Cases_on `step_inst fuel C h
+    (s with vs_gas_readings := FLAT (headvals::valrows) ++ tail)` >>
+  fs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  rename1 `step_inst _ _ _ _ = OK next` >>
+  qpat_assum `~is_terminator h.inst_opcode` (fn nt =>
+    qpat_x_assum `(if is_terminator h.inst_opcode then _ else _) = OK u`
+      (assume_tac o REWRITE_RULE [nt])) >>
+  `next.vs_gas_readings = FLAT valrows ++ tail /\
+   visit_gas ((p,d,h.inst_id),func,h,
+     s with vs_gas_readings := FLAT (headvals::valrows) ++ tail) ++
+   trace_gas (trace_step p d fuel C func h
+     (s with vs_gas_readings := FLAT (headvals::valrows) ++ tail)) =
+     ZIP (headkeys,headvals)` by
+    (Cases_on `h.inst_opcode = GAS`
+     >- (gvs[] >> drule_all dftBlockSimTheory.step_inst_ok_gas >> strip_tac >>
+         Cases_on `headvals` >> gvs[update_var_def] >>
+         simp[visit_gas_def, trace_step_noninvoke, trace_gas_def]) >>
+     Cases_on `h.inst_opcode = INVOKE`
+     >- (qpat_x_assum `!q v w. q < _ /\ _ ==> _` (qspecl_then
+           [`0`, `s with vs_gas_readings := FLAT (headvals::valrows) ++ tail`,
+            `next`] mp_tac) >> simp[visit_gas_def]) >>
+     gvs[] >> drule_all dft_nonconsuming_ok_readings >>
+     simp[visit_gas_def, trace_step_noninvoke, trace_gas_def]) >>
+  `next with vs_gas_readings := FLAT valrows ++ tail = next` by
+    simp[venom_state_component_equality] >>
+  fs[] >>
+  `!q v w.
+    q < LENGTH pre /\ (EL q pre).inst_opcode = INVOKE /\
+    FOLDR (dft_exec_cons fuel C) OK (TAKE q pre)
+      (next with vs_inst_idx := SUC s.vs_inst_idx) = OK v /\
+    step_inst fuel C (EL q pre) v = OK w ==>
+    trace_gas (trace_step p d fuel C func (EL q pre) v) =
+      ZIP (EL q keyrows, EL q valrows) /\
+    w.vs_gas_readings = FLAT (DROP (SUC q) valrows) ++ tail` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!q v w. q < SUC (LENGTH pre) /\ _ ==> _`
+       (qspecl_then [`SUC q`, `v`, `w`] mp_tac) >>
+     fs[dftIndexedExecTheory.dft_exec_cons_def]) >>
+  `trace_gas (trace_block p d fuel C func bb
+     (next with vs_inst_idx := SUC s.vs_inst_idx)) =
+     ZIP (FLAT keyrows, FLAT valrows)` by
+    (qpat_x_assum `!s bb u kgss kss tail fuel C func p d. _` (qspecl_then
+      [`next with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `u`,
+       `valrows`, `keyrows`, `tail`, `fuel`, `C`, `func`, `p`, `d`] mp_tac) >>
+     (impl_tac >- fs[]) >> simp[]) >>
+  simp[Once trace_defs, get_instruction_def, trace_gas_def, FLAT_APPEND] >>
+  pure_rewrite_tac[GSYM trace_gas_def] >>
+  qpat_assum `visit_gas _ ++ trace_gas _ = ZIP _` (fn head =>
+    pure_rewrite_tac[APPEND_ASSOC,
+      PURE_REWRITE_RULE [APPEND_ASSOC] head]) >>
+  qpat_assum `trace_gas (trace_block _ _ _ _ _ _ _) = _`
+    (fn tail => pure_rewrite_tac[tail]) >>
+  `LENGTH (FLAT keyrows) = LENGTH (FLAT valrows)` by
+    (qpat_x_assum `LIST_REL _ keyrows valrows` (fn rel =>
+       mp_tac (MATCH_MP LIST_REL_LENGTH rel) >> mp_tac rel) >>
+     rpt (pop_assum kall_tac) >> simp[LENGTH_FLAT] >>
+     metis_tac[MAP_EQ_LIST_REL]) >>
+  irule ZIP_APPEND >> conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+
 (* Successful native prefixes identify dynamic occurrence keys, including
    a nonzero starting cursor. This is separate from original-site events. *)
 Theorem noninvoke_prefix_trace_keys:
@@ -321,15 +422,22 @@ Proof
      qpat_x_assum `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs)`
        (mp_tac o REWRITE_RULE [EVERY_EL]) >>
      disch_then (qspec_then `qi` mp_tac) >> simp[LENGTH_TAKE]) >>
-  `LENGTH (FLAT kgss) = LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k xs))` by
-    (irule gas_padding_filling_length >> gvs[GSYM MAP_TAKE]) >>
-  `!ys. FLAT (MAP (\i. if i.inst_opcode = GAS then [(p,d,i.inst_id)] else []) ys) =
-    MAP (\i. (p,d,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) ys)` by
-    (Induct >> simp[] >> gen_tac >> IF_CASES_TAC >> simp[]) >>
-  `FLAT (TAKE k ks) =
-    MAP (\i. (p,d,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) (TAKE k xs))` by
-    simp[GSYM MAP_TAKE] >>
-  simp[] >> irule noninvoke_prefix_trace_keys >> simp[]
+  match_mp_tac (Q.SPECL
+    [`TAKE k xs`, `be`, `bb`, `u`, `kgss`, `TAKE k ks`, `tail`,
+     `fuel`, `C`, `func`, `p`, `d`] prefix_trace_keys) >>
+  asm_simp_tac (srw_ss()) [GSYM MAP_TAKE] >>
+  rpt conj_tac >| [
+    simp[LIST_REL_MAP2] >> irule LIST_REL_refl >>
+    rpt strip_tac >> BETA_TAC >> IF_CASES_TAC >> simp[],
+    qpat_x_assum `LIST_REL (LIST_REL _) _ kgss` mp_tac >>
+      simp[GSYM MAP_TAKE, LIST_REL_MAP1] >>
+      match_mp_tac LIST_REL_mono >> rpt gen_tac >> BETA_TAC >>
+      simp_tac (srw_ss()) [combinTheory.o_DEF] >>
+      IF_CASES_TAC >> simp[] >> strip_tac >> gvs[],
+    rpt gen_tac >> strip_tac >>
+    qpat_x_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) (TAKE k xs)`
+      (mp_tac o REWRITE_RULE [EVERY_EL]) >>
+    disch_then (qspec_then `q` mp_tac) >> fs[]]
 QED
 
 Theorem initial_occurrence_prefix_replay:
