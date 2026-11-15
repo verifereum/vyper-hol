@@ -23,10 +23,10 @@ Ancestors
   passSharedProps passTransform venomInst list pred_set
 
 (* Coverage and both consumers retain one choice of the stage bridge. *)
-Theorem concretize_stage_taint_within:
+Theorem concretize_stage_taint_within_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -41,10 +41,10 @@ Proof
   qpat_assum `?names. callee_first names C.ctx_functions`
     (qx_choose_then `names` assume_tac) >>
   Cases_on `max_live_eom C'`
-  >- (irule ptr_dalloca_no_eom_taint_within >> metis_tac[]) >>
+  >- (irule ptr_dalloca_no_eom_taint_within_static >> metis_tac[]) >>
   rename1 `max_live_eom C' = SOME eom` >>
   `(ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp)` by simp[] >>
-  drule ptr_stage_paired_bridge >>
+  drule ptr_stage_paired_bridge_static >>
   disch_then (qspecl_then [`vs`,`lo`,`eom`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `C.ctx_entry = C'.ctx_entry` by fs[ctx_pass_stage_def] >>
@@ -62,7 +62,7 @@ Proof
     (rpt gen_tac >> disch_tac >> irule ptr_paired_history_coverage_safe >>
      simp[] >> conj_tac
      >- (rpt gen_tac >> strip_tac >>
-         drule_all ptr_paired_universal_extension >> simp[]) >>
+         drule_all ptr_paired_universal_extension_static >> simp[]) >>
      fs[EVERY_MEM] >> metis_tac[]) >>
   rewrite_tac[taint_within_def] >> conj_tac
   >- (map_every qx_gen_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`fuel`,`post`] >>
@@ -77,7 +77,7 @@ Proof
       qpat_assum `!ht at. ptr_chrono_history _ _ _ _ ==> _`
         (drule_then strip_assume_tac)
       >- (mp_tac (Q.INST [`at` |-> `ptr_observe stk PG G tn fn inst s`]
-            ptr_dalloca_paired_observation_taint) >>
+            ptr_dalloca_paired_observation_taint_static) >>
           (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
           disch_then (mp_tac o CONJUNCT1) >>
           disch_then (qspecl_then [`fuel`,`post`] mp_tac) >>
@@ -105,7 +105,7 @@ Proof
   qpat_assum `!ht at. ptr_chrono_history _ _ _ _ ==> _`
     (drule_then strip_assume_tac)
   >- (mp_tac (Q.INST [`at` |-> `ptr_observe stk PG G tn fn inst s`]
-        ptr_dalloca_paired_observation_taint) >>
+        ptr_dalloca_paired_observation_taint_static) >>
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then (mp_tac o CONJUNCT2) >>
       disch_then (qspecl_then [`fuel`,`th`] mp_tac) >>
@@ -116,4 +116,23 @@ Proof
   drule_all active_inst_block_lookup >> strip_tac >> gvs[] >>
   mp_tac (Q.INST [`ctx` |-> `C'`, `t` |-> `th`] ld_revert_pair_suffix_step) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
+QED
+
+Theorem concretize_stage_taint_within:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) ==>
+  taint_within D C' vs
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL concretize_stage_taint_within_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

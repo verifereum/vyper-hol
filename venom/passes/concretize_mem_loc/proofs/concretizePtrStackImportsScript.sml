@@ -149,6 +149,43 @@ Proof
   gvs[] >> first_x_assum irule >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
+Theorem ptr_frame_descendant_mems_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  n < LENGTH stk /\ k <= n /\
+  EL k ((fn,s) :: MAP (\f. (f.cf_fn,f.cf_state)) stk) = (owner,os) /\
+  FLOOKUP os.vs_allocas aid = SOME (b,sz) ==>
+  ?p own_out nm ops g.
+    lookup_function owner.fn_name C'.ctx_functions = SOME own_out /\
+    MEM (Allocation aid,p,sz) own_out.fn_mems_used /\
+    (EL n stk).cf_inst.inst_opcode = INVOKE /\
+    (EL n stk).cf_inst.inst_operands = Label nm :: ops /\
+    lookup_function nm C'.ctx_functions = SOME g /\
+    MEM (Allocation aid,p,sz) g.fn_mems_used
+Proof
+  strip_tac >>
+  `?own_out p. lookup_function owner.fn_name C'.ctx_functions = SOME own_out /\
+    MEM (Allocation aid,p,sz) own_out.fn_mems_used` by
+    (Cases_on `k`
+     >- (gvs[] >> drule_all ptr_frame_current_mems_static >> simp[]) >>
+     gvs[] >>
+     `n' < LENGTH stk` by decide_tac >>
+     `MEM (EL n' stk) stk` by simp[EL_MEM] >>
+     gvs[EL_MAP] >> drule_all ptr_frame_saved_mems_static >> simp[]) >>
+  `EL k (fn :: MAP (\f. f.cf_fn) stk) = owner` by
+    (Cases_on `k` >> gvs[EL_MAP] >>
+     `n' < LENGTH stk` by decide_tac >> gvs[EL_MAP]) >>
+  drule_all ptr_frame_table_source_static >> strip_tac >>
+  `EVERY (\f. MEM f.cf_fn C.ctx_functions) stk` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule ptr_frame_stack_edges >> strip_tac >>
+  drule_all ptr_stack_tuple_transport >> metis_tac[]
+QED
+
 Theorem ptr_frame_descendant_mems:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -167,23 +204,9 @@ Theorem ptr_frame_descendant_mems:
     lookup_function nm C'.ctx_functions = SOME g /\
     MEM (Allocation aid,p,sz) g.fn_mems_used
 Proof
-  strip_tac >>
-  `?own_out p. lookup_function owner.fn_name C'.ctx_functions = SOME own_out /\
-    MEM (Allocation aid,p,sz) own_out.fn_mems_used` by
-    (Cases_on `k`
-     >- (gvs[] >> drule_all ptr_frame_current_mems >> simp[]) >>
-     gvs[] >>
-     `n' < LENGTH stk` by decide_tac >>
-     `MEM (EL n' stk) stk` by simp[EL_MEM] >>
-     gvs[EL_MAP] >> drule_all ptr_frame_saved_mems >> simp[]) >>
-  `EL k (fn :: MAP (\f. f.cf_fn) stk) = owner` by
-    (Cases_on `k` >> gvs[EL_MAP] >>
-     `n' < LENGTH stk` by decide_tac >> gvs[EL_MAP]) >>
-  drule_all ptr_frame_table_source >> strip_tac >>
-  `EVERY (\f. MEM f.cf_fn C.ctx_functions) stk` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
-  drule ptr_frame_stack_edges >> strip_tac >>
-  drule_all ptr_stack_tuple_transport >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_descendant_mems_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
 
 Theorem ptr_stack_edge_inst[local]:
@@ -192,6 +215,27 @@ Theorem ptr_stack_edge_inst[local]:
 Proof
   Induct >> simp[ptr_stack_edges_def] >> rpt gen_tac >>
   Cases_on `n` >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_frame_descendant_demand_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  n < LENGTH stk /\ k <= n /\
+  EL k ((fn,s) :: MAP (\f. (f.cf_fn,f.cf_state)) stk) = (owner,os) /\
+  FLOOKUP os.vs_allocas aid = SOME (b,sz) /\
+  o1_walk_view rpolicy 2 C' (EL n stk).cf_fn observed ==>
+  ml_callee_gen (Allocation aid)
+    (\name. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context name)))
+    (EL n stk).cf_inst
+Proof
+  strip_tac >> drule_all ptr_frame_descendant_mems_static >> strip_tac >>
+  `MEM (EL n stk).cf_inst (fn_insts (EL n stk).cf_fn)` by
+    metis_tac[ptr_frame_stack_edges, ptr_stack_edge_inst] >>
+  drule_all ptr_o1_walk_invoke_demand >> simp[]
 QED
 
 Theorem ptr_frame_descendant_demand:
@@ -209,10 +253,30 @@ Theorem ptr_frame_descendant_demand:
     (\name. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context name)))
     (EL n stk).cf_inst
 Proof
-  strip_tac >> drule_all ptr_frame_descendant_mems >> strip_tac >>
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_descendant_demand_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_frame_descendant_import_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  n < LENGTH stk /\ k <= n /\
+  EL k ((fn,s) :: MAP (\f. (f.cf_fn,f.cf_state)) stk) = (owner,os) /\
+  FLOOKUP os.vs_allocas aid = SOME (b,sz) /\
+  o1_walk_view rpolicy 2 C' (EL n stk).cf_fn observed /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C ==>
+  ?p. MEM (Allocation aid,p,sz)
+    (imported_mems_used observed.cu_context (EL n stk).cf_fn)
+Proof
+  strip_tac >> drule_all ptr_frame_descendant_mems_static >> strip_tac >>
   `MEM (EL n stk).cf_inst (fn_insts (EL n stk).cf_fn)` by
     metis_tac[ptr_frame_stack_edges, ptr_stack_edge_inst] >>
-  drule_all ptr_o1_walk_invoke_demand >> simp[]
+  drule_all ptr_stage_invoke_import_tuple >> metis_tac[]
 QED
 
 Theorem ptr_frame_descendant_import:
@@ -230,8 +294,7 @@ Theorem ptr_frame_descendant_import:
   ?p. MEM (Allocation aid,p,sz)
     (imported_mems_used observed.cu_context (EL n stk).cf_fn)
 Proof
-  strip_tac >> drule_all ptr_frame_descendant_mems >> strip_tac >>
-  `MEM (EL n stk).cf_inst (fn_insts (EL n stk).cf_fn)` by
-    metis_tac[ptr_frame_stack_edges, ptr_stack_edge_inst] >>
-  drule_all ptr_stage_invoke_import_tuple >> metis_tac[]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_frame_descendant_import_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

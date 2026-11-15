@@ -35,10 +35,10 @@ Proof
   drule_all ptr_dalloca_fresh_reserved_wf >> simp[]
 QED
 
-Theorem ptr_dalloca_no_eom_taint_within:
+Theorem ptr_dalloca_no_eom_taint_within_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -55,4 +55,24 @@ Proof
     (irule ptr_dalloca_stage_no_eom_empty >> metis_tac[]) >>
   simp[taint_within_def, final_taint_def] >>
   metis_tac[frame_reachable_functions_member, listTheory.MEM]
+QED
+
+Theorem ptr_dalloca_no_eom_taint_within:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  (!eom. max_live_eom C' = SOME eom ==> eom <= w2n vs.vs_initial_fmp) /\
+  max_live_eom C' = NONE ==>
+  taint_within D C' vs
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_dalloca_no_eom_taint_within_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED

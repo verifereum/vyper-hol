@@ -20,12 +20,12 @@ Ancestors
   ptrDiscipline pointerConfinedDefs unitShapeDefs venomExecSemantics
   memLocDefs venomState venomInst finite_map list pred_set
 
-Theorem ptr_paired_prefix_comparison:
+Theorem ptr_paired_prefix_comparison_static:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
@@ -51,7 +51,7 @@ Proof
     a.po_fn a.po_inst a.po_state` by
     (drule ptr_gap_ownership_history >> strip_tac >>
      drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes_static >> simp[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[Once frame_reachable_cases] >> metis_tac[]) >>
@@ -101,7 +101,7 @@ Proof
        metis_tac[ptr_history_content_labels] >>
      `MEM a.po_inst.inst_opcode [EQ; LT; GT]` by simp[] >>
      `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
-     drule_all ptr_mixed_comparison_execution >> simp[]) >>
+     drule_all ptr_mixed_comparison_execution_static >> simp[]) >>
   `?i. active_inst a.po_fn i
      ((update_var out v a.po_state) with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
     (`EVERY bb_well_formed a.po_fn.fn_blocks` by
@@ -141,14 +141,14 @@ Proof
    qexistsl_tac [`0`, `update_var out v a.po_state`] >> fs[update_var_def])
 QED
 
-Resume ptr_paired_prefix_comparison[shape]:
+Resume ptr_paired_prefix_comparison_static[shape]:
   `MEM a.po_inst (fn_insts a.po_fn)` by
     (fs[active_inst_def, fn_insts_MEM] >> metis_tac[MEM_EL]) >>
   fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def,
      wf_function_def, fn_inst_wf_def, EVERY_MEM, fn_insts_MEM] >> metis_tac[]
 QED
 
-Resume ptr_paired_prefix_comparison[discipline]:
+Resume ptr_paired_prefix_comparison_static[discipline]:
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
@@ -171,7 +171,87 @@ Resume ptr_paired_prefix_comparison[discipline]:
   simp[] >> metis_tac[]
 QED
 
-Finalise ptr_paired_prefix_comparison
+Finalise ptr_paired_prefix_comparison_static
+
+Theorem ptr_paired_prefix_comparison:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  MEM a.po_inst.inst_opcode [EQ; LT; GT] /\
+  ptr_chrono_step C' at zt ==>
+  ?z TG'.
+    TG' = step_prov PT TG a.po_inst z.po_state /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
+Proof
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_comparison_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
+QED
+
+Theorem ptr_paired_comparison_prefix_normalize_static:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\ code_layout_valid vs) /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [EQ; LT; GT] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_prefix_comparison_static >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+QED
 
 Theorem ptr_paired_comparison_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -206,22 +286,7 @@ Theorem ptr_paired_comparison_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_paired_prefix_comparison >> strip_tac >>
-  `fn_inst_wf z.po_fn` by
-    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
-     drule ptr_structural_transcript_erasure >> strip_tac >>
-     drule ptr_structural_trace_source >> strip_tac >>
-     drule ptr_chrono_history_reachable >> strip_tac >>
-     fs[ptr_observation_reachable_def] >>
-     drule ptr_frame_context_membership >> strip_tac >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
-  simp[] >> strip_tac >>
-  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
-    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
-    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
-  simp[APPEND_ASSOC, ptr_gap_scan_fields]
+  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_comparison_prefix_normalize_static) >>
+  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
+  tautLib.TAUT_TAC
 QED
