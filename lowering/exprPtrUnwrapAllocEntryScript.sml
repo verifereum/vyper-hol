@@ -4,13 +4,13 @@ Ancestors
   exprPtrUnwrapAllocation exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation
   bufferAllocationExecution exprSimAlloc loweringPosts exprLoweringProps
   fragGasSeqPtr fragGasSeqAbort fragExec fragExecMem allocaHistory
-  ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst finite_map words
+  ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomMemDefs venomInst finite_map words
   compileEnv loweringStateRelDefs fragGasPathPtr stmtAppendStorageRunPtr exprPtrUnwrapStorageSource
 
 Theorem unwrap_alloc_origin_path:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  allocas_from lo s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?out u.
@@ -21,7 +21,16 @@ Theorem unwrap_alloc_origin_path:
        step_prov PG G (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) u,
        step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s u tn)
 Proof
-  strip_tac >> drule_all unwrap_alloc_generated_step >>
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (strip_tac >>
+     `alloca_inv s /\ fmp_room ctx func s` by fs[stmt_state_rel_def] >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     qpat_x_assum `fmp_room ctx func s` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       alloca_inv_def, alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
+  drule_all unwrap_alloc_generated_step >>
   disch_then (qspec_then `s` strip_assume_tac) >>
   qexistsl [`out`, `update_var out (n2w (buffer_allocation_base s sm.cs_next_id))
     (buffer_allocation_fields s sm.cs_next_id nb)`] >>
@@ -76,7 +85,7 @@ QED
 Theorem unwrap_alloc_entry:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?out u Gf tnf a.
@@ -96,7 +105,13 @@ Theorem unwrap_alloc_entry:
 Proof
   strip_tac >> drule_all unwrap_alloc_code_prefix >> strip_tac >>
   `allocas_from 0 s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
-    simp[allocas_from_def] >>
+    (simp[allocas_from_def] >> strip_tac >>
+     `alloca_inv s /\ fmp_room ctx func s` by fs[stmt_state_rel_def] >>
+     qpat_x_assum `alloca_inv s` mp_tac >>
+     qpat_x_assum `fmp_room ctx func s` mp_tac >>
+     simp[allocas_below_fmp_def, fmp_room_def,
+       alloca_inv_def, alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all unwrap_alloc_counted_edge >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   drule unwrap_alloc_generated_code >> strip_tac >> gvs[] >>
