@@ -3490,24 +3490,6 @@ Proof
   disch_then (qspecl_then [`u`, `r`, `t`] mp_tac) >> simp[]
 QED
 
-Theorem source_exhausted_try_safety[local]:
-  source_exhausted_safe f /\
-  (!s e t. f s = (INR e,t) ==> source_exhausted_safe (h e)) ==>
-  source_exhausted_safe (try f h)
-Proof
-  simp_tac bool_ss [] >> ntac 2 strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `try _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [vyperStateTheory.try_def] >>
-  Cases_on `f s` >> rename1 `f s = (a,u)` >>
-  qpat_x_assum `source_exhausted_safe f`
-    (qspecl_then [`s`, `a`, `u`] mp_tac) >>
-  simp[] >> strip_tac >> Cases_on `a` >> simp[] >>
-  strip_tac >> gvs[] >>
-  first_x_assum (qspecl_then [`s`, `y`, `u`] mp_tac) >> simp[] >>
-  disch_then (qspecl_then [`u`, `r`, `t`] mp_tac) >> simp[]
-QED
-
 Theorem source_exhausted_try_guarded_safety[local]:
   source_exhausted_safe f /\
   (!s e t. f s = (INR e,t) /\
@@ -4798,6 +4780,15 @@ Resume source_create_eval_cut[consumed]:
 QED
 Finalise source_create_eval_cut[local]
 
+Theorem source_replay_replace_frame[local]:
+  (!s oc. f (s with outcomes := oc) =
+    (FST (f s), SND (f s) with outcomes := oc)) ==> outcomes_frame f
+Proof
+  strip_tac >> simp[outcomes_frame_def] >> gen_tac >>
+  first_x_assum (qspecl_then [`st`,`st.outcomes`] mp_tac) >>
+  simp[] >> disch_then (mp_tac o Q.AP_TERM `(\p. (SND p).outcomes)`) >> simp[]
+QED
+
 Theorem source_replay_frame_cut[local]:
   !f s os. outcomes_frame f /\ outcomes_suffix f /\ outcome_prefix_causal f ==>
     source_wrapper_cut_at f s os
@@ -4806,6 +4797,308 @@ Proof
   disj1_tac >> irule source_replay_unconsumed_cut >>
   simp[] >> drule_all outcomes_frame_result >> simp[]
 QED
+
+Theorem source_replay_precompile_cut[local]:
+  !bt s os. source_wrapper_cut_at (precompile_call_success bt) s os
+Proof
+  rpt gen_tac >> Cases_on `precompile_builtin bt`
+  >- (Cases_on `os`
+      >- (simp[precompile_call_success_def, probe_failed_outcome_def,
+               empty_failed_outcome_def,
+               vyperStateTheory.check_def, vyperStateTheory.assert_def,
+               vyperStateTheory.raise_def] >> rpt strip_tac >> gvs[]) >>
+      simp[precompile_call_success_def] >>
+      Cases_on `call_outcome_success h` >>
+      simp[vyperStateTheory.check_def, vyperStateTheory.assert_def,
+           vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+      rpt strip_tac >> gvs[] >> disj1_tac >> qexists_tac `t` >> simp[]) >>
+  simp[precompile_call_success_def, vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[] >> disj1_tac >> qexists_tac `os` >> simp[]
+QED
+
+(* Keep cut traversal and semantic suppliers at separate abstraction levels. *)
+val replay_cut_pattern = ``source_wrapper_cut_at f s os``;
+fun is_replay_cut tm = can (match_term replay_cut_pattern) tm;
+fun replay_cut_computation tm =
+  rator (lhs (fst (dest_imp (snd (strip_forall tm)))));
+fun replay_cut_at c tm = PURE_REWRITE_CONV [c (replay_cut_computation tm)] tm;
+fun replay_cut_wrap_conv tm =
+  if is_replay_cut tm then REWR_CONV exhausted_truth_wrapper tm
+  else if is_forall tm then BINDER_CONV replay_cut_wrap_conv tm
+  else if is_imp tm then RAND_CONV replay_cut_wrap_conv tm
+  else ALL_CONV tm;
+fun REPLAY_CUT_IH_TAC g =
+  (RULE_ASSUM_TAC (CONV_RULE replay_cut_wrap_conv) >>
+   CONV_TAC replay_cut_wrap_conv >>
+   evalWalkLib.IH_TAC {stop = K false,
+     normalise = PURE_REWRITE_RULE [GSYM AND_IMP_INTRO, custom_error_11,
+       NOT_CLAUSES, AND_CLAUSES, IMP_CLAUSES,
+       vyperStateTheory.ignore_bind_def]}) g;
+
+val replay_frame_facts =
+  [outcomes_frame_read_results, outcomes_frame_places,
+   outcomes_frame_write_place, outcomes_frame_append_place,
+   outcomes_frame_pop_place, outcomes_frame_resolve_array, outcomes_frame_reads,
+   outcomes_frame_primitives, outcomes_frame_handlers,
+   outcomes_frame_return, outcomes_frame_raise, outcomes_frame_static,
+   outcomes_frame_adopt];
+val replay_trace_facts =
+  [evaluate_storage_trace_frame, storage_trace_frame_bind_all,
+   storage_trace_frame_switch, storage_trace_frame_gas,
+   storage_trace_frame_precompile_call_success,
+   storage_trace_frame_send, storage_trace_frame_ext_call,
+   storage_trace_frame_raw_call,
+   storage_trace_frame_check_not_static,
+   storage_trace_frame_return, storage_trace_frame_raise,
+   storage_trace_frame_checks, storage_trace_frame_lifts,
+   storage_trace_frame_read_result, storage_trace_frame_read_results,
+   storage_trace_frame_state_reads, storage_trace_frame_state_updates,
+   storage_trace_frame_write_place, storage_trace_frame_new_variable,
+   storage_trace_frame_append_place, storage_trace_frame_read_place,
+   storage_trace_frame_place_type, storage_trace_frame_extend_place,
+   storage_trace_frame_pop_scope,
+   storage_trace_frame_pop_place,
+   storage_trace_frame_finally, storage_trace_frame_finally_unless_halt,
+       storage_trace_frame_optional_locks, storage_trace_frame_function_handler,
+       storage_trace_frame_function_stack,
+       storage_trace_frame_array_iterator_results,
+   storage_trace_frame_try, storage_trace_frame_loop_handler,
+   storage_trace_frame_conditional_result, storage_trace_frame_select,
+   storage_trace_frame_array_length];
+val REPLAY_DROP_IHS = POP_ASSUM_LIST (fn facts => map_every assume_tac
+  (List.filter (not o is_forall o concl) facts));
+fun REPLAY_TRACE_STEP g = FIRST
+  [(simp replay_trace_facts >> NO_TAC),
+   (MATCH_MP_TAC storage_trace_frame_bind_all >> conj_tac),
+   (MATCH_MP_TAC storage_trace_frame_finally >> conj_tac),
+   (MATCH_MP_TAC storage_trace_frame_finally_unless_halt >> conj_tac),
+   (MATCH_MP_TAC storage_trace_frame_try >> conj_tac),
+   CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
+   CONV_TAC (RAND_CONV (evalWalkLib.unfold_conv [switch_BoolV_def, vyperStateTheory.ignore_bind_def])),
+   (fn goal as (_,w) =>
+     if is_cond (rand w) orelse TypeBase.is_case (rand w)
+     then evalWalkLib.HEAD_CASE_TAC goal else NO_TAC goal),
+   gen_tac, DISCH_THEN STRIP_ASSUME_TAC] g;
+val REPLAY_TRACE_TAC = REPLAY_DROP_IHS >> rpt REPLAY_TRACE_STEP;
+fun REPLAY_SUFFIX_STEP g = FIRST
+  [ CONV_TAC (RAND_CONV (CHANGED_CONV BETA_CONV)),
+    (MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac),
+    (fn goal as (_,w) => FIRST (Net.match w prefix_assembly_net) goal),
+    (simp[outcomes_suffix_precompile_call_success,
+         eval_outcomes_suffix_with_results, outcomes_suffix_frame,
+         outcomes_frame_bind] >> NO_TAC),
+    (MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac),
+    CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
+    CONV_TAC (RAND_CONV (evalWalkLib.unfold_conv [switch_BoolV_def, vyperStateTheory.ignore_bind_def])),
+    (fn goal as (_,w) =>
+      if is_cond (rand w) orelse TypeBase.is_case (rand w)
+      then evalWalkLib.HEAD_CASE_TAC goal else NO_TAC goal),
+    gen_tac, DISCH_THEN STRIP_ASSUME_TAC] g;
+val REPLAY_SUFFIX_TAC = REPLAY_DROP_IHS >> rpt REPLAY_SUFFIX_STEP;
+val replay_safety_net = List.foldl (fn (th,net) =>
+  Net.insert (exhausted_computation (concl th), MATCH_ACCEPT_TAC th) net)
+  Net.empty (map SPEC_ALL (CONJUNCTS source_exhausted_eval_safety_mutual));
+fun REPLAY_SAFETY_STEP g = FIRST
+  [(qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
+    simp[acquire_nonreentrant_lock_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.get_transient_storage_def, vyperStateTheory.update_transient_def,
+      vyperStateTheory.check_def, vyperStateTheory.assert_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[COND_RATOR, AllCaseEqs(), vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, vyperStateTheory.update_transient_def] >> NO_TAC),
+   (qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
+    simp[release_nonreentrant_lock_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.update_transient_def, vyperStateTheory.return_def] >>
+    rpt strip_tac >> gvs[]),
+   (rename1 `handle_function ex ss = _` >>
+    qpat_x_assum `handle_function _ _ = _` mp_tac >> Cases_on `ex` >> simp[handle_function_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[] >> NO_TAC),
+   (qpat_x_assum `next_gas_reading _ = _` mp_tac >>
+    simp[next_gas_reading_def, vyperStateTheory.raise_def,
+         vyperStateTheory.return_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[] >> NO_TAC),
+   (qpat_x_assum `precompile_call_success _ _ = _` mp_tac >>
+    simp[precompile_call_success_def] >>
+    REPLAY_DROP_IHS >>
+    simp[vyperStateTheory.check_def, vyperStateTheory.assert_def,
+         vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[] >> NO_TAC),
+   (fn goal as (_,w) => if aconv w F then
+      metis_tac[source_binop_excludes_create_error,
+        source_range_excludes_create_error,
+        MP source_type_pure_exclusions source_abi_decode_excludes_create_error,
+        MP source_ordinary_pure_exclusions source_binop_excludes_create_error] goal else NO_TAC goal),
+   (fn goal as (_,w) => FIRST
+      (Net.match (exhausted_computation w) replay_safety_net) goal),
+   EXHAUSTED_SAFETY_STEP] g;
+val REPLAY_SAFETY_TAC = REPLAY_DROP_IHS >> rpt REPLAY_SAFETY_STEP;
+
+fun REPLAY_SCOPES_WITH_TAC rule push_eq push_def = (fn goal as (_,w) =>
+  let val run = funpow 4 rand w in
+    (Cases_on [ANTIQUOTE run] >> simp[NULL_EQ] >>
+     irule rule >>
+     qpat_x_assum push_eq mp_tac >>
+     simp[push_def, vyperStateTheory.return_def] >>
+     REPLAY_DROP_IHS >> strip_tac >> gvs[] >>
+     goal_assum (drule_at Any) >> simp[]) goal
+  end);
+
+val REPLAY_SCOPES_TAC = REPLAY_SCOPES_WITH_TAC
+  (cj 1 source_replay_cleanup_scopes) `push_scope _ = _`
+  vyperStateTheory.push_scope_def;
+val REPLAY_LOOP_SCOPES_TAC = REPLAY_SCOPES_WITH_TAC
+  (cj 2 source_replay_cleanup_scopes) `push_scope_with_var _ _ _ _ = _`
+  vyperStateTheory.push_scope_with_var_def;
+
+fun replay_recursive tm = List.exists (fn n => n =
+    fst (dest_const (fst (strip_comb tm))))
+  ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for", "eval_expr",
+   "eval_exprs", "eval_base_place", "eval_target_place", "assign_tuple_targets",
+   "assign_tuple_target_list", "eval_expr_results"];
+fun REPLAY_CUT_STEP g = FIRST
+  [MATCH_ACCEPT_TAC source_replay_precompile_cut,
+   MATCH_ACCEPT_TAC (cj 1 source_ordinary_eval_cuts),
+   MATCH_ACCEPT_TAC (cj 2 source_ordinary_eval_cuts),
+   MATCH_ACCEPT_TAC (cj 3 source_ordinary_eval_cuts),
+   MATCH_ACCEPT_TAC source_create_eval_cut,
+   (fn goal as (_,w) => if is_replay_cut w andalso
+      replay_recursive (replay_cut_computation w) then
+      REPLAY_CUT_IH_TAC goal else NO_TAC goal),
+   (fn goal as (_,w) => if is_replay_cut w then
+      (MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac) goal
+      else NO_TAC goal),
+   (fn goal as (_,w) => if is_replay_cut w then
+      (MATCH_MP_TAC source_replay_frame_cut >> REPLAY_DROP_IHS >> conj_tac
+       >- (simp replay_frame_facts >> NO_TAC) >> conj_tac
+       >- (irule outcomes_suffix_frame >> simp replay_frame_facts >> NO_TAC) >>
+       rpt PREFIX_STEP >> NO_TAC) goal else NO_TAC goal),
+   CONV_TAC (replay_cut_at (CHANGED_CONV (DEPTH_CONV BETA_CONV))),
+   CONV_TAC (replay_cut_at (CHANGED_CONV evalWalkLib.head_conv)),
+   CONV_TAC (replay_cut_at (evalWalkLib.unfold_conv
+     [vyperStateTheory.ignore_bind_def, switch_BoolV_def])),
+   (fn goal as (_,w) => if is_replay_cut w then
+      let val c = replay_cut_computation w in
+        if TypeBase.is_case c orelse is_cond c
+        then evalWalkLib.HEAD_CASE_TAC goal else NO_TAC goal end
+      else NO_TAC goal),
+   (fn goal as (_,w) => if can (match_term ``outcomes_suffix f``) w
+      then CHANGED_TAC REPLAY_SUFFIX_TAC goal else NO_TAC goal),
+   (fn goal as (_,w) => if can (match_term ``storage_trace_frame f``) w
+      then CHANGED_TAC REPLAY_TRACE_TAC goal else NO_TAC goal),
+   (fn goal as (_,w) => if is_exhausted_safety w
+      then CHANGED_TAC REPLAY_SAFETY_TAC goal else NO_TAC goal),
+   (fn goal as (_,w) => if is_replay_cut w then NO_TAC goal
+      else FIRST [gen_tac, conj_tac, DISCH_THEN STRIP_ASSUME_TAC] goal)] g;
+
+Theorem source_replay_internal_suppliers[local]:
+  !cx src_id_opt fn args dflts es ret mut nr stmts vs.
+    let t = do
+      prev <- get_scopes;
+      dflt_vs <- finally
+        do set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od (set_scopes prev);
+      env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf stmts; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+    od in
+    outcomes_suffix t /\ storage_trace_frame t /\ source_exhausted_safe t
+Proof
+  rpt gen_tac >> rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >>
+  BETA_TAC >> conj_tac
+  >- (MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+      >- REPLAY_SUFFIX_TAC >>
+      rpt gen_tac >> strip_tac >> BETA_TAC >>
+      MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+      >- REPLAY_SUFFIX_TAC >>
+      rpt gen_tac >> strip_tac >> REPLAY_SUFFIX_TAC) >>
+  conj_tac >- REPLAY_TRACE_TAC >>
+  REPLAY_SAFETY_TAC
+QED
+
+val REPLAY_BASE_SUFFIX_STEP = REPLAY_SUFFIX_STEP;
+val REPLAY_BASE_TRACE_STEP = REPLAY_TRACE_STEP;
+val REPLAY_BASE_SAFETY_STEP = REPLAY_SAFETY_STEP;
+val replay_internal_supplier_facts =
+  CONJUNCTS (SPEC_ALL (BETA_RULE (PURE_REWRITE_RULE
+    [LET_THM, vyperStateTheory.ignore_bind_def] source_replay_internal_suppliers)));
+val REPLAY_INTERNAL_SUPPLIER_TAC =
+  BETA_TAC >> rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >>
+  FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts);
+
+val REPLAY_SUFFIX_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts), REPLAY_BASE_SUFFIX_STEP];
+val REPLAY_SUFFIX_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
+  rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_SUFFIX_STEP;
+val REPLAY_TRACE_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts), REPLAY_BASE_TRACE_STEP];
+val REPLAY_TRACE_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
+  rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_TRACE_STEP;
+val REPLAY_SAFETY_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts), REPLAY_BASE_SAFETY_STEP];
+val REPLAY_SAFETY_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
+  rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_SAFETY_STEP;
+
+Theorem source_replay_internal_args_suppliers[local]:
+  !cx src_id_opt fn args dflts es ret mut nr stmts.
+    let t = do
+      type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+        "IntCall args length";
+      vs <- eval_exprs cx es;
+      prev <- get_scopes;
+      dflt_vs <- finally
+        do set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od (set_scopes prev);
+      env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf stmts; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+    od in
+    outcomes_suffix t /\ storage_trace_frame t /\ source_exhausted_safe t
+Proof
+  rpt gen_tac >> rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >>
+  BETA_TAC >> conj_tac
+  >- (MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+      >- REPLAY_SUFFIX_TAC >>
+      rpt gen_tac >> strip_tac >> BETA_TAC >>
+      MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+      >- REPLAY_SUFFIX_TAC >>
+      rpt gen_tac >> strip_tac >> REPLAY_INTERNAL_SUPPLIER_TAC) >>
+  conj_tac >- REPLAY_TRACE_TAC >> REPLAY_SAFETY_TAC
+QED
+
+val replay_internal_supplier_facts = replay_internal_supplier_facts @
+  CONJUNCTS (SPEC_ALL (BETA_RULE (PURE_REWRITE_RULE
+    [LET_THM, vyperStateTheory.ignore_bind_def] source_replay_internal_args_suppliers)));
+val REPLAY_INTERNAL_SUPPLIER_TAC =
+  BETA_TAC >> rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >>
+  FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts);
+val REPLAY_SUFFIX_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts), REPLAY_BASE_SUFFIX_STEP];
+val REPLAY_SUFFIX_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
+  rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_SUFFIX_STEP;
+val REPLAY_TRACE_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts), REPLAY_BASE_TRACE_STEP];
+val REPLAY_TRACE_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
+  rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_TRACE_STEP;
+val REPLAY_SAFETY_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supplier_facts), REPLAY_BASE_SAFETY_STEP];
+val REPLAY_SAFETY_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
+  rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_SAFETY_STEP;
 
 Theorem eval_outcome_probe_cut_mutual[local]:
   (!cx stmt s os. source_wrapper_cut_at (eval_stmt cx stmt) s os) /\
@@ -4858,8 +5151,478 @@ Proof
       qpat_x_assum `!s os r t. _` kall_tac >>
       rpt gen_tac >> strip_tac >>
       qpat_x_assum `source_exhausted_safe _`
-        (qspecl_then [`s`,`r`,`t`] mp_tac) >> simp[]) >>
-  FAIL_TAC "next cut constructor"
+        (qspecl_then [`s`,`r`,`t`] mp_tac) >> simp[])
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[Once evaluate_def])
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[Once evaluate_def])
+  >- (ntac 2 gen_tac >> strip_tac >>
+      rewrite_tac[cj 8 evaluate_def] >>
+      ho_match_mp_tac source_replay_cut_bind >>
+      conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+      conj_tac
+      >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+          conj_tac >- simp[] >> conj_tac
+          >- (irule outcomes_suffix_frame >> simp[]) >> rpt PREFIX_STEP) >>
+      conj_tac >- (gen_tac >> irule outcomes_suffix_frame >> simp[]) >>
+      conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          irule source_replay_bind_transport >> simp[] >>
+          gen_tac >> irule storage_trace_frame_bind_all >>
+          simp[storage_trace_frame_read_result] >> qx_gen_tac `sv` >>
+          Cases_on `dest_StringV sv` >>
+          simp[vyperStateTheory.lift_option_type_def,
+            storage_trace_frame_raise, vyperStateTheory.bind_return] >>
+          irule storage_trace_frame_bind_all >> simp[storage_trace_frame_raise]) >>
+      gen_tac >>
+      `source_exhausted_safe
+        (bind (read_result cx tv) (\v.
+          bind (lift_option_type (dest_StringV v) "not StringV")
+            (\str. (raise (AssertException str) : evaluation_state -> unit evaluation_result))))` by
+        rpt EXHAUSTED_SAFETY_STEP >>
+      qpat_x_assum `!s os r t. _` kall_tac >>
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `source_exhausted_safe _`
+        (qspecl_then [`s`,`r`,`t`] mp_tac) >> simp[])
+  >- (ntac 2 gen_tac >> strip_tac >> rewrite_tac[cj 9 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 2 gen_tac >> strip_tac >> rewrite_tac[cj 10 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 2 gen_tac >> strip_tac >> rewrite_tac[cj 11 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 12 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 13 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- rpt REPLAY_CUT_STEP >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 14 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> strip_tac >> rewrite_tac[cj 15 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 16 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- rpt REPLAY_CUT_STEP >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 17 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 18 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 5 gen_tac >> strip_tac >> rewrite_tac[cj 19 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- rpt REPLAY_CUT_STEP >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> strip_tac >> rewrite_tac[cj 20 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- (ntac 10 REPLAY_CUT_STEP
+          >- (strip_tac >> BETA_TAC >>
+              MATCH_MP_TAC (cj 1 source_replay_cut_wrappers) >>
+              conj_tac
+              >- REPLAY_SCOPES_TAC >>
+              conj_tac
+              >- REPLAY_SCOPES_TAC >>
+              rpt REPLAY_CUT_STEP) >>
+          rpt REPLAY_CUT_STEP) >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 6 gen_tac >> strip_tac >> rewrite_tac[cj 21 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 2 gen_tac >> strip_tac >> rewrite_tac[cj 22 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (gen_tac >> rewrite_tac[cj 23 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 24 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 2 gen_tac >> strip_tac >> rewrite_tac[cj 25 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 26 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> rewrite_tac[cj 27 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 28 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- (ntac 10 REPLAY_CUT_STEP
+          >- (strip_tac >> BETA_TAC >>
+              MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+              >- (MATCH_MP_TAC (cj 3 source_replay_cut_wrappers) >>
+                  conj_tac
+                  >- REPLAY_LOOP_SCOPES_TAC >>
+                  conj_tac
+                  >- REPLAY_LOOP_SCOPES_TAC >>
+                  rpt REPLAY_CUT_STEP) >>
+              rpt REPLAY_CUT_STEP >> REPLAY_CUT_IH_TAC) >>
+          rpt REPLAY_CUT_STEP) >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> rewrite_tac[cj 29 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> rewrite_tac[cj 30 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> rewrite_tac[cj 31 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 5 gen_tac >> strip_tac >> rewrite_tac[cj 32 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- (ntac 10 REPLAY_CUT_STEP
+          >- (ntac 5 REPLAY_CUT_STEP >>
+              qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> _`
+                drule >> strip_tac >> simp[]) >>
+          all_tac
+          >- REPLAY_SUFFIX_TAC >>
+          ntac 1 REPLAY_CUT_STEP
+          >- REPLAY_TRACE_TAC
+          >- REPLAY_SAFETY_TAC >>
+          rpt REPLAY_CUT_STEP) >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> rewrite_tac[cj 33 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 34 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> strip_tac >> rewrite_tac[cj 35 evaluate_def] >>
+      ntac 5 REPLAY_CUT_STEP
+      >- (ntac 10 REPLAY_CUT_STEP
+          >- (BETA_TAC >> rpt REPLAY_CUT_STEP) >>
+          rpt REPLAY_CUT_STEP) >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> strip_tac >> rewrite_tac[cj 36 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 4 gen_tac >> strip_tac >> rewrite_tac[cj 37 evaluate_def] >>
+      ntac 4 REPLAY_CUT_STEP
+      >- rpt REPLAY_CUT_STEP >>
+      ntac 4 REPLAY_CUT_STEP
+      >- (strip_tac >> BETA_TAC >> Cases_on `bt = Len` >>
+          asm_simp_tac bool_ss [COND_CLAUSES]
+          >- rpt REPLAY_CUT_STEP >>
+          Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+          asm_simp_tac bool_ss [COND_CLAUSES] >>
+          ntac 3 REPLAY_CUT_STEP
+          >- ntac 10 REPLAY_CUT_STEP
+          >- (gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+              conj_tac >- REPLAY_TRACE_TAC >>
+              REPLAY_SAFETY_TAC)
+          >- rpt REPLAY_CUT_STEP
+          >- rpt REPLAY_CUT_STEP >>
+          all_tac
+          >- rpt REPLAY_CUT_STEP
+          >- (conj_tac
+          >- (ntac 6 REPLAY_CUT_STEP
+              >- rpt REPLAY_CUT_STEP >>
+              conj_tac
+              >- (ntac 5 REPLAY_CUT_STEP >>
+                  MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                  >- rpt REPLAY_CUT_STEP >>
+                  conj_tac
+                  >- rpt REPLAY_CUT_STEP >>
+                  gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                  conj_tac >- REPLAY_TRACE_TAC >>
+                  REPLAY_SAFETY_TAC) >>
+              gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+              conj_tac >- REPLAY_TRACE_TAC >>
+              REPLAY_SAFETY_TAC) >>
+          gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+          conj_tac >- REPLAY_TRACE_TAC >>
+          REPLAY_SAFETY_TAC) >>
+          rpt REPLAY_CUT_STEP) >>
+      all_tac >- REPLAY_TRACE_TAC >>
+      REPLAY_SAFETY_TAC)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 38 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 39 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 40 evaluate_def] >>
+      ntac 4 REPLAY_CUT_STEP
+      >- rpt REPLAY_CUT_STEP >>
+      conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+        MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+        >- REPLAY_CUT_IH_TAC >>
+        conj_tac >- rpt REPLAY_CUT_STEP >>
+        gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+        conj_tac >- REPLAY_TRACE_TAC >>
+        REPLAY_SAFETY_TAC) >>
+      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+      conj_tac >- REPLAY_TRACE_TAC >>
+      REPLAY_SAFETY_TAC)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 41 evaluate_def] >>
+      ntac 4 REPLAY_CUT_STEP
+      >- (ntac 6 REPLAY_CUT_STEP >> BETA_TAC >>
+          MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+          >- REPLAY_CUT_IH_TAC >>
+          conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+            MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+            >- REPLAY_CUT_IH_TAC >>
+            conj_tac >- rpt REPLAY_CUT_STEP >>
+            gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+            conj_tac >- REPLAY_TRACE_TAC >>
+            REPLAY_SAFETY_TAC) >>
+          gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+          conj_tac >- REPLAY_TRACE_TAC >>
+          REPLAY_SAFETY_TAC) >>
+      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+      conj_tac >- REPLAY_TRACE_TAC >>
+      REPLAY_SAFETY_TAC)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 42 evaluate_def] >>
+      ntac 4 REPLAY_CUT_STEP
+      >- rpt REPLAY_CUT_STEP >>
+      conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+        MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+        >- rpt REPLAY_CUT_STEP >>
+        conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+          MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+          >- rpt REPLAY_CUT_STEP >>
+          conj_tac >- (ntac 6 REPLAY_CUT_STEP >>
+            BETA_TAC >> rewrite_tac[LET_THM] >> BETA_TAC >>
+            rewrite_tac[vyperStateTheory.ignore_bind_def] >>
+            MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+            >- rpt REPLAY_CUT_STEP >>
+            conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+              MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+              >- REPLAY_CUT_IH_TAC >>
+              conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                >- rpt REPLAY_CUT_STEP >>
+                conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                  MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                  >- (MATCH_MP_TAC (cj 2 source_replay_cut_wrappers) >>
+                      rpt REPLAY_CUT_STEP) >>
+                  conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                    MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                    >- rpt REPLAY_CUT_STEP >>
+                    conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                      MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                      >- rpt REPLAY_CUT_STEP >>
+                      conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                        MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                        >- (rewrite_tac[lock_if_nr_def] >>
+                            rpt REPLAY_CUT_STEP) >>
+                        conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                          MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                          >- rpt REPLAY_CUT_STEP >>
+                          conj_tac >- (ntac 5 REPLAY_CUT_STEP >>
+                            MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                            >- (MATCH_MP_TAC (cj 4 source_replay_cut_wrappers) >>
+                                conj_tac >- metis_tac[source_replay_internal_cleanup] >>
+                                rpt REPLAY_CUT_STEP) >>
+                            conj_tac >- rpt REPLAY_CUT_STEP >>
+                            gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                            conj_tac >- REPLAY_TRACE_TAC >>
+                            REPLAY_SAFETY_TAC) >>
+                          gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                          conj_tac >- REPLAY_TRACE_TAC >>
+                          REPLAY_SAFETY_TAC) >>
+                        gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                        conj_tac >- REPLAY_TRACE_TAC >>
+                        REPLAY_SAFETY_TAC) >>
+                      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                      conj_tac >- REPLAY_TRACE_TAC >>
+                      REPLAY_SAFETY_TAC) >>
+                    gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                    conj_tac >- REPLAY_TRACE_TAC >>
+                    REPLAY_SAFETY_TAC) >>
+                  gen_tac >> conj_tac
+                  >- (REPLAY_DROP_IHS >> BETA_TAC >>
+                      MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+                      >- REPLAY_SUFFIX_TAC >>
+                      rpt gen_tac >> strip_tac >> REPLAY_SUFFIX_TAC) >>
+                  conj_tac >- REPLAY_TRACE_TAC >>
+                  REPLAY_SAFETY_TAC) >>
+                gen_tac >> conj_tac
+                >- (REPLAY_DROP_IHS >> BETA_TAC >>
+                    MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+                    >- REPLAY_SUFFIX_TAC >>
+                    rpt gen_tac >> strip_tac >> BETA_TAC >>
+                    MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+                    >- REPLAY_SUFFIX_TAC >>
+                    rpt gen_tac >> strip_tac >> REPLAY_SUFFIX_TAC) >>
+                conj_tac >- REPLAY_TRACE_TAC >>
+                REPLAY_DROP_IHS >> BETA_TAC >>
+                MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+                >- REPLAY_SAFETY_TAC >>
+                rpt gen_tac >> strip_tac >> REPLAY_SAFETY_TAC) >>
+              gen_tac >> conj_tac
+              >- (REPLAY_DROP_IHS >> BETA_TAC >>
+                  MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+                  >- REPLAY_SUFFIX_TAC >>
+                  rpt gen_tac >> strip_tac >> BETA_TAC >>
+                  MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+                  >- REPLAY_SUFFIX_TAC >>
+                  rpt gen_tac >> strip_tac >> REPLAY_SUFFIX_TAC) >>
+              conj_tac >- REPLAY_TRACE_TAC >>
+              REPLAY_INTERNAL_SUPPLIER_TAC) >>
+            gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+            conj_tac >- REPLAY_TRACE_TAC >>
+            REPLAY_DROP_IHS >> BETA_TAC >>
+            MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+            >- REPLAY_SAFETY_TAC >>
+            rpt gen_tac >> strip_tac >> REPLAY_INTERNAL_SUPPLIER_TAC) >>
+          gen_tac >> conj_tac >- REPLAY_INTERNAL_SUPPLIER_TAC >>
+          conj_tac >- REPLAY_INTERNAL_SUPPLIER_TAC >>
+          REPLAY_INTERNAL_SUPPLIER_TAC) >>
+        gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+        conj_tac >- REPLAY_TRACE_TAC >>
+        REPLAY_SAFETY_TAC) >>
+      gen_tac >> conj_tac
+      >- (REPLAY_DROP_IHS >> BETA_TAC >>
+          MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+          >- REPLAY_SUFFIX_TAC >>
+          rpt gen_tac >> strip_tac >> BETA_TAC >>
+          MATCH_MP_TAC outcomes_suffix_bind_guarded >> conj_tac
+          >- REPLAY_SUFFIX_TAC >>
+          rpt gen_tac >> strip_tac >> REPLAY_INTERNAL_SUPPLIER_TAC) >>
+      conj_tac >- REPLAY_TRACE_TAC >>
+      REPLAY_DROP_IHS >> BETA_TAC >>
+      MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+      >- REPLAY_SAFETY_TAC >>
+      rpt gen_tac >> strip_tac >> BETA_TAC >>
+      MATCH_MP_TAC source_exhausted_bind_safety >> conj_tac
+      >- REPLAY_SAFETY_TAC >>
+      rpt gen_tac >> strip_tac >> REPLAY_INTERNAL_SUPPLIER_TAC)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 43 evaluate_def] >>
+      ntac 4 REPLAY_CUT_STEP
+      >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+          rewrite_tac[vyperStateTheory.ignore_bind_def] >>
+          MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+          >- rpt REPLAY_CUT_STEP >>
+          conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+            MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+            >- rpt REPLAY_CUT_STEP >>
+            conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+              MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+              >- rpt REPLAY_CUT_STEP >>
+              conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+                MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                >- rpt REPLAY_CUT_STEP >>
+                conj_tac >- rpt REPLAY_CUT_STEP >>
+                gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                conj_tac >- REPLAY_TRACE_TAC >> REPLAY_SAFETY_TAC) >>
+              gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+              conj_tac >- REPLAY_TRACE_TAC >> REPLAY_SAFETY_TAC) >>
+            gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+            conj_tac >- REPLAY_TRACE_TAC >> REPLAY_SAFETY_TAC) >>
+          gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+          conj_tac >- REPLAY_TRACE_TAC >> REPLAY_SAFETY_TAC) >>
+      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+      conj_tac >- REPLAY_TRACE_TAC >>
+      REPLAY_SAFETY_TAC)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 44 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 45 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 46 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 47 evaluate_def] >>
+      ntac 2 gen_tac >> MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+      >- REPLAY_CUT_IH_TAC >>
+      conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+        MATCH_MP_TAC source_replay_frame_cut >> REPLAY_DROP_IHS >>
+        conj_tac >- (Cases_on `cx.txn.created_in_tx` >>
+          simp[LET_THM, vyperStateTheory.ignore_bind_def,
+            outcomes_frame_bind, outcomes_frame_primitives, outcomes_frame_reads,
+            outcomes_frame_static, outcomes_frame_return, outcomes_frame_raise] >>
+          rpt (FIRST [CHANGED_TAC BETA_TAC,
+            irule outcomes_frame_bind >> conj_tac, gen_tac,
+            simp[outcomes_frame_primitives, outcomes_frame_reads,
+              outcomes_frame_static, outcomes_frame_return, outcomes_frame_raise] >> NO_TAC])) >>
+        conj_tac >- (REPLAY_SUFFIX_TAC) >>
+        rpt PREFIX_STEP) >>
+      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+      conj_tac >- (REPLAY_TRACE_TAC >>
+        MATCH_ACCEPT_TAC storage_trace_frame_transfer_value) >> REPLAY_SAFETY_TAC)
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[cj 48 evaluate_def] >>
+      Cases_on `kind` >> rewrite_tac[create_kind_case_def] >>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [create_kind_distinct, create_kind_11,
+        REFL_CLAUSE, AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP]) >>
+      (ntac 2 gen_tac >>
+      MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+      >- REPLAY_CUT_IH_TAC >>
+      conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+        FIRST [MATCH_ACCEPT_TAC source_create_eval_cut,
+          IF (CONV_TAC (replay_cut_at (CHANGED_CONV (SIMP_CONV bool_ss [LET_THM]))))
+            (MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+             >- REPLAY_CUT_IH_TAC >>
+             conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+               MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+               >- (rpt REPLAY_CUT_STEP) >>
+               conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+                 MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+                 >- REPLAY_CUT_IH_TAC >>
+                 conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+                   MATCH_ACCEPT_TAC source_create_eval_cut) >>
+                 gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+                 conj_tac >- (BETA_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+                 REPLAY_SAFETY_TAC) >>
+               gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+               conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+               REPLAY_SAFETY_TAC) >>
+             gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+             conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+             REPLAY_SAFETY_TAC)
+            (MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+          >- (rpt REPLAY_CUT_STEP) >>
+          conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+            MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+            >- REPLAY_CUT_IH_TAC >>
+            conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+              MATCH_MP_TAC source_replay_cut_bind_reachable >> conj_tac
+              >- (rpt REPLAY_CUT_STEP) >>
+              conj_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+                MATCH_ACCEPT_TAC source_create_eval_cut) >>
+              gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+              conj_tac >- (BETA_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+              REPLAY_SAFETY_TAC) >>
+            gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+            conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+            REPLAY_SAFETY_TAC) >>
+          gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+          conj_tac >- (REPLAY_TRACE_TAC >> MATCH_ACCEPT_TAC storage_trace_frame_create) >>
+          REPLAY_SAFETY_TAC)]) >>
+      gen_tac >> conj_tac >- REPLAY_SUFFIX_TAC >>
+      conj_tac >- (REPLAY_TRACE_TAC >>
+        FIRST [MATCH_ACCEPT_TAC storage_trace_frame_create,
+          MATCH_ACCEPT_TAC storage_trace_frame_check_create_blueprint]) >>
+      REPLAY_SAFETY_TAC >>
+      gvs[vyperCreateTheory.check_create_blueprint_def,
+        vyperStateTheory.bind_def, vyperStateTheory.get_accounts_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        vyperStateTheory.lift_option_def, vyperMiscTheory.option_CASE_rator,
+        AllCaseEqs()]))
+  >- (ntac 3 gen_tac >> ho_match_mp_tac source_replay_frame_cut >>
+      simp[eval_outcomes_suffix_with_results, eval_outcome_prefix_causal_mutual] >>
+      simp[cj 49 evaluate_def])
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 50 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 2 gen_tac >> rewrite_tac[cj 51 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> rewrite_tac[cj 52 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 53 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 54 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 2 gen_tac >> strip_tac >> rewrite_tac[cj 55 evaluate_def] >>
+      rpt REPLAY_CUT_STEP
+      >- (MATCH_MP_TAC source_replay_frame_cut >> conj_tac
+          >- (irule source_replay_replace_frame >> simp[outcomes_replace_get_place]) >>
+          conj_tac
+          >- (irule outcomes_suffix_frame >> irule source_replay_replace_frame >>
+              simp[outcomes_replace_get_place]) >> rpt PREFIX_STEP)
+      >- (irule outcomes_suffix_frame >> irule source_replay_replace_frame >>
+          simp[outcomes_replace_get_place]) >>
+      MATCH_ACCEPT_TAC storage_trace_frame_get_place)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 56 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 57 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (gen_tac >> rewrite_tac[cj 58 evaluate_def] >>
+      rpt REPLAY_CUT_STEP >> gvs[])
+  >- (ntac 5 gen_tac >> strip_tac >> rewrite_tac[cj 59 evaluate_def] >>
+      rpt REPLAY_CUT_STEP)
+  >- (ntac 3 gen_tac >> rewrite_tac[cj 60 evaluate_def] >>
+      rpt REPLAY_CUT_STEP >> gvs[])
+  >- (ntac 3 gen_tac >> rewrite_tac[cj 61 evaluate_def] >>
+      rpt REPLAY_CUT_STEP >> gvs[])
+  >- (gen_tac >> rewrite_tac[cj 62 evaluate_def] >>
+      rpt REPLAY_CUT_STEP >> gvs[]) >>
+  ntac 3 gen_tac >> strip_tac >> rewrite_tac[cj 63 evaluate_def] >>
+  rpt REPLAY_CUT_STEP
 QED
 
 val _ = clear_overloads_on "source_wrapper_cut_at";
@@ -5031,5 +5794,9 @@ Theorem eval_outcome_probe_replay_mutual:
           then failed_outcome (LAST st_p.requests)
           else empty_failed_outcome]))))
 Proof
-  rpt conj_tac >> rpt gen_tac >> strip_tac
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  FIRST (map drule (CONJUNCTS eval_outcome_probe_cut_mutual)) >>
+  strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[SF CONJ_ss] >>
+  gvs[pairTheory.pair_CASE_def]
 QED
