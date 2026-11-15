@@ -4560,23 +4560,26 @@ val ld_proposed_combined_return_restore =
     val (pre,pop) = dest_imp (concl ld_recursive_paired_return_pop)
     val (popvars,popbody) = strip_exists pop
     val result = ``
-      let keepS = COMPL (set sf.lf_inst.inst_outputs);
-          keepT = COMPL (set tf.lf_inst.inst_outputs) in
-      let owners = {owner | ?bs sz.
-            ld_live astail sf.lf_local sf.lf_params
-              (DRESTRICT sf.lf_prov keepS) (owner,(bs,sz))} in
       ?floor.
-        owners SUBSET live /\
+        ({owner | ?bs sz.
+            ld_live astail sf.lf_local sf.lf_params
+              (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,(bs,sz))}) SUBSET live /\
         ld_normal_data CS sf.lf_fn (HD supports)
           {v | v IN HD supports /\ ~retpc_var sf.lf_fn v}
-          lo (DRESTRICT E owners) sf.lf_local tf.lf_local
+          lo (DRESTRICT E ({owner | ?bs sz.
+            ld_live astail sf.lf_local sf.lf_params
+              (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,(bs,sz))})) sf.lf_local tf.lf_local
           sf.lf_params tf.lf_params
-          (DRESTRICT sf.lf_prov keepS) (DRESTRICT tf.lf_prov keepT)
-          (tn with t_var := DRESTRICT sf.lf_tvar keepS)
-          (un with t_var := DRESTRICT tf.lf_tvar keepT) s' t'
-          astail owners (HD savedkeys) (32 * SUM (MAP CARD (TL suspended)))
+          (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (DRESTRICT tf.lf_prov (COMPL (set tf.lf_inst.inst_outputs)))
+          (tn with t_var := DRESTRICT sf.lf_tvar (COMPL (set sf.lf_inst.inst_outputs)))
+          (un with t_var := DRESTRICT tf.lf_tvar (COMPL (set tf.lf_inst.inst_outputs))) s' t'
+          astail ({owner | ?bs sz.
+            ld_live astail sf.lf_local sf.lf_params
+              (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,(bs,sz))}) (HD savedkeys) (32 * SUM (MAP CARD (TL suspended)))
           (HD suspended) (TL suspended) gtail floor /\
-        (^ld_indexed_saved_geometry) lo (DRESTRICT E owners)
+        (^ld_indexed_saved_geometry) lo (DRESTRICT E ({owner | ?bs sz.
+            ld_live astail sf.lf_local sf.lf_params
+              (DRESTRICT sf.lf_prov (COMPL (set sf.lf_inst.inst_outputs))) (owner,(bs,sz))}))
           astail gtail (TL savedkeys) /\ alloca_inv t' /\
         (?j'. active_inst tf.lf_fn j'
           (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx)) /\
@@ -4584,7 +4587,7 @@ val ld_proposed_combined_return_restore =
           (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx) ==>
           (^ld_recursive_combined_candidate) vs0 CT
             (MAP (\g. (g.lf_fn,g.lf_inst,g.lf_state,g.lf_tvar)) gtail)
-            (un with t_var := DRESTRICT tf.lf_tvar keepT)
+            (un with t_var := DRESTRICT tf.lf_tvar (COMPL (set tf.lf_inst.inst_outputs)))
             tf.lf_fn j' (t' with vs_inst_idx := SUC tf.lf_state.vs_inst_idx))``
     val inputs = free_vars pre @ popvars
     fun align tm = subst (List.mapPartial (fn v =>
