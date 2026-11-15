@@ -3,7 +3,7 @@ Theory exprSimSubscriptArrayCompose
 Ancestors
   exprSimSubscriptArraySuffix gasOutcome gasSummary gasSummaryCompose gasExemptCert
   exprSimDefs exprSimSubscriptArraySource exprSimMemorySource vyperState list
-  gasStorage
+  gasStorage aggregateCountedOutcome
 
 Theorem framed_array_summary_after_prefix[local]:
   gas_marked_exec memory (ctx,func) a (es,s0) left (INL v) mid (OK t) /\
@@ -174,7 +174,10 @@ Proof
     (gen_tac >> Cases_on `res` >> simp[] >> rename1 `INR exc` >>
      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>
-  simp[] >> rpt strip_tac >>
+  simp[] >> reverse conj_tac
+  >- (irule counted_outcome_conseq >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 raw.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gas_bad_storage_at_initial >>

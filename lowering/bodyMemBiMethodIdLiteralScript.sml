@@ -34,9 +34,11 @@ Proof
     (drule_then strip_assume_tac) >>
   simp[gas_value_prefix_def] >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s0`
+       (fn th => mp_tac (Q.INST
+         [`readings` |-> `s0.vs_gas_readings`, `k` |-> `s0.vs_inst_idx`,
+          `gs` |-> `[]`]
+         (MATCH_MP (Q.SPEC `H` msg_gas_state_frame) th))) >> simp[]) >>
   `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
     (`(es with gas_obs := []).accounts = es.accounts /\
       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>

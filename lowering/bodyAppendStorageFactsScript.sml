@@ -5,6 +5,7 @@ Ancestors
   compileVyper compileEnv loweringStateRelDefs vyperAST words supportedDecls vyperInterpreter
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv
   exprSimHypsDefs finite_map vyperTypeInvariants
+  supportedStmts supportedProgram
 
 Theorem body_append_element_alloc_bound:
   stmt_exprs_ok cenv (Append target e) ==>
@@ -232,4 +233,43 @@ Theorem type_widens_to_word:
   !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
 Proof
   metis_tac[compileEnvTheory.type_widens_to_word]
+QED
+
+Theorem append_narrow_annotation:
+  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
+  supported_variable_decl tops nid =
+    SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+  ~supported_full_word_type elem ==> expr_type e = elem
+Proof
+  strip_tac >>
+  `~supported_storage_dynamic_array tops nid` by
+    (strip_tac >> drule supported_append_storage_decl >> strip_tac >> gvs[]) >>
+  gvs[supported_stmt_def]
+QED
+
+Theorem append_storage_element_domain:
+  body_inv tops ctx cenv cx /\
+  supported_variable_decl tops nid =
+    SOME (vis,mut,ArrayT elem (Dynamic dn),SOME slot) /\
+  (mut = Storage \/ mut = Transient) ==>
+  supported_storage_type tops elem /\ ~is_bytestring_type elem /\
+  (~supported_full_word_type elem ==> ~is_word_type elem)
+Proof
+  Cases_on `nid` >> strip_tac >>
+  drule supported_variable_decl_mem >> strip_tac >>
+  `supported_program tops` by fs[body_inv_def] >>
+  drule_all supported_program_declaration >> strip_tac >>
+  `supported_storage_type tops elem` by
+    (Cases_on `vis` >>
+     gvs[supported_declaration_header_def, supported_storage_array_depth]) >>
+  simp[] >> conj_tac >- (Cases_on `elem` >> simp[is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_bytestring_type_def, supported_storage_type_def,
+           Once supported_nested_type_def, supported_full_word_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_bytestring_type_def, supported_storage_type_def,
+           Once supported_nested_type_def, supported_full_word_type_def]) >>
+  Cases_on `elem` >>
+  gvs[supported_storage_type_def, Once supported_nested_type_def,
+      supported_full_word_type_def, is_word_type_def, is_bytestring_type_def]
 QED
