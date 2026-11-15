@@ -112,9 +112,20 @@ Proof
        p23_runtime_length_eval,
        p23_get_calldata_def] >>
   conj_tac >-
-   (rw[global_cells_typed_def, vyperStateTheory.get_source_immutables_def,
+   (simp[vyperTypeContractSoundnessTheory.checked_contract_runtime_ready_def,
+         vyperTypeContractTheory.exports_ok_def,
+         vyperABIEntriesTheory.abi_deployed_signatures_def,
+         vyperABIEntriesTheory.abi_external_signatures_def,
+         vyperABIEntriesTheory.abi_decl_signatures_def,
+         vyperTypeContractTheory.var_allocated_def,
+         vyperStateTheory.find_var_decl_by_name_def] >>
+    rw[vyperTypeInitialStateTheory.immutables_ready_def,
+       vyperStateTheory.get_source_immutables_def,
+       vyperInterpreterTheory.initial_evaluation_context_def,
+       vyperContextTheory.get_module_code_def,
+       vyperContextTheory.get_tenv_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
-    gvs[] >> EVAL_TAC) >>
+    gvs[vyperStateTheory.find_var_decl_by_name_def] >> EVAL_TAC) >>
   conj_tac >- (rw[vyperTypeInvariantsTheory.accounts_well_typed_def] >>
     Cases_on `addr = 2w` >>
     simp[vyperTypeInvariantsTheory.account_well_typed_def,
@@ -137,7 +148,8 @@ Proof
   rpt gen_tac >>
   simp[listTheory.APPEND_EQ_CONS] >>
   rpt strip_tac >> gvs[listTheory.APPEND_EQ_CONS] >>
-  qexistsl [`BaseTV (UintT 256)`, `IntV 42`] >> EVAL_TAC
+  qexistsl [`BaseTV (UintT 256)`, `IntV 42`] >> EVAL_TAC >>
+  simp[integerTheory.INT_LT_REFL] >> EVAL_TAC
 QED
 val p23_get_lookup_eval = EVAL
   ``vyperInterpreter$lookup_function NONE "get" External p23_tops``;
