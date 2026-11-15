@@ -337,7 +337,8 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[cont]:
   RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   `value_has_type (TupleTV tvs) v` by
     (qpat_x_assum `!gs v es1. _ ==> value_has_type (TupleTV _) _`
-       (qspecl_then [`gs`, `v`, `ee`] irule) >> first_assum ACCEPT_TAC) >>
+       (qspecl_then [`gs`, `v`, `ee`] irule) >>
+     qexistsl_tac [`ee`, `gs`] >> first_assum ACCEPT_TAC) >>
   Cases_on `assign_tuple_targets cx
     (TupleTarget (MAP (BaseTarget o NameTarget) ids)) v ee` >>
   rename1 `_ = (res, ee')` >>
