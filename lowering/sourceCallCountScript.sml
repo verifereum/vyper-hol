@@ -2242,6 +2242,316 @@ Proof
     vyperStateTheory.set_scopes_def]
 QED
 
+(* Parser-only cut notation; expands without introducing a logical constant. *)
+val _ = overload_on ("source_wrapper_cut_at", ``\f s os.
+  !r t.
+    f (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) ==>
+    ((?pre. t.outcomes = SOME (pre ++ [probe_failed_outcome]) /\
+       !tail. f (s with outcomes := SOME (os ++ tail)) =
+         (r,t with outcomes := SOME (pre ++ tail))) \/
+     (t.outcomes = SOME [] /\
+      (\(r,s). (r,erase_storage_trace s)) (r,t) =
+        (\(r,s). (r,erase_storage_trace s))
+          (f (s with outcomes := SOME (os ++ [empty_failed_outcome]))) /\
+      (\(r,s). (r,erase_storage_trace s)) (r,t) =
+        (\(r,s). (r,erase_storage_trace s)) (f (s with outcomes := SOME os))) \/
+     (t.outcomes = SOME [] /\
+      r = INR (Error (RuntimeError "create outcome accounts")) /\
+      ~NULL t.requests /\
+      FST (f (s with outcomes := SOME (os ++ [empty_failed_outcome]))) <>
+        INR (Error (RuntimeError "create outcome accounts")) /\
+      (\(r,s). (r,erase_storage_trace s)) (f (s with outcomes := SOME os)) =
+      (\(r,s). (r,erase_storage_trace s))
+        (f (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
+      (!q u. f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (q,u) ==>
+         u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))``);
+
+Theorem source_replay_cut_postprocess[local]:
+  !K f s os.
+    ((!r t xs. K (r,t with outcomes := xs) =
+       (FST (K (r,t)), (SND (K (r,t))) with outcomes := xs)) /\
+     (!x y. (\(r,s). (r,erase_storage_trace s)) x =
+            (\(r,s). (r,erase_storage_trace s)) y ==>
+       (\(r,s). (r,erase_storage_trace s)) (K x) =
+       (\(r,s). (r,erase_storage_trace s)) (K y)) /\
+     (!r t. (SND (K (r,t))).outcomes = t.outcomes) /\
+     (!r t. accounts_runtime_well_typed t.accounts ==>
+       accounts_runtime_well_typed (SND (K (r,t))).accounts) /\
+     (FST (K (f (s with outcomes := SOME (os ++ [probe_failed_outcome])))) =
+        INR (Error (RuntimeError "create outcome accounts")) <=>
+      FST (f (s with outcomes := SOME (os ++ [probe_failed_outcome]))) =
+        INR (Error (RuntimeError "create outcome accounts"))) /\
+     (FST (K (f (s with outcomes := SOME (os ++ [empty_failed_outcome])))) =
+        INR (Error (RuntimeError "create outcome accounts")) <=>
+      FST (f (s with outcomes := SOME (os ++ [empty_failed_outcome]))) =
+        INR (Error (RuntimeError "create outcome accounts"))) /\
+     (!r t. (SND (K (r,t))).requests = t.requests)) ==>
+    source_wrapper_cut_at f s os ==>
+    source_wrapper_cut_at (\s. K (f s)) s os
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac bool_ss [] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+  rename1 `f (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (rf,sf)` >>
+  qpat_x_assum `!r t. (rf,sf) = (r,t) ==> _`
+    (qspecl_then [`rf`,`sf`] mp_tac) >> simp_tac bool_ss [] >> strip_tac
+  >- (disj1_tac >> qexists_tac `pre` >> gvs[] >>
+      qpat_x_assum `!r t. (SND (_ (r,t))).outcomes = _`
+        (qspecl_then [`rf`,`sf`] mp_tac) >> simp[])
+  >- (disj2_tac >> disj1_tac >> gvs[] >> conj_tac
+      >- (qpat_x_assum `!r t. (SND (_ (r,t))).outcomes = _`
+            (qspecl_then [`rf`,`sf`] mp_tac) >> simp[]) >>
+      rename1 `post (rf,sf) = (r,t)` >>
+      qpat_x_assum `!x y. _ = _ ==> _ = _`
+        (qspec_then `(rf,sf)` mp_tac) >> simp[] >>
+      disch_then (fn th => conj_tac >> irule th >> simp[])) >>
+  disj2_tac >> disj2_tac >> gvs[] >>
+  Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+  gvs[] >>
+  qpat_assum `!r t. (SND (_ (r,t))).outcomes = _`
+    (qspecl_then [`INR (Error (RuntimeError "create outcome accounts"))`,`sf`] assume_tac) >>
+  qpat_assum `!r t. (SND (_ (r,t))).requests = _`
+    (qspecl_then [`INR (Error (RuntimeError "create outcome accounts"))`,`sf`] assume_tac) >>
+  qpat_assum `_ (_,sf) = (_,t)` (fn th => fs[th]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!r t. (SND (_ (r,t))).outcomes = _`
+    (qspecl_then [`q`,`r`] assume_tac) >>
+  qpat_assum `!r t. accounts_runtime_well_typed _ ==> _`
+    (qspecl_then [`q`,`r`] assume_tac) >>
+  qpat_assum `_ (q,r) = (_,_)` (fn th => fs[th])
+QED
+
+Theorem source_replay_cut_wrappers[local]:
+  (!f s os.
+    ~NULL (SND (f (s with outcomes := SOME (os ++ [probe_failed_outcome])))).scopes /\
+    ~NULL (SND (f (s with outcomes := SOME (os ++ [empty_failed_outcome])))).scopes /\
+    source_wrapper_cut_at f s os ==>
+    source_wrapper_cut_at (finally f pop_scope) s os) /\
+  (!f prev s os. source_wrapper_cut_at f s os ==>
+    source_wrapper_cut_at (finally f (set_scopes prev)) s os) /\
+  (!f s os.
+    ~NULL (SND (f (s with outcomes := SOME (os ++ [probe_failed_outcome])))).scopes /\
+    ~NULL (SND (f (s with outcomes := SOME (os ++ [empty_failed_outcome])))).scopes /\
+    source_wrapper_cut_at f s os ==>
+    source_wrapper_cut_at (finally (try f handle_loop_exception) pop_scope) s os) /\
+  (!(f:evaluation_state -> value evaluation_result) cx nr view prev s os.
+    (!(h:evaluation_state -> value evaluation_result) st r t. h st = (r,t) ==>
+      (FST (finally_unless_halt
+        (finally (try h handle_function) (pop_function prev))
+        (unlock_if_nr cx nr view) st) =
+        INR (Error (RuntimeError "create outcome accounts")) <=>
+        r = INR (Error (RuntimeError "create outcome accounts"))) /\
+      (SND (finally_unless_halt
+        (finally (try h handle_function) (pop_function prev))
+        (unlock_if_nr cx nr view) st)).requests = t.requests) /\
+    source_wrapper_cut_at f s os ==>
+    source_wrapper_cut_at (finally_unless_halt
+      (finally (try f handle_function) (pop_function prev))
+      (unlock_if_nr cx nr view)) s os)
+Proof
+  conj_tac >- suspend "pop" >>
+  conj_tac >- suspend "set" >>
+  conj_tac >- suspend "loop" >>
+  suspend "internal"
+QED
+
+Resume source_replay_cut_wrappers[set]:
+  rpt gen_tac >> strip_tac >>
+  `finally f (set_scopes prev) = (\s. (\(r,t). (r,t with scopes := prev)) (f s))`
+    by (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `f s'` >>
+        Cases_on `q` >>
+        simp[vyperStateTheory.finally_def, vyperStateTheory.set_scopes_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  pop_assum SUBST1_TAC >>
+  qspecl_then [`\(r,t). (r,t with scopes := prev)`,`f`,`s`,`os`]
+    mp_tac source_replay_cut_postprocess >>
+  impl_tac
+  >- (simp[] >> conj_tac
+      >- (rpt gen_tac >> PairCases_on `x` >> PairCases_on `y` >>
+          simp[vyperStateTheory.erase_storage_trace_def] >> metis_tac[]) >>
+      Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+      Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >> simp[]) >>
+  simp[]
+QED
+
+Theorem source_replay_cut_pop[local]:
+  !f s os.
+    ~NULL (SND (f (s with outcomes := SOME (os ++ [probe_failed_outcome])))).scopes /\
+    ~NULL (SND (f (s with outcomes := SOME (os ++ [empty_failed_outcome])))).scopes /\
+    source_wrapper_cut_at f s os ==>
+    source_wrapper_cut_at (finally f pop_scope) s os
+Proof
+  rpt gen_tac >> strip_tac >>
+  `finally f pop_scope = (\s. (\(r,t).
+      case t.scopes of [] => (INR (Error (TypeError "pop_scope")),t)
+        | h::tl => (r,t with scopes := tl)) (f s))`
+    by (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `f s'` >>
+        Cases_on `q` >> Cases_on `r.scopes` >>
+        simp[vyperStateTheory.finally_def, vyperStateTheory.pop_scope_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  pop_assum SUBST1_TAC >>
+  qspecl_then [`\(r,t). case t.scopes of
+      [] => (INR (Error (TypeError "pop_scope")),t)
+      | h::tl => (r,t with scopes := tl)`,`f`,`s`,`os`]
+    mp_tac source_replay_cut_postprocess >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (rpt gen_tac >> Cases_on `t.scopes` >> simp[])
+      >- (rpt gen_tac >> PairCases_on `x` >> PairCases_on `y` >>
+          simp[] >> strip_tac >>
+          `x1.scopes = y1.scopes` by
+            (qpat_x_assum `erase_storage_trace _ = _` mp_tac >>
+             simp[vyperStateTheory.erase_storage_trace_def,
+               vyperStateTheory.evaluation_state_component_equality]) >>
+          Cases_on `x1.scopes` >> fs[] >>
+          fs[vyperStateTheory.erase_storage_trace_def] >>
+          qpat_x_assum `_ = y1.scopes` (SUBST1_TAC o SYM) >> simp[])
+      >- (rpt gen_tac >> Cases_on `t.scopes` >> simp[])
+      >- (rpt gen_tac >> Cases_on `t.scopes` >> simp[])
+      >- (Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+          Cases_on `r.scopes` >> gvs[])
+      >- (Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+          Cases_on `r.scopes` >> gvs[]) >>
+      rpt gen_tac >> Cases_on `t.scopes` >> simp[]) >>
+  simp[]
+QED
+
+Resume source_replay_cut_wrappers[pop]:
+  simp[source_replay_cut_pop]
+QED
+
+Resume source_replay_cut_wrappers[loop]:
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`try f handle_loop_exception`,`s`,`os`]
+    mp_tac source_replay_cut_pop >>
+  reverse impl_tac >- simp[] >>
+  `!st. SND (try f handle_loop_exception st) = SND (f st)` by
+    (gen_tac >> Cases_on `f st` >> Cases_on `q` >>
+     simp[vyperStateTheory.try_def] >>
+     Cases_on `y` >>
+     simp[handle_loop_exception_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def]) >>
+  simp[] >>
+  `try f handle_loop_exception = (\s. (\(r,t).
+    case r of INL v => (INL v,t) | INR ex =>
+      if ex = ContinueException then (INL F,t)
+      else if ex = BreakException then (INL T,t) else (INR ex,t)) (f s))`
+    by (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `f s'` >> Cases_on `q` >>
+        simp[vyperStateTheory.try_def, handle_loop_exception_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+        Cases_on `y` >> simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  pop_assum SUBST1_TAC >>
+  qspecl_then [`\(r,t). case r of INL v => (INL v,t) | INR ex =>
+      if ex = ContinueException then (INL F,t)
+      else if ex = BreakException then (INL T,t) else (INR ex,t)`,
+      `f`,`s`,`os`] mp_tac source_replay_cut_postprocess >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (rpt gen_tac >> Cases_on `r` >> simp[] >> Cases_on `y` >> simp[])
+      >- (rpt gen_tac >> PairCases_on `x` >> PairCases_on `y` >>
+          simp[] >> strip_tac >> gvs[] >> Cases_on `x0` >> simp[] >>
+          Cases_on `y` >> simp[])
+      >- (rpt gen_tac >> Cases_on `r` >> simp[] >> Cases_on `y` >> simp[])
+      >- (rpt gen_tac >> Cases_on `r` >> simp[] >> Cases_on `y` >> simp[])
+      >- (Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+          Cases_on `q` >> simp[] >> Cases_on `y` >> simp[])
+      >- (Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+          Cases_on `q` >> simp[] >> Cases_on `y` >> simp[]) >>
+      rpt gen_tac >> Cases_on `r` >> simp[] >> Cases_on `y` >> simp[]) >>
+  simp[]
+QED
+
+Resume source_replay_cut_wrappers[internal]:
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `post = \(r,t). finally_unless_halt
+    (finally (try (\st. (r,t)) handle_function) (pop_function prev))
+    (unlock_if_nr cx nr view) t` >>
+  `finally_unless_halt (finally (try f handle_function) (pop_function prev))
+      (unlock_if_nr cx nr view) = (\st. post (f st))` by
+    (simp[FUN_EQ_THM, Abbr `post`] >> gen_tac >> Cases_on `f st` >>
+     simp[vyperStateTheory.finally_unless_halt_def, vyperStateTheory.finally_def,
+       vyperStateTheory.try_def]) >>
+  pop_assum SUBST1_TAC >>
+  qspecl_then [`post`,`f`,`s`,`os`] mp_tac source_replay_cut_postprocess >>
+  reverse impl_tac >- simp[] >>
+  rpt conj_tac
+  >- (rpt gen_tac >> simp[Abbr `post`] >>
+      Cases_on `nr` >> Cases_on `view` >> Cases_on `cx.nonreentrant_slot` >>
+      Cases_on `r` >>
+      simp[vyperStateTheory.try_def, vyperStateTheory.finally_def,
+        vyperStateTheory.finally_unless_halt_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def, pop_function_def, vyperStateTheory.set_scopes_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        unlock_if_nr_def, release_nonreentrant_lock_def,
+        vyperStateTheory.update_transient_def, vyperStateTheory.get_transient_storage_def,
+        vyperStateTheory.record_storage_event_def] >>
+      Cases_on `y` >> simp[handle_function_def, vyperStateTheory.return_def,
+        vyperStateTheory.raise_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def])
+  >- (rpt gen_tac >> PairCases_on `x` >> PairCases_on `y` >>
+      simp[] >> strip_tac >> gvs[] >>
+      simp[Abbr `post`] >>
+      Cases_on `nr` >> Cases_on `view` >> Cases_on `cx.nonreentrant_slot` >>
+      Cases_on `x0` >>
+      simp[vyperStateTheory.try_def, vyperStateTheory.finally_def,
+        vyperStateTheory.finally_unless_halt_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def, pop_function_def, vyperStateTheory.set_scopes_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        unlock_if_nr_def, release_nonreentrant_lock_def,
+        vyperStateTheory.update_transient_def, vyperStateTheory.get_transient_storage_def,
+        vyperStateTheory.record_storage_event_def] >>
+      fs[vyperStateTheory.erase_storage_trace_def,
+        vyperStateTheory.evaluation_state_component_equality] >>
+      Cases_on `y` >>
+      simp[handle_function_def, vyperStateTheory.return_def,
+        vyperStateTheory.raise_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def, vyperStateTheory.finally_def,
+        vyperStateTheory.finally_unless_halt_def, pop_function_def,
+        vyperStateTheory.set_scopes_def] >>
+      fs[vyperStateTheory.erase_storage_trace_def,
+        vyperStateTheory.evaluation_state_component_equality])
+  >- (rpt gen_tac >> simp[Abbr `post`] >>
+      Cases_on `nr` >> Cases_on `view` >> Cases_on `cx.nonreentrant_slot` >>
+      Cases_on `r` >>
+      simp[vyperStateTheory.try_def, vyperStateTheory.finally_def,
+        vyperStateTheory.finally_unless_halt_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def, pop_function_def, vyperStateTheory.set_scopes_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        unlock_if_nr_def, release_nonreentrant_lock_def,
+        vyperStateTheory.update_transient_def, vyperStateTheory.get_transient_storage_def,
+        vyperStateTheory.record_storage_event_def] >>
+      Cases_on `y` >> simp[handle_function_def, vyperStateTheory.return_def,
+        vyperStateTheory.raise_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def])
+  >- (rpt gen_tac >> simp[Abbr `post`] >> strip_tac >>
+      Cases_on `nr` >> Cases_on `view` >> Cases_on `cx.nonreentrant_slot` >>
+      Cases_on `r` >>
+      simp[vyperStateTheory.try_def, vyperStateTheory.finally_def,
+        vyperStateTheory.finally_unless_halt_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def, pop_function_def, vyperStateTheory.set_scopes_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        unlock_if_nr_def, release_nonreentrant_lock_def,
+        vyperStateTheory.update_transient_def, vyperStateTheory.get_transient_storage_def,
+        vyperStateTheory.record_storage_event_def] >>
+      Cases_on `y` >> simp[handle_function_def, vyperStateTheory.return_def,
+        vyperStateTheory.raise_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.bind_def])
+  >- (Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+      simp[Abbr `post`] >>
+      pop_last_assum (qspecl_then [`\st. (q,r)`,`r`,`q`,`r`] mp_tac) >> simp[])
+  >- (Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+      simp[Abbr `post`] >>
+      pop_last_assum (qspecl_then [`\st. (q,r)`,`r`,`q`,`r`] mp_tac) >> simp[]) >>
+  rpt gen_tac >> simp[Abbr `post`] >>
+  first_x_assum (qspecl_then [`\st. (r,t)`,`t`,`r`,`t`] mp_tac) >> simp[]
+QED
+
+Finalise source_replay_cut_wrappers[local]
+
+val _ = clear_overloads_on "source_wrapper_cut_at";
+
 Theorem source_create_probe_cut[local]:
   !salt value code rof k st rp sp.
     (!v s. s.outcomes = SOME [] /\ accounts_runtime_well_typed s.accounts ==>
