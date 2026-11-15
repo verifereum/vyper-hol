@@ -604,59 +604,100 @@ Proof
        venomEffectsTheory.opcode_fail_class_def, venomInstTheory.is_pseudo_def]
 QED
 
-Theorem dft_packet_guarded_cursor:
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
-    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
-  ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
-    inst.inst_opcode = INVOKE) /\ ~in_revert_forward fn s) ==>
-  ?sf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q z.
-    FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE) /\
-    LAST order = d /\
-    FLOOKUP blocks (p,d) =
-      SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
-    q = EL count rho /\ q < LENGTH xs /\ EL q xs = inst /\
-    z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
-    EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
-    (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
-      MEM r (TAKE count rho))
+Theorem dft_packet_setup_readings:
+  (!callee args.
+    setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
+      setup_callee callee args b0) /\
+  setup_callee ctf args b0 = SOME child_entry ==>
+  setup_callee ctf args u =
+    SOME (child_entry with vs_gas_readings := u.vs_gas_readings)
 Proof
-  disch_then (CONJUNCTS_THEN2
-    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) assume_tac) >>
-  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `FLOOKUP acts p = _` mp_tac >>
-  qpat_x_assum `LAST _ = d` mp_tac >>
-  qpat_x_assum `FLOOKUP blocks (p,d) = _` mp_tac >>
-  qpat_x_assum `lookup_block st.vs_current_bb _ = _` mp_tac >>
-  qpat_x_assum `get_instruction _ _ = _` mp_tac >>
-  qpat_x_assum `case body_entry of NONE => _ | SOME v => _` mp_tac >>
-  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
-    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,count,front,closed,brest) ==>
-    ?sf tf inc entry order res nrest sp. _` mp_tac >>
-  qpat_x_assum `!a sf tf inc entry order res nrest.
-    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _` mp_tac >>
-  qpat_x_assum `!bb bt ps xs ys rho in_state h0 be hbe count sf inc entry order.
-    FLOOKUP acts p = _ /\ FLOOKUP blocks (p,d) = _ /\ inv_memory_observation _ ==> _` mp_tac >>
-  qpat_x_assum `(_ \/ _ \/ _) /\ _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _`
-    (strip_assume_tac o SRULE []) >>
-  gnvs[] >>
-  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
-    FLOOKUP blocks (a,e) = _ ==> _` drule >> strip_tac >>
-  gnvs[] >> Cases_on `body_entry`
-  >- (gvs[] >>
-      `~is_pseudo inst.inst_opcode` by metis_tac[dft_packet_guard_not_pseudo] >>
-      gvs[venomInstTheory.get_instruction_def, EL_APPEND, EVERY_EL] >>
-      metis_tac[]) >>
-  PairCases_on `x` >> gvs[] >>
-  `count' < LENGTH rho'` by metis_tac[LIST_REL_LENGTH] >>
-  qpat_x_assum `LIST_REL _ rho' ys`
-    (mp_tac o SRULE [LIST_REL_EL_EQN]) >> strip_tac >>
-  first_x_assum (qspec_then `count'` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  FAIL_TAC "ordered source predecessors"
+  strip_tac >>
+  first_x_assum (qspecl_then [`ctf`, `args`] mp_tac) >>
+  simp[gasOracleReplayTheory.gas_setup_callee] >>
+  Cases_on `setup_callee ctf args u` >> simp[] >> strip_tac >>
+  drule gasOracleReplayTheory.gas_setup_callee_readings >>
+  simp[venomStateTheory.venom_state_component_equality]
 QED
+
+Theorem dft_packet_native_row_keys:
+  !pre kss s bb.
+    pre = DROP s.vs_inst_idx bb.bb_instructions /\
+    LIST_REL (\i keys.
+      if i.inst_opcode = GAS then keys = [(p,d,i.inst_id)]
+      else if i.inst_opcode = INVOKE then T else keys = []) pre kss /\
+    (!j st.
+      j < LENGTH pre /\
+      EVERY (\i. ~is_terminator i.inst_opcode) (TAKE j pre) /\
+      FOLDR (dft_exec_cons fuel C) OK (TAKE j pre) s = OK st /\
+      (EL j pre).inst_opcode = INVOKE ==>
+      (?extra. EL j kss = MAP FST (trace_gas
+        (trace_step p d fuel C fn (EL j pre) st)) ++ extra) /\
+      (!u. step_inst fuel C (EL j pre) st = OK u ==>
+        EL j kss = MAP FST (trace_gas
+          (trace_step p d fuel C fn (EL j pre) st)))) ==>
+    ?extra. FLAT kss = MAP FST (trace_gas
+      (trace_block p d fuel C fn bb s)) ++ extra
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[DROP_EQ_NIL] >>
+      simp[Once trace_defs, venomInstTheory.get_instruction_def, trace_gas_def]) >>
+  namedCases_on `kss` ["", "row rows"] >> gvs[] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `_ = DROP _ _`
+      (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  `(?extra. row = MAP FST (visit_gas ((p,d,h.inst_id),fn,h,s) ++
+      trace_gas (trace_step p d fuel C fn h s)) ++ extra) /\
+   (!u. step_inst fuel C h s = OK u ==>
+      row = MAP FST (visit_gas ((p,d,h.inst_id),fn,h,s) ++
+        trace_gas (trace_step p d fuel C fn h s)))` by
+    (Cases_on `h.inst_opcode = INVOKE`
+     >- (qpat_x_assum `!j st. _` (qspecl_then [`0`, `s`] mp_tac) >>
+         qpat_x_assum `h::pre = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+         simp[visit_gas_def]) >>
+     Cases_on `h.inst_opcode = GAS` >>
+     gvs[trace_step_noninvoke, visit_gas_def, trace_gas_def]) >>
+  Cases_on `step_inst fuel C h s`
+  >- suspend "ok"
+  >> (`get_instruction bb s.vs_inst_idx = SOME h` by
+        simp[venomInstTheory.get_instruction_def] >>
+      drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+      simp[dftGasFromListReadingsTheory.trace_gas_cons,
+           dftGasFromListReadingsTheory.trace_gas_append,
+           dftGasFromListReadingsTheory.trace_gas_nil, MAP_APPEND] >>
+      metis_tac[APPEND_ASSOC, MAP_APPEND])
+QED
+
+Resume dft_packet_native_row_keys[ok]:
+  rename1 `step_inst fuel C h s = OK out` >>
+  `row = MAP FST (visit_gas ((p,d,h.inst_id),fn,h,s) ++
+      trace_gas (trace_step p d fuel C fn h s))` by metis_tac[] >>
+  qpat_x_assum `!u. _` kall_tac >>
+  qpat_x_assum `row = _ ++ extra` kall_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    simp[venomInstTheory.get_instruction_def] >>
+  Cases_on `is_terminator h.inst_opcode`
+  >- (drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+      simp[dftGasFromListReadingsTheory.trace_gas_cons,
+           dftGasFromListReadingsTheory.trace_gas_append, MAP_APPEND] >>
+      metis_tac[APPEND_ASSOC]) >>
+  first_x_assum (qspecl_then [`rows`, `out with vs_inst_idx := SUC s.vs_inst_idx`, `bb`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_x_assum `!j st. _` (qspecl_then [`SUC j`, `st`] mp_tac) >>
+      qpat_x_assum `h::pre = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+      simp[dftIndexedExecTheory.dft_exec_cons_def]) >>
+  strip_tac >>
+  drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+  simp[dftGasFromListReadingsTheory.trace_gas_cons,
+       dftGasFromListReadingsTheory.trace_gas_append, MAP_APPEND] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Finalise dft_packet_native_row_keys
 
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
