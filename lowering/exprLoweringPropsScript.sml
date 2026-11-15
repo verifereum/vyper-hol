@@ -3953,7 +3953,7 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_ext_call_kwargs[local]:
+Theorem ci_mono_compile_ext_call_kwargs:
   ∀ks es cfn cenv rt sa.
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_ext_call_kwargs cfn cenv rt ks es sa))
