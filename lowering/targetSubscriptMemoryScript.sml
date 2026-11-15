@@ -159,7 +159,8 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `!old prefix owner. _`
        (qspecl_then [`old`,`prefix`,`owner`] mp_tac) >> simp[]) >>
-  drule_all popped_snapshot_path_in_memory >> simp[ADD_ASSOC]
+  drule_all popped_snapshot_path_in_memory >>
+  pure_rewrite_tac[ADD_ASSOC] >> disch_then ACCEPT_TAC
 QED
 
 Theorem place_ptr_rel_memory_current:
