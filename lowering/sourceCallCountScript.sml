@@ -1999,6 +1999,147 @@ Proof
   rpt TOP_CASE_TAC >> simp[] >> metis_tac[fn_entry_run_truncate]
 QED
 
+(* Consumption-cut probes: no premise on the original accounts or requests. *)
+Theorem source_replay_unconsumed_cut[local]:
+  !f st os r t.
+    outcomes_suffix f /\ outcome_prefix_causal f /\
+    f (st with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) /\
+    t.outcomes <> SOME [] ==>
+    ?pre. t.outcomes = SOME (pre ++ [probe_failed_outcome]) /\
+      !tail. f (st with outcomes := SOME (os ++ tail)) =
+        (r,t with outcomes := SOME (pre ++ tail))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all outcomes_suffix_result >> simp[outcome_suffix_def] >>
+  disch_then (qx_choose_then `used` (qx_choose_then `rest` strip_assume_tac)) >>
+  qspec_then `rest` strip_assume_tac SNOC_CASES >> gvs[] >>
+  gvs[GSYM SNOC_APPEND] >>
+  Cases_on `l` >> gvs[outcome_prefix_causal_def, SNOC_APPEND] >>
+  gvs[rich_listTheory.APPEND_ASSOC_CONS]
+QED
+
+
+Theorem source_replay_trace_transport[local]:
+  !f s t.
+    storage_trace_frame f /\ erase_storage_trace s = erase_storage_trace t ==>
+    (\(r,s). (r,erase_storage_trace s)) (f s) =
+    (\(r,s). (r,erase_storage_trace s)) (f t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule storage_trace_frame_erasure >>
+  disch_then (qspec_then `s` assume_tac) >>
+  drule storage_trace_frame_erasure >>
+  disch_then (qspec_then `t` assume_tac) >>
+  Cases_on `f s` >> Cases_on `f t` >> gvs[] >> metis_tac[]
+QED
+
+Theorem source_replay_bind_transport[local]:
+  !f h g s t.
+    (!v. storage_trace_frame (g v)) /\
+    (\(r,s). (r,erase_storage_trace s)) (f s) =
+    (\(r,s). (r,erase_storage_trace s)) (h t) ==>
+    (\(r,s). (r,erase_storage_trace s)) (bind f g s) =
+    (\(r,s). (r,erase_storage_trace s)) (bind h g t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `f s` >> Cases_on `h t` >> gvs[] >>
+  rename1 `erase_storage_trace a = erase_storage_trace b` >>
+  Cases_on `q` >> gvs[vyperStateTheory.bind_def] >>
+  irule source_replay_trace_transport >> simp[]
+QED
+
+
+Theorem source_ordinary_probe_cut[local]:
+  !rq fail success st oc.
+    storage_trace_frame fail /\
+    (oc = probe_failed_outcome \/ oc = empty_failed_outcome) ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (bind (take_request_outcome rq)
+        (\(rq,oc). if oc.co_success then success rq oc else fail)
+        (st with outcomes := SOME [oc])) =
+    (\(r,s). (r,erase_storage_trace s))
+      (bind (take_request_outcome rq)
+        (\(rq,oc). if oc.co_success then success rq oc else fail)
+        (st with outcomes := SOME []))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperStateTheory.bind_def, take_request_outcome_def,
+    take_outcome_def, probe_failed_outcome_def, empty_failed_outcome_def,
+    failed_outcome_def] >>
+  Cases_on `computed_precompile rq` >>
+  Cases_on `precompile_result rq.cr_target rq.cr_data` >>
+  Cases_on `THE (precompile_result rq.cr_target rq.cr_data)` >> gvs[] >>
+  irule source_replay_trace_transport >>
+  simp[vyperStateTheory.erase_storage_trace_def]
+QED
+
+Theorem source_replay_internal_cleanup[local]:
+  !f cx nr view prev st r t.
+    f st = (r,t) ==>
+    (FST (finally_unless_halt
+      (finally (try f handle_function) (pop_function prev))
+      (unlock_if_nr cx nr view) st) =
+      INR (Error (RuntimeError "create outcome accounts")) <=>
+      r = INR (Error (RuntimeError "create outcome accounts"))) /\
+    (SND (finally_unless_halt
+      (finally (try f handle_function) (pop_function prev))
+      (unlock_if_nr cx nr view) st)).requests = t.requests
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `nr` >> Cases_on `view` >> Cases_on `cx.nonreentrant_slot` >>
+  Cases_on `r` >>
+  gvs[vyperStateTheory.try_def, vyperStateTheory.finally_def,
+    vyperStateTheory.finally_unless_halt_def,
+    vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+    pop_function_def, vyperStateTheory.set_scopes_def,
+    vyperStateTheory.return_def, unlock_if_nr_def,
+    release_nonreentrant_lock_def, vyperStateTheory.update_transient_def,
+    vyperStateTheory.get_transient_storage_def, vyperStateTheory.raise_def,
+    vyperStateTheory.record_storage_event_def] >>
+  rename1 `f st = (INR ex,t)` >> Cases_on `ex` >>
+  simp[handle_function_def, vyperStateTheory.raise_def,
+    vyperStateTheory.return_def, vyperStateTheory.bind_def,
+    vyperStateTheory.finally_def, vyperStateTheory.finally_unless_halt_def,
+    vyperStateTheory.ignore_bind_def, pop_function_def,
+    vyperStateTheory.set_scopes_def]
+QED
+
+Theorem source_create_probe_cut[local]:
+  !salt value code rof k st rp sp.
+    (!v s. s.outcomes = SOME [] /\ accounts_runtime_well_typed s.accounts ==>
+      FST (k v s) <> INR (Error (RuntimeError "create outcome accounts"))) /\
+    bind (create_oracle_result salt value code rof) k
+      (st with outcomes := SOME [probe_failed_outcome]) = (rp,sp) ==>
+    rp = INR (Error (RuntimeError "create outcome accounts")) /\
+    ~NULL sp.requests /\
+    LAST sp.requests = create_outcome_request
+      (case salt of NONE => CreateCall | SOME s => Create2Call s) value code st /\
+    FST (bind (create_oracle_result salt value code rof) k
+      (st with outcomes := SOME [empty_failed_outcome])) <>
+      INR (Error (RuntimeError "create outcome accounts")) /\
+    bind (create_oracle_result salt value code rof) k
+      (st with outcomes := SOME []) =
+    bind (create_oracle_result salt value code rof) k
+      (st with outcomes := SOME [failed_outcome (LAST sp.requests)])
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~accounts_runtime_well_typed probe_failed_outcome.co_accounts` by
+    simp[probe_failed_outcome_def, empty_failed_outcome_def,
+      accounts_runtime_well_typed_def, account_runtime_well_typed_def,
+      vfmStateTheory.lookup_account_def] >>
+  `accounts_runtime_well_typed empty_failed_outcome.co_accounts` by
+    simp[empty_failed_outcome_def, accounts_runtime_well_typed_def,
+      vfmStateTheory.lookup_account_def] >>
+  gvs[vyperStateTheory.bind_def, vyperCreateTheory.create_oracle_result_def,
+      take_create_outcome_def, take_outcome_def, record_request_def,
+      create_outcome_request_def, computed_precompile_def] >>
+  Cases_on `salt` >> gvs[] >>
+  Cases_on `rof` >>
+  gvs[empty_failed_outcome_def, adopt_call_outcome_equation] >>
+  first_x_assum irule >>
+  simp[accounts_runtime_well_typed_def, vfmStateTheory.lookup_account_def]
+QED
+
 (* Exhausted-mode primitive interfaces. *)
 Theorem source_exhausted_create_oracle_safety[local]:
   !salt value code rof s r t.
