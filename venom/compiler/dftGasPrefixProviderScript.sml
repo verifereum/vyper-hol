@@ -2331,6 +2331,65 @@ Proof
   metis_tac[]
 QED
 
+Theorem native_schedule_stopping_frontier:
+  !body.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\ ~t.vs_call_ctx.cc_static /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+  t.vs_inst_idx = j /\
+  terminates (exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ body) t) ==>
+  ?done z later before after tz.
+    scheduled = done ++ z::later /\ todo = before ++ z::after /\
+    EVERY (\i. ~is_terminator i.inst_opcode) done /\
+    FOLDR (dft_exec_cons b C') OK done t = OK tz /\
+    tz.vs_inst_idx = j + LENGTH done /\
+    exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ body) t =
+      dft_exec_suffix b C' [z] tz /\
+    (is_terminator z.inst_opcode \/ ~(?u. step_inst b C' z tz = OK u)) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) before /\
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z]) =
+      FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z]) /\
+    (((?u. exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ body) t = OK u) \/
+      (?v u. exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ body) t = IntRet v u)) ==>
+      after = [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `LIST_REL _ scheduled actual_body` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `EVERY (\i. MEM i bb.bb_instructions) scheduled` by
+    (drule native_bubbles_perm >> strip_tac >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >>
+     metis_tac[sortingTheory.PERM_MEM_EQ]) >>
+  `exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ scheduled) t =
+   exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ actual_body) t` by
+    (irule (cj 1 (SIMP_RULE pure_ss [LET_THM] native_normalized_block_observations)) >>
+     simp[] >> qexists_tac `bb.bb_instructions` >> simp[]) >>
+  `exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ scheduled) t =
+   dft_exec_suffix b C' scheduled t` by
+    (irule dftIndexedExecTheory.dft_exec_suffix_boundary >> simp[DROP_APPEND]) >>
+  `terminates (dft_exec_suffix b C' scheduled t)` by metis_tac[] >>
+  drule native_suffix_stopping_decomposition >> strip_tac >>
+  `?before after. todo = before ++ z::after /\
+    EVERY (\i. ~is_terminator i.inst_opcode) before /\
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z]) =
+      FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z]) /\
+    (((?u. dft_exec_suffix b C' [z] tz = OK u) \/
+      (?v u. dft_exec_suffix b C' [z] tz = IntRet v u)) ==> after = [])` by
+    (irule native_schedule_frontier_calls >> metis_tac[]) >>
+  qexistsl_tac [`done`, `z`, `later`, `before`, `after`, `tz`] >> metis_tac[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
