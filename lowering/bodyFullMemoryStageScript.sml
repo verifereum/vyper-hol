@@ -163,7 +163,7 @@ Proof
         (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
       disch_then (qspecl_then [`u`,`G1`,`tn1`,`[]`,`OK t`,`Gf`,`tf`] mp_tac) >>
       simp[]) >>
-  conj_tac >- suspend "state" >> first_assum ACCEPT_TAC
+  conj_tac >- suspend "state" >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume body_full_memory_stage_path[source]:
