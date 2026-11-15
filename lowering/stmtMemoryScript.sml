@@ -77,7 +77,11 @@ Proof
       >- (fs[gas_marked_exec_def] >> metis_tac[eval_expr_stmt_exception]) >>
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       rpt strip_tac >> first_x_assum drule >> simp[stmt_exit_def] >>
-      metis_tac[expr_exit_INR_type]) >>
+      strip_tac
+      >- (disj1_tac >> qpat_x_assum `expr_exit (INR _) _` mp_tac >>
+          rpt (pop_assum kall_tac) >> metis_tac[expr_exit_INR_type]) >>
+      qpat_x_assum `halt_exit _ _ _ (INR _) _` mp_tac >>
+      simp[halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[expr_stmt_exempt]
 QED

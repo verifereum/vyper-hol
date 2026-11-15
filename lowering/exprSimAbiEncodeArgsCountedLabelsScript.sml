@@ -94,6 +94,16 @@ Proof
   strip_tac >>
   drule_all expr_sim_apply >> strip_tac >>
   drule_all abi_args_lower_label_replay >> strip_tac >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
+     (bind (eval_expr cx e) (read_result cx)) (es,s0)
+     (\H res fin t. ?v. res = INL v /\
+       expr_post H ctx func ce cx e es sa sb s0 fin v (Label l) t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+     (\H res fin r. expr_exit res r)` by
+    (qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
+     strip_tac >> qexists_tac `marks` >> metis_tac[]) >>
   drule_all abi_args_no_read_outcome_success >> simp[] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
      ee.storage_trace` by fs[storage_trace_domain_def] >>

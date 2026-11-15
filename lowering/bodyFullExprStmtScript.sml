@@ -56,7 +56,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`, `vv`,
                            `s0`, `G0`, `tn0`] mp_tac) >>
-  impl_tac >- simp[] >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (irule o MATCH_MP
     (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_expr_stmt)) >>
   rpt conj_tac
@@ -72,5 +72,7 @@ Proof
          drule_then irule return_buf_frame_frame >> fs[vv_post_def]) >>
       fs[vv_post_def, ghost_kept_at_def, stmt_lands_def, cenv_top_ext_refl]) >>
   rpt gen_tac >> strip_tac >> Cases_on `res` >> fs[expr_exit_def] >>
-  simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  rename1 `expr_exit (INR exc) r` >> simp[stmt_exit_ptr_def] >>
+  Cases_on `r` >> Cases_on `exc` >> gvs[expr_exit_def, halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
 QED

@@ -534,7 +534,8 @@ Resume compile_bop_typed_sim_mem[left_exit]:
   conj_tac
   >- (pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gnvs[] >> first_assum ACCEPT_TAC
+  disj2_tac >> gnvs[] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 Resume compile_bop_typed_sim_mem[left_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -577,11 +578,39 @@ Resume compile_bop_typed_sim_mem[right_normal]:
   disch_then (qspec_then `[]` (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
   qpat_x_assum `!gs2 v2 es2. _` (drule o SIMP_RULE (srw_ss()) []) >> strip_tac >>
   `?H. valid_horizon cx st0 H es_end'.storage_trace` by metis_tac[] >>
+  `~u.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `gas_marked_exec T (ctx,func)
+     (bind (eval_expr cx (Builtin ann (Bop bop) [e1; e2])) (read_result cx))
+     (es,s0) (marks ++ marks')
+     (bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es_end')
+     es_end' (OK u)` by
+    (irule (REWRITE_RULE [ETA_AX] bop_marked_exec_normal) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     simp[gas_marked_path_def] >> irule (cj 1 gas_path_mem_rules) >> simp[]) >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ (bop_result _ _ _ _ _ _ _) _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+  disch_then (qspec_then `[]` assume_tac) >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
   drule_all (Q.INST [`mid` |-> `es_end`, `fin` |-> `es_end'`,
                      `left` |-> `marks`, `right` |-> `marks'`]
                (SIMP_RULE bool_ss [PULL_EXISTS]
-                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary_mem))) >> simp[]
+                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary_mem))) >>
+  rewrite_tac[gas_summary_at_def] >>
+  disch_then (qx_choose_then `out` (qx_choose_then `end_es`
+    (qx_choose_then `end_r` strip_assume_tac))) >>
+  `out <> INR HaltException` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ out _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     qpat_assum `bind _ _ _ = (bop_result _ _ _ _ _ _ _,_)`
+       (fn th => pure_rewrite_tac [th]) >>
+     disch_then (SUBST1_TAC o SYM o CONJUNCT1 o REWRITE_RULE [pairTheory.PAIR_EQ]) >>
+     pure_rewrite_tac [bop_result_def] >>
+     qmatch_goalsub_abbrev_tac `sum_CASE result _ _` >>
+     Cases_on `result` >> simp[]) >>
+  qexistsl_tac [`out`, `end_es`, `end_r`] >>
+  fs[halt_exit_def] >> metis_tac[]
 QED
 Resume compile_bop_typed_sim_mem[right_exit]:
   Cases_on `res`
@@ -597,7 +626,8 @@ Resume compile_bop_typed_sim_mem[right_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v1) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gnvs[] >> first_assum ACCEPT_TAC
+  disj2_tac >> gnvs[] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 Resume compile_bop_typed_sim_mem[right_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
