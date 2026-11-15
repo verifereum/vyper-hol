@@ -3,7 +3,7 @@ Theory dftGasPrefixProvider
 Ancestors
   dftGasOracleKeyReplay dftGasToListReplay dftGasOracleDefs
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
-  dftGasFromListReplayBoundary dftGasFromListTraceDefs
+  dftGasFromListReplayBoundary dftGasFromListTraceDefs dftGasFromListTraceNames
   dftGasToListTrace dftGasToListAgreement gasOracleReplay
   dftRunRel dftDefs o1PassContract contextRawReachable gasEvents gasCount
   venomExecSemantics venomState venomInst list sorting
@@ -364,6 +364,28 @@ Proof
        `cs with vs_gas_readings := g ++ tail`] mp_tac) >>
      simp[] >> strip_tac >> gvs[]) >>
   gvs[TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem ambient_region_mask:
+  EVERY R keys ==>
+  MAP (ALOOKUP (FILTER (\kw. R (FST kw)) obs)) keys =
+  MAP (ALOOKUP obs) keys
+Proof
+  strip_tac >> irule MAP_CONG >> simp[] >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  `R x` by metis_tac[] >>
+  simp[pairTheory.LAMBDA_PROD, alistTheory.ALOOKUP_FILTER]
+QED
+
+Theorem native_blocks_gas_region:
+  EVERY (\kw. later_region p d (FST kw))
+    (trace_gas (dftGasFromListTraceDefs$trace_blocks p d fuel C fn s))
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `MEM (FST kw) (MAP FST
+    (dftGasFromListTraceDefs$trace_blocks p d fuel C fn s))` by
+    (irule trace_gas_name_mem >> simp[MEM_MAP] >> metis_tac[]) >>
+  gvs[MEM_MAP] >> drule trace_blocks_region >> simp[]
 QED
 
 Theorem dft_blocks_gas_prefix_sound:
