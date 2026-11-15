@@ -604,11 +604,7 @@ Proof
          disch_then (qx_choose_then `exc` strip_assume_tac) >>
          qexists_tac `exc` >> conj_tac >> first_assum ACCEPT_TAC) >>
       gvs[] >> qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
-      conj_tac
-      >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-      rpt strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?exc. _` drule >>
-      simp[] >> metis_tac[]) >>
+      irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   `ignore_bind (bind a k) (return ()) =
    bind a (\v. ignore_bind (k v) (return ()))` by
