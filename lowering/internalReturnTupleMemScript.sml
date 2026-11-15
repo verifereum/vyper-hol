@@ -298,7 +298,7 @@ Proof
 QED
 
 Theorem compile_internal_tuple_return_intret_mem:
-  cenv.ce_return_buf = NONE /\ cenv.ce_imm_alloca = NONE /\
+  ~cx.txn.is_static /\ cenv.ce_return_buf = NONE /\ cenv.ce_imm_alloca = NONE /\
   cenv.ce_returns_count = LENGTH tys /\ tys <> [] /\
   (case ty of TupleT ts => ts | StructT nm =>
     MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nm))
@@ -328,7 +328,8 @@ Proof
   drule_all compile_internal_tuple_return_parts >> strip_tac >>
   `~s.vs_call_ctx.cc_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       loweringStateRelDefsTheory.state_rel_def] >>
+       loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
   drule_all tuple_unlock_load_ret_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexistsl_tac [`n`, `r`] >> simp[] >> gvs[] >>

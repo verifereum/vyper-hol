@@ -169,11 +169,16 @@ Resume compile_assert_frag_ptr[exception]:
   >- (gen_tac >> asm_simp_tac (srw_ss()) [eval_assert_bind] >>
       simp[Once bind_def]) >>
   qx_gen_tac `H2` >> strip_tac >> BETA_TAC >>
-  conj_tac
-  >- (qpat_x_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` drule >>
-      simp[]) >>
+  `gas_path_ptr (cx_dead H2 cx) 0 ctx func PG G0 tn0 s0
+     (LENGTH marks) G tn r /\
+   halt_exit H2 cx (es_end with gas_obs := []) (INR y : value + exception) r` by
+    (qpat_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H2` (mp_tac o REWRITE_RULE [halt_exit_def])) >>
+     simp[halt_exit_def]) >>
+  conj_tac >- simp[] >>
   disj2_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type])
+  conj_tac >- metis_tac[expr_exit_INR_type] >>
+  fs[halt_exit_def])
 QED
 
 Resume compile_assert_frag_ptr[true]:
@@ -244,7 +249,7 @@ Resume compile_assert_frag_ptr[false]:
   qpat_x_assum `!H. _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (drule_then (strip_assume_tac o cj 1)) >>
   conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
-  disj2_tac >> simp[exit_result_def, stmt_exit_ptr_def])
+  disj2_tac >> simp[exit_result_def, stmt_exit_ptr_def, halt_exit_def])
 QED
 
 Finalise compile_assert_frag_ptr

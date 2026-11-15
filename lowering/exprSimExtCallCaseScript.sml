@@ -315,7 +315,8 @@ Theorem extcall_request_setup:
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (eval_expr cx
          (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-            args dflt)) (es,s0) Q (\H res ee r. expr_exit res r)
+            args dflt)) (es,s0) Q
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   cheat
 QED
