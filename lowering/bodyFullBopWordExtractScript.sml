@@ -8,18 +8,6 @@ Ancestors
   exprLoweringProps valueEncoding vyperTypeSystem vyperState compileEnv freshWrites
 
 Theorem bop_word_suffix_extract:
-  let P = (\e es ca cb t0 G0 tn0 op H (res : value + vyperState$exception) ee G tn t.
-    ?v. res = INL v /\
-      expr_post H ctx func cenv cx e es ca cb t0 ee v op t /\
-      expr_store_bound cx (expr_type e) v op t /\
-      t.vs_current_bb = cb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH cb.cs_current_insts /\
-      alloca_history func t /\ t0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
-      ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
-      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
-      ghost_kept_at lo cenv es ca G0 tn0 t0 G tn /\
-      ~t.vs_halted /\ ee.gas_obs = []) in
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
@@ -67,13 +55,31 @@ Theorem bop_word_suffix_extract:
     (INL v1, mid with gas_obs := tail)) /\
   storage_trace_domain cx st0 mid.storage_trace /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
-    P e1 es sa s1 s0 G0 tn0 x H (INL v1) mid G1 tn1 t) /\
+    (expr_post H ctx func cenv cx e1 es sa s1 s0 mid v1 x t /\
+      expr_store_bound cx (expr_type e1) v1 x t /\
+      t.vs_current_bb = s1.cs_current_bb /\
+      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      ptr_val_ok cx (post_value_type cenv e1) v1 x G1 tn1 t /\
+      (~is_word_type (post_value_type cenv e1) ==> ptr_buf_ok cenv e1 x G1 t) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+      ~t.vs_halted /\ mid.gas_obs = [])) /\
   (!tail. bind (eval_expr cx e2) (read_result cx)
     (mid with gas_obs := gas_explicit right t.vs_gas_readings ++ tail) =
     (INL v2, fin with gas_obs := tail)) /\
   storage_trace_domain cx st0 fin.storage_trace /\
   (!H. valid_horizon cx st0 H fin.storage_trace ==>
-    P e2 mid s1 s2 t G1 tn1 y H (INL v2) fin G2 tn2 u) ==>
+    (expr_post H ctx func cenv cx e2 mid s1 s2 t fin v2 y u /\
+      expr_store_bound cx (expr_type e2) v2 y u /\
+      u.vs_current_bb = s2.cs_current_bb /\
+      u.vs_inst_idx = LENGTH s2.cs_current_insts /\
+      alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx fin G2 tn2 u /\
+      ptr_val_ok cx (post_value_type cenv e2) v2 y G2 tn2 u /\
+      (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
+      ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
+      ~u.vs_halted /\ fin.gas_obs = [])) ==>
   well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
   is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   type_bits (expr_type e1) MOD 8 = 0 /\

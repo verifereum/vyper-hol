@@ -907,8 +907,8 @@ Proof
     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
   `sa.cs_next_id <= sh1.cs_next_id` by
     (Q.UNDISCH_TAC `(case bytestring_literal_hash e1 of
-        NONE => (\(m,cb). compile_bytestring_hash m cb)
-          (lower_value compile_expr cenv (expr_type e1) e1 sa)
+        NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e1) e1 sa))
+       (SND (lower_value compile_expr cenv (expr_type e1) e1 sa))
       | SOME digest => (Lit digest,sa)) = (h1,sh1)` >>
      Cases_on `bytestring_literal_hash e1`
      >- (Cases_on `lower_value compile_expr cenv (expr_type e1) e1 sa` >>

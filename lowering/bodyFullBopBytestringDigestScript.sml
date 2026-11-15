@@ -9,7 +9,7 @@ Ancestors
 
 Theorem bop_bytestring_digest_operational:
   (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
-   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
+   else emit_op ISZERO [FST (emit_op EQ [h1;h2] sa)] (SND (emit_op EQ [h1;h2] sa))) = (op,sb) /\
   (bop = Eq \/ bop = NotEq) /\
   eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 /\
   op_prov G h1 = NONE /\ op_prov G h2 = NONE /\
@@ -35,9 +35,9 @@ Theorem bop_bytestring_digest_operational:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tnf))
 Proof
-  strip_tac >> drule_all comparison_digest_run >>
+  strip_tac >> drule_all (SRULE [LET_THM, pairTheory.UNCURRY] comparison_digest_run) >>
   disch_then (qx_choose_then `raw` strip_assume_tac) >>
-  drule comparison_digest_shape >> strip_tac >>
+  drule (SRULE [LET_THM, pairTheory.UNCURRY] comparison_digest_shape) >> strip_tac >>
   `?B. bop_scalar_seq {x | not_fresh_at sa x} {h1;h2}
         (emitted_insts sa sb) B /\ op IN B` by
     (Cases_on `bop = Eq` >>

@@ -4,8 +4,8 @@ Ancestors bodyFullBopBytestringHash bodySimFull gasShadow gasShadowState
 
 Theorem bop_bytestring_selected_child_full:
   (case bytestring_literal_hash e of
-     NONE => (\(m,cb). compile_bytestring_hash m cb)
-       (lower_value compile_expr cenv (expr_type e) e sa)
+     NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
+       (SND (lower_value compile_expr cenv (expr_type e) e sa))
    | SOME digest => (Lit digest,sa)) = (h,sz) /\
   is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
   body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\

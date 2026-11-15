@@ -39,7 +39,7 @@ Theorem membership_flag_parent_outcome:
     (\res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule bodyPtrBopTypedSourceTheory.bop_pair_source_facts >>
+  drule bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `es2`, `es1`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   drule_all bop_pair_word_inputs >> strip_tac >>

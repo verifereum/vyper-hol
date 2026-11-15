@@ -27,7 +27,7 @@ Theorem bop_bytestring_final_post:
   alloca_history func u /\ fn_inst_ids_distinct func /\
   fn_has_code s2 sb func /\
   (if bop = Eq then emit_op EQ [h1;h2] s2
-   else let (q,sm) = emit_op EQ [h1;h2] s2 in emit_op ISZERO [q] sm) = (op,sb) /\
+   else emit_op ISZERO [FST (emit_op EQ [h1;h2] s2)] (SND (emit_op EQ [h1;h2] s2))) = (op,sb) /\
   u.vs_current_bb = s2.cs_current_bb /\ u.vs_inst_idx = LENGTH s2.cs_current_insts /\
   run_inst_seq (emitted_insts s2 sb) u = OK raw0 /\
   (raw0 with vs_vars := u.vs_vars) = u /\
@@ -88,12 +88,12 @@ Proof
   `alloca_history func (raw0 with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule emitted_alloca_history >> conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`emitted_insts s2 sb`, `u`, `s2`] >> simp[] >>
-     drule comparison_digest_shape >> strip_tac >>
+     drule (SRULE [LET_THM, pairTheory.UNCURRY] comparison_digest_shape) >> strip_tac >>
      simp[] >> conj_tac >- fs[stmt_state_rel_def] >>
      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
      qpat_x_assum `!i. MEM i _ ==> _` (drule_then strip_assume_tac) >> simp[]) >>
   `sb.cs_current_bb = s2.cs_current_bb` by
-    (drule comparison_digest_shape >> simp[]) >>
+    (drule (SRULE [LET_THM, pairTheory.UNCURRY] comparison_digest_shape) >> simp[]) >>
   `alloca_history func ss` by
     (irule allocaHistoryTheory.alloca_history_frame >>
      qexists_tac `raw0 with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[] >>

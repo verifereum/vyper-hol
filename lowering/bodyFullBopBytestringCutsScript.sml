@@ -12,26 +12,28 @@ Theorem bop_bytestring_selected_compile_cuts:
   gas_shadow_state sa shadow_sa ==>
   ?h1 sh1 h2 sh2 shadow_sh1 shadow_sh2.
     (case bytestring_literal_hash e1 of
-       NONE => (\(m,cb). compile_bytestring_hash m cb)
-         (lower_value compile_expr cenv (expr_type e1) e1 sa)
+       NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e1) e1 sa))
+       (SND (lower_value compile_expr cenv (expr_type e1) e1 sa))
      | SOME digest => (Lit digest,sa)) = (h1,sh1) /\
     (case bytestring_literal_hash e2 of
-       NONE => (\(m,cb). compile_bytestring_hash m cb)
-         (lower_value compile_expr cenv (expr_type e2) e2 sh1)
+       NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e2) e2 sh1))
+       (SND (lower_value compile_expr cenv (expr_type e2) e2 sh1))
      | SOME digest => (Lit digest,sh1)) = (h2,sh2) /\
     (case bytestring_literal_hash (gas_shadow_expr e1) of
-       NONE => (\(m,cb). compile_bytestring_hash m cb)
-         (lower_value compile_expr cenv (expr_type (gas_shadow_expr e1))
-           (gas_shadow_expr e1) shadow_sa)
+       NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type (gas_shadow_expr e1))
+           (gas_shadow_expr e1) shadow_sa))
+       (SND (lower_value compile_expr cenv (expr_type (gas_shadow_expr e1))
+           (gas_shadow_expr e1) shadow_sa))
      | SOME digest => (Lit digest,shadow_sa)) = (h1,shadow_sh1) /\
     (case bytestring_literal_hash (gas_shadow_expr e2) of
-       NONE => (\(m,cb). compile_bytestring_hash m cb)
-         (lower_value compile_expr cenv (expr_type (gas_shadow_expr e2))
-           (gas_shadow_expr e2) shadow_sh1)
+       NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type (gas_shadow_expr e2))
+           (gas_shadow_expr e2) shadow_sh1))
+       (SND (lower_value compile_expr cenv (expr_type (gas_shadow_expr e2))
+           (gas_shadow_expr e2) shadow_sh1))
      | SOME digest => (Lit digest,shadow_sh1)) = (h2,shadow_sh2) /\
     gas_shadow_state sh1 shadow_sh1 /\ gas_shadow_state sh2 shadow_sh2 /\
     (if bop = Eq then emit_op EQ [h1;h2] sh2
-     else let (q,sm) = emit_op EQ [h1;h2] sh2 in emit_op ISZERO [q] sm) = (op,sb) /\
+     else emit_op ISZERO [FST (emit_op EQ [h1;h2] sh2)] (SND (emit_op EQ [h1;h2] sh2))) = (op,sb) /\
     (!m cb. bytestring_literal_hash e1 = NONE /\
       lower_value compile_expr cenv (expr_type e1) e1 sa = (m,cb) ==>
       ?shadow_cb. lower_value compile_expr cenv (expr_type e1)

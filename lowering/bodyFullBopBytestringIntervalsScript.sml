@@ -10,12 +10,12 @@ Theorem bop_bytestring_selected_code_intervals:
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
   fn_has_code sa sb func /\
   (case bytestring_literal_hash e1 of
-     NONE => (\(m,cb). compile_bytestring_hash m cb)
-       (lower_value compile_expr cenv (expr_type e1) e1 sa)
+     NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e1) e1 sa))
+       (SND (lower_value compile_expr cenv (expr_type e1) e1 sa))
    | SOME digest => (Lit digest,sa)) = (h1,sh1) /\
   (case bytestring_literal_hash e2 of
-     NONE => (\(m,cb). compile_bytestring_hash m cb)
-       (lower_value compile_expr cenv (expr_type e2) e2 sh1)
+     NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e2) e2 sh1))
+       (SND (lower_value compile_expr cenv (expr_type e2) e2 sh1))
    | SOME digest => (Lit digest,sh1)) = (h2,sh2) ==>
   cs_extends sa sh1 /\ sa.cs_next_var <= sh1.cs_next_var /\
   cs_extends sh1 sh2 /\ sh1.cs_next_var <= sh2.cs_next_var /\
@@ -31,7 +31,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   ` (if bop = Eq then emit_op EQ [h1;h2] sh2
      else let (q,sm) = emit_op EQ [h1;h2] sh2 in emit_op ISZERO [q] sm) = (op,sb)` by
-    (gvs[lower_value_bytestring_compare]) >>
+    (gvs[lower_value_bytestring_compare, pairTheory.UNCURRY]) >>
   drule comparison_digest_shape >> strip_tac >>
   Cases_on `bytestring_literal_hash e1` >>
   Cases_on `bytestring_literal_hash e2` >>

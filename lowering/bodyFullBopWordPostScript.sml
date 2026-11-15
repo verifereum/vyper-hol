@@ -7,25 +7,6 @@ Ancestors
   augAssignPtrCompiler vyperTypeSystem bodyFullUnwrapRun
 
 Theorem bop_word_suffix_success_post:
-  let P = (\e es ca cb t0 G0 tn0 op H (res : value + vyperState$exception) ee G tn t.
-    ?v. res = INL v /\ expr_post H ctx func cenv cx e es ca cb t0 ee v op t /\
-      expr_store_bound cx (expr_type e) v op t /\
-      t.vs_current_bb = cb.cs_current_bb /\ t.vs_inst_idx = LENGTH cb.cs_current_insts /\
-      alloca_history func t /\ t0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
-      ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
-      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
-      ghost_kept_at lo cenv es ca G0 tn0 t0 G tn /\ ~t.vs_halted /\ ee.gas_obs = []) in
-  let R = (\H (res : value + vyperState$exception) ee G tn t. ?v. res = INL v /\
-    expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 ee v op t /\
-    expr_store_bound cx (expr_type (Builtin ann (Bop bop) [e1;e2])) v op t /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-    ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
-    ptr_val_ok cx (post_value_type cenv (Builtin ann (Bop bop) [e1;e2])) v op G tn t /\
-    (~is_word_type (post_value_type cenv (Builtin ann (Bop bop) [e1;e2])) ==>
-      ptr_buf_ok cenv (Builtin ann (Bop bop) [e1;e2]) op G t) /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) in
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
@@ -51,8 +32,22 @@ Theorem bop_word_suffix_success_post:
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   stmt_state_rel H ctx func cenv cx es s0 /\
-  P e1 es sa s1 s0 G0 tn0 x H (INL v1) mid G1 tn1 t /\
-  P e2 mid s1 s2 t G1 tn1 y H (INL v2) fin G2 tn2 u /\
+  (expr_post H ctx func cenv cx e1 es sa s1 s0 mid v1 x t /\
+      expr_store_bound cx (expr_type e1) v1 x t /\
+      t.vs_current_bb = s1.cs_current_bb /\ t.vs_inst_idx = LENGTH s1.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      ptr_val_ok cx (post_value_type cenv e1) v1 x G1 tn1 t /\
+      (~is_word_type (post_value_type cenv e1) ==> ptr_buf_ok cenv e1 x G1 t) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\ ~t.vs_halted /\ mid.gas_obs = []) /\
+  (expr_post H ctx func cenv cx e2 mid s1 s2 t fin v2 y u /\
+      expr_store_bound cx (expr_type e2) v2 y u /\
+      u.vs_current_bb = s2.cs_current_bb /\ u.vs_inst_idx = LENGTH s2.cs_current_insts /\
+      alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx fin G2 tn2 u /\
+      ptr_val_ok cx (post_value_type cenv e2) v2 y G2 tn2 u /\
+      (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
+      ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\ ~u.vs_halted /\ fin.gas_obs = []) /\
   is_word_type ann /\ MAP FDOM es.scopes = MAP FDOM mid.scopes /\
   MAP FDOM mid.scopes = MAP FDOM fin.scopes /\
   bop_scalar_seq {z | not_fresh_at s2 z} ({x;y} UNION IMAGE Lit UNIV)
@@ -65,8 +60,15 @@ Theorem bop_word_suffix_success_post:
   tn'.t_trans = tn2.t_trans /\ tn'.t_imm = tn2.t_imm /\
   (!z. not_fresh_at s2 z ==> FLOOKUP G' z = FLOOKUP G2 z /\
     FLOOKUP tn'.t_var z = FLOOKUP tn2.t_var z) ==>
-  R H (INL v) (fin with gas_obs := []) G' tn'
-    (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb))
+  (expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 (fin with gas_obs := []) v op (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)) /\
+    expr_store_bound cx (expr_type (Builtin ann (Bop bop) [e1;e2])) v op (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)) /\
+    (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)).vs_current_bb = sb.cs_current_bb /\ (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)).vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)) /\ s0.vs_alloca_next <= (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)).vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx (fin with gas_obs := []) G' tn' (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)) /\
+    ptr_val_ok cx (post_value_type cenv (Builtin ann (Bop bop) [e1;e2])) v op G' tn' (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb)) /\
+    (~is_word_type (post_value_type cenv (Builtin ann (Bop bop) [e1;e2])) ==>
+      ptr_buf_ok cenv (Builtin ann (Bop bop) [e1;e2]) op G' (r with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts s2 sb))) /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >> gvs[] >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>

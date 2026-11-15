@@ -34,7 +34,7 @@ Theorem bop_pair_scalar_run:
     run_inst_seq (emitted_insts c2 cz) t2 = Abort Revert_abort t)
 Proof
   strip_tac >>
-  drule bodyPtrBopTypedSourceTheory.bop_pair_source_facts >>
+  drule bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `es2`, `es1`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[word_value_type_word])) >> strip_tac >>
   drule_all bop_pair_word_inputs >> strip_tac >>
@@ -92,7 +92,7 @@ Theorem bop_scalar_parent_outcome:
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
-  drule bodyPtrBopTypedSourceTheory.bop_pair_source_facts >>
+  drule bop_pair_source_facts >>
   disch_then (qspecl_then [`v2`, `v1`, `es2`, `es1`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[word_value_type_word])) >> strip_tac >>
   drule_all bop_pair_word_inputs >> strip_tac >>

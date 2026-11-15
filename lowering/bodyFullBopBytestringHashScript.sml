@@ -500,8 +500,8 @@ QED
 
 Theorem bop_bytestring_selected_hash_full:
   (case bytestring_literal_hash e of
-     NONE => (\(m,cb). compile_bytestring_hash m cb)
-       (lower_value compile_expr cenv (expr_type e) e sa)
+     NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
+       (SND (lower_value compile_expr cenv (expr_type e) e sa))
    | SOME digest => (Lit digest,sa)) = (h,sz) /\
   is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
   body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\
@@ -546,7 +546,8 @@ Theorem bop_bytestring_selected_hash_full:
     (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> Cases_on `bytestring_literal_hash e`
-  >- (pairarg_tac >> gvs[] >>
+  >- (Cases_on `lower_value compile_expr cenv (expr_type e) e sa` >>
+      rename1 `lower_value compile_expr cenv (expr_type e) e sa = (m,cb)` >> gvs[] >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ J R` >>
       qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ PostHash R` >>
       `gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
