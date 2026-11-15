@@ -319,6 +319,7 @@ Proof
   >- first_assum ACCEPT_TAC
   >- PER_H_TAC
   >- simp[]
+  >- simp[]
   >- simp[expr_store_bound_word]
   >- fs[update_var_def]
   >- simp[]
@@ -493,6 +494,7 @@ Proof
   rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- PER_H_TAC
+  >- simp[]
   >- simp[]
   >- simp[expr_store_bound_word]
   >- fs[update_var_def]
@@ -754,6 +756,7 @@ Proof
   >- first_assum ACCEPT_TAC
   >- PER_H_TAC
   >- simp[]
+  >- simp[]
   >- simp[expr_store_bound_word]
   >- fs[update_var_def]
   >- simp[]
@@ -842,6 +845,7 @@ Resume unwrap_code_word_origin_ptr[runtime]:
   >- first_assum ACCEPT_TAC
   >- PER_H_TAC
   >- simp[]
+  >- simp[]
   >- simp[expr_store_bound_word]
   >- fs[update_var_def]
   >- simp[]
@@ -876,7 +880,7 @@ val WORD_PIECE_TAC = fn th =>
   mp_tac th >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> NO_TAC) >>
-  disch_then ACCEPT_TAC;
+  simp[];
 
 Theorem unwrap_word_value_origin_ptr:
   is_word_type (post_value_type cenv e) /\
