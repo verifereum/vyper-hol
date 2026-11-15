@@ -2351,7 +2351,8 @@ Theorem extcall_request_full:
             (type_memory_bytes cenv default_ty <> 0 ==>
              ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
                eval_operand default_op t = SOME w /\ b <= w2n w /\
-               w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
+               w2n w + type_memory_bytes cenv default_ty <= b + sz /\
+               w2n w + type_memory_bytes cenv default_ty <= t.vs_alloca_next)) /\
          (abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) <> 0 ==>

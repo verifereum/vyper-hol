@@ -67,7 +67,7 @@ Proof
   irule (SIMP_RULE (srw_ss()) [vyperStateTheory.ignore_bind_def, ETA_THM]
     (Q.INST [`k` |-> `kont`, `gas` |-> `callgas`, `Q` |-> `post`,
        `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
-       (SPEC_ALL extcall_call_full))) >>
+       (SPEC_ALL extcall_call_full_default_frame))) >>
   simp[] >> conj_tac
   >- (gen_tac >> simp[Abbr `kont`] >>
       Cases_on `if returnData = [] then
@@ -90,5 +90,12 @@ Proof
     extcall_return_full) >>
   simp[] >> conj_tac >- metis_tac[] >>
   qexistsl [`addr_op`, `buf_op`, `default_op`, `default_ty`, `has_default`, `sr`] >>
-  simp[]
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!dv. _ ==> ptr_mem_ok _ _ _ _ G tn t /\ _`
+    (qspec_then `dv` mp_tac) >>
+  qpat_x_assum `!dv. _ ==> ptr_mem_ok _ _ _ _ G' tn' t' /\ _`
+    (qspec_then `dv` mp_tac) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
