@@ -15,7 +15,8 @@ Ancestors
   loweringPosts bodyMemoryDefs bodyPtrDefs bodyExprPreFacts
   stmtLoweringMono fragExec gasSummaryCompose gasExemptCert exprSimDefs
   compileEnv stmtLowering vyperInterpreter vyperState vyperStorageTrace
-  vyperEvalPreservesScopes vyperStorageFootprint list
+  vyperEvalPreservesScopes vyperStorageFootprint contextRawReachable unitMemInv
+  ptrDiscipline list
 
 (* Notes for the proof (may be ignored):
    - A pre-horizon proof of this composition, over a generic shadow
@@ -35,6 +36,7 @@ Ancestors
 Theorem stmt_frag_full_cons_env:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty
    stmt ss es.
+    ~ctx_has_dalloca ctx /\
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty stmt)
@@ -102,7 +104,7 @@ Proof
   simp[stmt_frag_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`, `s0`,
                            `G0`, `tn0`, `c`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
   simp[Once evaluate_def, ignore_bind_def] >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
@@ -122,10 +124,10 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `headR`] >> rpt strip_tac >>
-  Cases_on `res` >> simp[] >>
+  Cases_on `res` >> simp[halt_exit_def] >>
   qpat_x_assum `!tail. stmt_exit_ptr _ (_ with gas_obs := tail) _ _ _`
     (qspec_then `[]` mp_tac) >>
-  simp[stmt_exit_ptr_def, expr_exit_def]
+  simp[stmt_exit_ptr_def, expr_exit_def] >> fs[halt_exit_def]
 QED
 
 Resume stmt_frag_full_cons_env[continue]:
@@ -143,13 +145,17 @@ Resume stmt_frag_full_cons_env[continue]:
   rename1 `INR exc` >> disj2_tac >> qexists_tac `exc` >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
-  qexists_tac `cenv'''` >> fs[stmt_lands_def] >>
+    (qspec_then `H` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `cfin` strip_assume_tac) >>
+  qexists_tac `cfin` >> fs[stmt_lands_def] >>
   irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv'''`, `t`, `sm`] >> simp[]
+  qexistsl_tac [`cfin`, `t`, `sm`] >> simp[]
 QED
 
 Resume stmt_frag_full_cons_env[tail]:
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
   `mid with gas_obs := [] = mid` by
     gvs[evaluation_state_component_equality] >>
   `eval_stmt cx stmt
@@ -178,7 +184,7 @@ Resume stmt_frag_full_cons_env[tail]:
   simp[stmt_frag_full_def] >>
   disch_then (qspecl_then [`st0`, `sm`, `sb`, `shadow_sm`, `shadow_sb`, `t`, `G1`,
                            `tn1`, `cenv'`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ (eval_stmts _ _) _ _ _` (irule_at Any) >>
   conj_tac >- suspend "post" >> simp[]

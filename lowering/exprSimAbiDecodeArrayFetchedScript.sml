@@ -142,7 +142,10 @@ Proof
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
    t.vs_fmp = s.vs_fmp` by fs[venom_state_component_equality] >>
   qpat_x_assum `t = s with <|vs_vars := _; vs_memory := _|>` kall_tac >>
-  `decode_site_resources ctx func t` by metis_tac[decode_site_resources_fields] >>
+  `decode_site_resources ctx func t` by
+    (drule run_inst_seq_initial_fmp >> strip_tac >>
+     drule run_inst_seq_memory_length >> strip_tac >>
+     irule decode_site_resources_fields >> qexists_tac `s` >> simp[]) >>
   `0 < 32+n*mem_sz` by simp[] >>
   `decode_memory_frame writes s t` by
     (irule abi_bytes_frame_memory >> qexistsl [`32+n*mem_sz`, `d`] >>

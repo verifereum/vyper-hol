@@ -101,7 +101,7 @@ Theorem constructor_exit_run:
   rt + cap < dimword(:256) /\
   (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
           storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
-          nkey < dimword (:256)) /\
+          nkey < dimword (:256) /\ ~cx.txn.is_static) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
   stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
@@ -124,7 +124,8 @@ Proof
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
-  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `nr ==> ~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule optional_unlock_frag >>
   disch_then (qspecl_then [`ctx`, `\s0. s0 = s`, `\s2. s2 = s1`, `\r. F`] mp_tac) >>
   simp[Abbr `s1`] >>
