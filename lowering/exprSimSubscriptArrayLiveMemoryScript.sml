@@ -211,7 +211,7 @@ QED
 
 Resume live_memory_array_suffix_summary_family[selection]:
   `val_wf (ArrayTV etv bd) (ArrayV av)` by metis_tac[value_has_type_memory_wf] >>
-  `((case bd of Fixed _ => F | Dynamic _ => T) ==> 
+  `((case bd of Fixed _ => F | Dynamic _ => T) ==>
      mload (w2n b) s = n2w (array_length (ArrayTV etv bd) av)) /\
    ((case bd of Fixed _ => F | Dynamic _ => T) = F ==>
      (case bd of Fixed n => n | Dynamic _ => 0) = array_length (ArrayTV etv bd) av)` by
