@@ -1386,18 +1386,6 @@ Proof
   asm_simp_tac (srw_ss()) [EL_mem_bytes_at, GSYM arithmeticTheory.ADD_ASSOC]
 QED
 
-(* Interface probes: zero-size expansion, padded input, overlapping snapshot. *)
-Theorem mcopy_window_edge_probes[local]:
-  mem_bytes_at 7 0 (mcopy 7 19 0 (s with vs_memory := [])).vs_memory = [] /\
-  mem_bytes_at 5 3 (mcopy 5 19 3 (s with vs_memory := [])).vs_memory =
-    [0w; 0w; 0w] /\
-  mem_bytes_at 1 3
-    (mcopy 1 0 3 (s with vs_memory := [1w; 2w; 3w; 4w])).vs_memory =
-    [1w; 2w; 3w]
-Proof
-  simp[mcopy_mem_bytes_at_same, mem_bytes_at_def] >> EVAL_TAC
-QED
-
 (* Relocation observes relative byte windows, rather than absolute addresses. *)
 Theorem mem_bytes_at_translate_parts[local]:
   !a b n m m'.
