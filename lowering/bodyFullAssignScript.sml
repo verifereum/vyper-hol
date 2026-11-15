@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAssign
 Ancestors
+  fullAssignCopyFull fullStoreSlotsMemberLayout fullStoreSlotsMemberResources
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -1016,7 +1017,9 @@ Theorem body_assign_toplevel_copy_full:
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule compile_assign_toplevel_copy_full >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 (* A word field of a memory struct local. *)
