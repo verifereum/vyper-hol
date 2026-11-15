@@ -1,7 +1,7 @@
 (* One selected block's DLOAD pairs, rewritten throughout the function. *)
 Theory mmDloadProofs
 Ancestors
-  venomFnInstsProofs
+  venomFnInstsProofs mmTraceProofs
   mmWfProofs
   mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner passSharedDefs irSupply codegenReadyCompute dominatorProofs
@@ -14,6 +14,8 @@ Ancestors
 (* The cached equality is used only where the producer is available.  In
    particular, mere presence of an old loop iteration's output is not a
    sufficient availability test. *)
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Definition mm_dload_cached_def:
   mm_dload_cached src out s <=>
     ?off. eval_operand src s = SOME off /\
@@ -1225,28 +1227,9 @@ Theorem mm_dload_static_mem_ok[local]:
     (fn with fn_blocks := MAP (transform_block_dload pairs) fn.fn_blocks)
     (transform_dload_inst pairs i) t
 Proof
-  strip_tac >>
-  `s.vs_fmp = t.vs_fmp /\ s.vs_initial_fmp = t.vs_initial_fmp` by
-    fs[state_equiv_def, execution_equiv_def,
-       stateFrameTheory.execution_frame_def] >>
-  `dalloca_no_wrap (transform_dload_inst pairs i) s` by
-    (qspecl_then [`pairs`, `i`] strip_assume_tac mm_dload_transform_cases >>
-     gvs[dalloca_no_wrap_def, mk_nop_from_def, mk_dloadbytes_inst_def,
-         static_mem_ok_def]) >>
-  `!op. MEM op (transform_dload_inst pairs i).inst_operands ==>
-    eval_operand op s = eval_operand op t` by
-    (rpt strip_tac >> irule stateEquivProofsTheory.eval_operand_equiv >>
-     qexists_tac `vars` >> metis_tac[]) >>
-  `dalloca_no_wrap (transform_dload_inst pairs i) t` by
-    (fs[dalloca_no_wrap_def] >> rpt strip_tac >> metis_tac[MEM]) >>
-  pure_rewrite_tac[static_mem_ok_def] >>
-  conj_tac >- simp[] >>
-  conj_tac >- fs[static_mem_ok_def] >>
-  qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[static_mem_ok_def] >> strip_tac
-  >- (disj1_tac >> irule mm_dload_revert_forward >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  disj2_tac >>
+  strip_tac >> qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[mmTraceProofsTheory.mm_static_mem_ok_def] >> strip_tac
+  >- metis_tac[mm_dload_revert_forward] >>
   `inst_mem_ranges (transform_dload_inst pairs i) s =
    inst_mem_ranges (transform_dload_inst pairs i) t` by
     (irule mm_dload_ranges_equiv >> metis_tac[]) >>
@@ -1255,12 +1238,12 @@ Proof
   >- simp[inst_mem_ranges_def, mk_nop_from_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def]
-  >- gvs[arithmeticTheory.ADD_COMM] >>
+  >- fs[arithmeticTheory.ADD_COMM] >>
   `?v. i.inst_opcode = MSTORE /\ i.inst_operands = [dp.dp_dst; Var v] /\
        mm_dload_cached dp.dp_src v s` by metis_tac[] >>
   `inst_mem_ranges (mk_dloadbytes_inst i dp.dp_src dp.dp_dst) s =
    inst_mem_ranges i s` by (irule mm_dload_store_ranges >> metis_tac[]) >>
-  gvs[arithmeticTheory.ADD_COMM]
+  fs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem mm_dload_step_equiv[local]:
