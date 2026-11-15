@@ -1578,6 +1578,109 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem extcall_request_keywords_counted_horizon[local]:
+  !ys ks done_opts done_es ca cb ea r0 kont vo go def.
+  expr_body_pre ce cx env
+    (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) root_es /\
+  opts = done_opts ++ ks /\
+  DROP (1 + LENGTH ats) args = done_es ++ ys /\
+  LENGTH done_opts = LENGTH done_es /\ LENGTH ks = LENGTH ys /\
+  expr_sim_inv ce cx env ea /\ exprs_case nocalls ctx func ce cx ys /\
+  (nocalls ==> int_calls_expr
+    (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) = []) /\
+  compile_ext_call_kwargs compile_expr ce rt ks ys ca = ((vo,go,def),cb) /\
+  fn_has_code ca cb func /\ fn_inst_ids_distinct func /\
+  (!H. valid_horizon cx st0 H ea.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ea r0 /\
+    storage_well_formed_on cx ea (FST H)) /\
+  ~r0.vs_halted /\ r0.vs_current_bb = ca.cs_current_bb /\
+  r0.vs_inst_idx = LENGTH ca.cs_current_insts /\ local_ptrs_reserved ce ca /\
+  gas_admissible (bind (eval_exprs cx ys) kont) expr_vv_res_ok ea /\
+  (!kw. storage_trace_frame (kont kw)) /\
+  (!kw ee t.
+    (?H0. valid_horizon cx st0 H0 ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee t /\
+      storage_well_formed_on cx ee (FST H)) /\
+    wb_frame ce ea ee ca r0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = cb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH cb.cs_current_insts /\ ee.gas_obs = [] /\
+    outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM ea.scopes = MAP FDOM ee.scopes /\
+    ca.cs_next_var <= cb.cs_next_var /\ ca.cs_next_id <= cb.cs_next_id /\
+    local_ptrs_reserved ce cb /\ expr_sim_inv ce cx env ee /\
+    (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+      (ea with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+    pure_frame ce func ea ca r0 t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      valid_horizon cx st0 H ea.storage_trace) /\
+    LENGTH kw = LENGTH ks /\
+    EVERY (safe_operand cb)
+      [(case vo of NONE => Lit 0w | SOME op => op);
+       (case def of NONE => Lit 0w | SOME (op,dt) => op)] /\
+    (!g. go = SOME g ==> safe_operand cb g) /\
+    (IS_SOME vo <=> IS_SOME (ext_call_kwarg EKValue ks kw)) /\
+    (!v. ext_call_kwarg EKValue ks kw = SOME v ==>
+      ?op n w. vo = SOME op /\ dest_NumV v = SOME n /\
+        eval_operand op t = SOME w /\ w2n w = n) /\
+    (IS_SOME go <=> IS_SOME (ext_call_kwarg EKGas ks kw)) /\
+    (!v. ext_call_kwarg EKGas ks kw = SOME v ==>
+      ?g n w. go = SOME g /\ dest_NumV v = SOME n /\
+        eval_operand g t = SOME w /\ w2n w = n) /\
+    extcall_default_ready cx rt (IS_SOME def)
+      (case def of NONE => Lit 0w | SOME (op,dt) => op)
+      (case def of NONE => rt | SOME (op,dt) => dt)
+      (ext_call_kwarg EKDefault ks kw) t ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (kont kw) (ee,t) Q
+      (\H res ee r. expr_exit res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (eval_exprs cx ys) kont) (ea,r0) Q (\H res ee r. expr_exit res r)
+Proof
+  Induct_on `ys`
+  >- (rpt gen_tac >> strip_tac >>
+      `ks = []` by (Cases_on `ks` >> fs[]) >>
+      gvs[compile_ext_call_kwargs_def, comp_return_def] >>
+      irule extcall_request_positionals_counted_horizon >>
+      qpat_assum `expr_body_pre ce cx env _ root_es` (irule_at Any) >>
+      qexistsl_tac [`nocalls`, `DROP 1 args`, `[]`, `ca`, `ca`, `[]`] >>
+      simp[compile_ext_call_args_def, comp_return_def] >>
+      rpt gen_tac >> strip_tac >> first_x_assum irule >>
+      simp[ext_call_kwarg_def, extcall_default_ready_def,
+           exprSafeOperandTheory.safe_operand_Lit] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ks` >- fs[] >>
+  rename1 `compile_ext_call_kwargs compile_expr ce rt (tag::tags) (h::ys) ca = _` >>
+  `expr_body_pre ce cx env h ea /\ ~expr_has_effect h /\
+   ~exprs_can_mutate ce ys` by
+    (irule extcall_request_remaining_source >> simp[] >>
+     qexistsl_tac [`ann`, `args`, `ats`,
+       `TAKE (LENGTH ats) (DROP 1 args) ++ done_es`, `dr`, `root_es`,
+       `name`, `opts`, `rt`, `skip`, `stat`] >> simp[] >>
+     rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     qpat_x_assum `DROP (1 + LENGTH ats) args = _` (fn th =>
+       rewrite_tac[GSYM th]) >>
+     `DROP (1 + LENGTH ats) args = DROP (LENGTH ats) (DROP 1 args)` by
+       simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
+     simp[TAKE_DROP]) >>
+  qpat_x_assum `compile_ext_call_kwargs _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_ext_call_kwargs_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >>
+  simp[comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  simp[comp_return_def] >> strip_tac >>
+  gvs[] >>
+  `expr_type h = ext_call_kw_type rt tag /\
+   ext_call_opts_ok stat (done_opts ++ tag::tags)` by
+    (drule extcall_request_source_boundary >> strip_tac >>
+     qpat_x_assum `MAP expr_type (DROP _ args) = _` mp_tac >>
+     simp[] >> disch_then (mp_tac o Q.AP_TERM `DROP (LENGTH done_es)`) >>
+     `DROP (LENGTH done_es) done_opts = []` by
+       metis_tac[DROP_LENGTH_NIL] >>
+     simp[DROP_APPEND, GSYM MAP_DROP] >>
+     disch_then (mp_tac o Q.AP_TERM `HD`) >> simp[]) >>
+  FAIL_TAC "keyword head"
+QED
+
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
    opts args dflt ty es st0 sa sb vv s0 Q.
