@@ -363,3 +363,5 @@ Proof
      MATCH_ACCEPT_TAC source_entry_core_outcomes_suffix) >>
   drule_all outcomes_suffix_result >> simp[Abbr `entry_seed`]
 QED
+
+val _ = clear_overloads_on "source_wrapper_cut_at";
