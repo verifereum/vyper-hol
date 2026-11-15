@@ -330,6 +330,7 @@ Resume source_array_init_owned_sequence[physical_run]:
      qpat_assum `FLOOKUP s.vs_allocas oid = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `d+32 <= s.vs_alloca_next` by decide_tac >>
   `?p. ((FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = NONE /\
        p = s.vs_alloca_next /\ p+32 < dimword (:256)) \/
       (FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = SOME (p,32) /\
