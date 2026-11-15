@@ -5,48 +5,6 @@ Theory storageLiveAgree
 Ancestors
   arithmetic words list byte vyperValue vyperStorage vyperLookupStorage loweringStateRelDefs accountsRelProps
 
-(* ===== Live-byte restriction to consecutive members ===== *)
-
-Theorem dead_bytes_list_head_live[local]:
-  !st base tv tvs j b.
-  (j:num) < base + type_slot_size tv /\
-  ~dead_bytes st base tv j b ==>
-  ~dead_bytes_list st base (tv::tvs) j b
-Proof
-  rw[Once dead_bytes_def] >> strip_tac >>
-  drule (cj 2 dead_bytes_range) >> decide_tac
-QED
-
-Theorem dead_bytes_list_tail_live[local]:
-  !st base tv tvs j b.
-  base + type_slot_size tv <= (j:num) /\
-  ~dead_bytes_list st (base + type_slot_size tv) tvs j b ==>
-  ~dead_bytes_list st base (tv::tvs) j b
-Proof
-  rw[Once dead_bytes_def] >> strip_tac >>
-  drule (cj 1 dead_bytes_range) >> decide_tac
-QED
-
-Theorem dead_bytes_fields_head_live[local]:
-  !st base nm tv fields j b.
-  (j:num) < base + type_slot_size tv /\
-  ~dead_bytes st base tv j b ==>
-  ~dead_bytes_fields st base ((nm,tv)::fields) j b
-Proof
-  rw[Once dead_bytes_def] >> strip_tac >>
-  drule (cj 3 dead_bytes_range) >> decide_tac
-QED
-
-Theorem dead_bytes_fields_tail_live[local]:
-  !st base nm tv fields j b.
-  base + type_slot_size tv <= (j:num) /\
-  ~dead_bytes_fields st (base + type_slot_size tv) fields j b ==>
-  ~dead_bytes_fields st base ((nm,tv)::fields) j b
-Proof
-  rw[Once dead_bytes_def] >> strip_tac >>
-  drule (cj 1 dead_bytes_range) >> decide_tac
-QED
-
 (* Storage that agrees with s1 on every byte of the region s1 does not leave
    dead (dead_bytes) decodes there whenever s1 does. Intuition: every slot
    slots_in_range reads lies in the region; the length slot of a bytestring
