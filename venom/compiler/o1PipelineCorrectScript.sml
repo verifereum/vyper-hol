@@ -122,7 +122,7 @@ Proof
   simp[fmp_variant_room_def] >> strip_tac >>
   qexists_tac `vs_in` >> simp[] >> strip_tac >>
   `vs_in.vs_fmp = vs_in.vs_initial_fmp` by
-    fs[raw_variant_def, gas_variant_def,
+    gvs[raw_variant_def, gas_variant_def,
        venomStateTheory.venom_state_component_equality] >>
   metis_tac[]
 QED
