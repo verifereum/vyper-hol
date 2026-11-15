@@ -17,7 +17,7 @@ QED
 
 Theorem joint_read_owner_birth:
   joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
-  ptr_discipline lo ctx vs0 /\ ~ctx_has_dalloca ctx /\ j <= LENGTH es /\
+  ptr_discipline lo ctx vs0 /\ (ctx_has_dalloca ctx ==> byte < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) ==>
   byte < lo \/ in_revert_forward current s \/
@@ -45,13 +45,16 @@ Proof
     gvs[joint_reads_def] >>
   `lo <= byte` by decide_tac >>
   drule_all access_ok_read_site >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+   (ctx_has_dalloca ctx ==> FST (b,sz) < w2n vs0.vs_initial_fmp)` by
+    (simp[] >> rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all joint_provenance_birth >> strip_tac >>
   qexistsl_tac [`ops`,`v`,`b`,`sz`,`d`,`owner`,`aid`,`t`] >> simp[]
 QED
 
 Theorem joint_read_owner_birth_above:
   joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
-  ptr_discipline lo ctx vs0 /\ ~ctx_has_dalloca ctx /\ j <= LENGTH es /\
+  ptr_discipline lo ctx vs0 /\ (ctx_has_dalloca ctx ==> byte < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
   ~in_revert_forward current s ==>

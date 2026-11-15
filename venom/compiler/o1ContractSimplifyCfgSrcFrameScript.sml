@@ -4406,7 +4406,6 @@ Theorem scfg_simplify_cfg_frame_rows:
   EVERY scfg_static C.ctx_functions /\
   EVERY (\f. EVERY (\i. i.inst_opcode <> PHI) (fn_insts f)) C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ ptr_discipline lo C vs /\
-  ~ctx_has_dalloca C /\
   frame_reachable vs (C with ctx_functions := MAP simplify_cfg_fn C.ctx_functions)
     stk PG G tn g j t ==>
   access_ok lo G g j t /\ taint_ok g tn j t /\ allocas_from lo t /\

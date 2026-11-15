@@ -182,7 +182,8 @@ Theorem joint_provenance_birth:
   joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
   j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP G v = SOME site ==>
+  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\ FLOOKUP G v = SOME site ==>
   ?d owner aid t.
     t < j /\ allocation_birth ctx (EL t (q0::qs)) (EL t es) d owner aid site /\
     (!i. t < i /\ i <= j ==>
@@ -206,7 +207,8 @@ Theorem joint_demand_owner_birth:
   joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
   n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP G v = SOME site /\
+  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\ FLOOKUP G v = SOME site /\
   byte IN joint_reads (EL j (q0::qs)) /\
   (!k. n <= k /\ k < j ==>
     byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
