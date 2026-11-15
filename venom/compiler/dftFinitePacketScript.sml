@@ -3,6 +3,7 @@ Ancestors
   dftGasInvCrossingProbe dftGasFromListTraceDefs dftRunRel dftGasOracleDefs
   o1PassContract frameJointTransition unitMemInv list rich_list
   dftGasFromListRestore dftGasToListReplay gasEvents finite_map pred_set
+  dftFinitePacketReachability dftGasFromListLookup dftContractGas
 
 (* Retained native DFT packet and the semantic suspended callers. *)
 Definition dft_focus_packet_rel_def:
@@ -768,6 +769,98 @@ Resume dft_packet_native_row_keys[ok]:
 QED
 
 Finalise dft_packet_native_row_keys
+
+Theorem dft_packet_return_frame:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  joint_transition C8 (JointConfig stk PG G tn fn inst s oms om hs h)
+    (SOME (OriginResume fuel fn inst s ir child_out caller_post)) q8' ==>
+  ?e cid a f rest sf tf inc entry order bb bt ps xs ys rho in_state h0
+    be hbe count q call_h b0 done child_entry inst' caller_om oms' caller_h hs'.
+    p = (e,cid)::a /\ stk = f::rest /\ LENGTH rest = LENGTH a /\
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,NONE,NONE) /\
+    LAST order = e /\
+    FLOOKUP blocks (a,e) =
+      SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK b0,F,NONE) /\
+    FLOOKUP calls (a,e,cid) = SOME (q,call_h,b0,done,child_entry,NONE) /\
+    done = TAKE count rho /\ b0.vs_inst_idx = LENGTH ps + count /\
+    f.cf_fn = tf /\ f.cf_state = b0 /\ f.cf_inst.inst_id = cid /\
+    f.cf_inst.inst_opcode = INVOKE /\ f.cf_inst = EL q xs /\
+    step_inst fuel C8 inst s = IntRet ir child_out /\
+    bind_outputs (EL q xs).inst_outputs ir.iret_values
+      (adopt_return_fmp ir (merge_callee_state b0 child_out)) = SOME caller_post /\
+    active_inst tf inst' (caller_post with vs_inst_idx := SUC b0.vs_inst_idx) /\
+    oms = caller_om::oms' /\ hs = caller_h::hs' /\
+    q8' = JointConfig rest f.cf_params
+      (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
+      (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
+      tf inst' (caller_post with vs_inst_idx := SUC b0.vs_inst_idx) oms'
+      (DRESTRICT caller_om (COMPL (set f.cf_inst.inst_outputs))) hs'
+      (caller_h ++ [OriginResume fuel fn inst s ir child_out caller_post;
+        OriginObserve (OriginSnapshot tf f.cf_params
+          (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
+          (DRESTRICT caller_om (COMPL (set f.cf_inst.inst_outputs))) inst'
+          (caller_post with vs_inst_idx := SUC b0.vs_inst_idx))])
+Proof
+  strip_tac >>
+  qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
+  pure_rewrite_tac [joint_transition_return] >> strip_tac >>
+  gvs[frameJointTransitionTheory.joint_config_11] >>
+  qhdtm_x_assum `dft_focus_packet_rel` mp_tac >>
+  pure_rewrite_tac [dft_focus_packet_rel_def] >> strip_tac >>
+  `!key tf c b0. MEM (key,tf,c,b0) (trace_blocks [] 0 N C8 root_tf root_entry) ==>
+      active_inst tf c b0 /\ wf_function tf` by
+    (rpt gen_tac >> disch_tac >>
+     `raw_reachable root_entry C8 tf c b0` suffices_by
+       (strip_tac >> conj_tac
+        >- (drule stepWriteFootprintBaseTheory.raw_reachable_active >> simp[]) >>
+        drule raw_reachable_wf >> simp[o1_ctx_shape_wf_functions]) >>
+     drule dft_fn_rel_entry_label >> disch_tac >>
+     qpat_x_assum `MEM (key,tf,c,b0) _` mp_tac >>
+     qpat_x_assum `fn_entry_label root_tf = _` mp_tac >>
+     qpat_x_assum `fn_entry_label root_sf = _` mp_tac >>
+     qpat_x_assum `C8.ctx_entry = _` mp_tac >>
+     qpat_x_assum `lookup_function nm C8.ctx_functions = _` mp_tac >>
+     qpat_x_assum `root_entry.vs_prev_bb = _` mp_tac >>
+     qpat_x_assum `root_entry.vs_current_bb = _` mp_tac >>
+     qpat_x_assum `root_entry.vs_inst_idx = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[dft_packet_trace_raw_reachable]) >>
+  qpat_x_assum `!a e cid q h b0 done child_entry ret.
+    FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,child_entry,ret) ==> _` mp_tac >>
+
+  qpat_x_assum `!key tf c b0. _` mp_tac >>
+  qpat_x_assum `j < LENGTH _` mp_tac >>
+  qpat_x_assum `!k. _ ==> ?sf tf inc entry order q call_h b0 done child_entry e cid a. _ /\ _ /\ _ /\ _ /\ (EL k _).cf_fn = tf /\ _` mp_tac >>
+  qpat_x_assum `!k. _ ==> ?sf tf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q h b0 done child_entry cid e a. _` mp_tac >>
+  qpat_x_assum `LENGTH _ = LENGTH p` mp_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+  qpat_x_assum `bind_outputs _ _ _ = SOME _` mp_tac >>
+  qpat_x_assum `active_inst _ inst' _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt strip_tac >> gvs[frameJointTransitionTheory.joint_config_11] >>
+  Cases_on `p` >- gvs[] >>
+  qpat_x_assum `!k. _` (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!k. _` (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `!a e cid q h b0 done child_entry ret. _`
+    (drule_then strip_assume_tac) >> gvs[] >>
+  `call_h < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry)` by decide_tac >>
+  `MEM ((t,LAST order,f.cf_inst.inst_id),f.cf_fn,EL q xs,f.cf_state)
+     (trace_blocks [] 0 N C8 root_tf root_entry)` by metis_tac[EL_MEM] >>
+  qpat_x_assum `!key tf c b0. _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `active_inst _ (EL q xs) _` mp_tac >>
+  qpat_x_assum `active_inst _ f.cf_inst _` mp_tac >>
+  qpat_x_assum `wf_function _` mp_tac >>
+  qpat_x_assum `bind_outputs _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  drule_all wf_active_lookup >> strip_tac >>
+  qpat_x_assum `active_inst _ (EL q xs) _` kall_tac >>
+  drule_all wf_active_lookup >> strip_tac >>
+  gvs[]
+QED
 
 Theorem dft_focus_packet_step:
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
