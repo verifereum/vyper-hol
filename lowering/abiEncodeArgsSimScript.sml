@@ -646,19 +646,6 @@ Proof
   metis_tac[exprSafeOperandTheory.alloc_buffer_not_label]
 QED
 
-Theorem abi_args_name_label_forward[local]:
-  FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz) /\
-  ~is_word_type (expr_type (Name ann id)) ==>
-  lower_value compile_expr ce ty (Name ann id) sa = (Label l,sa)
-Proof
-  simp[exprLoweringTheory.lower_value_def, comp_bind_def,
-       Once exprLoweringTheory.compile_expr_def,
-       exprLoweringTheory.compile_expr_body_def,
-       exprLoweringTheory.compile_name_vv_def,
-       exprLoweringTheory.unwrap_value_def, contextTheory.mk_ptr_def,
-       comp_return_def]
-QED
-
 
 Theorem abi_args_operand_live:
   (!x. op = Var x ==> not_fresh_at sm x) /\ ci_mono sm sb ==>
