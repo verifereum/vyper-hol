@@ -2740,11 +2740,15 @@ Resume dynamic_convert_lower_case[counted]:
   rewrite_tac[eval_expr_convert_action]
   >- suspend "value" >>
   `expr_exit res rr` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H1` mp_tac) >> simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>
   simp[gas_summary_at_def] >> qexistsl_tac [`INR y`, `es_end`, `rr`] >>
-  simp[] >> irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]
+  simp[] >> conj_tac
+  >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    drule >> simp[]
 QED
 
 Resume dynamic_convert_lower_case[value]:
