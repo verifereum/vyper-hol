@@ -3,14 +3,19 @@ Ancestors
   assignPlaceRelayoutProvenance assignPlacePhysicalBytes assignPlaceNormalizeFrame
   assignPlaceStorageSuffix placeStoreSlots assignPlaceLayout
   loweringPosts stmtSimDefs stmtLowering compileEnv placeStore valueCopyBytes
-  entryArgPtrs stmtLoweringMono fragExec
-Libs monadsyntax
+  entryArgPtrs stmtLoweringMono fragExec vyperStorageFootprint
+  vyperStoragePlaceObserved tuplePlaceBorrowStore
+Libs monadsyntax horizonTypeLib
 
 Theorem assign_place_storage_from_expr_post:
   compile_assign_value cenv dst loc src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
     (type_memory_bytes cenv dty) su = ((),sb) /\
-  expr_post ctx func cenv cx e es sa su s0 ee v src s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa su s0 ee v src s /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H)) /\
   expr_sim_inv cenv cx env ee /\
   type_widens_to (get_tenv cx) (post_value_type cenv e) dty /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv /\
@@ -21,7 +26,6 @@ Theorem assign_place_storage_from_expr_post:
   (!x. dst = Var x ==> not_fresh_at su x) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type dty) /\
-  storage_place_region cx p /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -44,7 +48,8 @@ Theorem assign_place_storage_from_expr_post:
    ~(is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)) ==>
    type_alloc_ok cenv dty) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -53,6 +58,16 @@ Theorem assign_place_storage_from_expr_post:
     alloca_frame cenv ee su s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa su s0 ee v src s /\
+   storage_place_observed H0 p /\ regions_consistent (FST H0) /\
+   storage_locks_separated (FST H0) (SND H0)` by metis_tac[] >>
+  pop_assum strip_assume_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H)` by
+    fs[expr_post_def] >>
   Cases_on `is_bytestring_type (lowered_value_type cenv e) /\ is_bytestring_type dty`
   >- suspend "bytes" >>
   Cases_on `is_word_type dty`
@@ -61,9 +76,10 @@ Proof
 QED
 
 Resume assign_place_storage_from_expr_post[bytes]:
-  `stmt_state_rel ctx func cenv cx ee s` by fs[expr_post_def] >>
+  `stmt_state_rel H0 ctx func cenv cx ee s` by fs[expr_post_def] >>
   `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
     alloca_frame cenv ee su s cenv ff t /\ ~t.vs_halted /\
@@ -77,33 +93,36 @@ Resume assign_place_storage_from_expr_post[bytes]:
 QED
 
 Resume assign_place_storage_from_expr_post[word]:
-  fs[expr_post_def] >>  `post_value_type cenv e = dty` by
+  fs[expr_post_def] >>
+  `post_value_type cenv e = dty` by
     metis_tac[compileEnvTheory.type_widens_to_word] >>
   `lowered_value_type cenv e = dty` by
     metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   fs[] >>
-  `emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
-                        | _ => MSTORE) [dst;src] su = ((),sb)` by
-    (Cases_on `loc` >> gvs[compile_assign_value_def,
-        comp_return_def, comp_bind_def]) >>
-  gs[] >>
-  `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
-    (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-             FLOOKUP t.vs_allocas aid = SOME b) /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (loc = LocStorage \/ loc = LocTransient ==> t.vs_memory = s.vs_memory)` by
-    (irule place_store_word_run >> simp[] >>
-     goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[] >>
-     goal_assum (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >> simp[] >>
-     goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >> simp[] >>
-     metis_tac[]) >>
+  `type_widens_to (get_tenv cx) dty dty` by
+    simp[vyperTypeSystemTheory.type_widens_to_def] >>
+  `stmt_state_rel H0 ctx func cenv cx ee s /\ storage_place_observed H0 p /\
+   regions_consistent (FST H0) /\ storage_locks_separated (FST H0) (SND H0)` by
+    metis_tac[] >>
+  `!dtv'. evaluate_type (get_tenv cx) dty = SOME dtv' ==>
+    0 < type_slot_size dtv'` by (rpt strip_tac >> gvs[]) >>
+  qspecl_then [`H0`, `ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`,
+    `p`, `dw`, `loc`, `dst`, `src`, `src_loc`, `dty`, `dtv`, `v`, `su`, `sb`]
+    mp_tac (at_horizon_named "H" (at_horizon_named "H0"
+      tuple_place_equal_storage_run_memory)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  disch_then (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)) >>
+  `!HH. valid_horizon cx st0 HH ee.storage_trace ==>
+    stmt_state_rel HH ctx func cenv cx ff t` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (qspec_then `HH` (drule_then strip_assume_tac)) >>
+     qpat_assum `!H. stmt_state_rel H _ _ _ _ _ _ /\ _ ==> _`
+       (qspec_then `HH` mp_tac) >> simp[]) >>
   qexists_tac `t` >> simp[] >>
   `MAP FDOM ff.scopes = MAP FDOM ee.scopes` by
     metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
-  irule alloca_frame_of_mem_frame >> simp[] >>
+  irule (at_horizon_named "H" alloca_frame_of_mem_frame) >> simp[] >>
   goal_assum (drule_at Any)
 QED
 
@@ -126,12 +145,14 @@ Resume assign_place_storage_from_expr_post[equal_layout]:
     val_in_memory stv v (w2n sw) s.vs_memory` by
     gvs[expr_val_rel_def] >>
   `w2n sw + type_memory_size stv < dimword (:256)` by
-    (irule assignPlaceSourceBoundsTheory.nonbytes_expr_val_at_bound >> metis_tac[]) >>
+    (irule (at_horizon_named "H"
+      assignPlaceSourceBoundsTheory.nonbytes_expr_val_at_bound) >> metis_tac[]) >>
   `well_formed_type_value stv` by
     metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
-  gvs[] >>
+  fs[] >>
   `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -139,13 +160,13 @@ Resume assign_place_storage_from_expr_post[equal_layout]:
     alloca_frame cenv ee su s cenv ff t` by
     (irule assign_place_typed_storage_suffix_run >> simp[] >>
      (conj_tac >- metis_tac[]) >>
-     goal_assum (drule_at (Pat `place_ptr_rel _ _ s _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `val_in_memory _ _ _ s.vs_memory`)) >>
-     qexistsl_tac [`dst`, `src`] >> simp[] >>
+     (conj_tac >- (qexists_tac `env` >> simp[])) >>
+     qexistsl_tac [`dst`, `dtv`, `expr_type e`, `loc`, `p`, `src`, `sw`, `v`, `dw`] >>
+     simp[arithmeticTheory.ADD_COMM] >>
      (conj_tac >- metis_tac[]) >>
      `type_memory_bytes cenv (expr_type e) = type_memory_size dtv` by
        metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
-     gvs[compile_assign_value_def, comp_bind_def, comp_return_def]) >>
+     gvs[compile_assign_value_def, comp_bind_def, comp_return_def] >> metis_tac[]) >>
   qexists_tac `t` >> simp[]
 QED
 
@@ -179,7 +200,8 @@ Resume assign_place_storage_from_expr_post[normalize]:
   `?sw. eval_operand src s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory` by gvs[expr_val_rel_def] >>
   `w2n sw + type_memory_size stv < dimword (:256)` by
-    (irule assignPlaceSourceBoundsTheory.nonbytes_expr_val_at_bound >> metis_tac[]) >>
+    (irule (at_horizon_named "H"
+      assignPlaceSourceBoundsTheory.nonbytes_expr_val_at_bound) >> metis_tac[]) >>
   `type_alloc_ok cenv dty` by metis_tac[] >>
   drule_all placeStoreStorageTheory.place_store_destination_alloc_bound >> strip_tac >>
   `value_has_type dtv v` by
@@ -193,7 +215,7 @@ Resume assign_place_storage_from_expr_post[normalize]:
         (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `ee`, `dty`]
           assign_place_normalize_framed_path))) >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ s`)) >>
   disch_then (drule_at (Pat `eval_operand src s = _`)) >>
   disch_then (qspecl_then [`stv`, `dtv`, `v`] mp_tac) >>
   (impl_tac >- (simp[arithmeticTheory.ADD_COMM] >>
@@ -214,6 +236,11 @@ QED
 
 Resume assign_place_storage_from_expr_post[normalized_suffix]:
   markerLib.RESUME_TAC >> strip_tac >>
+  `!HH. valid_horizon cx st0 HH ee.storage_trace ==>
+    stmt_state_rel HH ctx func cenv cx ee u /\ storage_place_observed HH p /\
+    regions_consistent (FST HH) /\ storage_locks_separated (FST HH) (SND HH)` by
+    metis_tac[] >>
+  `stmt_state_rel H0 ctx func cenv cx ee u` by metis_tac[] >>
   `su.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sc.cs_next_var /\
    su.cs_next_id <= sc.cs_next_id` by
     (qspec_then `type_memory_bytes cenv dty` (qspec_then `su` mp_tac)
@@ -236,7 +263,8 @@ Resume assign_place_storage_from_expr_post[normalized_suffix]:
   `well_formed_type_value dtv` by
     metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
   `?t. gas_marked_path F ctx func u 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x u) /\
     t.vs_memory = u.vs_memory /\ t.vs_allocas = u.vs_allocas /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -244,10 +272,9 @@ Resume assign_place_storage_from_expr_post[normalized_suffix]:
     alloca_frame cenv ee sc u cenv ff t` by
     (irule assign_place_typed_storage_suffix_run >> simp[] >>
      (conj_tac >- metis_tac[]) >>
-     goal_assum (drule_at (Pat `place_ptr_rel _ _ u _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `val_in_memory _ _ _ u.vs_memory`)) >>
-     qexistsl_tac [`dst`, `a.buf_operand`] >> simp[] >>
-     first_assum ACCEPT_TAC) >>
+     (conj_tac >- (qexists_tac `env` >> simp[])) >>
+     qexistsl_tac [`dst`, `dtv`, `dty`, `loc`, `p`, `a.buf_operand`, `w`, `v`, `dw`] >>
+     simp[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
   `gas_marked_path F ctx func s 0 (OK t)` by
     metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0] >>
   qexists_tac `t` >> simp[] >>
