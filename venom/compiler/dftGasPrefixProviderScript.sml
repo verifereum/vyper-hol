@@ -2080,6 +2080,257 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES] >> disch_then (mp_tac o cj 4) >> metis_tac[]
 QED
 
+Theorem native_stopping_call_partner[local]:
+  inst_wf z /\ inst_shape_ok z /\ dft_gas_swap_pair z call /\
+  call.inst_opcode = INVOKE /\
+  (!op. MEM op z.inst_operands ==> IS_SOME (eval_operand op s)) /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C z s = OK u)) ==> F
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `dft_gas_swap_pair call z` by metis_tac[dft_gas_swap_pair_sym] >>
+  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
+  `z.inst_opcode = GAS \/ is_effect_free_op z.inst_opcode` by
+    (qpat_x_assum `dft_gas_swap_pair z call` mp_tac >>
+     simp[dft_gas_swap_pair_def] >> strip_tac >>
+     Cases_on `z.inst_opcode` >>
+     gvs[is_effect_free_op_def, read_effects_def, write_effects_def,
+         is_terminator_def, is_alloca_op_def, is_ext_call_op_def, is_pseudo_def,
+         dft_abort_compatible_def, dft_abort_kind_def, empty_effects_def]) >>
+  Cases_on `z.inst_opcode = GAS`
+  >- (fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      metis_tac[step_inst_gas_single]) >>
+  `is_effect_free_op z.inst_opcode` by metis_tac[] >>
+  `z.inst_opcode <> PHI /\ z.inst_opcode <> PARAM /\ z.inst_opcode <> FMP_PARAM` by
+    (Cases_on `z.inst_opcode` >> gvs[is_pseudo_def]) >>
+  `?u. step_inst_base z s = OK u` by
+    (irule effect_free_step_inst_base_ok >>
+     simp[] >> metis_tac[optionTheory.IS_SOME_EQ_NOT_NONE]) >>
+  metis_tac[step_inst_non_invoke]
+QED
+
+Theorem native_selected_operands[local]:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  dft_remaining_inv fn bb (pre ++ z::post) s /\
+  EVERY (\x. ~dft_must_order x z) pre /\
+  ~is_terminator z.inst_opcode /\ z.inst_opcode <> INVOKE /\
+  z.inst_opcode <> CODECOPY ==>
+  !op. MEM op z.inst_operands ==> IS_SOME (eval_operand op s)
+Proof
+  strip_tac >> Cases_on `pre = []`
+  >- (gvs[] >> metis_tac[inv_remaining_head_operands]) >>
+  drule_all dft_remaining_inv_ready >> strip_tac >>
+  Cases >> simp[eval_operand_def, lookup_var_def,
+    finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem native_selected_stopping_no_call_swap[local]:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  dft_remaining_inv fn bb (pre ++ z::post) s /\
+  EVERY (\x. ~dft_must_order x z) pre /\ inst_wf z /\ inst_shape_ok z /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C z s = OK u)) ==>
+  !call. call.inst_opcode = INVOKE ==> ~dft_gas_swap_pair z call
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt strip_tac >>
+  `dft_gas_swap_pair call z` by metis_tac[dft_gas_swap_pair_sym] >>
+  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
+  `z.inst_opcode <> CODECOPY` by
+    (Cases_on `z.inst_opcode = CODECOPY` >>
+     gvs[write_effects_def, empty_effects_def]) >>
+  `!op. MEM op z.inst_operands ==> IS_SOME (eval_operand op s)` by
+    metis_tac[native_selected_operands] >>
+  metis_tac[native_stopping_call_partner]
+QED
+
+Theorem native_bubbles_perm[local]:
+  !src dst. dft_head_bubbles A src dst ==> PERM src dst
+Proof
+  ho_match_mp_tac dft_head_bubbles_ind >> simp[] >>
+  rpt strip_tac >> (simp[sortingTheory.PERM_FUN_APPEND_CONS])
+QED
+
+Theorem native_bubbles_filter[local]:
+  (!x y. A x y ==> ~(P x /\ P y)) ==>
+  !src dst. dft_head_bubbles A src dst ==> FILTER P src = FILTER P dst
+Proof
+  strip_tac >> ho_match_mp_tac dft_head_bubbles_ind >> simp[] >>
+  rpt strip_tac >> Cases_on `P y` >> gvs[FILTER_APPEND_DISTRIB] >>
+  `FILTER P pre = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM] >> metis_tac[]) >> gvs[]
+QED
+
+Theorem native_bubbles_prefix_remaining[local]:
+  !done todo rest s t.
+    wf_function fn /\ EVERY inst_wf bb.bb_instructions /\
+    dft_remaining_inv fn bb todo s /\ ~s.vs_call_ctx.cc_static /\
+    dft_head_bubbles A todo (done ++ rest) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) done /\
+    FOLDR (dft_exec_cons b C) OK done s = OK t ==>
+    ?residual. dft_remaining_inv fn bb residual t /\
+      ~t.vs_call_ctx.cc_static /\ dft_head_bubbles A residual rest
+Proof
+  Induct >- (simp[] >> metis_tac[]) >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `dft_head_bubbles _ _ _` mp_tac >>
+  simp[Once dft_head_bubbles_cases] >> strip_tac >> gvs[] >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def, AllCaseEqs()] >>
+  rename1 `step_inst b C h s = OK u` >>
+  `dft_remaining_inv fn bb (pre ++ post)
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule dft_remaining_inv_step >> simp[] >>
+     qexistsl_tac [`C`, `b`, `h`] >> simp[] >>
+     qpat_x_assum `dft_remaining_inv fn bb _ s` mp_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  `~u.vs_call_ctx.cc_static` by
+    metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
+  first_x_assum (qspecl_then [`pre ++ post`, `rest`,
+    `u with vs_inst_idx := SUC s.vs_inst_idx`, `t`] mp_tac) >> simp[]
+QED
+
+Theorem native_suffix_stopping_decomposition:
+  !xs b C t. terminates (dft_exec_suffix b C xs t) ==>
+  ?done z later tz.
+    xs = done ++ z::later /\
+    EVERY (\i. ~is_terminator i.inst_opcode) done /\
+    FOLDR (dft_exec_cons b C) OK done t = OK tz /\
+    tz.vs_inst_idx = t.vs_inst_idx + LENGTH done /\
+    dft_exec_suffix b C xs t = dft_exec_suffix b C [z] tz /\
+    (is_terminator z.inst_opcode \/ ~(?u. step_inst b C z tz = OK u))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[dftIndexedExecTheory.dft_exec_suffix_def, passSimulationDefsTheory.terminates_def] >>
+  strip_tac >>
+  Cases_on `is_terminator h.inst_opcode \/ ~(?u. step_inst b C h t = OK u)`
+  >- (qexistsl_tac [`[]`, `h`, `xs`, `t`] >> simp[] >>
+      Cases_on `step_inst b C h t` >>
+      gvs[dftIndexedExecTheory.dft_exec_suffix_def]) >>
+  gvs[] >>
+  rename1 `step_inst b C h t = OK u` >>
+  qpat_x_assum `!b C t. _` (qspecl_then
+    [`b`, `C`, `u with vs_inst_idx := SUC t.vs_inst_idx`] mp_tac) >>
+  impl_tac
+  >- gvs[dftIndexedExecTheory.dft_exec_suffix_def] >>
+  strip_tac >>
+  qexistsl_tac [`h::done`, `z`, `later`, `tz`] >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  simp[Once dftIndexedExecTheory.dft_exec_suffix_def] >>
+  decide_tac
+QED
+
+Theorem native_remaining_frontier_cut[local]:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ dft_remaining_inv fn bb todo t /\
+  PERM todo (done ++ z::later) /\
+  FILTER (\i. i.inst_opcode = INVOKE \/ i = z) todo =
+    FILTER (\i. i.inst_opcode = INVOKE \/ i = z) (done ++ z::later) ==>
+  ?before after. todo = before ++ z::after /\
+    EVERY (\i. ~is_terminator i.inst_opcode) before /\
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z]) =
+      FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z]) /\
+    (is_terminator z.inst_opcode ==> after = [])
+Proof
+  strip_tac >>
+  `MEM z todo` by metis_tac[sortingTheory.PERM_MEM_EQ, MEM_APPEND, MEM] >>
+  `?before after. todo = before ++ z::after` by metis_tac[MEM_SPLIT] >>
+  pop_assum strip_assume_tac >>
+  `ALL_DISTINCT todo` by
+    (qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     simp[dft_remaining_inv_def]) >>
+  `ALL_DISTINCT (before ++ z::after) /\
+   ALL_DISTINCT (done ++ z::later)` by
+    metis_tac[sortingTheory.ALL_DISTINCT_PERM] >>
+  `~MEM z before /\ ~MEM z after /\ ~MEM z done` by
+    (fs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  `FILTER (\i. i.inst_opcode = INVOKE \/ i = z) before =
+   FILTER (\i. i.inst_opcode = INVOKE \/ i = z) done` by
+    (qpat_x_assum `FILTER _ todo = _` mp_tac >>
+     simp[FILTER_APPEND_DISTRIB] >> strip_tac >>
+     drule MEM_APPEND_lemma >> simp[MEM_FILTER]) >>
+  `FILTER (\i. i.inst_opcode = INVOKE) before =
+   FILTER (\i. i.inst_opcode = INVOKE) done` by
+    (qpat_x_assum `FILTER _ before = FILTER _ done`
+       (mp_tac o Q.AP_TERM `FILTER (\i. i.inst_opcode = INVOKE)`) >>
+     simp[rich_listTheory.FILTER_FILTER, SF CONJ_ss]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) before` by
+    (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+     `id_before todo i z` by
+       (simp[] >> irule id_before_append_member >> simp[]) >>
+     irule dft_wf_order_nonterminator >>
+     qexistsl_tac [`bb`, `fn`, `z`] >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
+  qexistsl_tac [`before`, `after`] >> simp[FILTER_APPEND_DISTRIB] >>
+  disch_tac >>
+  `MEM z bb.bb_instructions /\
+   (!x. MEM x after ==>
+      id_before (MAP (\i. i.inst_id) bb.bb_instructions) z.inst_id x.inst_id)` by
+    (qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     simp[] >> metis_tac[dft_remaining_inv_head_order]) >>
+  Cases_on `after` >> simp[] >>
+  metis_tac[dft_wf_order_nonterminator, MEM]
+QED
+
+Theorem native_schedule_frontier_calls:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\ ~t.vs_call_ctx.cc_static /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo (done ++ z::later) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) done /\
+  FOLDR (dft_exec_cons b C') OK done t = OK tz /\
+  terminates (dft_exec_suffix b C' [z] tz) /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C' z tz = OK u)) ==>
+  ?before after. todo = before ++ z::after /\
+    EVERY (\i. ~is_terminator i.inst_opcode) before /\
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z]) =
+      FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z]) /\
+    (((?u. dft_exec_suffix b C' [z] tz = OK u) \/
+      (?v u. dft_exec_suffix b C' [z] tz = IntRet v u)) ==> after = [])
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qmatch_asmsub_abbrev_tac `dft_head_bubbles A todo (done ++ z::later)` >>
+  `?residual. dft_remaining_inv fn bb residual tz /\
+     ~tz.vs_call_ctx.cc_static /\ dft_head_bubbles A residual (z::later)` by
+    metis_tac[native_bubbles_prefix_remaining] >>
+  qpat_x_assum `dft_head_bubbles A residual _` mp_tac >>
+  simp[Once dft_head_bubbles_cases] >> strip_tac >> gvs[] >>
+  qpat_x_assum `dft_remaining_inv fn bb _ tz` mp_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> disch_tac >>
+  `inst_wf z /\ inst_shape_ok z` by
+    (fs[dft_remaining_inv_def, EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\x. ~dft_must_order x z) pre` by
+    (fs[EVERY_MEM, Abbr `A`] >> metis_tac[]) >>
+  `!call. call.inst_opcode = INVOKE ==> ~dft_gas_swap_pair z call` by
+    metis_tac[native_selected_stopping_no_call_swap] >>
+  `!x y. A x y ==> dft_gas_swap_pair x y` by
+    (simp[Abbr `A`] >> metis_tac[dft_crossing_swap_pair]) >>
+  `!x y. A x y ==> ~((x.inst_opcode = INVOKE \/ x = z) /\
+                              (y.inst_opcode = INVOKE \/ y = z))` by
+    (rpt strip_tac >>
+     `dft_gas_swap_pair x y` by metis_tac[] >>
+     fs[Abbr `A`] >>
+     metis_tac[dft_gas_swap_pair_sym,
+               dftGasInvCallPartnerTheory.inv_call_partner_class,
+               id_before_distinct_endpoints, dftWfTheory.wf_fn_block_inst_ids_distinct]) >>
+  `FILTER (\i. i.inst_opcode = INVOKE \/ i = z) todo =
+   FILTER (\i. i.inst_opcode = INVOKE \/ i = z) (done ++ z::later)` by
+    (irule native_bubbles_filter >> qexists_tac `A` >> simp[] >> metis_tac[]) >>
+  `PERM todo (done ++ z::later)` by metis_tac[native_bubbles_perm] >>
+  drule_all native_remaining_frontier_cut >> strip_tac >>
+  qexistsl_tac [`before`, `after`] >> simp[] >> disch_tac >>
+  `is_terminator z.inst_opcode` by
+    (Cases_on `is_terminator z.inst_opcode` >> simp[] >>
+     qpat_x_assum `(?u. dft_exec_suffix _ _ _ _ = OK u) \/ _` mp_tac >>
+     Cases_on `step_inst b C' z tz` >>
+     simp[dftIndexedExecTheory.dft_exec_suffix_def] >>
+     metis_tac[dft_swap_nonterminator_no_intret]) >>
+  metis_tac[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
