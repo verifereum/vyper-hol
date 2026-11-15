@@ -193,6 +193,8 @@ Proof
      (mstore off (typed_val_to_w256 tv v) ss)` by
     (irule immutable_augassign_alloca_sep_update >>
      metis_tac[stmt_state_rel_def]) >>
+  `fmp_room ctx func (mstore off (typed_val_to_w256 tv v) ss)` by
+    (irule fmp_room_mstore >> fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def, state_rel_def] >>
   gvs[stmt_state_rel_def, state_rel_def, venomStateTheory.mstore_def,
        storage_rel_def, transient_rel_def, accounts_rel_def, logs_rel_def,
@@ -200,7 +202,7 @@ Proof
        venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
        venomMemDefsTheory.alloca_next_valid_def,
-       alloca_room_def, fmp_room_def,
+       alloca_room_def,
        pending_alloca_size_def, immutable_base_zero_def] >>
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

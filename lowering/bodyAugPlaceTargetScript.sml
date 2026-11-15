@@ -349,6 +349,7 @@ Proof
        var_decl_info_CASE_rator,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[bind_def, lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      ignore_bind_def, record_storage_event_def,
       return_def, raise_def, AllCaseEqs()] >> metis_tac[]
 QED
 

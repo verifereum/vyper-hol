@@ -23,7 +23,7 @@ Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
-  valueEncodingTyping vyperStoragePlaceRegion
+  valueEncodingTyping vyperStoragePlaceRegion vyperStoragePlaceObserved
   stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState valueEncoding valueEncodingDefs vyperTyping valueEncodingProps valueEncodingProofs
