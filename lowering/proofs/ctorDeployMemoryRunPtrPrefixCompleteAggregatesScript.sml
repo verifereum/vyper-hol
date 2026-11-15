@@ -349,7 +349,7 @@ Theorem prefix_tuple_complete_checked_contract:
   LIST_REL (^CshiftChecked) tys tvs ==>
     (^CshiftChecked) (TupleT tys) (TupleTV tvs)
 Proof
-  cheat
+  simp_tac bool_ss [prefix_tuple_complete_mode_contract]
 QED
 
 Theorem prefix_struct_complete_code_contract:
@@ -372,7 +372,7 @@ Theorem prefix_struct_complete_checked_contract:
   LIST_REL (^CshiftChecked_desc) (MAP SND args) tvs ==>
   (^CshiftChecked) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
 Proof
-  cheat
+  simp_tac bool_ss [prefix_struct_complete_mode_contract]
 QED
 
 Theorem prefix_fixed_array_complete_code_contract:

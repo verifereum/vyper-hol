@@ -891,7 +891,14 @@ QED
 Theorem prefix_members_complete_mode:
   !tys tvs. LIST_REL ((^CshiftMode) checked) tys tvs ==> (^MshiftMode) checked tys tvs
 Proof
-  cheat
+  Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
+  simp_tac bool_ss [LIST_REL_def, prefix_members_complete_mode_nil] >> strip_tac >>
+  rename1 `LIST_REL _ tys rest` >>
+  mp_tac (Q.INST [`ty` |-> `h`, `tv` |-> `h'`, `tvs` |-> `rest`]
+    prefix_members_complete_mode_cons) >>
+  (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
+    first_x_assum irule >> gvs[])) >>
+  simp_tac bool_ss []
 QED
 
 (* The generic interface is exactly false mode; normalize the quotation once. *)

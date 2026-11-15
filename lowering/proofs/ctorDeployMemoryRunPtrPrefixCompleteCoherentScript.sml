@@ -205,7 +205,12 @@ QED
 Theorem prefix_base_complete_checked[local]:
   (^CshiftChecked) (BaseT bt) (BaseTV bt)
 Proof
-  cheat
+  `(?clamp. type_to_abi_dec_info sf ce (BaseT bt) = DecPrimWord clamp) \/
+   (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
+    (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
+  >- (irule prefix_scalar_complete_checked_contract >> goal_assum (drule_at Any)) >>
+  irule prefix_bytestring_complete_checked_contract >> goal_assum (drule_at Any)
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -217,7 +222,7 @@ QED
 Theorem prefix_flag_complete_checked[local]:
   (^CshiftChecked) (FlagT nsid) (FlagTV n)
 Proof
-  cheat
+  irule prefix_scalar_complete_checked_contract >> simp[Once type_to_abi_dec_info_def]
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -249,7 +254,9 @@ QED
 Theorem prefix_array_complete_checked[local]:
   (^CshiftChecked) ty tv ==> (^CshiftChecked) (ArrayT ty bd) (ArrayTV tv bd)
 Proof
-  cheat
+  Cases_on `bd`
+  >- MATCH_ACCEPT_TAC prefix_fixed_array_complete_checked_contract >>
+  MATCH_ACCEPT_TAC prefix_dynamic_complete_checked
 QED
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
