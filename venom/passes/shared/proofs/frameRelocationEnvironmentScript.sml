@@ -129,7 +129,10 @@ Proof
     (irule (reader_clean_ghosts |> UNDISCH |> CONJUNCT2 |> DISCH_ALL) >> simp[]) >>
   simp[] >> (conj_tac
   >- (gvs[] >> simp[reader_clean_ghosts] >>
-      irule guarded_clean_write_restrict >> simp[] >>
+      irule (SIMP_RULE (srw_ss()) []
+        (Q.INST [`s` |-> `s with vs_gas_readings := rest`,
+                 `t` |-> `t with vs_gas_readings := rest`]
+          guarded_clean_write_restrict)) >> simp[] >>
       goal_assum (drule_at Any) >>
       irule local_rel_gas_readings >> goal_assum (drule_at Any))) >>
   simp[reader_clean_ghosts] >>
