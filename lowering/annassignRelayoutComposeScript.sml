@@ -221,11 +221,12 @@ Theorem annassign_relayout_rhs_outcome:
         expr_post H ctx func c cx e es sa sb salloc ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (eval_stmt cx (AnnAssign id typ e)) (es,salloc)
       (\H. stmt_post H ctx func cx lctx old c sa0 sf es salloc)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   (irule annassign_rhs_outcome >>
