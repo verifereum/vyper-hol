@@ -8,8 +8,8 @@ Ancestors
   fnEntryPlan fnEntryStep fnBlockBodyHelpers stackOpSim fnFrameBoundaryEntryParams fnEntryParams
   asmDataEnv asmSymBridge asmSymSem asmSem
   fnBlockBodyClasses fnBlockBodySteps fnBlockBody venomWf fnFrameDeepJnz
-  fnFrameBoundaryInvoke fnFrameBoundaryGenRet frameRel contextCodegenRel
-  stackPlanTypes stackPlanGen planExec unitShapeDefs
+  fnFrameBoundaryInvoke fnFrameBoundaryGenRet fnFrameDeepInvoke frameViewFacts
+  frameRel contextCodegenRel stackPlanTypes stackPlanGen planExec unitShapeDefs
   frameJointTrace frameJointTransition frameOriginHistory
   venomInstProps venomExecSemantics venomState venomInst fcgDefs
   list rich_list arithmetic finite_map
@@ -263,6 +263,150 @@ Proof
   simp[entry_frame_symbolic_plan_def, fn_has_retpc_def, Abbr `start`,
        codegen_asm_entry_rel_def] >>
   fs[codegen_asm_entry_rel_def]
+QED
+
+Theorem frame_stack_symbolic_plan_pop:
+  frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 (f::stk) callee entry cra crest cmem csentry cret csrest clabs /\
+  focus_s7_symbolic_context unit prog /\
+  fn_return_state_rel unit.cu_context cpl callee send entry asr /\
+  FLOOKUP (build_offset_to_pc prog) (w2n cra) = SOME asr.as_pc /\
+  asr.as_stack = REVERSE rv.iret_values ++ crest /\
+  asm_sym_rel prog env asr ssr /\
+  ssr.sym_stack = MAP Val (REVERSE rv.iret_values) ++ csrest /\
+  (!b. context_spill_byte cpl b /\ ~closure_spill_byte unit.cu_context cpl callee.fn_name b ==> FLOOKUP ssr.sym_mem_labels b = FLOOKUP clabs b) /\
+  (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cpl b) /\
+  bind_outputs f.cf_inst.inst_outputs rv.iret_values (adopt_return_fmp rv (merge_callee_state f.cf_state send)) = SOME resumed ==>
+  ?n fin sfin caller_entry ra rest mem0 sentry ret srest labs0.
+    0 < n /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n asr = AsmOK fin /\
+    sym_steps prog env n ssr = SymOK sfin /\
+    frame_stack_symbolic_plan env rpolicy unit cpl prog vs0 es0 stk f.cf_fn caller_entry ra rest mem0 sentry ret srest labs0 /\
+    active_frame_symbolic_plan env rpolicy unit cpl prog f.cf_fn (resumed with vs_inst_idx := SUC f.cf_state.vs_inst_idx) fin ra rest mem0 ret srest labs0 sfin
+Proof
+  strip_tac >>
+  qpat_x_assum `frame_stack_symbolic_plan _ _ _ _ _ _ _ (_::_) _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [frame_stack_symbolic_plan_cases]) >>
+  gvs[] >>
+  drule body_plan_inv_facts >> strip_tac >>
+  drule_all body_plan_inv_inst >> strip_tac >>
+  drule_all body_plan_inv_static >> strip_tac >>
+  drule_all body_plan_inv_step >>
+  disch_then (qx_choosel_then [`next_ops`, `next_ps`, `next_rest`] strip_assume_tac) >>
+  `!at. MEM at next_ps.ps_stack \/ at IN FDOM next_ps.ps_spilled ==>
+     operand_val (frame_view f.cf_fn ra resumed) (SND (compute_label_offsets prog)) at =
+     operand_val (frame_view f.cf_fn ra resumed) (SND (compute_label_offsets prog)) (normalize_operand dfg [] at)` by
+    (`dfg = dfg_build_function f.cf_fn /\
+      (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+        operand_val (frame_view f.cf_fn ra f.cf_state) (SND (compute_label_offsets prog)) at =
+        operand_val (frame_view f.cf_fn ra f.cf_state) (SND (compute_label_offsets prog)) (normalize_operand dfg [] at))` by
+       (gvs[body_plan_inv_def] >> metis_tac[]) >>
+     drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME _`) alias_invoke_return_preserve >>
+     disch_then (drule_at (Pat `bind_outputs _ _ _ = SOME _`)) >>
+     disch_then (qspecl_then [`SND (compute_label_offsets prog)`, `ra`] mp_tac) >>
+     gvs[] >> disch_tac >> gen_tac >> disch_tac >>
+     first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all body_operands_le_16 >> strip_tac >>
+  drule_all invoke_plan_decompose >>
+  disch_then (qx_choosel_then [`decomp_iops`, `decomp_prepared`, `decomp_rops`,
+    `decomp_arranged`, `consumed`, `pushed`, `decomp_ret_lbl`, `called`,
+    `pops`, `popped`, `opts`, `swapped`] strip_assume_tac) >>
+  gvs[] >>
+  qpat_assum `body_plan_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [body_plan_inv_def]) >>
+  `ordered_spill_regions cpl.cp_regions /\ ctx_wf unit.cu_context` by
+    fs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
+  `callee.fn_name = nm` by
+    (drule fmpAnalysisPropsTheory.lookup_function_name >> simp[]) >>
+  `fn_directly_calls unit.cu_context f.cf_fn.fn_name callee.fn_name` by
+    (qpat_x_assum `callee.fn_name = nm` SUBST1_TAC >>
+     drule_all invoke_direct_call >> simp[]) >>
+  `~TC (fn_directly_calls unit.cu_context) f.cf_fn.fn_name f.cf_fn.fn_name` by
+    (drule_all invoke_context_no_cycle >> simp[]) >>
+  drule_at (Pat `emit_input_plan _ _ _ _ = _`) invoke_entry_structural_marked >>
+  disch_then drule_all >> strip_tac >>
+  `LENGTH rv.iret_values = LENGTH f.cf_inst.inst_outputs` by
+    (qpat_x_assum `bind_outputs _ _ _ = SOME _` mp_tac >> simp[bind_outputs_def] >> IF_CASES_TAC >> simp[]) >>
+  `ssa_form f.cf_fn` by fs[codegen_ready_fn_def] >>
+  `sms.sym_mem_labels = sms.sym_mem_labels` by simp[] >>
+  `ssr.sym_stack = MAP Val (REVERSE rv.iret_values) ++ (saved_sym ++ srest)` by simp[APPEND_ASSOC] >>
+  drule_all (Q.INST [`scas` |-> `sms`] sym_invoke_return_frame_from_callee) >> strip_tac >>
+  `ALL_DISTINCT f.cf_inst.inst_outputs` by
+    metis_tac[genBlockSimTheory.codegen_ready_inst_outputs_distinct] >>
+  `EVERY (\x. ~retpc_var f.cf_fn x) f.cf_inst.inst_outputs` by
+    (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+     irule noncopy_output_not_retpc >>
+     conj_tac >- fs[codegen_ready_fn_def] >>
+     qexists `f.cf_inst` >> simp[]) >>
+  `EVERY (\s. case s of SOSpill off => off < dimword (:256)
+     | SORestore off => off < dimword (:256) | _ => T) (pops ++ opts)` by
+    fs[EVERY_APPEND] >>
+  `fn_return_state_rel unit.cu_context cpl callee send mid asr` by
+    fs[fn_return_state_rel_def] >>
+  `asm_block_at prog asr.as_pc
+     (execute_plan cpl.cp_initial_fmp (SOLabel cret :: pops ++ opts))` by
+    (`asr.as_pc = ast.as_pc +
+        LENGTH (execute_plan cpl.cp_initial_fmp (decomp_iops ++ decomp_rops)) + 3` by decide_tac >>
+     pop_assum SUBST1_TAC >>
+     pure_rewrite_tac[APPEND] >>
+     irule invoke_return_block >> qexists `nm` >>
+     qpat_assum `asm_block_at prog ast.as_pc _` mp_tac >>
+     simp[APPEND_ASSOC]) >>
+  `asm_static_wf prog` by fs[focus_s7_symbolic_context_def] >>
+  `?fin sfin.
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog
+      (1 + LENGTH (execute_plan cpl.cp_initial_fmp (pops ++ opts))) asr = AsmOK fin /\
+    fn_frame_inv unit.cu_context cpl (SND (compute_label_offsets prog)) f.cf_fn ra rest mem0
+      (release_dead_spills (live_vars_at liveness f.cf_state.vs_current_bb (k + 1)) swapped) resumed fin /\
+    fin.as_pc = asr.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp (SOLabel cret :: (pops ++ opts))) /\
+    sym_steps prog env (1 + LENGTH (execute_plan cpl.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin /\
+    sym_frame_inv prog env unit.cu_context cpl f.cf_fn ret srest labs0
+      (release_dead_spills (live_vars_at liveness f.cf_state.vs_current_bb (k + 1)) swapped) fin sfin` by
+    (irule sym_invoke_return_frame_numeric >>
+     simp[] >>
+     qpat_assum `fn_frame_inv _ _ _ _ _ _ _ arranged f.cf_state mid` (irule_at Any) >>
+     qpat_assum `bind_outputs _ _ _ = SOME resumed` (irule_at Any) >>
+     qpat_assum `sym_frame_inv _ _ _ _ _ _ _ _ called asr ssr` (irule_at Any) >>
+     qpat_assum `fresh_label _ _ = (cret,called)` (irule_at Any) >>
+     qpat_assum `(if _ then _ else _) = (opts,swapped)` (irule_at Any) >>
+     qpat_assum `(if _ then _ else _) = (pops,popped)` (irule_at Any) >>
+     qpat_assum `MEM r cpl.cp_regions` (irule_at Any) >>
+     qpat_assum `mid.as_stack = REVERSE args ++ saved ++ rest` (irule_at Any) >>
+     qpat_assum `fn_return_state_rel _ _ _ _ mid asr` (irule_at Any) >>
+     gvs[APPEND]) >>
+  `resumed.vs_labels = f.cf_state.vs_labels /\
+   resumed.vs_call_ctx = f.cf_state.vs_call_ctx /\
+   resumed.vs_current_bb = f.cf_state.vs_current_bb` by
+    (drule invoke_bind_frame_fields >>
+     Cases_on `rv.iret_adopt_fmp` >>
+     simp[adopt_return_fmp_def, merge_callee_state_def] >>
+     disch_then (fn th => once_rewrite_tac [th]) >> simp[]) >>
+  `~is_terminator f.cf_inst.inst_opcode /\
+   (!j. ~revert_forward_pair bb k j)` by
+    (conj_tac >- simp[is_terminator_def] >>
+     gen_tac >> disch_tac >>
+     qpat_x_assum `revert_forward_pair bb k j` mp_tac >>
+     simp[revert_forward_pair_def, get_instruction_def]) >>
+  `fin.as_pc = ast.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp
+     (decomp_iops ++ decomp_rops ++
+      [SOPushLabel cret; SOPushLabel nm; SOEmit "JUMP"; SOLabel cret] ++ pops ++ opts))` by
+    (fs[execute_plan_append, execute_plan_def, exec_stack_op_def] >> decide_tac) >>
+  drule body_plan_advance_core >>
+  qpat_assum `bb.bb_label = _` (fn th => rewrite_tac [th]) >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME _`)) >>
+  disch_then (qspecl_then [`resumed`, `next_rest`, `fin`] mp_tac) >>
+  impl_tac
+  >- (simp[non_param_insts_def, APPEND_ASSOC] >>
+      metis_tac[non_param_insts_def, APPEND_ASSOC]) >>
+  strip_tac >>
+  qexistsl_tac [`1 + LENGTH (execute_plan cpl.cp_initial_fmp (pops ++ opts))`,
+    `fin`, `sfin`] >>
+  simp[] >>
+  qpat_assum `frame_stack_symbolic_plan _ _ _ _ _ _ _ stk _ _ _ _ _ _ _ _ _`
+    (irule_at Any) >>
+  pure_rewrite_tac[active_frame_symbolic_plan_def] >>
+  qpat_assum `f.cf_state.vs_inst_idx = k` (fn th => rewrite_tac [th]) >>
+  first_assum (irule_at Any) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem body_plan_symbolic_jnz_step:
