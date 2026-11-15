@@ -87,19 +87,14 @@ Proof
   metis_tac[]
 QED
 
-Theorem abi_valid_allocated_bulk_sequence:
+Theorem abi_valid_allocated_bulk_count:
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
   abi_valid_allocated_entry H ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
-  ?actual. run_inst_seq (emitted_insts st en) s = OK actual /\
-    val_in_memory (ArrayTV tv (Dynamic maxn)) v d actual.vs_memory /\
-    abi_decode_frame d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) s actual /\
-    fresh_vars_wrt ceiling actual /\ actual.vs_allocas = s.vs_allocas /\
-    actual.vs_alloca_next = s.vs_alloca_next /\ actual.vs_halted = s.vs_halted /\
-    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op actual = SOME w)
+  ?vs. v = ArrayV (DynArrayV vs) /\ all_have_type tv vs /\
+    LENGTH vs <= maxn /\ mload (B+p) s = n2w (LENGTH vs)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qhdtm_assum `abi_valid_allocated_entry`
@@ -116,6 +111,45 @@ Proof
     (Cases_on `v` >> fs[Once value_has_type_def] >>
      rename1 `value_has_type _ (ArrayV a)` >> Cases_on `a` >> fs[Once value_has_type_def]) >>
   pop_assum strip_assume_tac >>
+  `?avs. vyper_to_abi_same env ty vs = SOME avs /\
+    dec (Array NONE (vyper_to_abi_type env ty)) (DROP p xs) = ListV avs` by
+    (qpat_x_assum `vyper_to_abi env (ArrayT _ _) _ = _` mp_tac >>
+     asm_simp_tac bool_ss [Once vyper_to_abi_def, vyper_to_abi_type_def] >>
+     simp_tac bool_ss [AllCaseEqs(), optionTheory.NOT_NONE_SOME, optionTheory.SOME_11] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `mem_bytes_at (B+p) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs))) s.vs_memory =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by metis_tac[] >>
+  drule_all static_dynarray_source_windows >> strip_tac >>
+  qexists_tac `vs` >> fs[mload_def, mem_word_at_def, mem_bytes_at_def]
+QED
+
+
+Theorem abi_valid_allocated_bulk_sequence:
+  type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
+    DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
+  abi_valid_allocated_entry H ce env sf (ArrayT ty (Dynamic maxn))
+    (ArrayTV tv (Dynamic maxn)) v ctx func cenv cx es
+    st en base_op hi src dst B L xs p d dstid live ceiling s ==>
+  ?actual. run_inst_seq (emitted_insts st en) s = OK actual /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) v d actual.vs_memory /\
+    abi_decode_frame d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) s actual /\
+    fresh_vars_wrt ceiling actual /\ actual.vs_allocas = s.vs_allocas /\
+    actual.vs_alloca_next = s.vs_alloca_next /\ actual.vs_halted = s.vs_halted /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op actual = SOME w)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_valid_allocated_bulk_count >> strip_tac >>
+  qhdtm_assum `abi_valid_allocated_entry`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_valid_allocated_entry_def]) >>
+  drule_all abi_valid_decoded_metadata >>
+  simp_tac bool_ss [abi_decoder_metadata_def] >> strip_tac >>
+  `DecDynArray ei abi_sz mem_sz F maxn = type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))` by simp[] >>
+  drule_all abi_decoder_bulk_metadata >> strip_tac >>
+  `~is_dynamic (vyper_to_abi_type env ty)` by
+    metis_tac[static_layout_compatible_properties] >>
+  drule_all abi_valid_allocated_bulk_window >> simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_decoder_typed_conversion >> strip_tac >>
   `?avs. vyper_to_abi_same env ty vs = SOME avs /\
     dec (Array NONE (vyper_to_abi_type env ty)) (DROP p xs) = ListV avs` by
     (qpat_x_assum `vyper_to_abi env (ArrayT _ _) _ = _` mp_tac >>
@@ -152,9 +186,7 @@ Proof
     enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by metis_tac[] >>
   drule_all static_dynarray_source_windows >> strip_tac >>
   `abi_decode_load MLOAD (n2w (B+p) : bytes32) s = n2w (LENGTH vs)` by
-    (simp[abi_decode_load_def, mload_def, w2n_n2w] >>
-     qpat_x_assum `mem_word_at (B+p) _ = _` mp_tac >>
-     simp[mem_word_at_def, mem_bytes_at_def]) >>
+    simp[abi_decode_load_def, w2n_n2w] >>
   `compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),en)` by metis_tac[] >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
