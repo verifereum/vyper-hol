@@ -3,6 +3,7 @@ Ancestors
   sourceCallCount
   sourceCallCountMonotone
   sourceCallCountEntryReplay
+  sourceCallCountWitness
   sourceCallCountWitnessTest
   vyperFiniteStoragePreservation
   vyperLogPreservation

@@ -6,7 +6,8 @@
 Theory loweringCallBudgetHistory
 Ancestors
   ptrDiscipline ptrSafeRun gasOutcomeFull gasEvents gasExplicitSites
-  sourceCallCount loweringStateRelDefs compileVyper vyperCompiler
+  sourceCallCount sourceCallCountEntryReplay sourceCallCountMonotone
+  sourceCallCountWitness loweringStateRelDefs compileVyper vyperCompiler
   o1PassContract fragGasOriginPtr contextRawReachable
   vyperLoweringCorrect e2eDefs exprSimHypsDefs lowerDloadDefs
   list rich_list arithmetic pred_set
