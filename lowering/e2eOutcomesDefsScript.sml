@@ -29,11 +29,9 @@ End
    or the request's failure. *)
 Definition s1_request_prefix_def:
   s1_request_prefix tops <=>
-    !rpolicy unit.
+    !rpolicy unit am tx ret vs.
       lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-      supported_program tops ==>
-      ?shadow_ctx. !am tx ret vs.
-      source_typing_ok tops am tx /\
+      supported_program tops /\ source_typing_ok tops am tx /\
       source_deployment_rel tops am tx /\
       valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
       initial_venom_state_rel tops am tx vs /\
@@ -41,8 +39,7 @@ Definition s1_request_prefix_def:
       EVERY (\oc. LENGTH oc.co_returnData < dimword(:256) /\
                   accounts_runtime_well_typed oc.co_accounts) vs.vs_outcomes ==>
       ?marks.
-        source_unit_execution_correct_with shadow_ctx marks
-          tops ret am tx unit vs /\
+        source_unit_execution_correct_at marks tops ret am tx unit vs /\
         !tail res am' rqs obs obs_pre rq outcome sfx H.
           call_external_trace (SOME vs.vs_outcomes)
             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx =

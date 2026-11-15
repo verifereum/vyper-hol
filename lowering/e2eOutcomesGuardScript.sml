@@ -115,13 +115,8 @@ Proof
     (simp[] >> irule call_trace_outcomes_bounded >> fs[call_state_rel_def]) >>
   qpat_x_assum `s1_request_prefix tops` mp_tac >>
   simp[ s1_request_prefix_def] >>
-  disch_then (qspecl_then [`rpolicy`, `unit`] mp_tac) >>
-  impl_tac >- simp[] >>
-  disch_then (qx_choose_then `shadow_ctx`
-    (qspecl_then [`am`, `tx`, `ret`, `vs_in`] mp_tac)) >>
+  disch_then (qspecl_then [`rpolicy`, `unit`, `am`, `tx`, `ret`, `vs_in`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
-  `source_unit_execution_correct_at marks tops ret am tx unit vs_in` by
-    (simp[source_unit_execution_correct_at_with] >> metis_tac[]) >>
   qexistsl_tac [`vs_in`, `marks`] >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       qpat_assum `!D. dead_wf D ==> _` (qspec_then `D` mp_tac) >> simp[]) >>
