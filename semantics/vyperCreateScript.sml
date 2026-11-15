@@ -18,7 +18,7 @@ Ancestors
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
   vyperContext vyperState vyperEvmBoundary vyperRuntimeAccounts
-  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar]
+  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar] constSubst vyperOriginFold
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -231,23 +231,35 @@ Definition blueprint_size_ok_def:
   blueprint_size_ok n = (0i < w2i (n2w n : bytes32))
 End
 
+Definition blueprint_literal_offset_def:
+  blueprint_literal_offset cx has_salt es =
+    case DROP (if has_salt then 3 else 2) es of
+      [] => F
+    | e::_ =>
+        let env = case get_module_code cx NONE of
+                    SOME tops => module_consts_env tops []
+                  | NONE => [] in
+        is_int_literal (origin_fold_value (subst_consts_expr env e))
+End
+
 Definition blueprint_prefix_size_def:
-  blueprint_prefix_size has_salt vs accounts =
+  blueprint_prefix_size has_salt literal_offset vs accounts =
     case dest_create_args (CreateFromBlueprint F) has_salt vs of
     | NONE => NONE
     | SOME ops =>
-        case (ops.co_code_src, ops.co_code_offset) of
-        | (AddressCodeSource target, SOME offset) =>
-            let n = blueprint_copy_size offset
-              (lookup_account target accounts).code in
-            if blueprint_size_ok n then SOME n else NONE
+        case (ops.co_code_src,ops.co_code_offset) of
+        | (AddressCodeSource target,SOME offset) =>
+            let code = (lookup_account target accounts).code in
+            let n = blueprint_copy_size offset code in
+            if (if literal_offset then blueprint_size_ok n
+                else offset < LENGTH code) then SOME n else NONE
         | _ => NONE
 End
 
 Definition check_create_blueprint_def:
-  check_create_blueprint has_salt vs = do
+  check_create_blueprint has_salt literal_offset vs = do
     accounts <- get_accounts;
-    lift_option (blueprint_prefix_size has_salt vs accounts)
+    lift_option (blueprint_prefix_size has_salt literal_offset vs accounts)
       "create source has no deployable code"
   od
 End
@@ -279,6 +291,7 @@ val () = cv_auto_trans blueprint_copy_size_def;
 val () = cv_auto_trans blueprint_initcode_def;
 val () = cv_auto_trans raw_create_initcode_def;
 val () = cv_auto_trans blueprint_size_ok_def;
+val () = cv_auto_trans blueprint_literal_offset_def;
 val () = cv_auto_trans blueprint_prefix_size_def;
 val () = check_create_blueprint_def
   |> SRULE [FUN_EQ_THM, bind_def, get_accounts_def, return_def,
@@ -287,7 +300,7 @@ val () = check_create_blueprint_def
   |> cv_auto_trans;
 
 Theorem check_create_blueprint_state[simp]:
-  SND (check_create_blueprint has_salt vs st) = st
+  SND (check_create_blueprint has_salt literal_offset vs st) = st
 Proof
   simp[check_create_blueprint_def, bind_def, get_accounts_def,
        lift_option_def, return_def, raise_def, AllCaseEqs()] >>
@@ -356,7 +369,7 @@ Definition build_create_code_def:
                 SOME <|
                   cc_initcode := if size_ok then
                     blueprint_initcode n code_offset code args_enc else [];
-                  cc_source_ok := blueprint_size_ok n;
+                  cc_source_ok := (IS_SOME blueprint_size \/ blueprint_size_ok n);
                   cc_size_ok := size_ok
                 |>)
      | _ => NONE) /\

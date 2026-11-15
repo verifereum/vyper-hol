@@ -3251,10 +3251,10 @@ Resume eval_storage_well_formed_on_mutual[FiniteBlueprint]:
   Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
   rename1 `eval_exprs _ _ st = (prefix_res,prefix_st)` >>
   Cases_on `prefix_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]
-  >- (Cases_on `check_create_blueprint has_salt x prefix_st` >>
-      rename1 `check_create_blueprint _ _ _ = (gate_res,gate_st)` >>
+  >- (Cases_on `check_create_blueprint has_salt (blueprint_literal_offset cx has_salt es) x prefix_st` >>
+      rename1 `check_create_blueprint _ _ _ _ = (gate_res,gate_st)` >>
       `gate_st = prefix_st` by
-        (qpat_assum `check_create_blueprint _ _ _ = _`
+        (qpat_assum `check_create_blueprint _ _ _ _ = _`
           (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
       qpat_x_assum `gate_st = prefix_st` SUBST_ALL_TAC >>
       Cases_on `gate_res` >> simp_tac(srw_ss())[bind_apply, LET_THM]

@@ -18,13 +18,13 @@ Libs
   wordsLib monadsyntax
 
 Theorem check_create_blueprint_result_state:
-  check_create_blueprint has_salt vs st = (res, st') ==> st' = st
+  check_create_blueprint has_salt literal_offset vs st = (res, st') ==> st' = st
 Proof
   metis_tac[check_create_blueprint_state, pairTheory.SND]
 QED
 
 Theorem check_create_blueprint_exception_is_error:
-  check_create_blueprint has_salt vs st = (INR ex, st') ==>
+  check_create_blueprint has_salt literal_offset vs st = (INR ex, st') ==>
   ?err. ex = Error err
 Proof
   simp[check_create_blueprint_def, bind_def, get_accounts_def,
@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem check_create_blueprint_no_type_error:
-  check_create_blueprint has_salt vs st = (res, st') ==>
+  check_create_blueprint has_salt literal_offset vs st = (res, st') ==>
   !msg. res <> INR (Error (TypeError msg))
 Proof
   simp[check_create_blueprint_def, bind_def, get_accounts_def,

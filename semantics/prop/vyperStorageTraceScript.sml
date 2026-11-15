@@ -900,7 +900,7 @@ Proof
 QED
 
 Theorem storage_trace_frame_check_create_blueprint:
-  !has_salt vs. storage_trace_frame (check_create_blueprint has_salt vs)
+  !has_salt literal_offset vs. storage_trace_frame (check_create_blueprint has_salt literal_offset vs)
 Proof
   rpt gen_tac >> pure_rewrite_tac[check_create_blueprint_def] >>
   irule storage_trace_frame_bind_all >>
