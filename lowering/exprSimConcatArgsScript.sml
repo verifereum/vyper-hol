@@ -875,9 +875,8 @@ QED
 Theorem concat_args_sim:
   !args P k ctx func cenv cx env nocalls st0 es sa sb s0 dv ov ow
    binst B bsz oinst.
-    compile_concat compile_expr cenv args (Var dv) (MAP (\e. let ety = expr_type e in
-                if is_bytestring_type ety then (T, 0:num)
-                else case ety of
+    compile_concat compile_expr cenv args (Var dv) (MAP (\e. if is_bytestring_type (expr_type e) then (T, 0:num)
+                else case expr_type e of
                        BaseT (BytesT (Fixed m)) => (F, m)
                      | _ => (F, 32:num)) args)
       (Var ov) sa = ((), sb) /\
@@ -942,7 +941,8 @@ Theorem concat_args_sim:
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\H rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r)
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit H cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -974,7 +974,7 @@ Proof
     (drule (cj 2 compile_expr_grows) >> simp[ci_mono_def]) >>
   `ci_mono s1 sb` by
     (qspecl_then [`cenv`, `e`, `args`, `dv`, `ov`, `sa`, `sb`, `op`, `s1`]
-       mp_tac concat_cons_mono >>
+       mp_tac (SIMP_RULE bool_ss [LET_THM] concat_cons_mono) >>
      impl_tac >- (rpt conj_tac >- first_assum ACCEPT_TAC
                   >- first_assum ACCEPT_TAC >> metis_tac[]) >>
      disch_then ACCEPT_TAC) >>
@@ -1054,7 +1054,7 @@ Resume concat_args_sim[head_normal]:
                `ctx`, `func`, `cenv`, `cx`, `e`, `args`, `es`, `sa`, `s1`, `sb`,
                `s0`, `es_end with gas_obs := []`, `v`, `op`, `t`, `B`, `bsz`,
                `ow`, `k`, `P`, `binst`, `oinst`, `dv`, `ov`, `tv`]
-    mp_tac (Q.GEN `H` concat_head_arm) >>
+    mp_tac (Q.GEN `H` (SIMP_RULE bool_ss [LET_THM] concat_head_arm)) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -1139,7 +1139,7 @@ QED
 Resume concat_args_sim[head_exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
   `expr_exit res r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
      simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>
@@ -1150,10 +1150,12 @@ Resume concat_args_sim[head_exit]:
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   (* Rewrite only the goal: gvs[] over this context was too slow for one
      step. *)
-  disj2_tac >> simp[] >>
+  disj2_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qspec_then `H` mp_tac) >> simp[] >>
   qpat_x_assum `expr_exit _ r` mp_tac >>
-  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def, halt_exit_def]
 QED
 
 Resume concat_args_sim[head_exempt]:
@@ -1325,9 +1327,11 @@ QED
 Resume concat_args_sim[tail_exit]:
   qpat_x_assum `(\rr ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
   `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
        (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac) >>
-     simp[]) >>
+     impl_tac >- simp[] >>
+     disch_then (qx_choose_then `exc` strip_assume_tac) >>
+     qexists_tac `exc` >> conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>

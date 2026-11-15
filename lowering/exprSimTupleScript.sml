@@ -1393,7 +1393,9 @@ Proof
       simp[] >> conj_tac
       >- (rewrite_tac[tuple_source] >> irule gas_marked_exec_bind_exception >>
           simp[]) >>
-      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
+      gvs[] >> disj2_tac >> rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
+        (qspec_then `H` mp_tac) >> simp[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[tuple_exempt_cert]
 QED
 

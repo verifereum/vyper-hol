@@ -49,7 +49,10 @@ Proof
         t.vs_inst_idx = LENGTH sa.cs_current_insts` >>
       conj_tac
       >- (simp[wb_args_post_def, abi_args_post_nil] >> metis_tac[]) >>
-      irule lower_word_args_nil_sim >> simp[] >> metis_tac[])
+      drule_all lower_word_args_nil_sim >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def,
+                  gasSummaryTheory.gas_summary_at_def] >>
+      strip_tac >> qexists_tac `marks` >> metis_tac[])
   >> rpt strip_tac
   >> rename1 `abi_args_ready ctx func ce cx Inv (e::args)`
   >> gvs[abi_args_compile_cons, listTheory.EVERY_DEF]

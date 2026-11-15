@@ -172,5 +172,8 @@ Theorem aggregate_buffer_alloc_counted_mem:
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     b + sz <= t.vs_alloca_next
 Proof
-  strip_tac >> drule_all aggregate_buffer_alloc_counted_mem_any_block >> simp[]
+  strip_tac >> drule_all aggregate_buffer_alloc_counted_mem_any_block >>
+  disch_then (qx_choosel_then [`inst`, `x`, `t`, `b`] strip_assume_tac) >>
+  qexistsl_tac [`inst`, `x`, `t`, `b`] >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >> metis_tac[]
 QED

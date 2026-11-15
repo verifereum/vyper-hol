@@ -216,7 +216,8 @@ Proof
   strip_tac >>
   `!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE` by metis_tac[] >>
   drule return_observer_context_reachable >> strip_tac >>
-  simp[fmp_room_def, EXISTS_MEM] >> metis_tac[]
+  simp[fmp_room_def, ptrDisciplineTheory.ctx_has_dalloca_def,
+       return_observer_context_def, EXISTS_MEM] >> metis_tac[]
 QED
 
 Theorem return_observer_complete_no_dynamic:
@@ -395,7 +396,8 @@ Theorem return_observer_prefix_fmp_room:
   t.vs_fmp = s.vs_fmp ==>
   fmp_room ctx fn t
 Proof
-  strip_tac >> irule fmp_room_static_charge >>
+  strip_tac >> drule local_prefix_memory_frame >> strip_tac >>
+  irule fmp_room_static_charge >>
   qexists_tac `s` >> simp[] >>
   irule return_observer_prefix_static_charge >> metis_tac[]
 QED

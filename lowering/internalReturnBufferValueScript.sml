@@ -15,7 +15,7 @@ QED
 
 Theorem compile_internal_return_buffer_value_frag:
   !H ctx func cenv cx es ty sty tv stv v val_op rpc elem_types buf_op sa su sb bw.
-    compile_return_unlock cenv sa = ((),su) /\
+    ~cx.txn.is_static /\ compile_return_unlock cenv sa = ((),su) /\
     compile_internal_return cenv (SOME val_op) rpc cenv.ce_returns_count
       ty sty elem_types (SOME buf_op) su = ((),sb) /\
     cenv.ce_returns_count = 0 /\

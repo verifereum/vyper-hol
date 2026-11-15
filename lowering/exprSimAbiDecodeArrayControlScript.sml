@@ -192,6 +192,8 @@ Proof
   simp_tac bool_ss [decode_site_effect_def] >>
   conj_tac
   >- (irule decode_site_resources_fields >> qexists `s` >>
+      qspecl_then [`slot`, `w`, `s`] mp_tac
+        venomMemPropsTheory.mstore_memory_nondecreasing >>
       simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]) >>
   conj_tac >- simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
   conj_tac >- simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
@@ -249,6 +251,8 @@ Proof
      irule abi_decoder_operand_live_mono >> qexists `st.cs_next_var` >> fs[EVERY_MEM]) >>
   `decode_site_resources ctx func t` by
     (irule decode_site_resources_fields >> qexists `s` >>
+     qspecl_then [`slot`, `w`, `s`] mp_tac
+       venomMemPropsTheory.mstore_memory_nondecreasing >>
      simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]) >>
   `t.vs_memory = (mstore slot w s).vs_memory` by
     simp[Abbr `t`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
