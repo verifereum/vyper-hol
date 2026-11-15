@@ -74,7 +74,7 @@ Proof
       >- (`~storage_trace_domain cx st0 es_end.storage_trace` by
             (simp[vyperStorageFootprintTheory.storage_trace_domain_def] >>
              strip_tac >>
-             qpat_x_assum `!H. _ ==> expr_exit _ _`
+             qpat_x_assum `!H. _ ==> expr_exit _ _ /\ _`
                (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
              simp[expr_exit_def]) >>
           qexists_tac `marks` >> disj1_tac >> if_out_of_domain_tac) >>
@@ -85,8 +85,8 @@ Proof
       >- (rewrite_tac[eval_stmt_if_forced] >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
       disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
-      qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H` mp_tac) >>
-      simp[] >> metis_tac[expr_exit_INR_type]) >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _ /\ _` (qspec_then `H` mp_tac) >>
+      simp[halt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   drule eval_stmt_if_condition_cert >> metis_tac[]
 QED
@@ -202,7 +202,9 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
                   FLOOKUP u.vs_allocas aid = SOME bnd) /\
        return_buf_frame d cenv'' sb u /\ alloca_history func u /\
        (jump_to (if b then tl else el) t).vs_alloca_next <= u.vs_alloca_next)
-     (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
+     (\H res ee r.
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+       halt_exit H cx ee res r)` by
     (irule if_branch_outcome_mem >> simp[jump_to_def] >>
      qexistsl_tac [`after`, `FST (stmts_env cenv lctx ty (if b then ss1 else ss2) entry)`,
        `last`, `xl`] >> simp[] >>

@@ -1092,10 +1092,14 @@ Theorem forced_endpoint_bind_outcome[local]:
     gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0 (next v)
       (mid with gas_obs := [],t) Post
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)) ==>
+      (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s0) Post
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
@@ -1112,7 +1116,7 @@ Proof
       disch_then ACCEPT_TAC)
   >- suspend "next"
   >- (BETA_TAC >> rpt strip_tac >> Cases_on `res` >- fs[expr_exit_def] >>
-      rename1 `INR ex` >> qexists_tac `ex` >> simp[] >> gen_tac >>
+      rename1 `INR ex` >> qexists_tac `ex` >> fs[halt_exit_def] >> gen_tac >>
       irule expr_exit_stmt_exit >> qexists_tac `INR ex` >> simp[])
   >- (BETA_TAC >> rpt strip_tac >> qexists_tac `v` >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC
@@ -1204,7 +1208,9 @@ Theorem for_range_checked_tail_outcome[local]:
           (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,t0)
     (\H. stmt_post H ctx func cx lctx cenv cenv st sf es t0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -1507,7 +1513,7 @@ Resume for_range_checked_tail_outcome[bad_bound]:
   qexistsl_tac [`INR (Error (RuntimeError "For too long"))`, `es`,
                  `Abort Revert_abort t`] >>
   simp[gas_marked_exec_def, raise_def, exit_result_def,
-       stmt_exit_def, expr_exit_def]
+       stmt_exit_def, expr_exit_def, halt_exit_def]
 QED
 
 Resume for_range_checked_tail_outcome[bad_order]:
@@ -1523,7 +1529,7 @@ Resume for_range_checked_tail_outcome[bad_order]:
   qexistsl_tac [`INR (Error (RuntimeError "no range"))`, `es`,
                  `Abort Revert_abort t`] >>
   simp[gas_marked_exec_def, raise_def, exit_result_def,
-       stmt_exit_def, expr_exit_def]
+       stmt_exit_def, expr_exit_def, halt_exit_def]
 QED
 
 Finalise for_range_checked_tail_outcome
@@ -1765,7 +1771,9 @@ Resume compile_for_range_checked_frag_active[tail_apply]:
   `gas_outcome F (cx_tops cx) (ctx,func) cx st0 source
     (mid' with gas_obs := [],t')
     (\H. stmt_post H ctx func cx lctx cenv cenv s2 sb (mid' with gas_obs := []) t')
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)` by
     (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
      simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>
      simp[] >> suspend "tail_hyps") >>

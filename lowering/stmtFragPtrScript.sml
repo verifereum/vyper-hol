@@ -287,7 +287,7 @@ Resume compile_expr_stmt_frag_ok_ptr[summary]:
   simp[gas_marked_exec_ptr_def] >> strip_tac >> fs[] >>
   conj_tac >- metis_tac[eval_expr_stmt_exception] >>
   disj2_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type]
+  fs[expr_exit_INR_type, halt_exit_def]
 QED
 
 Resume compile_expr_stmt_frag_ok_ptr[normal]:
