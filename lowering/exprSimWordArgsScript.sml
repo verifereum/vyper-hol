@@ -549,7 +549,7 @@ Theorem expr_sim_apply:
         expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rewrite_tac[expr_sim_def] >> rpt strip_tac >>
   first_x_assum irule >> asm_rewrite_tac[]
@@ -627,7 +627,7 @@ Theorem lower_word_args_nil_sim:
          pure_frame cenv func es sa s0 t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -763,7 +763,7 @@ Theorem lower_word_args_sim:
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -880,7 +880,7 @@ Resume lower_word_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume lower_word_args_sim[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -946,7 +946,7 @@ Resume lower_word_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume lower_word_args_sim[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
@@ -1160,6 +1160,11 @@ Resume compile_word_builtin_sim[normal]:
      fs[EVERY_MEM, EXISTS_MEM, combinTheory.o_DEF]) >>
   drule_all word_builtin_continuation_summary >>
   rewrite_tac[gas_summary_at_def] >> strip_tac >>
+  `res <> INR HaltException` by
+    (qpat_x_assum `gas_marked_exec _ _ (\st. _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[builtin_result_def] >> CASE_TAC >> strip_tac >> gvs[]) >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   asm_simp_tac (srw_ss()) [eval_expr_builtin_action, gas_summary_at_def] >>
   qexistsl_tac [`res`,`es_end'`,`r`] >>
@@ -1167,7 +1172,7 @@ Resume compile_word_builtin_sim[normal]:
    >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                 |> REWRITE_RULE [APPEND_NIL]) >>
        qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _` (irule_at Any) >>
-       gvs[]) >> gvs[] >> metis_tac[])
+       gvs[]) >> gvs[halt_exit_def] >> metis_tac[])
 QED
 Resume compile_word_builtin_sim[exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -1177,7 +1182,7 @@ Resume compile_word_builtin_sim[exit]:
   asm_simp_tac (srw_ss()) [eval_expr_builtin_action, gas_summary_at_def] >>
   qexistsl_tac [`INR y`,`es_end`,`r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 Resume compile_word_builtin_sim[exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
