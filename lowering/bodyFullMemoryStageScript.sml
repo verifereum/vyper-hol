@@ -51,6 +51,19 @@ Theorem body_full_memory_stage_path:
     allocas_from lo t /\ lo <= t.vs_alloca_next /\
     (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
       FLOOKUP t.vs_allocas aid = SOME ent) /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\
+    t.vs_immutables = s.vs_immutables /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    tf.t_imm = tn.t_imm /\
+    (!i. ~(b <= i /\ i < b+n) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!aid a len. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+      regions_disjoint b n a len) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
     (!x. not_fresh_at sa x ==>
       not_fresh_at sb x /\ lookup_var x t = lookup_var x s /\
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
@@ -92,15 +105,18 @@ Proof
     (SPEC_ALL body_full_memory_copy_path)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `typed_copy_state_frame sm _ _ u t` >>
+  `t.vs_call_ctx = u.vs_call_ctx /\ t.vs_immutables = u.vs_immutables /\
+   t.vs_accounts = u.vs_accounts /\ t.vs_transient = u.vs_transient /\
+   t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
+    (qpat_assum `typed_copy_state_frame _ _ _ _ _`
+       (mp_tac o AP_TERM ``\z. (z.vs_call_ctx,z.vs_immutables,z.vs_accounts,
+          z.vs_transient,z.vs_allocas,z.vs_alloca_next)`` o CONJUNCT1 o
+        REWRITE_RULE [typed_copy_state_frame_def]) >> simp[]) >>
   `!D d. ghost_inv_at D lo d cenv cx es G tn s ==>
     ghost_inv_at D lo d cenv cx es Gf tf t` by suspend "ghost" >>
   `ci_mono sm sb` by metis_tac[ci_mono_compile_copy_memory,pairTheory.SND] >>
   `!x. not_fresh_at sm x ==> not_fresh_at sb x` by
     (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
-  `t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
-    (qpat_assum `typed_copy_state_frame _ _ _ _ _`
-       (mp_tac o AP_TERM ``\z. (z.vs_allocas,z.vs_alloca_next)`` o
-        CONJUNCT1 o REWRITE_RULE [typed_copy_state_frame_def]) >> simp[]) >>
   `lookup_var root t = SOME (n2w b) /\
    FLOOKUP Gf root = FLOOKUP G1 root /\
    op_taint tf (Var root) = op_taint tn1 (Var root)` by metis_tac[] >>
@@ -121,6 +137,22 @@ Proof
   `allocas_from lo t` by (fs[allocas_from_def] >> metis_tac[]) >>
   qpat_assum `w2n ((n2w b):bytes32) = b`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `!i. ~(b <= i /\ i < b+n) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)` by
+    (qx_gen_tac `i` >> strip_tac >>
+     qpat_assum `typed_copy_state_frame _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE
+         [typed_copy_state_frame_def,typed_copy_frame_def]) >>
+     qpat_assum `!a len. a+len <= b \/ b+n <= a ==> _`
+       (qspecl_then [`i`,`1`] mp_tac) >>
+     (impl_tac >-
+       (irule (DECIDE ``!b i n:num.
+         ~(b <= i /\ i < b+n) ==> i+1 <= b \/ b+n <= i``) >> simp[])) >>
+     qpat_assum `!i. _ ==> (i IN tf.t_mem <=> i IN tn1.t_mem)`
+       (qspec_then `i` mp_tac) >>
+     qpat_assum `!i. _ ==> (i IN tn1.t_mem <=> i IN tn.t_mem)`
+       (qspec_then `i` mp_tac) >> simp[]) >>
   `!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint b n a len` by
     (qpat_assum `!name a len. local_region cenv es.scopes u name a len ==> _` mp_tac >>
@@ -181,13 +213,6 @@ Resume body_full_memory_stage_path[ghost]:
   `ghost_inv_at D lo d cenv cx es G1 tn1 u` by metis_tac[] >>
   qpat_assum `w2n ((n2w b):bytes32) = b`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  `t.vs_call_ctx = u.vs_call_ctx /\ t.vs_immutables = u.vs_immutables /\
-   t.vs_accounts = u.vs_accounts /\ t.vs_transient = u.vs_transient /\
-   t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
-    (qpat_assum `typed_copy_state_frame _ _ _ _ _`
-       (mp_tac o AP_TERM ``\z. (z.vs_call_ctx,z.vs_immutables,z.vs_accounts,
-          z.vs_transient,z.vs_allocas,z.vs_alloca_next)`` o CONJUNCT1 o
-        REWRITE_RULE [typed_copy_state_frame_def]) >> simp[]) >>
   `allocas_from lo t /\ lo <= t.vs_alloca_next` by
     (fs[allocas_from_def] >> metis_tac[]) >>
   `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
