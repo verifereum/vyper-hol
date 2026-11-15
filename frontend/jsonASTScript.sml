@@ -66,6 +66,7 @@ Datatype:
   | JE_Str num string                                  (* length, value *)
   | JE_GenericStr string                               (* generic string, no length *)
   | JE_Bytes num string                                (* length, hex value *)
+  | JE_HexBytes num string                             (* distinct pin source class *)
   | JE_Hex string json_type                            (* hex value and compiler type *)
   | JE_Bool bool                                       (* True/False *)
   | JE_Ellipsis                                        (* interface stub body *)
