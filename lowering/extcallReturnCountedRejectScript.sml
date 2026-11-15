@@ -10,7 +10,7 @@ Ancestors
   venomExecSemantics localPtrsProps list finite_map words
 
 (* The corresponding success-side fact is local to its theory. *)
-Theorem return_reject_stmt_control[local]:
+Theorem return_reject_stmt_control:
   stmt_state_rel H ctx func ce cx es (s with vs_current_bb := b) =
   stmt_state_rel H ctx func ce cx es s
 Proof
@@ -27,7 +27,7 @@ Proof
        pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
-Theorem return_reject_entry_control[local]:
+Theorem return_reject_entry_control:
   abi_malformed_entry H ctx func ce cx es st sites dstid live
     base_op hi src dst B len xs p d n s ==>
   abi_malformed_entry H ctx func ce cx es (start_relabel L ids st)
