@@ -597,6 +597,17 @@ Proof
   gvs[mem_inv_raw_reachable] >> metis_tac[]
 QED
 
+Theorem dft_packet_active_block:
+  wf_function sf /\ active_inst sf inst u /\
+  lookup_block lbl sf.fn_blocks = SOME bb /\ MEM inst bb.bb_instructions ==>
+  u.vs_current_bb = bb.bb_label
+Proof
+  rpt strip_tac >>
+  gvs[contextCodegenRelTheory.active_inst_def] >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  metis_tac[venomWfPropsTheory.wf_function_instruction_block, MEM_EL]
+QED
+
 Theorem dft_packet_cut_instruction:
   bb.bb_instructions = ps ++ xs /\
   EVERY (\i. ~is_pseudo i.inst_opcode) xs /\ q < LENGTH xs /\
@@ -615,8 +626,8 @@ Proof
   `phi_prefix_length ps - LENGTH ps = 0` by decide_tac >> simp[]
 QED
 
-(* Preserved assembly input for C1.2.8.3; not a theorem export.
-   The term and tactic are delayed until the assembly proof is completed. *)
+(* Unfinished source projection: preserve its term and tactic without
+   executing or exporting a theorem until the proof is completed. *)
 fun pending_dft_packet_source_projection () =
  (``
   (!N C7 C8 root_sf root_tf root_entry packet acts blocks calls
@@ -778,6 +789,130 @@ Proof
        venomEffectsTheory.opcode_fail_class_def, venomInstTheory.is_pseudo_def]
 QED
 
+Theorem dft_packet_invoke_fallible_order[local]:
+  !x y. x.inst_opcode = INVOKE /\ (is_fallible y \/ y.inst_opcode = INVOKE) ==>
+    ~dft_abort_compatible x.inst_opcode y.inst_opcode \/ dft_must_order x y
+Proof
+  rpt gen_tac >> Cases_on `y.inst_opcode` >>
+  simp[dftDefsTheory.is_fallible_def, venomEffectsTheory.opcode_fail_class_def,
+       dftDefsTheory.dft_abort_compatible_def, dftDefsTheory.dft_abort_kind_def,
+       dftScheduleOrderTheory.dft_must_order_def,
+       venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+       venomEffectsTheory.all_effects_def, venomInstTheory.is_terminator_def,
+       pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem dft_packet_id_before_take[local]:
+  !l k a. ALL_DISTINCT l /\ k < LENGTH l /\
+    id_before l a (EL k l) ==> MEM a (TAKE k l)
+Proof
+  rpt strip_tac >>
+  gvs[dftScheduleOrderTheory.id_before_def] >>
+  `j = k` by metis_tac[EL_ALL_DISTINCT_EL_EQ] >>
+  gvs[] >> simp[MEM_EL] >> qexists_tac `i` >> simp[EL_TAKE]
+QED
+
+Theorem dft_packet_schedule_predecessors:
+  !sf tf bb bt ps xs ys rho count q.
+  dft_fn_rel sf tf /\
+  lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+  lookup_block bb.bb_label tf.fn_blocks = SOME bt /\
+  bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+  EVERY (\x. is_pseudo x.inst_opcode) ps /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) xs /\
+  EVERY (\x. ~is_pseudo x.inst_opcode) ys /\
+  LENGTH xs = LENGTH ys /\ PERM rho (COUNT_LIST (LENGTH xs)) /\
+  LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
+    from_block [EL q xs] y) rho ys /\
+  count < LENGTH ys /\ q = EL count rho /\ EL q xs = EL count ys /\
+  (is_fallible (EL q xs) \/ (EL q xs).inst_opcode = INVOKE) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+  (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+    MEM r (TAKE count rho))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `PERM sched (COUNT_LIST (LENGTH xs))` >>
+  rename1 `q = EL pos sched` >>
+  `wf_function sf` by fs[dftRunRelTheory.dft_fn_rel_def] >>
+  `MEM bb sf.fn_blocks` by
+    metis_tac[venomExecPropsTheory.FIND_MEM, venomInstTheory.lookup_block_def] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  drule_all dft_fn_rel_lookup_order >> strip_tac >>
+  `q < LENGTH xs` by
+    (fs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions = ps /\
+   FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions = xs` by
+    (`FILTER (\i. is_pseudo i.inst_opcode) ps = ps /\
+      FILTER (\i. is_pseudo i.inst_opcode) xs = [] /\
+      FILTER (\i. ~is_pseudo i.inst_opcode) ps = [] /\
+      FILTER (\i. ~is_pseudo i.inst_opcode) xs = xs` by
+       simp[FILTER_EQ_ID, FILTER_EQ_NIL] >>
+     simp[FILTER_APPEND_DISTRIB]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) xs)` by gvs[ALL_DISTINCT_APPEND] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) ys)` by
+    (qpat_x_assum `dft_block_rel bb bt`
+      (strip_assume_tac o REWRITE_RULE [dftScheduleOrderTheory.dft_block_rel_def]) >>
+     fs[] >> metis_tac[sortingTheory.ALL_DISTINCT_PERM]) >>
+  conj_tac
+  >- (rewrite_tac[EVERY_EL] >> qx_gen_tac `n` >> disch_tac >>
+      `n < q /\ n < LENGTH xs` by (gvs[LENGTH_TAKE] >> decide_tac) >>
+      simp[EL_TAKE] >> irule dft_wf_order_nonterminator >>
+      qexistsl_tac [`bb`, `sf`, `EL q xs`] >> simp[] >>
+      conj_tac >- metis_tac[MEM_EL, MEM_APPEND] >>
+      irule id_before_append_right >>
+      simp[dftScheduleOrderTheory.id_before_def] >>
+      qexistsl_tac [`n`, `q`] >> simp[EL_MAP]) >>
+  suspend "calls"
+QED
+
+Resume dft_packet_schedule_predecessors[calls]:
+  rpt strip_tac >>
+  `r < LENGTH xs` by decide_tac >>
+  `MEM (EL r xs) bb.bb_instructions /\ MEM (EL q xs) bb.bb_instructions` by
+    metis_tac[MEM_EL, MEM_APPEND] >>
+  `~is_pseudo (EL r xs).inst_opcode /\ ~is_pseudo (EL q xs).inst_opcode` by
+    (fs[EVERY_EL] >> metis_tac[]) >>
+  `id_before (MAP (\i. i.inst_id) bb.bb_instructions)
+     (EL r xs).inst_id (EL q xs).inst_id` by
+    (simp[] >> irule id_before_append_right >>
+     simp[dftScheduleOrderTheory.id_before_def] >>
+     qexistsl_tac [`r`, `q`] >> simp[EL_MAP]) >>
+  `id_before (MAP (\i. i.inst_id) bt.bb_instructions)
+     (EL r xs).inst_id (EL q xs).inst_id` by
+    (Cases_on `dft_abort_compatible (EL r xs).inst_opcode (EL q xs).inst_opcode`
+     >- (`dft_must_order (EL r xs) (EL q xs)` by
+           metis_tac[dft_packet_invoke_fallible_order] >>
+         qpat_x_assum `dft_block_rel bb bt`
+           (strip_assume_tac o REWRITE_RULE [dftScheduleOrderTheory.dft_block_rel_def]) >>
+         fs[] >> irule id_before_append_right >> metis_tac[]) >>
+     metis_tac[]) >>
+  `~MEM (EL r xs).inst_id (MAP (\i. i.inst_id) ps) /\
+   ~MEM (EL q xs).inst_id (MAP (\i. i.inst_id) ps)` by
+    (`MEM (EL r xs).inst_id (MAP (\i. i.inst_id) xs) /\
+      MEM (EL q xs).inst_id (MAP (\i. i.inst_id) xs)` by
+       (conj_tac >> simp[MEM_MAP] >> metis_tac[MEM_EL]) >>
+     qpat_x_assum `ALL_DISTINCT (MAP _ bb.bb_instructions)` mp_tac >>
+     asm_rewrite_tac[MAP_APPEND, ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  `id_before (MAP (\i. i.inst_id) ys) (EL r xs).inst_id (EL q xs).inst_id` by
+    (qpat_x_assum `id_before (MAP _ bt.bb_instructions) _ _` mp_tac >>
+     gvs[dftScheduleOrderTheory.id_before_append_suffix]) >>
+  `MEM (EL r xs).inst_id (MAP (\i. i.inst_id) (TAKE pos ys))` by
+    (rewrite_tac[MAP_TAKE] >> irule dft_packet_id_before_take >>
+     simp[EL_MAP] >> metis_tac[]) >>
+  `?k. k < pos /\ (EL k ys).inst_id = (EL r xs).inst_id` by
+    (qpat_x_assum `MEM _ (MAP _ (TAKE pos ys))` mp_tac >>
+     simp[MEM_MAP, MEM_EL, EL_TAKE] >> (metis_tac [listTheory.EL_TAKE])) >>
+  `k < LENGTH ys` by decide_tac >>
+  qpat_x_assum `LIST_REL _ sched ys` (mp_tac o SRULE [LIST_REL_EL_EQN]) >>
+  strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
+  `EL k sched = r` by
+    (fs[EL_ALL_DISTINCT_EL_EQ] >> metis_tac[EL_MAP]) >>
+  simp[MEM_EL] >> qexists_tac `k` >> simp[EL_TAKE]
+QED
+
+Finalise dft_packet_schedule_predecessors
+
 Theorem dft_packet_guarded_cursor_structure:
   dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
     acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
@@ -846,6 +981,35 @@ Proof
   qpat_x_assum `!a sf tf inc entry order res nrest.
     FLOOKUP acts a = _ ==> _` drule >> strip_tac >>
   simp[]
+QED
+
+Theorem dft_packet_guarded_cursor:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+    inst.inst_opcode = INVOKE) /\ ~in_revert_forward fn s) ==>
+  ?sf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q z.
+    FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE) /\
+    LAST order = d /\
+    FLOOKUP blocks (p,d) =
+      SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
+    q = EL count rho /\ q < LENGTH xs /\ EL q xs = inst /\
+    z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+    (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+      MEM r (TAKE count rho))
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  drule dft_packet_guarded_cursor_structure >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `PERM sched (COUNT_LIST (LENGTH xs))` >>
+  rename1 `q = EL pos sched` >>
+  qexistsl_tac [`sf`, `inc`, `entry`, `order`, `bb`, `bt`, `ps`, `xs`, `ys`,
+    `sched`, `in_state`, `h0`, `be`, `hbe`, `pos`, `q`, `z`] >> simp[] >>
+  Cases_on `inv_memory_observation inst.inst_opcode`
+  >- metis_tac[] >>
+  irule dft_packet_schedule_predecessors >> metis_tac[]
 QED
 
 Theorem dft_packet_setup_readings:
