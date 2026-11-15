@@ -246,9 +246,9 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem inv_ev_reachable_source_initialized:
+Theorem inv_ev_reachable_source_initialized_static:
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
-  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\
   ev_reachable orc initial C p d fn inst t /\
   lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
   t.vs_inst_idx = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) ==>
@@ -299,7 +299,7 @@ Proof
   metis_tac[inv_ev_reachable_function_mem]
 QED
 
-Resume inv_ev_reachable_source_initialized[pseudo_partition]:
+Resume inv_ev_reachable_source_initialized_static[pseudo_partition]:
   qpat_x_assum `pseudos_prefix bb` mp_tac >>
   simp[pseudos_prefix_def, Abbr `pseudos`, Abbr `normal`] >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -318,4 +318,15 @@ Resume inv_ev_reachable_source_initialized[pseudo_partition]:
     simp[FILTER_EQ_ID, EVERY_MEM] >> simp[]
 QED
 
-Finalise inv_ev_reachable_source_initialized
+Finalise inv_ev_reachable_source_initialized_static
+
+Theorem inv_ev_reachable_source_initialized:
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  ev_reachable orc initial C p d fn inst t /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+  t.vs_inst_idx = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) ==>
+  dft_remaining_inv fn bb (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) t
+Proof
+  metis_tac[inv_ev_reachable_source_initialized_static]
+QED

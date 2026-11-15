@@ -59,12 +59,12 @@ Proof
       venomEffectsTheory.empty_effects_def, is_terminator_def]
 QED
 
-Theorem inv_remaining_trace_extension:
+Theorem inv_remaining_trace_extension_observation:
   !pre s.
   wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
   EVERY inst_wf bb.bb_instructions /\
   dft_remaining_inv fn bb (pre ++ y::post) s /\
-  ~s.vs_call_ctx.cc_static /\ inv_memory_observation y.inst_opcode /\
+  (~s.vs_call_ctx.cc_static \/ y.inst_opcode = INVOKE) /\ inv_memory_observation y.inst_opcode /\
   EVERY (\x. inst_shape_ok x /\ ~is_terminator x.inst_opcode /\
     ~dft_must_order x y) pre ==>
   ?t. inv_ev_trace orc p d fuel ctx pre s t /\
@@ -82,7 +82,7 @@ Proof
   `!op. MEM op h.inst_operands ==> ?v. eval_operand op s = SOME v` by
     metis_tac[inv_remaining_head_operands, IS_SOME_EXISTS] >>
   `?u. ev_step orc p d fuel ctx h s = OK u` by
-    metis_tac[inv_crossed_predecessor_total] >>
+    metis_tac[inv_crossed_predecessor_total_observation] >>
   `dft_remaining_inv fn bb (pre ++ y::post)
       (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule (SRULE [] (Q.INST [`pre` |-> `[]`] inv_remaining_ev_step)) >>
@@ -91,6 +91,21 @@ Proof
   first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
   simp[] >> strip_tac >> qexists_tac `t` >> simp[] >>
   metis_tac[inv_crossing_operand_frame]
+QED
+
+Theorem inv_remaining_trace_extension:
+  !pre s.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ y::post) s /\
+  ~s.vs_call_ctx.cc_static /\ inv_memory_observation y.inst_opcode /\
+  EVERY (\x. inst_shape_ok x /\ ~is_terminator x.inst_opcode /\
+    ~dft_must_order x y) pre ==>
+  ?t. inv_ev_trace orc p d fuel ctx pre s t /\
+    dft_remaining_inv fn bb (y::post) t /\
+    (!op. MEM op y.inst_operands ==> eval_operand op t = eval_operand op s)
+Proof
+  metis_tac[inv_remaining_trace_extension_observation]
 QED
 
 Theorem inv_entry_trace_extension:
