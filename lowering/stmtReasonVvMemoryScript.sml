@@ -282,7 +282,9 @@ Theorem raise_reason_vv_outcome:
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome T (cx_tops cx) (ctx,func) cx st0
       (eval_stmt cx (Raise (RaiseReason se))) (es, s) Q
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `cs_extends sa sm` by metis_tac[cj 1 compile_expr_grows] >>
@@ -339,14 +341,15 @@ Resume raise_reason_vv_outcome[normal]:
       simp_tac (srw_ss()) [gas_marked_path_def] >>
       metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
   disj2_tac >>
-  simp_tac (srw_ss()) [exit_result_def, stmt_exit_def, expr_exit_def]
+  simp_tac (srw_ss()) [exit_result_def, stmt_exit_def, expr_exit_def,
+                       halt_exit_def]
 QED
 
 Resume raise_reason_vv_outcome[exception]:
   `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `expr_exit res r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `H0` mp_tac) >> simp[]) >>
   Cases_on `res` >- fs[expr_exit_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >>
@@ -355,7 +358,7 @@ Resume raise_reason_vv_outcome[exception]:
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> rewrite_tac[eval_raise_reason_eq] >>
       asm_simp_tac (srw_ss()) [bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def, halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
@@ -583,7 +586,7 @@ Proof
   >~ [`exit_result _`]
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
       Cases_on `res` >- fs[expr_exit_def] >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+      fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   suspend "normal"
 QED
 
