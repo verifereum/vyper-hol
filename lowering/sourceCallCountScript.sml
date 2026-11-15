@@ -1933,7 +1933,7 @@ Proof
   simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
-Theorem fn_entry_run_truncate[local]:
+Theorem fn_entry_run_truncate:
   !n os gobs am cx nr mut mods args dflts vals fbody res fin.
     n <= LENGTH os /\
     entry_calls_within n os
