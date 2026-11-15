@@ -416,6 +416,8 @@ Proof
      (mstore (w2n w) (val_to_w256 v) s)` by
     (irule immutables_rel_mstore_alloca >>
      simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
+  `LENGTH s.vs_memory <= LENGTH (mstore (w2n w) (val_to_w256 v) s).vs_memory` by
+    simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
   irule stmt_state_rel_declare_memory >>
   simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
   simp[word_value_memory_rel] >> conj_tac
