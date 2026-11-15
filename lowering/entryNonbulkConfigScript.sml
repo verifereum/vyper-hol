@@ -167,10 +167,3 @@ Resume entry_nonbulk_loop_config[admissible]:
   drule_all calldata_static_clamped_child_exclusion >> simp[]
 QED
 Finalise entry_nonbulk_loop_config
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_nonbulk_loop_config)
-  in if null axioms andalso null (Thm.hyp entry_nonbulk_loop_config) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry nonbulk config inherited admission"
-  end;

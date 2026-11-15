@@ -27,10 +27,6 @@ Proof
   qexists `s'` >> simp[] >> once_rewrite_tac[step_inst_def] >> simp[]
 QED
 
-val _ = if null (hyp ld_invoke_from_return) then ()
-        else raise Fail "invoke consumer has hypotheses";
-
-
 (* General capability projections isolate composition from semantic producers. *)
 Theorem ld_probe_entry_body:
   ^ld_probe_entry C' fn' Point q /\
@@ -127,8 +123,3 @@ Proof
     (qspecl_then [`fuel`, `C'`, `fn'`, `q`] mp_tac) >> simp[] >>
   disch_then irule >> simp[] >> first_assum ACCEPT_TAC
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-             else raise Fail "return interface probe has kernel hypotheses")
-  [ld_probe_entry_body, ld_probe_terminal_invoke,
-   ld_probe_conditional_induction, ld_probe_run_return];

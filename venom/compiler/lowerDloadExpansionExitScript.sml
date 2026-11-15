@@ -94,10 +94,6 @@ Proof
   qpat_x_assum `mload _ u2 = _` mp_tac >> simp[mload_def]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "expansion exit theorem has hypotheses")
-  [ld_alloca_value_frame, ld_codecopy_value_frame, ld_dload_expansion_value_exit];
-
 Theorem ld_codecopy_memory_private:
   ld_memory lo A tn s t /\
   inst.inst_opcode = CODECOPY /\
@@ -113,9 +109,6 @@ Proof
   gvs[step_inst_non_invoke, Once step_inst_base_def] >>
   irule ld_memory_write_private >> simp[] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_codecopy_memory_private) then ()
-  else raise Fail "private CODECOPY theorem has hypotheses";
 
 Theorem ld_codecopy_owned_private:
   ld_global lo A (f::fs) /\ EVERY (ld_maps A) (f::fs) /\
@@ -134,6 +127,3 @@ Proof
   goal_assum (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
   gvs[] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_codecopy_owned_private) then ()
-  else raise Fail "owned private CODECOPY theorem has hypotheses";

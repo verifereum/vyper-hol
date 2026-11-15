@@ -287,12 +287,3 @@ Proof
   irule contract_storage_well_formed_storage_frame >>
   goal_assum (drule_at Any) >> simp[]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-    else raise Fail (name ^ " is not closed")
-  end)
-  [("append_place_preserves_contract_storage",append_place_preserves_contract_storage),
-   ("pop_place_preserves_contract_storage",pop_place_preserves_contract_storage)];

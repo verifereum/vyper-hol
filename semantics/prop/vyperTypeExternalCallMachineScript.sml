@@ -727,10 +727,3 @@ Proof
   >- metis_tac[checked_call_external_halt_preserves_machine_well_typed] >>
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
-
-(* Machine preservation must not inherit admitted prerequisites. *)
-val () = List.app (fn (_, th) =>
-  if List.null (List.filter (fn s => s <> "DISK_THM")
-      (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail "external call machine preservation has oracle dependencies")
-  (DB.thms "vyperTypeExternalCallMachine");

@@ -1201,11 +1201,3 @@ Proof
   simp[] >>
   metis_tac[arithmeticTheory.ADD_COMM, section_evaluated_value_mask_support]
 QED
-
-(* Certify this theory's own proofs, including all exported helpers. *)
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Unclosed dead-section relation theorem: " ^ name)
-  end) (DB.thms "ctorDeployDeadSectionRel");

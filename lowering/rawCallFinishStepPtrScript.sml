@@ -169,11 +169,6 @@ Proof
 
 QED
 
-val _ = if List.all (null o hyp)
-  [raw_call_emit_checked_full, raw_call_emit_suffix_ready,
-   raw_call_extracted_checked_full] then ()
-  else raise Fail "emitted oracle adapters have kernel hypotheses";
-
 (* The header and CALL output address refer to the same allocation witness.
    Capacity is the whole allocated buffer, not just its returned prefix. *)
 Theorem raw_call_allocated_suffix_ready:

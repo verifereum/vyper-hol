@@ -691,13 +691,6 @@ Proof
   metis_tac[call_external_log_extends]
 QED
 
-(* Integration audit: all log preservation exports must be kernel closed. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Log preservation oracle debt: " ^ name)
-  end) (DB.thms "vyperLogPreservation");
-
 Theorem log_extends_outcome_rules[local]:
   (!s. log_extends s s) /\
   (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\

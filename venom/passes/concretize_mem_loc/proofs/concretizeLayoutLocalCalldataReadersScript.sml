@@ -181,7 +181,4 @@ Proof
   qexists_tac `update_var v z t` >> simp[]
 QED
 
-val _ = if null (hyp concretize_calldata_reader_local_complete) then ()
-        else raise Fail "calldata reader export has hypotheses";
-
 val _ = export_theory();

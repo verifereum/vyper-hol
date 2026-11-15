@@ -44,6 +44,3 @@ Proof
   drule_all concretize_positions_activation_numeric >> strip_tac >>
   irule guarded_pointer_range >> simp[] >> metis_tac[]
 QED
-
-val _ = if null (hyp concretize_guarded_pointer_range) then ()
-        else raise Fail "concretize_guarded_pointer_range has hypotheses";

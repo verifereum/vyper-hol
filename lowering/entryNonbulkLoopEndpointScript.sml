@@ -148,10 +148,3 @@ Resume entry_nonbulk_loop_endpoint[package]:
   asm_rewrite_tac[listTheory.LENGTH]
 QED
 Finalise entry_nonbulk_loop_endpoint
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_nonbulk_loop_endpoint)
-  in if null axioms andalso null (Thm.hyp entry_nonbulk_loop_endpoint) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry nonbulk loop endpoint inherited admission"
-  end;

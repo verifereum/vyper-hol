@@ -41,7 +41,7 @@ Ancestors
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
-  allocaBudgetChecks
+  allocaFrontierWitness
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect

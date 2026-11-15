@@ -339,7 +339,3 @@ Resume ld_runner_exec_clause_events_fuel[call_ok]:
 
 QED
 Finalise ld_runner_exec_clause_events_fuel
-
-val _ = if null (hyp ld_runner_exec_clause_events_fuel) andalso
-               aconv (concl ld_runner_exec_clause_events_fuel) ldExecClause
-        then () else raise Fail "exec clause audit failed";

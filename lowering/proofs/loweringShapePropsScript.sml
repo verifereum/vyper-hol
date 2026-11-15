@@ -3382,21 +3382,6 @@ Proof
        operand_case_not_label]
 QED
 
-Theorem compile_array_subscript_shape[local]:
-  !internal base_op idx_op is_dynamic static_count ws elem_size signed_idx loader.
-    (!op. shape_step internal compiler_label (\st. plain_operand st op)
-       (loader op) (\v st. plain_operand st v)) ==>
-    shape_step internal compiler_label
-      (\st. plain_operand st base_op /\ plain_operand st idx_op)
-      (compile_array_subscript base_op idx_op is_dynamic static_count
-         ws elem_size signed_idx loader)
-      (\op st. plain_operand st op)
-Proof
-  rpt strip_tac >>
-  irule shape_step_conseq >> irule_at Any compile_array_subscript_shape_under >>
-  qexists_tac `\st. T` >> simp[shape_stable_def]
-QED
-
 fun stmt_bind post name first_step =
   irule shape_step_bind >> qexists_tac post >>
   reverse conj_tac >- first_step >> qx_gen_tac name >> BETA_TAC;
@@ -3692,7 +3677,7 @@ Proof
   simp[supported_expr_exists_def, expr_shape_root_def, arithmeticTheory.NOT_LESS]
 QED
 
-Theorem expr_shape_extcode_addr[local]:
+Theorem expr_shape_extcode_addr:
   ~supported_expr_exists p e /\ is_extcode e ==>
   ~supported_expr_exists p (extcode_addr_expr e)
 Proof
@@ -3875,28 +3860,6 @@ Proof
   shape_framed_tac compile_alloc_buffer_shape
 QED
 
-(* Any word loader with the plain-operand contract can be used under a
-   stable live-value frame; neither its implementation nor an opcode is needed. *)
-Theorem shape_step_loader_framed[local]:
-  shape_stable R /\
-  (!op. shape_step internal compiler_label (\st. plain_operand st op)
-     (loader op) (\v st. plain_operand st v)) ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st op)
-    (loader op) (\v st. R st /\ plain_operand st v)
-Proof
-  rpt strip_tac >> ho_match_mp_tac shape_step_frame >> simp[]
-QED
-
-Theorem compile_ptr_load_shape_framed[local]:
-  shape_stable R /\ loc <> LocCode ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st op)
-    (compile_ptr_load is_ctor imm loc op)
-    (\v st. R st /\ plain_operand st v)
-Proof
-  rpt strip_tac >> irule shape_step_loader_framed >>
-  simp[compile_ptr_load_shape]
-QED
-
 (* Consequence adaptation is shared by plain-operand primitive consumers. *)
 val shape_opcode_tac =
   simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
@@ -3917,15 +3880,6 @@ Theorem compile_store_bytestring_shape_framed[local]:
     (compile_store_bytestring val_op dst_op) (\u st. R st)
 Proof
   shape_framed_tac compile_store_bytestring_shape
-QED
-
-Theorem compile_ensure_in_memory_shape_framed[local]:
-  shape_stable R /\ loc <> LocCode ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st ptr_op)
-    (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor imm)
-    (\op st. R st /\ plain_operand st op)
-Proof
-  shape_framed_tac compile_ensure_in_memory_shape
 QED
 
 Theorem compile_copy_memory_shape_framed[local]:
@@ -4585,14 +4539,6 @@ Proof
          irule shape_step_frame_from >> irule_at Any clamp_and_return_shape >>
          qexists_tac `R` >> simp[] >> NO_TAC,
          shape_clamp_basetype_emit_tac]
-QED
-
-Theorem compile_builtin_len_shape[local]:
-  shape_stable R /\ loc <> LocCode ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st ptr_op)
-    (compile_builtin_len is_ctor imm ptr_op loc) (\v st. R st /\ plain_operand st v)
-Proof
-  simp[builtinSimpleTheory.compile_builtin_len_def, compile_ptr_load_shape_framed]
 QED
 
 Theorem compile_builtin_calldatasize_shape[local]:
@@ -5369,32 +5315,6 @@ Resume compile_abi_decode_shape_supported[decode_finish]:
 QED
 Finalise compile_abi_decode_shape_supported
 
-Theorem compile_abi_decode_shape_mload[local]:
-  (!dst src_op load_opc base_op hi_op info.
-    load_opc = MLOAD ==> !R internal. shape_stable R ==>
-    shape_step internal compiler_label
-      (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op])
-      (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info) (\u st. R st)) /\
-  (!dst src_op load_opc base_op hi_op elems abi_ofst mem_ofst.
-    load_opc = MLOAD ==> !R internal. shape_stable R ==>
-    shape_step internal compiler_label
-      (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op])
-      (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op elems abi_ofst mem_ofst)
-      (\u st. R st)) /\
-  (!dst src_op load_opc base_op hi_op info abi_sz mem_sz i_ptr cnt.
-    load_opc = MLOAD ==> !R internal. shape_stable R ==>
-    shape_step internal compiler_label
-      (\st. R st /\ EVERY (plain_operand st) [dst;src_op;base_op;hi_op;i_ptr;cnt])
-      (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op info abi_sz mem_sz i_ptr cnt)
-      (\u st. R st))
-Proof
-  conj_tac
-  >- (rpt strip_tac >> irule (cj 1 compile_abi_decode_shape_supported) >> simp[]) >>
-  conj_tac
-  >- (rpt strip_tac >> irule (cj 2 compile_abi_decode_shape_supported) >> simp[]) >>
-  rpt strip_tac >> irule (cj 3 compile_abi_decode_shape_supported) >> simp[]
-QED
-
 Theorem lower_abi_decode_shape:
   shape_stable R ==>
   shape_step internal compiler_label (\st. R st /\ plain_operand st data_op)
@@ -5823,22 +5743,6 @@ Theorem compile_mapping_subscript_shape_framed[local]:
     (compile_mapping_subscript base_slot key_op) (\v st. R st /\ plain_operand st v)
 Proof
   shape_framed_tac compile_mapping_subscript_shape
-QED
-
-(* The source invariant excludes code pointers: runtime reads emit DLOAD.
-   Non-code loaders ignore imm, so it needs no plain-operand premise. *)
-Theorem compile_array_subscript_shape_framed[local]:
-  shape_stable R /\ (!st. R st ==> loc <> LocCode) ==>
-  shape_step internal compiler_label
-    (\st. R st /\ EVERY (plain_operand st) [base_op; idx_op])
-    (compile_array_subscript base_op idx_op dynamic_array static_count
-       scale elem_size is_signed_idx (compile_ptr_load is_ctor imm loc))
-    (\v st. R st /\ plain_operand st v)
-Proof
-  strip_tac >> Cases_on `loc = LocCode`
-  >- (gvs[shape_step_def] >> metis_tac[]) >>
-  shape_framed_tac compile_array_subscript_shape >>
-  simp[compile_ptr_load_shape]
 QED
 
 Theorem compile_array_subscript_cenv_shape_framed[local]:
@@ -6700,23 +6604,6 @@ Proof
   strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `opc`, `g`, `rest`]
                   shape_step_emit_op_call_assert) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >>
-  simp[shape_step_def] >> metis_tac[]
-QED
-
-Theorem shape_step_emit_op_branch_guarded[local]:
-  shape_stable R /\ MEM opc [CALL; STATICCALL] /\
-  (!st id outs. R st /\ (gas_operand st g \/ plain_operand st g) /\
-                EVERY (plain_operand st) rest ==>
-     lowered_inst_ok internal (mk_inst id opc (g::rest) outs)) ==>
-  shape_step internal compiler_label
-    (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
-          EVERY (plain_operand st) rest)
-    (checked_extcall opc g rest) (\v st. R st /\ plain_operand st v)
-Proof
-  strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `opc`, `g`, `rest`]
-                  shape_step_emit_op_call_branch) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[shape_step_def] >> metis_tac[]
 QED
@@ -9594,28 +9481,6 @@ Proof
   qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
   conj_tac
   >- (gen_tac >> BETA_TAC >> irule unwrap_value_shape) >>
-  drule (cj 1 compile_expr_shape) >>
-  disch_then (qspecl_then [`cenv`, `ty`, `internal`] assume_tac) >>
-  drule shape_step_frame >>
-  disch_then (qspec_then `\st. cenv_shape_ok st cenv` mp_tac) >>
-  simp[cenv_shape_ok_stable]
-QED
-
-Theorem lower_value_with_loc_shape[local]:
-  !cenv ty e internal.
-    ~supported_expr_exists expr_shape_root e ==>
-    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
-      (lower_value_with_loc compile_expr cenv ty e)
-      (\r st. plain_operand st (FST r))
-Proof
-  rpt strip_tac >> simp[lower_value_with_loc_def] >>
-  irule shape_step_bind >>
-  qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
-  conj_tac
-  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op` >> conj_tac
-      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
-      irule unwrap_value_shape) >>
   drule (cj 1 compile_expr_shape) >>
   disch_then (qspecl_then [`cenv`, `ty`, `internal`] assume_tac) >>
   drule shape_step_frame >>
@@ -14716,23 +14581,6 @@ Proof
   gvs[EVERY_MEM] >>
   `MEM (LAST (i::is)) (i::is)` by simp[MEM_LAST] >>
   fs[] >> metis_tac[]
-QED
-
-Theorem internal_label_not_compiler[local]:
-  internal_label_ok l ==> ~compiler_label l
-Proof
-  metis_tac[jump_label_ok_names, jump_label_ok_def]
-QED
-
-Theorem internal_segments_noncompiler_heads[local]:
-  !descs segs.
-    LIST_REL internal_segment_ok descs segs /\
-    EVERY (\d. internal_label_ok (FST d)) descs ==>
-    EVERY (\seg. seg <> [] /\ ~compiler_label (HD seg).bb_label) segs
-Proof
-  Induct >> Cases_on `segs` >> simp[] >> rpt strip_tac >>
-  rename1 `internal_segment_ok d seg` >> PairCases_on `d` >>
-  gvs[internal_segment_ok_def] >> metis_tac[internal_label_not_compiler]
 QED
 
 

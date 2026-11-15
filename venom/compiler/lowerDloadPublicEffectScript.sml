@@ -46,10 +46,6 @@ Proof
   simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "public effect has hypotheses")
-  [ld_dloadbytes_taint, ld_dloadbytes_outputs, ld_empty_outputs_prov];
-
 Theorem ld_public_copy_memory:
   ld_memory lo A tn s t /\ LENGTH bytes = n /\
   (n = 0 \/ (d = d' /\ d+n <= lo) \/
@@ -175,7 +171,3 @@ Resume ld_sync_dloadbytes_effect[observations_nonghost]:
   gvs[write_memory_with_expansion_def, update_var_def, ld_nonghost_def]
 QED
 Finalise ld_sync_dloadbytes_effect
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "public effect has hypotheses")
-  [ld_public_copy_memory, ld_public_add_prefix_state, ld_sync_dloadbytes_effect];

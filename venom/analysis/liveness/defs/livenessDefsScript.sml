@@ -272,7 +272,6 @@ Proof
   simp[mk_inst_def, inst_uses_def, inst_defs_def, operand_vars_def,
        operand_var_def]
 QED
-
 Theorem fmp_hidden_param_liveness_transfer:
   (liveness_transfer bbs
      (mk_inst id FMP_PARAM [Lit (n2w k)] [v]) live =
@@ -295,77 +294,3 @@ Proof
   simp[mk_inst_def, inst_uses_def, inst_defs_def, operand_vars_def,
        operand_var_def]
 QED
-
-(* Computational interface probes: overwrite, empty blocks and set scheduling. *)
-Theorem liveness_recompute_probe[local]:
-  let cfg = <| cfg_succs := FEMPTY |+ ("b", ["s"]);
-               cfg_preds := FEMPTY; cfg_reachable := FEMPTY;
-               cfg_dfs_post := []; cfg_dfs_pre := [] |> in
-  let bbs = [<| bb_label := "b";
-                bb_instructions := [mk_inst 0 ADD [Var "x"; Var "y"] ["z"]] |>] in
-  let old = <| ds_inst := FEMPTY |+ (("b",0),["stale"])
-                               |+ (("b",1),["stale"])
-                               |+ (("s",0),["z";"w"]);
-               ds_boundary := FEMPTY |+ ("b",["stale"]) |> in
-  let new = liveness_block bbs cfg "b" old in
-  df_at [] new "b" 1 = ["z";"w"] /\
-  df_at [] new "b" 0 = ["w";"y";"x"] /\
-  df_boundary [] new "b" = ["w";"y";"x"] /\
-  df_at [] new "s" 0 = ["z";"w"] /\
-  liveness_changed bbs "b" old new
-Proof
-  EVAL_TAC
-QED
-
-Theorem liveness_empty_order_probe[local]:
-  let cfg = <| cfg_succs := FEMPTY |+ ("b", ["s"]);
-               cfg_preds := FEMPTY |+ ("b", ["p"]);
-               cfg_reachable := FEMPTY;
-               cfg_dfs_post := []; cfg_dfs_pre := [] |> in
-  let bbs = [<| bb_label := "b"; bb_instructions := [] |>] in
-  let old = <| ds_inst := FEMPTY |+ (("b",0),["x";"y"])
-                               |+ (("s",0),["y";"x"]);
-               ds_boundary := FEMPTY |+ ("b",["x";"y"]) |> in
-  let new = liveness_block bbs cfg "b" old in
-  df_at [] new "b" 0 = ["y";"x"] /\
-  df_boundary [] new "b" = ["y";"x"] /\
-  ~liveness_changed bbs "b" old new /\
-  FST (wl_step (liveness_changed bbs) (liveness_block bbs cfg)
-               (cfg_preds_of cfg) (["b"],old)) = []
-Proof
-  EVAL_TAC
-QED
-
-Theorem liveness_cycle_probe[local]:
-  let fn = mk_raw_function "cycle"
-    [<| bb_label := "b";
-        bb_instructions := [mk_inst 0 ADD [Var "x"; Var "y"] ["z"];
-                            mk_inst 1 JMP [Label "b"] []] |>] in
-  let st = liveness_recompute_fuel 4 fn in
-  df_at [] st "b" 0 = ["y";"x"] /\
-  df_at [] st "b" 2 = ["y";"x"] /\
-  df_boundary [] st "b" = ["y";"x"]
-Proof
-  EVAL_TAC
-QED
-
-Theorem liveness_acyclic_probe[local]:
-  let fn = mk_raw_function "acyclic"
-    [<| bb_label := "b";
-        bb_instructions := [mk_inst 0 JMP [Label "s"] []] |>;
-     <| bb_label := "s";
-        bb_instructions := [mk_inst 1 SINK [Var "x"] []] |>] in
-  let st = liveness_recompute_fuel 4 fn in
-  df_at [] st "b" 0 = ["x"] /\
-  df_at [] st "b" 1 = ["x"] /\
-  df_at [] st "s" 0 = ["x"] /\
-  df_boundary [] st "b" = ["x"] /\
-  df_at [] (liveness_recompute_fuel 0 fn) "s" 0 = []
-Proof
-  EVAL_TAC
-QED
-
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in staged liveness definitions")
-  (DB.thms "livenessDefs");

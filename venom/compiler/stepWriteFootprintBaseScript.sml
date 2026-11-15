@@ -217,6 +217,25 @@ Proof
 
 QED
 
+Theorem noninvoke_spill_step_safe:
+  !cp inst s fuel ctx t.
+  inst.inst_opcode <> INVOKE /\
+  context_source_memory_writes_disjoint cp inst s /\
+  step_inst fuel ctx inst s = OK t ==>
+  context_spill_step_safe cp s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `step_inst_base inst s = OK t` by metis_tac[step_inst_non_invoke] >>
+  rw[context_spill_step_safe_def] >>
+  sym_tac >>
+  irule step_inst_base_OK_byte_frame >> qexists_tac `inst` >> simp[] >>
+  rpt strip_tac >>
+  fs[context_spill_byte_def, context_source_memory_writes_disjoint_def,
+     listTheory.EVERY_MEM] >>
+  qpat_x_assum `!x. MEM x _ ==> _` drule >> simp[] >>
+  strip_tac >> res_tac >> decide_tac
+QED
+
 Theorem pack_dret_dynamic_byte_frame:
   !pairs cursor s ptrs final_cursor t.
     pack_dret_dynamic cursor pairs s = (ptrs,final_cursor,t) /\

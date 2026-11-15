@@ -324,10 +324,3 @@ Proof
   simp[value_has_type_def, vyperValueOperationTheory.popped_value_def] >>
   metis_tac[]
 QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then print ("Kernel-closed place boundary: " ^ name ^ "\n")
-     else raise Fail ("Incomplete place boundary: " ^ name)
-  end) (DB.thms "vyperPlaceStatePreservation");

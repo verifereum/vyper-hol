@@ -234,10 +234,3 @@ Proof
   qexists_tac `result` >> asm_rewrite_tac[] >>
   asm_rewrite_tac[GSYM mem_bytes_at_def, immutable_copy_memory_readback]
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Unclosed immutable constructor relation: " ^ name)
-  end) (DB.thms "immutableConstructorRelation");

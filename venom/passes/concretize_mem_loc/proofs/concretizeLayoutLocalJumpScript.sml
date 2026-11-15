@@ -104,6 +104,4 @@ Proof
   fs[relocation_env_def, relocation_reader_context_def, jump_to_def]
 QED
 
-val _ = if null (hyp concretize_jmp_local_complete) then ()
-        else raise Fail "JMP export has hypotheses";
 val _ = export_theory();

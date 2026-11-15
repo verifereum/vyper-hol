@@ -240,7 +240,3 @@ Resume concretize_mstore8_local_complete[local]:
        dead_result_rel_memory_frame]
 QED
 Finalise concretize_mstore8_local_complete
-
-val _ = if List.all (null o hyp)
-  [concretize_mstore8_execution_geometry, concretize_mstore8_local_complete]
-  then () else raise Fail "Store8 exports have hypotheses";

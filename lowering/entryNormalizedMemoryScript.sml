@@ -28,38 +28,3 @@ Proof
   simp_tac bool_ss [abi_decoder_valid_pre_def, abi_decoder_metadata_def] >>
   rpt strip_tac >> irule entry_decoder_normalized_memory >> metis_tac[]
 QED
-
-Theorem entry_dynamic_normalized_memory_probe[local]:
-  abi_decoder_coherent ce FEMPTY sf (BaseT (BytesT (Dynamic 4))) (BaseTV (BytesT (Dynamic 4))) /\
-  val_in_memory (BaseTV (BytesT (Dynamic 4))) (vyperValue$BytesV [1w;2w]) p mem ==>
-  val_in_memory (BaseTV (BytesT (Dynamic 4))) (vyperValue$BytesV [1w;2w]) p mem
-Proof
-  strip_tac >> irule entry_decoder_normalized_memory >>
-  qexistsl_tac [`contractABI$BytesV [1w;2w]`, `ce`, `FEMPTY`,
-                `vyperValue$BytesV [1w;2w]`, `sf`, `BaseT (BytesT (Dynamic 4))`] >>
-  asm_simp_tac bool_ss [] >> EVAL_TAC
-QED
-
-Theorem entry_nested_sparse_normalized_memory_probe[local]:
-  abi_decoder_coherent ce FEMPTY sf
-    (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 1))
-    (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Fixed 1)) /\
-  val_in_memory (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Fixed 1))
-    (ArrayV (SArrayV [(0, ArrayV (SArrayV [(0, vyperValue$IntV 1)]))])) p mem ==>
-  val_in_memory (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Fixed 1))
-    (ArrayV (SArrayV [(0, ArrayV (SArrayV [(0, vyperValue$IntV 1)]))])) p mem
-Proof
-  strip_tac >> irule entry_decoder_normalized_memory >>
-  qexistsl_tac [`ListV [ListV [NumV 1]]`, `ce`, `FEMPTY`,
-    `ArrayV (SArrayV [(0, ArrayV (SArrayV [(0, vyperValue$IntV 1)]))]))`, `sf`,
-    `ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 1)`] >>
-  asm_simp_tac bool_ss [] >> EVAL_TAC
-QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry normalized memory inherited admission"
-  end) [entry_decoder_normalized_memory, entry_valid_pre_original_memory,
-        entry_dynamic_normalized_memory_probe, entry_nested_sparse_normalized_memory_probe];

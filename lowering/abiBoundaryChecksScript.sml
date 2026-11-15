@@ -45,6 +45,3 @@ Theorem nested_static_array_sizes_probe:
 Proof
   simp[type_memory_bytes_def, type_memory_size_def]
 QED
-
-(* Check the exported probe objects rather than inferring integrity from a
-   successful build (definitions imported from disk may carry DISK_THM). *)

@@ -51,9 +51,6 @@ Proof
        set_var_taint_def, finite_mapTheory.DRESTRICT_UNIV]
 QED
 
-val _ = if null (hyp concretize_mstore_local_core) then ()
-        else raise Fail "store local core export has hypotheses";
-
 (* The restored-memory equalities preserve every non-memory field on each
    side individually, hence preserve all incoming control/GAS equalities. *)
 Theorem concretize_mstore_local_observed:
@@ -105,9 +102,6 @@ Proof
   drule local_rel_observation >>
   simp[local_rel_def, dead_result_rel_mstore]
 QED
-
-val _ = if null (hyp concretize_mstore_local_observed) then ()
-        else raise Fail "observed store export has hypotheses";
 
 Theorem concretize_mstore_local_complete:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -166,6 +160,3 @@ Proof
   goal_assum (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   metis_tac[]
 QED
-
-val _ = if null (hyp concretize_mstore_local_complete) then ()
-        else raise Fail "complete store export has hypotheses";

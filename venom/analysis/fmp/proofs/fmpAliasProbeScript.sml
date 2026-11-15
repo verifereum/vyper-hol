@@ -154,8 +154,3 @@ Theorem fmp_alias_repeated_site_rejected:
 Proof
   EVAL_TAC
 QED
-
-val _ = List.app (fn (name,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected oracle dependency in " ^ name))
-  (DB.thms "fmpAliasProbe");

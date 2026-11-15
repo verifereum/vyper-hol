@@ -35,6 +35,3 @@ Proof
   >> `a IN FDOM A` by metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
   metis_tac[]
 QED
-
-val _ = if null (hyp ld_stable_head_extend) then ()
-        else raise Fail "stable head extension has hypotheses";

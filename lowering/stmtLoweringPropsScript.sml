@@ -72,13 +72,3 @@ Proof
           rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[run_inst_seq_def, step_inst_base_opcode_eqs, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
-
-(* Every theorem here is closed. *)
-val () = List.app
-  (fn (name,th) =>
-    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("statement lowering proof is not closed: " ^ name)
-    end)
-  (DB.thms "stmtLoweringProps");

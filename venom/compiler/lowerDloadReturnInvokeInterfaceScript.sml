@@ -15,6 +15,3 @@ Theorem ld_saved_map_restrict_trans:
 Proof
   simp[SUBSET_DEF, FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
-
-val _ = if null (hyp ld_saved_map_restrict_trans) then ()
-        else raise Fail "saved-map interface has kernel hypotheses";

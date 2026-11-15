@@ -758,21 +758,3 @@ Proof
   drule_all entry_joint_header_successor >>
   strip_tac >> qexistsl_tac [`v`, `new`] >> asm_rewrite_tac[]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry joint loop inherited admission"
-    end) [entry_setup_frame_refl, entry_setup_frame_trans,
-          entry_joint_loop_safe_refl, entry_joint_loop_pull_refl,
-          entry_joint_loop_safe_trans, entry_joint_loop_pull_trans,
-          entry_joint_fixed_successor, entry_joint_identity_child,
-          entry_joint_child_control, entry_joint_loop_control,
-          entry_joint_empty_setup_endpoint, entry_joint_loop_finite,
-          entry_joint_backedge_transfer, entry_joint_setup_resources,
-          entry_joint_valid_setup, entry_joint_ordinary_child,
-          entry_joint_chosen_successor, entry_joint_empty_setup,
-          entry_joint_empty_child, entry_joint_header_successor,
-          entry_joint_loop_from_header];

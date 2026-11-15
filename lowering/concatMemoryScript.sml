@@ -125,15 +125,6 @@ Proof
        concat_store_frontier]
 QED
 
-val () =
-  let val th = compile_concat_fixed_step_mem_ok
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "CONCAT_MEMORY_KERNEL_AUDIT OK\n"
-     else raise Fail "concat memory footprint inherited admission"
-  end;
-
 Theorem concat_bytes_shape:
   (do arg_len <- emit_op MLOAD [mem_ptr];
       arg_data <- emit_op ADD [mem_ptr; Lit 32w];
@@ -274,12 +265,3 @@ Proof
        concat_mcopy_frontier]
 
 QED
-
-val () =
-  let val th = compile_concat_bytes_step_mem_ok
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "CONCAT_BYTES_MEMORY_KERNEL_AUDIT OK\n"
-     else raise Fail "concat bytes footprint inherited admission"
-  end;

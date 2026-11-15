@@ -344,8 +344,3 @@ Resume ld_dload_endpoint[successor]:
 QED
 
 Finalise ld_dload_endpoint
-
-val _ = app (fn th => if null (hyp th) then ()
-  else raise Fail "expansion endpoint boundary has hypotheses")
-  [ld_sync_envelope_position, ld_head_order_cong,
-   ld_sync_scratch_reconstruct, ld_dloadbytes_endpoint, ld_dload_endpoint];

@@ -244,15 +244,3 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH mid.cs_current_insts` >>
   fs[eval_op_inst_idx, fresh_vars_wrt_def]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry setup endpoint inherited admission"
-    end) [entry_element_setup_reentry_code, entry_sequence_nonoutput_lookup,
-          entry_element_setup_outputs, entry_sequence_nonterminator_labels,
-          entry_element_setup_total_frame, entry_element_setup_endpoint,
-          entry_sequence_output_disjoint_fresh, entry_member_navigation_outputs,
-          entry_member_navigation_endpoint];

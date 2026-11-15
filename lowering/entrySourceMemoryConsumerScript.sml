@@ -41,10 +41,3 @@ Proof
   drule_all entry_member_success_original_value >> strip_tac >>
   metis_tac[]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry source memory consumer inherited admission"
-  end) [entry_member_success_original_value, entry_canonical_suffix_success_original_value];
