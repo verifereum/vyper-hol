@@ -87,7 +87,7 @@ Theorem ricf_call_current_payload_operand_origin:
   ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
   p.rpe_fn = fn /\ p.rpe_owner = a /\
   occurrence_syntax_origin fn a H /\
-  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
   occurrence_natural_geometry lo a U B stk s /\
   FLOOKUP B p.rpe_dst = SOME (p.rpe_db,p.rpe_size) /\ 0 < p.rpe_size /\
   op_prov G op = SOME (p.rpe_db,p.rpe_size) ==>

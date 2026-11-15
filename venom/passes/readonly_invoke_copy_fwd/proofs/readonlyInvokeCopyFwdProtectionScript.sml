@@ -153,7 +153,7 @@ End
 
 Definition ricf_source_protection_def:
   ricf_source_protection vs C RO lo n a U B HP H stk PG G tn fn inst s records <=>
-    occurrence_annotation_ok n a U B HP H stk PG G s /\
+    occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
     occurrence_natural_geometry lo a U B stk s /\
     EVERY (ricf_protection_record vs C RO a U B stk PG G tn fn inst s) records
 End
@@ -180,7 +180,7 @@ Definition ricf_protection_alignment_def:
 End
 
 Theorem ricf_source_protection_empty_entry:
-  occurrence_annotation_ok n a [] FEMPTY [] FEMPTY [] PG G s ==>
+  occurrence_annotation_ok (dimword (:256)) n a [] FEMPTY [] FEMPTY [] PG G s ==>
   ricf_source_protection vs C RO lo n a [] FEMPTY [] FEMPTY
     [] PG G tn fn inst s [] /\
   ricf_protection_alignment FEMPTY [] [] {} [] []

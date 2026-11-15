@@ -58,7 +58,7 @@ Proof
   `?n a U B HP H.
     occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[frame_reachable_occurrence_lift] >>
-  drule occ_frame_reachable_annotation >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> strip_tac >>
   drule active_inst_mem_fn_insts >>
   fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]
 QED
