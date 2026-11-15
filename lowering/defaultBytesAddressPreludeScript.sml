@@ -220,7 +220,7 @@ Proof
         pure_rewrite_tac[loweringStateRelDefsTheory.not_fresh_at_def] >>
         disch_then (qspec_then `sb.cs_next_var` mp_tac) >> simp[]) >>
      simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x t1 = _ /\ _` 
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x t1 = _ /\ _`
        (qspec_then `x` mp_tac) >>
      fs[lookup_var_def] >> metis_tac[]) >>
   `!x. not_fresh_at sa x ==> lookup_var x t3 = lookup_var x s /\

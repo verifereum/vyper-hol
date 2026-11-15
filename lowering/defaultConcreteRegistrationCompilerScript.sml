@@ -27,7 +27,7 @@ Theorem default_registration_slot_vars:
 Proof
   PairCases_on `spec` >>
   simp[default_registration_slot_def, FLOOKUP_UPDATE,
-       ctor_decoder_coherent_vars] 
+       ctor_decoder_coherent_vars]
 QED
 
 Theorem default_registration_slots_vars:

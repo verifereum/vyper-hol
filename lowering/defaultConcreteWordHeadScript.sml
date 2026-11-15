@@ -240,4 +240,3 @@ Resume default_registration_word_head[owners]:
 QED
 
 Finalise default_registration_word_head
-
