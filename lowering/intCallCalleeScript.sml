@@ -2119,8 +2119,11 @@ Theorem run_inst_seq_fmp_room:
     fmp_room ctx func s /\ t.vs_fmp = s.vs_fmp ==>
     fmp_room ctx func t
 Proof
-  rpt strip_tac >> irule fmp_room_static_charge >>
-  qexists_tac `s` >> simp[] >>
+  rpt strip_tac >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
+  irule fmp_room_static_charge >> qexists_tac `s` >> simp[] >>
   irule run_inst_seq_static_charge >> metis_tac[]
 QED
 

@@ -706,7 +706,8 @@ Proof
   `alloca_room ctx func s'` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `fmp_room ctx func s'` by
-    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+    (simp_tac bool_ss [Abbr `s'`] >> irule fmp_room_mstore >>
+     fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') s'` by
     (irule immutable_alloca_sep_declare_local >>
      qexistsl_tac [`entry`, `es`, `id`, `inst`, `p`, `s`, `sz`, `w`] >>

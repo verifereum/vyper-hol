@@ -3,6 +3,7 @@
 Theory abiEncoderObserver
 Ancestors
   abiDecoderLoop fragExec venomState venomExecSemantics venomExecProofs emitHelper venomInst
+  ctxLookupAgreeHelpers execMemoryLengthBase
 
 Definition stop_view_def:
   stop_view s = halt_state (s with vs_returndata := [])
@@ -73,6 +74,28 @@ Inductive local_prefix:
     abi_observer_step ctx fn cut s middle /\ local_prefix ctx fn cut middle t ==>
     local_prefix ctx fn cut s t)
 End
+
+Theorem abi_observer_step_memory_frame[local]:
+  abi_observer_step ctx fn cut s t ==>
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  rw[abi_observer_step_def] >>
+  `step_inst_base inst s = OK middle` by metis_tac[step_inst_non_invoke] >>
+  imp_res_tac step_inst_base_initial_fmp >>
+  imp_res_tac step_base_memory_length >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  fs[venom_state_component_equality]
+QED
+
+Theorem local_prefix_memory_frame:
+  !ctx fn cut s t. local_prefix ctx fn cut s t ==>
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  ho_match_mp_tac local_prefix_ind >> simp[] >> rpt strip_tac >>
+  drule abi_observer_step_memory_frame >> strip_tac >> gvs[] >> decide_tac
+QED
 
 Theorem abi_observer_step_sim:
   abi_observer_step ctx fn cut s t ==> abi_decode_sim ctx fn s t

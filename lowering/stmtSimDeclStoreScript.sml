@@ -42,6 +42,10 @@ Theorem stmt_state_rel_declare_memory:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_fmp = s.vs_fmp /\
+    ((ptrDiscipline$ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
@@ -102,7 +106,8 @@ Proof
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `fmp_room ctx func t` by
-    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def] >>
+     first_assum ACCEPT_TAC) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
      drule immutable_alloca_sep_frame >> disch_then irule >>
@@ -163,6 +168,10 @@ Proof
      reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
      qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
+  `(mstore (w2n w) x s).vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH (mstore (w2n w) x s).vs_memory` by
+    (conj_tac >- simp[mstore_def] >>
+     simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >>
   fs[mstore_def, LET_THM, lookup_var_def] >> gs[] >> first_assum ACCEPT_TAC
