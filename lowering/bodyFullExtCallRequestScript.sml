@@ -9,6 +9,7 @@ Theory bodyFullExtCallRequest
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
   bodyFullExtCallRequestSnapshotFull
+  bodyFullExtCallRequestOperands
   bufferAllocationJoint extcallReturnDefaultMemoryJoint
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
   vyperInterpreter vyperAST list

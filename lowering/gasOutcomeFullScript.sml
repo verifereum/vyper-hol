@@ -60,6 +60,34 @@ Proof
   rw[gas_outcome_full_def] >> qexists_tac `marks` >> metis_tac[]
 QED
 
+Theorem gas_outcome_full_post_path:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R /\
+  (!H res ee G' tn' t marks.
+     valid_horizon cx st0 H ee.storage_trace /\
+     gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+       (s, G, tn) marks (OK t, G', tn') /\
+     Q H res ee G' tn' t ==>
+     Q' H res ee G' tn' t) /\
+  (!H res ee gt r. R H res ee gt r ==> R' H res ee gt r) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q' R'
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks` >| [
+    disj1_tac >> metis_tac[],
+    disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
+      conj_tac >- fs[] >> conj_tac >- fs[] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+      >- (disj1_tac >> first_x_assum irule >>
+          simp[] >> metis_tac[]) >>
+      disj2_tac >> metis_tac[],
+    disj2_tac >> disj2_tac >> metis_tac[]]
+QED
+
 (* With no step, the focus stops where it starts. *)
 Theorem gas_origin_ptr_focus_nil:
   ~s.vs_halted ==>
