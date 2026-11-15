@@ -14152,7 +14152,7 @@ Proof
   imp_res_tac supported_pure_shape >> res_tac >> fs[]
 QED
 
-Theorem supported_expr_shape[local]:
+Theorem supported_expr_shape:
   !tops e. supported_expr tops e ==>
     ~supported_expr_exists expr_shape_root e
 Proof
@@ -14535,9 +14535,9 @@ Proof
      EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
     (rpt strip_tac
      >- metis_tac[supported_program_function, supported_function_body_shape] >>
-     drule_all supported_program_declaration >>
-     simp[supportedDeclsTheory.supported_declaration_header_def, NULL_EQ] >>
-     metis_tac[]) >>
+     drule_all supported_program_defaults >>
+     rw[EVERY_MEM, supported_default_expression_def] >>
+     metis_tac[supported_expr_shape]) >>
   rw[runtime_bodies_shape_ok_def]
   >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>
       metis_tac[public_getter_body_shape, function_visibility_distinct])
