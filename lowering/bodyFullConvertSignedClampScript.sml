@@ -42,17 +42,6 @@ Proof
   first_assum (qspec_then `q` ACCEPT_TAC)
 QED
 
-(* A failed ASSERT changes a field retained by state_frame. *)
-Theorem failed_assert_not_success_frame[local]:
-  ~s.vs_halted ==>
-  state_frame ((revert_state (set_returndata [] s)) with vs_inst_idx := j) <>
-  state_frame (s with vs_inst_idx := j)
-Proof
-  simp[stateFrameTheory.state_frame_def, revert_state_def, set_returndata_def] >>
-  strip_tac >>
-  disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_halted``) >> simp[]
-QED
-
 Theorem double_check_uniform_certificate[local]:
   MEM opc1 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
   MEM opc2 [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
