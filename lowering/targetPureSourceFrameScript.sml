@@ -2,37 +2,41 @@ Theory targetPureSourceFrame
 Ancestors
   supportedTargets supportedExprs vyperInterpreter vyperPureExpr
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
-  vyperState vyperContext vyperMisc targetPlaceSimCasesBase
+  vyperState vyperContext vyperMisc
 Libs
   monadsyntax
 
 Theorem target_pure_source_mutual:
   (!tops e. supported_pure_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE|> =
-      s with <|gas_obs := []; outcomes := NONE|>) /\
+      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
   (!tops es. supported_pure_exprs tops es ==>
     (!cx s r s'. eval_exprs cx es s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE|> =
-      s with <|gas_obs := []; outcomes := NONE|>) /\
+      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
     (!e. MEM e es ==> !cx s r s'. eval_expr cx e s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE|> =
-      s with <|gas_obs := []; outcomes := NONE|>)) /\
+      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>)) /\
   (!tops fields. supported_pure_fields tops fields ==>
     !cx s r s'. eval_exprs cx (MAP SND fields) s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE|> =
-      s with <|gas_obs := []; outcomes := NONE|>) /\
+      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
   (!tops e. supported_place_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE|> =
-      s with <|gas_obs := []; outcomes := NONE|>)
+      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >>
   simp[supported_pure_expr_def]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (rpt strip_tac >> drule_at Any eval_expr_preserves_state >>
+      simp[pure_expr_def] >> strip_tac >>
+      gvs[evaluation_state_component_equality])
   >- simp[Once evaluate_def, return_def]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (rpt strip_tac >> drule_at Any eval_expr_preserves_state >>
+      simp[pure_expr_def] >> strip_tac >>
+      gvs[evaluation_state_component_equality])
   >- suspend "ifexp"
   >- suspend "structlit"
   >- suspend "subscript"
@@ -43,8 +47,12 @@ Proof
   >- suspend "cons"
   >- suspend "fields_nil"
   >- suspend "fields_cons"
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >- (rpt strip_tac >> drule_at Any eval_expr_preserves_state >>
+      simp[pure_expr_def] >> strip_tac >>
+      gvs[evaluation_state_component_equality])
+  >- (rpt strip_tac >> drule_at Any eval_expr_preserves_state >>
+      simp[pure_expr_def] >> strip_tac >>
+      gvs[evaluation_state_component_equality])
   >- suspend "place_subscript"
   >> suspend "place_rest"
 QED
@@ -55,22 +63,22 @@ Resume target_pure_source_mutual[ifexp]:
       return_def, raise_def] >>
   imp_res_tac read_result_state >>
   imp_res_tac conditional_result_state >> gvs[] >>
-  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[]
+  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[structlit]:
   PairCases_on `id` >> rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[]
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[subscript]:
   rpt strip_tac >> Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[builtin]:
   rpt strip_tac >>
@@ -91,13 +99,13 @@ Resume target_pure_source_mutual[builtin]:
       AllCaseEqs()] >>
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
   Cases_on `es` >> gvs[builtin_args_length_ok_def] >>
-  metis_tac[]
+  fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[typebuiltin]:
   rpt strip_tac >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+  imp_res_tac lift_sum_state >> gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[nil]:
   simp[Once evaluate_def, return_def]
@@ -105,7 +113,7 @@ QED
 Resume target_pure_source_mutual[cons]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac read_result_state >> gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[fields_nil]:
   simp[Once evaluate_def, return_def]
@@ -113,18 +121,18 @@ QED
 Resume target_pure_source_mutual[fields_cons]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac read_result_state >> gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[place_subscript]:
   rpt strip_tac >> Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[place_rest]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> gvs[] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
 Finalise target_pure_source_mutual
 
@@ -132,14 +140,15 @@ Theorem target_pure_base_source_projection:
   !bt tops cx s r s'.
     supported_target_pure tops bt /\
     eval_base_place cx bt s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE|> =
-      s with <|gas_obs := []; outcomes := NONE|>
+      s' with <|gas_obs := []; outcomes := NONE; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; storage_trace := []|>
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
   >~ [`TopLevelNameTarget p`]
   >- (PairCases_on `p` >> simp[supported_target_pure_def, Once evaluate_def] >>
-      rpt strip_tac >> metis_tac[lookup_global_state]) >>
+      rpt strip_tac >> drule lookup_global_state >> strip_tac >>
+      gvs[evaluation_state_component_equality]) >>
   simp[supported_target_pure_def, Once evaluate_def] >> rpt strip_tac
   >- (gvs[bind_def, get_scopes_def, type_check_def, assert_def,
           ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
@@ -149,15 +158,15 @@ Proof
   imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
   gvs[raise_def] >>
   first_x_assum (drule_all_then assume_tac) >>
-  gvs[] >>
+  gvs[evaluation_state_component_equality] >>
   drule (cj 1 target_pure_source_mutual) >>
-  disch_then drule >> simp[]
+  disch_then drule >> simp[evaluation_state_component_equality]
 QED
 
 Theorem target_pure_base_source_frame:
   supported_target_pure tops bt /\ eval_base_place cx bt s = (r,s') ==>
-  ?gs os. s' = s with <|gas_obs := gs; outcomes := os|>
+  ?gs os st. s' = s with <|gas_obs := gs; outcomes := os; storage_trace := st|>
 Proof
   strip_tac >> drule_all target_pure_base_source_projection >>
-  simp[evaluation_state_component_equality] >> metis_tac[]
+  simp[evaluation_state_component_equality] >> fs[evaluation_state_component_equality] >> metis_tac[]
 QED
