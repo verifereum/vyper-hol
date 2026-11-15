@@ -30,6 +30,9 @@ Ancestors
   tailMerge
   simplifyCfg
   cfgNorm
+  o1ContractCfgNormCursorBlocks
+  o1ContractCfgNormCursorReturns
+  o1ContractCfgNormCursorProjection
   (* memory passes *)
   loadElim
   deadStoreElim
