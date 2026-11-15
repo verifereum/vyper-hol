@@ -215,3 +215,26 @@ Definition asm_frame_step_ok_tail_def:
           call_requests es = [] /\ a1.as_gas_readings = tail
     | AsmError _ => T
 End
+
+Theorem asm_frame_rel_tail_nil:
+  asm_frame_rel_tail [] prog data es0 a es <=>
+  asm_frame_rel prog data es0 a es
+Proof
+  simp[asm_frame_rel_tail_def] >> eq_tac >> strip_tac >>
+  `a with as_gas_readings := gas_readings es = a` by
+    gvs[asm_frame_rel_def, asm_state_component_equality] >>
+  gvs[asm_frame_rel_def]
+QED
+
+Theorem asm_frame_rel_entry_tail:
+  initial_ctx_rel_tail tail cplan prog ctx vs es /\
+  (vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+    (lookup_account (FST (HD es.contexts)).msgParams.callee
+      es.rollback.accounts)) ==>
+  asm_frame_rel_tail tail prog vs.vs_data_section es (entry_asm_state vs es) es
+Proof
+  strip_tac >> fs[initial_ctx_rel_tail_def] >>
+  mp_tac (Q.INST [`vs` |-> `vs with vs_gas_readings := gas_readings es`]
+    asm_frame_rel_entry) >>
+  simp[asm_frame_rel_tail_def, entry_asm_state_def]
+QED
