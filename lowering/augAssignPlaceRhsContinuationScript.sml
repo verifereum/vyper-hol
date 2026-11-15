@@ -314,10 +314,8 @@ Resume aug_place_rhs_operator_write_mem[callback]:
     (Cases_on `p`
      >- fs[place_ptr_rel_def]
      >- (rename1 `PlaceR (MemoryPlace id path)` >>
-         mp_tac (Q.INST [`sa` |-> `s1`, `s` |-> `t`, `loc` |-> `SOME loc`,
-                         `vt` |-> `Type ty`] aug_place_memory_ptr_frame) >>
-         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-         strip_tac >> first_assum ACCEPT_TAC)
+         irule aug_place_memory_ptr_frame >>
+         goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[])
      >> fs[place_ptr_rel_def]) >>
   `loc = LocMemory ==> w2n w + 32 <= t.vs_alloca_next` by
     (strip_tac >>
@@ -348,7 +346,9 @@ Resume aug_place_rhs_operator_write_mem[callback]:
   `alloca_frame cenv es0 sa s_entry cenv ee t` by
     (`alloca_frame cenv es s1 s0 cenv ee t` by
        (mp_tac (Q.INST [`H` |-> `H0`, `sa` |-> `s1`, `sb` |-> `s2`,
-                        `op` |-> `y`] stmtSimDefsTheory.expr_post_alloca_frame) >>
+                        `op` |-> `y`]
+                  (INST_TYPE [alpha |-> ``:256``]
+                    stmtSimDefsTheory.expr_post_alloca_frame)) >>
         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
         strip_tac >> first_assum ACCEPT_TAC) >>
      irule stmtSimDefsTheory.alloca_frame_trans >>
