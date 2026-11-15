@@ -106,15 +106,13 @@ Proof
      t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   conj_tac
   >- (qpat_x_assum `gas_outcome _ _ _ _ _ (bind (eval_expr cx src) _) _ _ _` mp_tac >>
-      `!(res:value+exception) r.
-         (?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r) <=>
-         expr_exit res r` by
-        (rpt gen_tac >> Cases_on `res`
-         >- simp[] >>
-         rename1 `INR exc` >>
-         qspecl_then [`Value`, `INR exc`] mp_tac expr_exit_success_map >>
-         simp[FUN_EQ_THM]) >>
-      CONV_TAC (DEPTH_CONV BETA_CONV) >> asm_rewrite_tac[ETA_AX]) >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      match_mp_tac EQ_IMPLIES >> AP_TERM_TAC >>
+      rewrite_tac[FUN_EQ_THM] >> qx_genl_tac [`H1`, `res`, `ee1`, `out`] >>
+      Cases_on `res` >- simp[] >> rename1 `INR exc` >>
+      qspecl_then [`Value`, `INR exc`] mp_tac expr_exit_success_map >>
+      simp[FUN_EQ_THM, halt_exit_def]) >>
   reverse conj_tac
   >- (gen_tac >> BETA_TAC >>
       simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
@@ -166,15 +164,13 @@ Proof
     t.vs_current_bb = st3.cs_current_bb /\ t.vs_inst_idx = LENGTH st3.cs_current_insts` >>
   conj_tac
   >- (qpat_x_assum `gas_outcome _ _ _ _ _ (bind (eval_expr cx off) _) _ _ _` mp_tac >>
-      `!(res:value+exception) r.
-         (?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r) <=>
-         expr_exit res r` by
-        (rpt gen_tac >> Cases_on `res`
-         >- simp[] >>
-         rename1 `INR exc` >>
-         qspecl_then [`Value`, `INR exc`] mp_tac expr_exit_success_map >>
-         simp[FUN_EQ_THM]) >>
-      CONV_TAC (DEPTH_CONV BETA_CONV) >> asm_rewrite_tac[ETA_AX]) >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      match_mp_tac EQ_IMPLIES >> AP_TERM_TAC >>
+      rewrite_tac[FUN_EQ_THM] >> qx_genl_tac [`H1`, `res`, `ee1`, `out`] >>
+      Cases_on `res` >- simp[] >> rename1 `INR exc` >>
+      qspecl_then [`Value`, `INR exc`] mp_tac expr_exit_success_map >>
+      simp[FUN_EQ_THM, halt_exit_def]) >>
   reverse conj_tac
   >- (gen_tac >> BETA_TAC >>
       simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
@@ -272,6 +268,35 @@ Proof
      qexists_tac `sa` >> simp[] >> metis_tac[cs_extends_trans]) >>
   qpat_assum `expr_type src = _` (fn th => once_rewrite_tac[GSYM th]) >>
   qpat_assum `expr_type off = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  qmatch_goalsub_abbrev_tac
+    `gas_outcome _ _ _ _ _ tail_source tail_start tail_post _` >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 tail_source tail_start
+     tail_post (\H res ee r. expr_exit res r)` suffices_by
+    (qunabbrev_tac `tail_start` >>
+     rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> BETA_TAC >>
+     disch_then (qx_choose_then `tail_marks` strip_assume_tac)
+     >- (qexists_tac `tail_marks` >> simp[])
+     >- (qexists_tac `tail_marks` >> disj2_tac >> disj1_tac >>
+         qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+           (qx_choosel_then [`tail_res`, `tail_end`, `tail_out`] strip_assume_tac o
+            SIMP_RULE (srw_ss()) [gas_summary_at_def]) >>
+         `tail_res <> INR HaltException` by
+           (qpat_x_assum `gas_marked_exec _ _ tail_source _ _ _ _ _`
+              (mp_tac o cj 1 o REWRITE_RULE [gas_marked_exec_def]) >>
+            disch_then (qspec_then `[]` mp_tac) >>
+            qunabbrev_tac `tail_source` >>
+            simp[vyperContextTheory.evaluate_type_builtin_def] >>
+            Cases_on `evaluate_extract32 bs (Num i) bt` >>
+            rw[lift_sum_def, bind_def, return_def, raise_def]) >>
+         rewrite_tac[gas_summary_at_def] >>
+         qexistsl_tac [`tail_res`, `tail_end`, `tail_out`] >> simp[halt_exit_def] >>
+         disj2_tac >> first_assum ACCEPT_TAC) >>
+     qexists_tac `tail_marks` >> disj2_tac >> disj2_tac >>
+     rename1 `gas_exempt_cert _ _ _ _ _ tail_marks
+       (tail_err,tail_ee) (tail_leaf,tail_finish)` >>
+     qexistsl_tac [`tail_err`, `tail_ee`, `tail_leaf`, `tail_finish`] >>
+     first_assum ACCEPT_TAC) >>
+  unabbrev_all_tac >>
   irule extract32_tail_ready_any_post >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`dp`, `ee with gas_obs := gas_explicit marks' u.vs_gas_readings`,
