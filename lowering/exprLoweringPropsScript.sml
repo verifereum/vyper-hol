@@ -2814,28 +2814,6 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
 QED
 
-Theorem ci_mono_compile_ecadd[local]:
-  ∀ x1 y1 x2 y2 sa. ci_mono sa (SND (compile_ecadd x1 y1 x2 y2 sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinMiscTheory.compile_ecadd_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
-QED
-
-Theorem ci_mono_compile_ecmul[local]:
-  ∀ x y scalar sa. ci_mono sa (SND (compile_ecmul x y scalar sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinMiscTheory.compile_ecmul_def] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
-QED
-
 Theorem ci_mono_compile_assert_slice_bounds[local]:
   ∀ start_op len_op src_len sa. ci_mono sa (SND (compile_assert_slice_bounds start_op len_op src_len sa))
 Proof
