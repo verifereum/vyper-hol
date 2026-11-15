@@ -615,8 +615,8 @@ Proof
   `phi_prefix_length ps - LENGTH ps = 0` by decide_tac >> simp[]
 QED
 
-(* Preserved assembly input for C1.2.8.3; not a theorem export.
-   The term and tactic are delayed until the assembly proof is completed. *)
+(* Unfinished source projection: preserve its term and tactic without
+   executing or exporting a theorem until the proof is completed. *)
 fun pending_dft_packet_source_projection () =
  (``
   (!N C7 C8 root_sf root_tf root_entry packet acts blocks calls
