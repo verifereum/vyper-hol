@@ -1154,6 +1154,7 @@ Resume concat_args_sim[head_exit]:
   disj2_tac >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
     (qspec_then `H` mp_tac) >> simp[] >>
+  qpat_x_assum `expr_exit _ r` mp_tac >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, halt_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def, halt_exit_def]
 QED
