@@ -15,9 +15,10 @@ Proof
   `wb_frame cenv em en sm s1 t` by
     (drule expr_post_frame >> simp[]) >>
   conj_tac
-  >- (irule (Q.SPECL [`func`, `cenv`, `cx`, `em`, `s1`, `sm`,
+  >- (qspecl_then [`func`, `cenv`, `cx`, `em`, `s1`, `sm`,
         `en`, `en`, `sn`, `t`, `u`, `ctx`]
-        (Q.INST [`H` |-> `H`] exprSimWordArgsTheory.wb_frame_trans)) >> simp[]) >>
+        mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   strip_tac >>
   `pure_frame cenv func em sm s1 t` by
     (drule_all expr_post_pure_frame >> simp[]) >>
