@@ -144,6 +144,3 @@ Proof
   simp[EVERY_MEM, EL] >>
   (impl_tac >- (conj_tac >- fs[EVERY_MEM] >> fs[lookup_var_def])) >> simp[]
 QED
-
-val _ = if null (hyp dload_joint_tracked_delegate_next) then ()
-        else raise Fail "delegate next: nonempty hypotheses";

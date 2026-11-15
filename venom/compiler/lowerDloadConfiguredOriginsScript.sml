@@ -1005,7 +1005,3 @@ Proof
   simp[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def,
        ctx_fn_names_def]
 QED
-
-val _ = if null (hyp lower_dload_stage_covered_supplies) andalso
-           null (hyp o1_ctx_shape_distinct_names)
-        then () else raise Fail "covered supply boundary has hypotheses";

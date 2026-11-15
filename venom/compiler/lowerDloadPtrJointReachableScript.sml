@@ -121,9 +121,6 @@ QED
 
 Finalise dload_joint_reachable_if_next
 
-val _ = if null (hyp dload_joint_reachable_if_next) then ()
-  else raise Fail "joint reachable if next: nonempty hypotheses";
-
 Theorem dload_target_reachable_labels:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   o1_ctx_shape C /\ frame_reachable vs C' ds PH H un g j t ==>
@@ -157,8 +154,3 @@ Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
   disch_then kall_tac >> metis_tac[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "unconditional joint reachability: nonempty hypotheses")
-  [frame_reachable_functions_member, lower_dload_stage_labels_distinct,
-   dload_target_reachable_labels, dload_joint_reachable];

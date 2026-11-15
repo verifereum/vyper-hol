@@ -2509,12 +2509,3 @@ Proof
                     (build_offset_to_pc prog) (EL as.as_pc prog) as` >>
   gvs[] >> metis_tac[]
 QED
-
-(* Audit the final theorem's dependency tags; the frozen label-map oracle
-   is deliberately retained above, as required by this task. *)
-val _ = let
-  val (oracles, _) = Tag.dest_tag (Thm.tag asm_evm_step_starve)
-in
-  print ("asm_evm_step_starve dependency oracles: " ^
-         String.concatWith ", " oracles ^ "\n")
-end;

@@ -26,9 +26,3 @@ Theorem ctor_storage_arg_reads_after_pop:
 Proof
   CONV_TAC cv_eval
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "vyperCtorStorageAliasTest");

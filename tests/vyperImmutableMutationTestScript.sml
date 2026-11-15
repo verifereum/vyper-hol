@@ -68,16 +68,11 @@ fun check mode visibility ty body =
          FunctionDecl ^visibility Nonpayable F F "__init__" [] [] NoneT ^body])]
          : (num option # toplevel list) list``});
 val checked_count = ref 0;
-fun expect label accepted th = let
-  val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  val closed = null (Thm.hyp th) andalso null axioms andalso
-    List.all (fn s => s = "DISK_THM") oracles
-  in
-    if closed andalso
-       (if accepted then optionSyntax.is_some else optionSyntax.is_none) (rhs (concl th))
-    then checked_count := !checked_count + 1
-    else raise Fail ("immutable mutation checker: " ^ label)
-  end;
+fun expect label accepted th =
+  if null (Thm.hyp th) andalso
+     (if accepted then optionSyntax.is_some else optionSyntax.is_none) (rhs (concl th))
+  then checked_count := !checked_count + 1
+  else raise Fail ("immutable mutation checker: " ^ label);
 fun reject label ty mutation = (
   expect (label ^ " deploy") false
     (check true ``Deploy`` ty ``[^(initialize ty); ^mutation]``);

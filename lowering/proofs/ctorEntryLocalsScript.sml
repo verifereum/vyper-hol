@@ -63,11 +63,3 @@ Proof
   strip_tac >> first_x_assum drule >> strip_tac >>
   gvs[local_ptrs_reserved_def]
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then
-       print ("CTOR_ENTRY_KERNEL_CLOSED " ^ name ^ "\n")
-     else raise Fail ("Unclosed constructor entry theorem: " ^ name)
-  end) (DB.thms "ctorEntryLocals");

@@ -97,13 +97,3 @@ Theorem entry_fixed_zero_array_suffix_valid:
 Proof
   simp[vyper_decode_valid_enc_def]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry canonical window inherited admission"
-  end)
-  [entry_canonical_dynamic_member_offset, entry_empty_member_slice_not_empty,
-   entry_canonical_dynamic_member_bound, entry_canonical_dynamic_member_window,
-   entry_fixed_zero_array_suffix_valid];

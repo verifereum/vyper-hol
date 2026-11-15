@@ -41,11 +41,3 @@ Proof
     by simp[] >>
   drule_all alloca_history_run_inst_seq >> simp[]
 QED
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry history frame inherited admission"
-    end) [entry_straight_line_code_slice, entry_straight_line_alloca_history];

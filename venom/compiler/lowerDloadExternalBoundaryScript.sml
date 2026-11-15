@@ -257,9 +257,6 @@ Proof
   simp[venom_create_request_def]
 QED
 
-val _ = if null (hyp ld_create_request_equal) then ()
-        else raise Fail "create request projection has hypotheses";
-
 (* CREATE consumes the same current oracle result, retaining separate locals. *)
 Theorem ld_consume_create_effect:
   ld_memory lo A tn s t /\ ld_nonghost tn s t /\

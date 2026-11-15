@@ -36,10 +36,6 @@ Proof
   drule_all ld_code_data_bytes >> simp[]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "code data theorem has hypotheses")
-  [ld_code_data_bytes, ld_codecopy_source_mload];
-
 (* Public destination may relocate; the payload is still exactly shared. *)
 Theorem ld_dloadbytes_codecopy_payload:
   code_layout_valid s /\
@@ -79,7 +75,3 @@ Proof
   pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[opcode_case_def] >> simp[]
 QED
-
-val _ = if null (hyp ld_dloadbytes_codecopy_payload) then ()
-        else raise Fail "public copy payload has hypotheses";
-

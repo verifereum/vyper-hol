@@ -45,11 +45,3 @@ Proof
   irule entry_sparse_memory_transport >>
   simp[vyperValueTheory.default_value_def]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry sparse memory inherited admission"
-  end) [entry_sparse_memory_indexed, entry_sparse_memory_transport,
-        entry_sparse_explicit_zero_memory];

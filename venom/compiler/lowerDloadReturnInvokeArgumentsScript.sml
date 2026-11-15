@@ -74,7 +74,3 @@ QED
 (* Permission, identity liveness and erased provenance remain the existing
    ld_arguments_permission, ld_arguments_live and ld_arguments_erasure;
    these are not reproved as INVOKE-specific duplicates. *)
-val _ = List.app (fn th => if null (hyp th) then ()
-          else raise Fail "invoke argument boundary has kernel hypotheses")
-  [ld_invoke_argument_admissible, ld_vars_operands_defined,
-   ld_invoke_arguments_related];

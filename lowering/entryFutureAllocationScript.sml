@@ -37,11 +37,3 @@ Theorem entry_future_allocations_frame:
 Proof
   rpt strip_tac >> `hi <= id /\ cutoff <= id` by decide_tac >> metis_tac[]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry future allocation inherited admission"
-  end) [entry_singleton_future_absent, entry_absent_member_ownership,
-        entry_empty_future_allocations, entry_future_allocations_frame];

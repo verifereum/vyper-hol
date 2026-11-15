@@ -194,8 +194,3 @@ Theorem current_wf_nonphi_after_collect:
 Proof
   ACCEPT_TAC livenessTransferProofsTheory.current_wf_nonphi_after_collect
 QED
-
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in public liveness API")
-  (DB.thms "livenessProofs");

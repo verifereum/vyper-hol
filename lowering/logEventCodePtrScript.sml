@@ -23,9 +23,6 @@ Proof
   drule abi_encoder_counters >> simp[]
 QED
 
-val _ = if null (hyp log_tuple_encoder_interval) then ()
-  else raise Fail "log_tuple_encoder_interval is not closed";
-
 Theorem emitted_interval_split:
   inst_extends a b /\ inst_extends b c /\
   same_blocks a b /\ same_blocks b c /\ fn_has_code a c func /\

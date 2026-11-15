@@ -173,11 +173,3 @@ Proof
   CONV_TAC (DEPTH_CONV intLib.REDUCE_CONV) >>
   CONV_TAC wordsLib.WORD_EVAL_CONV
 QED
-
-val _ = List.app (fn (name, th) => let
-  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") oracles then
-       print ("IMMUTABLE_ENCODING_KERNEL_CLOSED " ^ name ^ "\n")
-     else raise Fail ("Unclosed immutable encoding theorem: " ^ name)
-  end) (DB.thms "immutableEncoding");

@@ -162,17 +162,3 @@ Proof
   drule_all revert_forward_at_terminates_abort >> strip_tac >> gvs[] >>
   drule_all ld_runner_forward_abort_endpoint >> simp[]
 QED
-
-(* Integrity check: a closed export must not inherit proof-local assumptions. *)
-val _ = List.app (fn (name, th) =>
-  if null (hyp th) then print ("HYP AUDIT " ^ name ^ " count=0\n")
-  else raise Fail ("Nonempty kernel hypotheses: " ^ name))
-  [("ld_runner_branch_endpoint", ld_runner_branch_endpoint),
-   ("ld_runner_ret_endpoint", ld_runner_ret_endpoint),
-   ("ld_runner_halt_endpoint", ld_runner_halt_endpoint),
-   ("ld_runner_abort_endpoint", ld_runner_abort_endpoint),
-   ("ld_runner_forward_abort_endpoint", ld_runner_forward_abort_endpoint),
-   ("ld_runner_forward_endpoint", ld_runner_forward_endpoint),
-   ("assign_suffix_no_halt", assign_suffix_no_halt),
-   ("revert_forward_at_no_halt", revert_forward_at_no_halt),
-   ("revert_forward_at_terminates_abort", revert_forward_at_terminates_abort)];

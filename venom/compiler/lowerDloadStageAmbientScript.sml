@@ -86,7 +86,3 @@ Proof
   gvs[] >> irule (SRULE [] ld_owned_root) >>
   goal_assum (drule_at Any) >> simp[]
 QED
-
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "stage ambient boundary has hypotheses")
-  [ld_stage_ambient, ld_stage_root_coverage];

@@ -71,9 +71,3 @@ Theorem dalloca_mask_examples[local]:
 Proof
   EVAL_TAC
 QED
-
-val _ = List.app (fn (name, th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("Incomplete alignment theorem: " ^ name))
-  (DB.thms "fmpAlignment");

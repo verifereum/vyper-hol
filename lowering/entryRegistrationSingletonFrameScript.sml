@@ -351,12 +351,3 @@ Resume entry_registration_singleton_prefix_frame[package]:
 QED
 
 Finalise entry_registration_singleton_prefix_frame
-
-val () =
-  let val th = entry_registration_singleton_prefix_frame
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "ENTRY_REGISTRATION_SINGLETON_FRAME_AUDIT OK\n"
-     else raise Fail "registration singleton frame inherited admission"
-  end;

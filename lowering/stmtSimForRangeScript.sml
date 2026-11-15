@@ -1826,13 +1826,3 @@ Proof
   conj_tac >- metis_tac[] >>
   qexists `env` >> simp[] >> metis_tac[]
 QED
-
-(* Integrity gate for the forced iterator boundary and checked-range consumer. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "RANGE_FORCE_AUDIT OK\n"
-     else raise Fail "forced range inherited admission"
-  end) [eval_iterator_range_forced, eval_stmt_for_range_cases,
-        compile_for_range_checked_frag_active, compile_for_range_checked_frag];

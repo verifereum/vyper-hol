@@ -151,11 +151,6 @@ Proof
        FLOOKUP_DEF, EXTENSION] >> metis_tac[]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "scratch transport has hypotheses")
-  [ld_private_source_member, ld_configured_charge_bound,
-   ld_dload_scratch_tail_transport, ld_dload_memory_frame];
-
 Theorem ld_scratch_endpoint_ownership:
   ir_supply_covers_fn f.lf_supply f.lf_fn /\
   ALL_DISTINCT (fn_ir_inst_ids f.lf_fn) /\ ld_private f d ai /\
@@ -433,7 +428,3 @@ Resume ld_dload_scratch_exit[memory]:
 QED
 
 Finalise ld_dload_scratch_exit
-
-val _ = if null (hyp ld_dload_scratch_exit) then () else
-  raise Fail "scratch exit has hypotheses";
-

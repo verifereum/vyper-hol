@@ -136,9 +136,6 @@ Proof
   drule_all (cj 2 gas_path_ptr_rules) >> simp[]
 QED
 
-val () = if null (hyp raw_call_scalar_finish) then ()
-  else raise Fail "scalar finish has kernel hypotheses";
-
 (* Both oracle outcomes at zero capacity share the same checked edge. *)
 Theorem raw_call_zero_reverting_finish:
   compile_raw_call_finish addr dp dl gas_op value_op

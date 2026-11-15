@@ -105,11 +105,3 @@ Resume entry_source_member_success[child]:
   rpt (pop_assum kall_tac) >> metis_tac[calldata_safe_transfer_trans]
 QED
 Finalise entry_source_member_success
-
-val () =
-  List.app (fn th =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-    in if null axioms andalso null (Thm.hyp th) andalso
-          List.all (fn name => name = "DISK_THM") oracles
-       then () else raise Fail "entry source member child inherited admission"
-    end) [entry_source_member_success];

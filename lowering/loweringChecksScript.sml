@@ -33,9 +33,9 @@ Ancestors
   vyperMembershipMatrixTest
   (* more interface contracts on concrete inputs; raw RETURN's copy *)
   e2eBoundaryTest groupedDispatchProps rawReturnCopy
-  (* compiled creation code and events, the event endpoints' admission audit *)
+  (* compiled creation code and events *)
   vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
-  eventEndpointAudit
+  checkedLogEmptyExecution checkedLogDataExecution
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest

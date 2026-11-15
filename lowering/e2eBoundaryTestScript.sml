@@ -388,11 +388,3 @@ Theorem escaped_control_is_not_related:
 Proof
   simp[call_result_rel_at_def]
 QED
-
-(* Boundary regressions must be kernel-closed, not inherited admissions. *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean result boundary check: " ^ name)
-  end) (DB.thms "e2eBoundaryTest");

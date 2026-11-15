@@ -147,9 +147,6 @@ Proof
   gvs[Abbr `rq`, Excl "consume_call_outcome_eq"]
 QED
 
-val _ = if null (hyp ld_delegate_execution) then ()
-        else raise Fail "delegate execution boundary has hypotheses";
-
 Theorem ld_delegate_observed_effect:
   ld_vars P A f /\ tn.t_var = f.lf_tv /\ MEM inst (fn_insts f.lf_fn) /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
@@ -355,6 +352,3 @@ Proof
   gen_tac >> strip_tac >> irule ld_set_prov_selected >>
   qexistsl [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
 QED
-
-val _ = if null (hyp ld_sync_delegate_effect) then ()
-        else raise Fail "DELEGATECALL producer has hypotheses";

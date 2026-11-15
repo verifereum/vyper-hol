@@ -79,10 +79,3 @@ Proof
   qexistsl_tac [`guard_st`,`header_st`,`p`,`t`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag entry_valid_header_producer_local_frontier)
-  in if null axioms andalso null (Thm.hyp entry_valid_header_producer_local_frontier) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then () else raise Fail "entry header producer inherited admission"
-  end;

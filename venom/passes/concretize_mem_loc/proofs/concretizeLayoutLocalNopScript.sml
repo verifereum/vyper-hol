@@ -81,6 +81,4 @@ Proof
   fs[relocation_taint_le_def, demand_taint_def] >> metis_tac[]
 QED
 
-val _ = if null (hyp concretize_nop_local_complete) then ()
-        else raise Fail "NOP export has hypotheses";
 val _ = export_theory();

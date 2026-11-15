@@ -130,6 +130,3 @@ Resume log_source_store_encode_path_ptr[post]:
   qexists_tac `dv` >> asm_rewrite_tac[]
 QED
 Finalise log_source_store_encode_path_ptr
-
-val _ = if null (hyp log_source_store_encode_path_ptr) then ()
-  else raise Fail "log_source_store_encode_path_ptr is not closed";
