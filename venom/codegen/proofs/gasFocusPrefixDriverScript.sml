@@ -101,9 +101,25 @@ val focus_joint_motive : term = ``
     rpolicy unit cpl prog vs0 es0 ast0 result final data tail
     (N:num) (C7:venom_context) C8 C9
     (root_sf:ir_function) (root_tf:ir_function) (root_entry:venom_state)
-    packet cursors
+    packet
+    (acts : ((num # num) list,
+      ir_function # ir_function # num # venom_state # num list #
+      exec_result option # bytes32 list option) fmap)
+    (blocks : (((num # num) list # num),
+      basic_block # basic_block # instruction list # instruction list #
+      instruction list # num list # venom_state # num #
+      (venom_state # num) option # num # exec_result # bool #
+      bytes32 list option) fmap)
+    (calls : (gas_event,
+      num # num # venom_state # num list # venom_state #
+      (internal_return # venom_state # venom_state) option) fmap)
+    (ms_tab : (((num # num) list # num), bytes32 option list list) fmap)
+    (es_tab : (((num # num) list # num), (string # num) list list) fmap)
+    (ks_tab : (((num # num) list # num), gas_event list list) fmap)
+    rooted_eval p d cursors
     q8 q0 evs qs q9 n ast es raw_slots sites unused.
-    packet_rel N C7 C8 root_sf root_tf root_entry packet q8 raw_slots sites unused /\
+    packet_rel N C7 C8 root_sf root_tf root_entry packet
+      acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
     cursor_rel C8 C9 cursors q8 q9 /\
     frame_rel rpolicy unit cpl prog vs0 es0 q9 ast /\
     joint_trace vs0 C9 q0 evs qs q9 /\
@@ -119,7 +135,21 @@ val focus_joint_motive : term = ``
 val focus_dft_packet_step_goal : term = ``
   \packet_rel.
   !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
-    (root_entry:venom_state) packet acts blocks calls ms_tab es_tab ks_tab
+    (root_entry:venom_state) packet
+    (acts : ((num # num) list,
+      ir_function # ir_function # num # venom_state # num list #
+      exec_result option # bytes32 list option) fmap)
+    (blocks : (((num # num) list # num),
+      basic_block # basic_block # instruction list # instruction list #
+      instruction list # num list # venom_state # num #
+      (venom_state # num) option # num # exec_result # bool #
+      bytes32 list option) fmap)
+    (calls : (gas_event,
+      num # num # venom_state # num list # venom_state #
+      (internal_return # venom_state # venom_state) option) fmap)
+    (ms_tab : (((num # num) list # num), bytes32 option list list) fmap)
+    (es_tab : (((num # num) list # num), (string # num) list list) fmap)
+    (ks_tab : (((num # num) list # num), gas_event list list) fmap)
     rooted_eval p d cpl es0 raw_slots sites unused
     stk PG G tn fn inst s oms om hs h ev q8'.
     packet_rel N C7 C8 root_sf root_tf root_entry packet
