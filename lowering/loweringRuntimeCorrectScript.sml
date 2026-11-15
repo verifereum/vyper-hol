@@ -24,6 +24,7 @@
  * TOP-LEVEL:
  *   lower_vyper_runtime_unit_correct -- S1
  *   lower_vyper_runtime_unit_body_joint -- S1 when the value moves
+ *   runtime_body_joint_from_start -- the same, from the entry's endpoint
  *   lower_vyper_runtime_unit_run_bounded -- S1b (sufficient gas)
  *)
 
@@ -32,6 +33,7 @@ Ancestors
   sourceUnitExecution e2eDefs compileVyper vyperInterpreter vyperState
   vyperStorageFootprint gasShadowUnit vyperTypeSelectedEntrySoundness
   externalEntryValueRevert unitExecutionCompose externalEntryJoint
+  runtimeEntryEndpoint
   externalBodyFrame externalFrameRetOk runtimeBodyShadow
   externalCallSelected externalBodySourceOk bodySimFullMain bodySimFull
   entryStateRel entryReachBodyFmp entryReachBodyRuntimeResources
@@ -328,17 +330,18 @@ QED
 
 (* ===== S1 ===== *)
 
-(* S1 when the value moves and the body starts: unit_execution_compose of
-   the entry's pointer path to the body's start and the body's
-   gas_outcome_full, the call being call_external_trace at the call's
-   outcomes. *)
-Theorem lower_vyper_runtime_unit_body_joint:
+(* S1 when the value moves and the body starts, from the entry's endpoint
+   (runtimeEntryEndpoint): unit_execution_compose of the entry's pointer
+   path to the body's start and the body's gas_outcome_full, the call
+   being call_external_trace at the call's outcomes.  Every entry that
+   reaches the endpoint (the canonical one, any dispatched encoding, the
+   __default__ fallback) shares this proof. *)
+Theorem runtime_body_joint_from_start_with_shadow:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
@@ -348,81 +351,32 @@ Theorem lower_vyper_runtime_unit_body_joint:
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) ==>
-    ?shadow_ctx func shadow_func marks.
-      unit.cu_context.ctx_entry = SOME "__entry" /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      fn_entry_label func = SOME "__entry" /\
-      gas_shadow_context unit.cu_context shadow_ctx /\
-      gas_shadow_function func shadow_func /\
-      MEM func unit.cu_context.ctx_functions /\
-      MEM shadow_func shadow_ctx.ctx_functions /\
-      (((!tail.
-           ~(source_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
-             call_outcomes_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
-        ?(H : (bool # bytes32 # type_value) list # num list)
-           leaf leaf_pg leaf_g leaf_tn finish.
-          gas_origin_ptr_focus
-            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
-             0, gas_explicit_sites unit.cu_context shadow_ctx,
-             unit.cu_context, func, [])
-            ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                         vs_inst_idx := 0 |>), FEMPTY, entry_taint)
-            marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
-       ?res am' rqs obs.
-         (!tail. call_external_trace (SOME vs.vs_outcomes)
-            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx =
-            (res, am', rqs, obs)) /\
-         ((source_exempt tops (res, am', rqs) /\
-           ?(H : (bool # bytes32 # type_value) list # num list)
-              leaf leaf_pg leaf_g leaf_tn finish.
-             gas_origin_ptr_focus
-               (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
-                0, gas_explicit_sites unit.cu_context shadow_ctx,
-                unit.cu_context, func, [])
-               ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                            vs_inst_idx := 0 |>), FEMPTY, entry_taint)
-               marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
-          (?r. exit_result r /\
-             storage_trace_domain
-               (initial_evaluation_context am.sources am.layouts tx NONE)
-               (initial_state am []) obs /\
-             gas_origin_path T
-               (gas_explicit_sites unit.cu_context shadow_ctx)
-               unit.cu_context func
-               (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                           vs_inst_idx := 0 |>) marks r /\
-             !H. valid_horizon
-                   (initial_evaluation_context am.sources am.layouts tx NONE)
-                   (initial_state am []) H obs ==>
-               external_call_result_rel H tops ret tx (res, am', rqs) r /\
-               (!fuel. ptr_safe_blocks
-                 (cx_dead H
-                   (initial_evaluation_context am.sources am.layouts tx NONE))
-                 0 fuel unit.cu_context func [] FEMPTY entry_taint
-                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                             vs_inst_idx := 0 |>)))))
+      (INL (), es0) /\
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody ==>
+    ?shadow_unit marks.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks
+        tops ret am tx unit vs
 Proof
   rpt gen_tac >> strip_tac >>
   `LENGTH tx.args = LENGTH args` by
     (drule bind_arguments_length >> simp[]) >>
-  drule_all external_entry_joint >> strip_tac >>
+  qpat_x_assum `runtime_entry_endpoint _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [runtime_entry_endpoint_def]) >>
   drule_all external_body_frame >> strip_tac >>
   `rt = if ret = NoneT then NONE else SOME ret` by
     gvs[package_external_fn_def, set_external_package_target_def] >>
   drule guarded_body_code >> strip_tac >>
   drule_all guarded_body_stmts_env >> strip_tac >>
-  drule_all runtime_selected_body_shadow >>
+  drule_all runtime_entry_body_shadow_with_shadow >>
   disch_then (qx_choosel_then [`func2`, `shadow_ctx`, `shadow_func`,
-                `cenv2`, `sb2`, `shadow_sa`, `shadow_sb`] strip_assume_tac) >>
+                `cenv2`, `sb2`, `shadow_sa`, `shadow_sb`, `shadow_unit`] strip_assume_tac) >>
   `func2 = func /\ cenv2 = cenv' /\ sb2 = sb` by gvs[] >>
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all external_frame_ret_ok_full >>
   disch_then (qspecl_then
     [`\H. cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE)`,
-     `0`, `NONE`, `shadow_ctx`, `[]`, `func`, `shadow_func`] assume_tac) >>
+     `0`, `NONE`, `shadow_unit.cu_context`, `[]`, `func`, `shadow_func`] assume_tac) >>
   `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) =
    tops` by
     (irule cx_tops_module >>
@@ -516,7 +470,7 @@ Proof
                (qspec_then `[]` mp_tac) >> simp[]) >>
           `ret = NoneT` by (drule_all external_body_source_ok >> simp[]) >>
           `rt = NONE` by simp[] >>
-          qspecl_then [`gas_explicit_sites unit.cu_context shadow_ctx`,
+          qspecl_then [`gas_explicit_sites unit.cu_context shadow_unit.cu_context`,
                        `unit.cu_context`, `cenv`, `nkey`, `ut'`, `iv`,
                        `fbody`, `sa`, `st'`, `sb`, `func`, `t`] mp_tac
             compile_guarded_body_stop_path >>
@@ -551,7 +505,10 @@ Proof
           gvs[expr_exit_def, external_call_result_rel_def]) >>
       gvs[abstract_machine_from_state_def]) >>
   strip_tac >>
-  qexistsl_tac [`shadow_ctx`, `func`, `shadow_func`, `marks`] >> simp[] >>
+  qexistsl_tac [`shadow_unit`, `marks`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  pure_rewrite_tac[source_unit_execution_correct_with_def] >>
+  qexistsl_tac [`func`, `shadow_func`] >> simp[] >>
   qpat_x_assum `_ \/ _` mp_tac >>
   simp[call_external_trace_observations] >> strip_tac
   >- (disj1_tac >> conj_tac
@@ -561,6 +518,195 @@ Proof
           simp[source_storage_guards_domain])
       >> metis_tac[]) >>
   disj2_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem runtime_body_joint_from_start:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret fbody ==>
+    ?shadow_ctx func shadow_func marks.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      (((!tail.
+           ~(source_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
+             call_outcomes_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
+        ?(H : (bool # bytes32 # type_value) list # num list)
+           leaf leaf_pg leaf_g leaf_tn finish.
+          gas_origin_ptr_focus
+            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+             0, gas_explicit_sites unit.cu_context shadow_ctx,
+             unit.cu_context, func, [])
+            ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                         vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+            marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+       ?res am' rqs obs.
+         (!tail. call_external_trace (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx =
+            (res, am', rqs, obs)) /\
+         ((source_exempt tops (res, am', rqs) /\
+           ?(H : (bool # bytes32 # type_value) list # num list)
+              leaf leaf_pg leaf_g leaf_tn finish.
+             gas_origin_ptr_focus
+               (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+                0, gas_explicit_sites unit.cu_context shadow_ctx,
+                unit.cu_context, func, [])
+               ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                            vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+               marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+          (?r. exit_result r /\
+             storage_trace_domain
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               (initial_state am []) obs /\
+             gas_origin_path T
+               (gas_explicit_sites unit.cu_context shadow_ctx)
+               unit.cu_context func
+               (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                           vs_inst_idx := 0 |>) marks r /\
+             !H. valid_horizon
+                   (initial_evaluation_context am.sources am.layouts tx NONE)
+                   (initial_state am []) H obs ==>
+               external_call_result_rel H tops ret tx (res, am', rqs) r /\
+               (!fuel. ptr_safe_blocks
+                 (cx_dead H
+                   (initial_evaluation_context am.sources am.layouts tx NONE))
+                 0 fuel unit.cu_context func [] FEMPTY entry_taint
+                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                             vs_inst_idx := 0 |>)))))
+Proof
+  rpt strip_tac >>
+  drule_all runtime_body_joint_from_start_with_shadow >>
+  disch_then (qx_choosel_then [`shadow_unit`, `marks`] strip_assume_tac) >>
+  qpat_x_assum `source_unit_execution_correct_with _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_with_def]) >>
+  qexistsl_tac [`shadow_unit.cu_context`, `func`, `shadow_func`, `marks`] >>
+  simp[]
+QED
+
+(* S1 when the value moves and the body starts, for the canonical
+   encoding: the canonical entry reaches the endpoint. *)
+Theorem lower_vyper_runtime_unit_body_joint_with_shadow:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) ==>
+    ?shadow_unit marks.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks
+        tops ret am tx unit vs
+Proof
+  rpt strip_tac >>
+  drule_all external_entry_joint_endpoint >> strip_tac >>
+  drule_all runtime_body_joint_from_start_with_shadow >> disch_then ACCEPT_TAC
+QED
+
+Theorem lower_vyper_runtime_unit_body_joint:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) ==>
+    ?shadow_ctx func shadow_func marks.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      (((!tail.
+           ~(source_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail) /\
+             call_outcomes_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail))) /\
+        ?(H : (bool # bytes32 # type_value) list # num list)
+           leaf leaf_pg leaf_g leaf_tn finish.
+          gas_origin_ptr_focus
+            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+             0, gas_explicit_sites unit.cu_context shadow_ctx,
+             unit.cu_context, func, [])
+            ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                         vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+            marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+       ?res am' rqs obs.
+         (!tail. call_external_trace (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx =
+            (res, am', rqs, obs)) /\
+         ((source_exempt tops (res, am', rqs) /\
+           ?(H : (bool # bytes32 # type_value) list # num list)
+              leaf leaf_pg leaf_g leaf_tn finish.
+             gas_origin_ptr_focus
+               (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+                0, gas_explicit_sites unit.cu_context shadow_ctx,
+                unit.cu_context, func, [])
+               ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                            vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+               marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+          (?r. exit_result r /\
+             storage_trace_domain
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               (initial_state am []) obs /\
+             gas_origin_path T
+               (gas_explicit_sites unit.cu_context shadow_ctx)
+               unit.cu_context func
+               (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                           vs_inst_idx := 0 |>) marks r /\
+             !H. valid_horizon
+                   (initial_evaluation_context am.sources am.layouts tx NONE)
+                   (initial_state am []) H obs ==>
+               external_call_result_rel H tops ret tx (res, am', rqs) r /\
+               (!fuel. ptr_safe_blocks
+                 (cx_dead H
+                   (initial_evaluation_context am.sources am.layouts tx NONE))
+                 0 fuel unit.cu_context func [] FEMPTY entry_taint
+                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                             vs_inst_idx := 0 |>)))))
+Proof
+  rpt strip_tac >>
+  drule_all external_entry_joint_endpoint >> strip_tac >>
+  drule_all runtime_body_joint_from_start >> disch_then ACCEPT_TAC
 QED
 
 Theorem lower_vyper_runtime_unit_correct:
