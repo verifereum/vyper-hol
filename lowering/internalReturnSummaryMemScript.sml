@@ -94,7 +94,7 @@ Proof
   disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `r`] >>
-  simp[Once evaluate_def, raise_def, stmt_exit_def] >>
+  simp[Once evaluate_def, raise_def, stmt_exit_def, halt_exit_def] >>
   TRY disj2_tac >> rpt strip_tac >> TRY disj2_tac >>
   `RetQ H NoneV (es with scopes := []) r` by metis_tac[] >>
   qpat_x_assum `!H v ee gs r. _`
@@ -113,7 +113,7 @@ Theorem internal_return_summary_bind_mem[local]:
   gas_summary_at T (ctx,func) marks source (es,s0)
     (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==> P H res ee t)
     (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-       expr_exit res r) /\
+       expr_exit res r /\ halt_exit H cx ee res r) /\
   (!H res ee t. P H res ee t ==> ?v. res = INL v) /\
   (!H v ee r. RetQ H v ee r ==> exit_result r) /\
   (!H v ee gs r. RetQ H v (ee with gas_obs := gs) r = RetQ H v ee r) /\
@@ -132,7 +132,8 @@ Theorem internal_return_summary_bind_mem[local]:
       (bind source (\v. (raise (ReturnException v) :
          evaluation_state -> (unit + exception) # evaluation_state))) (es,s0) Q
       (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-         !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+         (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+         halt_exit H cx ee res r)
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
@@ -168,7 +169,7 @@ Proof
           >- (irule gas_marked_exec_bind_normal >>
               qexistsl_tac [`es_end`, `t`, `v`] >>
               simp[gas_marked_exec_def, gas_marked_path_def, raise_def]) >>
-          simp[stmt_exit_def] >>
+          simp[stmt_exit_def, halt_exit_def] >>
           TRY disj2_tac >> rpt strip_tac >> TRY disj2_tac >>
           `RetQ H v (es_end with scopes := []) r` by
             (`RetQ H v ((es_end with scopes := []) with gas_obs := []) r` by
@@ -194,7 +195,8 @@ Proof
       qexists_tac `marks` >> disj2_tac >>
       qexistsl_tac [`INR ex`, `es_end`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+      simp[stmt_exit_def] >> fs[halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   ret_bad_tac
 QED
 
