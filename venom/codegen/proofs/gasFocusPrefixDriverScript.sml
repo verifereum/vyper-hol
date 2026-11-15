@@ -1,8 +1,8 @@
 Theory gasFocusPrefixDriver
 Ancestors
-  o1PipelineCorrect o1SafeUpto o1PassContract gasEvents
-  codegenEntryRel asmFrameRel frameJointTrace asmSem symbolResolve
-  frameOutcome callTrace vfmExecution list rich_list
+  o1PipelineCorrect o1SafeUpto o1PassContract o1RequestContract o1PassLift gasEvents
+  codegenEntryRel codegenAsmProgOk asmFrameRel frameJointTrace asmSem symbolResolve
+  frameOutcome callTrace vfmExecution list rich_list pred_set words
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
    The packet, CFG cursor and frame-plan conjuncts will be joined here once
@@ -44,6 +44,8 @@ val focus_producer_goal : term = ``
           (vs0 with vs_gas_readings := raw ++ [0w]) ==>
         ctx_sim D unit.cu_context out.po_unit.cu_context
           (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
+        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+          (vs0 with vs_gas_readings := raw ++ [0w]) vs0 /\
         o1_lowered_inv out.po_unit.cu_context vs0
 ``;
 
@@ -57,6 +59,99 @@ val focus_execution_motive : term = ``
     asm_frame_rel_tail tail prog data es0 ast es /\
     run_call es0 = SOME (result,final) /\
     ~frame_resource_starved es0 result final
+``;
+
+(* Explicit component parameters allow owners to fix their interfaces before
+   their theories are imported here. Each step below is a goal function:
+   instantiate its parameters before attempting a proof. In particular no
+   preservation theorem is claimed for arbitrary component predicates. *)
+val focus_joint_motive : term = ``
+  \packet_rel cursor_rel frame_rel
+    rpolicy unit cpl prog vs0 es0 ast0 result final data tail
+    (N:num) (C7:venom_context) C8 C9
+    (root_sf:ir_function) (root_tf:ir_function) (root_entry:venom_state)
+    packet cursors
+    q8 q0 evs qs q9 n ast es raw_slots sites unused.
+    packet_rel N C7 C8 root_sf root_tf root_entry packet q8 raw_slots sites unused /\
+    cursor_rel C8 C9 cursors q8 q9 /\
+    frame_rel rpolicy unit cpl prog vs0 es0 q9 ast /\
+    joint_trace vs0 C9 q0 evs qs q9 /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n ast0 = AsmOK ast /\
+    asm_frame_rel_tail tail prog data es0 ast es /\
+    run_call es0 = SOME (result,final) /\
+    ~frame_resource_starved es0 result final /\
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0)
+``;
+
+val focus_dft_packet_step_goal : term = ``
+  \packet_rel.
+  !(N:num) (C7:venom_context) C8 (root_sf:ir_function) (root_tf:ir_function)
+    (root_entry:venom_state) packet es0 raw_slots sites unused
+    stk PG G tn fn inst s oms om hs h ev q8'.
+    packet_rel N C7 C8 root_sf root_tf root_entry packet
+      (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    (inst.inst_opcode = GAS ==> s.vs_gas_readings <> []) /\
+    joint_transition C8 (JointConfig stk PG G tn fn inst s oms om hs h) ev q8' ==>
+    ?packet' raw_slots' sites' unused'.
+      packet_rel N C7 C8 root_sf root_tf root_entry
+        packet' q8' raw_slots' sites' unused' /\
+      LENGTH raw_slots' = LENGTH sites' /\
+      PERM (MAP THE (FILTER IS_SOME raw_slots') ++ unused') (gas_readings es0)
+``;
+
+val focus_cfg_cursor_step_goal : term = ``
+  \cursor_rel.
+  !C8 C9 cursors stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8
+    stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9 ev q9'.
+    cursor_rel C8 C9 cursors
+      (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+    joint_transition C9
+      (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) ev q9' ==>
+    mem_corr inst8 s8 inst9 s9 /\ call_corr inst8 s8 inst9 s9 /\
+    (inst_mem_ranges inst9 s9 <> [] /\ ~in_revert_forward fn9 s9 ==>
+      ~in_revert_forward fn8 s8) /\
+    ?cursors' q8'.
+      ((q8' = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8 /\
+        MEM inst9.inst_opcode [ASSIGN; JMP] /\
+        inst9.inst_opcode <> GAS /\ inst9.inst_opcode <> INVOKE /\
+        inst_mem_ranges inst9 s9 = []) \/
+       ?ev8. joint_transition C8
+         (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) ev8 q8') /\
+      cursor_rel C8 C9 cursors' q8' q9'
+``;
+
+val focus_s7_frame_step_goal : term = ``
+  \frame_rel.
+  !rpolicy unit cpl prog vs0 es0 stk PG G tn fn inst s oms om hs h
+    ast ev stk' PG' G' tn' fn' inst' t oms' om' hs' h'.
+    joint_config_reachable vs0 unit.cu_context
+      (JointConfig stk PG G tn fn inst s oms om hs h) /\
+    frame_rel rpolicy unit cpl prog vs0 es0
+      (JointConfig stk PG G tn fn inst s oms om hs h) ast /\
+    ~in_revert_forward fn s /\
+    (inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+      source_memory_reads_disjoint cpl inst s /\
+      context_source_memory_writes_disjoint cpl inst s) /\
+    joint_transition unit.cu_context
+      (JointConfig stk PG G tn fn inst s oms om hs h) ev
+      (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ==>
+    ?n ast'.
+      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog n ast = AsmOK ast' /\
+      frame_rel rpolicy unit cpl prog vs0 es0
+        (JointConfig stk' PG' G' tn' fn' inst' t oms' om' hs' h') ast' /\
+      (0 < n \/
+       (n = 0 /\ inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+        stk' = stk /\ fn' = fn /\ t.vs_current_bb = s.vs_current_bb /\
+        t.vs_inst_idx = SUC s.vs_inst_idx /\
+        ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+          LENGTH bb.bb_instructions - t.vs_inst_idx <
+            LENGTH bb.bb_instructions - s.vs_inst_idx))
 ``;
 
 (* Every free name is intentional. A missing imported constant must fail
@@ -81,6 +176,15 @@ val _ =
   else raise Fail "focus execution motive is not a closed Boolean predicate";
 
 val _ = app
+  (fn tm =>
+    if null (free_vars tm) andalso
+       type_of (snd (strip_abs tm)) = type_of ``T``
+    then ()
+    else raise Fail "focus component interface has free names or a non-Boolean body")
+  [focus_joint_motive, focus_dft_packet_step_goal,
+   focus_cfg_cursor_step_goal, focus_s7_frame_step_goal];
+
+val _ = app
   (fn (thy, name) =>
     if is_const (prim_mk_const {Thy = thy, Name = name}) then ()
     else raise Fail (thy ^ "$" ^ name ^ " is not a constant"))
@@ -89,3 +193,65 @@ val _ = app
    ("codegenEntryRel", "initial_ctx_rel_tail"),
    ("frameJointTrace", "joint_trace"),
    ("asmFrameRel", "asm_frame_rel_tail")];
+
+(* This bound is uniform over values, not over an unbounded number of slots.
+   The execution fold must still establish its bound on the slot count. *)
+Theorem focus_mark_lengths_bounded:
+  !(markf:bytes32 list -> bool list) max_raw.
+    ?bound. !raw.
+      LENGTH raw <= max_raw ==> LENGTH (markf (raw ++ [0w])) <= bound
+Proof
+  rpt gen_tac >>
+  `FINITE {raw:bytes32 list | LENGTH raw <= max_raw}` by
+    (mp_tac (Q.ISPECL [`UNIV:bytes32 set`, `max_raw:num`] FINITE_BOUNDED_LISTS) >>
+     simp[]) >>
+  qexists_tac `MAX_SET (IMAGE (\raw. LENGTH (markf (raw ++ [0w])))
+    {raw:bytes32 list | LENGTH raw <= max_raw})` >>
+  rpt strip_tac >> irule in_max_set >> simp[] >>
+  qexists_tac `raw` >> simp[]
+QED
+
+Theorem focus_execution_initial:
+  codegen_assembly rpolicy unit = SOME prog /\
+  initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0 /\
+  joint_initial vs0 unit.cu_context q0 /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final ==>
+  ^(focus_execution_motive)
+    vs0 unit.cu_context prog vs0.vs_data_section es0
+    (entry_asm_state vs0 es0) result final tail
+    q0 [] [] q0 0 (entry_asm_state vs0 es0) es0
+Proof
+  strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  `vs0.vs_call_ctx.cc_created_in_tx \/ account_already_created
+    (lookup_account (FST (HD es0.contexts)).msgParams.callee
+      es0.rollback.accounts)` by
+    (gvs[initial_ctx_rel_tail_def, initial_ctx_rel_def] >> metis_tac[]) >>
+  `asm_frame_rel_tail tail prog vs0.vs_data_section es0
+    (entry_asm_state vs0 es0) es0` by
+    metis_tac[asm_frame_rel_entry_tail] >>
+  simp[joint_trace_def, joint_chain_def, asm_steps_def]
+QED
+
+(* Early stopping is allowed only when every compatible filling is covered
+   and every conditional Exit antecedent is false. Actual terminal stopping
+   has a separate simulation and output-invariant obligation. *)
+Theorem focus_early_stop_extract[local]:
+  LENGTH raw_slots = LENGTH sites /\
+  PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+  (!raw.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+    ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+  (!raw D.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw /\
+    (?fr. terminates (run_context fr unit.cu_context
+      (vs0 with vs_gas_readings := raw ++ [0w]))) /\
+    dead_wf D /\
+    o1_pre_walk_inv D unit.cu_context
+      (vs0 with vs_gas_readings := raw ++ [0w]) ==> F) ==>
+  ^(snd (dest_imp focus_producer_goal))
+Proof
+  strip_tac >> qexistsl_tac [`raw_slots`, `sites`, `unused`] >>
+  simp[] >> metis_tac[]
+QED
