@@ -6,14 +6,14 @@ Ancestors
   loweringStateRelDefs arithmetic
 
 Theorem immutable_assign_mem_entry_post:
-  expr_post ctx func ce cx e es sa su s0 ee v op u /\
-  stmt_post ctx func cx lctx ce ce su sb ee u (INL ()) fin t /\
+  expr_post H ctx func ce cx e es sa su s0 ee v op u /\
+  stmt_post H ctx func cx lctx ce ce su sb ee u (INL ()) fin t /\
   sa.cs_next_var <= su.cs_next_var /\ sa.cs_next_var <= sb.cs_next_var /\
   return_buf_frame d ce sa s0 /\ alloca_history func u /\
   fn_inst_ids_distinct func /\ gas_marked_path T ctx func u 0 (OK t) /\
   s0.vs_alloca_next <= t.vs_alloca_next ==>
   stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
-  cenv_top_ext ce ce fin.scopes /\ stmt_state_rel ctx func ce cx fin t /\
+  cenv_top_ext ce ce fin.scopes /\ stmt_state_rel H ctx func ce cx fin t /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
      lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

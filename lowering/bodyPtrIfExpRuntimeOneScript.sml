@@ -4,7 +4,7 @@ Ancestors bodyPtrIfExpRuntimeCompiler bodyPtrIfExpRuntimeOffset
   instIdxIndep venomState emitHelper context compileEnv loweringStateRelDefs venomExecSemantics
   venomInst exprSimPtrProps fragGasPathPtr immutableCopyExecution
   exprLoweringProps emitHelperProps bodyPtrIfExpScalarLoad finite_map
-  bodyPtrDefs ptrDiscipline words arithmetic pred_set ghostPcTransportPtr
+  bodyPtrDefs ptrDiscipline words arithmetic pred_set ghostPcTransportPtr wordLoadStorePtr
 
 (* Fixed-run frames commute with restoring a straight-line cursor. *)
 Theorem ifexp_runtime_frame_cursor:

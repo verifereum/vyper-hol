@@ -60,5 +60,19 @@ Proof
   >- (irule body_expr_sim_mem_of_vv_sim_mem >> simp[] >>
       conj_tac >- metis_tac[toplevel_compile_not_stack] >>
       goal_assum drule) >>
-  rw[expr_sim_mem_def] >> gvs[stmt_state_rel_def, state_rel_def]
+  rw[expr_sim_mem_def] >>
+  Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >- (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+         es.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      gvs[stmt_state_rel_def, state_rel_def]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_initial >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result]
 QED

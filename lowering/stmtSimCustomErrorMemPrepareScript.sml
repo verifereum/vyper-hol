@@ -28,7 +28,10 @@ Theorem custom_error_allocate_store_ready_mem:
     buf.buf_operand 0 sa' = ((),sm) /\
   fn_has_code sa sa' func /\ fn_has_code sa' sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  valid_horizon cx st0 H0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?inst x t b tvs.
@@ -38,7 +41,9 @@ Theorem custom_error_allocate_store_ready_mem:
     local_ptrs_reserved ce sa' /\ (!scopes. not_local_ptr ce scopes x) /\
     gas_marked_path T ctx func s0 0 (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sa'.cs_current_bb /\ t.vs_inst_idx = LENGTH sa'.cs_current_insts /\
-    stmt_state_rel ctx func ce cx es t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es t /\
+       storage_well_formed_on cx es (FST H)) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\ lookup_var x t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas inst.inst_id =
       SOME (b,type_memory_bytes ce (TupleT (MAP SND params))) /\
@@ -48,10 +53,11 @@ Theorem custom_error_allocate_store_ready_mem:
     type_memory_size_list tvs = type_memory_bytes ce (TupleT (MAP SND params)) /\
     type_memory_bytes ce (TupleT (MAP SND params)) < 2 ** 64 /\
     abi_size_bound ce.ce_struct_fields (TupleT (MAP SND params)) + 32 < 2 ** 64 /\
-    gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx (custom_error_exprs err)) (es,t)
-      (\res ee r. ?vs. res = INL vs /\ r.vs_current_bb = sm.cs_current_bb /\
+    gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx (custom_error_exprs err)) (es,t)
+      (\H res ee r. ?vs. res = INL vs /\ r.vs_current_bb = sm.cs_current_bb /\
         r.vs_inst_idx = LENGTH sm.cs_current_insts /\ expr_sim_inv ce cx env ee /\
-        stmt_state_rel ctx func ce cx ee r /\
+        stmt_state_rel H ctx func ce cx ee r /\
+        storage_well_formed_on cx ee (FST H) /\
         alloca_history func r /\ t.vs_alloca_next <= r.vs_alloca_next /\ tuple_in_memory vs tvs b r.vs_memory /\
         (!z w. not_fresh_at sa' z /\ lookup_var z t = SOME w ==>
           lookup_var z r = SOME w) /\
@@ -72,9 +78,12 @@ Theorem custom_error_allocate_store_ready_mem:
               sa'.cs_next_id <= i.inst_id /\ FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
               regions_disjoint p n c sz) ==>
             mem_bytes_at p n r.vs_memory = mem_bytes_at p n t.vs_memory)))
-      (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
+      (\H res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
+  `stmt_state_rel H0 ctx func ce cx es s0 /\
+   (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func ce cx es s0)` by metis_tac[] >>
   `type_memory_bytes ce (TupleT (MAP SND params)) < 2 ** 64 /\
    abi_size_bound ce.ce_struct_fields (TupleT (MAP SND params)) + 32 < 2 ** 64` by
     (qpat_x_assum `stmt_exprs_ok _ _` mp_tac >>
@@ -83,6 +92,11 @@ Proof
   `type_memory_bytes ce (TupleT (MAP SND params)) < dimword (:256)` by
     (fs[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es t /\
+     storage_well_formed_on cx es (FST H)` by
+    (rpt strip_tac >> res_tac >>
+     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
   `well_typed_exprs env (custom_error_exprs err)` by
     metis_tac[custom_error_raise_args_well_typed] >>
   `type_memory_bytes ce (TupleT (MAP expr_type (custom_error_exprs err))) < 2 ** 64` by
@@ -102,14 +116,13 @@ Proof
     regions_disjoint io (type_memory_size itv) b (type_memory_size_list tvs)` by
     (rpt strip_tac >>
      irule (SRULE [] (Q.INST [`off` |-> `0`] custom_error_buffer_immutable_frame)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
      gvs[] >> qexistsl_tac [`iv`,`name`] >> simp[]) >>
   gvs[] >>
   drule_at (Pat `compile_custom_error_store_args _ _ _ _ _ _ = _`)
-    custom_error_store_args_sim_mem >>
+    (Q.INST [`st0` |-> `st0`] (SPEC_ALL custom_error_store_args_sim_mem)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >> simp[] >>

@@ -92,7 +92,11 @@ Resume compile_calldata_slice_sim_mem[success]:
   rename1 `r = OK t1` >>
   qpat_x_assum `r = OK t1` SUBST_ALL_TAC >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) buffer_memory_marked_read >>
-  simp[mk_ptr_def, is_word_type_def] >> strip_tac >>
+  simp[mk_ptr_def, is_word_type_def] >>
+  disch_then (qspecl_then [`T`, `marks`,
+    `eval_expr cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])`]
+    mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `read_result cx tv (es_end with gas_obs := []) =
      (INL v,es_end with gas_obs := [])` by
     (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`

@@ -51,7 +51,7 @@ Proof
 QED
 
 Theorem compile_mapping_bytestring_key_mem_ok:
-  expr_post ctx func cenv cx e es sa sm s0 es' kv key s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' kv key s /\
   expr_store_bound cx (expr_type e) kv key s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

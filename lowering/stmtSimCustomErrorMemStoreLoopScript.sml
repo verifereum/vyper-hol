@@ -7,6 +7,7 @@ Ancestors
   exprLoweringProps exprSimDefs exprSimHypsDefs exprSimHyps exprSimProps
   exprSimSource loweringPosts compileEnv loweringStateRelDefs
   valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
+  gasStorage vyperStorageTrace vyperStorageFootprint
   gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath fragExec
   vyperInterpreter vyperState vyperImmutableMetadataFrame
   vyperEvalExprPreservesScopesDom exprBopSimProps exprSimMemDefs
@@ -19,12 +20,12 @@ Libs monadsyntax
 Theorem custom_error_mem_read_cons_outcome[local]:
   read_result cx tv es = (INL v,es) /\
   gas_marked_path memory ctx func t 0 (OK q) /\
-  gas_outcome memory tops (ctx,func) (eval_exprs cx args)
+  gas_outcome memory tops (ctx,func) cx st0 (eval_exprs cx args)
     (es with gas_obs := [],q)
-    (\res ee r. ?vs. res = INL vs /\ P vs ee r)
-    (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) /\
-  (!vs ee r. P vs ee r ==> Q (INL (v::vs)) ee r) ==>
-  gas_outcome memory tops (ctx,func)
+    (\H res ee r. ?vs. res = INL vs /\ P H vs ee r)
+    (\H res ee r. ?exc. res = INR exc /\ R H (INR exc) ee r) /\
+  (!H vs ee r. P H vs ee r ==> Q H (INL (v::vs)) ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0
     (bind (read_result cx tv)
       (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))
     (es,t) Q R
@@ -33,34 +34,60 @@ Proof
   `gas_marked_exec memory (ctx,func) (read_result cx tv) (es,t)
       [] (INL v) es (OK q)` by
     (simp[gas_marked_exec_def] >> metis_tac[read_result_gas_obs]) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      irule (SRULE [] (Q.INST [`left` |-> `[]`]
+        (SPEC_ALL gas_bad_storage_at_bind_right))) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_return])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule (SRULE [] (Q.INST [`left` |-> `[]`]
+             (SPEC_ALL gas_bad_storage_at_bind_right))) >>
+           goal_assum (drule_at Any) >> simp[] >>
+           irule gas_bad_storage_at_bind_left >>
+           simp[storage_trace_frame_return] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `memory`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
       >- suspend "normal"
       >> suspend "exit") >>
   suspend "exempt"
 QED
+
 Resume custom_error_mem_read_cons_outcome[normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o BETA_RULE) >>
+  first_assum (drule_then strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   gvs[] >>
   `gas_marked_exec memory (ctx,func)
       (bind (eval_exprs cx args) (\vs. return (v::vs)))
       (es with gas_obs := [],q) marks (INL (v::vs)) es_end (OK t')` by
     (qpat_x_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >> strip_tac >> simp[bind_def, return_def]) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     simp[bind_def, return_def]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (v::vs)`, `es_end`, `OK t'`] >> simp[] >>
   irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_marked_exec_bind_normal))) >>
   goal_assum (drule_at Any) >> simp[]
 QED
 Resume custom_error_mem_read_cons_outcome[exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  first_assum (drule_then strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   gvs[] >>
   `gas_marked_exec memory (ctx,func)
       (bind (eval_exprs cx args) (\vs. return (v::vs)))
       (es with gas_obs := [],q) marks (INR exc) es_end r` by
     (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
   irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_marked_exec_bind_normal))) >>
@@ -68,7 +95,7 @@ Resume custom_error_mem_read_cons_outcome[exit]:
 QED
 Resume custom_error_mem_read_cons_outcome[exempt]:
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
   simp[bind_assoc, bind_return] >>
   irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_exempt_cert_bind_value))) >>
@@ -78,7 +105,7 @@ Finalise custom_error_mem_read_cons_outcome
 
 Theorem custom_error_store_args_sim_mem_using_head:
   (!ce e sa vv sm off x dst sn op su st cx env es s0 ctx func marks tvv mid r
-    inst b asz tv.
+    inst b asz tv st0.
     compile_expr ce (expr_type e) e sa = (vv,sm) /\
     (if off = 0 then comp_return (Var x)
      else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
@@ -88,7 +115,8 @@ Theorem custom_error_store_args_sim_mem_using_head:
     expr_body_pre ce cx env e es /\
     gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
       marks (INL tvv) mid (OK r) /\
-    vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       vv_post H ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r) /\
     vv_store_bound cx (expr_type e) (lowered_value_type ce e)
       (mid with gas_obs := []) tvv vv r /\
     alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
@@ -108,7 +136,9 @@ Theorem custom_error_store_args_sim_mem_using_head:
         | SOME imms => get_source_immutables ce.ce_module imms) name =
         SOME (itv,iv) ==>
       regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) /\
-    stmt_state_rel ctx func ce cx es s0 /\ ~r.vs_halted /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0) /\
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\ ~r.vs_halted /\
     r.vs_current_bb = sm.cs_current_bb /\
     r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?v q.
@@ -120,7 +150,8 @@ Theorem custom_error_store_args_sim_mem_using_head:
       q.vs_inst_idx = LENGTH st.cs_current_insts /\
       alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
       val_in_memory tv v (b+off) q.vs_memory /\
-      stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+      (!H. valid_horizon cx st0 H mid.storage_trace ==>
+         stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q) /\
       (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
         lookup_var z q = SOME a) /\
       (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
@@ -144,7 +175,7 @@ Theorem custom_error_store_args_sim_mem_using_head:
             FLOOKUP q.vs_allocas i.inst_id = SOME (c,sz) ==>
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory))) ==>
-  !args ce cx env off sa sb es tvs func inst x b asz s0 ctx tys tops.
+  !args ce cx env off sa sb es tvs func inst x b asz s0 ctx tys tops st0.
   tys = MAP expr_type args /\
   compile_custom_error_store_args ce args tys (Var x) off sa = ((),sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
@@ -168,13 +199,16 @@ Theorem custom_error_store_args_sim_mem_using_head:
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res ee r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res ee r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env ee /\
-      stmt_state_rel ctx func ce cx ee r /\
+      stmt_state_rel H ctx func ce cx ee r /\
+      storage_well_formed_on cx ee (FST H) /\
       alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -199,20 +233,25 @@ Theorem custom_error_store_args_sim_mem_using_head:
             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
-    (\res ee exit. ?exc. res = INR exc /\
+    (\H res ee exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   disch_then (mk_asm "head") >>
   Induct_on `args`
   >- (asm_x "head" kall_tac >> rpt gen_tac >> simp[compile_custom_error_store_args_def, comp_return_def] >>
       strip_tac >> gvs[] >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-      rewrite_tac[gas_summary_at_def] >>
-      qexistsl_tac [`INL []`, `es`, `OK s0`] >>
-      fs[gas_marked_exec_def, evaluate_def, return_def,
-         gas_marked_path_def, gas_path_mem_rules, val_in_memory_def,
-         locals_kept_def, stmt_state_rel_def, state_rel_gas_obs,
-         immutable_alloca_sep_def] >> metis_tac[]) >>
+      `!regions. storage_well_formed_on cx (es with gas_obs := []) regions =
+         storage_well_formed_on cx es regions` by
+        (gen_tac >> irule storage_well_formed_on_backends >> simp[]) >>
+      irule exprSimAggregateLoopsTheory.aggregate_tuple_nil_outcome >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qx_gen_tac `H` >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H` mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac >>
+      fs[val_in_memory_def, locals_kept_def, stmt_state_rel_def,
+         state_rel_gas_obs, immutable_alloca_sep_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> qpat_x_assum `tys = _` SUBST_ALL_TAC >>
   Cases_on `compile_expr ce (expr_type h) h sa` >>
   rename1 `compile_expr ce (expr_type h) h sa = (vv,sm)` >>
@@ -244,14 +283,14 @@ Resume custom_error_store_args_sim_mem_using_head[step]:
     (asm_x "head" kall_tac >> metis_tac[listTheory.MEM]) >>
   `gas_admissible (eval_expr cx h) expr_vv_res_ok es` by
     (asm_x "head" kall_tac >> metis_tac[expr_body_pre_vv_gas_admissible]) >>
-  `gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx h) (es,s0)
-    (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func ce cx h es sa sm s0 ee tv vv t /\
+  `gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_expr cx h) (es,s0)
+    (\H res ee t. ?tv. res = INL tv /\
+      vv_post H ctx func ce cx h es sa sm s0 ee tv vv t /\
       vv_store_bound cx (expr_type h) (lowered_value_type ce h) ee tv vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (asm_x "head" kall_tac >> fs[body_exprs_mem_ok_def] >>
      qpat_x_assum `body_expr_mem_ok cx h`
        (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_mem_ok_def]) >>
@@ -261,9 +300,38 @@ Resume custom_error_store_args_sim_mem_using_head[step]:
   once_rewrite_tac[evaluate_def] >>
   irule gas_outcome_bind_result_exec >>
   goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (Cases >> simp[expr_exit_INL]) >>
-  reverse conj_tac >- (rpt gen_tac >> strip_tac >> gvs[]) >>
+  conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_INL]) >>
+  reverse conj_tac
+  >- (rw[] >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_return]) >>
   rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_return]) >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `vv_post H0 ctx func ce cx h es sa sm s0
+     (mid with gas_obs := []) tv vv t` by metis_tac[] >>
+  `t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+   vv_store_bound cx (expr_type h) (lowered_value_type ce h)
+     (mid with gas_obs := []) tv vv t /\
+   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H es.storage_trace` by
+       (irule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+        goal_assum (drule_at Any) >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+     metis_tac[]) >>
   `?ht tt. evaluate_type (get_tenv cx) (expr_type h) = SOME ht /\
     OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tt /\
     tvs = ht::tt` by fs[] >> gvs[] >>
@@ -288,6 +356,9 @@ Resume custom_error_store_args_sim_mem_using_head[step]:
   `expr_body_pre ce cx env h es` by
     (asm_x "head" kall_tac >> metis_tac[]) >>
   `b+asz < dimword (:256)` by decide_tac >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
+    metis_tac[vv_post_def] >>
   asm_x "head" (drule_all_then strip_assume_tac) >>
   suspend "tail"
 QED
@@ -313,10 +384,11 @@ Resume custom_error_store_args_sim_mem_using_head[tail]:
      qpat_x_assum `ce.ce_is_ctor ==> !name itv iv io. _ ==> regions_disjoint _ _ _ (type_memory_size_list _)` mp_tac >>
      simp[]) >>
   qabbrev_tac `tailoff = off + type_memory_size ht` >>
-  qabbrev_tac `Post = \vs ee r.
+  qabbrev_tac `Post = \H vs ee r.
     r.vs_current_bb = sb.cs_current_bb /\
     r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env ee /\
-    stmt_state_rel ctx func ce cx ee r /\
+    stmt_state_rel H ctx func ce cx ee r /\
+    storage_well_formed_on cx ee (FST H) /\
     alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next /\
     tuple_in_memory vs tt (b+tailoff) r.vs_memory /\
     (!z w. not_fresh_at st z /\ lookup_var z q = SOME w ==> lookup_var z r = SOME w) /\
@@ -339,10 +411,10 @@ Resume custom_error_store_args_sim_mem_using_head[tail]:
           FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
           regions_disjoint p n c sz) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory))` >>
-  `gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args)
+  `gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args)
     (mid with gas_obs := [],q)
-    (\res ee r. ?vs. res = INL vs /\ Post vs ee r)
-    (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
+    (\H res ee r. ?vs. res = INL vs /\ Post H vs ee r)
+    (\H res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
     (simp[Abbr `Post`] >>
      first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL) >>
@@ -365,7 +437,7 @@ Resume custom_error_store_args_sim_mem_using_head[tail]:
   irule custom_error_mem_read_cons_outcome >>
   goal_assum (drule_at Any) >> simp[] >> qexists_tac `Post` >>
   reverse conj_tac
-  >- (qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` mp_tac >> simp[]) >>
+  >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` mp_tac >> simp[]) >>
   rpt gen_tac >> simp[Abbr `Post`] >> strip_tac >> simp[] >>
   conj_tac >- suspend "tuple_memory" >>
   conj_tac >- suspend "lookup_frame" >>

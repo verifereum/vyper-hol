@@ -59,6 +59,7 @@ Resume compile_blockhash_frag_mem[success]:
      disch_then (qspec_then `n` mp_tac) >> gvs[] >> decide_tac) >>
   drule_all blockhash_clean_success_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   drule_all blockhash_run_post >> strip_tac >>
   `!H. valid_horizon cx st0 H es0.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es0

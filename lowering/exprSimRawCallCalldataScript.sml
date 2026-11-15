@@ -1237,6 +1237,44 @@ Proof
   gvs[LENGTH_TAKE_EQ]
 QED
 
+Theorem raw_call_output_store_run[local]:
+  !sa sb ptr cap s w n data.
+    emit_void MSTORE [ptr;cap] sa = ((),sb) /\
+    eval_operand ptr s = SOME w /\
+    eval_operand cap s = SOME (n2w (MIN n (LENGTH data))) /\
+    fresh_vars_wrt sa s /\
+    mem_bytes_at (w2n w + 32) (LENGTH (TAKE n data)) s.vs_memory = TAKE n data ==>
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      t = mstore (w2n w) (n2w (MIN n (LENGTH data))) s /\
+      val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n data))
+        (w2n w) t.vs_memory /\
+      fresh_vars_wrt sb t /\
+      (!op v. eval_operand op s = SOME v ==> eval_operand op t = SOME v)
+Proof
+  rpt strip_tac >> drule_all emit_void_MSTORE_correct >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  drule raw_call_output_length_memory >>
+  simp[mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem raw_call_restore_run[local]:
+  !sa sb op s saved.
+    emit_void SETFMP [op] sa = ((),sb) /\
+    eval_operand op s = SOME saved /\ fresh_vars_wrt sa s ==>
+    run_inst_seq (emitted_insts sa sb) s = OK (s with vs_fmp := saved) /\
+    fresh_vars_wrt sb (s with vs_fmp := saved) /\
+    (!p w. eval_operand p s = SOME w ==>
+           eval_operand p (s with vs_fmp := saved) = SOME w)
+Proof
+  rpt strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
+  drule emit_void_extends >> strip_tac >>
+  gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
+      emit_void_def, comp_bind_def, fresh_id_def, emit_def, comp_return_def] >>
+  Cases_on `p` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
 (* The header store is valid even while DALLOCA has temporarily moved FMP. *)
 Theorem raw_call_output_store_frame[local]:
   !ctx func cenv cx es s saved inst q b sz (w:bytes32) len.

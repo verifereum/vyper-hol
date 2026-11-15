@@ -7,7 +7,7 @@ Theorem immutable_normalize_mem_endpoint:
   compile_alloc_buffer (type_memory_bytes ce dty) sm = (buf,mid) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty mid = ((),sb) /\
   fn_has_code sm mid func /\ fn_has_code mid sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   expr_val_at ce cx sty sa sm es v src s /\ expr_val_rel cx sty v src s /\
   type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
   ~is_word_type dty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) /\

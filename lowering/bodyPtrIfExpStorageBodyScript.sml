@@ -2,7 +2,7 @@ Theory bodyPtrIfExpStorageBody
 Ancestors
   bodyPtrIfExpStoragePhases bodyPtrIfExpBytesCounted slotCopyExecution copyExecution
   exprLoweringProps fragExec venomExecSemantics venomState venomInst
-  finite_map ptrDiscipline instIdxIndep bodyPtrDefs fragGasSeqPtr
+  finite_map ptrDiscipline instIdxIndep bodyPtrDefs fragGasSeqPtr wordLoadStorePtr
 
 Theorem ifexp_copy_body_runtime:
   MEM load [SLOAD;TLOAD] /\

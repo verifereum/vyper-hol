@@ -8,7 +8,7 @@ Ancestors
   exprLoweringProps loweringStateRelDefs freshWrites venomMemDefs
 
 Theorem snapshot_target_operand_frame:
-  target_post ctx func ce cx es sa sb s0 ee pv vt r z /\
+  target_post H ctx func ce cx es sa sb s0 ee pv vt r z /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   (!l. op <> Label l) /\ eval_operand op s0 = SOME w /\
   sa.cs_next_var <= sb.cs_next_var ==>
@@ -25,7 +25,7 @@ QED
    fitting in it retains its encoding, including its dynamically-sized tail.
    Retaining the entry also retains room up to the endpoint's alloca cursor. *)
 Theorem snapshot_target_owned_memory_frame:
-  target_post ctx func ce cx es sa sb s0 ee pv vt r z /\
+  target_post H ctx func ce cx es sa sb s0 ee pv vt r z /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   (!l. op <> Label l) /\ eval_operand op s0 = SOME w /\
   sa.cs_next_var <= sb.cs_next_var /\
@@ -59,7 +59,7 @@ Proof
 QED
 
 Theorem snapshot_target_scalar_frame:
-  target_post ctx func ce cx es sa sb s0 ee pv vt r z /\
+  target_post H ctx func ce cx es sa sb s0 ee pv vt r z /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
   sa.cs_next_var <= sb.cs_next_var /\
   is_word_type ty /\ expr_val_rel cx ty v op s0 ==>
@@ -74,8 +74,8 @@ QED
 (* Ownership's local-separation clause survives too.  Scope-domain equality
    is a source target-evaluation fact, not a purity assumption. *)
 Theorem snapshot_target_local_separation:
-  target_post ctx func ce cx es sa sb s0 ee pv vt r z /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  target_post H ctx func ce cx es sa sb s0 ee pv vt r z /\
+  stmt_state_rel H ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!n lb len. local_region ce es.scopes s0 n lb len ==>
      b + sz <= lb \/ lb + len <= b) ==>

@@ -17,19 +17,24 @@ Theorem compile_mapping_subscript_outcome_mem:
   place_type cenv obj = MapPT kt vt /\
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   gas_admissible (eval_expr cx (Subscript ann obj idx)) A es /\
   (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (eval_expr cx (Subscript ann obj idx)) (es,s0)
-    (\res ee t. ?tr base_slot kv tv tp p.
+    (\H res ee t. ?tr base_slot kv tv tp p ef.
        res = INL tv /\
        storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
        select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
-         (ValueSubscript kv) ee = (INL tv,ee) /\
+         (ValueSubscript kv) ef = (INL tv,ee) /\
+       valid_horizon cx st0 H ee.storage_trace /\
+       storage_well_formed_on cx ee (FST H) /\
        expr_type idx = kt /\ hashmap_key_type kt /\
        (?key_ty. evaluate_type (get_tenv cx) kt = SOME key_ty /\
                  value_has_type key_ty kv) /\
@@ -37,13 +42,13 @@ Theorem compile_mapping_subscript_outcome_mem:
        p.ptr_location = slot_loc tr /\
        eval_operand p.ptr_operand t =
          SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
        (~expr_has_effect (Subscript ann obj idx) ==>
           pure_frame cenv func es sa s0 t) /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   disch_tac >> match_mp_tac compile_mapping_subscript_outcome_mem_given_tail >>
   conj_tac
@@ -119,19 +124,29 @@ Proof
   `tp = ann` by
     (drule_all compile_expr_mapping_subscript_parts >> strip_tac >> gvs[]) >>
   gvs[] >>
+  Cases_on `evaluate_type (get_tenv cx) ann` >>
   qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
   simp[select_result_def, extend_place_def, lift_option_type_def,
-       lift_option_def, bind_def, return_def, AllCaseEqs()] >>
+       lift_option_def, ignore_bind_def, bind_def, return_def, raise_def,
+       record_storage_event_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  Cases_on `evaluate_type (get_tenv cx) ann` >> gvs[raise_def, return_def] >>
-  drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
-  `contract_storage_well_formed cx ee /\ storage_layout_safe cx` by
-    gvs[expr_sim_inv_def] >>
+  rename1 `evaluate_type (get_tenv cx) ann = SOME tvt` >>
+  `MEM (tr,hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv),tvt) (FST H) /\
+   regions_consistent (FST H)` by
+    (fs[vyperStorageFootprintTheory.valid_horizon_def, vyperStorageFootprintTheory.storage_observations_ok_def,
+        vyperStorageFootprintTheory.storage_trace_regions_def, EVERY_APPEND, EVERY_MEM]) >>
   drule_all mapping_leaf_storage_valid >> strip_tac >>
-  drule_all mapping_leaf_vv_holds >> strip_tac >>
-  simp[vv_post_def, vyperASTTheory.expr_type_def, vv_at_def] >>
+  drule_all (SRULE [] (Q.INST
+    [`es` |-> `ef with storage_trace := ef.storage_trace ++
+      [StorageRoot tr
+        (w2n (hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv))) tvt]`]
+    mapping_leaf_vv_holds)) >> strip_tac >>
+  simp[vv_post_def, expr_type_def, vv_at_def] >>
+  conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
+  conj_tac >- (rpt strip_tac >> Cases_on `tr` >> gvs[slot_loc_def]) >>
   qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def, vv_store_bound_nonmem] >> NO_TAC]
+
 QED

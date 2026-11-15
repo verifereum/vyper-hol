@@ -47,12 +47,12 @@ Theorem snapshot_storage_unwrap_mem[local]:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?z w tvt. gas_path_mem ctx func s 0 (OK z) /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
       evaluate_type (get_tenv cx) t = SOME tvt /\ eval_operand op z = SOME w /\
       w2n w + type_memory_size tvt <= z.vs_alloca_next /\
       (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s) /\
@@ -79,7 +79,7 @@ Proof
   qpat_x_assum `(_ + 31) DIV 32 = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_all storage_unwrap_typed_suffix_path_mem >> strip_tac >>
-  `expr_post ctx func cenv cx e es sa sb s0 ee v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 ee v buf.buf_operand z` by
     (irule buffer_post_transport >> simp[] >>
      qexistsl_tac [`mid`, `p`, `s`, `sm`, `tv`, `u`] >>
      qpat_assum `t = expr_type e` (fn th => rewrite_tac[GSYM th]) >>
@@ -125,11 +125,11 @@ QED
 
 Theorem snapshot_code_type_facts[local]:
   post_value_type ce e = expr_type e /\ p.ptr_location = LocCode /\
-  vv_post ctx func ce cx e es sa sm s0 ee (Value v) (LocatedValue ty p) s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee (Value v) (LocatedValue ty p) s /\
   (!tvt. evaluate_type (get_tenv cx) ty = SOME tvt ==>
     type_memory_bytes ce ty = type_memory_size tvt /\
     type_memory_size tvt < 2**64) ==>
-  ty = expr_type e /\ stmt_state_rel ctx func ce cx ee s /\
+  ty = expr_type e /\ stmt_state_rel H ctx func ce cx ee s /\
   ?a tv. eval_operand p.ptr_operand s = SOME a /\
     immutable_holds ce cx ty (Value v) a ee s /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
@@ -139,7 +139,7 @@ Theorem snapshot_code_type_facts[local]:
     (type_memory_bytes ce ty + 31) DIV 32 = type_slot_size tv
 Proof
   strip_tac >>
-  `ty = expr_type e /\ stmt_state_rel ctx func ce cx ee s /\
+  `ty = expr_type e /\ stmt_state_rel H ctx func ce cx ee s /\
    ?a. eval_operand p.ptr_operand s = SOME a /\
      immutable_holds ce cx ty (Value v) a ee s` by
     gvs[vv_post_def, vv_holds_def] >> simp[] >>
@@ -163,12 +163,12 @@ Theorem snapshot_code_unwrap_mem[local]:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2**64) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?z w tvt. gas_path_mem ctx func s 0 (OK z) /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
       evaluate_type (get_tenv cx) t = SOME tvt /\ eval_operand op z = SOME w /\
       w2n w + type_memory_size tvt <= z.vs_alloca_next /\
       (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s) /\
@@ -205,7 +205,7 @@ Proof
     (qsuff_tac `eval_operand buf.buf_operand z = eval_operand buf.buf_operand u`
      >- gvs[] >> irule storage_copy_operand_preserved >> simp[] >>
      qexists_tac `mid` >> simp[]) >>
-  `expr_post ctx func cenv cx e es sa sb s0 ee v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 ee v buf.buf_operand z` by
     (irule buffer_post_transport >> simp[] >>
      qexistsl_tac [`mid`, `p`, `s`, `sm`, `tv`, `u`] >>
      qpat_assum `t = expr_type e` (fn th => rewrite_tac[GSYM th]) >>
@@ -242,14 +242,14 @@ Resume snapshot_code_unwrap_mem[ctor]:
   `regions_disjoint (w2n a) (type_memory_size tv)
     (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `ee`, `func`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `ee`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
      drule_all buffer_alloc_code >> strip_tac >>
      goal_assum (drule_at Any) >> gvs[mk_inst_def] >>
      qexistsl_tac [`expr_type e`, `u`, `v`] >> simp[]) >>
   `w2n a + type_memory_size tv <= u.vs_alloca_next` by decide_tac >>
   gvs[] >> drule snapshot_ctor_copy_typed_mem >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `immutable_holds _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var p') _ = _`)) >>
   (impl_tac >- (simp[] >> decide_tac)) >>
@@ -260,7 +260,7 @@ Resume snapshot_code_unwrap_mem[runtime]:
   `w2n a + type_memory_size tv <= LENGTH u.vs_data_section` by
     (irule runtime_immutable_data_section >> metis_tac[]) >>
   gvs[] >> drule snapshot_runtime_copy_typed_mem >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `immutable_holds _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var p') _ = _`)) >>
   (impl_tac >- (simp[] >> decide_tac)) >>
@@ -282,12 +282,12 @@ Theorem snapshot_nonmemory_unwrap_mem:
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2**64) /\
     read_result cx raw ee = (INL v,ee) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee raw (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?z w tvt. gas_path_mem ctx func s 0 (OK z) /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
       evaluate_type (get_tenv cx) t = SOME tvt /\ eval_operand op z = SOME w /\
       w2n w + type_memory_size tvt <= z.vs_alloca_next /\
       (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s) /\

@@ -70,7 +70,7 @@ Theorem immutable_augassign_root_entry:
   stmt_env cenv lctx ret_ty (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
     sa = (c,sf) /\ fn_has_code sa sf func /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   c = cenv /\ ?off tv iv cur rhs result s1 s2 s3 u.
     cenv.ce_is_ctor /\ src = cenv.ce_module /\ is_word_type ty /\
@@ -92,7 +92,7 @@ Theorem immutable_augassign_root_entry:
     (!z. not_fresh_at s1 z ==> not_fresh_at s2 z) /\
     (!z. not_fresh_at s2 z ==> not_fresh_at s3 z) /\
     gas_marked_path T ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx es u /\ alloca_history func u /\
+    stmt_state_rel H ctx func cenv cx es u /\ alloca_history func u /\
     eval_operand cur u = SOME (typed_val_to_w256 tv iv) /\
     w2n (n2w off : bytes32) + 32 <= u.vs_alloca_next /\
     (!z. cur = Var z ==> not_fresh_at s1 z) /\

@@ -140,7 +140,7 @@ Proof
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   `?ht tt. evaluate_type (get_tenv cx) mty = SOME ht /\
       OPT_MMAP (evaluate_type (get_tenv cx)) tys' = SOME tt /\
-      tvs = ht::tt` by fs[] >> gvs[] >>
+      tvs = ht::tt` by fs[] >> gnvs[] >>
   reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gas_bad_storage_at_initial >>

@@ -70,7 +70,7 @@ QED
 Theorem fixed_array_subscript_counted_mem_ok:
   compile_array_subscript base_op idx_op F cnt ws esz sgn loader sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -79,7 +79,7 @@ Theorem fixed_array_subscript_counted_mem_ok:
   eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
   idx_in_range sgn i (n2w cnt) ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand op t = SOME (b + i * n2w esz) /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
@@ -176,7 +176,7 @@ QED
 Theorem runtime_length_mem_frame[local]:
   compile_imm_load_word F imm base_op sa = (lop,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
   alloca_history func s /\ w2n b <= LENGTH s.vs_data_section /\
   eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
   (!z. base_op = Var z ==> not_fresh_at sa z) /\
@@ -184,7 +184,7 @@ Theorem runtime_length_mem_frame[local]:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u. gas_marked_path T ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx es u /\ alloca_history func u /\
+    stmt_state_rel H ctx func cenv cx es u /\ alloca_history func u /\
     u.vs_alloca_next = s.vs_alloca_next /\
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
     eval_operand base_op u = SOME b /\ eval_operand idx_op u = SOME i /\
@@ -298,7 +298,7 @@ Theorem runtime_array_subscript_counted_mem_ok:
   compile_array_subscript base_op idx_op T cnt ws esz sgn
     (compile_imm_load_word F imm) sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -309,7 +309,7 @@ Theorem runtime_array_subscript_counted_mem_ok:
   idx_in_range sgn i (word_of_bytes T (0w:bytes32)
     (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand op t = SOME ((b + n2w ws) + i * n2w esz) /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\

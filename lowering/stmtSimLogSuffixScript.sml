@@ -541,7 +541,7 @@ Theorem log_static_empty_run[local]:
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   SND (split_log_ops xs flags) = [] /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   LENGTH flags = LENGTH xs /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
   LIST_REL (\arg v. supported_scalar_type (SND arg) /\
@@ -572,7 +572,7 @@ Proof
              compile_log_emit_static_run) >>
      simp[eval_operand_def] >> conj_tac
      >- (qexistsl_tac [`h`,`ops`,`n2w h::topics`] >> fs[]) >>
-     qexistsl_tac [`ce`,`ctx`,`cx`,`es`,`func`] >> simp[]) >>
+     qexistsl_tac [`H`,`ce`,`ctx`,`cx`,`es`,`func`] >> simp[]) >>
   drule log_topics_inst_extends >> strip_tac >>
   drule inst_extends_emit_inst >> strip_tac >>
   drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[] >> metis_tac[]
@@ -591,7 +591,7 @@ Theorem log_static_data_emit_run[local]:
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\
   fresh_vars_wrt limit_st s /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   LIST_REL (\arg v. log_arg_rel ce cx sa source_st es s arg v /\
@@ -628,7 +628,7 @@ Theorem log_static_suffix_run:
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fresh_vars_wrt limit_st s /\ sb.cs_next_var <= limit_st.cs_next_var /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\

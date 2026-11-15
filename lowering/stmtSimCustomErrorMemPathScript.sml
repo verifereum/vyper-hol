@@ -14,6 +14,7 @@ Ancestors
   bodySimExprCases bodyCustomErrorWindowBounds supportedExprs vyperValue bodyExprPreFacts
   abiCallerTupleLayout valueEncodingProps list vyperTypeABI
   stmtSimDeclCompose gasSummaryCompose gasOutcome gasSummary gasContext gasCount
+  gasStorage vyperStorageTrace vyperStorageFootprint
   gasExemptCert fragGasMode fragGasPath vyperInterpreter vyperState
 
 Theorem compile_raise_custom_error_ready_frag_mem:
@@ -37,6 +38,13 @@ Theorem compile_raise_custom_error_ready_frag_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   Cases_on `err` >>
   drule_all custom_error_body_resolution >> strip_tac >>
   `compile_revert_with_custom_error cenv (CustomError p l l0) sa = ((),sb)` by
@@ -60,26 +68,31 @@ Proof
   drule_at (Pat `compile_alloc_buffer _ _ = _`) custom_error_allocate_store_ready_mem >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `type_stmt _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `valid_horizon cx st0 H0 es.storage_trace`)) >>
   disch_then (drule_at (Pat `compile_custom_error_store_args _ _ _ _ _ _ = _`)) >>
   simp[] >> strip_tac >>
   irule gas_outcome_zero_prefix_mem >>
   qexists_tac `t` >> conj_tac
   >- fs[gas_marked_path_def] >>
-  drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
+  drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)
     (Q.INST [`RetQ` |-> `RetQ`] custom_error_args_revert_outcome) >>
   disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
   disch_then (drule_at (Pat `get_module_code _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_custom_error_args_in _ _ = _`)) >>
   disch_then (drule_at (Pat `order_custom_error_args _ _ = _`)) >>
   (impl_tac >- suspend "stored_tuple_tail") >>
-  disch_then (qspec_then `\v ee r. F` (mp_then Any mp_tac gas_outcome_conseq)) >>
+  disch_then (qspec_then `\H v ee r. F` (mp_then Any mp_tac gas_outcome_conseq)) >>
   simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def] >>
   disch_then irule >> rpt strip_tac >> simp[]
 QED
 
 Resume compile_raise_custom_error_ready_frag_mem[stored_tuple_tail]:
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> gvs[] >>
     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
     qpat_assum `!tail. eval_exprs _ _ _ = _`
@@ -106,7 +119,7 @@ Resume compile_raise_custom_error_ready_frag_mem[stored_tuple_tail]:
     drule_at (Pat `custom_error_revert_tail _ _ _ _ _ _ = _`)
       custom_error_stored_tuple_revert_path >>
     disch_then (drule_at (Pat `tuple_in_memory _ _ _ _`)) >>
-    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ mid r`)) >>
+    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ mid r`)) >>
     disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
     disch_then (drule_at (Pat `expr_sim_inv _ _ _ mid`)) >>
     disch_then (qspecl_then [`av`,`type_memory_bytes cenv (TupleT (MAP SND params))`,

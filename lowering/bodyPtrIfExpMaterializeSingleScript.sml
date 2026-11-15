@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpMaterializeWord bodyPtrIfExpMaterializeFrame
   context compileEnv loweringStateRelDefs emitHelper fragExec contextCodegenRel codegenRel
   venomExecSemantics venomInst venomState finite_map rich_list
-  ptrDiscipline ptrSafeRun bodyPtrDefs bodyPtrIfExpBytesEndpoint
+  ptrDiscipline ptrSafeRun bodyPtrDefs bodyPtrIfExpBytesEndpoint wordLoadStorePtr
 
 Theorem ifexp_ensure_single_stages:
   (loc = LocStorage \/ loc = LocTransient) /\
