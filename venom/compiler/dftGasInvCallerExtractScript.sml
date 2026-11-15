@@ -1,5 +1,6 @@
 Theory dftGasInvCallerExtract
 Ancestors
+  dftGasInvPrefixRun
   dftGasNativePrefixReplay dftGasInvReachSlice dftGasInvReturnReflect
   dftGasInvCallerInput dftGasInvExtraction dftGasInvReachAvailability dftGasInvPrefixReach
   o1PassContract contextCodegenRel venomInstProofs1 venomExecProofs
@@ -377,5 +378,39 @@ Theorem native_invoke_caller:
       setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
       setup_callee callee args b0)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `inv_ev_prefix orc p d C bb (LENGTH pre)
+     (be with vs_gas_readings := b0.vs_gas_readings)
+     (u with vs_gas_readings := b0.vs_gas_readings)` by
+    (qspecl_then [`source_fuel`, `C`, `func`, `bb`,
+       `be with vs_gas_readings := gs`, `u`, `p`, `d`, `LENGTH pre`,
+       `orc`, `b0.vs_gas_readings`] mp_tac native_prefix_oracle >>
+     simp[DROP_APPEND, TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+     disch_then irule >>
+     qpat_x_assum `dftGasFromListTraceDefs$trace_agrees orc
+       (dftGasFromListTraceDefs$trace_block _ _ source_fuel _ _ _ _)` mp_tac >>
+     simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]) >>
+  `inv_ev_prefix orc p d C' bb' (LENGTH scheduled)
+     (be with vs_gas_readings := b0.vs_gas_readings) b0` by
+    (qspecl_then [`target_fuel`, `C'`, `func'`, `bb'`, `be`, `b0`,
+       `p`, `d`, `LENGTH scheduled`, `orc`, `b0.vs_gas_readings`]
+       mp_tac native_prefix_oracle >>
+     simp[DROP_APPEND, TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+     disch_then irule >>
+     qpat_x_assum `dftGasFromListTraceDefs$trace_agrees orc
+       (dftGasFromListTraceDefs$trace_block _ _ target_fuel _ _ _ _)` mp_tac >>
+     simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG]) >>
+  drule_all inv_ev_prefix_context_reflect >> strip_tac >>
+  `inv_ev_ftrace orc p d C scheduled
+     (be with vs_gas_readings := b0.vs_gas_readings) b0` by
+    (drule_all inv_ev_prefix_ftrace >>
+     simp[DROP_APPEND, TAKE_APPEND, TAKE_LENGTH_TOO_LONG]) >>
+  `dft_remaining_inv func bb (pre ++ i::post)
+     (be with vs_gas_readings := b0.vs_gas_readings)` by
+    (irule dft_remaining_inv_gas_variant >> qexists_tac `be` >> simp[]) >>
+  `(be with vs_gas_readings := b0.vs_gas_readings).vs_inst_idx = LENGTH ps` by simp[] >>
+  drule_all inv_lookup_scheduled_invoke_static >> strip_tac >>
+  `sS = (u with vs_gas_readings := b0.vs_gas_readings)` by
+    (irule inv_ev_prefix_unique >> metis_tac[]) >>
+  gvs[gasOracleReplayTheory.gas_eval_operand]
 QED
