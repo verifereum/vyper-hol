@@ -158,6 +158,7 @@ Proof
     tr (pre ++ [AsmPushLabel x; AsmOp "JUMPI"; AsmPushLabel y; AsmOp "JUMP"] ++ AsmLabel x :: rest)
        (pre ++ [AsmOp "ISZERO"; AsmPushLabel y; AsmOp "JUMPI"] ++ AsmLabel x :: rest)`
     by (unabbrev_all_tac >> mp_tac inefficient_jump_site >> simp[]) >>
+  qpat_x_assum `!pre pat repl post D. _` kall_tac >>
   `!sfx pre. asm_static_wf (pre ++ sfx) ==>
       tr (pre ++ sfx) (pre ++ FST (optimize_inefficient_jumps sfx))`
     suffices_by (strip_tac >> gen_tac >>
@@ -173,8 +174,25 @@ Proof
   simp[optimize_inefficient_jumps_fst] >>
   reverse IF_CASES_TAC
   >- (gvs[] >> first_x_assum (qspec_then `pre ++ [a]` mp_tac) >>
-      simp[GSYM listTheory.APPEND_ASSOC]) >>
+      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,listTheory.APPEND] >> simp[]) >>
   Cases_on `a` >> Cases_on `e` >> gvs[asm_jumpi_over_jump_def] >>
   Cases_on `c` >> gvs[asm_is_push_label_def] >>
-  FAIL_TAC "recheck"
+  rename1 `AsmPushLabel lx :: AsmOp "JUMPI" :: AsmPushLabel ly :: _` >>
+  `asm_static_wf (pre ++ AsmOp "ISZERO" :: AsmPushLabel ly :: AsmOp "JUMPI" :: AsmLabel lx :: rest)`
+    by (mp_tac (Q.INST
+          [`pat` |-> `[AsmPushLabel lx; AsmOp "JUMPI"; AsmPushLabel ly; AsmOp "JUMP"]`,
+           `repl` |-> `[AsmOp "ISZERO"; AsmPushLabel ly; AsmOp "JUMPI"]`,
+           `pfx` |-> `pre`, `sfx` |-> `AsmLabel lx :: rest`] asm_splice_static_wf) >>
+        impl_tac
+        >- (simp[asm_splice_ok_def, is_data_inst_def, asm_label_refs_def,
+                 symbolResolveTheory.asm_inst_size_def] >>
+            pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,listTheory.APPEND] >> simp[] >>
+            rpt strip_tac >> gvs[] >> CONV_TAC EVAL) >>
+        pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,listTheory.APPEND] >> simp[]) >>
+  first_x_assum (qspec_then `pre` drule) >> disch_tac >>
+  qpat_x_assum `!p q r. _` irule >>
+  qexists_tac `pre ++ AsmOp "ISZERO" :: AsmPushLabel ly :: AsmOp "JUMPI" :: AsmLabel lx :: rest` >>
+  simp[] >>
+  qpat_x_assum `!pre x y rest. _` (qspecl_then [`pre`, `lx`, `ly`, `rest`] mp_tac) >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,listTheory.APPEND] >> simp[]
 QED
