@@ -122,7 +122,8 @@ Proof
   qexistsl_tac [`z`, `rest`] >> simp[] >>
   `step_prov PG (SND o_f rv) inst post = SND o_f (origin_set rv [v] NONE) /\
    step_taint inst s post tn = tn with t_var := tn.t_var |+ (v,{})` by
-    (gvs[] >> irule reader_clean_ghosts >> simp[]) >>
+    (gvs[] >>
+     irule (SIMP_RULE (srw_ss()) [] reader_clean_ghosts) >> simp[]) >>
   `step_taint inst t (update_var v z (t with vs_gas_readings := rest)) un =
     un with t_var := un.t_var |+ (v,{})` by
     (irule (reader_clean_ghosts |> UNDISCH |> CONJUNCT2 |> DISCH_ALL) >> simp[]) >>
