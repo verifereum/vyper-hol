@@ -35,7 +35,12 @@ Proof
     (irule static_shadow_mem_ranges >> simp[]) >>
   `in_revert_forward fn sh <=> in_revert_forward fn s` by
     (irule static_shadow_revert_forward >> simp[]) >>
-  simp[static_mem_ok_def]
+  `sh.vs_fmp = s.vs_fmp /\ sh.vs_initial_fmp = s.vs_initial_fmp` by
+    gvs[static_shadow_rel_def, static_shadow_def,
+        venom_state_component_equality] >>
+  `!op. eval_operand op sh = eval_operand op s` by
+    metis_tac[static_shadow_rel_eval_operand] >>
+  simp[static_mem_ok_def, dalloca_no_wrap_def]
 QED
 
 Theorem static_shadow_lowered_mem_ok:
