@@ -32,6 +32,21 @@ Proof
   drule ceil32_le_multiple >> simp[]
 QED
 
+Theorem dalloca_completed_copy_size_bound:
+  exec_create inst s value off sz salt = OK t ==>
+  w2n ((sz:bytes32) + 21w) = w2n sz + 21 /\
+  ceil32 (w2n (sz + 21w)) <= 65536
+Proof
+  simp[exec_create_def, AllCaseEqs()] >> rpt strip_tac >>
+  `w2n sz + 21 < dimword (:256)` by
+    (fs[max_code_size_def, dimword_def, dimindex_256] >> decide_tac) >>
+  `w2n (sz + 21w) = w2n sz + 21` by simp[w2n_add_2] >>
+  simp[] >>
+  mp_tac (Q.INST [`n` |-> `w2n (sz:bytes32) + 21`, `k` |-> `2048`]
+    ceil32_le_multiple) >>
+  fs[max_code_size_def] >> decide_tac
+QED
+
 Theorem dalloca_trailing_blueprint_size_bound:
   w2n (code_size:bytes32) < 2 ** 255 /\
   w2n (args_len:bytes32) < 2 ** 64 ==>
