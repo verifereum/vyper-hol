@@ -1005,7 +1005,8 @@ Proof
   `es with <|scopes := []; gas_obs := tail|> =
    (es with scopes := []) with gas_obs := tail` by simp[] >>
   pop_assum SUBST1_TAC >> REWRITE_TAC[state_rel_gas_obs] >>
-  first_assum ACCEPT_TAC
+  qexists_tac `(return_unlock_state cenv s0).vs_inst_idx` >>
+  simp[venom_state_component_equality]
 QED
 
 Theorem internal_frame_ret_none_full:
@@ -1040,7 +1041,7 @@ Proof
   disj2_tac >> gvs[intret_q_def, result_rel_def] >>
   `return_unlock_state cenv' s = return_unlock_state cenv s` by
     simp[return_unlock_state_def] >>
-  qexists_tac `s` >> simp[] >>
+  qexistsl_tac [`s`, `i`] >> simp[] >>
   drule_all (Q.INST
     [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
     constructor_exit_state_rel) >> simp[]
@@ -1299,8 +1300,11 @@ Proof
        drule >> simp[]) >>
   `state_rel H func cenv cx mid t` by
     fs[expr_post_def, stmt_state_rel_def] >>
-  rpt conj_tac >>
-  TRY (metis_tac[intret_vals_match_word] >> NO_TAC) >>
+  qexists_tac `(return_unlock_state cenv t).vs_inst_idx` >>
+  simp[venom_state_component_equality] >>
+  rpt conj_tac
+  >~ [`intret_vals_match _ _ _`]
+  >- metis_tac[intret_vals_match_word] >>
   drule state_rel_scopes_nil >>
   strip_tac >>
   `mid with <|scopes := []; gas_obs := tail|> =
@@ -1344,7 +1348,7 @@ Proof
   disj2_tac >> gvs[intret_q_def, result_rel_def] >>
   `return_unlock_state cenv' s = return_unlock_state cenv s` by
     fs[return_unlock_state_def] >>
-  qexists_tac `s` >> simp[] >>
+  qexistsl_tac [`s`, `i`] >> simp[] >>
   drule_all (Q.INST
     [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
     constructor_exit_state_rel) >> simp[]
