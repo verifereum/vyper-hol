@@ -97,7 +97,8 @@ Proof
   simp[lowerDloadDefsTheory.dload_offset_ok_def]
 QED
 
-(* Pruning drops functions, so it keeps the DLOAD headroom bound. *)
+(* Pruning drops functions, so it keeps the DLOAD headroom bound and
+   adds no DALLOCA. *)
 Theorem ctx_dload_count_prune:
   ctx_dload_count (prune_unit_fcg_unreachable unit fcg).cu_context <=
   ctx_dload_count unit.cu_context
@@ -113,7 +114,10 @@ Theorem dload_headroom_ok_prune:
   dload_headroom_ok (prune_unit_fcg_unreachable unit fcg).cu_context fn inst s
 Proof
   simp[lowerDloadDefsTheory.dload_headroom_ok_def] >>
-  mp_tac ctx_dload_count_prune >> decide_tac
+  mp_tac ctx_dload_count_prune >>
+  simp[prune_unit_fcg_unreachable_def, listTheory.EXISTS_MEM,
+       listTheory.MEM_FILTER, PULL_EXISTS] >>
+  rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Theorem o1_fn_passes_steps:
@@ -127,21 +131,22 @@ Proof
 QED
 
 Theorem o1_run_contracts:
-  k < LENGTH o1_fn_passes ==> o1_run_contract_gas rp D k
+  k < LENGTH o1_fn_passes ==> o1_run_contract_gas rp D fmp k
 Proof
   strip_tac >>
-  `o1_run_contract rp D k \/ o1_run_contract_gas rp D k` suffices_by
-    metis_tac[o1_run_contract_def, o1_run_contract_gas_def,
-              o1_stage_contract_imp_gas] >>
+  Cases_on `k = 3` >- gvs[o1_contract_fmp_lowering] >>
+  `o1_run_contract rp D k \/ o1_run_contract_gas rp D fmp k` suffices_by
+    (rw[] >> gvs[o1_run_contract_def, o1_run_contract_gas_def] >>
+     metis_tac[o1_stage_contract_imp_gas]) >>
   fs[o1_fn_passes_def] >>
-  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 7 \/
+  `k = 0 \/ k = 1 \/ k = 2 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 7 \/
    k = 8` by decide_tac >>
   gvs[o1_contract_make_ssa_1, o1_contract_lower_dload,
-      o1_contract_concretize_mem_loc, o1_contract_fmp_lowering,
-      o1_contract_make_ssa_2, o1_contract_simplify_cfg, o1_contract_sue,
+      o1_contract_concretize_mem_loc, o1_contract_make_ssa_2,
+      o1_contract_simplify_cfg, o1_contract_sue,
       o1_contract_cfg_normalization] >>
   disj2_tac >> mp_tac (Q.INST [`rpolicy` |-> `rp`] o1_contract_dft) >>
-  simp[o1_run_contract_gas_def]
+  simp[]
 QED
 
 (* ===== Source shape ===== *)
@@ -150,6 +155,15 @@ Theorem raw_opcode_ok_not_raw_fmp[local]:
   raw_opcode_ok op ==> ~is_raw_fmp_opcode op
 Proof
   Cases_on `op` >> simp[raw_opcode_ok_def, is_raw_fmp_opcode_def]
+QED
+
+Theorem source_pre_fmp_ops:
+  o1_source_unit_ok u /\ MEM fn u.cu_context.ctx_functions ==>
+  pre_fmp_ops fn
+Proof
+  rw[o1_source_unit_ok_def, pre_fmp_ops_def, EVERY_MEM] >>
+  `raw_opcode_ok inst.inst_opcode` by metis_tac[] >>
+  Cases_on `inst.inst_opcode` >> fs[raw_opcode_ok_def, pre_fmp_opcode_def]
 QED
 
 Theorem source_no_raw_fmp_ops:
@@ -165,7 +179,7 @@ Theorem source_fmp_free:
   fmp_free_ctx unit.cu_context
 Proof
   rw[fmp_free_ctx_def, unit_fmp_unsealed_def, EVERY_MEM] >>
-  metis_tac[source_no_raw_fmp_ops]
+  metis_tac[source_pre_fmp_ops]
 QED
 
 Theorem fmp_free_ctx_prune:
@@ -357,6 +371,15 @@ Proof
          simp[] >> metis_tac[]) >>
      simp[EVERY_MEM] >> metis_tac[source_no_raw_fmp_ops]) >>
      simp[]) >>
+  `EVERY pre_fmp_ops mid.cu_context.ctx_functions` by
+    (`mid.cu_context.ctx_functions =
+        MAP simplify_cfg_fn unit.cu_context.ctx_functions` by
+       metis_tac[simplify_cfg_stage_functions] >>
+     asm_rewrite_tac[EVERY_MAP] >> simp[EVERY_MEM] >> rpt strip_tac >>
+     drule_all source_pre_fmp_ops >>
+     simp[pre_fmp_ops_def, simplifyCfgDefsTheory.simplify_cfg_fn_def] >> strip_tac >>
+     irule simplifyCfgInvariantTheory.simplify_cfg_fn_with_labels_opcodes >>
+     fs[pre_fmp_opcode_def]) >>
   `EVERY fmp_sig_no_param mid.cu_context.ctx_functions` by
     (mp_tac (Q.INST [`C` |-> `unit.cu_context`, `C'` |-> `mid.cu_context`,
                      `pass` |-> `CFP_Simple VP_SimplifyCFG`,
@@ -450,7 +473,6 @@ Proof
   fs[o1_src_inv_def] >> rpt conj_tac
   >- fs[prune_unit_fcg_unreachable_fields]
   >- fs[EVERY_MEM]
-  >- (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[])
   >- (qexists_tac `lo` >>
       simp[fixed_region_reserved_def, prune_unit_fcg_unreachable_fields] >>
       conj_tac >- fs[fixed_region_reserved_def] >>
@@ -495,7 +517,86 @@ Proof
   metis_tac[fcg_postorder_callee_before_caller]
 QED
 
-(* The nine stage contexts of the walk, composed. *)
+Theorem gas_raw_variant_trans:
+  gas_variant s1 s2 /\ raw_variant fmp s2 s3 ==> raw_variant fmp s1 s3
+Proof
+  rw[raw_variant_def] >> metis_tac[gas_variant_trans]
+QED
+
+Theorem raw_gas_variant_trans:
+  raw_variant fmp s1 s2 /\ gas_variant s2 s3 ==> raw_variant fmp s1 s3
+Proof
+  rw[raw_variant_def, gas_variant_def] >>
+  gvs[venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem raw_variant_run_state_ok:
+  raw_variant fmp vs_in vs_out /\ o1_run_state_ok vs_out ==>
+  o1_run_state_ok vs_in
+Proof
+  rw[raw_variant_def] >> drule gas_variant_run_state_ok >>
+  disch_then irule >>
+  gvs[o1_run_state_ok_def, o1_initial_state_ok_def, lowerDloadDefsTheory.code_layout_valid_def]
+QED
+
+Theorem gas_variant_initial_fmp:
+  gas_variant s s' ==> s'.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+(* Consecutive gas-form stage contracts compose. *)
+Theorem gas_stages_compose[local]:
+  !n. dead_wf D /\ m < n /\ n <= LENGTH o1_fn_passes /\
+  (!k vo. m <= k /\ k < n /\ o1_run_state_ok vo ==>
+     ?vi. gas_variant vi vo /\
+       (Inv k (stage k) vi ==>
+        ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D
+          (stage k) (stage (SUC k)) vi vo /\
+        Inv (SUC k) (stage (SUC k)) vo)) ==>
+  !vo. o1_run_state_ok vo ==>
+    ?vi. gas_variant vi vo /\
+      (Inv m (stage m) vi ==>
+       ctx_sim_fuel (pass_fuel (EL (PRE n) o1_fn_passes) (stage n)) D
+         (stage m) (stage n) vi vo /\ Inv n (stage n) vo)
+Proof
+  Induct >> rpt strip_tac >- fs[] >>
+  Cases_on `m = n` >- (gvs[] >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `dead_wf D /\ m < n /\ _ ==> _` mp_tac >> impl_tac
+  >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  strip_tac >>
+  `pass_fuel (EL (PRE n) o1_fn_passes) (stage n) = I` by
+    (irule pass_fuel_walk_I >> fs[o1_fn_passes_def] >> Cases_on `n` >> fs[]) >>
+  REWRITE_TAC [prim_recTheory.PRE] >>
+  `pass_fuel (EL n o1_fn_passes) (stage (SUC n)) =
+   pass_fuel (EL n o1_fn_passes) (stage (SUC n)) o I` by
+    simp[combinTheory.I_o_ID] >>
+  pop_assum SUBST1_TAC >>
+  irule guarded_ctx_sim_trans >> simp[] >>
+  qexistsl_tac [`stage n`, `Inv n`] >> simp[] >>
+  rpt strip_tac >> fs[] >> first_x_assum irule >> simp[]
+QED
+
+(* The walk passes from FmpLowering on keep the static layout. *)
+Theorem o1_walk_stages_max_live_eom:
+  (!k. k < LENGTH o1_fn_passes ==>
+       ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+         (stage k) (stage (SUC k))) ==>
+  !j. 3 + j <= LENGTH o1_fn_passes ==>
+      max_live_eom (stage (3 + j)) = max_live_eom (stage 3)
+Proof
+  strip_tac >> Induct >> rw[] >>
+  `3 + j < LENGTH o1_fn_passes` by simp[] >>
+  first_x_assum drule >> strip_tac >>
+  drule ctx_pass_stage_max_live_eom >> impl_tac
+  >- (fs[o1_fn_passes_def] >>
+      `j = 0 \/ j = 1 \/ j = 2 \/ j = 3 \/ j = 4 \/ j = 5` by decide_tac >>
+      gvs[fn_pass_tag_def, fn_pass_static_layout_effect_def]) >>
+  gvs[arithmeticTheory.ADD_CLAUSES]
+QED
+
+(* The nine stage contexts of the walk, composed.  FmpLowering's run
+   (stage 3) runs its input at fmp; the others vary only the GAS oracle. *)
 Theorem o1_walk_stages_sim:
   (!k. k < LENGTH o1_fn_passes ==>
        ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
@@ -503,52 +604,142 @@ Theorem o1_walk_stages_sim:
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
   (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   dead_wf D /\ o1_run_state_ok vs_out ==>
-  ?vs_in. gas_variant vs_in vs_out /\
-    (o1_inv D 0 (stage 0) vs_in ==>
-     ctx_sim_fuel (cfg_norm_fuel (stage (LENGTH o1_fn_passes))) D
-       (stage 0) (stage (LENGTH o1_fn_passes)) vs_in vs_out /\
+  ?vs_in. raw_variant fmp vs_in vs_out /\
+    (o1_inv D 0 (stage 0) vs_in /\
+     fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
+     ctx_sim_fuel (cfg_norm_fuel (stage (LENGTH o1_fn_passes))) D (stage 0) (stage (LENGTH o1_fn_passes)) vs_in vs_out /\
      o1_inv D (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs_out)
 Proof
   strip_tac >>
+  drule o1_walk_stages_max_live_eom >> strip_tac >>
   `!k vs. k < LENGTH o1_fn_passes /\ o1_run_state_ok vs ==>
-    ?vi. gas_variant vi vs /\
-      (o1_inv D k (stage k) vi ==>
-       ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D
-         (stage k) (stage (SUC k)) vi vs /\
+    ?vi. fmp_variant (if k = 3 then SOME fmp else NONE) vi vs /\
+      (o1_inv D k (stage k) vi /\
+       fmp_variant_room (if k = 3 then SOME fmp else NONE)
+         (stage (SUC k)) vs ==>
+       ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vi vs /\
        o1_inv D (SUC k) (stage (SUC k)) vs)` by
     (rpt gen_tac >> strip_tac >>
-     `o1_run_contract_gas rpolicy D k` by simp[o1_run_contracts] >>
+     `o1_run_contract_gas rpolicy D fmp k` by simp[o1_run_contracts] >>
      fs[o1_run_contract_gas_def, o1_stage_contract_gas_def, o1_pre_def] >>
      `k <= LENGTH o1_fn_passes /\ SUC k <= LENGTH o1_fn_passes` by simp[] >>
      `EVERY (o1_fn_row k) (stage k).ctx_functions /\
       EVERY (o1_fn_row (SUC k)) (stage (SUC k)).ctx_functions` by simp[] >>
      first_x_assum (qspecl_then [`stage k`, `stage (SUC k)`, `vs`] mp_tac) >>
      simp[]) >>
+  (* MakeSSA's and LowerDload's runs (k < 2) keep their input state: their
+     plain contracts need no headroom. *)
+  `!k vs. k < 2 /\ o1_run_state_ok vs /\ o1_inv D k (stage k) vs ==>
+     ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vs vs /\
+     o1_inv D (SUC k) (stage (SUC k)) vs` by
+    (rpt gen_tac >> strip_tac >>
+     `o1_run_contract rpolicy D k` by
+       (`k = 0 \/ k = 1` by decide_tac >> pop_assum strip_assume_tac >>
+        gvs[o1_contract_make_ssa_1, o1_contract_lower_dload]) >>
+     fs[o1_run_contract_def, o1_stage_contract_def, o1_pre_def] >>
+     `k < LENGTH o1_fn_passes /\ SUC k <= LENGTH o1_fn_passes` by
+       simp[o1_fn_passes_def] >>
+     `EVERY (o1_fn_row k) (stage k).ctx_functions /\
+      EVERY (o1_fn_row (SUC k)) (stage (SUC k)).ctx_functions` by simp[] >>
+     first_x_assum (qspecl_then [`stage k`, `stage (SUC k)`, `vs`] mp_tac) >>
+     simp[]) >>
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
   gvs[] >>
-  `!n. n < 9 ==> !vo. o1_run_state_ok vo ==>
-    ?vi. gas_variant vi vo /\
-      (o1_inv D 0 (stage 0) vi ==>
-       ctx_sim_fuel (pass_fuel (EL n o1_fn_passes) (stage (SUC n))) D
-         (stage 0) (stage (SUC n)) vi vo /\
-       o1_inv D (SUC n) (stage (SUC n)) vo)` by
-    (Induct
-     >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
-     rpt strip_tac >>
-     `?vi. gas_variant vi vo /\
-        (o1_inv D 0 (stage 0) vi ==>
-         ctx_sim_fuel (pass_fuel (EL (SUC n) o1_fn_passes) (stage (SUC (SUC n))) o
-                       pass_fuel (EL n o1_fn_passes) (stage (SUC n))) D
-           (stage 0) (stage (SUC (SUC n))) vi vo /\
-         o1_inv D (SUC (SUC n)) (stage (SUC (SUC n))) vo)` suffices_by
-       (`pass_fuel (EL n o1_fn_passes) (stage (SUC n)) = I` by
-          simp[pass_fuel_walk_I] >>
-        simp[combinTheory.I_o_ID]) >>
-     irule guarded_ctx_sim_trans >> simp[] >>
-     qexistsl_tac [`stage (SUC n)`, `o1_inv D (SUC n)`] >>
+  `max_live_eom (stage 3) = max_live_eom (stage 9) /\
+   max_live_eom (stage 4) = max_live_eom (stage 9) /\
+   max_live_eom (stage 5) = max_live_eom (stage 9) /\
+   max_live_eom (stage 6) = max_live_eom (stage 9) /\
+   max_live_eom (stage 7) = max_live_eom (stage 9) /\
+   max_live_eom (stage 8) = max_live_eom (stage 9)` by
+    (qpat_x_assum `!j. j + 3 <= _ ==> _`
+       (fn th => map_every (fn n => mp_tac (Q.SPEC n th))
+                   [`0`, `1`, `2`, `3`, `4`, `5`, `6`]) >>
      simp[]) >>
-  first_x_assum (qspec_then `8` mp_tac) >>
-  simp[o1_fn_passes_def, pass_fuel_def]
+  (* Every run but FmpLowering's, with the headroom of the last stage's
+     layout end carried along the GAS variants. *)
+  `!k vs. k < 9 /\ k <> 3 /\ o1_run_state_ok vs ==>
+    ?vi. gas_variant vi vs /\
+      (o1_inv D k (stage k) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
+       ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vi vs /\
+       o1_inv D (SUC k) (stage (SUC k)) vs /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vs.vs_initial_fmp))` by
+    (rpt strip_tac >> Cases_on `k < 2`
+     >- (qexists_tac `vs` >> simp[gas_variant_refl] >> strip_tac >>
+         qpat_x_assum `!k vs. k < 2 /\ _ ==> _`
+           (qspecl_then [`k`, `vs`] mp_tac) >> simp[]) >>
+     qpat_x_assum `!k vs. k < 9 /\ o1_run_state_ok vs ==> _`
+       (qspecl_then [`k`, `vs`] mp_tac) >>
+     simp[fmp_variant_def] >> strip_tac >>
+     qexists_tac `vi` >> simp[] >> strip_tac >>
+     `vs.vs_initial_fmp = vi.vs_initial_fmp` by
+       metis_tac[gas_variant_initial_fmp] >>
+     `max_live_eom (stage (SUC k)) = max_live_eom (stage 9)` by
+       (`k = 2 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 7 \/ k = 8` by decide_tac >>
+        pop_assum strip_assume_tac >> gvs[]) >>
+     `fmp_variant_room NONE (stage (SUC k)) vs` by gvs[fmp_variant_room_def] >>
+     `ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vi vs /\
+      o1_inv D (SUC k) (stage (SUC k)) vs` by (first_x_assum irule >> simp[]) >>
+     simp[]) >>
+  `!vo. o1_run_state_ok vo ==>
+     ?vi. gas_variant vi vo /\
+       (o1_inv D 0 (stage 0) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
+        ctx_sim_fuel I D (stage 0) (stage 3) vi vo /\ o1_inv D 3 (stage 3) vo /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vo.vs_initial_fmp))` by
+    (rpt strip_tac >>
+     irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
+              (Q.INST [`Inv` |-> `\k C v. o1_inv D k C v /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v.vs_initial_fmp)`]
+                 (Q.SPEC `3` gas_stages_compose))) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!k vs. k < 9 /\ k <> 3 /\ _ ==> _`
+       (qspecl_then [`k`, `vo'`] mp_tac) >>
+     impl_tac >- fs[] >>
+     simp[pass_fuel_def, o1_fn_passes_def]) >>
+  `!vo. o1_run_state_ok vo ==>
+     ?vi. gas_variant vi vo /\
+       (o1_inv D 4 (stage 4) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
+        ctx_sim_fuel (cfg_norm_fuel (stage 9)) D (stage 4) (stage 9) vi vo /\ o1_inv D 9 (stage 9) vo /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vo.vs_initial_fmp))` by
+    (rpt strip_tac >>
+     irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
+              (Q.INST [`Inv` |-> `\k C v. o1_inv D k C v /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v.vs_initial_fmp)`]
+                 (Q.SPEC `9` gas_stages_compose))) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!k vs. k < 9 /\ k <> 3 /\ _ ==> _`
+       (qspecl_then [`k`, `vo'`] mp_tac) >>
+     impl_tac >- fs[] >>
+     simp[pass_fuel_def, o1_fn_passes_def]) >>
+  qpat_x_assum `!vo. o1_run_state_ok vo ==> ?vi. gas_variant vi vo /\ (o1_inv D 4 _ _ /\ _ ==> _)`
+    (qspec_then `vs_out` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `v4` strip_assume_tac) >>
+  `o1_run_state_ok v4` by metis_tac[gas_variant_run_state_ok] >>
+  qpat_x_assum `!k vs. k < 9 /\ o1_run_state_ok vs ==> _`
+    (qspecl_then [`3`, `v4`] mp_tac) >>
+  simp[fmp_variant_def] >>
+  disch_then (qx_choose_then `v3` strip_assume_tac) >>
+  `o1_run_state_ok v3` by metis_tac[raw_variant_run_state_ok] >>
+  qpat_x_assum `!vo. o1_run_state_ok vo ==> ?vi. gas_variant vi vo /\ (o1_inv D 0 _ _ /\ _ ==> _)`
+    (qspec_then `v3` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `vi` strip_assume_tac) >>
+  qexists_tac `vi` >> conj_tac
+  >- metis_tac[gas_raw_variant_trans, raw_gas_variant_trans] >>
+  strip_tac >>
+  `v4.vs_initial_fmp = vs_out.vs_initial_fmp /\
+   vi.vs_initial_fmp = v3.vs_initial_fmp` by
+    metis_tac[gas_variant_initial_fmp] >>
+  `v3.vs_initial_fmp = fmp` by
+    (fs[raw_variant_def] >> imp_res_tac gas_variant_initial_fmp >> fs[]) >>
+  `!eom. max_live_eom (stage 9) = SOME eom ==>
+     eom <= w2n vs_out.vs_initial_fmp /\ w2n vs_out.vs_initial_fmp <= w2n fmp` by
+    fs[fmp_variant_room_def] >>
+  `(!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp)` by (rpt strip_tac >> first_x_assum drule >> gvs[]) >>
+  `(!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v4.vs_initial_fmp)` by (rpt strip_tac >> first_x_assum drule >> gvs[]) >>
+  `fmp_variant_room (SOME fmp) (stage 4) v4` by
+    (gvs[fmp_variant_room_def] >> metis_tac[]) >>
+  gvs[pass_fuel_def] >>
+  `ctx_sim_fuel I D (stage 3) (stage 4) v3 v4` by fs[o1_fn_passes_def] >>
+  `ctx_sim_fuel (I o I) D (stage 0) (stage 4) vi v4` by
+    (irule ctx_sim_fuel_trans >> metis_tac[]) >>
+  `ctx_sim_fuel (cfg_norm_fuel (stage 9) o (I o I)) D (stage 0) (stage 9)
+     vi vs_out` by
+    (irule ctx_sim_fuel_trans >> metis_tac[]) >>
+  fs[combinTheory.I_o_ID]
 QED
 
 Theorem o1_walk_sim:
@@ -563,12 +754,12 @@ Theorem o1_walk_sim:
   unit'.cu_context.ctx_entry = SOME entry /\
   ctx_fn_names unit'.cu_context =
     ctx_fn_names (prune_unit_fcg_unreachable unit fcg).cu_context /\
-  !D vs_out. dead_wf D /\ o1_run_state_ok vs_out ==>
-    ?vs_in. gas_variant vs_in vs_out /\
-      (o1_walk_src_inv D (prune_unit_fcg_unreachable unit fcg).cu_context vs_in ==>
-       ctx_sim_fuel (cfg_norm_fuel unit'.cu_context) D
-         (prune_unit_fcg_unreachable unit fcg).cu_context
-         unit'.cu_context vs_in vs_out /\
+  !D fmp vs_out. dead_wf D /\ o1_run_state_ok vs_out ==>
+    ?vs_in. raw_variant fmp vs_in vs_out /\
+      (o1_walk_src_inv D (prune_unit_fcg_unreachable unit fcg).cu_context vs_in /\
+       fmp_variant_room (SOME fmp) unit'.cu_context vs_out ==>
+       ctx_sim_fuel (cfg_norm_fuel unit'.cu_context) D (prune_unit_fcg_unreachable unit fcg).cu_context
+               unit'.cu_context vs_in vs_out /\
        o1_lowered_inv unit'.cu_context vs_out)
 Proof
   strip_tac >> drule_all o1_ctx_shape_prune >> strip_tac >>
@@ -591,10 +782,10 @@ Proof
            o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions) /\
    o1_inv D (LENGTH o1_fn_passes) = o1_lowered_inv` by
     simp[o1_inv_def, o1_fn_passes_def] >>
-  `?vi. gas_variant vi vs_out /\
-    (o1_inv D 0 (stage 0) vi ==>
-     ctx_sim_fuel (cfg_norm_fuel (stage (LENGTH o1_fn_passes))) D
-       (stage 0) (stage (LENGTH o1_fn_passes)) vi vs_out /\
+  `?vi. raw_variant fmp vi vs_out /\
+    (o1_inv D 0 (stage 0) vi /\
+     fmp_variant_room (SOME fmp) (stage (LENGTH o1_fn_passes)) vs_out ==>
+     ctx_sim_fuel (cfg_norm_fuel (stage (LENGTH o1_fn_passes))) D (stage 0) (stage (LENGTH o1_fn_passes)) vi vs_out /\
      o1_inv D (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs_out)` by
     (irule o1_walk_stages_sim >> fs[] >> qexists_tac `rpolicy` >>
      rpt strip_tac >> first_x_assum drule >> simp[o1_walk_view_def]) >>
@@ -610,11 +801,11 @@ Theorem o1_pipeline_stage_facts:
   unit_defs_reach_uses unit /\ unit_fmp_unsealed unit ==>
   o1_ctx_shape out.po_unit.cu_context /\
   entry_fn_first out.po_unit.cu_context /\
-  !D vs_out. dead_wf D /\ o1_run_state_ok vs_out ==>
-    ?vs_in. gas_variant vs_in vs_out /\
-      (o1_pre_walk_inv D unit.cu_context vs_in ==>
-       ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D
-         unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+  !D fmp vs_out. dead_wf D /\ o1_run_state_ok vs_out ==>
+    ?vs_in. raw_variant fmp vs_in vs_out /\
+      (o1_pre_walk_inv D unit.cu_context vs_in /\
+       fmp_variant_room (SOME fmp) out.po_unit.cu_context vs_out ==>
+       ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
        o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
   strip_tac >> drule o1_driver_runs >> strip_tac >>
@@ -637,10 +828,10 @@ Proof
       qexists_tac `(prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context` >>
       gvs[prune_unit_fcg_unreachable_fields]) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!D vs_out. _` (qspecl_then [`D`, `vs_out`] mp_tac) >>
+  qpat_x_assum `!D fmp vs_out. _` (qspecl_then [`D`, `fmp`, `vs_out`] mp_tac) >>
   simp[] >> disch_then (qx_choose_then `vs` strip_assume_tac) >>
   qexists_tac `vs` >> simp[] >> strip_tac >>
-  `o1_run_state_ok vs` by metis_tac[gas_variant_run_state_ok] >>
+  `o1_run_state_ok vs` by metis_tac[raw_variant_run_state_ok] >>
   `ctx_sim_fuel I D unit.cu_context pre.cu_context vs vs /\
    o1_walk_src_inv D pre.cu_context vs` by metis_tac[] >>
   `(!fuel vs. run_context fuel pre.cu_context vs =

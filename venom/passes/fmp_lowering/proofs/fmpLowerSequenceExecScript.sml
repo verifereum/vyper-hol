@@ -1,7 +1,7 @@
-(* Straight-line operational composition of the production indexed walker.
- * The point invariant includes the concrete ledger/coverage and fresh-name
- * conditions required by local simulations. The rule does not establish them
- * from static plan acceptance, and does not model block control flow. *)
+(* Operational composition of the production indexed walker. The straight-line
+ * rule takes ledger, coverage and fresh-name conditions from its caller; the
+ * block ledger rule below obtains restore-selection and ledger facts from
+ * accepted reclaim analysis. These rules do not compose block control flow. *)
 Theory fmpLowerSequenceExec
 Ancestors
   fmpLowerIndexedProps fmpLowerRestoreExec fmpLowerReclaimPlan analysisSimDefs
@@ -370,15 +370,6 @@ Proof
        fmpAnalysisDefsTheory.fmp_invoke_target_def]
 QED
 
-(* One reachable block of the lowered function, against a raw run R relates
- * to it.  The block invariant carries the restore selection, the analysis
- * state, the runner, the frontier relation between the raw FMP and the runner
- * (fmp0 is the lowered base, raw0 the raw one) and the ledger.  The caller
- * owes, per original instruction: for DALLOCA, the expansion's operand,
- * no-wrap and freshness facts and R across the computed raw and lowered
- * steps; for any other instruction, the lowered head's run, R, the frontier
- * relation afterwards, and (unless it clears the marks) an unchanged runner
- * and marks. *)
 Theorem EL_segment[local]:
   LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg ==>
   EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg
@@ -406,6 +397,15 @@ Proof
   gvs[] >> metis_tac[APPEND_ASSOC]
 QED
 
+(* One reachable block of the lowered function, against a raw run R relates
+ * to it.  The block invariant carries the restore selection, the analysis
+ * state, the runner, the frontier relation between the raw FMP and the runner
+ * (fmp0 is the lowered base, raw0 the raw one) and the ledger.  The caller
+ * owes, per original instruction: for DALLOCA, the expansion's operand,
+ * no-wrap and freshness facts and R across the computed raw and lowered
+ * steps; for any other instruction, the lowered head's run, R, the frontier
+ * relation afterwards, and (unless it clears the marks) an unchanged runner
+ * and marks. *)
 Theorem fmp_lower_block_ledger:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
