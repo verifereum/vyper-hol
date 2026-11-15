@@ -250,6 +250,56 @@ QED
 
 (* ===== S6b: resource bound of the output (sufficient gas) ===== *)
 
+(* The source pointer may differ from the generated frame's pointer.  The
+   witnesses stay uniform in both states and that source pointer. *)
+Theorem run_venom_pipeline_run_bounded_raw:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp
+    ==>
+    ?fuel' M. !D vs fmp.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_run_state_ok vs /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      w2n vs.vs_initial_fmp <= w2n fmp /\
+      (!vs_in. raw_variant fmp vs_in vs ==>
+         raw_unit_memory_ok unit.cu_context vs_in /\
+         ptr_discipline lo unit.cu_context vs_in /\
+         taint_within D unit.cu_context vs_in /\
+         mem_inv dload_offset_ok unit.cu_context vs_in /\
+         mem_inv dload_headroom_ok unit.cu_context vs_in /\
+         terminates (run_context fuel unit.cu_context vs_in))
+      ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`cfg_norm_fuel out.po_unit.cu_context fuel`,
+                `2 * dimword(:256)`] >>
+  rpt gen_tac >> strip_tac >>
+  `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+         eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  mp_tac (Q.SPECL [`D`, `lo`, `rpolicy`, `unit`, `out`, `vs`, `fmp`]
+            run_venom_pipeline_fuel) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!vs_in. raw_variant fmp vs_in vs ==> _`
+    (qspec_then `vs_in` mp_tac) >>
+  simp[] >> strip_tac >>
+  `ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D unit.cu_context
+     out.po_unit.cu_context vs_in vs /\
+   o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
+  `terminates
+     (run_context (cfg_norm_fuel out.po_unit.cu_context fuel)
+        out.po_unit.cu_context vs)` by
+    (fs[ctx_sim_fuel_def] >> metis_tac[dead_result_rel_terminates]) >>
+  fs[o1_lowered_inv_def, mem_inv_def] >>
+  metis_tac[venom_run_bounded_word_ceiling]
+QED
+
 (* S6b.  A fuel bound on the source unit that holds for every entry state
  * gives the output a fuel bound and a memory bound that hold for every
  * entry state, so neither depends on the external-call outcomes or the GAS
@@ -258,16 +308,9 @@ QED
  * the output state); the plan cp locates the spill slots (below
  * cp_initial_fmp) and the DRET packing area (above it).  The output fuel
  * is cfg_norm_fuel of the source fuel (run_venom_pipeline_fuel), and the
- * memory bound is the output's max_live_eom: every access stays static
- * (o1_lowered_inv). *)
-(* TEMPORARY WAVE ADMISSION (DALLOCA forms track, discharged in P13 with
- * the dynamic bound).  The wave restores the dynamic o1_lowered_inv
- * (lowered_mem_fact), which no longer gives the static bound M = eom this
- * proof read off train 16's static o1_lowered_inv: an access at or above
- * the initial free-memory pointer is allowed there.  The bound has to be
- * carried from row 3, which the stage rows do not expose; P13 widens them
- * once, with the dynamic bound.  Statement unchanged.  Train 16's proof,
- * ported to the raw variant; its last step needs the static bound:
+ * memory bound is the uniform word ceiling, including dynamic accesses. *)
+(* Previous static-layout proof, retained for its pointer-transport steps.
+ * Its final static bound does not follow from the dynamic lowered invariant:
 Proof
   rpt gen_tac >> strip_tac >>
   qexistsl_tac [`cfg_norm_fuel out.po_unit.cu_context fuel`,
@@ -325,7 +368,17 @@ Theorem run_venom_pipeline_run_bounded:
       ==>
       venom_run_bounded fuel' M out.po_unit.cu_context vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all run_venom_pipeline_run_bounded_raw >>
+  disch_then (qspecl_then [`lo`, `fuel`]
+    (qx_choosel_then [`fuel'`, `M`] assume_tac)) >>
+  qexistsl_tac [`fuel'`, `M`] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum
+    (qspecl_then [`D`, `vs`, `vs.vs_initial_fmp`] mp_tac) >>
+  impl_tac
+  >- (fs[] >> metis_tac[raw_variant_gas_variant, o1_run_state_ok_def]) >>
+  simp[]
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)

@@ -156,7 +156,7 @@ Proof
     (gvs[MEM, mem_read_ops_def, mem_write_ops_def]) >>
   `op_taint tn ops.iao_ofst = {}` by
     (irule ld_numeric_operand_untainted >> simp[] >>
-     qexistsl_tac [`fn`,`inst`,`s`] >> gvs[]) >>
+     qexistsl_tac [`fn`,`inst`,`s`] >> simp[]) >>
   `?xx. eval_operand ops.iao_ofst f.lf_src = SOME xx /\
     (op_prov f.lf_H ops.iao_ofst = NONE ==> xx = y) /\
     (!a. op_prov f.lf_H ops.iao_ofst = SOME a ==>

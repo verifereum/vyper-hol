@@ -7,7 +7,7 @@
  *)
 Theory venomRunBounded
 Ancestors
-  unitMemInv passSimulationDefs contextCodegenRel
+  unitMemInv passSimulationDefs contextCodegenRel list pair
 
 (* Resource bound codegen's gas proof consumes: the run ends within fuel,
    and every access is below M or part of a revert forwarding.  The stages
@@ -20,3 +20,15 @@ Definition venom_run_bounded_def:
                EVERY (\(off,len). len = 0 \/ off + len <= M)
                  (inst_mem_ranges inst s)) ctx vs
 End
+
+Theorem venom_run_bounded_word_ceiling:
+  terminates (run_context fuel ctx vs) /\
+  codegen_reachability_package Inv ctx vs ==>
+  venom_run_bounded fuel (2 * dimword(:256)) ctx vs
+Proof
+  rw[venom_run_bounded_def, mem_inv_def] >>
+  qexists_tac `Inv` >> simp[] >>
+  rpt strip_tac >> disj2_tac >>
+  mp_tac (Q.SPECL [`inst`, `s`] inst_mem_ranges_word_ceiling) >>
+  simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]
+QED
