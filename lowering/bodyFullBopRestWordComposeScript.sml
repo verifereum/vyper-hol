@@ -169,34 +169,34 @@ Resume compile_rest_word_membership_full[after_array]:
            ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
       `?q Gt Tt. !H. valid_horizon cx st0 H mid'.storage_trace ==>
         gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-          (t',G1',tn1') [] (OK q,Gt H,Tt H) /\
-        membership_loop_frame sm G1' tn1' t' (Gt H) (Tt H) q /\
+          (t',G1',tn1') [] (OK q,Gt,Tt) /\
+        membership_loop_frame sm G1' tn1' t' (Gt) (Tt) q /\
         ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
         q.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func q /\ t.vs_alloca_next <= q.vs_alloca_next /\
         vv_post H ctx func cenv cx e2 mid s1 sm t mid' x' vv q /\
         vv_store_bound cx (expr_type e2) (lowered_value_type cenv e2) mid' x' vv q /\
-        ghost_inv_at (DF H) lo d cenv cx mid' (Gt H) (Tt H) q /\
-        ptr_vv_ok cx (post_value_type cenv e2) x' vv mid' (Gt H) (Tt H) q /\
+        ghost_inv_at (DF H) lo d cenv cx mid' (Gt) (Tt) q /\
+        ptr_vv_ok cx (post_value_type cenv e2) x' vv mid' (Gt) (Tt) q /\
         (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
           ?val. read_result cx x' mid' = (INL val,mid') /\
             !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e2) = SOME rt /\
               eval_operand (vv_operand vv) q = SOME w ==>
               w2n w + type_memory_size rt <= lo /\
-              (!mem. mem_agree_outside (Tt H).t_mem q.vs_memory mem ==>
+              (!mem. mem_agree_outside (Tt).t_mem q.vs_memory mem ==>
                 val_in_memory rt val (w2n w) mem)) /\
         (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type cenv e2) ==>
-          ptr_buf_ok cenv e2 op (Gt H) q) /\
+          ptr_buf_ok cenv e2 op (Gt) q) /\
         (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
-          ptr_buf_ok cenv e2 p.ptr_operand (Gt H) q) /\
-        ghost_kept_at lo cenv mid s1 G1 tn1 t (Gt H) (Tt H) /\
+          ptr_buf_ok cenv e2 p.ptr_operand (Gt) q) /\
+        ghost_kept_at lo cenv mid s1 G1 tn1 t (Gt) (Tt) /\
         eval_operand needle q = SOME (typed_val_to_w256 et x) /\
-        op_prov (Gt H) needle = NONE /\ op_taint (Tt H) needle = {} /\
+        op_prov (Gt) needle = NONE /\ op_taint (Tt) needle = {} /\
         eval_operand op q = SOME (bool_to_word
           (if bop = In then evaluate_in_array (ArrayTV et bd) x av
            else ~evaluate_in_array (ArrayTV et bd) x av)) /\
-        op_prov (Gt H) op = NONE /\ op_taint (Tt H) op = {}` by
-        (ho_match_mp_tac rest_word_membership_tail_full >>
+        op_prov (Gt) op = NONE /\ op_taint (Tt) op = {}` by
+        (ho_match_mp_tac rest_word_membership_tail_const_full >>
          qexistsl [`expr_type e1`, `pbd`] >>
          `t'.vs_current_bb = sm.cs_current_bb /\
           t'.vs_inst_idx = LENGTH sm.cs_current_insts` by
@@ -214,7 +214,55 @@ Resume compile_rest_word_membership_full[after_array]:
             qpat_assum `mid' with gas_obs := [] = mid'`
               (fn th => rewrite_tac [th]))) >>
          rpt conj_tac >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-      FAIL_TAC "tail applied") >>
+      `ann = BaseT BoolT` by
+        (qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+         qpat_assum `bop = In \/ bop = NotIn` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
+              vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+         Cases_on `bop` >> simp[vyperTypeSystemTheory.well_typed_binop_def] >> metis_tac[]) >>
+      qmatch_asmsub_abbrev_tac `eval_operand op q = SOME (bool_to_word answer)` >>
+      `evaluate_type (get_tenv cx) (ArrayT (expr_type e1) bd) = SOME (ArrayTV et bd)` by
+        (qpat_assum `expr_body_pre _ _ _ e2 _`
+           (mp_tac o MATCH_MP exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+      `!ee. bop_result cx ann bop [expr_type e1; ArrayT (expr_type e1) bd]
+        x (ArrayV av) ee = INL (BoolV answer)` by
+        (Cases_on `bop = In` >>
+         gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
+             vyperValueOperationTheory.evaluate_membership_array]) >>
+      irule gas_outcome_full_intro >>
+      qexistsl [`Gt'`, `mid'`, `[]`, `OK q`, `INL (BoolV answer)`, `Tt`] >>
+      conj_tac
+      >- (gen_tac >> pure_rewrite_tac[gas_explicit_def, listTheory.MAP, listTheory.FLAT, listTheory.APPEND, bind_def] >>
+          qpat_assum `!tail. read_result cx x' _ = _`
+            (qspec_then `tail` (fn th => rewrite_tac [th])) >>
+          qpat_assum `!ee. bop_result _ _ _ _ _ _ _ = _`
+            (qspec_then `mid' with gas_obs := tail` (fn th => rewrite_tac [th])) >> simp[]) >>
+      simp[] >> gen_tac >> disch_tac >> disj1_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      `needleQ H (INL x) mid G1 tn1 t` by metis_tac[] >>
+      qpat_x_assum `needleQ H _ _ _ _ _` mp_tac >>
+      simp_tac bool_ss [Abbr `needleQ`] >> strip_tac >>
+      `valid_horizon cx st0 H mid.storage_trace` by
+        (qpat_assum `!tail. eval_expr cx e2 _ = _` (qspec_then `[]` mp_tac) >>
+         strip_tac >> drule_at (Pos (el 2)) valid_horizon_frame >>
+         simp[evaluate_storage_trace_frame]) >>
+      `valid_horizon cx st0 H es.storage_trace` by
+        (`storage_trace_frame (bind (eval_expr cx e1) (read_result cx))` by
+           (irule storage_trace_frame_bind_all >>
+            simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+         qpat_assum `!tail. monad_bind (eval_expr cx e1) _ _ = _`
+           (qspec_then `[]` mp_tac) >>
+         strip_tac >> drule_at (Pos (el 2)) valid_horizon_frame >> simp[]) >>
+      `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+      qpat_x_assum `INL x = INL v`
+        (SUBST_ALL_TAC o REWRITE_RULE [sumTheory.INL_11]) >>
+      qunabbrev_tac `answer` >>
+      drule_all (SIMP_RULE bool_ss [post_value_type_def, expr_type_def] rest_word_full_parent_post) >>
+      simp[post_value_type_def, expr_type_def]) >>
   fs[Abbr `arrayQ`]
 QED
 

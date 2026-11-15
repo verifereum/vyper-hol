@@ -15,6 +15,7 @@
 Theory bodyFullExprCore
 Ancestors
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord
+  bodyFullBopRestWordCompose exprSimBopRestWordFacts
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
   exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
@@ -211,7 +212,11 @@ Theorem bop_rest_word_sim_full:
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
+    fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  drule_all rest_word_typed_membership >> strip_tac >>
+  irule compile_rest_word_membership_full >> metis_tac[]
 QED
 
 (* in and not in on an array literal of words, which the lowering unrolls
