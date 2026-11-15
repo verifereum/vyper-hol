@@ -748,3 +748,201 @@ Proof
   gen_tac >> Induct >> simp[occurrence_saved_ok_def] >> rpt strip_tac >>
   Cases_on `j` >> gvs[occurrence_allocas_ok_def] >> metis_tac[]
 QED
+
+
+(* At the word ceiling there is no dynamic-only provenance.  This
+   recovers the static interface without a pointer-discipline premise. *)
+Theorem occurrence_env_ok_ceil:
+  occurrence_env_ok (dimword (:256)) B owners H G <=>
+  FDOM H = FDOM G /\
+  !v id. FLOOKUP H v = SOME id ==>
+    MEM (FST id) owners /\
+    ?site. FLOOKUP B id = SOME site /\ FLOOKUP G v = SOME site
+Proof
+  `!b z:num. ~(dimword (:256) <= b /\ b + z < dimword (:256))` by
+    decide_tac >>
+  simp[occurrence_env_ok_def] >> eq_tac >> strip_tac
+  >- (conj_tac
+      >- (simp[EXTENSION, TO_FLOOKUP] >> gen_tac >>
+          Cases_on `FLOOKUP H x` >> Cases_on `FLOOKUP G x` >> gvs[]
+          >- (rename1 `FLOOKUP G key = SOME site` >>
+              qpat_x_assum `!v b z. _`
+                (qspecl_then [`key`, `FST site`, `SND site`] mp_tac) >>
+              simp[pairTheory.PAIR]) >>
+          qpat_x_assum `!v id. _` drule >> simp[]) >>
+      metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >> fs[FLOOKUP_DEF] >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem occurrence_param_ok_ceil:
+  occurrence_param_ok (dimword (:256)) B owners p q <=>
+  (p = NONE /\ q = NONE) \/
+  ?id site. p = SOME id /\ q = SOME site /\
+    MEM (FST id) owners /\ FLOOKUP B id = SOME site
+Proof
+  `!b z:num. ~(dimword (:256) <= b /\ b + z < dimword (:256))` by
+    decide_tac >>
+  simp[occurrence_param_ok_def] >>
+  Cases_on `q` >> simp[] >> PairCases_on `x` >> simp[]
+QED
+
+Theorem occurrence_first_erasure_ceil:
+  !ops. occurrence_env_ok (dimword (:256)) B owners H G ==>
+    occurrence_param_ok (dimword (:256)) B owners (first_prov H ops) (first_prov G ops)
+Proof
+  Induct >> simp[first_prov_def, occurrence_param_ok_ceil] >>
+  rpt strip_tac >>
+  drule occurrence_op_erasure >> disch_then (qspec_then `h` mp_tac) >>
+  simp[occurrence_param_ok_ceil] >> rpt strip_tac >>
+  gvs[occurrence_param_ok_ceil]
+QED
+
+Theorem occurrence_out_nonalloca_erasure_ceil[local]:
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
+  LIST_REL (occurrence_param_ok (dimword (:256)) B owners) HP PG ==>
+  occurrence_param_ok (dimword (:256)) B owners
+    (occurrence_out a HP H inst s') (out_prov PG G inst s')
+Proof
+  rpt strip_tac >>
+  simp[occurrence_out_def, out_prov_def] >>
+  Cases_on `inst.inst_opcode = PARAM`
+  >- (simp[] >> Cases_on `inst.inst_operands`
+      >- simp[occurrence_param_ok_ceil] >>
+      Cases_on `h` >> simp[occurrence_param_ok_ceil] >>
+      Cases_on `t` >> simp[occurrence_param_ok_ceil] >>
+      gvs[LIST_REL_EL_EQN] >>
+      rename1 `inst.inst_operands = [Lit idx]` >>
+      IF_CASES_TAC
+      >- (qpat_x_assum `!n. _` (qspec_then `w2n idx` mp_tac) >>
+          simp[occurrence_param_ok_ceil]) >>
+      simp[occurrence_param_ok_ceil]) >>
+  simp[] >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+            inst.inst_opcode = ASSIGN` >>
+  simp[]
+  >- (irule occurrence_first_erasure_ceil >> simp[]) >>
+  simp[occurrence_param_ok_ceil]
+QED
+
+Theorem occurrence_step_nonalloca_erasure_ceil[local]:
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\
+  LIST_REL (occurrence_param_ok (dimword (:256)) B owners) HP PG ==>
+  occurrence_env_ok (dimword (:256)) B owners
+    (occurrence_step a HP H inst s') (step_prov PG G inst s')
+Proof
+  strip_tac >> simp[occurrence_step_def, step_prov_def] >>
+  irule occurrence_set_erasure >>
+  simp[occurrence_out_nonalloca_erasure_ceil]
+QED
+
+Theorem occurrence_annotation_next_ceil:
+  occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
+  step_inst fuel C inst s = OK s' ==>
+  occurrence_annotation_ok (dimword (:256)) n a U (occurrence_sites_step a B inst s') HP
+    (occurrence_step a HP H inst s') stk PG (step_prov PG G inst s')
+    (s' with vs_inst_idx := idx)
+Proof
+  strip_tac >>
+  `occurrence_allocas_ok B a s` by gvs[occurrence_annotation_ok_def] >>
+  `!id site. FLOOKUP B id = SOME site ==>
+     FLOOKUP (occurrence_sites_step a B inst s') id = SOME site` by
+    (Cases_on `inst.inst_opcode = ALLOCA`
+     >- (rpt strip_tac >> irule occurrence_sites_step_preserves >> metis_tac[]) >>
+     simp[occurrence_sites_step_def]) >>
+  `occurrence_allocas_ok (occurrence_sites_step a B inst s') a s'` by
+    (Cases_on `inst.inst_opcode = ALLOCA`
+     >- (irule occurrence_sites_step_allocas >> metis_tac[]) >>
+     `s'.vs_allocas = s.vs_allocas` by
+       (irule step_inst_base_preserves_allocas >> qexists_tac `inst` >>
+        gvs[step_inst_non_invoke]) >>
+     gvs[occurrence_sites_step_def, occurrence_allocas_ok_def]) >>
+  gvs[occurrence_annotation_ok_def] >>
+  rpt conj_tac
+  >- (simp[occurrence_sites_step_def] >>
+      Cases_on `inst.inst_opcode = ALLOCA` >> simp[] >>
+      Cases_on `FLOOKUP s'.vs_allocas inst.inst_id` >> simp[] >>
+      rpt strip_tac >> gvs[] >> metis_tac[])
+  >- gvs[occurrence_allocas_ok_def]
+  >- (Cases_on `inst.inst_opcode = ALLOCA`
+      >- (irule occurrence_step_alloca_erasure >> simp[] >> metis_tac[]) >>
+      simp[occurrence_sites_step_def] >>
+      irule occurrence_step_nonalloca_erasure_ceil >> simp[])
+  >- (irule occurrence_params_transport >>
+      qexistsl_tac [`B`, `a::MAP (\u. u.of_owner) U`] >> simp[]) >>
+  irule occurrence_saved_transport >> qexists_tac `B` >> simp[] >>
+  rpt strip_tac >> PairCases_on `id` >>
+  irule occurrence_sites_step_other_owner >> gvs[] >> metis_tac[]
+QED
+
+Theorem occ_frame_reachable_annotation_static:
+  !vs C stk PG G tn fn inst s n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+    MEM fn C.ctx_functions /\ EVERY (\f. MEM f.cf_fn C.ctx_functions) stk /\
+    (vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C ==>
+     occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s)
+Proof
+  ho_match_mp_tac occ_frame_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume occ_frame_reachable_annotation_static[entry]:
+  rpt gen_tac >> strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  simp[] >> strip_tac >>
+  drule occurrence_enters_block_allocas >>
+  simp[occurrence_annotation_ok_def, occurrence_allocas_ok_def,
+       occurrence_env_ok_ceil, occurrence_saved_ok_def]
+QED
+
+Resume occ_frame_reachable_annotation_static[next]:
+  rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by
+    (gvs[ctx_has_dalloca_def, EXISTS_MEM] >>
+     `MEM inst (fn_insts fn)` by
+       (qpat_x_assum `active_inst fn inst s` mp_tac >>
+        rw[contextCodegenRelTheory.active_inst_def, venomInstTheory.fn_insts_def,
+           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+     metis_tac[]) >>
+  irule occurrence_annotation_next_ceil >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_annotation_static[block]:
+  rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
+  irule occurrence_annotation_block >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_annotation_static[call]:
+  rpt gen_tac >> strip_tac >>
+  `MEM fn' C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  simp[] >> strip_tac >>
+  irule occurrence_annotation_call >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_annotation_static[ret]:
+  rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:string``] occurrence_annotation_return) >>
+  metis_tac[]
+QED
+
+Finalise occ_frame_reachable_annotation_static
+
+Theorem frame_reachable_occurrence_annotation_static:
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  ?n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+    occurrence_annotation_ok (dimword (:256)) n a U B HP H stk PG G s
+Proof
+  strip_tac >> drule frame_reachable_occurrence_lift >> strip_tac >>
+  drule occ_frame_reachable_annotation_static >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED

@@ -73,7 +73,7 @@ Theorem ricf_operational_positive_copy:
 Proof
   strip_tac >>
   drule_all ricf_located_event_operands_available >> strip_tac >> gvs[] >>
-  `MEM fn C.ctx_functions` by metis_tac[occ_frame_reachable_annotation] >>
+  `MEM fn C.ctx_functions` by metis_tac[occ_frame_reachable_annotation_static] >>
   `MEM (EL b fn.fn_blocks) fn.fn_blocks /\
    e.rfe_index < LENGTH (EL b fn.fn_blocks).bb_instructions /\
    (ricf_event_copy e (EL b fn.fn_blocks)).inst_opcode = MCOPY` by
