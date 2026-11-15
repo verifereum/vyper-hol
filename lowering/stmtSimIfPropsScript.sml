@@ -590,12 +590,16 @@ Theorem if_branch_outcome_cleanup:
     (es with scopes := FEMPTY :: es.scopes,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv' sa sb
       (es with scopes := FEMPTY :: es.scopes) s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
@@ -616,7 +620,8 @@ Proof
       qexistsl_tac [`res`, `ee with scopes := rest`, `r`] >>
       conj_tac
       >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
-      disj2_tac >> gvs[stmt_exit_def] ) >>
+      disj2_tac >> gvs[stmt_exit_def, halt_exit_def, halt_rel_def,
+                      accounts_rel_def]) >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
   drule if_branch_cert_scopes >> strip_tac >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -703,7 +708,9 @@ Theorem if_branch_outcome:
     (es with scopes := FEMPTY :: es.scopes,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv' sa last
       (es with scopes := FEMPTY :: es.scopes) s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted /\
   (~block_is_terminated last ==>
     emit_inst JMP [Label xl] [] last = ((),after) /\
@@ -712,7 +719,9 @@ Theorem if_branch_outcome:
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >> irule if_branch_outcome_to_exit >>
   qexistsl_tac [`after`, `last`, `xl`] >> simp[] >>
@@ -761,10 +770,14 @@ Theorem if_selected_outcome_prefix:
     (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
     (mid with gas_obs := [],jump_to label t)
     (\H. stmt_post H ctx func cx lctx cenv cenv entry sb (mid with gas_obs := []) (jump_to label t))
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) ==>
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_stmt cx (If c ss1 ss2)) (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx c) (read_result cx))
