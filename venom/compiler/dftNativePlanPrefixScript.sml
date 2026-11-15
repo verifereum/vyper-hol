@@ -176,9 +176,8 @@ Theorem native_strict_row_residual[local]:
           FOLDR (dft_exec_cons (F-e) C) OK z
            (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
       | other => ([],other)) /\
-    e = SUC a /\ e < F /\
+    e = SUC a /\ e <= F /\
     lookup_block entry.vs_current_bb sf.fn_blocks = SOME bb /\
-    ~entry.vs_halted /\
     LENGTH z < LENGTH (DROP (phi_prefix_length bb.bb_instructions)
       bb.bb_instructions) /\
     z = TAKE (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
@@ -260,9 +259,9 @@ Theorem native_proper_row_entry[local]:
           FOLDR (dft_exec_cons (F-e) C) OK z
            (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
       | other => ([],other)) /\
-    e = SUC a /\ e < F /\
+    e = SUC a /\ e <= F /\
     lookup_block entry.vs_current_bb sf.fn_blocks = SOME bb /\
-    ~entry.vs_halted /\ bb.bb_instructions <> [] /\
+    bb.bb_instructions <> [] /\
     EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
     is_terminator (LAST bb.bb_instructions).inst_opcode /\
     ~MEM (LAST bb.bb_instructions).inst_opcode [RET;RETFMP;DRET] /\
@@ -376,7 +375,7 @@ Theorem native_plan_tail_alignment[local]:
       MAP (\(bb,e,z). e) plan =
         GENLIST (\r. a + SUC r) (LENGTH plan) /\
       (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
-        e < F /\ MEM bb sf.fn_blocks /\
+        e <= F /\ MEM bb sf.fn_blocks /\
         (if SUC r < LENGTH plan then
           bb.bb_instructions <> [] /\
           EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
@@ -392,7 +391,8 @@ Theorem native_plan_tail_alignment[local]:
       (!r bb e z es s.
         r < LENGTH plan /\ EL r plan = (bb,e,z) /\
         B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
-        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~s.vs_halted)) /\
+        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+        (0 < r ==> ~s.vs_halted))) /\
     plan_ok F C sf a (row::rows) entry /\ rows <> [] /\
     A F C sf.fn_name row entry = (es,OK s) ==>
     plan_ok F C sf (SUC a) rows s
@@ -420,7 +420,7 @@ Proof
   simp[IgnAsm `B = _`]
 QED
 
-Theorem native_single_plan_prefix:
+Theorem native_single_plan_prefix_inclusive:
   !A B plan_ok.
     A = (\F C owner (bb,e,z) s.
       case eval_phis s bb.bb_instructions of
@@ -442,7 +442,7 @@ Theorem native_single_plan_prefix:
       MAP (\(bb,e,z). e) plan =
         GENLIST (\r. a + SUC r) (LENGTH plan) /\
       (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
-        e < F /\ MEM bb sf.fn_blocks /\
+        e <= F /\ MEM bb sf.fn_blocks /\
         (if SUC r < LENGTH plan then
           bb.bb_instructions <> [] /\
           EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
@@ -458,7 +458,8 @@ Theorem native_single_plan_prefix:
       (!r bb e z es s.
         r < LENGTH plan /\ EL r plan = (bb,e,z) /\
         B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
-        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~s.vs_halted)) ==>
+        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+      (0 < r ==> ~s.vs_halted))) ==>
     !plan F C sf a entry bb e z x es r p.
       plan_ok F C sf a plan entry /\ LAST plan = (bb,e,z) /\
       x = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
@@ -829,7 +830,7 @@ Proof
        Once gas_events_step_def] >> simp[step_inst_def]
 QED
 
-Theorem native_plan_prefix:
+Theorem native_plan_prefix_inclusive:
  !F C root_fn root_entry root_path root_depth
   levels paths incoming last_fn last_plan last_bb last_depth last_z x
   A B T W plan_ok levels_ok.
@@ -876,7 +877,7 @@ Theorem native_plan_prefix:
     MAP (\(bb,e,z). e) plan =
       GENLIST (\r. a + SUC r) (LENGTH plan) /\
     (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
-      e < F /\ MEM bb sf.fn_blocks /\
+      e <= F /\ MEM bb sf.fn_blocks /\
       (if SUC r < LENGTH plan then
         bb.bb_instructions <> [] /\
         EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
@@ -892,7 +893,8 @@ Theorem native_plan_prefix:
     (!r bb e z es s.
       r < LENGTH plan /\ EL r plan = (bb,e,z) /\
       B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
-      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~s.vs_halted)) /\
+      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+      (0 < r ==> ~s.vs_halted))) /\
   levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
     levels <> [] /\ LENGTH paths = LENGTH levels /\
     LENGTH incoming = LENGTH levels /\
@@ -952,7 +954,7 @@ Proof
     (qpat_assum `ww = _` (fn th => simp_tac (srw_ss()) [th])) >>
   first_assum (qspec_then `root_entry` assume_tac) >>
   drule_all native_levels_head_alignment >> strip_tac >>
-  qspecl_then [`A`, `B`, `plan_ok`] mp_tac native_single_plan_prefix >>
+  qspecl_then [`A`, `B`, `plan_ok`] mp_tac native_single_plan_prefix_inclusive >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (assume_tac o SIMP_RULE (srw_ss()) []) >>
   Cases_on `levels = []`
@@ -1077,8 +1079,8 @@ Proof
   Cases_on `SND (ww N C levels ent)` >> gvs[]
 QED
 
-(* The final entered block may execute its body at fuel zero. *)
-Theorem native_plan_prefix_inclusive:
+(* Backward-compatible strict-bound projection, derived from the inclusive core. *)
+Theorem native_plan_prefix:
  !F C root_fn root_entry root_path root_depth
   levels paths incoming last_fn last_plan last_bb last_depth last_z x
   A B T W plan_ok levels_ok.
@@ -1125,7 +1127,7 @@ Theorem native_plan_prefix_inclusive:
     MAP (\(bb,e,z). e) plan =
       GENLIST (\r. a + SUC r) (LENGTH plan) /\
     (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
-      e <= F /\ MEM bb sf.fn_blocks /\
+      e < F /\ MEM bb sf.fn_blocks /\
       (if SUC r < LENGTH plan then
         bb.bb_instructions <> [] /\
         EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
@@ -1141,8 +1143,7 @@ Theorem native_plan_prefix_inclusive:
     (!r bb e z es s.
       r < LENGTH plan /\ EL r plan = (bb,e,z) /\
       B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
-      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
-      (0 < r ==> ~s.vs_halted))) /\
+      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~s.vs_halted)) /\
   levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
     levels <> [] /\ LENGTH paths = LENGTH levels /\
     LENGTH incoming = LENGTH levels /\
@@ -1185,10 +1186,26 @@ Theorem native_plan_prefix_inclusive:
     gas_events_blocks (F-root_depth) C root_fn root_entry =
       FST (W F C levels root_entry))
 Proof
-  FAIL_TAC "inclusive boundary proof pending"
+  rpt gen_tac >> strip_tac >> irule native_plan_prefix_inclusive >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`A`, `B`, `T'`, `incoming`] >>
+  simp_tac (srw_ss()) [] >>
+  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
+  map_every (fn pat => qpat_x_assum pat kall_tac)
+    [`A = _`, `B = _`, `T' = _`, `W' = _`] >>
+  qpat_x_assum `levels_ok = _` SUBST_ALL_TAC >>
+  qpat_x_assum `plan_ok = _` SUBST_ALL_TAC >>
+  gvs[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i sf plan call. _` drule_all >> strip_tac >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    qpat_x_assum `!r bb e z. _` drule_all >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!r bb e z es s. _` drule_all >> simp[]
 QED
 
-Theorem native_single_plan_prefix_inclusive:
+Theorem native_single_plan_prefix:
   !A B plan_ok.
     A = (\F C owner (bb,e,z) s.
       case eval_phis s bb.bb_instructions of
@@ -1210,7 +1227,7 @@ Theorem native_single_plan_prefix_inclusive:
       MAP (\(bb,e,z). e) plan =
         GENLIST (\r. a + SUC r) (LENGTH plan) /\
       (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
-        e <= F /\ MEM bb sf.fn_blocks /\
+        e < F /\ MEM bb sf.fn_blocks /\
         (if SUC r < LENGTH plan then
           bb.bb_instructions <> [] /\
           EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
@@ -1226,8 +1243,7 @@ Theorem native_single_plan_prefix_inclusive:
       (!r bb e z es s.
         r < LENGTH plan /\ EL r plan = (bb,e,z) /\
         B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
-        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
-      (0 < r ==> ~s.vs_halted))) ==>
+        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~s.vs_halted)) ==>
     !plan F C sf a entry bb e z x es r p.
       plan_ok F C sf a plan entry /\ LAST plan = (bb,e,z) /\
       x = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
@@ -1259,5 +1275,16 @@ Theorem native_single_plan_prefix_inclusive:
       | other => run_blocks (F-a) C sf entry = other /\
           gas_events_blocks (F-a) C sf entry = es)
 Proof
-  FAIL_TAC "inclusive single-plan proof pending"
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule native_single_plan_prefix_inclusive >>
+  qrefinel [`A`, `B`, `plan`, `_`, `z`] >>
+  simp_tac (srw_ss()) [] >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  simp[IgnAsm `A = _`, IgnAsm `B = _`, IgnAsm `plan_ok = _`] >>
+  map_every (fn pat => qpat_x_assum pat kall_tac) [`A = _`, `B = _`] >>
+  qpat_x_assum `plan_ok = _` SUBST_ALL_TAC >> gvs[] >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    qpat_x_assum `!r bb e z. _` drule_all >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!r bb e z es s. _` drule_all >> simp[]
 QED
