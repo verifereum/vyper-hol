@@ -1,6 +1,7 @@
 Theory abiDecodePtrRejectChecks
 Ancestors
-  abiDecoderRange abiDecoderVarSequence entryDecodeProps abiEncoder emitHelperProps exprLoweringProps
+  abiDecoderRange abiDecoderVarSequence abiDecoderAbortReentry
+  entryDecodeProps abiEncoder emitHelperProps exprLoweringProps
   compileEnv emitHelper venomExecSemantics venomState venomInst words arithmetic list rich_list
 
 Definition abi_decode_reject_witness_def:
@@ -34,6 +35,25 @@ Proof
   qexistsl_tac [`pre ++ tail`, `bad`, `post`, `reached`] >>
   simp[APPEND_ASSOC, EVERY_APPEND] >>
   metis_tac[run_inst_seq_append]
+QED
+
+(* Actual reverts expose only the executed prefix, with no suffix obligations. *)
+Theorem abi_decode_revert_witness:
+  !code s u.
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code /\
+  run_inst_seq code s = Abort Revert_abort u ==>
+  abi_decode_reject_witness code s u
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> simp_tac bool_ss [EVERY_DEF, run_inst_seq_def] >>
+  strip_tac >> Cases_on `step_inst_base h s` >> gvs[]
+  >- (`abi_decode_reject_witness code v u` by metis_tac[] >>
+      irule (abi_decode_reject_witness_prefix |> Q.INST [`pre` |-> `[h]`]
+        |> SRULE [APPEND]) >>
+      simp[] >> qexists_tac `v` >> simp[run_inst_seq_def]) >>
+  drule_all abi_decoder_revert_inputs >> strip_tac >>
+  simp[abi_decode_reject_witness_def] >>
+  qexistsl_tac [`[]`, `h`, `code`, `s`] >> simp[run_inst_seq_def]
 QED
 
 Theorem abi_decode_ASSERT_reject_witness:

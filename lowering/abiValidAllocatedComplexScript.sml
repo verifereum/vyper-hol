@@ -7,11 +7,11 @@ Ancestors
   abiDecoderSequenceReach abiDecoderReentry abiDecoderReentryPointer
   abiDecoderContract abiDecoderTypedCompose abiDecoderLoop abiDecoderDynamicLoopSetup
   exprLoweringProps exprSimDefs compileEnv loweringStateRelDefs venomState venomInst instIdxIndep
-  emitHelperProps freshWrites words list arithmetic pred_set
+  emitHelperProps freshWrites words list arithmetic pred_set fragExec venomExecSemantics
   abiDecoderCoherence abiDecoderMemberInfos abiDecodeRanges abiEncoder vyperABI valueEncoding
   abiMalformedMemberSetup
 
-Theorem abi_valid_allocated_complex_guard:
+Theorem abi_valid_allocated_complex_guard_run[local]:
   abi_decode_complex_head_guard src hi H st = ((),middle) /\
   fn_has_code st middle func /\
   abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
@@ -26,7 +26,9 @@ Theorem abi_valid_allocated_complex_guard:
     t.vs_inst_idx = LENGTH middle.cs_current_insts /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\
-    abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
+    abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t /\
+    run_inst_seq (emitted_insts st middle) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >>
   qhdtm_assum `abi_malformed_entry`
@@ -50,11 +52,85 @@ Proof
                               is_terminator_def]) >>
   drule_all abi_decoder_run_sequence_reach >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `run_inst_seq (emitted_insts st middle) s =
+      OK (actual with vs_inst_idx := s.vs_inst_idx)` by
+    (`EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st middle)` by
+       fs[EVERY_MEM] >>
+     qspecl_then [`emitted_insts st middle`, `s`, `s.vs_inst_idx`]
+       mp_tac run_inst_seq_inst_idx >> simp[exec_result_map_def]) >>
   qexists_tac `t` >> simp[] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   fs[abi_decoder_address_frame_def, fresh_vars_wrt_def,
      abi_malformed_resource_post_inst_idx] >>
   qpat_x_assum `actual = _` SUBST_ALL_TAC >> simp[]
+QED
+
+Theorem abi_valid_allocated_complex_guard:
+  abi_decode_complex_head_guard src hi H st = ((),middle) /\
+  fn_has_code st middle func /\
+  abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
+    base_op hi src dst B L xs p d n s /\
+  p + H <= L /\ middle.cs_next_var <= ceiling.cs_next_var /\
+  fresh_vars_wrt ceiling s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. abi_decode_sim ctx func s t /\
+    fresh_vars_wrt ceiling t /\ ~t.vs_halted /\
+    t.vs_current_bb = middle.cs_current_bb /\
+    t.vs_inst_idx = LENGTH middle.cs_current_insts /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
+Proof
+  metis_tac[abi_valid_allocated_complex_guard_run]
+QED
+
+Theorem abi_valid_allocated_complex_members_entry_run:
+  abi_decode_complex_head_guard src hi H st = ((),middle) /\
+  compile_abi_decode_complex_elems dst src MLOAD base_op hi
+    (abi_decoder_member_infos sf ce tys) 0 0 middle = ((),en) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  abi_malformed_entry HZ ctx func cenv cx es st
+    (abi_malformed_scratch_sites st en func) dstid live
+    base_op hi src dst B L xs p d n s /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  type_memory_size_list tvs <= n /\ p + H <= L /\
+  p + SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= L /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) (DROP p xs) (DROP p xs) /\
+  abi_to_vyper_list env tys
+    (abi_decode_members (MAP (vyper_to_abi_type env) tys) (DROP p xs) (DROP p xs)) = SOME vs /\
+  en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. abi_decode_sim ctx func s t /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
+      (abi_malformed_scratch_sites st en func) dstid s t /\
+    abi_valid_allocated_members_entry HZ ce env sf tys tvs vs ctx func cenv cx es
+      middle en base_op hi src dst B L xs p d n 0 0 dstid live ceiling t /\
+    run_inst_seq (emitted_insts st middle) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_complex_code >> strip_tac >>
+  `middle.cs_next_var <= ceiling.cs_next_var` by decide_tac >>
+  drule_all abi_valid_allocated_complex_guard_run >> strip_tac >>
+  `abi_malformed_scratch_sites middle en func SUBSET
+   abi_malformed_scratch_sites st en func` by
+    (irule abi_malformed_scratch_sites_nested >> decide_tac) >>
+  `local_ptrs_reserved cenv middle` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
+     fs[abi_malformed_entry_def]) >>
+  `EVERY (abi_decoder_operand_live middle.cs_next_var) [base_op;hi;src;dst]` by
+    (fs[abi_malformed_entry_def, EVERY_MEM] >> rpt strip_tac >>
+     irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+  `abi_malformed_entry HZ ctx func cenv cx es middle
+    (abi_malformed_scratch_sites middle en func) dstid live
+    base_op hi src dst B L xs p d n t` by
+    (drule_all abi_malformed_aggregate_reentry >> simp[]) >>
+  qexists_tac `t` >> simp[abi_valid_allocated_members_entry_def]
 QED
 
 Theorem abi_valid_allocated_complex_members_entry:
@@ -82,25 +158,7 @@ Theorem abi_valid_allocated_complex_members_entry:
     abi_valid_allocated_members_entry HZ ce env sf tys tvs vs ctx func cenv cx es
       middle en base_op hi src dst B L xs p d n 0 0 dstid live ceiling t
 Proof
-  strip_tac >>
-  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_complex_code >> strip_tac >>
-  `middle.cs_next_var <= ceiling.cs_next_var` by decide_tac >>
-  drule_all abi_valid_allocated_complex_guard >> strip_tac >>
-  `abi_malformed_scratch_sites middle en func SUBSET
-   abi_malformed_scratch_sites st en func` by
-    (irule abi_malformed_scratch_sites_nested >> decide_tac) >>
-  `local_ptrs_reserved cenv middle` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
-     fs[abi_malformed_entry_def]) >>
-  `EVERY (abi_decoder_operand_live middle.cs_next_var) [base_op;hi;src;dst]` by
-    (fs[abi_malformed_entry_def, EVERY_MEM] >> rpt strip_tac >>
-     irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
-  `abi_malformed_entry HZ ctx func cenv cx es middle
-    (abi_malformed_scratch_sites middle en func) dstid live
-    base_op hi src dst B L xs p d n t` by
-    (drule_all abi_malformed_aggregate_reentry >> simp[]) >>
-  qexists_tac `t` >> simp[abi_valid_allocated_members_entry_def]
+  metis_tac[abi_valid_allocated_complex_members_entry_run]
 QED
 
 Theorem abi_valid_allocated_complex_members_post:

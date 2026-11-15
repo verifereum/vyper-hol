@@ -51,6 +51,25 @@ Proof
   qexistsl_tac [`inst`, `q`, `b`, `sz`] >> simp[] >> decide_tac
 QED
 
+Theorem abi_malformed_allocated_bounds:
+  alloca_inv s /\
+  abi_malformed_allocated_window live B L xs s /\
+  abi_malformed_destination func cenv scopes dstid d n s /\ live <> dstid ==>
+  B + L <= s.vs_alloca_next /\ d + n <= s.vs_alloca_next /\
+  (B + L <= d \/ d + n <= B)
+Proof
+  strip_tac >>
+  qhdtm_assum `abi_malformed_allocated_window`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_malformed_allocated_window_def]) >>
+  qhdtm_assum `abi_malformed_destination`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_malformed_destination_def]) >>
+  `B + cap <= s.vs_alloca_next /\ b + sz <= s.vs_alloca_next` by
+    (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `B + cap <= b \/ b + sz <= B` by
+    (fs[alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >>
+  decide_tac
+QED
+
 Theorem abi_malformed_resource_window:
   abi_malformed_allocated_window live B L xs s /\
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t /\
