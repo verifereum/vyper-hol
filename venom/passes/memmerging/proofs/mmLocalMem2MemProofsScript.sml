@@ -15,6 +15,8 @@ Ancestors
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
+Overload static_mem_ok[local] = ``mmTraceProofs$mm_static_mem_ok``
+
 Definition mm_local_nonmemory_frame_def:
   mm_local_nonmemory_frame s =
     stateFrame$state_frame (s with <|vs_memory := []; vs_inst_idx := 0|>)
@@ -1321,7 +1323,7 @@ Proof
      drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]) >>
   qpat_x_assum `!q. h <= q /\ q <= r ==> _` kall_tac >>
   qpat_x_assum `static_mem_ok _ _ _ (EL j is) _` mp_tac >>
-  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mmTraceProofsTheory.mm_static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
     EVERY_APPEND] >> strip_tac >>
   (Cases_on `(EL j bb.bb_instructions).inst_opcode = MCOPY`
   >- (gvs[mm_local_write_footprint_def, codegenRelTheory.source_memory_write_ranges_def,
