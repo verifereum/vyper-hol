@@ -2,7 +2,7 @@
 Theory bodyFullAbiEncodeSlot
 Ancestors
   bodyFullAbiEncodeOffset bodyFullAbiEncodeStore bodyFullAbiEncodeCopy
-  fragGasOriginPtrLoop
+  fragGasOriginPtrLoop fragExecPtr
   abiTupleProps bodyPtrMakeArrayPrimitiveInstall bodyPtrMakeArrayWordStore
   assignBasePtrCleanStore exprLoweringProps emitHelperProps fragExec
   assignTuplePtrStoreWord assignTuplePtrCopyEndpoint typedCopyPtr robustCopyTransportPtr contextCodegenRel unitTransformDefs memSafeRun

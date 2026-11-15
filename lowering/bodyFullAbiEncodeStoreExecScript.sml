@@ -1,10 +1,10 @@
 (* Same-type materialization uses no heterogeneous layout metadata. *)
 Theory bodyFullAbiEncodeStoreExec
 Ancestors
-  logStoreDataOriginPtr bodyFullAllocGeneric typedCopyOriginPtrBytes
+  bodyFullAllocGeneric typedCopyOriginPtrBytes
   typedMemoryCopy robustCopyTransportPtr representationCleanPtr
   valueCopy valueEncoding valueEncodingDefs exprSimProps context compileEnv
-  bodyPtrDefs ptrDiscipline fragGasOriginPtr fragExec rich_list bodyFullPathHistory
+  bodyPtrDefs ptrDiscipline fragGasOriginPtr fragExec fragExecPtr rich_list bodyFullPathHistory
   allocaHistory bodyFullAbiEncodeCopy assignTuplePtrCopyEndpoint
   emitHelper instMemFrontier memSafeRun unitTransformDefs contextCodegenRel
 
@@ -216,7 +216,7 @@ Resume same_type_store_core[bulk_post]:
     (unabbrev_all_tac >>
      mp_tac (Q.INST [`dst` |-> `Var xd`, `src` |-> `Var xs`,
                      `count_op` |-> `Lit (n2w (type_memory_size tv))`]
-                    (SPEC_ALL typedCopyPtrTheory.mcopy_operand_ghost_frame) |>
+                    (SPEC_ALL fragExecPtrTheory.mcopy_operand_ghost_frame) |>
              Q.GENL [`a`, `b`, `n`, `id`]) >>
      simp[venomStateTheory.eval_operand_def] >>
      disch_then (qspec_then `sa.cs_next_id` strip_assume_tac) >>
