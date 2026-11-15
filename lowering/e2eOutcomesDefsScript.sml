@@ -9,8 +9,10 @@ Ancestors
 (* The call theorem's premises other than its storage guards, for one call
    frame es of the compiled contract.  Re-entries meet the same premises. *)
 Definition vyper_call_staging_def:
-  vyper_call_staging policy tops runtime_bc am tx ret es <=>
-    (?deploy_bc. compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc)) /\
+  vyper_call_staging fin policy tops runtime_bc am tx ret es <=>
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    (?deploy_bc. compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc)) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
