@@ -47,17 +47,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_extcodecopy_footprint[local]:
-  inst.inst_opcode = EXTCODECOPY /\ inst.inst_operands = [a;d;r;n] /\
-  eval_operand a s = SOME addr /\ eval_operand d s = SOME dst /\
-  eval_operand r s = SOME src /\ eval_operand n s = SOME sz ==>
-  (i IN range_bytes (step_writes inst s post) <=>
-   w2n dst <= i /\ i < w2n dst + w2n sz)
-Proof
-  simp[step_writes_def, source_memory_write_ranges_def,
-       sized_source_write_range_def, range_bytes_def,
-       arithmeticTheory.ADD_COMM]
-QED
 
 Theorem ptr_extcodecopy_scalar_discipline[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
@@ -370,45 +359,6 @@ Proof
   gvs[] >> qexistsl_tac [`dop`,`nop`] >> simp[]
 QED
 
-Theorem ptr_extcodecopy_transcript_successor[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  a.po_inst.inst_opcode = EXTCODECOPY /\
-  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
-  ptr_chrono_step C' at zt ==>
-  ?z bytes (dst:256 word) (dt:256 word) (sz:256 word).
-    ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
-      (done ++ [LENGTH h - 1]) tokens registry births PT TG saved entries
-      (H ++ [(tokens,registry,births,PT,TG,saved,entries)]) /\
-    ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG saved /\
-    z = ptr_ledger_next a z.po_inst
-      (write_memory_with_expansion (w2n dst) bytes a.po_state) /\
-    active_inst z.po_fn z.po_inst z.po_state /\
-    zt.po_fn = at.po_fn /\ zt.po_stack = at.po_stack /\
-    zt.po_params = at.po_params /\ active_inst zt.po_fn zt.po_inst zt.po_state /\
-    LENGTH bytes = w2n sz /\
-    (?dop nop.
-      mem_write_ops a.po_inst = SOME
-        <|iao_ofst := dop; iao_size := SOME nop; iao_max_size := SOME nop|> /\
-      eval_operand dop a.po_state = SOME dst /\
-      eval_operand dop at.po_state = SOME dt /\
-      eval_operand nop a.po_state = SOME sz /\
-      MEM (w2n dst,w2n sz) (source_memory_write_ranges a.po_inst a.po_state)) /\
-    (!x. x IN range_bytes (step_writes a.po_inst a.po_state z.po_state) <=>
-      w2n dst <= x /\ x < w2n dst + w2n sz) /\
-    (!x. x IN range_bytes (step_writes at.po_inst at.po_state zt.po_state) <=>
-      w2n dt <= x /\ x < w2n dt + w2n sz) /\
-    zt.po_state = (write_memory_with_expansion (w2n dt) bytes at.po_state
-      with vs_inst_idx := SUC at.po_state.vs_inst_idx) /\
-    (!j. j < w2n sz ==>
-      read_byte (w2n dst+j) z.po_state.vs_memory =
-      read_byte (w2n dt+j) zt.po_state.vs_memory)
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_extcodecopy_transcript_successor_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_extcodecopy_write_certificate_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'

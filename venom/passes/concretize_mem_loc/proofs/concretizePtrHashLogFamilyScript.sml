@@ -252,39 +252,6 @@ Proof
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem ptr_paired_hash_log_payload[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  active_inst a.po_fn a.po_inst a.po_state /\
-  ALL_DISTINCT (fn_labels a.po_fn) /\
-  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
-  MEM a.po_inst.inst_opcode [SHA3; LOG] /\
-  mem_read_ops a.po_inst = SOME ops /\
-  inst_read_op a.po_inst = SOME ops.iao_ofst /\
-  MEM ops.iao_ofst a.po_inst.inst_operands /\
-  eval_operand ops.iao_ofst a.po_state = SOME x /\
-  eval_operand ops.iao_ofst at.po_state = SOME y /\
-  MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
-  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
-    (SOME x) (SOME y) ==>
-  TAKE n (DROP (w2n x) a.po_state.vs_memory ++ REPLICATE n 0w) =
-  TAKE n (DROP (w2n y) at.po_state.vs_memory ++ REPLICATE n 0w)
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_payload_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_paired_hash_log_endpoint_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -344,26 +311,6 @@ Proof
   metis_tac[optionTheory.NOT_NONE_SOME]
 QED
 
-Theorem ptr_paired_hash_log_endpoint[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  ptr_discipline lo C vs /\
-  MEM a.po_inst.inst_opcode [SHA3; LOG] ==>
-  active_inst a.po_fn a.po_inst a.po_state /\
-  MEM a.po_inst (fn_insts a.po_fn) /\ inst_wf a.po_inst /\
-  fn_shape_ok a.po_fn /\ ALL_DISTINCT (fn_labels a.po_fn) /\
-  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
-  ~in_revert_forward a.po_fn a.po_state /\
-  ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
-    a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels /\
-  ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
-  ?P. fn_ptr_ok P a.po_fn /\ FDOM a.po_prov SUBSET fn_pv P a.po_fn
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_endpoint_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_paired_hash_log_read_inputs_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -401,37 +348,6 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem ptr_paired_hash_log_read_inputs[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  MEM a.po_inst.inst_opcode [SHA3; LOG] /\
-  MEM (off,n) (source_memory_read_ranges a.po_inst at.po_state) ==>
-  ?ops x y. mem_read_ops a.po_inst = SOME ops /\
-    inst_read_op a.po_inst = SOME ops.iao_ofst /\
-    MEM ops.iao_ofst a.po_inst.inst_operands /\
-    eval_operand ops.iao_ofst a.po_state = SOME x /\
-    eval_operand ops.iao_ofst at.po_state = SOME y /\ off = w2n y /\
-    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
-    ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
-      (SOME x) (SOME y) /\
-    TAKE n (DROP (w2n x) a.po_state.vs_memory ++ REPLICATE n 0w) =
-    TAKE n (DROP (w2n y) at.po_state.vs_memory ++ REPLICATE n 0w)
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_hash_log_read_inputs_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_sha3_size_evaluation[local]:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ opaque_use_ok fn /\

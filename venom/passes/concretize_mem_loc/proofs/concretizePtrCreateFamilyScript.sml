@@ -112,27 +112,6 @@ Proof
   simp[venom_call_request_def]
 QED
 
-Theorem ptr_create_family_execution[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t /\
-  exec_create inst t value ot sz salt = OK z ==>
-  ?u. exec_create inst s value off sz salt = OK u /\
-      u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
-      (!out. inst.inst_outputs = [out] ==> lookup_var out u = lookup_var out z)
-Proof
-  strip_tac >>
-  `venom_create_request s value off sz salt = venom_create_request t value ot sz salt` by
-    (irule ptr_create_family_request >> metis_tac[]) >>
-  qpat_x_assum `exec_create _ _ _ _ _ _ = OK _` mp_tac >>
-  simp[exec_create_def, AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
-  strip_tac >> gvs[Excl "consume_create_outcome_eq"] >>
-  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) s` >>
-  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) t` >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  drule_all ptr_create_family_completion >>
-  simp[ptr_history_content_update_var, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
-QED
 
 Theorem ptr_create_family_mixed_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
@@ -290,34 +269,6 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >> fs[]
 QED
 
-Theorem ptr_create_family_input_bytes[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] /\
-  ~in_revert_forward a.po_fn a.po_state /\
-  mem_read_ops a.po_inst = SOME ops /\ inst_read_op a.po_inst = SOME ops.iao_ofst /\
-  MEM ops.iao_ofst a.po_inst.inst_operands /\
-  eval_operand ops.iao_ofst a.po_state = SOME x /\
-  eval_operand ops.iao_ofst at.po_state = SOME y /\
-  MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
-  ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  read_memory (w2n x) n a.po_state = read_memory (w2n y) n at.po_state
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_input_bytes_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_create_family_scalar_provenance[local]:
   ptr_use_ok P pv inst /\
@@ -511,34 +462,6 @@ Proof
   qexistsl_tac [`ao`,`ro`,`at.po_state`] >> simp[]
 QED
 
-Theorem ptr_create_family_delegate_endpoint_execution[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  a.po_inst.inst_opcode = DELEGATECALL /\ ptr_use_ok P pv a.po_inst /\
-  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
-  EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands /\
-  a.po_inst.inst_outputs = [out] /\ ~retpc_var a.po_fn out /\
-  ~in_revert_forward a.po_fn a.po_state /\
-  step_inst fuel C' a.po_inst at.po_state = OK t' ==>
-  ?s'. step_inst 0 C a.po_inst a.po_state = OK s' /\
-    s'.vs_returndata = t'.vs_returndata /\ ptr_history_content a.po_taint s' t' /\
-    ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
-      (step_taint a.po_inst a.po_state s' a.po_taint) a.po_fn at.po_fn s' t'
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_delegate_endpoint_execution_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_create_family_endpoint_execution_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -622,37 +545,6 @@ Proof
   qexistsl_tac [`offset`,`at.po_state`] >> simp[]
 QED
 
-Theorem ptr_create_family_endpoint_execution[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  MEM a.po_inst.inst_opcode [CREATE; CREATE2] /\
-  ptr_use_ok P pv a.po_inst /\
-  (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
-  EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands /\
-  a.po_inst.inst_outputs = [out] /\ ~retpc_var a.po_fn out /\
-  ~in_revert_forward a.po_fn a.po_state /\
-  step_inst fuel C' a.po_inst at.po_state = OK t' ==>
-  ?s'. step_inst 0 C a.po_inst a.po_state = OK s' /\
-    ptr_history_content a.po_taint s' t' /\
-    ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
-      (step_taint a.po_inst a.po_state s' a.po_taint)
-      a.po_fn at.po_fn s' t'
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_endpoint_execution_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_paired_prefix_create_successor_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -786,34 +678,6 @@ Proof
   qexistsl_tac [`0`,`post`] >> simp[]
 QED
 
-Theorem ptr_paired_prefix_create_successor[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  MEM a.po_inst.inst_opcode [CREATE; CREATE2] /\
-  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
-  ptr_chrono_step C' at zt ==>
-  ?z TG'.
-    TG' = step_prov PT TG a.po_inst z.po_state /\
-    ptr_paired_prefix R lp positions lo vs C C'
-      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
-      tokens registry births PT TG' saved entries
-      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_paired_prefix_create_successor_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_create_family_delegate_structural_successor_static[local]:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -977,40 +841,6 @@ Proof
   simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def]
 QED
 
-Theorem ptr_create_family_delegate_structural_successor[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  mem_inv raw_mem_ok C vs /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  EVERY all_reachable C.ctx_functions /\
-  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
-  a.po_inst.inst_opcode = DELEGATECALL /\
-  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
-  ptr_chrono_step C' at zt ==>
-  ?z TG'.
-    TG' = step_prov PT TG a.po_inst z.po_state /\
-    ptr_structural_transcript R vs C C' (h ++ [z]) z (ht ++ [zt]) zt
-      (done ++ [LENGTH h - 1]) tokens registry births PT TG' saved entries
-      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) /\
-    ptr_paired_sample positions z zt (tokens,registry,births,PT,TG',saved,entries) /\
-    ptr_paired_params positions z zt (tokens,registry,births,PT,TG',saved,entries) /\
-    ptr_paired_code R lp positions z.po_fn zt.po_fn /\
-    ptr_paired_cursor lp z zt /\
-    z.po_stack = a.po_stack /\ zt.po_stack = at.po_stack /\
-    z.po_state.vs_returndata = zt.po_state.vs_returndata /\
-    ptr_tagged_chrono_step C (HD tokens) a z PT TG saved PT TG' saved
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_create_family_delegate_structural_successor_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_create_family_delegate_written_byte[local]:
   exec_delegatecall inst s gas addr ao az ro rz = OK t /\

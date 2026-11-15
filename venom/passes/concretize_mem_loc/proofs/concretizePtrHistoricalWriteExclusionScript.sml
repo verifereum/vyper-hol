@@ -395,19 +395,6 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem ptr_chrono_nonwrite_footprint[local]:
-  ~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE /\
-  (?fuel post. step_inst fuel C a.po_inst a.po_state = OK post) /\
-  ~ptr_chrono_write C addr a ==>
-  addr NOTIN range_bytes (step_writes a.po_inst a.po_state posts)
-Proof
-  strip_tac >> spose_not_then assume_tac >>
-  qpat_x_assum `addr IN range_bytes (step_writes _ _ _)` mp_tac >>
-  pure_rewrite_tac[ptr_step_write_range] >> strip_tac >>
-  `addr < off + len` by (Cases_on `MEM a.po_inst.inst_opcode
-    [CALL;STATICCALL;DELEGATECALL]` >> gvs[MIN_DEF] >> decide_tac) >>
-  fs[ptr_chrono_write_def, range_bytes_def] >> metis_tac[ADD_COMM]
-QED
 
 Theorem ptr_historical_ordinary_assembly[local]:
   ptr_demand_interval_static R vs C C' h endpoint ht at done tokens registry births

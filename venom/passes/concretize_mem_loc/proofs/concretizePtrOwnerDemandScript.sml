@@ -107,35 +107,6 @@ Proof
   drule_all ptr_reachable_protected_byte_no_kill_static >> simp[]
 QED
 
-Theorem ptr_owner_interval_no_kill[local]:
-  ptr_chrono_history vs C h endpoint /\ i <= j /\ j < LENGTH h /\
-  (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
-  (ptr_owner_view d (EL i h)).cf_fn = fn /\
-  FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
-  b <= byte /\ byte < b + sz /\
-  (!k. i <= k /\ k < j ==>
-    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
-    (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
-      MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
-      ~(off <= byte /\ byte < off + len))) /\
-  o1_run_state_ok vs /\ o1_ctx_shape C /\
-  EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
-  EVERY fn_inst_wf C.ctx_functions /\
-  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
-  ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
-  ~MEM (Allocation aid) (MAP FST imports) ==>
-  !k. i <= k /\ k < j ==>
-  ~ptr_ml_can_kill (Allocation aid)
-    (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn)
-    (\a. if context_alloca_size fn imports a = 0 then NONE
-         else SOME (context_alloca_size fn imports a))
-    (ptr_owner_view d (EL k h)).cf_inst
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_owner_interval_no_kill_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_stage_owner_interval_no_kill_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

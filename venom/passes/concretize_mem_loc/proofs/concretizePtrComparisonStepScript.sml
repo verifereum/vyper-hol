@@ -49,24 +49,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem ptr_comparison_common_position[local]:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  ptr_stage_placements C' positions /\
-  FLOOKUP TG u = SOME (tu,iu) /\ FLOOKUP TG v = SOME (tv,iv) /\
-  FLOOKUP a.po_prov u = SOME (b,sz) /\
-  FLOOKUP a.po_prov v = SOME (b,sz) ==>
-  ?p. FLOOKUP positions (Allocation iu) = SOME (p,sz) /\
-      FLOOKUP positions (Allocation iv) = SOME (p,sz)
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_comparison_common_position_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 (* The two compared variables share one positive-size site (access_ok).  A
    tagged one's site is a static allocation below the dynamic floor; an
@@ -361,33 +343,6 @@ Proof
   gvs[eval_operands_def]
 QED
 
-Theorem ptr_mixed_comparison_values[local]:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\
-  EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
-  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  ptr_stage_placements C' positions /\
-  ptr_mixed_vars births positions TG a.po_taint a.po_fn g a.po_state t /\
-  a.po_state.vs_labels = t.vs_labels /\
-  fn_ptr_ok P a.po_fn /\ MEM a.po_inst (fn_insts a.po_fn) /\
-  (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn) /\
-  EVERY (\op. ptr_nonopaque_operand a.po_fn op /\ op_taint a.po_taint op = {})
-    a.po_inst.inst_operands /\
-  access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
-  a.po_inst.inst_operands = [op1;op2] /\
-  MEM a.po_inst.inst_opcode [EQ; LT; GT] /\
-  eval_operand op1 a.po_state = SOME x /\ eval_operand op2 a.po_state = SOME y /\
-  eval_operand op1 t = SOME x' /\ eval_operand op2 t = SOME y' ==>
-  (x' = y' <=> x = y) /\
-  (w2n x' < w2n y' <=> w2n x < w2n y) /\
-  (w2n x' > w2n y' <=> w2n x > w2n y)
-Proof
-  rpt gen_tac >> mp_tac (SPEC_ALL ptr_mixed_comparison_values_static) >>
-  pure_rewrite_tac[o1PassContractTheory.o1_run_state_ok_def] >>
-  tautLib.TAUT_TAC
-QED
 
 Theorem ptr_mixed_comparison_execution_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
