@@ -785,6 +785,143 @@ Proof
   metis_tac[frame_plain_step]
 QED
 
+(* Non-context primitives leave the readings untouched, including faults
+   and the call/create outcome consumers. Split each primitive separately. *)
+Theorem asm_primitives_gas_readings_append[local]:
+  !f. MEM f [asm_binop bin; asm_unop un; asm_ternop tern;
+             asm_push_val v; asm_pop; asm_dup n; asm_swap n;
+             asm_mload; asm_mstore; asm_mstore8; asm_sload; asm_sstore;
+             asm_tload; asm_tstore; asm_jump pc; asm_jumpi pc;
+             asm_return_op; asm_revert_op; asm_log n; asm_sha3;
+             asm_copy_to_mem bytes; asm_returndatacopy; asm_extcodecopy;
+             asm_mcopy; asm_selfdestruct; asm_exec_call static;
+             asm_exec_staticcall; asm_exec_delegatecall;
+             asm_exec_create; asm_exec_create2] ==>
+  f (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  case f a of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err
+Proof
+  rw[MEM] >>
+  simp[asm_binop_def, asm_unop_def, asm_ternop_def, asm_push_val_def,
+       asm_pop_def, asm_dup_def, asm_swap_def, asm_next_def,
+       asm_mload_def, asm_mstore_def, asm_mstore8_def, asm_sload_def,
+       asm_sstore_def, asm_tload_def, asm_tstore_def, asm_jump_def,
+       asm_jumpi_def, asm_return_op_def, asm_revert_op_def, asm_log_def,
+       asm_sha3_def, asm_copy_to_mem_def, asm_returndatacopy_def,
+       asm_extcodecopy_def, asm_mcopy_def, asm_selfdestruct_def,
+       asm_exec_call_def, asm_exec_staticcall_def, asm_exec_delegatecall_def,
+       asm_exec_create_def, asm_exec_create2_def, asm_call_request_def,
+       asm_create_request_def, asm_consume_call_outcome_def,
+       asm_consume_create_outcome_def] >>
+  rpt CASE_TAC >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[asm_state_component_equality]
+QED
+
+Theorem asm_groups_gas_readings_append[local]:
+  !step. MEM step [asm_step_arith; asm_step_compare; asm_step_bitwise;
+                  asm_step_memory; asm_step_control pc; asm_step_copy;
+                  asm_step_extcall] ==>
+  step name (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  OPTION_MAP (\r. case r of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err) (step name a)
+Proof
+  rw[MEM] >>
+  rw[asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+     asm_step_memory_def, asm_step_control_def, asm_step_copy_def,
+     asm_step_extcall_def] >>
+  simp[asm_next_def, asm_state_component_equality] >>
+  irule asm_primitives_gas_readings_append >> simp[MEM] >> metis_tac[]
+QED
+
+Theorem asm_push_val_gas_readings_append[local]:
+  asm_push_val v (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  case asm_push_val v a of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err
+Proof
+  irule asm_primitives_gas_readings_append >> simp[MEM] >> metis_tac[]
+QED
+
+Theorem asm_state_unop_gas_readings_append[local]:
+  (!x. f x (a with as_gas_readings := a.as_gas_readings ++ tail) = f x a) ==>
+  asm_state_unop f (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  case asm_state_unop f a of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err
+Proof
+  strip_tac >> Cases_on `a.as_stack` >>
+  simp[asm_state_unop_def, asm_next_def, asm_state_component_equality]
+QED
+
+Theorem gas_tail_option_map_cond[local]:
+  OPTION_MAP h (if p then x else y) =
+  (if p then OPTION_MAP h x else OPTION_MAP h y)
+Proof
+  Cases_on `p` >> simp[]
+QED
+
+Theorem asm_context_gas_readings_append[local]:
+  name <> "GAS" \/ a.as_gas_readings <> [] ==>
+  asm_step_context name (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  OPTION_MAP (\r. case r of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err) (asm_step_context name a)
+Proof
+  Cases_on `name = "GAS"`
+  >- (gvs[asm_step_context_def] >> Cases_on `a.as_gas_readings` >>
+      gvs[asm_gas_def, asm_push_val_def, asm_next_def,
+          asm_state_component_equality]) >>
+  disch_then kall_tac >>
+  pure_rewrite_tac[asm_step_context_def, gas_tail_option_map_cond] >>
+  simp[asm_push_val_gas_readings_append, asm_state_unop_gas_readings_append]
+QED
+
+Theorem asm_op_gas_readings_append[local]:
+  name <> "GAS" \/ a.as_gas_readings <> [] ==>
+  asm_step_op pc name (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  case asm_step_op pc name a of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err
+Proof
+  disch_tac >>
+  mp_tac asm_groups_gas_readings_append >>
+  simp[MEM, DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+  drule asm_context_gas_readings_append >> strip_tac >>
+  simp[asm_step_op_def] >>
+  Cases_on `asm_step_arith name a` >> simp[] >>
+  Cases_on `asm_step_compare name a` >> simp[] >>
+  Cases_on `asm_step_bitwise name a` >> simp[] >>
+  Cases_on `asm_step_memory name a` >> simp[] >>
+  Cases_on `asm_step_control pc name a` >> simp[] >>
+  Cases_on `asm_step_extcall name a` >> simp[] >>
+  Cases_on `asm_step_copy name a` >> simp[] >>
+  Cases_on `asm_step_context name a` >> simp[] >>
+  Cases_on `ALOOKUP dup_table name` >> simp[] >>
+  Cases_on `ALOOKUP swap_table name` >> simp[] >>
+  Cases_on `ALOOKUP log_table name` >> simp[] >>
+  irule asm_primitives_gas_readings_append >> simp[MEM] >> metis_tac[]
+QED
+
 (* Padding stays unread until GAS consumes the recorded prefix. *)
 Theorem asm_step_gas_readings_append:
   inst <> AsmOp "GAS" \/ a.as_gas_readings <> [] ==>
@@ -797,5 +934,8 @@ Theorem asm_step_gas_readings_append:
   | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
   | AsmError err => AsmError err
 Proof
-  cheat
+  Cases_on `inst` >>
+  simp[asm_step_def, asm_next_def, asm_state_component_equality]
+  >- (strip_tac >> irule asm_op_gas_readings_append >> metis_tac[]) >>
+  rpt CASE_TAC >> simp[asm_state_component_equality]
 QED
