@@ -150,30 +150,55 @@ Proof
   simp[]
 QED
 
-Theorem literal_tstore_clean_inst_seq_ptr:
+Theorem literal_tstore_inst_seq_ptr_at:
   ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
-  (!b. ~((key,b) IN tn.t_trans)) ==>
-  inst_seq_ptr D 0 ctx func PG G tn
-    [mk_inst id TSTORE [Lit key; Lit value] []] ss G tn
+  allocas_from lo ss ==>
+  inst_seq_ptr D lo ctx func PG G tn
+    [mk_inst id TSTORE [Lit key; Lit value] []] ss G
+    (tn with t_trans := key_update tn.t_trans key {})
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id TSTORE [Lit key; Lit value] []) ss =
      OK (tstore key value ss)` by simp[step_TSTORE_lit] >>
-  `ptr_inst_ok D 0 0 ctx func G tn
+  `ptr_inst_ok D lo 0 ctx func G tn
      (mk_inst id TSTORE [Lit key; Lit value] []) ss` by
-    (irule append_scalar_inst_check >> simp[tstore_def, op_taint_def] >>
-     rpt strip_tac >> gvs[]) >>
-  `key_update tn.t_trans key {} = tn.t_trans` by
-    (simp[key_update_def, EXTENSION] >>
-     qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> metis_tac[]) >>
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, op_taint_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke, step_TSTORE_lit,
+          tstore_def] >> rpt strip_tac >> gvs[]) >>
   `step_taint (mk_inst id TSTORE [Lit key; Lit value] []) ss
-     (tstore key value ss) tn = tn` by
+     (tstore key value ss) tn =
+     tn with t_trans := key_update tn.t_trans key {}` by
     (mp_tac (Q.INST [`tr` |-> `T`, `a` |-> `Lit key`,
        `v` |-> `Lit value`, `slot` |-> `key`, `s` |-> `ss`,
        `s'` |-> `tstore key value ss`]
        (SPEC_ALL scalar_storage_store_taint)) >>
      simp[eval_operand_def, op_taint_def, tstore_def]) >>
   simp[inst_seq_ptr_def, scalar_void_prov]
+QED
+
+Theorem literal_tstore_clean_inst_seq_ptr_at:
+  ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
+  allocas_from lo ss /\ (!b. ~((key,b) IN tn.t_trans)) ==>
+  inst_seq_ptr D lo ctx func PG G tn
+    [mk_inst id TSTORE [Lit key; Lit value] []] ss G tn
+Proof
+  strip_tac >>
+  `key_update tn.t_trans key {} = tn.t_trans` by
+    (simp[key_update_def, EXTENSION] >>
+     qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> metis_tac[]) >>
+  mp_tac (SPEC_ALL literal_tstore_inst_seq_ptr_at) >> simp[]
+QED
+
+Theorem literal_tstore_clean_inst_seq_ptr:
+  ~ctx_has_dalloca ctx /\ ~ss.vs_call_ctx.cc_static /\
+  (!b. ~((key,b) IN tn.t_trans)) ==>
+  inst_seq_ptr D 0 ctx func PG G tn
+    [mk_inst id TSTORE [Lit key; Lit value] []] ss G tn
+Proof
+  strip_tac >> irule literal_tstore_clean_inst_seq_ptr_at >>
+  simp[allocas_from_def]
 QED
 
 (* Exactly the three fresh scalar temporaries change the successful ghost. *)
