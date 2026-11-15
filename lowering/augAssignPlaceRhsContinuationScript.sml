@@ -134,7 +134,7 @@ Proof
                    (INST_TYPE [alpha |-> ``:unit``]
                       vyperStorageFootprintTheory.valid_horizon_frame)) >>
          impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
-         first_assum ACCEPT_TAC) >>
+         simp[]) >>
       `stmt_state_rel H ctx func cenv cx ee t` by
         (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
                           stmt_state_rel H _ _ _ _ ee t /\ _`
@@ -248,8 +248,7 @@ Theorem aug_place_rhs_operator_write_mem:
 Proof
   strip_tac >>
   `!z. y = Var z ==> not_fresh_at s2 z` by
-    (drule_all exprOperandVarTheory.compile_lower_value_var >> strip_tac >>
-     first_assum ACCEPT_TAC) >>
+    (drule_at (Pos hd) exprOperandVarTheory.compile_lower_value_var >> simp[]) >>
   `(!z. x = Var z ==> not_fresh_at s2 z) /\
    (!z. dst = Var z ==> not_fresh_at s2 z) /\
    (!z. not_fresh_at sa z ==> not_fresh_at s2 z)` by metis_tac[] >>
@@ -257,12 +256,13 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `s1`, `s2`, `y`, `s0`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  irule forced_then_outcome >>
-  qexists_tac `\H v ee t. expr_post H ctx func cenv cx e es s1 s2 s0 ee v y t /\
+  match_mp_tac (Q.INST [`P` |->
+    `\H v ee t. expr_post H ctx func cenv cx e es s1 s2 s0 ee v y t /\
     expr_store_bound cx (expr_type e) v y t /\
     t.vs_current_bb = s2.cs_current_bb /\
     t.vs_inst_idx = LENGTH s2.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
+      (SPEC_ALL forced_then_outcome)) >>
   BETA_TAC >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
@@ -299,7 +299,9 @@ Resume aug_place_rhs_operator_write_mem[callback]:
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_assum `!rhs ee. ee.gas_obs = [] /\ _ ==> _`
     (qspecl_then [`v`, `ee`] mp_tac) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  impl_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `gs` >> first_assum ACCEPT_TAC) >> strip_tac >>
   `eval_operand y t = SOME (val_to_w256 v)` by
     (drule_all expr_post_word_operand >> simp[]) >>
   `eval_operand x t = SOME (val_to_w256 cur) /\ eval_operand dst t = SOME w` by

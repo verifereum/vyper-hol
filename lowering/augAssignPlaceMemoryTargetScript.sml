@@ -1,7 +1,7 @@
 (* Allocation bounds at a word-valued local place. *)
 Theory augAssignPlaceMemoryTarget
 Ancestors
-  targetPlaceSimMem stmtSimAugAssignPlaceMemory allocaFootprint
+  stmtSimAugAssignPlaceMemory allocaFootprint
   abiValueEncoding loweringPosts bodySimAugPlaceLoad exprSimDefs
   compileEnv exprSimProps exprLoweringProps bodyMemAugAssignAttrLocal
   fragGasMode stmtSimAugAssignPlace bodyAugPlaceTarget bodySimAugPlaceLive

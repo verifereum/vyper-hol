@@ -980,8 +980,7 @@ Proof
        stmt_state_rel H ctx func cenv cx es t /\
        storage_well_formed_on cx es (FST H)` by
     (gen_tac >> strip_tac >> conj_tac
-     >- (irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-         qexistsl_tac [`H0`, `s0`] >> rpt conj_tac >> metis_tac[])
+     >- metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]
      >- metis_tac[]) >>
   `!H. valid_horizon cx st0 H (es with gas_obs := []).storage_trace ==>
        stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t /\
@@ -1186,8 +1185,11 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
      `not_fresh_at s1 x /\ not_fresh_at s2 x` by
        metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
      `lookup_var x u = SOME w` by
-       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def]) >> metis_tac[]) >>
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+          (qspec_then `H1` mp_tac) >>
+        impl_tac >- simp[] >>
+        disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+        metis_tac[]) >> metis_tac[]) >>
   `not_fresh_at sa p` by
     (fs[local_ptrs_reserved_def] >>
      qpat_x_assum `!n1 p' sz1. _ ==> not_fresh_at sa p'` drule >> simp[]) >>
@@ -1200,7 +1202,12 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
         (w0 + n2w (struct_field_offset
           (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))` by
        (irule eval_operand_frame >> simp[] >>
-        qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
+        qexistsl_tac [`s1`, `t`] >>
+        qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+          (qspec_then `H1` mp_tac) >>
+        impl_tac >- simp[] >>
+        disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+        simp[]) >>
      fs[eval_operand_def] >> metis_tac[]) >>
   `eval_operand res_op s = SOME (typed_val_to_w256 ftv result)` by
     simp[typed_val_to_w256_word_value] >>
@@ -1208,7 +1215,8 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
 QED
 
 Resume compile_augassign_attr_local_mem[store]:
-  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx ee s ==>
        ?t2. stmt_state_rel H ctx func cenv cx
               (ee with scopes := pre ++
                 (env1 |+ (id, cur with
@@ -1219,6 +1227,7 @@ Resume compile_augassign_attr_local_mem[store]:
             t2.vs_requests = s.vs_requests /\ t2.vs_call_ctx = s.vs_call_ctx` by
     (gen_tac >> strip_tac >> drule_all assign_attr_local_word_store_path_mem >>
      strip_tac >> metis_tac[]) >>
+  `stmt_state_rel H1 ctx func cenv cx ee s` by metis_tac[] >>
   drule_all assign_attr_local_word_store_path_mem >> strip_tac >>
   rename1 `gas_marked_path T ctx func s 0 (OK last)` >>
   `gas_marked_path T ctx func u 0 (OK last)` by
@@ -1253,14 +1262,18 @@ Resume compile_augassign_attr_local_mem[post]:
         t2.vs_accounts = s.vs_accounts /\
         t2.vs_transient = s.vs_transient /\
         t2.vs_requests = s.vs_requests /\ t2.vs_call_ctx = s.vs_call_ctx` by
-    metis_tac[] >>
+    (qpat_assum `!H. stmt_state_rel H _ _ _ _ _ s ==> ?t2. _`
+       (qspec_then `H` mp_tac) >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
   `stmt_state_rel H ctx func cenv cx
      (ee with scopes := pre ++
        (env1 |+ (id, cur with
          <|value := StructV (AFUPDKEY fld (K result) vals');
            popped := []|>)) :: rest) last` by
-    (irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-     qexistsl_tac [`H1`, `t2`] >> rpt conj_tac >> metis_tac[]) >>
+    (match_mp_tac (Q.INST [`H0` |-> `H1`, `s` |-> `t2`]
+       (INST_TYPE [alpha |-> ``:256``]
+         exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
+     rpt conj_tac >> metis_tac[]) >>
   `s3.cs_next_var <= sb.cs_next_var` by
     (qpat_x_assum `emit_void _ _ s3 = _` mp_tac >>
      disch_then (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >> simp[]) >>
@@ -1275,8 +1288,11 @@ Resume compile_augassign_attr_local_mem[post]:
            FLOOKUP last.vs_allocas aid = SOME b` by
     (rpt strip_tac >>
      `FLOOKUP u.vs_allocas aid = SOME b` by
-       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def] >> metis_tac[]) >> metis_tac[]) >>
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+          (qspec_then `H1` mp_tac) >>
+        impl_tac >- simp[] >>
+        disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+        metis_tac[]) >> metis_tac[]) >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x last = SOME w` by
     (rpt strip_tac >> metis_tac[]) >>
