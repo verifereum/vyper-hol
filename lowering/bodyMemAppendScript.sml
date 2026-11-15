@@ -4,7 +4,7 @@ Ancestors
   bodyMemoryPreds bodyMemAppendAdapter supportedStmts supportedExprs
   bodyMemAppendAggregateCompose bodyMemAppendAggregateFacts bodyExprPreFacts
   bodyMemAssignTopCopyFacts vyperLookupStorage vyperStorageLayoutSafety
-  bodyAppendStorageFacts bodyAppendStorageAdapter bodySim exprSimHypsDefs
+  bodyAppendStorageFacts bodyAppendStorageLayoutFacts bodyAppendStorageAdapter bodySim exprSimHypsDefs
   exprLoweringProps loweringStateRelDefs compileEnv vyperValue
   vyperTypeValues supportedDecls stmtSimDefs exprSimMemDefs bodyStorageMetadata
   vyperAST supportedTypes vyperTypeSystem
@@ -31,7 +31,7 @@ Proof
     metis_tac[bodyAppendStorageFactsTheory.append_storage_element_domain] >>
   Cases_on `nid` >>
   drule_at (Pat `supported_variable_decl _ _ = _`)
-    bodyAppendStorageFactsTheory.append_aggregate_target_layout >>
+    bodyAppendStorageLayoutFactsTheory.append_aggregate_target_layout >>
   simp[] >> disch_then drule_all >> strip_tac >>
   `supported_pure_expr tops e /\ supported_expr tops e` by
     (fs[supported_stmt_def] >> metis_tac[supportedExprsTheory.supported_expr_def]) >>

@@ -1554,7 +1554,9 @@ Resume compile_append_storage_aggregate_stmt_frag[operand]:
    w2n (slot+1w+(if tr then tload slot staged else sload slot staged)*
           n2w (type_slot_size tv)) + type_slot_size tv <= dimword (:256)` by
     (strip_tac >>
-     irule append_sparse_destination_bound >> qexists_tac `cap` >>
+     qspecl_then [`slot`,
+       `w2n (if tr then tload slot staged else sload slot staged)`,
+       `type_slot_size tv`, `cap`] mp_tac append_sparse_destination_bound >>
      simp[wordsTheory.n2w_w2n] >> fs[type_slot_size_def]) >>
   Cases_on `cx.txn.is_static`
   >- suspend "static" >>
@@ -1675,6 +1677,11 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
        metis_tac[ci_mono_lower_value_compile_expr, ci_mono_compile_alloc_buffer,
          ci_mono_compile_copy_memory, pairTheory.SND] >>
      fs[ci_mono_def] >> decide_tac) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (`valid_horizon cx st0 H es_rhs.storage_trace` by
+       metis_tac[valid_horizon_frame] >>
+     fs[Abbr `es_rhs`, valid_horizon_def]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   `alloca_frame cenv es sa s0 cenv es_end t` by
     (irule alloca_frame_of_mem_frame >> simp[] >>
      metis_tac[]) >>

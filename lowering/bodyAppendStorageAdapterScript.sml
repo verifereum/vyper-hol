@@ -4,7 +4,7 @@ Ancestors
   supportedExprTraverse supportedExprs loweringPosts exprLowering vyperAST allocLimits allocLimitsProps
   vyperTyping valueEncodingTyping exprSimProps
   stmtSimDefs exprSimSource exprSimHypsDefs
-  bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
+  bodyAppendStorageFacts bodyAppendStorageLayoutFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorageFacts bodySim supportedStmts supportedStmtTraverse
   vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs
   vyperTypeCallGraph vyperState vyperInterpreter
@@ -188,7 +188,7 @@ Proof
    ~is_word_type elem` by
     metis_tac[bodyAppendStorageFactsTheory.append_storage_element_domain] >>
   drule_at (Pat `supported_variable_decl _ _ = _`)
-    bodyAppendStorageFactsTheory.append_aggregate_target_layout >>
+    bodyAppendStorageLayoutFactsTheory.append_aggregate_target_layout >>
   simp[] >> disch_then drule_all >> strip_tac >>
   `supported_expr tops e` by simp[supported_expr_def] >>
   `well_typed_expr env e` by (drule append_typing_target >> metis_tac[]) >>
