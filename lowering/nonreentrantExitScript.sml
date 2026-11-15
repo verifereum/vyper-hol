@@ -6,7 +6,7 @@ Ancestors
   transientLockPtr fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasPathPtr
   fragExec unitTransformDefs fragGasMode
   ptrSafeRun ptrDiscipline codegenRel contextCodegenRel memSafeRun gasCount
-  nonreentrantEquiv bodyPtrDefs sourceUnitExecution loweringStateRelDefs
+  nonreentrantEquiv bodyPtrDefs ghostPcTransportPtr sourceUnitExecution loweringStateRelDefs
   vyperInterpreter vyperState accountsRelProps finite_map pred_set words arithmetic
 
 Theorem literal_tstore_mem_safe[local]:
@@ -162,4 +162,79 @@ Proof
       rpt strip_tac >> res_tac >>
       gvs[literal_tstore_mem_safe, literal_tstore_step, is_terminator_def]) >>
   gvs[] >> irule empty_frag_mem_indexed >> simp[]
+QED
+
+(* Zeroing transient storage preserves each horizon's relation pointwise. *)
+Theorem optional_transient_unlock_source_joint:
+  unlock_if_nr cx nr iv es = (INL (),us) /\
+  (nr /\ ~iv ==> cx.nonreentrant_slot = SOME nkey /\
+                  nkey < dimword (:256)) /\
+  u = ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+         vs_inst_idx := n) /\
+  tn' = (if nr /\ ~iv then
+    tn with t_trans := key_update tn.t_trans (n2w nkey) {} else tn) /\
+  dead_lo_ok H (DF H) lo cenv cx /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv_at (DF H) lo d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx us u /\
+  ghost_inv_at (DF H) lo d cenv cx us G tn' u
+Proof
+  strip_tac >> Cases_on `nr /\ ~iv`
+  >- (`cx.nonreentrant_slot = SOME nkey` by fs[] >>
+      `us = es with <|
+         storage_trace := es.storage_trace ++ [StorageLock nkey];
+         tStorage := (cx.txn.target =+ update_storage (n2w nkey) 0w
+           (es.tStorage cx.txn.target)) es.tStorage |>` by
+        gvs[unlock_if_nr_def, release_nonreentrant_lock_execution] >>
+      `us.scopes = es.scopes /\ us.immutables = es.immutables` by simp[] >>
+      `state_rel H func cenv cx es s /\
+       immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
+      `state_rel H func cenv cx us (tstore (n2w nkey) 0w s)` by
+        (`us = (es with tStorage :=
+             (cx.txn.target =+ update_storage (n2w nkey) 0w
+               (es.tStorage cx.txn.target)) es.tStorage)
+             with storage_trace := us.storage_trace` by
+           simp[evaluation_state_component_equality] >>
+         pop_assum SUBST1_TAC >> PURE_REWRITE_TAC[state_rel_storage_trace] >>
+         irule state_rel_transient_update >>
+         simp[] >>
+         metis_tac[storage_dead_update_zero]) >>
+      `immutable_alloca_sep func cenv cx us (tstore (n2w nkey) 0w s)` by
+        (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `us`, `s`,
+           `tstore (n2w nkey) 0w s`] immutable_alloca_sep_fields) >>
+         simp[tstore_def] >>
+         rpt strip_tac >> qexists_tac `id` >>
+         fs[local_region_def, lookup_var_def]) >>
+      `stmt_state_rel H ctx func cenv cx us (tstore (n2w nkey) 0w s)` by
+        (match_mp_tac (Q.SPECL [`H`, `func`, `cenv`, `cx`, `es`, `s`,
+           `us`, `tstore (n2w nkey) 0w s`, `ctx`]
+           stmt_state_rel_allocas_frame) >>
+         simp[tstore_def] >>
+         fs[stmt_state_rel_def, immutable_base_zero_alt, tstore_def]) >>
+      `key_update tn.t_trans (n2w nkey) {} SUBSET tn.t_trans` by
+        simp[key_update_def, SUBSET_DEF, PULL_EXISTS] >>
+      `stor_taint_ok_at (DF H) tn' u` by
+        (fs[ghost_inv_at_def, stor_taint_ok_at_def, dead_lo_ok_def] >>
+         gvs[tstore_def, cx_dead_def, combinTheory.APPLY_UPDATE_THM] >>
+         fs[SUBSET_DEF, key_update_def] >>
+         rpt strip_tac >> res_tac >>
+         Cases_on `s.vs_call_ctx.cc_address = cx.txn.target` >> gvs[] >>
+         irule storage_dead_update_zero >>
+         rename1 `storage_dead H T _ (w2n slot) byte` >>
+         qpat_x_assum `!x. x IN tn.t_trans ==> _`
+           (qspec_then `(slot,byte)` mp_tac) >> simp[]) >>
+      conj_tac >- gvs[stmt_state_rel_inst_idx] >>
+      qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[ghost_inv_at_def] >> strip_tac >>
+      Cases_on `d`
+      >- (gvs[ghost_inv_at_def, return_buf_ptr_def, ptr_covers_def,
+              tstore_def, op_taint_def, lookup_var_def, allocas_from_def] >>
+          metis_tac[]) >>
+      rename1 `return_buf_ptr (SOME pair) _ _ _ _` >>
+      PairCases_on `pair` >>
+      gvs[ghost_inv_at_def, return_buf_ptr_def, ptr_covers_def,
+          tstore_def, op_taint_def, lookup_var_def, allocas_from_def] >>
+      metis_tac[]) >>
+  `us = es` by gvs[unlock_if_nr_def, vyperStateTheory.return_def] >>
+  gvs[stmt_state_rel_inst_idx, ghost_inv_at_inst_idx]
 QED
