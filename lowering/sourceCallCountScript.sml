@@ -1999,6 +1999,144 @@ Proof
   rpt TOP_CASE_TAC >> simp[] >> metis_tac[fn_entry_run_truncate]
 QED
 
+(* Bind closure of the consumption cut.  All semantic suppliers are premises. *)
+Theorem source_replay_cut_bind[local]:
+  !f g.
+    (!s os r t.
+      f (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) ==>
+      ((?pre. t.outcomes = SOME (pre ++ [probe_failed_outcome]) /\
+         !tail. f (s with outcomes := SOME (os ++ tail)) =
+           (r,t with outcomes := SOME (pre ++ tail))) \/
+       (t.outcomes = SOME [] /\
+        (\(r,s). (r,erase_storage_trace s)) (r,t) =
+          (\(r,s). (r,erase_storage_trace s))
+            (f (s with outcomes := SOME (os ++ [empty_failed_outcome]))) /\
+        (\(r,s). (r,erase_storage_trace s)) (r,t) =
+          (\(r,s). (r,erase_storage_trace s))
+            (f (s with outcomes := SOME os))) \/
+       (t.outcomes = SOME [] /\
+        r = INR (Error (RuntimeError "create outcome accounts")) /\
+        ~NULL t.requests /\
+        FST (f (s with outcomes := SOME (os ++ [empty_failed_outcome]))) <>
+          INR (Error (RuntimeError "create outcome accounts")) /\
+        (\(r,s). (r,erase_storage_trace s))
+          (f (s with outcomes := SOME os)) =
+        (\(r,s). (r,erase_storage_trace s))
+          (f (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
+        (!v u. f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (INL v,u) ==>
+          u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))) /\
+    (!v s os r t.
+      g v (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) ==>
+      ((?pre. t.outcomes = SOME (pre ++ [probe_failed_outcome]) /\
+         !tail. g v (s with outcomes := SOME (os ++ tail)) =
+           (r,t with outcomes := SOME (pre ++ tail))) \/
+       (t.outcomes = SOME [] /\
+        (\(r,s). (r,erase_storage_trace s)) (r,t) =
+          (\(r,s). (r,erase_storage_trace s))
+            (g v (s with outcomes := SOME (os ++ [empty_failed_outcome]))) /\
+        (\(r,s). (r,erase_storage_trace s)) (r,t) =
+          (\(r,s). (r,erase_storage_trace s))
+            (g v (s with outcomes := SOME os))) \/
+       (t.outcomes = SOME [] /\
+        r = INR (Error (RuntimeError "create outcome accounts")) /\
+        ~NULL t.requests /\
+        FST (g v (s with outcomes := SOME (os ++ [empty_failed_outcome]))) <>
+          INR (Error (RuntimeError "create outcome accounts")) /\
+        (\(r,s). (r,erase_storage_trace s))
+          (g v (s with outcomes := SOME os)) =
+        (\(r,s). (r,erase_storage_trace s))
+          (g v (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
+        (!w u. g v (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (INL w,u) ==>
+          u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))) /\
+    (!v. outcomes_suffix (g v)) /\
+    (!a b s t.
+      (\(r,s). (r,erase_storage_trace s)) (a s) =
+      (\(r,s). (r,erase_storage_trace s)) (b t) ==>
+      (\(r,s). (r,erase_storage_trace s)) (bind a g s) =
+      (\(r,s). (r,erase_storage_trace s)) (bind b g t)) /\
+    (!v s r t.
+      s.outcomes = SOME [] /\ accounts_runtime_well_typed s.accounts /\
+      g v s = (r,t) ==>
+      r <> INR (Error (RuntimeError "create outcome accounts")) /\
+      (ISL r ==> t.outcomes = SOME [] /\ accounts_runtime_well_typed t.accounts)) ==>
+    !s os r t.
+      bind f g (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) ==>
+      ((?pre. t.outcomes = SOME (pre ++ [probe_failed_outcome]) /\
+         !tail. bind f g (s with outcomes := SOME (os ++ tail)) =
+           (r,t with outcomes := SOME (pre ++ tail))) \/
+       (t.outcomes = SOME [] /\
+        (\(r,s). (r,erase_storage_trace s)) (r,t) =
+          (\(r,s). (r,erase_storage_trace s))
+            (bind f g (s with outcomes := SOME (os ++ [empty_failed_outcome]))) /\
+        (\(r,s). (r,erase_storage_trace s)) (r,t) =
+          (\(r,s). (r,erase_storage_trace s))
+            (bind f g (s with outcomes := SOME os))) \/
+       (t.outcomes = SOME [] /\
+        r = INR (Error (RuntimeError "create outcome accounts")) /\
+        ~NULL t.requests /\
+        FST (bind f g (s with outcomes := SOME (os ++ [empty_failed_outcome]))) <>
+          INR (Error (RuntimeError "create outcome accounts")) /\
+        (\(r,s). (r,erase_storage_trace s))
+          (bind f g (s with outcomes := SOME os)) =
+        (\(r,s). (r,erase_storage_trace s))
+          (bind f g (s with outcomes := SOME (os ++ [failed_outcome (LAST t.requests)]))) /\
+        (!v u. bind f g (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (INL v,u) ==>
+          u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `f (s with outcomes := SOME (os ++ [probe_failed_outcome]))` >>
+  rename1 `f (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (rf,sf)` >>
+  qpat_x_assum `!s os r t. f _ = _ ==> _` drule >>
+  strip_tac
+  >- suspend "unconsumed"
+  >- suspend "ordinary"
+  >> suspend "create"
+QED
+Resume source_replay_cut_bind[unconsumed]:
+  reverse (Cases_on `rf`)
+  >- (gvs[vyperStateTheory.bind_def] >> disj1_tac >>
+      qexists_tac `pre` >> simp[vyperStateTheory.bind_def]) >>
+  gvs[vyperStateTheory.bind_def] >>
+  rename1 `g v sf = (r,t)` >>
+  `g v (sf with outcomes := SOME (pre ++ [probe_failed_outcome])) = (r,t)` by
+    simp[] >>
+  qpat_x_assum `!v s os r t. g v _ = _ ==> _` drule >>
+  qpat_assum `!tail. f _ = _`
+    (qspec_then `[]` (fn th => rewrite_tac[REWRITE_RULE [APPEND_NIL] th])) >>
+  simp[] >> strip_tac >> gvs[]
+QED
+Resume source_replay_cut_bind[ordinary]:
+  disj2_tac >> disj1_tac >> conj_tac
+  >- (Cases_on `rf` >> gvs[vyperStateTheory.bind_def] >>
+      rename1 `g v sf = (r,t)` >>
+      qpat_x_assum `!v. outcomes_suffix (g v)` (qspec_then `v` mp_tac) >>
+      simp[outcomes_suffix_def] >>
+      disch_then (qspec_then `sf` mp_tac) >> simp[outcome_suffix_def]) >>
+  qpat_assum `bind f g _ = (r,t)` (fn th => rewrite_tac[GSYM th]) >>
+  conj_tac >> first_x_assum irule >> gvs[]
+QED
+Resume source_replay_cut_bind[create]:
+  `r = INR (Error (RuntimeError "create outcome accounts")) /\ t = sf` by
+    gvs[vyperStateTheory.bind_def] >>
+  disj2_tac >> disj2_tac >> gvs[] >>
+  conj_tac
+  >- (Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+      rename1 `f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,se)` >>
+      Cases_on `re` >> gvs[vyperStateTheory.bind_def] >>
+      first_x_assum drule >> strip_tac >>
+      Cases_on `g x se` >>
+      first_x_assum drule >> simp[] >> strip_tac >>
+      first_x_assum drule >> simp[]) >>
+  rpt gen_tac >>
+  Cases_on `f (s with outcomes := SOME (os ++ [empty_failed_outcome]))` >>
+  rename1 `f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (re,se)` >>
+  Cases_on `re` >> gvs[vyperStateTheory.bind_def] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+Finalise source_replay_cut_bind[local]
+
 (* Consumption-cut probes: no premise on the original accounts or requests. *)
 Theorem source_replay_unconsumed_cut[local]:
   !f st os r t.
