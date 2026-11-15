@@ -3,7 +3,7 @@ Theory bodyFullHashKeccak
 Ancestors
   bodyFullHashKeccakFixed bodyFullHashKeccakBytes bodyFullHashCleanFrame
   bodyPtrHashBuiltinsCases bodyMemBiKeccakSuffix bodyMemBiKeccakOpenFree exprOperandVar
-  bodyPtrDefs ptrDiscipline venomState
+  bodyPtrDefs ptrDiscipline venomState ghostPcTransportPtr
   bodySimFull bodyFullPreds gasOutcomeFullCompose fragExec
   exprSimHash exprSimHashBoundary exprSimHyps exprSimHypsDefs exprSimSource
   gasShadowCompile gasShadowCompileStmtHelpers gasShadowState gasShadow
@@ -326,7 +326,7 @@ Resume keccak_vv_sim_full[fixed]:
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     bodyPtrDefsTheory.ptr_val_ok_def, contextTheory.vv_location_def,
     loweringPostsTheory.post_value_type_def, exprSimVVFrameTheory.vv_post_inst_idx,
-    bytes_ghost_cursor] >>
+    ghost_inv_at_inst_idx] >>
   `stmt_state_rel H ctx func cenv cx mid s` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
@@ -347,7 +347,7 @@ Resume keccak_vv_sim_full[fixed]:
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
   gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def,
-    bytes_ghost_cursor]
+    ghost_inv_at_inst_idx]
 QED
 
 Resume keccak_vv_sim_full[dynamic]:

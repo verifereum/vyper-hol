@@ -3,7 +3,7 @@ Theory bodyFullHashKeccakBytes
 Ancestors
   bodyPtrHashBuiltinsKeccakBytesRun bodyPtrHashBuiltinsCursor
   bodyPtrHashBuiltinsKeccakShape
-  bodyFullGhostFrame instSeqPtrLo fragGasSeqPtr ptrSafetyTransport
+  bodyFullGhostFrame instSeqPtrLo fragGasSeqPtr ptrSafetyTransport ghostPcTransportPtr
   exprSimHash exprLoweringProps allocaHistoryFragment bodyPtrDefs
   loweringStateRelDefs venomState venomInst
   ptrDiscipline words list finite_map
@@ -48,17 +48,6 @@ Proof
    FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
-QED
-
-Theorem bytes_ghost_cursor:
-  ghost_inv_at D lo d cenv cx es G tn (s with vs_inst_idx := k) <=>
-  ghost_inv_at D lo d cenv cx es G tn s
-Proof
-  Cases_on `d` >>
-  simp[ghost_inv_at_def, ptr_covers_def, lookup_var_def,
-    return_buf_ptr_def, stor_taint_ok_at_def, allocas_from_def] >>
-  PairCases_on `x` >>
-  simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
 QED
 
 Theorem hash_bytes_keccak_joint_run:
@@ -127,7 +116,7 @@ Proof
           qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >> simp[]) >>
       simp[ghost_kept_at_def]) >>
   conj_tac
-  >- (simp[stmt_state_rel_inst_idx, bytes_ghost_cursor] >>
+  >- (simp[stmt_state_rel_inst_idx, ghost_inv_at_inst_idx] >>
       rpt gen_tac >> strip_tac >>
       qpat_x_assum `!H D. _` (qspecl_then [`H`, `D`] mp_tac) >> simp[]) >>
   strip_tac >> drule hash_keccak_bytes_shape >> strip_tac >>
