@@ -5,6 +5,12 @@ Ancestors fragGasPathPtr fragGasOrigin fragGasSeqPtr fragGasPathMem fragGasOrigi
   finite_map words contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps typedCopyArrayPtr
 
+Theorem vars_pc_only_gas_readings:
+  !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
+Proof
+  rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
 Theorem ptr_safe_jump_exact_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\

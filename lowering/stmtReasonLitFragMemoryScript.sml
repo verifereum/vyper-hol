@@ -366,5 +366,6 @@ Proof
           dest_StringV_def, raise_def]) >>
       first_assum ACCEPT_TAC) >>
   disj2_tac >>
-  simp_tac (srw_ss()) [exit_result_def, stmt_exit_def, expr_exit_def]
+  simp_tac (srw_ss()) [exit_result_def, stmt_exit_def, expr_exit_def,
+                       halt_exit_def]
 QED

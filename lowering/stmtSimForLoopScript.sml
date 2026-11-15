@@ -416,6 +416,8 @@ Proof
      (mstore (w2n w) (val_to_w256 v) s)` by
     (irule immutables_rel_mstore_alloca >>
      simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
+  `LENGTH s.vs_memory <= LENGTH (mstore (w2n w) (val_to_w256 v) s).vs_memory` by
+    simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
   irule stmt_state_rel_declare_memory >>
   simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
   simp[word_value_memory_rel] >> conj_tac
@@ -425,7 +427,10 @@ Proof
          qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> fs[stmt_state_rel_def]) >>
       irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
       fs[regions_disjoint_def] >> decide_tac) >>
-  simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
+  `LENGTH s.vs_memory <=
+   LENGTH (mstore (w2n w) (val_to_w256 v) s).vs_memory` by
+    simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
+  fs[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 
 Theorem for_counter_entry_frame[local]:
@@ -853,6 +858,28 @@ Proof
   qexists_tac `cenv''` >> simp[]
 QED
 
+Theorem gas_outcome_exec_conseq[local]:
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  (!marks res mid t H.
+     gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
+     valid_horizon cx st0 H mid.storage_trace /\
+     Q H res (mid with gas_obs := []) t ==>
+     Q' H res (mid with gas_obs := []) t) /\
+  (!H res mid r. R H res mid r ==> R' H res mid r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R'
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >>
+  disch_then (qx_choose_then `marks` strip_assume_tac)
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_summary_at_def] >> BETA_TAC >> strip_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> fs[] >> metis_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
 Theorem for_round_prepare[local]:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -895,7 +922,9 @@ Theorem for_round_prepare[local]:
         (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>)
         s2)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   strip_tac >> fs[for_code_def] >>
   `stmt_state_rel H0 ctx func cenv cx esk cc` by metis_tac[] >>
@@ -938,7 +967,9 @@ Proof
     qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ ==> _` drule >> strip_tac >>
     drule msg_gas_state_frame >>
     disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`]
-      (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[])) >> simp[]
+      (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[])) >> simp[] >>
+  disch_then (mp_then Any mp_tac gas_outcome_exec_conseq) >>
+  disch_then irule >> simp[]
 QED
 
 Theorem for_body_finish[local]:
@@ -1110,7 +1141,8 @@ Theorem for_iteration_alloca[local]:
             frame_start.cs_next_id <= sb0.cs_next_id ==>
             alloca_frame cenv esk frame_start cc cenv ee t))
       (\H res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >>
   qmatch_goalsub_abbrev_tac
@@ -1194,8 +1226,8 @@ Resume for_iteration_alloca[exit_finish]:
   qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >>
   disj2_tac >> simp[Abbr `R`, Abbr `fin`, Abbr `wrapped`] >>
   rpt strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> !tail. _` drule >>
-  disch_then (qspec_then `tail` mp_tac) >> simp[stmt_exit_def]
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ halt_exit _ _ _ _ _` drule >>
+  simp[stmt_exit_def, exprSimDefsTheory.halt_exit_def, halt_rel_def, accounts_rel_def]
 QED
 Resume for_iteration_alloca[normal_finish]:
   fs[] >>
@@ -1284,33 +1316,12 @@ Theorem for_iteration:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\H res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
   disch_then irule >> simp[] >> rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem gas_outcome_exec_conseq[local]:
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
-  (!marks res mid t H.
-     gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
-     valid_horizon cx st0 H mid.storage_trace /\
-     Q H res (mid with gas_obs := []) t ==>
-     Q' H res (mid with gas_obs := []) t) /\
-  (!H res mid r. R H res mid r ==> R' H res mid r) ==>
-  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R'
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def] >>
-  disch_then (qx_choose_then `marks` strip_assume_tac)
-  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
-  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-      rewrite_tac[gas_summary_at_def] >> BETA_TAC >> strip_tac >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> fs[] >> metis_tac[]) >>
-  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem for_round_exec_preserves[local]:
@@ -1406,7 +1417,9 @@ Theorem for_loop_alloca:
          (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
             frame_start.cs_next_id <= sb0.cs_next_id ==>
             alloca_frame cenv esk frame_start cc cenv ee s))
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `Inv = \(H :(bool # bytes32 # type_value) list # num list) j ee t.
@@ -1433,7 +1446,9 @@ Proof
     (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
        frame_start.cs_next_id <= sb0.cs_next_id ==>
        alloca_frame cenv esk frame_start cc cenv ee t)` >>
-  qabbrev_tac `R = \(H :(bool # bytes32 # type_value) list # num list) ex ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \(H :(bool # bytes32 # type_value) list # num list) ex ee r.
+    (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+    halt_exit H cx ee (INR ex) r` >>
   `(!j es s.
       j < LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H j es s) /\
@@ -1460,7 +1475,8 @@ Proof
   (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
      simp[arithmeticTheory.ADD_COMM] >> rpt strip_tac >> irule alloca_frame_same >> simp[])) >>
   strip_tac >> drule gas_outcome_exec_conseq >> disch_then irule >>
-  simp[Abbr `Done`, Abbr `R`] >> metis_tac[]
+  simp[Abbr `Done`, Abbr `R`] >> rpt strip_tac >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume for_loop_alloca[round]:
@@ -1610,7 +1626,9 @@ Theorem for_loop:
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
                 FLOOKUP s.vs_allocas a = SOME b))
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>

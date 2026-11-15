@@ -219,7 +219,7 @@ Theorem annassign_rhs_outcome:
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (eval_expr cx e) (read_result cx)) (es,salloc) Q
-      (\H res ee r. expr_exit res r) /\
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) /\
     (!H res ee t. Q H res ee t ==> ?v. res = INL v) /\
     (!marks v ee t.
       gas_marked_exec F (ctx,func)
@@ -236,7 +236,8 @@ Theorem annassign_rhs_outcome:
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (eval_stmt cx (AnnAssign id typ e)) (es,salloc)
       (\H. stmt_post H ctx func cx lctx old c sa sf es s0)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -281,7 +282,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
@@ -434,11 +435,12 @@ Theorem annassign_concrete_rhs_outcome:
         expr_post H ctx func c cx e es sa sb salloc ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (eval_stmt cx (AnnAssign id typ e)) (es,salloc)
       (\H. stmt_post H ctx func cx lctx old c sa0 sf es salloc)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule annassign_rhs_outcome >>

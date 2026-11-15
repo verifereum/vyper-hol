@@ -1,6 +1,6 @@
 (* Clean scalar validation fragments used by calldata decoders. *)
 Theory calldataClampPtr
-Ancestors fragGasSeqPtr calldataDecodePtr fragGasOriginPtr fragGasSeqPtr memSafeRun instMemFrontier venomInstProofs abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
+Ancestors dispatchedDecoderTrace fragGasSeqPtr calldataDecodePtr fragGasOriginPtr fragGasSeqPtr memSafeRun instMemFrontier venomInstProofs abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   unitTransformDefs fragExec venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep contextCodegenRel
