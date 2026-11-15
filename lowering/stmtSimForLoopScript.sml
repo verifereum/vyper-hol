@@ -922,7 +922,9 @@ Theorem for_round_prepare[local]:
         (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>)
         s2)
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   strip_tac >> fs[for_code_def] >>
   `stmt_state_rel H0 ctx func cenv cx esk cc` by metis_tac[] >>
@@ -965,9 +967,7 @@ Proof
     qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ ==> _` drule >> strip_tac >>
     drule msg_gas_state_frame >>
     disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`]
-      (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[])) >> simp[] >>
-  disch_then (mp_then Any mp_tac gas_outcome_exec_conseq) >>
-  disch_then irule >> simp[]
+      (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[])) >> simp[]
 QED
 
 Theorem for_body_finish[local]:
@@ -1139,7 +1139,8 @@ Theorem for_iteration_alloca[local]:
             frame_start.cs_next_id <= sb0.cs_next_id ==>
             alloca_frame cenv esk frame_start cc cenv ee t))
       (\H res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >>
   qmatch_goalsub_abbrev_tac
@@ -1223,8 +1224,8 @@ Resume for_iteration_alloca[exit_finish]:
   qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >>
   disj2_tac >> simp[Abbr `R`, Abbr `fin`, Abbr `wrapped`] >>
   rpt strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> !tail. _` drule >>
-  disch_then (qspec_then `tail` mp_tac) >> simp[stmt_exit_def]
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ halt_exit _ _ _ _ _` drule >>
+  simp[stmt_exit_def, exprSimDefsTheory.halt_exit_def, halt_rel_def, accounts_rel_def]
 QED
 Resume for_iteration_alloca[normal_finish]:
   fs[] >>
@@ -1313,7 +1314,8 @@ Theorem for_iteration:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\H res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit H cx ee (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
@@ -1413,7 +1415,9 @@ Theorem for_loop_alloca:
          (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
             frame_start.cs_next_id <= sb0.cs_next_id ==>
             alloca_frame cenv esk frame_start cc cenv ee s))
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `Inv = \(H :(bool # bytes32 # type_value) list # num list) j ee t.
@@ -1440,7 +1444,9 @@ Proof
     (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
        frame_start.cs_next_id <= sb0.cs_next_id ==>
        alloca_frame cenv esk frame_start cc cenv ee t)` >>
-  qabbrev_tac `R = \(H :(bool # bytes32 # type_value) list # num list) ex ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \(H :(bool # bytes32 # type_value) list # num list) ex ee r.
+    (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+    halt_exit H cx ee (INR ex) r` >>
   `(!j es s.
       j < LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H j es s) /\
@@ -1467,7 +1473,8 @@ Proof
   (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
      simp[arithmeticTheory.ADD_COMM] >> rpt strip_tac >> irule alloca_frame_same >> simp[])) >>
   strip_tac >> drule gas_outcome_exec_conseq >> disch_then irule >>
-  simp[Abbr `Done`, Abbr `R`] >> metis_tac[]
+  simp[Abbr `Done`, Abbr `R`] >> rpt strip_tac >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume for_loop_alloca[round]:
@@ -1617,7 +1624,9 @@ Theorem for_loop:
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
                 FLOOKUP s.vs_allocas a = SOME b))
-      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r.
+        (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >>
   disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
