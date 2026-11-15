@@ -9,6 +9,9 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalBase concretizeLayout
   ptrDiscipline venomExecSemantics venomInst list
   frameResolvedTrace frameRelocationReachableSupport frameRelocationValues
   frameRelocationCleanOperands pointerConfinedDefs memLocDefs
+  concretizeLayoutAlignedControl frameJointTrace frameOriginHistory
+  frameOriginReachable frameAllocationOwnership frameJointTransition o1PassContract
+  contextCodegenRel
 
 Theorem layout_ordinary_revert_empty:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -64,10 +67,31 @@ Theorem layout_canonical_ordinary_revert_empty:
   post.vs_returndata = [] /\ step_inst fuel C' j t = Abort Revert_abort post' ==>
   post'.vs_returndata = []
 Proof
-  strip_tac >> drule_all layout_canonical_ordinary_environment >>
-  strip_tac >> gvs[concretize_positions_unchanged] >>
-  `layout_ordinary_state D lo C' q0 es qs g s t` by
-    fs[layout_ordinary_entry_def] >>
+  strip_tac >> drule layout_canonical_ordinary_step_witness >> strip_tac >>
+  `layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
+   layout_ordinary_trace vs0 C q0 es qs qend g s /\
+   layout_ordinary_state D lo C' q0 es qs g s t` by
+    fs[layout_aligned_entry_def, layout_ordinary_entry_def] >>
+  `joint_config_reachable vs0 C g.lop_config` by
+    (fs[layout_ordinary_trace_def] >>
+     drule joint_trace_prefix_reachable >> pure_rewrite_tac[EVERY_EL] >>
+     disch_then (qspec_then `g.lop_cursor` mp_tac) >> gvs[]) >>
+  Cases_on `q` >> gvs[decoration_at_def] >>
+  rename1 `g.lop_config = JointConfig stk PG G tn fn i s oms om hs h` >>
+  `frame_reachable vs0 C stk PG G tn fn i s` by
+    (gvs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `o1_fn_shape C fn /\ fn_ptr_ok P fn` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM i (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `taint_ok fn tn i s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `?birth ids rp rv anns. g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns` by
+    (qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[layout_ordinary_state_def] >> asm_rewrite_tac[] >> metis_tac[]) >>
+  gvs[concretize_positions_unchanged] >>
   `resolved_config_ok (JointConfig stk PG G tn fn i s oms om hs h)
      (birth::ids) ((rp,rv)::anns)` by
     (fs[layout_ordinary_trace_def] >> metis_tac[]) >>
