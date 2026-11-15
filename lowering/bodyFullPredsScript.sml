@@ -32,7 +32,12 @@ Definition body_expr_full_ok_def:
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_full_ok cx elems)) /\
+      body_exprs_full_ok cx elems) /\
+    (!ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+      e = Subscript ann e1 e2 /\
+      body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+      expr_map_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+        cenv cx ty e es)) /\
   body_exprs_full_ok cx [] = T /\
   body_exprs_full_ok cx (e::es) =
     (body_expr_full_ok cx e /\
@@ -57,7 +62,7 @@ Theorem body_make_array_children_full_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_full_ok _ _`
-    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
   simp[]
 QED
 

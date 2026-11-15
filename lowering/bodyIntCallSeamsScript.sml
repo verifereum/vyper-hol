@@ -196,7 +196,7 @@ End
 Definition intcall_callee_exit_def:
   intcall_callee_exit H func cenv cx rtv rc (rb:bytes32 option) (n:num)
                       (t:venom_state) res (ee:evaluation_state) r <=>
-    expr_exit res r \/
+    (expr_exit res r /\ halt_exit H cx ee res r) \/
     ?v ir s'.
       res = INL v /\ r = IntRet ir s' /\
       state_rel H func cenv cx (ee with scopes := []) s' /\

@@ -14,7 +14,8 @@ Definition stmt_res_ok_def:
     (?str. res = INR (AssertException str)) \/
     (?v. res = INR (ReturnException v)) \/
     ((res = INR BreakException \/ res = INR ContinueException) /\
-     ?ex inc. lctx = InLoop ex inc)
+     ?ex inc. lctx = InLoop ex inc) \/
+    res = INR HaltException
 End
 
 Definition stmt_exit_def:

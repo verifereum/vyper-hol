@@ -639,7 +639,8 @@ Definition stmt_frag_ptr_at_def:
                FLOOKUP G x = FLOOKUP G0 x /\
                op_taint tn (Var x) = op_taint tn0 (Var x)))
         (\H res ee gt r.
-          !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+          (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+          halt_exit H cx ee res r)
 End
 
 Definition stmt_frag_ptr_cx_dead:

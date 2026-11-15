@@ -23,6 +23,33 @@ Ancestors
 
 (* Rules mirror the context entry of codegen_reachability_package and the
    three clauses of reachability_closed, in that order. *)
+Inductive frag_reachable:
+[~start:]
+  (!ctx fn0 s0 inst.
+     active_inst fn0 inst s0 ==>
+     frag_reachable ctx fn0 s0 fn0 inst s0)
+[~next:]
+  (!ctx fn0 s0 fn inst inst' s s' fuel.
+     frag_reachable ctx fn0 s0 fn inst s /\ active_inst fn inst s /\
+     ~is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+     active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+     frag_reachable ctx fn0 s0 fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx))
+[~block:]
+  (!ctx fn0 s0 fn inst inst' s s' s1 fuel.
+     frag_reachable ctx fn0 s0 fn inst s /\ active_inst fn inst s /\
+     is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+     ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+     frag_reachable ctx fn0 s0 fn inst' s1)
+[~callee:]
+  (!ctx fn0 s0 caller inv s nm ops callee args cs s1 inst.
+     frag_reachable ctx fn0 s0 caller inv s /\ active_inst caller inv s /\
+     inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME (nm, ops) /\
+     lookup_function nm ctx.ctx_functions = SOME callee /\
+     eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+     enters_block callee cs s1 /\ active_inst callee inst s1 ==>
+     frag_reachable ctx fn0 s0 callee inst s1)
+End
+
 Inductive raw_reachable:
 [~entry:]
   (!vs0 ctx name fn lbl inst s1.

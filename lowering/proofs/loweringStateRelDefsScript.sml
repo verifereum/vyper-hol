@@ -685,6 +685,7 @@ Definition call_ctx_rel_def:
      cc.cc_callvalue = n2w txn.value ∧
      cc.cc_calldata = txn.calldata ∧
      cc.cc_static = txn.is_static ∧
+     cc.cc_created_in_tx = txn.created_in_tx ∧
      tc.tc_origin = txn.origin ∧
      tc.tc_gasprice = n2w txn.gas_price ∧
      tc.tc_chainid = n2w txn.chain_id ∧
@@ -760,6 +761,15 @@ Definition state_rel_def:
      LIST_REL (request_agree H cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
 End
+
+Definition halt_rel_def:
+  halt_rel H cx (vs:evaluation_state) ss <=>
+    accounts_rel H cx vs ss /\
+    vs.logs = ss.vs_logs /\
+    LIST_REL (request_agree H cx) vs.requests ss.vs_requests /\
+    vs.pending_deletions = ss.vs_pending_deletions
+End
+
 
 (* Legacy event invariant: retain the word-indexed immutable bookkeeping
    contract of the fixed-offset proofs. This is not the constructor memory

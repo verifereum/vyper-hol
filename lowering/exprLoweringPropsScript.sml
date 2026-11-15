@@ -264,14 +264,14 @@ End
    The upper margin covers bounded create scratch on non-aborting paths. *)
 Definition fmp_room_def:
   fmp_room ctx func (ss:venom_state) <=>
-    (EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) \/
-     (?g f. TC (fn_directly_calls ctx) func.fn_name g /\
-       MEM f ctx.ctx_functions /\ f.fn_name = g /\
-       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))) ==>
+    (ctx_has_dalloca ctx \/
+     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
     ss.vs_alloca_next + pending_alloca_size func ss +
     CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
-      unit_alloca_frame ctx <= w2n ss.vs_fmp /\
-    w2n ss.vs_fmp + 2 ** 65 < dimword (:256)
+      unit_alloca_frame ctx <= w2n ss.vs_initial_fmp /\
+    w2n ss.vs_initial_fmp <= w2n ss.vs_fmp /\
+    w2n ss.vs_initial_fmp < 2 ** 254 /\
+    w2n ss.vs_fmp <= MAX (w2n ss.vs_initial_fmp) (LENGTH ss.vs_memory + 31)
 End
 
 (* Constructor immutable capacity regions lie below the bump frontier and

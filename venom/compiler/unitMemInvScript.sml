@@ -38,6 +38,14 @@ Ancestors
 
 (* ===== Definitions ===== *)
 
+Definition dalloca_no_wrap_def:
+  dalloca_no_wrap inst s <=>
+    inst.inst_opcode = DALLOCA ==>
+    !sz_op sz.
+      inst.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
+      w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)
+End
+
 Definition inst_mem_ranges_def:
   inst_mem_ranges inst s =
     source_memory_read_ranges inst s ++ source_memory_write_ranges inst s

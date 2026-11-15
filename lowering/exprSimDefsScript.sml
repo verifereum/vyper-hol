@@ -1,14 +1,21 @@
 (* Shared counted expression judgments and their result domains. *)
 Theory exprSimDefs
 Ancestors
+  loweringStateRelDefs
   loweringPosts gasOutcome gasContext exprLowering compileEnv loweringSlice
   vyperInterpreter vyperState venomState venomExecSemantics
+
+Definition halt_exit_def:
+  halt_exit H cx (ee:evaluation_state) (res : 'a + exception) r <=>
+    (res = INR HaltException ==> ?s. r = Halt s /\ halt_rel H cx ee s)
+End
 
 Definition expr_exit_def:
   (expr_exit (INR (Error (RuntimeError m))) (Abort a s) <=> T) /\
   (expr_exit (INR (Error (RevertData d))) (Abort a s) <=> a = Revert_abort) /\
   (expr_exit (INR (AssertException str)) (Abort a s) <=>
      a = Revert_abort \/ (a = ExHalt_abort /\ str = "UNREACHABLE")) /\
+  (expr_exit (INR HaltException) (Halt s) <=> s.vs_returndata = []) /\
   (expr_exit _ _ <=> F)
 End
 
@@ -16,7 +23,8 @@ Definition expr_res_ok_def:
   expr_res_ok (res : value + exception) <=>
     (?v. res = INL v) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 Definition expr_sim_def:
@@ -37,7 +45,7 @@ Definition expr_sim_def:
           expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 End
 
 Definition expr_vv_res_ok_def:
@@ -45,7 +53,8 @@ Definition expr_vv_res_ok_def:
     (?v. res = INL (Value v)) \/ (?p. res = INL (PlaceR p)) \/
     (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 Definition expr_read_res_ok_def:
@@ -72,7 +81,7 @@ Definition expr_vv_sim_def:
           vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 End
 
 Theorem expr_exit_INL[simp]:

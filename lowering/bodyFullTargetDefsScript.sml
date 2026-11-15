@@ -9,6 +9,7 @@
  *)
 Theory bodyFullTargetDefs
 Ancestors
+  exprSimDefs unitMemInv contextRawReachable
   bodySimFull targetPlaceSimCases targetPlaceSimDefs
   gasShadow gasOutcomeFull loweringPosts exprLowering compileEnv
   ptrDiscipline venomState vyperInterpreter vyperState vyperAST
@@ -51,7 +52,7 @@ Definition target_sim_full_def:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -59,6 +60,8 @@ Definition target_sim_full_def:
       gas_admissible (eval_base_place cx bt) target_res_ok es /\
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -72,11 +75,15 @@ Definition target_sim_full_def:
           target_post H ctx func cenv cx es sa sb s0 ee pv vt r t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           target_ptr_ok cenv pv r G tn t /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-        (\H res ee gt q. expr_exit res q)
+        (\H res ee gt q.
+          expr_exit res q /\ halt_exit H cx ee res q /\
+          (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
 End
 
 (* New definition: pop_target_frag_ptr over the joint judgment; a memory
@@ -97,7 +104,7 @@ Definition target_place_sim_full_def:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -105,6 +112,8 @@ Definition target_place_sim_full_def:
       gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -123,9 +132,13 @@ Definition target_place_sim_full_def:
                          INL v) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           target_ptr_ok cenv (PlaceR p) r G tn t /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-        (\H res ee gt q. expr_exit res q)
+        (\H res ee gt q.
+          expr_exit res q /\ halt_exit H cx ee res q /\
+          (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
 End
