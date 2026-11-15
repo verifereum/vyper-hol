@@ -102,6 +102,16 @@ Proof
   Cases_on `memory` >> simp[cj 1 gas_path_rules, cj 1 gas_path_mem_rules]
 QED
 
+Theorem aggregate_tuple_gas_outcome_mono:
+  gas_outcome memory tops (ctx,func) cx st0 source start Q R ==>
+  (!H res ee r. Q H res ee r ==> Q' H res ee r) ==>
+  (!H res ee r. R H res ee r ==> R' H res ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source start Q' R'
+Proof
+  PairCases_on `start` >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
+QED
+
 Theorem aggregate_tuple_child_outcome[local]:
   exprs_case nocalls ctx func ce cx (e::args) /\
   expr_body_pre ce cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
@@ -124,7 +134,12 @@ Proof
   `expr_vv_sim ctx func ce cx (expr_type e) e es` by
     (fs[exprs_case_def, expr_vv_case_def] >> metis_tac[]) >>
   drule expr_body_pre_vv_gas_admissible >> strip_tac >>
-  fs[expr_vv_sim_def]
+  fs[expr_vv_sim_def] >>
+  qpat_x_assum `!st0 sa sb vv s0. _`
+    (qspecl_then [`st0`, `sa`, `sb`, `vv`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  irule aggregate_tuple_gas_outcome_mono >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem aggregate_tuple_marked_child_source[local]:
@@ -597,16 +612,6 @@ Theorem aggregate_tuple_exec_end_gas_obs[local]:
   gas_marked_exec memory (ctx,func) source start marks res ee r
 Proof
   PairCases_on `start` >> simp[gas_marked_exec_def]
-QED
-
-Theorem aggregate_tuple_gas_outcome_mono:
-  gas_outcome memory tops (ctx,func) cx st0 source start Q R ==>
-  (!H res ee r. Q H res ee r ==> Q' H res ee r) ==>
-  (!H res ee r. R H res ee r ==> R' H res ee r) ==>
-  gas_outcome memory tops (ctx,func) cx st0 source start Q' R'
-Proof
-  PairCases_on `start` >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
 QED
 
 (* The child's value, then the rest of the source under it. *)
@@ -1875,7 +1880,11 @@ Proof
   >- (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`es`, `s`] >>
       gvs[stmt_state_rel_def, mstore_def]) >>
-  qexistsl_tac [`es`, `s`] >> simp[mstore_def]
+  qexistsl_tac [`es`, `s`] >> simp[] >> reverse conj_tac
+  >- (disch_tac >> conj_tac
+      >- simp[mstore_def, write_memory_with_expansion_def] >>
+      simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
+  simp[mstore_def]
 QED
 
 Theorem array_header_store_boundary:

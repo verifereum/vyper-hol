@@ -15,7 +15,7 @@
  *)
 Theory exprSimPtrProps
 Ancestors
-  wordLoadStorePtr bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
+  wordLoadStorePtr bodyPtrDefs fragGasPathPtr exprSimStack exprStackPtr exprSimDefs loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv loweringStateRelDefs vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr
   emitHelperProps fragExec exprLoweringProps venomInst venomState
@@ -76,15 +76,7 @@ Theorem expr_vv_sim_ptr_stack:
   (!s tv es'. eval_expr cx e s = (INL tv,es') ==> ?v. tv = Value v) ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty e es
 Proof
-  rw[expr_vv_sim_ptr_def] >>
-  qpat_x_assum `!sa. ?t op sb. _` (qspec_then `sa` strip_assume_tac) >> gvs[] >>
-  `lower_value compile_expr cenv ty e sa = (op,sb)` by
-    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  irule expr_stack_outcome_ptr >> conj_tac
-  >- (first_assum ACCEPT_TAC) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[eval_expr_force_admissible] >>
-  gvs[expr_sim_ptr_def] >> first_x_assum irule >> simp[]
+  metis_tac[exprStackPtrTheory.expr_vv_sim_stack_ptr]
 QED
 
 Theorem ghost_inv_fresh_frame:

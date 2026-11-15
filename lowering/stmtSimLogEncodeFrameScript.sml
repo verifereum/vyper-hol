@@ -185,7 +185,9 @@ Theorem log_encode_allocation_frame[local]:
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
   t.vs_allocas = (abi_builtin_allocate_state inst.inst_id n s).vs_allocas /\
   t.vs_alloca_next = (abi_builtin_allocate_state inst.inst_id n s).vs_alloca_next /\
-  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t ==>
+  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t /\
+  t.vs_initial_fmp = s.vs_initial_fmp /\
+  LENGTH s.vs_memory <= LENGTH t.vs_memory ==>
   stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -208,7 +210,8 @@ Proof
       `(abi_builtin_allocate_state inst.inst_id n s).vs_fmp = s.vs_fmp` by
         rw[abi_builtin_allocate_state_def] >>
       irule fmp_room_fields >>
-      qexists_tac `abi_builtin_allocate_state inst.inst_id n s` >> gvs[]) >>
+      qexists_tac `abi_builtin_allocate_state inst.inst_id n s` >>
+      gvs[abi_builtin_allocate_state_def] >> IF_CASES_TAC >> gvs[]) >>
   rpt strip_tac >> drule_all log_encode_allocate_sizes >> simp[]
 QED
 
@@ -263,6 +266,10 @@ Proof
      qexists_tac `s` >>
      qpat_x_assum `log_encode_external t = _`
        (mp_tac o Q.AP_TERM `\x. x.vs_labels`) >>
+     simp[log_encode_external_def]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_x_assum `log_encode_external t = _`
+       (mp_tac o Q.AP_TERM `\x. x.vs_initial_fmp`) >>
      simp[log_encode_external_def]) >>
   Cases_on `dyn` >> gvs[]
   >- (irule log_encode_allocation_frame >> asm_simp_tac bool_ss [] >>

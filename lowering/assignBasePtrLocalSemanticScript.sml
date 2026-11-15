@@ -39,5 +39,9 @@ Proof
         venom_state_component_equality] >> metis_tac[]) >>
   `memory_value_rel entry.type v (w2n dst) u.vs_memory` by
     (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[Abbr `u`]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx \/
+    EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn)) ==>
+    LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    fs[Abbr `u`, typed_copy_state_frame_def, typed_copy_frame_def] >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `u`, stmt_state_rel_inst_idx]
 QED
