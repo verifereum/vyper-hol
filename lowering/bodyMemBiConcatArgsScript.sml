@@ -83,7 +83,8 @@ Theorem concat_args_sim_mem:
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\H rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r)
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit H cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -95,10 +96,13 @@ Proof
       simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def,
            eval_exprs_nil, gas_marked_path_def] >>
       qexistsl_tac [`INL []`, `es`, `OK s0`] >>
-      simp[cj 1 gas_path_mem_rules] >> rpt strip_tac >>
+      simp[cj 1 gas_path_mem_rules, exit_result_def] >> rpt strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
         (drule_then strip_assume_tac) >>
-      simp[locals_kept_refl]) >>
+      fs[locals_kept_refl, storage_well_formed_on_def] >>
+      rpt strip_tac >> Cases_on `b` >>
+      fs[vyperStorageBackendTheory.get_storage_def] >>
+      metis_tac[vyperStorageBackendTheory.get_storage_def]) >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   rename1 `body_exprs_mem_ok cx (e::args)` >>
   qpat_x_assum `body_exprs_mem_ok _ (_::_)`
@@ -196,7 +200,7 @@ Resume concat_args_sim_mem[head_normal]:
   `!H. valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace ==>
        stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t2 /\
        storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
-    (rpt strip_tac >>
+    (gen_tac >> strip_tac >>
      `valid_horizon cx st0 H es_end.storage_trace` by fs[] >>
      qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
                    expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -212,22 +216,27 @@ Resume concat_args_sim_mem[head_normal]:
   suspend "recurse"
 QED
 Resume concat_args_sim_mem[head_exit]:
-  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  `expr_exit res r` by metis_tac[] >>
-  Cases_on `res`
-  >- gvs[expr_exit_def] >>
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  `expr_exit res r` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+       (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     simp[]) >>
+  Cases_on `res` >- gvs[expr_exit_def] >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  gen_tac >> strip_tac >> qexists_tac `y` >> conj_tac >- REFL_TAC >>
+  (* Rewrite only the goal: gvs[] over this context was too slow for one
+     step. *)
+  disj2_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qspec_then `H` mp_tac) >> simp[] >>
   qpat_x_assum `expr_exit _ r` mp_tac >>
-  Cases_on `y` >> Cases_on `r` >>
-  TRY (rename1 `Error err` >> Cases_on `err`) >>
-  simp[expr_exit_def]
+  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def, halt_exit_def]
 QED
+
 Resume concat_args_sim_mem[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   irule_at Any wb_args_head_exempt_cert >> goal_assum (drule_at Any)
@@ -322,15 +331,21 @@ Resume concat_args_sim_mem[tail_normal]:
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >>
-  drule_all concat_args_glue >> strip_tac >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [evaluation_state_accfupds]) >>
+  drule_all (SRULE [] (Q.INST
+    [`es1` |-> `es_end with gas_obs := []`] (SPEC_ALL concat_args_glue))) >>
+  strip_tac >>
   suspend "post"
 QED
 Resume concat_args_sim_mem[tail_exit]:
-  qpat_x_assum `(\rr ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  Cases_on `res`
-  >- (qpat_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> _`
-        (drule_then mp_tac) >> simp[]) >>
-  rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
+  qpat_x_assum `(\rr ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+       (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac) >>
+     impl_tac >- simp[] >>
+     disch_then (qx_choose_then `exc` strip_assume_tac) >>
+     qexists_tac `exc` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR exc`, `es_end'`, `r`] >> conj_tac
@@ -338,11 +353,9 @@ Resume concat_args_sim_mem[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  gen_tac >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> _`
-    (drule_then mp_tac) >> simp[]
+  disj2_tac >> simp[]
 QED
+
 Resume concat_args_sim_mem[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
   irule_at Any wb_args_tail_exempt_cert >>
@@ -363,7 +376,7 @@ Resume concat_args_sim_mem[post]:
     (qunabbrev_tac `pure_args` >> strip_tac >>
      `pure_frame cenv func es sa s0 t` by
        (drule_all expr_post_pure_frame >> disch_then ACCEPT_TAC) >>
-     qpat_x_assum `~EXISTS expr_has_effect args ==> _` mp_tac >>
+     qpat_x_assum `EVERY ($~ o expr_has_effect) args ==> _` mp_tac >>
      impl_tac
      >- (rewrite_tac[listTheory.NOT_EXISTS] >> first_assum ACCEPT_TAC) >>
      strip_tac >>
@@ -385,8 +398,7 @@ Resume concat_args_sim_mem[post]:
      >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
          `local_region cenv (es_end with gas_obs := []).scopes t2 nm lb lsz` by
            (match_mp_tac local_region_frame_fwd >>
-            qexistsl_tac [`es.scopes`, `sa`, `s0`] >>
-            rpt conj_tac >> first_assum ACCEPT_TAC) >>
+            qexistsl_tac [`es.scopes`, `sa`, `s0`] >> simp[]) >>
          `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
            (qpat_x_assum `!n b sz. local_region cenv es.scopes s0 n b sz ==>
                             mem_bytes_at b sz t.vs_memory = _`
@@ -396,7 +408,8 @@ Resume concat_args_sim_mem[post]:
             qpat_x_assum `!name lb lsz. local_region cenv es.scopes s0 _ _ _ ==> _ /\ _`
               drule >> rpt (pop_assum kall_tac) >> decide_tac) >>
          `mem_bytes_at lb lsz tu.vs_memory = mem_bytes_at lb lsz t2.vs_memory` by
-           (qpat_x_assum `!n lb lsz. local_region _ _ t2 _ _ _ ==>
+           (RULE_ASSUM_TAC (PURE_REWRITE_RULE [evaluation_state_accfupds]) >>
+            qpat_x_assum `!n lb lsz. local_region _ _ t2 _ _ _ ==>
                             mem_bytes_at _ _ tu.vs_memory = _`
               (drule_then ACCEPT_TAC)) >>
          ntac 3 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
@@ -443,12 +456,11 @@ Resume concat_args_sim_mem[post]:
   qpat_x_assum `_ ==> pure_args` (fn th => rewrite_tac[th]) >>
   qunabbrev_tac `pure_args` >>
   qpat_assum `storage_well_formed_on cx (es_end' with gas_obs := []) (FST H)`
-    (fn th => simp[th]) >> conj_tac
-  >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >> simp[]) >>
+    (fn th => simp[th]) >>
   conj_tac
   >- (qpat_x_assum `stmt_state_rel H _ _ _ _ (es_end' with gas_obs := []) tu` mp_tac >> simp[]) >>
   conj_tac
-  >- (qpat_x_assum `mem_bytes_at _ _ tu.vs_memory = mem_bytes_at _ _ s0.vs_memory ++ _` mp_tac >>
+  >- (qpat_x_assum `mem_bytes_at _ _ tu.vs_memory = _ ++ _` mp_tac >>
       simp_tac bool_ss [LENGTH_APPEND, APPEND_ASSOC, AC ADD_ASSOC ADD_COMM]) >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ _ ==> _` irule >>
