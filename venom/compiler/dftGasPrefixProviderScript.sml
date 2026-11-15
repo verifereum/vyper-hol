@@ -293,6 +293,79 @@ Proof
       dftGasFromListTraceDefsTheory.visit_gas_def]
 QED
 
+Theorem returning_child_packet_exhaustion:
+  LENGTH keys = LENGTH g /\ LENGTH sites = LENGTH g /\
+  ((?f. terminates (run_blocks f C fn
+      (cs with vs_gas_readings := g ++ tail))) ==>
+    terminates (run_blocks b C fn (cs with vs_gas_readings := g ++ tail)) /\
+    dft_res_rel
+      (restore_result [] (run_blocks b C fn (cs with vs_gas_readings := g ++ tail)))
+      (restore_result [] target)) /\
+  (!v t. target = IntRet v t ==>
+    residual_result tail target
+      (run_blocks b C fn (cs with vs_gas_readings := g ++ tail))) /\
+  (!f. ?k. k <= LENGTH keys /\
+    trace_gas (dftGasFromListTraceDefs$trace_blocks p d f C fn
+      (cs with vs_gas_readings := g ++ tail)) =
+      ZIP (TAKE k keys, TAKE k g)) /\
+  (!f. ?extra. sites = gas_events_blocks f C fn
+      (cs with vs_gas_readings := g ++ tail) ++ extra) /\
+  run_blocks n C fn (cs with vs_gas_readings := g ++ tail) = IntRet ret u ==>
+  (?t. target = IntRet ret t) /\
+  run_blocks b C fn (cs with vs_gas_readings := g ++ tail) = IntRet ret u /\
+  trace_gas (dftGasFromListTraceDefs$trace_blocks p d n C fn
+    (cs with vs_gas_readings := g ++ tail)) = ZIP (keys,g) /\
+  gas_events_blocks n C fn (cs with vs_gas_readings := g ++ tail) = sites /\
+  u.vs_gas_readings = tail
+Proof
+  strip_tac >>
+  `terminates (run_blocks b C fn (cs with vs_gas_readings := g ++ tail)) /\
+   dft_res_rel
+    (restore_result [] (run_blocks b C fn (cs with vs_gas_readings := g ++ tail)))
+    (restore_result [] target)` by
+    (first_x_assum irule >> qexists_tac `n` >> simp[passSimulationDefsTheory.terminates_def]) >>
+  `run_blocks b C fn (cs with vs_gas_readings := g ++ tail) = IntRet ret u` by
+    (mp_tac (cj 3 venomExecProofsTheory.fuel_mono) >>
+     disch_then (qspecl_then [`b`, `MAX b n`, `C`, `fn`,
+       `cs with vs_gas_readings := g ++ tail`,
+       `run_blocks b C fn (cs with vs_gas_readings := g ++ tail)`] mp_tac) >>
+     simp[] >>
+     `(!e. run_blocks b C fn (cs with vs_gas_readings := g ++ tail) <> Error e)` by
+       (Cases_on `run_blocks b C fn (cs with vs_gas_readings := g ++ tail)` >>
+        gvs[passSimulationDefsTheory.terminates_def]) >>
+     simp[] >> strip_tac >>
+     mp_tac (cj 3 venomExecProofsTheory.fuel_mono) >>
+     disch_then (qspecl_then [`n`, `MAX b n`, `C`, `fn`,
+       `cs with vs_gas_readings := g ++ tail`, `IntRet ret u`] mp_tac) >>
+     simp[]) >>
+  Cases_on `target` >>
+  gvs[restore_result_def, dft_res_rel_def] >>
+  fs[residual_result_def, stateEquivTheory.lift_result_def] >>
+  qpat_x_assum `!f. ?k. _ /\ trace_gas _ = _`
+    (qspec_then `n` strip_assume_tac) >>
+  `gas_count_blocks n C fn (cs with vs_gas_readings := g ++ tail) = k` by
+    (mp_tac (cj 3 trace_gas_lengths) >>
+     disch_then (qspecl_then [`p`, `d`, `n`, `C`, `fn`,
+       `cs with vs_gas_readings := g ++ tail`] mp_tac) >>
+     simp[LENGTH_ZIP, LENGTH_TAKE]) >>
+  `tail = DROP k (g ++ tail)` by
+    (mp_tac (cj 3 gas_count_suffix) >>
+     disch_then (qspecl_then [`n`, `C`, `fn`,
+       `cs with vs_gas_readings := g ++ tail`] mp_tac) >>
+     simp[gas_count_suffix_def]) >>
+  `k = LENGTH g` by
+    (qpat_x_assum `tail = DROP _ _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[LENGTH_DROP] >> decide_tac) >>
+  gvs[] >>
+  qpat_x_assum `!f. ?extra. _` (qspec_then `n` strip_assume_tac) >>
+  `extra = []` by
+    (mp_tac (cj 3 gas_events_length) >>
+     disch_then (qspecl_then [`n`, `C`, `fn`,
+       `cs with vs_gas_readings := g ++ tail`] mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  gvs[TAKE_LENGTH_TOO_LONG]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
