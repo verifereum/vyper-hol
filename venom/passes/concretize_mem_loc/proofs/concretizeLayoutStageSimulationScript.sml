@@ -1,5 +1,5 @@
 Theory concretizeLayoutStageSimulation
-Ancestors 
+Ancestors
   concretizeLayoutCutSafe frameGasEvents gasEvents concretizeLayoutCanonicalContract concretizeLayoutStageEntry
   frameSelectedSimulation frameDecorationComplete frameResolvedCoherent frameFiniteJointDecoration frameJointTrace
   frameSelectedDecoration list concretizePtrParamShape unitTransformDefs o1PassContract

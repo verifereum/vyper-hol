@@ -1,7 +1,7 @@
 (* Supply alignment of finite unchanged suffix segments. *)
 Theory o1LowerDloadForwardAbort
 Ancestors
-  
+
   o1SafeUpto o1LowerDloadJointAssign o1LowerDloadAvailableSuffix o1ContractLowerDload lowerDloadDefs
   contextCodegenRel venomExecSemantics venomExecProps o1LowerDloadJointRelation o1LowerDloadExceptional
   o1LowerDloadJointScalar o1LowerDloadJointRangeCopy o1PassContract unitShapeDefs venomWf

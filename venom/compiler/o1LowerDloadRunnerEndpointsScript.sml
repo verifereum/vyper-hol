@@ -1,7 +1,7 @@
 (* Terminal endpoints retain the runner's original boundary witnesses. *)
 Theory o1LowerDloadRunnerEndpoints
 Ancestors
-  
+
   o1SafeUpto o1LowerDloadRunner o1LowerDloadUnchangedFetch o1LowerDloadBranchExec o1LowerDloadForwardInversion
   contextCodegenRel o1LowerDloadJointReturn o1LowerDloadHaltResult o1LowerDloadAbortResult o1LowerDloadJointIdentity
   o1LowerDloadExceptional o1LowerDloadRunnerBoundary o1LowerDloadJointRelation o1PassContract ptrDiscipline
@@ -250,4 +250,3 @@ Proof
     strip_assume_tac) >>
   qexists_tac `target_s` >> simp[] >> metis_tac[optionTheory.SOME_11]
 QED
-
