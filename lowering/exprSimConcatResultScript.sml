@@ -598,8 +598,10 @@ Proof
              qexistsl_tac [`es_end`, `t`, `vs`] >> simp[]) >>
           qexistsl_tac [`res`, `ee'`, `r`] >> fs[]) >>
       `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
-        (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _` drule >>
-         simp[] >> disch_then (qx_choose_then `exc` strip_assume_tac) >>
+        (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+           (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         disch_then (qx_choose_then `exc` strip_assume_tac) >>
          qexists_tac `exc` >> conj_tac >> first_assum ACCEPT_TAC) >>
       gvs[] >> qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
       conj_tac
