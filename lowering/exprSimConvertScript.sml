@@ -426,19 +426,27 @@ Proof
              simp[bind_def] >> disch_then irule >> simp[]) >>
           drule_all (SIMP_RULE bool_ss [PULL_EXISTS] convert_continuation_summary) >>
           rewrite_tac[gas_summary_at_def] >> strip_tac >>
+          `res <> INR HaltException` by
+            (qpat_assum `gas_marked_exec _ _ (\vs. (convert_result _ _ _ _,vs)) _ _ _ _ _`
+               (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+             disch_then (qspec_then `[]` mp_tac) >>
+             simp[convert_result_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
           qexistsl_tac [`res`,`es_end'`,`r`] >>
           (conj_tac
            >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                       |> REWRITE_RULE [APPEND_NIL]) >>
                qexistsl_tac [`es_end`,`t'`,`v`] >> gvs[]) >>
-           gvs[] >> disj2_tac >> first_assum ACCEPT_TAC)) >>
+           gvs[] >> disj2_tac >> rpt strip_tac >>
+           simp[halt_exit_def] >> metis_tac[])) >>
       Cases_on `res`
-      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
             (drule_then mp_tac) >> simp[]) >>
       simp[gas_summary_at_def] >> qexistsl_tac [`INR y`,`es_end`,`r`] >>
       simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
+      gvs[] >> disj2_tac >> rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+        drule >> simp[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule convert_exempt_cert >> simp[]
