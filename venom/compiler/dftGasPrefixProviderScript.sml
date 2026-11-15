@@ -9,6 +9,9 @@ Ancestors
   dftGasFromListLocator dftGasFromListContextReach
   dftRunRel dftDefs o1PassContract contextRawReachable gasEvents gasCount
   venomExecSemantics venomState venomInst list sorting
+  dftGasInvResidualTrace venomInstProps venomInstProofs stateEquivProofs
+  dftBlockSim stateFrame venomEffects dftScheduleOrder
+  dftGasInvSSAProbe unitShapeDefs venomWf option
 
 Definition dft_blocks_gas_prefix_def:
   dft_blocks_gas_prefix <=>
@@ -1294,6 +1297,108 @@ Proof
     (gen_tac >> qpat_x_assum `!n. ?k. _` (qspec_then `n` strip_assume_tac) >>
      qexists_tac `SUC k` >> simp[]) >>
    asm_rewrite_tac [])
+QED
+
+Theorem native_invoke_crossed_prefix:
+  !pre s.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\x. ~is_alloca_op x.inst_opcode) bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ call::post) s /\
+  ~s.vs_call_ctx.cc_static /\ call.inst_opcode = INVOKE /\
+  EVERY (\x. inst_shape_ok x /\ ~is_terminator x.inst_opcode /\
+    ~dft_must_order x call) pre /\
+  LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) <= LENGTH s.vs_gas_readings ==>
+  !n C. ?t.
+    FOLDR (dft_exec_cons n C) OK pre s = OK t /\
+    dft_remaining_inv fn bb (call::post) t /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH pre /\
+    t.vs_gas_readings = DROP (LENGTH (FILTER (\x. x.inst_opcode = GAS) pre)) s.vs_gas_readings /\
+    (!op. MEM op call.inst_operands ==> eval_operand op t = eval_operand op s) /\
+    (!callee args cs. setup_callee callee args s = SOME cs ==>
+      setup_callee callee args t = SOME (cs with vs_gas_readings :=
+        DROP (LENGTH (FILTER (\x. x.inst_opcode = GAS) pre)) s.vs_gas_readings))
+Proof
+  Induct
+  >- (simp[] >> rpt strip_tac >> fs[setup_callee_def] >>
+      gvs[venom_state_component_equality]) >>
+  simp[] >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  `MEM h bb.bb_instructions /\ ~is_pseudo h.inst_opcode` by
+    fs[dft_remaining_inv_def] >>
+  `inst_wf h /\ ~is_alloca_op h.inst_opcode` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `h.inst_opcode <> INVOKE /\ h.inst_opcode <> CODECOPY /\
+   (h.inst_opcode = GAS \/ is_effect_free_op h.inst_opcode)` by
+    (qpat_x_assum `~dft_must_order h call` mp_tac >>
+     qpat_x_assum `~is_alloca_op h.inst_opcode` mp_tac >>
+     qpat_x_assum `~is_terminator h.inst_opcode` mp_tac >>
+     qpat_x_assum `inst_wf h` mp_tac >>
+     qpat_x_assum `inst_shape_ok h` mp_tac >>
+     qpat_x_assum `call.inst_opcode = INVOKE` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     Cases_on `h.inst_opcode` >>
+     gvs[is_effect_free_op_def] >>
+     gvs[dft_must_order_def, read_effects_def, write_effects_def,
+         all_effects_def, empty_effects_def,
+         is_terminator_def, is_alloca_op_def, inst_shape_ok_def, inst_wf_def]) >>
+  `!op. MEM op h.inst_operands ==> IS_SOME (eval_operand op s)` by
+    metis_tac[inv_remaining_head_operands] >>
+  `?u. step_inst n C h s = OK u` by
+    (Cases_on `h.inst_opcode = GAS`
+     >- (fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+         metis_tac[step_inst_gas_single]) >> gvs[] >>
+     `h.inst_opcode <> PHI /\ h.inst_opcode <> PARAM /\ h.inst_opcode <> FMP_PARAM` by
+       (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def]) >>
+     simp[step_inst_non_invoke] >>
+     irule effect_free_step_inst_base_ok >> simp[] >>
+     rpt strip_tac >> first_x_assum drule >>
+     Cases_on `eval_operand op s` >> gvs[]) >>
+  `dft_remaining_inv fn bb (pre ++ call::post)
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule (SRULE [] (Q.INST [`pre` |-> `[]`] dft_remaining_inv_step)) >>
+     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  `u.vs_gas_readings = DROP (if h.inst_opcode = GAS then 1 else 0) s.vs_gas_readings /\
+   u.vs_call_ctx = s.vs_call_ctx` by
+    (Cases_on `h.inst_opcode = GAS`
+     >- (drule_all step_inst_ok_gas >> strip_tac >> gvs[update_var_def]) >>
+     `is_effect_free_op h.inst_opcode` by gvs[] >>
+     drule_all step_effect_free_state_equiv >>
+     gvs[stateEquivTheory.state_equiv_def, stateEquivTheory.execution_equiv_def,
+          execution_frame_def, venom_state_component_equality]) >>
+  `!op. MEM op call.inst_operands ==>
+      eval_operand op (u with vs_inst_idx := SUC s.vs_inst_idx) = eval_operand op s` by
+    (rpt strip_tac >>
+     `eval_operand op (u with vs_inst_idx := SUC s.vs_inst_idx) = eval_operand op u` by
+       (Cases_on `op` >> simp[eval_operand_def, lookup_var_def]) >>
+     asm_rewrite_tac [] >> irule eval_operand_step_pres >>
+     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+     fs[dft_must_order_def, inst_defs_def, inst_uses_def,
+        MEM_operand_vars_eq_Var, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+     metis_tac[]) >>
+  `!callee args cs. setup_callee callee args s = SOME cs ==>
+     setup_callee callee args (u with vs_inst_idx := SUC s.vs_inst_idx) =
+       SOME (cs with vs_gas_readings := u.vs_gas_readings)` by
+    (Cases_on `h.inst_opcode = GAS`
+     >- (drule_all step_inst_ok_gas >> strip_tac >>
+         rpt strip_tac >> gvs[setup_callee_def, update_var_def]) >>
+     `is_effect_free_op h.inst_opcode` by gvs[] >>
+     drule_all step_effect_free_state_equiv >>
+     simp[stateEquivTheory.state_equiv_def, stateEquivTheory.execution_equiv_def,
+          execution_frame_def, venom_state_component_equality] >>
+     rpt strip_tac >> fs[setup_callee_def] >>
+     gvs[venom_state_component_equality]) >>
+  qpat_x_assum `!s. _ ==> !n C. _`
+    (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- (simp[] >> Cases_on `h.inst_opcode = GAS` >>
+    gvs[DROP_LENGTH_TOO_LONG, LENGTH_DROP])) >>
+  disch_then (qspecl_then [`n`, `C`] strip_assume_tac) >>
+  qexists_tac `t` >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `h.inst_opcode = GAS` >>
+  gvs[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD1] >>
+  rpt strip_tac >>
+  qpat_x_assum `!callee args cs. setup_callee callee args s = SOME cs ==> _` drule >>
+  strip_tac >> first_x_assum drule >> simp[]
 QED
 
 Theorem dft_blocks_gas_prefix_sound:
