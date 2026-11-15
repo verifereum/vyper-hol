@@ -4,6 +4,7 @@ Ancestors
   vyperInterpreter vyperCallOutcome extCallOracle vyperRuntimeAccounts
   finite_map list option pair vyperTypeDeploymentMachine vyperStorageTrace
   vyperEvalOutcomeSuffix vyperEvalOutcomeReplace vyperCallOutcomeStorage
+  vyperEvalPreservesScopes
 Libs BasicProvers evalWalkLib
 
 val _ = Parse.hide "body";
@@ -4249,6 +4250,36 @@ Resume source_exhausted_eval_safety_mutual[c63]:
   EXHAUSTED_CONSTRUCTOR_TAC
 QED
 Finalise source_exhausted_eval_safety_mutual[local]
+
+Theorem source_replay_cleanup_scopes[local]:
+  (!cx tv ss1 ss2 s r t.
+    s.scopes <> [] /\
+    switch_BoolV cx tv (eval_stmts cx ss1) (eval_stmts cx ss2) s = (r,t) ==>
+    t.scopes <> []) /\
+  (!cx body s r t.
+    s.scopes <> [] /\
+    (do eval_stmts cx body; return F od) s = (r,t) ==>
+    t.scopes <> []) /\
+  (!cx body s r t.
+    s.scopes <> [] /\
+    (try (do eval_stmts cx body; return F od) handle_loop_exception) s = (r,t) ==>
+    t.scopes <> [])
+Proof
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[switch_BoolV_def, vyperStateTheory.bind_def,
+          COND_RATOR, vyperStateTheory.raise_def, AllCaseEqs()] >>
+      imp_res_tac vyperScopePreservationTheory.read_result_scopes >>
+      imp_res_tac eval_stmts_preserves_scopes_len >>
+      metis_tac[LENGTH_NIL]) >>
+  conj_tac >> rpt strip_tac >>
+  gvs[vyperStateTheory.try_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.bind_def, vyperStateTheory.return_def,
+      handle_loop_exception_def, COND_RATOR,
+      vyperStateTheory.raise_def, AllCaseEqs()] >>
+  imp_res_tac eval_stmts_preserves_scopes_len >>
+  gvs[] >> metis_tac[LENGTH_NIL]
+QED
 
 Theorem eval_outcome_probe_replay_mutual:
   (!cx stmt st0 os res_p st_p.
