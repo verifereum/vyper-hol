@@ -5,6 +5,7 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
+  loweringCallBudgetBounds
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
