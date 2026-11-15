@@ -11,7 +11,7 @@ Ancestors
   stmtSimDefs exprSimDefs loweringPosts gasExemptCert gasSummary
   gasSummaryCompose fragGasPathPtr fragGasPathMem fragGasMode fragExec
   ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
-  memSafeRun instMemFrontier gasEvents gasCount gasContext
+  memSafeRun instMemFrontier gasEvents gasCount gasContext contextRawReachable unitMemInv
   emitHelper emitHelperProps exprLoweringProps freshWrites
   stmtLowering exprLowering compileEnv valueEncoding allocaHistory
   vyperStorageTrace vyperStorageFootprint vyperStorageBackend
@@ -458,7 +458,7 @@ QED
 Theorem compile_if_stmt_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty c ss1 ss2
    es.
-    expr_type c = BaseT BoolT /\
+    ~ctx_has_dalloca ctx /\ expr_type c = BaseT BoolT /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (BaseT BoolT) c es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
@@ -547,7 +547,7 @@ Proof
   conj_tac >- simp[] >>
   simp[Abbr `condR`] >> rpt strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  fs[stmt_exit_ptr_def, expr_exit_INR_type, halt_exit_def]
 QED
 
 Resume compile_if_stmt_frag_full[selected]:
@@ -614,15 +614,24 @@ Resume compile_if_stmt_frag_full[selected]:
     (mp_then Any irule gas_outcome_full_zero_suffix_mono) >>
   conj_tac
   >~ [`gas_origin_ptr_path _ _ _ _`] >- suspend "finish" >>
-  rpt gen_tac >> BETA_TAC >> strip_tac >> gen_tac >>
-  first_x_assum (qspec_then `tail` mp_tac) >>
-  `(ee with scopes := sc :: ee.scopes) with gas_obs := tail =
-   (ee with gas_obs := tail) with scopes := sc :: ee.scopes` by
-    simp[evaluation_state_component_equality] >>
-  pop_assum SUBST1_TAC >> simp[stmt_exit_ptr_def]
+  rpt gen_tac >> BETA_TAC >> strip_tac >> conj_tac
+  >- (gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
+      `(ee with scopes := sc :: ee.scopes) with gas_obs := tail =
+       (ee with gas_obs := tail) with scopes := sc :: ee.scopes` by
+        simp[evaluation_state_component_equality] >>
+      pop_assum SUBST1_TAC >> simp[stmt_exit_ptr_def]) >>
+  conj_tac
+  >- fs[halt_exit_def, loweringStateRelDefsTheory.halt_rel_def,
+        loweringStateRelDefsTheory.accounts_rel_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume compile_if_stmt_frag_full[entry]:
+  `!fn inst s.
+     frag_reachable ctx func (jump_to (if b then tl else el) t) fn inst s ==>
+     dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H
          (mid with scopes := FEMPTY :: mid.scopes).storage_trace ==>
        stmt_state_rel H ctx func cenv cx
@@ -658,7 +667,8 @@ Resume compile_if_stmt_frag_full[entry]:
      not_fresh_at entry x` by metis_tac[not_fresh_at_mono] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   simp[ret_pc_ok_jump_to, return_buf_frame_jump_to, block_is_terminated_def,
-       jump_to_def]
+       jump_to_def] >>
+  fs[allocas_below_fmp_def]
 QED
 
 Resume compile_if_stmt_frag_full[finish]:
@@ -672,6 +682,9 @@ Resume compile_if_stmt_frag_full[finish]:
     (assume_tac o BETA_RULE) assume_tac)) >>
   `(ee with scopes := sc::ee.scopes).scopes = sc::ee.scopes` by simp[] >>
   pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  qpat_assum `~ctx_has_dalloca ctx`
+    (fn th => qpat_x_assum `?cenv''. stmt_lands _ _ _ _ /\ _`
+      (assume_tac o SIMP_RULE (srw_ss()) [th])) >>
   drule_all full_post_scope_pop >> disch_then assume_tac >>
   `~block_is_terminated last ==>
    emit_inst JMP [Label xl] [] last = ((), after) /\
@@ -683,7 +696,7 @@ Resume compile_if_stmt_frag_full[finish]:
     `tn0`, `t`, `G1`, `tn1`, `if b then tl else el`, `entry`, `last`,
     `after`, `xl`, `res`, `ee`, `u`, `G`, `tn`] mp_tac if_full_post_finish >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  BETA_TAC >> disch_then ACCEPT_TAC
+  BETA_TAC >> simp[]
 QED
 
 Finalise compile_if_stmt_frag_full
