@@ -3,7 +3,7 @@
  *)
 Theory dallocaCalldata
 Ancestors
-  dallocaCreateCopy
+  dallocaCreateCopy dallocaCreateBlueprint
   builtinSystem context exprLoweringProps emitHelper emitHelperProps compileEnv
   loweringStateRelDefs
   venomExecSemantics venomInst venomState list rich_list words finite_map
