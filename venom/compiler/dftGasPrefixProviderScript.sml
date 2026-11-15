@@ -697,8 +697,64 @@ Proof
        dftGasFromListTraceDefs$trace_blocks q d b C' callee' ct` by
        (simp[Once dftGasFromListTraceDefsTheory.trace_defs, Abbr `q`] >> gvs[]) >>
      asm_rewrite_tac[] >>
-     simp[GSYM trace_gas_def, GSYM (markerTheory.Abbrev_def)] >>
-     cheat) >>
+     simp[GSYM trace_gas_def] >>
+     simp[Abbr `Oc`] >>
+     simp[Once dftGasFromListTraceDefsTheory.trace_defs] >>
+     simp[dftGasFromListTraceDefsTheory.trace_step_gas,
+       trace_gas_def, visit_gas_def, is_terminator_def] >>
+     simp[GSYM trace_gas_def, Abbr `e`, Abbr `obsr`, Abbr `aR`] >>
+     AP_TERM_TAC >>
+     irule native_trace_block_suffix_cong >>
+     `j - SUC (SUC j) = 0 /\ SUC (SUC j) - (j + 2) = 0` by decide_tac >>
+     simp[Abbr `bt`, Abbr `br`, DROP_APPEND]) >>
+  `EVERY (\kw. block_region p d [call.inst_id] (FST kw)) Oc` by
+    (simp[Abbr `Oc`, EVERY_MEM] >> rpt strip_tac >>
+     `MEM (FST kw) (MAP FST (dftGasFromListTraceDefs$trace_blocks q d b C' callee' ct))` by
+       (irule trace_gas_name_mem >> simp[MEM_MAP] >> metis_tac[]) >>
+     gvs[MEM_MAP] >> drule trace_blocks_region >>
+     strip_tac >> PairCases_on `y` >> gvs[] >>
+     drule later_region_frame >>
+     simp[Abbr `q`] >> metis_tac[below_call_region, MEM]) >>
+  `EVERY (\kw. block_region p d (MAP (\i. i.inst_id) rest) (FST kw)) obsr` by
+    (simp[Abbr `obsr`, EVERY_MEM] >> rpt strip_tac >>
+     `MEM (FST kw) (MAP FST (dftGasFromListTraceDefs$trace_block p d b C' fn' br aR))` by
+       (irule trace_gas_name_mem >> simp[MEM_MAP] >> metis_tac[]) >>
+     gvs[MEM_MAP] >> drule trace_block_region >>
+     `j - SUC (SUC j) = 0` by decide_tac >>
+     simp[Abbr `br`, Abbr `aR`, DROP_APPEND]) >>
+  `EVERY (block_region p d [call.inst_id]) Kc` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     PairCases_on `e'` >>
+     metis_tac[later_region_frame, below_call_region, MEM]) >>
+  `!x. block_region p d [gas.inst_id] x ==>
+     ~block_region p d [call.inst_id] x /\
+     ~block_region p d (MAP (\i. i.inst_id) rest) x` by
+    (gen_tac >> disch_tac >> conj_tac >>
+     irule block_regions_disjoint >> qexists_tac `[gas.inst_id]` >>
+     gvs[MEM_MAP] >> metis_tac[]) >>
+  `!x. block_region p d [call.inst_id] x ==>
+     ~block_region p d (MAP (\i. i.inst_id) rest) x` by
+    (gen_tac >> disch_tac >>
+     irule block_regions_disjoint >> qexists_tac `[call.inst_id]` >>
+     gvs[MEM_MAP] >> metis_tac[]) >>
+  `block_region p d [gas.inst_id] e` by simp[Abbr `e`, block_region_def] >>
+  `ALOOKUP Oc e = NONE` by
+    (simp[alistTheory.ALOOKUP_NONE, MEM_MAP] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `!x. MEM x Kr ==> ALOOKUP Oc x = NONE /\ x <> e` by
+    (simp[alistTheory.ALOOKUP_NONE, MEM_MAP] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `!x. MEM x Kc ==> ALOOKUP obsr x = NONE /\ x <> e` by
+    (simp[alistTheory.ALOOKUP_NONE, MEM_MAP] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `slots = SOME w0::(Mc ++ Mr)` by
+    (simp[Abbr `slots`, Abbr `keys`, alistTheory.ALOOKUP_APPEND] >>
+     BINOP_TAC
+     >- (simp[Abbr `Mc`] >> irule MAP_CONG >> simp[] >>
+         rpt strip_tac >> Cases_on `ALOOKUP Oc x` >>
+         simp[alistTheory.ALOOKUP_APPEND]) >>
+     simp[Abbr `Mr`] >> irule MAP_CONG >>
+     simp[alistTheory.ALOOKUP_APPEND]) >>
   cheat
 QED
 
