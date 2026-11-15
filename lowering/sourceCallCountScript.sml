@@ -1,6 +1,6 @@
 (* Source outcome-consuming-step horizon, shared by call and deployment. *)
 Theory sourceCallCount
-Ancestors
+Ancestors vyperState[qualified,ignore_grammar]
   vyperInterpreter vyperCallOutcome extCallOracle vyperRuntimeAccounts
   finite_map list option pair vyperTypeDeploymentMachine vyperStorageTrace
   vyperEvalOutcomeSuffix vyperEvalOutcomeReplace vyperCallOutcomeStorage
@@ -2187,17 +2187,15 @@ QED
 
 
 Theorem source_ordinary_probe_cut[local]:
-  !rq fail success st oc.
-    storage_trace_frame fail /\
+  !rq k st oc.
+    storage_trace_frame (k (rq,failed_outcome rq)) /\
+    k (rq,probe_failed_outcome) = k (rq,failed_outcome rq) /\
+    k (rq,empty_failed_outcome) = k (rq,failed_outcome rq) /\
     (oc = probe_failed_outcome \/ oc = empty_failed_outcome) ==>
     (\(r,s). (r,erase_storage_trace s))
-      (bind (take_request_outcome rq)
-        (\(rq,oc). if oc.co_success then success rq oc else fail)
-        (st with outcomes := SOME [oc])) =
+      (bind (take_request_outcome rq) k (st with outcomes := SOME [oc])) =
     (\(r,s). (r,erase_storage_trace s))
-      (bind (take_request_outcome rq)
-        (\(rq,oc). if oc.co_success then success rq oc else fail)
-        (st with outcomes := SOME []))
+      (bind (take_request_outcome rq) k (st with outcomes := SOME []))
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[vyperStateTheory.bind_def, take_request_outcome_def,
@@ -4355,6 +4353,450 @@ Resume source_replay_cut_bind_reachable[create]:
     (qspecl_then [`se`,`q`,`u`] mp_tac) >> simp[]
 QED
 Finalise source_replay_cut_bind_reachable[local]
+
+Theorem source_take_request_residual[local]:
+  !rq s oc rest r t.
+    take_request_outcome rq (s with outcomes := SOME (oc::rest)) = (r,t) ==>
+    t.outcomes = SOME rest
+Proof
+  rpt gen_tac >>
+  Cases_on `computed_precompile rq` >>
+  Cases_on `precompile_result rq.cr_target rq.cr_data` >>
+  gvs[take_request_outcome_def, take_outcome_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `x` >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  Cases_on `oc.co_success` >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem source_take_request_bind_consumed[local]:
+  !rq g s os r t.
+    (!v. outcomes_frame (g v)) /\
+    bind (take_request_outcome rq) g
+      (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) /\
+    t.outcomes = SOME [] ==> os = []
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `os` >> simp[] >>
+  gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
+  drule source_take_request_residual >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `!v. outcomes_frame (g v)` (qspec_then `x` assume_tac) >>
+  drule_all outcomes_frame_result >> simp[]
+QED
+
+Theorem source_take_call_bind_normal[local]:
+  !addr data amount g s xs.
+    bind (take_call_outcome addr data amount) g (s with outcomes := SOME xs) =
+    bind (take_request_outcome (call_outcome_request addr data amount s)) g
+      (s with outcomes := SOME xs)
+Proof
+  simp[vyperStateTheory.bind_def, take_call_outcome_def,
+       call_outcome_request_def]
+QED
+
+Theorem source_send_oracle_normal[local]:
+  !cx gas vs s xs.
+    eval_send cx gas vs (s with outcomes := SOME xs) =
+    case vs of
+    | to_v::amount_v::gas_vs =>
+      if LENGTH gas_vs <> (if gas then 1 else 0) then
+        (INR (Error (TypeError "Send args")), s with outcomes := SOME xs)
+      else (case dest_AddressV to_v of
+      | NONE => (INR (Error (TypeError "Send not AddressV")), s with outcomes := SOME xs)
+      | SOME addr => (case dest_NumV amount_v of
+        | NONE => (INR (Error (TypeError "Send not NumV")), s with outcomes := SOME xs)
+        | SOME amount =>
+          if cx.txn.is_static /\ amount <> 0 then
+            (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
+          else bind (take_call_outcome addr []
+                       (if cx.txn.is_static then NONE else SOME amount))
+                 (\(rq,oc). bind (check oc.co_success "send failed")
+                   (\u. bind (adopt_call_outcome rq oc) (\v. return (Value NoneV))))
+                 (s with outcomes := SOME xs)))
+    | _ => (INR (Error (TypeError "Send args")), s with outcomes := SOME xs)
+Proof
+  rpt gen_tac >> Cases_on `vs`
+  >- simp[eval_send_def, vyperStateTheory.raise_def] >>
+  rename1 `h::tl` >> Cases_on `tl`
+  >- simp[eval_send_def, vyperStateTheory.raise_def] >>
+  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
+  Cases_on `cx.txn.is_static` >>
+  simp[eval_send_def, frame_call_value_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.check_def, vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+  rpt IF_CASES_TAC >> gvs[vyperStateTheory.raise_def] >>
+  simp[vyperStateTheory.bind_def]
+QED
+
+Theorem source_ext_effects_oracle_normal[local]:
+  !cx addr data amount gas accounts g s xs.
+    bind (eval_ext_call_effects cx addr data amount gas accounts) g
+      (s with outcomes := SOME xs) =
+    bind (take_call_outcome addr data amount)
+      (\(rq,oc). bind
+        (if call_outcome_success oc then return ()
+         else raise (Error (RevertData (call_outcome_return_data oc))))
+        (\u. bind (adopt_call_outcome rq oc)
+          (\v. g (call_outcome_return_data oc))))
+      (s with outcomes := SOME xs)
+Proof
+  rpt gen_tac >>
+  rewrite_tac[eval_ext_call_effects_def, vyperStateTheory.bind_assoc] >>
+  simp[Once vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc,
+       vyperStateTheory.bind_return] >>
+  AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM, FORALL_PROD, vyperStateTheory.bind_assoc,
+       vyperStateTheory.bind_return]
+QED
+
+Theorem source_ext_call_oracle_normal[local]:
+  !cx static skip name tys ret opts vs s xs.
+    eval_ext_call cx static skip (name,tys,ret) opts vs
+      (s with outcomes := SOME xs) =
+    case vs of
+    | [] => (INR (Error (TypeError "ExtCall operands")), s with outcomes := SOME xs)
+    | target::rest =>
+      if ~(LENGTH rest = LENGTH tys + LENGTH opts /\ ext_call_opts_ok static opts) then
+        (INR (Error (TypeError "ExtCall operands")), s with outcomes := SOME xs)
+      else case dest_AddressV target of
+      | NONE => (INR (Error (TypeError "ExtCall target not address")), s with outcomes := SOME xs)
+      | SOME addr =>
+        case (if static then SOME NONE else
+          case ext_call_kwarg EKValue opts (DROP (LENGTH tys) rest) of
+          | NONE => SOME (SOME 0)
+          | SOME v => OPTION_MAP SOME (dest_NumV v)) of
+        | NONE => (INR (Error (TypeError "ExtCall value not int")), s with outcomes := SOME xs)
+        | SOME amount =>
+          case build_ext_calldata (get_tenv cx) name tys (TAKE (LENGTH tys) rest) of
+          | NONE => (INR (Error (TypeError "ExtCall build_calldata")), s with outcomes := SOME xs)
+          | SOME data =>
+            if ~ext_call_precheck_ok skip ret addr s.accounts then
+              (INR (Error (RuntimeError "ExtCall target has no code")), s with outcomes := SOME xs)
+            else if cx.txn.is_static /\ (case amount of NONE => F | SOME n => n <> 0) then
+              (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
+            else bind (take_call_outcome addr data (if cx.txn.is_static then NONE else amount))
+              (\(rq,oc). bind
+                (if call_outcome_success oc then return ()
+                 else raise (Error (RevertData (call_outcome_return_data oc))))
+                (\u. bind (adopt_call_outcome rq oc) (\v.
+                  case (if call_outcome_return_data oc = [] then
+                    ext_call_kwarg EKDefault opts (DROP (LENGTH tys) rest) else NONE) of
+                  | SOME d => bind get_accounts (\accounts.
+                      bind (check (skip \/ ext_call_has_code addr accounts)
+                        "ExtCall target has no code") (\u. return (Value d)))
+                  | NONE => bind (lift_sum_runtime
+                      (evaluate_abi_decode_return (get_tenv cx) ret (call_outcome_return_data oc)))
+                      (\v. return (Value v)))))
+              (s with outcomes := SOME xs)
+Proof
+  `!b ex. assert b ex = if b then return () else raise ex` by
+    (rpt gen_tac >> Cases_on `b` >>
+     simp[FUN_EQ_THM, vyperStateTheory.assert_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  rpt gen_tac >> Cases_on `vs`
+  >- simp[eval_ext_call_def, vyperStateTheory.raise_def] >>
+  Cases_on `LENGTH t = LENGTH tys + LENGTH opts /\ ext_call_opts_ok static opts` >>
+  gvs[eval_ext_call_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, Once vyperStateTheory.ignore_bind_def,
+       Once vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, arithmeticTheory.ADD_COMM] >>
+  Cases_on `dest_AddressV h` >>
+  simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.bind_return,
+       Once vyperStateTheory.bind_def, vyperStateTheory.raise_def,
+       vyperStateTheory.return_def] >>
+  Cases_on `static` >> simp[vyperStateTheory.bind_return] >>
+  Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH tys) t)` >>
+  simp[vyperStateTheory.bind_return] >>
+  Cases_on `dest_NumV (THE (ext_call_kwarg EKValue opts (DROP (LENGTH tys) t)))` >>
+  gvs[vyperStateTheory.lift_option_type_def, vyperStateTheory.bind_return,
+      vyperStateTheory.bind_assoc] >>
+  Cases_on `build_ext_calldata (get_tenv cx) name tys (TAKE (LENGTH tys) t)` >>
+  simp[vyperStateTheory.bind_return, Once vyperStateTheory.bind_def,
+       vyperStateTheory.raise_def] >>
+  simp[vyperStateTheory.return_def] >>
+  simp[Once vyperStateTheory.bind_def, vyperStateTheory.get_accounts_def] >>
+  simp[Once vyperStateTheory.ignore_bind_def, Once vyperStateTheory.bind_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  Cases_on `cx.txn.is_static` >>
+  simp[frame_call_value_def, vyperStateTheory.bind_return,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.ignore_bind_def] >>
+  rpt (IF_CASES_TAC >> gvs[vyperStateTheory.bind_return]) >>
+  simp[source_ext_effects_oracle_normal] >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.raise_def]
+QED
+
+Theorem source_raw_call_oracle_normal[local]:
+  !cx flags addr data amount gas s xs.
+    eval_raw_call cx flags addr data amount gas (s with outcomes := SOME xs) =
+    if ~((~(flags.rcf_is_delegate /\ flags.rcf_is_static)) /\
+         ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)) then
+      (INR (Error (TypeError "raw_call flags/value")), s with outcomes := SOME xs)
+    else if cx.txn.is_static /\ ~flags.rcf_is_static /\ amount <> 0 then
+      (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
+    else bind (take_request_outcome
+      (if flags.rcf_is_delegate then
+        delegate_outcome_request addr data
+          (if cx.txn.is_static \/ flags.rcf_is_static then NONE else SOME amount) s
+       else call_outcome_request addr data
+          (if cx.txn.is_static \/ flags.rcf_is_static then NONE else SOME amount) s))
+      (\(rq,oc). bind (adopt_call_outcome rq oc) (\u.
+        if flags.rcf_revert_on_failure then
+          bind (if oc.co_success then return () else raise (Error (RevertData oc.co_returnData)))
+            (\u. if flags.rcf_max_outsize = 0 then return (Value NoneV)
+                 else return (Value (BytesV (TAKE flags.rcf_max_outsize oc.co_returnData))))
+        else if flags.rcf_max_outsize = 0 then return (Value (BoolV oc.co_success))
+        else return (Value (ArrayV (TupleV [BoolV oc.co_success;
+                         BytesV (TAKE flags.rcf_max_outsize oc.co_returnData)])))))
+      (s with outcomes := SOME xs)
+Proof
+  rpt gen_tac >>
+  Cases_on `flags.rcf_is_delegate` >> Cases_on `flags.rcf_is_static` >>
+  Cases_on `cx.txn.is_static` >>
+  simp[eval_raw_call_def, frame_call_value_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.check_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_return, vyperStateTheory.bind_assoc] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, take_call_outcome_def,
+       take_delegate_outcome_def, call_outcome_request_def,
+       delegate_outcome_request_def, vyperStateTheory.assert_def] >>
+  qmatch_goalsub_abbrev_tac `take_request_outcome rq ist` >>
+  Cases_on `take_request_outcome rq ist` >> Cases_on `q` >>
+  simp[] >> rename1 `INL v` >> PairCases_on `v` >>
+  simp[vyperStateTheory.bind_assoc, vyperStateTheory.bind_return,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+  Cases_on `adopt_call_outcome v0 v1 r` >> Cases_on `q` >> simp[]
+QED
+
+Theorem source_ordinary_eval_cuts[local]:
+  (!cx static skip sig opts vs s os.
+    source_wrapper_cut_at (eval_ext_call cx static skip sig opts vs) s os) /\
+  (!cx gas vs s os.
+    source_wrapper_cut_at (eval_send cx gas vs) s os) /\
+  (!cx flags addr data amount gas s os.
+    source_wrapper_cut_at (eval_raw_call cx flags addr data amount gas) s os)
+Proof
+  conj_tac >- suspend "extcall" >>
+  conj_tac >- suspend "send" >> suspend "rawcall"
+QED
+
+Resume source_ordinary_eval_cuts[send]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `t.outcomes = SOME []`
+  >- suspend "send_consumed" >>
+  disj1_tac >> irule source_replay_unconsumed_cut >>
+  simp[outcomes_suffix_send, outcome_prefix_causal_external_actions] >>
+  goal_assum (drule_at Any)
+QED
+Resume source_ordinary_eval_cuts[send_consumed]:
+  Cases_on `vs`
+  >- gvs[source_send_oracle_normal] >>
+  rename1 `h::tl` >> Cases_on `tl`
+  >- gvs[source_send_oracle_normal] >>
+  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
+  gvs[source_send_oracle_normal] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[source_take_call_bind_normal] >>
+  qmatch_asmsub_abbrev_tac `bind (take_request_outcome rq) k` >>
+  `os = []` by
+    (drule_at (Pos (el 2)) source_take_request_bind_consumed >>
+     simp[] >> disch_then irule >>
+     simp[Abbr `k`] >> Cases >>
+     simp[outcomes_frame_bind, outcomes_frame_adopt]) >>
+  disj1_tac >> gvs[] >>
+  `k = (\(rq,oc). if oc.co_success then
+       bind (adopt_call_outcome rq oc) (\v. return (Value NoneV))
+       else raise (Error (RuntimeError "send failed")))` by
+    (simp[Abbr `k`, FUN_EQ_THM, FORALL_PROD,
+          vyperStateTheory.bind_def, vyperStateTheory.check_def,
+          vyperStateTheory.assert_def, vyperStateTheory.raise_def] >>
+     rpt gen_tac >> IF_CASES_TAC >>
+     simp[vyperStateTheory.bind_def, vyperStateTheory.raise_def]) >>
+  qspecl_then [`rq`, `k`, `s`] mp_tac source_ordinary_probe_cut >>
+  simp[probe_failed_outcome_def, empty_failed_outcome_def,
+       failed_outcome_def, storage_trace_frame_raise] >> strip_tac >>
+  first_assum (qspec_then `probe_failed_outcome` mp_tac) >>
+  first_x_assum (qspec_then `empty_failed_outcome` mp_tac) >>
+  gvs[probe_failed_outcome_def, empty_failed_outcome_def] >> metis_tac[]
+QED
+Resume source_ordinary_eval_cuts[extcall]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `t.outcomes = SOME []`
+  >- suspend "extcall_consumed" >>
+  disj1_tac >> irule source_replay_unconsumed_cut >>
+  simp[outcomes_suffix_ext_call, outcome_prefix_causal_external_actions] >>
+  goal_assum (drule_at Any)
+QED
+Resume source_ordinary_eval_cuts[extcall_consumed]:
+  PairCases_on `sig` >> Cases_on `vs` >>
+  gvs[source_ext_call_oracle_normal] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[AllCaseEqs()] >>
+  gvs[source_take_call_bind_normal] >>
+  qmatch_asmsub_abbrev_tac `bind (take_request_outcome rq) k` >>
+  `os = []` by
+    (drule_at (Pos (el 2)) source_take_request_bind_consumed >>
+     simp[] >> disch_then irule >>
+     simp[Abbr `k`] >> Cases >> simp[] >>
+     irule outcomes_frame_bind >>
+     simp[outcomes_frame_adopt, outcomes_frame_primitives,
+          outcomes_frame_reads, outcomes_frame_bind] >>
+     irule outcomes_frame_bind >> simp[outcomes_frame_adopt] >>
+     TOP_CASE_TAC >>
+     simp[outcomes_frame_bind, outcomes_frame_primitives,
+          outcomes_frame_reads]) >>
+  disj1_tac >> gvs[] >>
+  `k (rq,failed_outcome rq) = raise (Error (RevertData [])) /\
+   k (rq,probe_failed_outcome) = raise (Error (RevertData [])) /\
+   k (rq,empty_failed_outcome) = raise (Error (RevertData []))` by
+    simp[Abbr `k`, failed_outcome_def, probe_failed_outcome_def,
+         empty_failed_outcome_def, FUN_EQ_THM,
+         vyperStateTheory.bind_def, vyperStateTheory.raise_def] >>
+  qspecl_then [`rq`, `k`, `s`] mp_tac source_ordinary_probe_cut >>
+  simp[storage_trace_frame_raise] >> strip_tac >>
+  first_assum (qspec_then `probe_failed_outcome` mp_tac) >>
+  first_x_assum (qspec_then `empty_failed_outcome` mp_tac) >>
+  simp[] >> gvs[] >> metis_tac[]
+QED
+Resume source_ordinary_eval_cuts[rawcall]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `t.outcomes = SOME []`
+  >- suspend "rawcall_consumed" >>
+  disj1_tac >> irule source_replay_unconsumed_cut >>
+  simp[outcomes_suffix_raw_call, outcome_prefix_causal_external_actions] >>
+  goal_assum (drule_at Any)
+QED
+Resume source_ordinary_eval_cuts[rawcall_consumed]:
+  gvs[source_raw_call_oracle_normal] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  qmatch_asmsub_abbrev_tac `bind (take_request_outcome rq) k` >>
+  `os = []` by
+    (drule_at (Pos (el 2)) source_take_request_bind_consumed >>
+     simp[] >> disch_then irule >>
+     simp[Abbr `k`] >> Cases >> simp[] >>
+     irule outcomes_frame_bind >> simp[outcomes_frame_adopt] >>
+     rpt (IF_CASES_TAC >> simp[outcomes_frame_bind])) >>
+  disj1_tac >> gvs[] >>
+  `!oc. ~oc.co_success /\ oc.co_returnData = [] ==>
+    k (rq,oc) =
+      if flags.rcf_revert_on_failure then raise (Error (RevertData []))
+      else if flags.rcf_max_outsize = 0 then return (Value (BoolV F))
+      else return (Value (ArrayV (TupleV [BoolV F; BytesV []])))` by
+    (rpt strip_tac >>
+     simp[Abbr `k`, FUN_EQ_THM, vyperStateTheory.bind_def,
+          adopt_call_outcome_equation, Abbr `rq`, call_outcome_request_def,
+          delegate_outcome_request_def, vyperStateTheory.raise_def,
+          vyperStateTheory.return_def] >>
+     rpt (IF_CASES_TAC >> simp[vyperStateTheory.bind_def,
+         vyperStateTheory.return_def, vyperStateTheory.raise_def])) >>
+  `storage_trace_frame (k (rq,failed_outcome rq)) /\
+   k (rq,probe_failed_outcome) = k (rq,failed_outcome rq) /\
+   k (rq,empty_failed_outcome) = k (rq,failed_outcome rq)` by
+    (simp[failed_outcome_def, probe_failed_outcome_def,
+          empty_failed_outcome_def] >>
+     Cases_on `flags.rcf_revert_on_failure` >>
+     Cases_on `flags.rcf_max_outsize = 0` >>
+     simp[storage_trace_frame_raise, storage_trace_frame_return]) >>
+  qspecl_then [`rq`, `k`, `s`] mp_tac source_ordinary_probe_cut >>
+  simp[] >> strip_tac >>
+  first_assum (qspec_then `probe_failed_outcome` mp_tac) >>
+  first_x_assum (qspec_then `empty_failed_outcome` mp_tac) >>
+  simp[] >> gvs[] >> metis_tac[]
+QED
+Finalise source_ordinary_eval_cuts[local]
+
+Theorem source_create_oracle_normal[local]:
+  !cx kind salt rof tys vs cs s xs.
+    eval_create cx kind salt rof tys vs cs (s with outcomes := SOME xs) =
+    case dest_create_args kind salt vs of
+    | NONE => (INR (Error (TypeError "create operand shape")), s with outcomes := SOME xs)
+    | SOME ops => case create_arg_ctor_types kind salt tys of
+    | NONE => (INR (Error (TypeError "create argument type shape")), s with outcomes := SOME xs)
+    | SOME ctor => case build_create_code (get_tenv cx) kind ops s.accounts ctor cs of
+    | NONE => (INR (Error (TypeError "create operands")), s with outcomes := SOME xs)
+    | SOME ci =>
+      if ~ci.cc_source_ok then
+        (INR (Error (RuntimeError "create source has no deployable code")), s with outcomes := SOME xs)
+      else if ~ci.cc_size_ok then
+        (INR (Error (RuntimeError "create initcode too large")), s with outcomes := SOME xs)
+      else if cx.txn.is_static then
+        (INR (Error (RuntimeError "write in static context")), s with outcomes := SOME xs)
+      else create_oracle_result ops.co_salt ops.co_value ci.cc_initcode rof
+        (s with outcomes := SOME xs)
+Proof
+  rpt gen_tac >> Cases_on `dest_create_args kind salt vs` >>
+  simp[vyperCreateTheory.eval_create_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+  Cases_on `create_arg_ctor_types kind salt tys` >>
+  simp[vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+  Cases_on `build_create_code (get_tenv cx) kind x s.accounts x' cs` >>
+  simp[vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.check_not_static_def] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Theorem source_create_oracle_consumed[local]:
+  !salt value code rof s os r t.
+    create_oracle_result salt value code rof
+      (s with outcomes := SOME (os ++ [probe_failed_outcome])) = (r,t) /\
+    t.outcomes = SOME [] ==> os = []
+Proof
+  rpt gen_tac >>
+  simp[vyperCreateTheory.create_oracle_result_def] >>
+  qmatch_goalsub_abbrev_tac `take_create_outcome kind value code ist` >>
+  Cases_on `take_create_outcome kind value code ist` >>
+  drule take_create_outcome_suffix >>
+  simp[Abbr `ist`] >> strip_tac >>
+  Cases_on `q` >>
+  simp[adopt_call_outcome_equation, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  `LENGTH os = 0` by decide_tac >> gvs[]
+QED
+
+Theorem source_create_eval_cut[local]:
+  !cx kind salt rof tys vs cs s os.
+    source_wrapper_cut_at (eval_create cx kind salt rof tys vs cs) s os
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `t.outcomes = SOME []`
+  >- suspend "consumed" >>
+  disj1_tac >> irule source_replay_unconsumed_cut >>
+  simp[outcomes_suffix_create, outcome_prefix_causal_external_actions] >>
+  goal_assum (drule_at Any)
+QED
+Resume source_create_eval_cut[consumed]:
+  gvs[source_create_oracle_normal, AllCaseEqs()] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  drule_all source_create_oracle_consumed >> strip_tac >> gvs[] >>
+  `bind (create_oracle_result ops.co_salt ops.co_value ci.cc_initcode rof)
+     return = create_oracle_result ops.co_salt ops.co_value ci.cc_initcode rof` by
+    (simp[FUN_EQ_THM, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def] >> gen_tac >>
+      Cases_on `create_oracle_result ops.co_salt ops.co_value ci.cc_initcode rof x` >>
+      Cases_on `q` >> simp[]) >>
+  disj2_tac >>
+  qspecl_then [`ops.co_salt`, `ops.co_value`, `ci.cc_initcode`, `rof`]
+    (qspec_then `return` mp_tac) source_create_probe_cut >>
+  simp[vyperStateTheory.bind_return, vyperStateTheory.return_def] >>
+  disch_then drule >> strip_tac >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`ops.co_salt`, `ops.co_value`, `ci.cc_initcode`, `rof`]
+    (qspec_then `return` mp_tac) source_create_empty_cut_state >>
+  simp[vyperStateTheory.bind_return, vyperStateTheory.return_def] >>
+  disch_then irule >> goal_assum (drule_at Any)
+QED
+Finalise source_create_eval_cut[local]
 
 Theorem source_replay_frame_cut[local]:
   !f s os. outcomes_frame f /\ outcomes_suffix f /\ outcome_prefix_causal f ==>
