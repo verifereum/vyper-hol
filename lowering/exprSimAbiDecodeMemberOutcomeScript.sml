@@ -78,7 +78,9 @@ Proof
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
    t.vs_fmp = s.vs_fmp /\ t.vs_halted = s.vs_halted /\ decode_static_frame s t` by
     fs[decode_static_frame_def, venom_state_component_equality] >>
-  `decode_site_resources ctx fn t` by metis_tac[decode_site_resources_fields] >>
+  `decode_site_resources ctx fn t` by
+    (irule decode_site_resources_fields >> qexists_tac `s` >>
+     fs[decode_static_frame_def, venom_state_component_equality]) >>
   simp[decode_site_effect_def, decode_memory_frame_def, decode_upper_frame_memory]
 QED
 
