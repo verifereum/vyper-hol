@@ -529,10 +529,18 @@ Proof
        (strip_assume_tac o REWRITE_RULE [revert_forward_pair_def]) >> gvs[]) >>
   `?dst src sz. inst.inst_operands = [dst;src;sz]` by
     metis_tac[revert_forward_pair_def, optionTheory.SOME_11] >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by
+    simp[gas_cut_whole] >>
   `eval_operand src s = eval_operand src t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >>
+     disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
+     disch_then irule >> simp[]) >>
   `eval_operand sz s = eval_operand sz t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >>
+     disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
+     disch_then irule >> simp[]) >>
   drule ld_joint_source >> strip_tac >>
   qhdtm_assum `ld_joint_boundary`
     (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
