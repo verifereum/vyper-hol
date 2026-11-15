@@ -1659,7 +1659,7 @@ Proof
   strip_tac >> drule_all valid_horizon_frame >> simp[]
 QED
 
-Theorem raw_call_implicit_path_suffix[local]:
+Theorem raw_call_implicit_path_suffix:
   gas_marked_path F ctx func s n (OK t) /\ es.gas_obs = [] /\
   gas_outcome F tops (ctx,func) cx st0 k (es,t) Q R ==>
   gas_outcome F tops (ctx,func) cx st0 k (es,s) Q R
@@ -1719,7 +1719,7 @@ Proof
   drule_all hash_run_path >> simp[]
 QED
 
-Theorem raw_call_optional_gas_path[local]:
+Theorem raw_call_optional_gas_path:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
