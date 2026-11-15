@@ -37,7 +37,7 @@ Proof
   decide_tac
 QED
 
-Theorem tuple_place_equal_memory_forward:
+Theorem tuple_place_equal_memory_forward_effect:
   ~is_word_type ty /\
   compile_assign_value cenv dst LocMemory op F src_loc ty ty
     (type_memory_bytes cenv ty) sa = ((),sb) /\
@@ -88,6 +88,11 @@ Theorem tuple_place_equal_memory_forward:
     (!aid b len a n. aid < sa.cs_next_id /\
       FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= a /\ a+n <= b+len /\
       (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+    (!a n. a+n <= s.vs_alloca_next /\
+      (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+        sa.cs_next_id <= aid ==> a+n <= b \/ b+len <= a) /\
+      (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
   strip_tac >>
@@ -124,7 +129,7 @@ Proof
   metis_tac[]
 QED
 
-Resume tuple_place_equal_memory_forward[staged]:
+Resume tuple_place_equal_memory_forward_effect[staged]:
   qpat_x_assum `!sw. eval_operand op s = SOME sw ==> _` (mp_tac o Q.SPEC `sw`) >>
   simp[] >> disch_then (qx_choose_then `srcb` (qx_choose_then `srclen` assume_tac)) >>
   pop_assum (mk_asm "source_region") >>
@@ -186,7 +191,7 @@ Resume tuple_place_equal_memory_forward[staged]:
      simp[] >> qexists_tac `get_tenv cx` >> simp[]) >>
   suspend "post"
 QED
-Resume tuple_place_equal_memory_forward[post]:
+Resume tuple_place_equal_memory_forward_effect[post]:
   markerLib.RESUME_TAC >>
   `!aid b len a n. aid < sa.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= a /\ a+n <= b+len ==>
@@ -230,6 +235,7 @@ Resume tuple_place_equal_memory_forward[post]:
   (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qexistsl_tac [`r`, `t`] >> simp[] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  (conj_tac >- (
   map_every qx_gen_tac [`aid`, `ob`, `ol`, `oa`, `on`] >> strip_tac >>
   `mem_bytes_at oa on t.vs_memory = mem_bytes_at oa on u.vs_memory` by
     (irule typed_copy_effect_bytes >>
@@ -237,11 +243,146 @@ Resume tuple_place_equal_memory_forward[post]:
   `mem_bytes_at oa on u.vs_memory = mem_bytes_at oa on s.vs_memory` by
     (qpat_x_assum `!a len. _ ==> mem_bytes_at a len u.vs_memory = _` irule >>
      asm "old_scratch_sep" (qspecl_then [`aid`, `ob`, `ol`, `oa`, `on`] mp_tac) >> simp[]) >>
-  simp[]
+  simp[])) >>
+  rpt strip_tac >>
+  `regions_disjoint a n (w2n tw) (type_memory_size tv)` by
+    (irule placeStoreStorageTheory.place_store_alloc_source_disjoint >>
+     qexistsl_tac [`s`, `sa`] >> simp[] >> metis_tac[]) >>
+  `a+n <= w2n tw \/ w2n tw+type_memory_size tv <= a` by
+    gvs[regions_disjoint_def] >>
+  `mem_bytes_at a n t.vs_memory = mem_bytes_at a n u.vs_memory` by
+    (irule typed_copy_effect_bytes >>
+     goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `!a len. _ ==> mem_bytes_at a len u.vs_memory = _`
+    (qspecl_then [`a`, `n`] mp_tac) >> simp[]
 QED
-Finalise tuple_place_equal_memory_forward
+Finalise tuple_place_equal_memory_forward_effect
 
 (* Correctness and byte preservation share the forward runner's endpoint. *)
+Theorem tuple_place_equal_memory_run_effect:
+  ~is_word_type ty /\
+  compile_assign_value cenv dst LocMemory op F src_loc ty ty
+    (type_memory_bytes cenv ty) sa = ((),sb) /\
+  eval_operand dst s = SOME w /\
+  place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type ty) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  expr_val_rel cx ty v op s /\
+  0 < type_memory_size tv /\ type_memory_size tv+64 < dimword (:256) /\
+  expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
+  (!sw. eval_operand op s = SOME sw ==>
+    ?b len. b <= w2n sw /\ w2n sw+type_memory_size tv <= b+len /\
+      ((?name. local_region cenv ee.scopes s name b len) \/
+       (?aid. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id))) /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  write_place cx p v ee = (INL (),ff) /\
+  (!id path entry t0. p = MemoryPlace id path /\
+    lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+    evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx ff t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!name b len a n. local_region cenv ee.scopes s name b len /\ b <= a /\
+      a+n <= b+len /\ (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+    (!aid b len a n. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= a /\ a+n <= b+len /\
+      (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+    (!a n. a+n <= s.vs_alloca_next /\
+      (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+        sa.cs_next_id <= aid ==> a+n <= b \/ b+len <= a) /\
+      (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
+Proof
+  strip_tac >> drule_all tuple_place_equal_memory_forward_effect >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx ff t` by
+    (irule memory_place_write_stmt_state >>
+     goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `(t with <|vs_vars := _; vs_memory := _;
+       vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = r`)) >>
+     goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+     goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+     goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+     simp[ADD_COMM] >> metis_tac[ADD_COMM]) >>
+  qexists_tac `t` >> gvs[ADD_COMM] >> conj_tac
+  >- (rpt strip_tac >>
+      `local_region cenv ee.scopes r name b len` by metis_tac[] >>
+      qpat_x_assum `!name b len a n. local_region _ _ _ _ _ _ /\ _ ==> _` mp_tac >>
+      simp[] >> disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+      disch_then (qspecl_then [`a`, `n`] mp_tac) >> simp[] >> metis_tac[ADD_COMM]) >>
+  conj_tac
+  >- (qpat_assum `!aid b len a n. _ ==> mem_bytes_at _ _ _ = _` mp_tac >>
+      simp[NoAsms]) >>
+  qpat_assum `!a n. _ ==> mem_bytes_at _ _ _ = _` mp_tac >> simp[NoAsms]
+QED
+
+(* Original formulas are projections of the single same-endpoint effect. *)
+Theorem tuple_place_equal_memory_forward:
+  ~is_word_type ty /\
+  compile_assign_value cenv dst LocMemory op F src_loc ty ty
+    (type_memory_bytes cenv ty) sa = ((),sb) /\
+  eval_operand dst s = SOME w /\
+  place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type ty) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  expr_val_rel cx ty v op s /\
+  0 < type_memory_size tv /\ type_memory_size tv+64 < dimword (:256) /\
+  expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
+  (!sw. eval_operand op s = SOME sw ==>
+    ?b len. b <= w2n sw /\ w2n sw+type_memory_size tv <= b+len /\
+      ((?name. local_region cenv ee.scopes s name b len) \/
+       (?aid. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id))) /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  write_place cx p v ee = (INL (),ff) /\
+  (!id path entry t0. p = MemoryPlace id path /\
+    lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+    evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r t. val_in_memory tv v (w2n w) t.vs_memory /\
+    stmt_state_rel ctx func cenv cx ee r /\
+    gas_marked_path F ctx func s 0 (OK t) /\
+    (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
+      vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
+      vs_inst_idx := r.vs_inst_idx|>) = r /\
+    t.vs_allocas = r.vs_allocas /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
+    (!name b len. local_region cenv ee.scopes s name b len ==>
+      local_region cenv ee.scopes r name b len) /\
+    (!name b len a n. local_region cenv ee.scopes r name b len /\ b <= a /\
+      a+n <= b+len /\ (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n r.vs_memory) /\
+    LENGTH r.vs_memory <= LENGTH t.vs_memory /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (cenv.ce_is_ctor ==> !nm itv iv off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (itv,iv) ==>
+      mem_bytes_at off (type_memory_size itv) t.vs_memory =
+      mem_bytes_at off (type_memory_size itv) r.vs_memory) /\
+    r.vs_memory = s.vs_memory /\
+    (!aid b len a n. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= a /\ a+n <= b+len /\
+      (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
+Proof
+  strip_tac >> drule_all tuple_place_equal_memory_forward_effect >> strip_tac >>
+  qexistsl_tac [`r`, `t`] >> gvs[ADD_COMM] >> metis_tac[]
+QED
+
 Theorem tuple_place_equal_memory_run_frame:
   ~is_word_type ty /\
   compile_assign_value cenv dst LocMemory op F src_loc ty ty
@@ -280,24 +421,6 @@ Theorem tuple_place_equal_memory_run_frame:
       (a+n <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
-  strip_tac >> drule_all tuple_place_equal_memory_forward >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ff t` by
-    (irule memory_place_write_stmt_state >>
-     goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `(t with <|vs_vars := _; vs_memory := _;
-       vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = r`)) >>
-     goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
-     goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
-     goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-     simp[ADD_COMM] >> metis_tac[ADD_COMM]) >>
-  qexists_tac `t` >> simp[] >> reverse conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid b len a n. _` irule >> simp[] >>
-      qexists_tac `aid` >> simp[]) >>
-  rpt strip_tac >>
-  `local_region cenv ee.scopes r name b len` by metis_tac[] >>
-  qpat_x_assum `!name b len a n. local_region _ _ _ _ _ _ /\ _ ==> _` mp_tac >>
-  simp[] >> disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-  disch_then (qspecl_then [`a`, `n`] mp_tac) >> simp[] >> metis_tac[ADD_COMM]
+  strip_tac >> drule_all tuple_place_equal_memory_run_effect >> strip_tac >>
+  qexists_tac `t` >> gvs[ADD_COMM] >> metis_tac[]
 QED
