@@ -32,8 +32,7 @@ Theorem entry_classified_internal_support:
   supported_program tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,body)
     (FST (SND (classify_functions tops))) ==>
-  supported_pure_exprs tops defaults /\
-  EVERY (supported_default_expression tops) defaults /\
+  NULL defaults /\
   EVERY (supported_value_type tops o SND) args /\
   supported_function_return tops Internal ret /\
   supported_function_body tops Internal args body /\
