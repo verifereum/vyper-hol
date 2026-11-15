@@ -1282,3 +1282,40 @@ Proof
   first_x_assum drule >>
   Cases_on `vv` >> simp[reason_result_shape_def, vv_operand_def]
 QED
+
+(* Positional snapshots never introduce label operands. *)
+Theorem compile_ext_call_args_not_label:
+  !xs env ce kws tys sa av sb.
+    EVERY (well_typed_expr env) xs /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+       ?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    compile_ext_call_args compile_expr ce kws tys xs sa = (av,sb) ==>
+    EVERY (\vv. !l. vv_operand vv <> Label l) av
+Proof
+  Induct_on `xs`
+  >- (rpt gen_tac >> Cases_on `tys` >>
+      simp[compile_ext_call_args_def, comp_return_def]) >>
+  rpt gen_tac >> Cases_on `tys`
+  >- simp[compile_ext_call_args_def, comp_return_def] >>
+  simp[compile_ext_call_args_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule_all compile_expr_reason_uniform >>
+  disch_then (qspec_then `expr_type h` mp_tac) >>
+  simp[reason_uniform_shape_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `?tag. reason_result_shape tag loc (ext_call_arg_value h' vv)` by
+    (Cases_on `vv` >>
+     gvs[ext_call_arg_value_def, reason_result_shape_def] >> metis_tac[]) >>
+  `!l. vv_operand vv' <> Label l` by
+    (Cases_on `exprs_can_mutate ce (xs ++ kws)` >> fs[]
+     >- (drule_all reason_snapshot_shape >>
+         Cases_on `vv'` >> simp[reason_result_shape_def, vv_operand_def]) >>
+     qpat_x_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
+         simp[compile_snapshot_vv_def] >> IF_CASES_TAC >>
+         simp[comp_bind_def, comp_return_def] >>
+         rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+         Cases_on `ext_call_arg_value h' vv` >>
+         gvs[reason_result_shape_def, vv_operand_def] >>
+         drule unwrap_value_not_label >> simp[vv_operand_def]) >>
+  gvs[] >> first_x_assum irule >> metis_tac[]
+QED
