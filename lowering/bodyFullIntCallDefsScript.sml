@@ -13,6 +13,7 @@ Ancestors
   bodyIntCallSeams bodyPtrDefs ptrDiscipline intCallCallee compileVyper
   exprLowering immSectionDead vyperStorageFootprint vyperInterpreter
   vyperState vyperAST venomState venomExecSemantics list
+  contextCodegenRel contextRawReachable
 
 val _ = Parse.hide "body";
 
@@ -34,7 +35,11 @@ Definition intcall_entry_full_def:
       (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
     storage_well_formed_on cx es1 (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!inst. active_inst func inst t ==>
+       frag_reachable ctx func s0 func inst t) /\
+    s0.vs_alloca_next <= t.vs_alloca_next /\
     ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
     (!ty p buf. vv = LocatedValue ty p /\ p.ptr_buf = SOME buf ==>
        ?x off aid.
