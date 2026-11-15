@@ -1,6 +1,6 @@
 (* Repeat-compatible navigation for the owned complex decoder fold. *)
 Theory sourceOwnedComplexPtr
-Ancestors sourceRecursiveComplexPtr sourceOwnedArrayConstructorPtr
+Ancestors sourceRecursiveComplexPtr
   canonicalMemberTraversalPtr
   venomExecSemantics venomState abiDecoderMemberSetup abiDecoderContract
   decoderMemberPrefixPtr abiDecoderDynamicLoopSetup fragExec abiDecoderFrame emitHelper venomInst
@@ -10,7 +10,9 @@ Ancestors sourceRecursiveComplexPtr sourceOwnedArrayConstructorPtr
   sourceEncodingWindows abiDecoderOffsetHead abiEncoderInput abiDecoderReentry
   venomMemDefs allocaFrontierBound actualAllocCredit calldataDynOwned
   abiEncoderSourceTransport abiDecoderMemberSlice decoderGhostFramePtr ptrDiscipline
-  decoderCalldataShell
+  decoderCalldataShell decoderNavigationPtr fragGasOriginPtr fragGasOrigin
+  fragGasMode fragGasPathMem instIdxIndep moduleLoweringProps
+  abiDecoderReentryPointer decoderArraySetupPtr
 
 (* The calldata instance of the position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
@@ -44,6 +46,8 @@ Proof
   strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
   gvs[DROP_LENGTH_APPEND, mk_inst_def]
 QED
+
+(* Keep the source navigation and destination offset on one ghost chain. *)
 
 Theorem owned_member_navigation_record_ptr:
   abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -93,8 +97,23 @@ Proof
        irule member_navigation_opcode_frame >>
        gvs[EVERY_MEM] >> metis_tac[])) >> simp[]) >>
   `w2n (n2w d : bytes32) + vo < dimword (:256)` by simp[] >>
-  drule_all calldata_member_setup_endpoint_ptr_uniform >>
+  drule_all calldata_member_setup_endpoint_ptr_uniform_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK (t with vs_inst_idx := LENGTH mid.cs_current_insts),H,u)` by
+    (rpt gen_tac >>
+     `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
+       simp[venom_state_component_equality] >>
+     qpat_assum `s with vs_inst_idx := LENGTH sa.cs_current_insts = s`
+       (fn eq => qpat_assum `~s.vs_halted ==> !D explicit. _`
+         (qspecl_then [`D`,`explicit`] (ACCEPT_TAC o REWRITE_RULE [eq]) o UNDISCH))) >>
+  `gas_path_mem ctx fn s 0
+     (OK (t with vs_inst_idx := LENGTH mid.cs_current_insts))` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
+       (qspecl_then [`ARB`,`ARB`] mp_tac) >>
+     disch_then (mp_tac o MATCH_MP (cj 1 gas_origin_ptr_path_projections)) >>
+     disch_then (mp_tac o MATCH_MP gas_origin_path_erase) >>
+     simp[gas_marked_path_def]) >>
   drule_all abi_decode_member_setup_shape >> strip_tac >>
   `frag_exec ctx sa mid (\s'. s' = s)
      (\r. r = t with vs_inst_idx := LENGTH mid.cs_current_insts) (K F)` by
@@ -117,8 +136,11 @@ Proof
   `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
     simp[venom_state_component_equality] >>
   qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ _) ==> _` mp_tac >>
+  qpat_x_assum `gas_path_mem ctx fn s 0 _` mp_tac >>
+  qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _` mp_tac >>
   qpat_x_assum `s with vs_inst_idx := _ = s` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD1, ADD_ASSOC, ADD_COMM]
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac bool_ss [DECIDE ``a + SUC b = b + (a + 1)``]
 QED
 
 Theorem owned_member_navigation_ptr:
@@ -398,14 +420,15 @@ Proof
       qpat_x_assum `sa = sb` SUBST_ALL_TAC >>
       qexistsl_tac [`s`, `G`, `tn`, `[]`] >>
       simp[NoAsms, abi_decode_sim_refl, abi_decode_footprint_frame_refl,
-        abi_footprint_disjoint_def] >>
+        abi_footprint_disjoint_def, cj 1 gas_path_mem_rules,
+        cj 1 gas_origin_ptr_path_rules] >>
       map_every (fn pat => qpat_assum pat mp_tac)
         [`~s.vs_halted`, `s.vs_current_bb = _`, `s.vs_inst_idx = _`,
          `fresh_vars_wrt limit s`, `alloca_inv s`, `alloca_frontier_inv ctx fn site s`,
          `allocas_from lo s`, `FLOOKUP s.vs_allocas oid = _`,
          `ptr_covers G tn root s cap`, `k = LENGTH tys`, `!i. i < k ==> _`] >>
       POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-      simp[] >> conj_tac
+      simp[cj 1 gas_path_mem_rules,cj 1 gas_origin_ptr_path_rules] >> conj_tac
       >- (rpt strip_tac >>
           qpat_x_assum `!i. i < k ==> _` (qspec_then `i` mp_tac) >>
           simp[mem_agree_outside_def]) >>
@@ -791,6 +814,21 @@ Resume source_owned_complex_suffix_ptr[step]:
      qpat_assum `!id p sz. en.cs_next_id <= id /\ _ ==> _` drule_all >>
      strip_tac >> asm_rewrite_tac[] >> qexists_tac `ins` >> asm_rewrite_tac[]) >>
   (rpt (CHANGED_TAC markerLib.RESUME_TAC) >> (
+  `gas_path_mem ctx fn s 0 (OK t')` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_path_mem ctx fn s 0 (OK r)`,
+        `gas_path_mem ctx fn r 0 (OK t)`,
+        `gas_path_mem ctx fn t 0 (OK t')`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t',H',u')` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`,
+        `!D explicit. gas_origin_ptr_path _ (r,H,u) _ _`,
+        `!D explicit. gas_origin_ptr_path _ (t,J,v) _ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`t'`, `H'`, `u'`, `fp ++ fp'`] >>
   conj_tac
   >- (irule abi_decode_sim_trans >> qexists_tac `t` >>

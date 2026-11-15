@@ -140,24 +140,25 @@ Theorem custom_error_store_args_sim_using_head:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\H res ee exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit H cx ee res exit)
 Proof
   disch_then (mk_asm "head") >>
   Induct_on `args`
   >- (asm_x "head" kall_tac >> rpt gen_tac >> simp[compile_custom_error_store_args_def, comp_return_def] >>
       strip_tac >> gvs[] >>
-      `!regions. storage_well_formed_on cx (es with gas_obs := []) regions =
-         storage_well_formed_on cx es regions` by
-        (gen_tac >> irule storage_well_formed_on_backends >> simp[]) >>
       irule exprSimAggregateLoopsTheory.aggregate_tuple_nil_outcome >>
-      conj_tac >- first_assum ACCEPT_TAC >>
+      asm_rewrite_tac[] >>
       qx_gen_tac `H` >> strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
         (qspec_then `H` mp_tac) >>
       asm_rewrite_tac[] >> strip_tac >>
-      fs[val_in_memory_def, locals_kept_def, stmt_state_rel_def,
-         state_rel_gas_obs, immutable_alloca_sep_def] >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      fs[val_in_memory_def, locals_kept_def,
+         exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+      `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+         storage_well_formed_on cx es (FST H)` by
+        (irule storage_well_formed_on_backends >> simp[]) >>
+      asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >> qpat_x_assum `tys = _` SUBST_ALL_TAC >>
   Cases_on `compile_expr ce (expr_type h) h sa` >>
   rename1 `compile_expr ce (expr_type h) h sa = (vv,sm)` >>
@@ -195,7 +196,7 @@ Resume custom_error_store_args_sim_using_head[step]:
       vv_post H ctx func ce cx h es sa sm s0 ee tv vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (asm_x "head" kall_tac >> fs[exprs_case_def, expr_vv_case_def] >>
      first_x_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
      simp[expr_vv_sim_def] >> disch_then irule >> simp[] >>
@@ -206,9 +207,14 @@ Resume custom_error_store_args_sim_using_head[step]:
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac
   >- (asm_x "head" kall_tac >>
-      qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
-      simp[gas_outcome_def, gas_summary_at_def] >>
-      metis_tac[expr_exit_INL, sumTheory.sum_CASES]) >>
+      qpat_x_assum `gas_outcome _ _ _ _ _ (eval_expr _ _) _ _ _`
+        (irule o MATCH_MP aggregate_tuple_gas_outcome_mono) >>
+      simp[] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_INL] >>
+      rpt strip_tac >> fs[halt_exit_def] >>
+      qpat_x_assum `expr_exit (INR _) _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
@@ -219,17 +225,17 @@ Resume custom_error_store_args_sim_using_head[step]:
            vyperStorageTraceTheory.storage_trace_frame_return]) >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `vv_post H0 ctx func ce cx h es sa sm s0
-     (mid with gas_obs := []) tv vv t` by metis_tac[] >>
-  `t.vs_current_bb = sm.cs_current_bb /\
-   t.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==>
+    _ /\ t.vs_current_bb = sm.cs_current_bb /\ _`
+    (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      stmt_state_rel H ctx func ce cx es s0` by
     (rpt strip_tac >>
      `valid_horizon cx st0 H es.storage_trace` by
-       (irule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
-        goal_assum (drule_at Any) >>
-        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+       (drule stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+        disch_then (qspecl_then [`cx`, `st0`, `H`] mp_tac) >>
+        asm_rewrite_tac[]) >>
      metis_tac[]) >>
   `?ht tt. evaluate_type (get_tenv cx) (expr_type h) = SOME ht /\
     OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tt /\
@@ -244,8 +250,10 @@ Resume custom_error_store_args_sim_using_head[step]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size ht)` by
-    (fs[type_memory_size_def, regions_disjoint_def] >> rpt strip_tac >>
-     first_x_assum drule >> disch_then drule_all >> strip_tac >> decide_tac) >>
+    (rpt strip_tac >>
+     qpat_x_assum `ce.ce_is_ctor ==> !name itv iv io. _`
+       (qspecl_then [`name`, `itv`, `iv`, `io`] mp_tac o UNDISCH) >>
+     asm_rewrite_tac[type_memory_size_def, regions_disjoint_def] >> decide_tac) >>
   `~t.vs_halted` by
     (asm_x "head" kall_tac >>
      metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal]) >>
@@ -258,7 +266,13 @@ Resume custom_error_store_args_sim_using_head[step]:
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
     metis_tac[vv_post_def] >>
-  asm_x "head" (drule_all_then strip_assume_tac) >>
+  asm_x "head" (qspecl_then
+    [`ce`, `h`, `sa`, `vv`, `sm`, `off`, `x`, `dst`, `sn`, `op`, `su`, `st`,
+     `cx`, `env`, `es`, `s0`, `ctx`, `func`, `marks`, `tv`, `mid`, `t`,
+     `inst`, `b`, `asz`, `ht`, `st0`] mp_tac) >>
+  impl_tac
+  >- (asm_rewrite_tac[] >> qexists_tac `H0` >> asm_rewrite_tac[]) >>
+  strip_tac >>
   suspend "tail"
 QED
 
@@ -284,7 +298,7 @@ Resume custom_error_store_args_sim_using_head[tail]:
      qpat_x_assum `ce.ce_is_ctor ==> !name itv iv io. _ ==> regions_disjoint _ _ _ (type_memory_size_list _)` mp_tac >>
      simp[]) >>
   qabbrev_tac `tailoff = off + type_memory_size ht` >>
-  qabbrev_tac `Post = \H vs ee r.
+  qabbrev_tac `Post = \(H:(bool # 256 word # type_value) list # num list) vs ee r.
     r.vs_current_bb = sb.cs_current_bb /\
     r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env ee /\
     stmt_state_rel H ctx func ce cx ee r /\
@@ -313,18 +327,23 @@ Resume custom_error_store_args_sim_using_head[tail]:
   `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args)
     (mid with gas_obs := [],q)
     (\H res ee r. ?vs. res = INL vs /\ Post H vs ee r)
-    (\H res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
+    (\H res ee exit. ?exc. res = INR exc /\
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit H cx ee res exit)` by
     (simp[Abbr `Post`] >>
      first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL) >>
      simp[] >> conj_tac >- metis_tac[] >>
+     conj_tac >- fs[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
      conj_tac >- (fs[Abbr `tailoff`, type_memory_size_def] >> decide_tac) >>
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `ce.ce_is_ctor ==> !name itv iv io.
-           _ /\ FLOOKUP (case ALOOKUP mid.immutables _ of NONE => _ | SOME imms => _) _ = _ ==> _` mp_tac >>
-         simp[] >> disch_then drule_all >>
-         simp[regions_disjoint_def, type_memory_size_def, Abbr `tailoff`] >> decide_tac) >>
+           _ /\ FLOOKUP (case ALOOKUP mid.immutables _ of NONE => _ | SOME imms => _) _ = _ ==> _`
+           (qspecl_then [`name`, `itv`, `iv`, `io`] (drule_all_then mp_tac) o UNDISCH) >>
+         simp[regions_disjoint_def, type_memory_size_def, Abbr `tailoff`] >>
+         POP_ASSUM_LIST (K all_tac) >>
+         decide_tac) >>
      `sa.cs_next_var <= st.cs_next_var /\ sa.cs_next_id <= st.cs_next_id` by
        fs[ci_mono_def] >>
      conj_tac >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -336,7 +355,9 @@ Resume custom_error_store_args_sim_using_head[tail]:
   irule aggregate_body_read_cons_outcome >>
   goal_assum (drule_at Any) >> simp[] >> qexists_tac `Post` >>
   reverse conj_tac
-  >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` mp_tac >> simp[]) >>
+  >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _`
+        (irule o MATCH_MP aggregate_tuple_gas_outcome_mono) >>
+      simp[] >> rpt strip_tac >> gvs[halt_exit_def]) >>
   rpt gen_tac >> simp[Abbr `Post`] >> strip_tac >> simp[] >>
   conj_tac >- suspend "tuple_memory" >>
   conj_tac >- suspend "lookup_frame" >>
@@ -376,6 +397,9 @@ Resume custom_error_store_args_sim_using_head[outside_frame]:
   fs[type_memory_size_def, Abbr `tailoff`] >> decide_tac
 QED
 Resume custom_error_store_args_sim_using_head[old_frame]:
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+    stmt_state_rel H _ _ _ _ es s0`
+    (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!name lo sz. local_region ce mid.scopes q name lo sz ==>
     local_region ce es.scopes s0 name lo sz` by

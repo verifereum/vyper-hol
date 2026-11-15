@@ -1,6 +1,7 @@
 Theory vyperBareGlobalName
 
 Ancestors
+  vyperPlaceFrames finite_map alist
   vyperLookup vyperState vyperScopePreservation
   vyperLookupStorage vyperImmutablesPreservation vyperMisc
 
@@ -250,4 +251,89 @@ Proof
   `r.immutables = st.immutables` by
     (irule set_global_immutables >> metis_tac[]) >>
   simp[]
+QED
+
+Theorem lookup_immutable_set_other:
+  (src',name') <> (src,name) /\
+  set_immutable cx src' name' tv v es = (r,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  simp[set_immutable_def, get_address_immutables_def,
+       set_address_immutables_def, bind_def, lift_option_type_def,
+       return_def, raise_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  simp[return_def, raise_def] >>
+  rpt strip_tac >> gvs[lookup_immutable_def] >>
+  Cases_on `src' = src` >>
+  gvs[set_source_immutables_def, get_source_immutables_def, FLOOKUP_UPDATE,
+      ALOOKUP_ADELKEY]
+QED
+
+Theorem lookup_global_immutable_root:
+  lookup_global cx src id es =
+    (INL (PlaceR (ImmutablePlace other_src other_id path)),es') ==>
+  other_src = src /\ other_id = id /\ path = []
+Proof
+  simp[lookup_global_def, vyperMiscTheory.option_CASE_rator,
+       vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
+       bind_def, lift_option_type_def, return_def, raise_def,
+       get_immutables_def, get_address_immutables_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]
+QED
+
+Theorem lookup_immutable_write_other:
+  write_place cx p v es = (r,es') /\
+  (!src' name' path. p = ImmutablePlace src' name' path ==>
+                      (src',name') <> (src,name)) ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `p`
+  >- (strip_tac >> drule write_storage_place_immutables >>
+      simp[lookup_immutable_def])
+  >- (strip_tac >> drule write_memory_place_immutables >>
+      simp[lookup_immutable_def]) >>
+  rename1 `write_place cx (ImmutablePlace other_src other_name path)` >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  simp[write_place_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables other_src imms) other_name` >>
+  simp[return_def, raise_def] >>
+  rename1 `FLOOKUP _ _ = SOME tva` >>
+  Cases_on `assign_subscripts (FST tva) (SND tva) path (Replace v)` >>
+  simp[return_def, raise_def] >>
+  rpt strip_tac >> irule lookup_immutable_set_other >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem pop_place_immutable_other:
+  (!other_src other_name path. p = ImmutablePlace other_src other_name path ==>
+     (other_src,other_name) <> (src,name)) /\
+  pop_place cx p es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `p` >> strip_tac
+  >- (drule vyperScopePreservationTheory.pop_storage_place_scopes_immutables >>
+      simp[lookup_immutable_def])
+  >- (rename1 `MemoryPlace id path` >>
+      Cases_on `find_containing_scope id es.scopes` >>
+      gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+          return_def, raise_def] >>
+      PairCases_on `x` >>
+      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
+          check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+      fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
+      imp_res_tac vyperStatePreservationTheory.lift_sum_state >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+      gvs[lookup_immutable_def] >>
+      pairarg_tac >>
+      gvs[bind_def, ignore_bind_def, set_scopes_def, return_def,
+          lookup_immutable_def]) >>
+  gvs[pop_place_def, bind_def, ignore_bind_def, get_immutables_def,
+      get_address_immutables_def, lift_option_type_def, lift_sum_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+      return_def, raise_def, AllCaseEqs()] >>
+  irule lookup_immutable_set_other >> goal_assum (drule_at Any) >> simp[]
 QED

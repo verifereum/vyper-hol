@@ -134,9 +134,8 @@ Theorem raw_call_kwargs_sim_mem[local]:
     (\H rr ee r. wb_args_exit rr r)
 Proof
   strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
-  drule_all lower_typed_args_sim_mem >> strip_tac >>
-  irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexists_tac `xs` >> simp[]
+  drule_all lower_typed_args_sim_mem >>
+  rewrite_tac[gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >> metis_tac[]
 QED
 
 Theorem raw_call_kwargs_mem_bind:

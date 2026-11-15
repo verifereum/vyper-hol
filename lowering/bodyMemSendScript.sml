@@ -305,7 +305,7 @@ Theorem send_args_summary_mem:
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-       wb_args_exit rr r) /\
+       wb_args_exit rr r /\ halt_exit H cx ee rr r) /\
   (~has_gas ==> gas_op = Lit 0w) /\
   MAP expr_type args =
     [BaseT AddressT; BaseT (UintT 256)] ++
@@ -335,7 +335,7 @@ Theorem send_args_summary_mem:
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-       expr_exit res r)
+       expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rewrite_tac[gas_summary_at_def] >> strip_tac >>
   qpat_x_assum `LENGTH args = _` (fn th => assume_tac th >>
@@ -354,7 +354,7 @@ Proof
   gvs[]
   >- suspend "normal" >>
   disj2_tac >>
-  Cases_on `res` >> gvs[wb_args_exit_def] >>
+  Cases_on `res` >> gvs[wb_args_exit_def, halt_exit_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
   simp[] >> metis_tac[]
@@ -436,6 +436,24 @@ Resume send_args_summary_mem[normal]:
                           read_result cx tv od`, `res`, `fin`] >>
         asm_simp_tac (srw_ss()) []) >>
      fs[] >> first_x_assum drule >> simp[]) >>
+  drule address_typed_dest >> disch_tac >>
+  drule uint256_typed_dest >> disch_tac >>
+  `IS_SOME (eval_operand gas_op t)` by
+    (Cases_on `has_gas` >> gvs[eval_operand_def]) >>
+  `res <> INR HaltException` by
+    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> _`
+       (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     qpat_assum `bind (eval_send _ _ _) _ _ = _`
+       (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+     fs[] >>
+     mp_tac (Q.INST [`es1` |-> `es_end with gas_obs := []`,
+       `es'` |-> `fin`, `H` |-> `H1`, `out` |-> `""`, `id` |-> `sm.cs_next_id`,
+       `aw` |-> `typed_val_to_w256 (BaseTV AddressT) to_v`,
+       `vw` |-> `typed_val_to_w256 (BaseTV (UintT 256)) amount_v`]
+       (INST_TYPE [alpha |-> ``:256``] send_call_read_step)) >>
+     (impl_tac >- asm_simp_tac (srw_ss()) []) >>
+     strip_tac >> gvs[]) >>
   `?r. gas_marked_path T ctx func t 0 r /\
        ((?t'. r = OK t' /\
               (?w. res = INL w /\
@@ -475,7 +493,7 @@ Resume send_args_summary_mem[normal]:
               |> REWRITE_RULE [APPEND_NIL]) >>
        qexistsl_tac [`es_end`, `t`, `to_v :: amount_v :: gas_vs`] >>
        simp[gas_marked_exec_def] >> gvs[])) >>
-  gvs[] >> metis_tac[]
+  gvs[halt_exit_def] >> metis_tac[]
 QED
 
 Finalise send_args_summary_mem
@@ -534,7 +552,7 @@ Proof
             t.vs_inst_idx = LENGTH sb.cs_current_insts /\
             alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
          (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-            expr_exit res r)` by
+            expr_exit res r /\ halt_exit H cx ee res r)` by
         (irule send_args_summary_mem >> simp[expr_type_def] >>
          conj_tac
          >- (qexistsl_tac [`addr_op`, `gas_op`, `s3`, `sm`, `success`, `val_op`] >>

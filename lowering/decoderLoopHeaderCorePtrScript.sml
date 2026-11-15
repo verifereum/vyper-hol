@@ -1,11 +1,12 @@
 (* Same-witness immutable frame for the decoder loop header. *)
 Theory decoderLoopHeaderCorePtr
-Ancestors compileEnv loweringStateRelDefs abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
+Ancestors decoderNavigationPtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem fragGasOrigin instMemFrontier fragGasPathMem fragGasPathPtr memSafeRun venomExecProofs venomInstProofs
+  compileEnv loweringStateRelDefs abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
   entryDispatchPtr typedCopyArrayPtr ptrSafeRun ptrDiscipline
   codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic
 
-Theorem decoder_index_header_ptr_core_uniform:
+Theorem decoder_index_header_ptr_core_uniform_origin:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions =
     abi_decode_header_insts id (Var q) src CALLDATALOAD iv cv cmp done body_lbl exit_lbl /\
@@ -36,16 +37,13 @@ Theorem decoder_index_header_ptr_core_uniform:
        op_taint u (Var x) = op_taint tn (Var x)) /\
     (!x. MEM x [iv;cv;cmp;done] ==>
        op_taint u (Var x) = {} /\ op_prov H (Var x) = NONE) /\
+    (slot + 32 <= s.vs_alloca_next ==>
+      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK t,H,u)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >>
-  `run_inst_seq (TAKE 4 (abi_decode_header_insts id (Var q) src CALLDATALOAD
-      iv cv cmp done body_lbl exit_lbl)) s =
-    OK (abi_decode_header_state iv cv cmp done j ncount s)` by
-    (irule abi_decode_header_prefix >>
-     simp[abi_decode_source_opcode_def, eval_operand_def, w2n_n2w] >>
-     gvs[ALL_DISTINCT]) >>
   qabbrev_tac `a = update_var iv (n2w j) s` >>
   qabbrev_tac `b = update_var cv (n2w ncount) a` >>
   qabbrev_tac `c = update_var cmp (bool_to_word (j < ncount)) b` >>
@@ -71,17 +69,14 @@ Proof
      qpat_x_assum `DISJOINT _ _` mp_tac >>
      simp[DISJOINT_DEF, EXTENSION] >>
      disch_then (qspec_then `slot + x` mp_tac) >> simp[]) >>
-  `H1 = DRESTRICT G (COMPL {iv}) /\
-   H2 = DRESTRICT H1 (COMPL {cv}) /\
-   H3 = DRESTRICT H2 (COMPL {cmp}) /\
-   H4 = DRESTRICT H3 (COMPL {done})` by
+  `H1 = DRESTRICT G (COMPL {iv}) /\ H2 = DRESTRICT H1 (COMPL {cv}) /\
+   H3 = DRESTRICT H2 (COMPL {cmp}) /\ H4 = DRESTRICT H3 (COMPL {done})` by
     simp[Abbr `H1`, Abbr `H2`, Abbr `H3`, Abbr `H4`,
       Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, step_prov_def,
       set_prov_def, out_prov_def, mk_inst_def] >>
   `u1.t_var = tn.t_var |+ (iv,{})` by
     simp[Abbr `u1`, Abbr `i0`, step_taint_def,
-      set_var_taint_def, out_taint_def, mk_inst_def, eval_operand_def,
-      w2n_n2w] >>
+      set_var_taint_def, out_taint_def, mk_inst_def, eval_operand_def, w2n_n2w] >>
   `u2.t_var = u1.t_var |+ (cv,{})` by
     (Cases_on `eval_operand src a` >>
      simp[Abbr `u2`, Abbr `i1`, step_taint_def,
@@ -94,8 +89,7 @@ Proof
   `u4.t_var = u3.t_var |+ (done,{})` by
     (Cases_on `eval_operand (Var cmp) c` >>
      simp[Abbr `u4`, Abbr `i3`, step_taint_def,
-       set_var_taint_def, out_taint_def, mk_inst_def, op_taint_def,
-       FLOOKUP_UPDATE]) >>
+       set_var_taint_def, out_taint_def, mk_inst_def, op_taint_def, FLOOKUP_UPDATE]) >>
   `u1.t_mem = tn.t_mem /\ u1.t_stor = tn.t_stor /\ u1.t_trans = tn.t_trans /\
    u1.t_imm = tn.t_imm` by
     (simp[Abbr `u1`, Abbr `i0`, step_taint_def, mem_taint_def, imm_taint_def,
@@ -132,18 +126,14 @@ Proof
       op_taint u4 (Var x) = {} /\ op_prov H4 (Var x) = NONE)` by
     (simp[Abbr `t`, Abbr `d`, Abbr `c`, Abbr `b`, Abbr `a`,
        jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-       FLOOKUP_DRESTRICT, op_taint_def, op_prov_def] >>
-     rpt strip_tac >> gvs[]) >>
+       FLOOKUP_DRESTRICT, op_taint_def, op_prov_def] >> rpt strip_tac >> gvs[]) >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_initial_fmp = s.vs_initial_fmp /\
    t.vs_fmp = s.vs_fmp /\ mload slot t = n2w j` by
     (simp[Abbr `t`, Abbr `d`, Abbr `c`, Abbr `b`, Abbr `a`,
        jump_to_def, update_var_def, mload_def, read_memory_def] >>
      fs[mload_def, read_memory_def]) >>
   `ptr_covers H4 u4 q t 32` by
-    (irule ptr_covers_frame >> qexistsl_tac [`G`, `s`, `tn`] >>
-     gvs[ALL_DISTINCT]) >>
-  qexistsl_tac [`H4`, `u4`, `t`] >> simp[Abbr `t`] >>
-  gen_tac >> strip_tac >> gen_tac >>
+    (irule ptr_covers_frame >> qexistsl_tac [`G`, `s`, `tn`] >> gvs[ALL_DISTINCT]) >>
   `step_inst_base i0 s = OK a /\ step_inst_base i1 a = OK b /\
    step_inst_base i2 b = OK c /\ step_inst_base i3 c = OK d` by
     (`eval_operand src a = SOME srcaddr` by
@@ -155,53 +145,46 @@ Proof
        eval_operand_def, lookup_var_update_var, mk_inst_def, w2n_n2w,
        abi_decode_load_def] >>
      gvs[ALL_DISTINCT, abi_decode_load_def, abi_decode_source_def, update_var_def]) >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn i0 s` by
-    (qpat_x_assum `ptr_covers G tn q s 32` mp_tac >>
+  `!D fuel. ptr_safe_step D lo fuel ctx fn PG G tn i0 s` by
+    (rpt gen_tac >> qpat_x_assum `ptr_covers G tn q s 32` mp_tac >>
      simp[ptr_covers_def] >> strip_tac >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `i0`, mk_inst_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def,
-       eval_operand_def, w2n_n2w] >>
+       source_memory_read_ranges_def, eval_operand_def, w2n_n2w] >>
      simp[mem_read_ops_def, op_prov_def] >>
-     simp[step_inst_non_invoke, mk_inst_def] >>
-     gvs[mk_inst_def] >>
+     simp[step_inst_non_invoke, mk_inst_def] >> gvs[mk_inst_def] >>
      simp[Abbr `a`, update_var_def] >> rpt strip_tac >> gvs[]) >>
-  `!n. ptr_safe_step D lo fuel ctx fn PG H1 u1 i1 (a with vs_inst_idx := n)` by
-    (gen_tac >>
+  `!D fuel n. ptr_safe_step D lo fuel ctx fn PG H1 u1 i1 (a with vs_inst_idx := n)` by
+    (rpt gen_tac >>
      `op_taint u1 src = {}` by
-       (Cases_on `src` >> simp[op_taint_def, FLOOKUP_UPDATE] >>
-        gvs[op_taint_def]) >>
+       (Cases_on `src` >> simp[op_taint_def, FLOOKUP_UPDATE] >> gvs[op_taint_def]) >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `i1`, mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke] >>
      simp[step_inst_inst_idx_indep, is_terminator_def, mk_inst_def,
        exec_result_map_def] >> gvs[mk_inst_def] >>
-     simp[Abbr `a`, Abbr `b`, update_var_def,
-       allocas_from_def, allocas_below_fmp_def] >>
+     simp[Abbr `a`, Abbr `b`, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
      gvs[exec_result_map_def] >>
      qpat_x_assum `allocas_from lo s` mp_tac >>
      qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  `!n. ptr_safe_step D lo fuel ctx fn PG H2 u2 i2 (b with vs_inst_idx := n)` by
-    (gen_tac >>
+  `!D fuel n. ptr_safe_step D lo fuel ctx fn PG H2 u2 i2 (b with vs_inst_idx := n)` by
+    (rpt gen_tac >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `i2`, mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke,
-       op_taint_def, op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
-       ALL_DISTINCT] >>
-     simp[step_inst_inst_idx_indep, is_terminator_def, mk_inst_def] >>
-     gvs[mk_inst_def] >>
+       op_taint_def, op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ALL_DISTINCT] >>
+     simp[step_inst_inst_idx_indep, is_terminator_def, mk_inst_def] >> gvs[mk_inst_def] >>
      simp[Abbr `b`, Abbr `a`, Abbr `c`, update_var_def, FDOM_DRESTRICT] >>
-     (conj_tac >- (gen_tac >> Cases_on `op = Var iv` >>
-       Cases_on `op = Var cv` >> gvs[])) >>
+     (conj_tac >- (gen_tac >> Cases_on `op = Var iv` >> Cases_on `op = Var cv` >> gvs[])) >>
      gvs[exec_result_map_def] >>
      qpat_x_assum `allocas_from lo s` mp_tac >>
      qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  `!n. ptr_safe_step D lo fuel ctx fn PG H3 u3 i3 (c with vs_inst_idx := n)` by
-    (gen_tac >>
+  `!D fuel n. ptr_safe_step D lo fuel ctx fn PG H3 u3 i3 (c with vs_inst_idx := n)` by
+    (rpt gen_tac >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
        Abbr `i3`, mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke,
@@ -214,16 +197,111 @@ Proof
      qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  `allocas_from lo d /\ (ctx_has_dalloca ctx ==> allocas_below_fmp d)` by
+    (simp[Abbr `d`, Abbr `c`, Abbr `b`, Abbr `a`, update_var_def,
+       allocas_from_def, allocas_below_fmp_def] >>
+     qpat_x_assum `allocas_from lo s` mp_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  `slot + 32 <= s.vs_alloca_next ==>
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,H4,u4)` by
+    (strip_tac >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (OK (a with vs_inst_idx := 1),H1,u1)` by
+    (rpt gen_tac >>
+     `slot < dimword (:256)` by decide_tac >>
+     simp_tac bool_ss [Abbr `H1`, Abbr `u1`] >>
+     `1 = SUC s.vs_inst_idx` by simp[] >> pop_assum SUBST1_TAC >>
+     irule straight_line_checked_step_origin >>
+
+     simp[Abbr `i0`, mk_inst_def, is_terminator_def, get_instruction_def,
+       abi_decode_header_insts_def, below_frontier_MLOAD, memSafeRunTheory.inst_dload_in_section_other,
+       eval_operand_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (a with vs_inst_idx := 1,H1,u1) []
+      (OK (b with vs_inst_idx := 2),H2,u2)` by
+    (rpt gen_tac >>
+     simp_tac bool_ss [Abbr `H2`, Abbr `u2`] >>
+     `step_prov PG H1 i1 (b with vs_inst_idx := 1) = step_prov PG H1 i1 b /\
+      step_taint i1 (a with vs_inst_idx := 1) (b with vs_inst_idx := 1) u1 =
+        step_taint i1 a b u1` by simp[step_prov_inst_idx, step_taint_inst_idx] >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (a with vs_inst_idx := 1,H1,u1) []
+       (OK ((b with vs_inst_idx := 1) with vs_inst_idx := SUC (a with vs_inst_idx := 1).vs_inst_idx),
+        step_prov PG H1 i1 (b with vs_inst_idx := 1),
+        step_taint i1 (a with vs_inst_idx := 1) (b with vs_inst_idx := 1) u1)` suffices_by simp[] >>
+     irule straight_line_checked_step_origin >>
+     simp[Abbr `i1`, mk_inst_def, is_terminator_def, get_instruction_def,
+       abi_decode_header_insts_def, below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other,
+       Abbr `a`, update_var_def, step_inst_inst_idx_indep, exec_result_map_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (b with vs_inst_idx := 2,H2,u2) []
+      (OK (c with vs_inst_idx := 3),H3,u3)` by
+    (rpt gen_tac >>
+     simp_tac bool_ss [Abbr `H3`, Abbr `u3`] >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (b with vs_inst_idx := 2,H2,u2) []
+       (OK ((c with vs_inst_idx := 2) with vs_inst_idx := SUC (b with vs_inst_idx := 2).vs_inst_idx),
+        step_prov PG H2 i2 (c with vs_inst_idx := 2),
+        step_taint i2 (b with vs_inst_idx := 2) (c with vs_inst_idx := 2) u2)` suffices_by
+       simp[step_prov_inst_idx, step_taint_inst_idx] >>
+     irule straight_line_checked_step_origin >>
+     simp[Abbr `i2`, mk_inst_def, is_terminator_def, get_instruction_def,
+       abi_decode_header_insts_def, below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other,
+       Abbr `b`, Abbr `a`, update_var_def, step_inst_inst_idx_indep, exec_result_map_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (c with vs_inst_idx := 3,H3,u3) []
+      (OK (d with vs_inst_idx := 4),H4,u4)` by
+    (rpt gen_tac >>
+     simp_tac bool_ss [Abbr `H4`, Abbr `u4`] >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (c with vs_inst_idx := 3,H3,u3) []
+       (OK ((d with vs_inst_idx := 3) with vs_inst_idx := SUC (c with vs_inst_idx := 3).vs_inst_idx),
+        step_prov PG H3 i3 (d with vs_inst_idx := 3),
+        step_taint i3 (c with vs_inst_idx := 3) (d with vs_inst_idx := 3) u3)` suffices_by
+       simp[step_prov_inst_idx, step_taint_inst_idx] >>
+     irule straight_line_checked_step_origin >>
+     simp[Abbr `i3`, mk_inst_def, is_terminator_def, get_instruction_def,
+       abi_decode_header_insts_def, below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other,
+       Abbr `c`, Abbr `b`, Abbr `a`, update_var_def, step_inst_inst_idx_indep, exec_result_map_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (d with vs_inst_idx := 4,H4,u4) [] (OK t,H4,u4)` by
+    (rpt gen_tac >>
+     `t = jump_to (if bool_to_word (~(j < ncount)) <> 0w then exit_lbl else body_lbl)
+        (d with vs_inst_idx := 4)` by
+       (Cases_on `j < ncount` >> simp[Abbr `t`, bool_to_word_def, jump_to_def]) >>
+     pop_assum SUBST1_TAC >>
+     mp_tac (Q.INST
+       [`id` |-> `id+4`, `op` |-> `Var done`,
+        `v` |-> `bool_to_word (~(j < ncount))`,
+        `yes` |-> `exit_lbl`, `no` |-> `body_lbl`,
+        `s` |-> `d with vs_inst_idx := 4`, `G` |-> `H4`, `tn` |-> `u4`]
+       (SPEC_ALL decoderNavigationPtrTheory.jnz_origin_ptr_path)) >>
+     simp[get_instruction_def, abi_decode_header_insts_def,
+       Abbr `d`, Abbr `c`, Abbr `b`, Abbr `a`, update_var_def,
+       allocas_from_def, allocas_below_fmp_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def] >>
+     qpat_assum `allocas_from lo s` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+     rpt gen_tac >>
+     map_every (fn pat => qpat_assum pat
+       (qspecl_then [`D`,`explicit`] mp_tac))
+       [`!D explicit. gas_origin_ptr_path _ (s,G,tn) [] _`,
+        `!D explicit. gas_origin_ptr_path _ (a with vs_inst_idx := 1,H1,u1) [] _`,
+        `!D explicit. gas_origin_ptr_path _ (b with vs_inst_idx := 2,H2,u2) [] _`,
+        `!D explicit. gas_origin_ptr_path _ (c with vs_inst_idx := 3,H3,u3) [] _`,
+        `!D explicit. gas_origin_ptr_path _ (d with vs_inst_idx := 4,H4,u4) [] _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND]) >>
+  qexistsl_tac [`H4`,`u4`,`t`] >> simp[] >>
+  rpt strip_tac >>
+  rpt (qpat_x_assum `slot + 32 <= s.vs_alloca_next ==> _` kall_tac) >>
   `i0.inst_opcode <> INVOKE /\ ~is_terminator i0.inst_opcode /\
    i1.inst_opcode <> INVOKE /\ ~is_terminator i1.inst_opcode /\
    i2.inst_opcode <> INVOKE /\ ~is_terminator i2.inst_opcode /\
    i3.inst_opcode <> INVOKE /\ ~is_terminator i3.inst_opcode` by
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
-  qpat_x_assum `!x. ~MEM x _ ==> _` kall_tac >>
-  qpat_x_assum `!x. MEM x _ ==> _` kall_tac >>
-  qpat_x_assum `ptr_covers H4 u4 q _ 32` kall_tac >>
-  qpat_x_assum `ptr_covers G tn q s 32` kall_tac >>
-  qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
   `a.vs_halted = s.vs_halted /\ b.vs_halted = s.vs_halted /\
    c.vs_halted = s.vs_halted /\ d.vs_halted = s.vs_halted` by
     simp[Abbr `a`, Abbr `b`, Abbr `c`, Abbr `d`, update_var_def] >>
@@ -233,18 +311,15 @@ Proof
   simp[Once ptr_safe_block_def, get_instruction_def, abi_decode_header_insts_def] >>
   simp[step_inst_non_invoke, step_inst_inst_idx_indep, exec_result_map_def,
        ghost_step_def, step_prov_inst_idx, step_taint_inst_idx] >>
-  (conj_tac >- (qpat_x_assum `!n. ptr_safe_step _ _ _ _ _ _ _ _ i1 _`
-     (qspec_then `1` mp_tac) >> simp[])) >>
+  (conj_tac >- metis_tac[]) >>
   simp[Abbr `H2`, Abbr `u2`] >>
   simp[Once ptr_safe_block_def, get_instruction_def, abi_decode_header_insts_def] >>
-  (conj_tac >- (qpat_x_assum `!n. ptr_safe_step _ _ _ _ _ _ _ _ i2 _`
-     (qspec_then `2` mp_tac) >> gvs[])) >>
+  (conj_tac >- metis_tac[]) >>
   simp[step_inst_non_invoke, step_inst_inst_idx_indep, exec_result_map_def,
        ghost_step_def, step_prov_inst_idx, step_taint_inst_idx,
        Abbr `H3`, Abbr `u3`] >>
   simp[Once ptr_safe_block_def, get_instruction_def, abi_decode_header_insts_def] >>
-  (conj_tac >- (qpat_x_assum `!n. ptr_safe_step _ _ _ _ _ _ _ _ i3 _`
-     (qspec_then `3` mp_tac) >> gvs[])) >>
+  (conj_tac >- metis_tac[]) >>
   simp[step_inst_non_invoke, step_inst_inst_idx_indep, exec_result_map_def,
        ghost_step_def, step_prov_inst_idx, step_taint_inst_idx,
        Abbr `H4`, Abbr `u4`] >>
@@ -253,15 +328,9 @@ Proof
     simp[Abbr `u`, op_taint_def, FLOOKUP_UPDATE] >>
   `H = DRESTRICT G (COMPL {iv} INTER COMPL {cv} INTER COMPL {cmp} INTER COMPL {done})` by
     (simp[Abbr `H`] >> gvs[]) >>
-  `allocas_from lo d /\ (ctx_has_dalloca ctx ==> allocas_below_fmp d)` by
-    (simp[Abbr `d`, Abbr `c`, Abbr `b`, Abbr `a`, update_var_def,
-       allocas_from_def, allocas_below_fmp_def] >>
-     qpat_x_assum `allocas_from lo s` mp_tac >>
-     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   `eval_operand (Var done) d = SOME (bool_to_word (~(j < ncount)))` by
     simp[Abbr `d`, eval_operand_def, lookup_var_update_var] >>
+  fs[Abbr `t`] >>
   qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `H = _` mp_tac >>
   qpat_x_assum `eval_operand (Var done) d = _` mp_tac >>
@@ -311,6 +380,45 @@ Proof
   simp[Once ptr_safe_blocks_def] >>
   gvs[ptr_safe_run_def, Abbr `gg`, jump_to_def] >>
   qpat_x_assum `!fuel. option_CASE _ _ _` (qspec_then `n` mp_tac) >> simp[]
+QED
+
+Theorem decoder_index_header_ptr_core_uniform:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    abi_decode_header_insts id (Var q) src CALLDATALOAD iv cv cmp done body_lbl exit_lbl /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  ALL_DISTINCT [q;iv;cv;cmp;done] /\ src <> Var iv /\
+  ptr_covers G tn q s 32 /\ lookup_var q s = SOME (n2w slot) /\
+  slot + 32 < dimword (:256) /\ mload slot s = n2w j /\
+  DISJOINT {a | slot <= a /\ a < slot + 32} tn.t_mem /\
+  eval_operand src s = SOME srcaddr /\ op_taint tn src = {} /\
+  abi_decode_load CALLDATALOAD srcaddr s = n2w ncount /\
+  j <= ncount /\ ncount < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 ==>
+  ?H u t.
+    t = jump_to (if j < ncount then body_lbl else exit_lbl)
+          (abi_decode_header_state iv cv cmp done j ncount s) /\
+    t.vs_allocas = s.vs_allocas /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp /\
+    ptr_covers H u q t 32 /\ mload slot t = n2w j /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_imm = tn.t_imm /\
+    (!x. ~MEM x [iv;cv;cmp;done] ==>
+       lookup_var x t = lookup_var x s /\
+       FLOOKUP H x = FLOOKUP G x /\
+       op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!x. MEM x [iv;cv;cmp;done] ==>
+       op_taint u (Var x) = {} /\ op_prov H (Var x) = NONE) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all decoder_index_header_ptr_core_uniform_origin >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`,`t`] >> simp[]
 QED
 
 (* Fixed-D compatibility specialization of the constructive uniform provider. *)

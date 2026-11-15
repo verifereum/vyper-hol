@@ -3,7 +3,7 @@ Theory bodyFullHashKeccak
 Ancestors
   bodyFullHashKeccakFixed bodyFullHashKeccakBytes bodyFullHashCleanFrame
   bodyPtrHashBuiltinsCases bodyMemBiKeccakSuffix bodyMemBiKeccakOpenFree exprOperandVar
-  bodyPtrDefs ptrDiscipline venomState
+  bodyPtrDefs ptrDiscipline venomState ghostPcTransportPtr
   bodySimFull bodyFullPreds gasOutcomeFullCompose fragExec
   exprSimHash exprSimHashBoundary exprSimHyps exprSimHypsDefs exprSimSource
   gasShadowCompile gasShadowCompileStmtHelpers gasShadowState gasShadow
@@ -75,7 +75,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
     `v`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
   `eval_expr cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e]) =
    bind (bind (eval_expr cx e) (read_result cx))
@@ -101,8 +101,13 @@ Proof
   >- suspend "hashed" >>
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-  conj_tac >- simp[Abbr `baseR`] >>
-  simp[Abbr `baseQ`, Abbr `baseR`]
+  conj_tac >- (simp[Abbr `baseR`] >> rpt strip_tac >> Cases_on `res` >>
+    gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+    metis_tac[expr_exit_INR_type]) >>
+  simp[Abbr `baseQ`, Abbr `baseR`] >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume keccak_vv_sim_full[hashed]:
@@ -247,7 +252,9 @@ Resume keccak_vv_sim_full[string]:
        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
-  gvs[]
+  gvs[] >>
+  `stmt_state_rel H ctx func cenv cx mid t` by metis_tac[] >>
+  drule stmt_state_rel_allocas_below_fmp >> simp[]
 QED
 
 Resume keccak_vv_sim_full[fixed]:
@@ -326,7 +333,7 @@ Resume keccak_vv_sim_full[fixed]:
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     bodyPtrDefsTheory.ptr_val_ok_def, contextTheory.vv_location_def,
     loweringPostsTheory.post_value_type_def, exprSimVVFrameTheory.vv_post_inst_idx,
-    bytes_ghost_cursor] >>
+    ghost_inv_at_inst_idx] >>
   `stmt_state_rel H ctx func cenv cx mid s` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
@@ -347,7 +354,9 @@ Resume keccak_vv_sim_full[fixed]:
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
   gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def,
-    bytes_ghost_cursor]
+    ghost_inv_at_inst_idx] >>
+  `stmt_state_rel H ctx func cenv cx mid u` by metis_tac[] >>
+  drule stmt_state_rel_allocas_below_fmp >> simp[]
 QED
 
 Resume keccak_vv_sim_full[dynamic]:
@@ -456,7 +465,9 @@ Resume keccak_vv_sim_full[dynamic]:
        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
-  gvs[]
+  gvs[] >>
+  `stmt_state_rel H ctx func cenv cx mid t` by metis_tac[] >>
+  drule stmt_state_rel_allocas_below_fmp >> simp[]
 QED
 
 Finalise keccak_vv_sim_full

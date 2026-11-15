@@ -10,7 +10,7 @@ Ancestors
   fragGasSeq gasCount gasSummary gasExemptCert gasContext gasOutcome
   gasSummaryCompose stmtSimForRounds vyperInterpreter vyperState
   words arithmetic rich_list emitHelperProps exprSimBopRestWordLoads
-  exprSimBopRestWordLayout exprSimProps
+  exprSimBopRestWordLayout exprSimProps exprSimSliceCompose
 Libs
   monadsyntax
 
@@ -563,7 +563,9 @@ Theorem counted_array_round_from_body:
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_stmts cx stmts) (entry,s2)
     (\H. stmt_post H ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r) /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
     stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
     ?sc rest. es2.scopes = sc :: rest /\
@@ -603,7 +605,8 @@ Theorem counted_array_round_from_body:
       (~broke ==> array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base
         p dst sz ainst cond_lbl st (SUC k) ee t))
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >>
   qmatch_goalsub_abbrev_tac
@@ -676,7 +679,9 @@ Resume counted_array_round_from_body[exit_finish]:
   Cases_on `res` >- gvs[] >>
   qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >> disj2_tac >>
-  gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def]
+  gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def,
+      exprSimDefsTheory.halt_exit_def, loweringStateRelDefsTheory.halt_rel_def,
+      loweringStateRelDefsTheory.accounts_rel_def]
 QED
 
 Resume counted_array_round_from_body[normal_finish]:
@@ -723,13 +728,15 @@ Theorem immutable_round_prepare:
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 source (ei,s2)
     (\H. stmt_post H ctx func cx lctx bc bc' sb0 sb1 ei s2)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r.
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >>
   (conj_tac >- (irule push_scope_with_var_zero_exec >> simp[])) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
-  disch_then irule >> simp[] >>
+  disch_then (fn th => irule slice_gas_outcome_conseq >> irule_at Any th) >> simp[] >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func bc cx
        (es with <|scopes := (FEMPTY |+ (id,
@@ -1820,7 +1827,8 @@ Theorem immutable_for_round_counted:
       (~broke ==> array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off))
         (n2w off) p dst sz ainst cond_lbl st (SUC k) ee t))
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >> drule_all (SIMP_RULE pure_ss [PULL_EXISTS] immutable_round_prepare) >>
   strip_tac >>
@@ -1917,7 +1925,8 @@ Theorem immutable_for_loop_counted:
       array_caller_frame caller old t /\
       alloca_frame cenv origin_es caller old cenv ee t)
     (\H res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit H cx ee (INR ex) r)
 Proof
   strip_tac >>
   `!s. array_caller_frame caller old s ==>
@@ -1935,7 +1944,8 @@ Proof
     array_caller_frame caller old s /\
     alloca_frame cenv origin_es caller old cenv ei s` >>
   qabbrev_tac `R = \(H:(bool # bytes32 # type_value) list # num list) ex ee r.
-    !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r` >>
+    (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r) /\
+    halt_exit H cx ee (INR ex) r` >>
   `(!j ei s. j < LENGTH vs /\
       (!H. valid_horizon cx st0 H ei.storage_trace ==> Inv H j ei s) /\
       gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs)))

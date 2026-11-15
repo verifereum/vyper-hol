@@ -5,7 +5,7 @@ Ancestors
   bodyPtrHashBuiltinsShaAlloc bodyPtrHashBuiltinsShaAllocInput bodyPtrHashBuiltinsShaEmit
   bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsShaEndpoint
   bodyPtrDefs loweringHalt emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
-  fragExec exprSimHash venomState ptrDiscipline finite_map pred_set words
+  fragExec exprSimHash venomState ptrDiscipline finite_map pred_set words ghostPcTransportPtr
 
 Theorem sha_alloc_success_frame_at:
   compile_alloc_buffer 32 sa = (buf,sn) /\ fn_has_code sa sn fn /\
@@ -76,10 +76,10 @@ Proof
          rpt (pop_assum kall_tac) >> simp[ghost_kept_at_def] >> metis_tac[]) >>
      qpat_assum `tf = _` SUBST1_TAC >> simp[]) >>
   qpat_x_assum `ghost_inv_at D lo d cenv cx (es with outcomes := SOME rest) Gf tf _`
-    (assume_tac o PURE_REWRITE_RULE [bytes_ghost_cursor]) >>
+    (assume_tac o PURE_REWRITE_RULE [ghost_inv_at_inst_idx]) >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
     (irule (Q.SPECL [`emitted_insts sa sb`, `D`, `D`, `lo`,
        `ctx`, `fn`, `PG`, `G`, `tn`, `s`, `Gf`, `tf`] inst_seq_ptr_zero_to_lo) >>
      gvs[ghost_inv_at_def, arithmeticTheory.ADD_ASSOC]) >>
-  qexistsl_tac [`t'`, `Gf`, `tf`] >> simp[bytes_ghost_cursor]
+  qexistsl_tac [`t'`, `Gf`, `tf`] >> simp[ghost_inv_at_inst_idx]
 QED

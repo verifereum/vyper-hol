@@ -86,7 +86,7 @@ Theorem abi_args_uncaptured_cons_sim_counted[local]:
           (live ==> EVERY (abi_decoder_operand_live sb.cs_next_var) ops) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
-       (\H rr ee r. wb_args_exit rr r)) ==>
+       (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx (e::args)) (es,s0)
     (\H rr ee u. ?vs. rr = INL vs /\
        abi_args_post H ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
@@ -94,7 +94,7 @@ Theorem abi_args_uncaptured_cons_sim_counted[local]:
        (live ==> EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops)) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   `storage_trace_frame (eval_exprs cx args)` by
@@ -194,7 +194,7 @@ Resume abi_args_uncaptured_cons_sim_counted[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def] >> metis_tac[]
 QED
 Resume abi_args_uncaptured_cons_sim_counted[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -250,7 +250,7 @@ Resume abi_args_uncaptured_cons_sim_counted[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def] >> metis_tac[]
 QED
 Resume abi_args_uncaptured_cons_sim_counted[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
@@ -372,14 +372,14 @@ Theorem abi_args_uncaptured_cons_sim:
           (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
-       (\H rr ee r. wb_args_exit rr r)) ==>
+       (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx (e::args)) (es,s0)
     (\H rr ee u. ?vs. rr = INL vs /\
        abi_args_post H ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
        (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   mp_tac (Q.INST [`live` |-> `F`] abi_args_uncaptured_cons_sim_counted) >>
   simp[]
@@ -427,7 +427,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
           EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
-       (\H rr ee r. wb_args_exit rr r)) ==>
+       (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx (e::args)) (es,s0)
     (\H rr ee u. ?vs. rr = INL vs /\
        abi_args_post H ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
@@ -435,7 +435,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
        EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   mp_tac (Q.INST [`live` |-> `T`] abi_args_uncaptured_cons_sim_counted) >>
   simp[]

@@ -7,7 +7,7 @@ Ancestors
   bodyFullHashShaLayout fragGasSeqPtr
   bodyFullHashShaBytesSuccess bodyPtrHashBuiltinsShaStringInput
   bodyPtrHashBuiltinsInputWindow
-  bodyFullHashKeccakBytes allocaHistoryFragment venomInstProps
+  bodyFullHashKeccakBytes allocaHistoryFragment venomInstProps ghostPcTransportPtr
   list rich_list arithmetic venomExecSemantics
   bodyFullHashCleanFrame bodyMemBiSha256Compose bodyPtrHashBuiltinsShaSource
   bodyPtrHashBuiltinsCases exprOperandVar bodyPtrDefs ptrDiscipline venomState
@@ -173,7 +173,7 @@ pop_assum strip_assume_tac >>
         qpat_assum `inst_seq_ptr (DF (storage_trace_horizon mid.storage_trace))
           lo ctx func PG G1 tn1 _ s Gf tf` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[inst_seq_ptr_ghost_unique]) >>
-     gvs[bytes_ghost_cursor])
+     gvs[ghost_inv_at_inst_idx])
 ) g;
 
 fun sha_memory_success_frame_tac g = (
@@ -266,7 +266,7 @@ irule gas_outcome_full_intro >>
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     bodyPtrDefsTheory.ptr_val_ok_def, contextTheory.vv_location_def,
     loweringPostsTheory.post_value_type_def, exprSimVVFrameTheory.vv_post_inst_idx,
-    bytes_ghost_cursor, vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+    ghost_inv_at_inst_idx, vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
   qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` (fn idx =>
     qpat_assum `alloca_history func
       (t with vs_inst_idx := s.vs_inst_idx+LENGTH (emitted_insts sm sn))`
@@ -732,7 +732,7 @@ Resume sha_vv_sim_full[fixed_success]:
         qpat_assum `inst_seq_ptr (DF (storage_trace_horizon mid.storage_trace))
           lo ctx func PG G1 tn1 _ s Gf tf` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[inst_seq_ptr_ghost_unique]) >>
-     gvs[bytes_ghost_cursor]) >>
+     gvs[ghost_inv_at_inst_idx]) >>
   `alloca_inv s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn)` by
     (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) _`
@@ -810,7 +810,7 @@ Resume sha_vv_sim_full[fixed_success]:
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     bodyPtrDefsTheory.ptr_val_ok_def, contextTheory.vv_location_def,
     loweringPostsTheory.post_value_type_def, exprSimVVFrameTheory.vv_post_inst_idx,
-    bytes_ghost_cursor, vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+    ghost_inv_at_inst_idx, vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
   qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` (fn idx =>
     qpat_assum `alloca_history func
       (t with vs_inst_idx := s.vs_inst_idx+LENGTH (emitted_insts sm sn))`
