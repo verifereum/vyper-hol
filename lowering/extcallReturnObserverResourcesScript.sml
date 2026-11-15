@@ -105,6 +105,7 @@ Theorem return_observer_output_state:
   local_prefix ctx' obs cut s t /\ t.vs_fmp = s.vs_fmp ==>
   stmt_state_rel H ctx func ce cx es t
 Proof
+  strip_tac >> drule abiEncoderObserverTheory.local_prefix_memory_frame >>
   strip_tac >>
   `pending_alloca_size obs s = pending_alloca_size func s /\
    pending_alloca_size obs t = pending_alloca_size func t` by
