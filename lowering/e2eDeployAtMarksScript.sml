@@ -17,7 +17,6 @@
  *   e2e_deploy_correct_from_gas_link -- the deploy result relation at every
  *     filling, from the facts above
  *   gas_readings_rel_mono -- gas_readings_rel is monotone in its run
- *   gas_variant_code_layout_valid -- a gas variant keeps the code layout
  *)
 Theory e2eDeployAtMarks
 Ancestors
@@ -43,13 +42,6 @@ Proof
   Cases_on `src` >> simp[deploy_source_exempt_def] >>
   rename1 `INR exc` >> Cases_on `exc` >>
   simp[deploy_source_exempt_def, deploy_result_rel_def]
-QED
-
-Theorem gas_variant_code_layout_valid:
-  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
-Proof
-  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  fs[code_layout_valid_def]
 QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
