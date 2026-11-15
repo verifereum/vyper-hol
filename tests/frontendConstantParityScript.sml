@@ -60,36 +60,13 @@ in
   else NONE
 end;
 
-(* Nodes where the compiler's unbounded arithmetic and the semantics differ,
-   by file, source position and the value the frontend computes. They are
-   reported but do not fail the check.
-   In constant_shift_overflow, ((1 << 256) >> 255) + 1 is 3 for the compiler
-   and 1 under uint256 shifts, and its subexpressions (1 << 256) >> 255 and
-   1 << 256 differ likewise; the frontend rejects that contract
-   (vyperConstEvalWitnessTheory). *)
-val known_differences =
-  map (fn (src, got) => ("check_contract/constant_shift_overflow.json", src, got))
-    [("42:23:0", "SOME (IntL 1)"), ("43:17:0", "SOME (IntL 0)"),
-     ("44:8:0", "SOME (IntL 0)")];
-fun known path src got =
-  List.exists (fn (file, s, g) =>
-    String.isSuffix file path andalso s = src andalso g = term_to_string got)
-    known_differences;
-
 val matched = ref 0;
 val pin_matched = ref 0;
 val pin_mismatches = ref ([] : string list);
 val mismatches = ref ([] : string list);
-val known_found = ref ([] : string list);
 val unevaluated = ref ([] : (string * int) list);
 val skipped_files = ref 0;
 val undecoded_asts = ref ([] : string list);
-val expected_undecoded_found = ref 0;
-(* Annotated ASTs that must not decode: an annotation in the main or an
-   imported module does not decode. *)
-val expected_undecoded =
-  ["check_contract/constant_undecodable_bound.json",
-   "check_contract/constant_undecodable_import/main.json"];
 fun count_unevaluated kind =
   unevaluated :=
     (case List.find (fn (k, _) => k = kind) (!unevaluated) of
@@ -111,7 +88,6 @@ fun check_pin_node path ctx source e expected = let
 in
   if optionSyntax.is_none got then ()
   else if aconv got expected then pin_matched := !pin_matched + 1
-  else if known path src got then ()
   else pin_mismatches :=
     (path ^ " " ^ src ^ ": pin_fold_expr " ^ term_to_string got ^
      ", compiler " ^ term_to_string expected) :: !pin_mismatches
@@ -145,8 +121,7 @@ in
              val msg = path ^ " " ^ src ^ " " ^ kind ^ ": computed " ^
                term_to_string got ^ ", compiler " ^ term_to_string expected
            in
-             if known path src got then known_found := msg :: !known_found
-             else mismatches := msg :: !mismatches
+             mismatches := msg :: !mismatches
            end
          end)
   | _ => count_unevaluated (kind ^ " (undecoded)")
@@ -188,10 +163,7 @@ fun annotated_asts json =
 
 fun check_ast path json =
   case decode jsonASTLib.annotated_ast json of
-    NONE =>
-      if List.exists (fn f => String.isSuffix f path) expected_undecoded
-      then expected_undecoded_found := !expected_undecoded_found + 1
-      else undecoded_asts := path :: !undecoded_asts
+    NONE => undecoded_asts := path :: !undecoded_asts
   | SOME ast => let
       val (main, imports) = case strip_comb ast of
           (_, [m, i]) => (m, i) | _ => raise Fail "annotated AST shape"
@@ -236,14 +208,11 @@ val () = app check_file files;
 
 val () = print (String.concat
   ["frontend constant parity: ", Int.toString (length files), " files (",
-   Int.toString (!skipped_files), " not annotated ASTs, ",
-   Int.toString (!expected_undecoded_found), " expected not to decode), ",
+   Int.toString (!skipped_files), " not annotated ASTs), ",
    Int.toString (!matched), " values match the compiler, ",
-   Int.toString (length (!known_found)), " known differences, ",
    Int.toString (length (!mismatches)), " differ\n"]);
 val () = app (fn (k, n) =>
   print ("  not evaluated: " ^ Int.toString n ^ " " ^ k ^ "\n")) (!unevaluated);
-val () = app (fn m => print ("  known difference " ^ m ^ "\n")) (rev (!known_found));
 val () = app (fn m => print ("  MISMATCH " ^ m ^ "\n")) (rev (!mismatches));
 val () = print ("pin_fold_expr parity: " ^ Int.toString (!pin_matched) ^
   " values match the compiler, " ^ Int.toString (length (!pin_mismatches)) ^

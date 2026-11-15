@@ -14,7 +14,7 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [
   "../tests/fixtures/check_contract/constant_bound.json",
   "../tests/fixtures/check_contract/constant_shifts.json",
-  "../tests/fixtures/check_contract/constant_shift_overflow.json",
+  "../tests/fixtures/check_contract/constant_shift_bound.json",
   "../tests/fixtures/check_contract/constant_refs/main.json",
   "../tests/fixtures/check_contract/constant_unevaluated_range.json",
   "../tests/fixtures/check_contract/constant_unevaluated_flag.json",
@@ -24,7 +24,8 @@ val () = holbuild_extra_deps [
   "../tests/fixtures/check_contract/constant_widened_subscript.json",
   "../tests/fixtures/check_contract/constant_undecodable_import/main.json",
   "../tests/fixtures/check_contract/constant_minmax_bound.json",
-  "../tests/fixtures/check_contract/constant_interface_stub.json"];
+  "../tests/fixtures/check_contract/constant_interface_stub.json",
+  "../tests/fixtures/check_contract/constant_typed_sizes/main.json"];
 
 val fixture_dir = "../tests/fixtures/check_contract/";
 
@@ -242,13 +243,11 @@ val () = contains "shift bound" ``ArrayT ^uint256 (Fixed 2)`` shifts;
 Theorem constant_shifts_translation = shifts;
 Theorem constant_shifts_contract_checked = checked "constant_shifts.json";
 
-(* ((1 << 256) >> 255) + 1 is 3 in the compiler's unbounded arithmetic but 1
-   under uint256 shifts. The evaluated annotation disagrees with the compiler's
-   type, so the contract is rejected rather than given the wrong bound. *)
-val overflow = translate "constant_shift_overflow.json";
-val () = if optionSyntax.is_none (rhs (concl overflow)) then ()
-  else raise Fail "wrapping shift bound accepted";
-Theorem constant_shift_overflow_rejected = overflow;
+(* The compiler type-checks the intermediate shift, which fits uint256. *)
+val shift_bound = translate "constant_shift_bound.json";
+val () = contains "bounded shift annotation" ``ArrayT ^uint256 (Fixed 3)`` shift_bound;
+Theorem constant_shift_bound_translation = shift_bound;
+Theorem constant_shift_bound_contract_checked = checked "constant_shift_bound.json";
 
 (* M = N + 1 refers to N declared after it; lib.W bounds an annotation through
    its module alias. Both sizes and the range bound evaluate. *)
@@ -272,8 +271,7 @@ val () = contains "nested module constant sum bound" ``ArrayT ^uint256 (Fixed 4)
 Theorem constant_nested_translation = nested;
 Theorem constant_nested_contract_checked = checked "constant_nested/main.json";
 
-(* max_value(int8) bounds the parameter's annotation, which the compiler
-   leaves untyped, so it takes its type from its argument: 127, not uint256's
+(* max_value(int8) retains the bound of its type argument: 127, not uint256's
    maximum. LOW = min_value(int8) is -128. *)
 val int8 = ``BaseT (IntT 8)``;
 val minmax = translate "constant_minmax_bound.json";
@@ -311,16 +309,61 @@ Theorem constant_addmod_range_contract_checked =
 Theorem constant_unevaluated_flag_contract_checked =
   checked "constant_unevaluated_flag.json";
 
-(* An annotation that is present but does not decode (here the bound
-   len(b"abc"), whose untyped bytes literal the decoder does not accept) fails
-   the decoding; it is not read as absent, which would trust the compiler's
-   inferred type. *)
-val () = if can translate "constant_undecodable_bound.json"
-  then raise Fail "undecodable annotation read as absent" else ();
-(* The same in an imported module fails the whole decoding; it does not drop
-   the imports. *)
-val () = if can translate "constant_undecodable_import/main.json"
-  then raise Fail "undecodable imported module dropped" else ();
+(* Formerly untyped annotation bytes now decode from the compiler's type
+   metadata. Both main and imported annotation bounds evaluate to 3. *)
+val bytes_bound = translate "constant_undecodable_bound.json";
+val () = contains "bytes length annotation" ``ArrayT ^uint256 (Fixed 3)`` bytes_bound;
+Theorem constant_bytes_bound_translation = bytes_bound;
+Theorem constant_bytes_bound_contract_checked = checked "constant_undecodable_bound.json";
+val imported_bytes_bound = translate "constant_undecodable_import/main.json";
+val () = contains "imported bytes length annotation"
+  ``ArrayT ^uint256 (Fixed 3)`` imported_bytes_bound;
+Theorem constant_imported_bytes_bound_translation = imported_bytes_bound;
+Theorem constant_imported_bytes_bound_contract_checked =
+  checked "constant_undecodable_import/main.json";
+
+(* A malformed annotation must still fail decoding, including in an import.
+   Removing the bytes type reconstructs the old undecodable input explicitly. *)
+fun untype_bytes (JSON.OBJECT fields) = let
+      val is_bytes = List.exists
+        (fn ("ast_type", JSON.STRING "Bytes") => true | _ => false) fields
+      val fields = if is_bytes
+        then List.filter (fn (key, _) => key <> "type") fields else fields
+    in JSON.OBJECT (map (fn (key, value) => (key, untype_bytes value)) fields) end
+  | untype_bytes (JSON.ARRAY values) = JSON.ARRAY (map untype_bytes values)
+  | untype_bytes value = value;
+val () = app (fn name => let
+  val json = JSONDecode.decodeFile JSONDecode.raw (fixture_dir ^ name)
+in
+  if can (JSONDecode.decode jsonASTLib.annotated_ast) (untype_bytes json)
+  then raise Fail (name ^ ": malformed annotation read as absent") else ()
+end) ["constant_undecodable_bound.json", "constant_undecodable_import/main.json"];
+
+val typed_sizes = translate "constant_typed_sizes/main.json";
+fun sized_variable (name, ty) =
+  if can (find_term (fn tm =>
+    case strip_comb tm of
+      (head, [_, _, id, declared, _]) =>
+        is_const head andalso fst (dest_const head) = "VariableDecl" andalso
+        aconv id (stringSyntax.fromMLstring name) andalso aconv declared ty
+    | _ => false)) (rhs (concl typed_sizes)) then ()
+  else raise Fail ("incorrect typed annotation for " ^ name);
+val () = app sized_variable
+  [("static_size", ``ArrayT ^uint256 (Fixed 3)``),
+   ("bytes_size", ``BaseT (BytesT (Dynamic 3))``),
+   ("string_size", ``BaseT (StringT 3)``),
+   ("dynamic_size", ``ArrayT ^uint256 (Dynamic 3)``),
+   ("selected_size", ``ArrayT ^uint256 (Fixed 3)``),
+   ("forward_size", ``ArrayT ^uint256 (Fixed 3)``),
+   ("imported_size", ``ArrayT ^uint256 (Fixed 4)``),
+   ("rounded_size", ``BaseT (StringT 1)``),
+   ("minmax_size", ``ArrayT ^uint256 (Fixed 3)``),
+   ("named_array_size", ``ArrayT ^uint256 (Fixed 3)``),
+   ("closed_shift_size", ``ArrayT ^uint256 (Fixed 4)``)];
+val () = contains "imported forward struct annotation"
+  ``StructDecl "Sized" [("data", BaseT (BytesT (Dynamic 4))) ]`` typed_sizes;
+Theorem constant_typed_sizes_translation = typed_sizes;
+Theorem constant_typed_sizes_contract_checked = checked "constant_typed_sizes/main.json";
 
 Theorem constant_initializer_runtime:
   eval_expr cx
