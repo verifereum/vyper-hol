@@ -81,6 +81,22 @@ Proof
   ho_match_mp_tac cfg_norm_cursors_ind >> simp[] >> metis_tac[]
 QED
 
+Theorem cfg_norm_cursors_admin_opcode:
+  !C rs cs. cfg_norm_cursors C rs cs /\
+    MEM (FST (FST (HD cs))).inst_opcode [ASSIGN; JMP; JNZ] ==>
+    MEM (FST (FST (LAST cs))).inst_opcode [ASSIGN; JMP; JNZ]
+Proof
+  pure_rewrite_tac [GSYM AND_IMP_INTRO] >>
+  ho_match_mp_tac cfg_norm_cursors_ind >>
+  pure_rewrite_tac [HD, LAST_CONS, FST, NOT_CONS_NIL] >> rpt strip_tac
+  >- (first_x_assum irule >>
+      metis_tac[supply_block_image_index]) >>
+  first_x_assum irule >>
+  `ir_supply_inst_ok s /\ ir_supply_covers_fn s fn` by
+    gvs[supply_norm_inv_def] >>
+  drule_all supply_split_index_shape >> simp[] >> metis_tac[]
+QED
+
 Theorem cfg_norm_cursors_entry_final:
   supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
   fn_entry_state fn cs /\ enters_block fn cs v /\ active_inst fn inst v ==>
@@ -326,16 +342,17 @@ Proof
   irule cfg_norm_cursors_split >> gvs[]
 QED
 
-Theorem cfg_norm_cursors_extend_next[local]:
+Theorem cfg_norm_cursors_extend_next_provenance[local]:
   cfg_norm_cursors C (round::rounds) (cursor::cursors) /\
   cfg_norm_cursors C rounds cursors' /\
-  (FST (HD cursors') = FST (HD cursors) \/
+  ((FST (HD cursors') = FST (HD cursors) /\ P) \/
    ?inst a u next. FST (HD cursors) = (inst,a) /\
      ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
      step_inst fuel C inst a = OK u /\
      FST (HD cursors') = (next,u with vs_inst_idx := SUC a.vs_inst_idx)) ==>
   ?cursor'. cfg_norm_cursors C (round::rounds) (cursor'::cursors') /\
-    (FST cursor' = FST cursor \/
+    ((FST cursor' = FST cursor /\
+      (P \/ MEM (FST (FST (HD cursors))).inst_opcode [ASSIGN; JMP; JNZ])) \/
      ?inst a u next. FST cursor = (inst,a) /\
        ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
        step_inst fuel C inst a = OK u /\
@@ -351,8 +368,32 @@ Proof
   >- metis_tac[cfg_norm_cursors_lengths]
   >- (drule_all cfg_norm_cursors_body_next >> strip_tac >>
       metis_tac[pairTheory.FST]) >>
+  rename1 `step_inst fuel C (EL vs.vs_inst_idx split.bb_instructions) vs = OK u` >>
+  `MEM (EL vs.vs_inst_idx split.bb_instructions).inst_opcode [ASSIGN; JMP; JNZ]` by
+    (gvs[supply_norm_inv_def] >>
+     drule_all supply_split_index_shape >> simp[] >> metis_tac[]) >>
   drule_all cfg_norm_cursors_split_next >> strip_tac >>
-  metis_tac[pairTheory.FST]
+  gvs[] >> metis_tac[pairTheory.FST]
+QED
+
+Theorem cfg_norm_cursors_extend_next[local]:
+  cfg_norm_cursors C (round::rounds) (cursor::cursors) /\
+  cfg_norm_cursors C rounds cursors' /\
+  (FST (HD cursors') = FST (HD cursors) \/
+   ?inst a u next. FST (HD cursors) = (inst,a) /\
+     ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+     step_inst fuel C inst a = OK u /\
+     FST (HD cursors') = (next,u with vs_inst_idx := SUC a.vs_inst_idx)) ==>
+  ?cursor'. cfg_norm_cursors C (round::rounds) (cursor'::cursors') /\
+    (FST cursor' = FST cursor \/
+     ?inst a u next. FST cursor = (inst,a) /\
+       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+       step_inst fuel C inst a = OK u /\
+       FST cursor' = (next,u with vs_inst_idx := SUC a.vs_inst_idx))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`P` |-> `T`] cfg_norm_cursors_extend_next_provenance) >>
+  simp[] >> disch_then drule_all >> metis_tac[]
 QED
 
 Theorem cfg_norm_cursors_tail:
@@ -362,7 +403,7 @@ Proof
   simp[Once cfg_norm_cursors_cases] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem cfg_norm_cursors_next:
+Theorem cfg_norm_cursors_next_classified:
   !rounds C cursors t fn inst v fuel D w next.
   cfg_norm_cursors C rounds cursors /\ LAST rounds = (t,fn,NONE) /\
   LAST cursors = ((inst,v),NONE) /\
@@ -371,7 +412,8 @@ Theorem cfg_norm_cursors_next:
   active_inst fn next (w with vs_inst_idx := SUC v.vs_inst_idx) ==>
   ?cursors'. cfg_norm_cursors C rounds cursors' /\
     LAST cursors' = ((next,w with vs_inst_idx := SUC v.vs_inst_idx),NONE) /\
-    (FST (HD cursors') = FST (HD cursors) \/
+    ((FST (HD cursors') = FST (HD cursors) /\
+      MEM inst.inst_opcode [ASSIGN; JMP; JNZ]) \/
      ?first a u after. FST (HD cursors) = (first,a) /\
        ~is_terminator first.inst_opcode /\ first.inst_opcode <> INVOKE /\
        step_inst fuel C first a = OK u /\
@@ -399,12 +441,43 @@ Proof
   first_x_assum drule_all >>
   disch_then (qx_choose_then `new_tail` strip_assume_tac) >>
   `?new_cursor. cfg_norm_cursors C (h::rounds) (new_cursor::new_tail) /\
-    (FST new_cursor = FST cursor \/
+    ((FST new_cursor = FST cursor /\
+      MEM inst.inst_opcode [ASSIGN; JMP; JNZ]) \/
      ?first a u after. FST cursor = (first,a) /\
        ~is_terminator first.inst_opcode /\ first.inst_opcode <> INVOKE /\
        step_inst fuel C first a = OK u /\
        FST new_cursor = (after,u with vs_inst_idx := SUC a.vs_inst_idx))` by
-    (irule cfg_norm_cursors_extend_next >> metis_tac[]) >>
+    (`?nc. cfg_norm_cursors C (h::rounds) (nc::new_tail) /\
+        ((FST nc = FST cursor /\
+          (MEM inst.inst_opcode [ASSIGN; JMP; JNZ] \/
+           MEM (FST (FST (HD tail))).inst_opcode [ASSIGN; JMP; JNZ])) \/
+         ?first a u after. FST cursor = (first,a) /\
+           ~is_terminator first.inst_opcode /\ first.inst_opcode <> INVOKE /\
+           step_inst fuel C first a = OK u /\
+           FST nc = (after,u with vs_inst_idx := SUC a.vs_inst_idx))` by
+       (irule cfg_norm_cursors_extend_next_provenance >> simp[] >> metis_tac[]) >>
+     `MEM (FST (FST (HD tail))).inst_opcode [ASSIGN; JMP; JNZ] ==>
+       MEM inst.inst_opcode [ASSIGN; JMP; JNZ]` by
+       (strip_tac >> drule_all cfg_norm_cursors_admin_opcode >> simp[]) >>
+     metis_tac[]) >>
   `new_tail <> []` by metis_tac[cfg_norm_cursors_lengths] >>
-  qexists_tac `new_cursor::new_tail` >> simp[LAST_CONS_cond]
+  qexists_tac `new_cursor::new_tail` >> gvs[LAST_CONS_cond]
+QED
+
+Theorem cfg_norm_cursors_next:
+  !rounds C cursors t fn inst v fuel D w next.
+  cfg_norm_cursors C rounds cursors /\ LAST rounds = (t,fn,NONE) /\
+  LAST cursors = ((inst,v),NONE) /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel D inst v = OK w /\
+  active_inst fn next (w with vs_inst_idx := SUC v.vs_inst_idx) ==>
+  ?cursors'. cfg_norm_cursors C rounds cursors' /\
+    LAST cursors' = ((next,w with vs_inst_idx := SUC v.vs_inst_idx),NONE) /\
+    (FST (HD cursors') = FST (HD cursors) \/
+     ?first a u after. FST (HD cursors) = (first,a) /\
+       ~is_terminator first.inst_opcode /\ first.inst_opcode <> INVOKE /\
+       step_inst fuel C first a = OK u /\
+       FST (HD cursors') = (after,u with vs_inst_idx := SUC a.vs_inst_idx))
+Proof
+  rpt strip_tac >> drule_all cfg_norm_cursors_next_classified >> metis_tac[]
 QED
