@@ -376,26 +376,6 @@ Proof
   gvs[] >> metis_tac[pairTheory.FST]
 QED
 
-Theorem cfg_norm_cursors_extend_next[local]:
-  cfg_norm_cursors C (round::rounds) (cursor::cursors) /\
-  cfg_norm_cursors C rounds cursors' /\
-  (FST (HD cursors') = FST (HD cursors) \/
-   ?inst a u next. FST (HD cursors) = (inst,a) /\
-     ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-     step_inst fuel C inst a = OK u /\
-     FST (HD cursors') = (next,u with vs_inst_idx := SUC a.vs_inst_idx)) ==>
-  ?cursor'. cfg_norm_cursors C (round::rounds) (cursor'::cursors') /\
-    (FST cursor' = FST cursor \/
-     ?inst a u next. FST cursor = (inst,a) /\
-       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-       step_inst fuel C inst a = OK u /\
-       FST cursor' = (next,u with vs_inst_idx := SUC a.vs_inst_idx))
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`P` |-> `T`] cfg_norm_cursors_extend_next_provenance) >>
-  simp[] >> disch_then drule_all >> metis_tac[]
-QED
-
 Theorem cfg_norm_cursors_tail:
   cfg_norm_cursors C (round::rounds) (cursor::cursors) /\ rounds <> [] ==>
   cfg_norm_cursors C rounds cursors

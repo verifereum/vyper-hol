@@ -157,23 +157,6 @@ Proof
   gvs[]
 QED
 
-Theorem cfg_norm_cursors_body_block[local]:
-  cfg_norm_cursors C
-    ((s,fn,SOME(pred,target,split,repls))::(s1,next_fn,meta)::rounds)
-    (((inst,a),NONE)::((next,v),pending)::cursors) /\
-  cfg_norm_cursors C ((s1,next_fn,meta)::rounds) (((next',z),pending')::cursors') /\
-  is_terminator next.inst_opcode /\ step_inst fuel D next v = OK w /\
-  ~w.vs_halted /\ enters_block next_fn w z ==>
-  ?cursor'. cfg_norm_cursors C
-    ((s,fn,SOME(pred,target,split,repls))::(s1,next_fn,meta)::rounds)
-    (cursor'::((next',z),pending')::cursors') /\
-    (FST cursor' = (inst,a) \/
-     ?u k first b. is_terminator inst.inst_opcode /\ step_inst k C inst a = OK u /\
-       ~u.vs_halted /\ enters_block fn u b /\ FST cursor' = (first,b))
-Proof
-  metis_tac[cfg_norm_cursors_body_block_classified]
-QED
-
 Theorem cfg_norm_cursors_extend_block_classified[local]:
   cfg_norm_cursors C (round::rounds) (cursor::cursors) /\
   cfg_norm_cursors C rounds cursors' /\
@@ -201,25 +184,6 @@ Proof
       gvs[] >> metis_tac[pairTheory.FST]) >>
   drule_all cfg_norm_cursors_split_block >> strip_tac >>
   metis_tac[pairTheory.FST]
-QED
-
-Theorem cfg_norm_cursors_extend_block[local]:
-  cfg_norm_cursors C (round::rounds) (cursor::cursors) /\
-  cfg_norm_cursors C rounds cursors' /\
-  (FST (HD cursors') = FST (HD cursors) \/
-   ?inst a u k next b. FST (HD cursors) = (inst,a) /\
-     is_terminator inst.inst_opcode /\ step_inst k C inst a = OK u /\
-     ~u.vs_halted /\ enters_block (FST (SND (HD rounds))) u b /\
-     FST (HD cursors') = (next,b)) ==>
-  ?cursor'. cfg_norm_cursors C (round::rounds) (cursor'::cursors') /\
-    (FST cursor' = FST cursor \/
-     ?inst a u k next b. FST cursor = (inst,a) /\
-       is_terminator inst.inst_opcode /\ step_inst k C inst a = OK u /\
-       ~u.vs_halted /\ enters_block (FST (SND round)) u b /\ FST cursor' = (next,b))
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`admin` |-> `T`] cfg_norm_cursors_extend_block_classified) >>
-  simp[] >> disch_then irule >> metis_tac[]
 QED
 
 Theorem cfg_norm_cursors_block_classified:
