@@ -611,11 +611,7 @@ Proof
            metis_tac[] >>
          drule_all layout_dalloca_trace_step >> metis_tac[]) >>
      `?v. i.inst_outputs = [v]` by
-       (irule layout_ordinary_single_output >> rpt conj_tac >>
-        FIRST [first_assum ACCEPT_TAC,
-               disj1_tac >> first_assum ACCEPT_TAC,
-               disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC,
-               disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC]) >>
+       (irule layout_ordinary_single_output >> fs[MEM] >> metis_tac[]) >>
      Cases_on `i.inst_opcode = ASSIGN`
      >- (gvs[] >>
          `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
