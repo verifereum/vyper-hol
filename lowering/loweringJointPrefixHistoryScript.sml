@@ -87,6 +87,28 @@ Proof
     mp_tac gas_origin_ptr_focus_certificate >> simp[Abbr`p`] >> metis_tac[]
 QED
 
+Theorem gas_origin_ptr_ok_certificate:
+  !D lo explicit ctx root marks end_state G' tn' following.
+    root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
+    (!fn. MEM fn ctx.ctx_functions ==>
+      ALL_DISTINCT (fn_labels fn) /\
+      !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,root.bp_fn,root.bp_params)
+      (root.bp_state,root.bp_prov,root.bp_taint) marks (OK end_state,G',tn') /\
+    active_inst root.bp_fn following end_state ==>
+    ?history. lower_budget_certificate (D,lo,explicit,ctx) root history marks
+      (INR (OK end_state,G',tn'))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all gas_origin_ptr_path_start >> strip_tac >>
+  `lower_budget_path T (D,lo,explicit,ctx) root [] [] root` by
+    (irule lower_budget_path_entry >> simp[] >> metis_tac[]) >>
+  drule gas_origin_ptr_path_history >>
+  disch_then (qspecl_then [`root`, `[]`, `[]`, `root`, `following`] mp_tac) >>
+  impl_tac >- metis_tac[] >> simp[] >> strip_tac >>
+  qexists_tac `history` >> simp[lower_budget_certificate_def] >> metis_tac[]
+QED
+
 (* Certificates retain the selected terminal history and actual terminal marks. *)
 Theorem gas_origin_ptr_exit_certificate:
   !D lo explicit ctx root marks r G' tn'.
@@ -99,21 +121,6 @@ Theorem gas_origin_ptr_exit_certificate:
     exit_result r ==>
     ?history. lower_budget_certificate (D,lo,explicit,ctx) root history marks
       (INR (r,G',tn'))
-Proof
-  NO_TAC
-QED
-
-Theorem gas_origin_ptr_ok_certificate:
-  !D lo explicit ctx root marks end_state G' tn' following.
-    root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
-    (!fn. MEM fn ctx.ctx_functions ==>
-      ALL_DISTINCT (fn_labels fn) /\
-      !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,root.bp_fn,root.bp_params)
-      (root.bp_state,root.bp_prov,root.bp_taint) marks (OK end_state,G',tn') /\
-    active_inst root.bp_fn following end_state ==>
-    ?history. lower_budget_certificate (D,lo,explicit,ctx) root history marks
-      (INR (OK end_state,G',tn'))
 Proof
   NO_TAC
 QED
