@@ -154,9 +154,11 @@ Proof
          `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
                          halt_exit H cx ee res r`]
          (SPEC_ALL (INST_TYPE [alpha |-> ``:value``] forced_then_summary))) >>
+       qexistsl_tac
+         [`\v ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
+                    !H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t`,
+          `cx`, `st0`] >>
        conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-       qexists_tac `\v ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
-                 !H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t` >>
        conj_tac
        >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
            rename1 `gas_marked_path _ _ _ tt 0 _` >>
@@ -293,9 +295,11 @@ Proof
          `\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
                          halt_exit H cx ee res r`]
          (SPEC_ALL (INST_TYPE [alpha |-> ``:eval_result``] forced_then_summary))) >>
+       qexistsl_tac
+         [`\tv ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
+                     !H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t`,
+          `cx`, `st0`] >>
        conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-       qexists_tac `\tv ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
-                 !H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t` >>
        conj_tac
        >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
            rename1 `gas_marked_path _ _ _ tt 0 _` >>
