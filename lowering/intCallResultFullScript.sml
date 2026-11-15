@@ -7,50 +7,8 @@ Ancestors
   exprLowering exprLoweringProps emitHelper emitHelperProps freshWrites
   fragExecMem bodyPtrDefs loweringStateRelDefs ptrDiscipline venomState venomExecSemantics
   venomInst finite_map words arithmetic list rich_list pred_set
-  fragGasSeqPtr memSafeRun unitTransformDefs ptrSafetyTransport
-
-Theorem ptr_inst_ok_result_add_conditional:
-  op_taint tn left = {} /\ op_taint tn right = {} /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id ADD [left;right] [tmp]) s
-Proof
-  rpt strip_tac >>
-  simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       allocas_from_def, mk_inst_def,
-       codegenRelTheory.source_memory_write_ranges_def,
-       contextCodegenRelTheory.source_memory_read_ranges_def] >>
-  conj_tac >- metis_tac[] >>
-  simp[step_inst_non_invoke] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
-    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
-  simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem ptr_inst_ok_result_mstore_conditional:
-  ptr_covers G tn p s 32 /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn
-    (mk_inst id MSTORE [Var p;v] []) s
-Proof
-  rpt strip_tac >> gvs[ptr_covers_def] >>
-  simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       allocas_from_def, mk_inst_def,
-       codegenRelTheory.source_memory_write_ranges_def,
-       contextCodegenRelTheory.source_memory_read_ranges_def,
-       codegenRelTheory.fixed_source_write_range_def, eval_operand_def] >>
-  conj_tac >-
-    (Cases_on `eval_operand v s` >> simp[] >>
-     rpt strip_tac >> gvs[] >> simp[memLocDefsTheory.mem_write_ops_def] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  simp[step_inst_non_invoke] >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
-                   combinTheory.K_THM, opcode_case_def] >>
-  simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
-  rpt strip_tac >> gvs[]
-QED
+  fragGasSeqPtr memSafeRun unitTransformDefs
+  exprPtrUnwrapScalarEdges exprPtrUnwrapCopyEdges
 
 Theorem store_result_head_checked[local]:
   emit_op ADD [Var root; Lit (n2w off)] sa = (dst,sm) /\
@@ -140,20 +98,13 @@ Proof
       simp[Abbr `im`, mk_inst_def, Abbr `H`, Abbr `tm`,
            step_prov_def, set_prov_def, DRESTRICT_UNIV] >>
       conj_tac
-      >- (simp[Abbr `ia`] >> irule ptr_inst_ok_lower_bound_transport >>
-     (conj_tac >- (fs[allocas_from_def, Abbr `u`, update_var_def] >> metis_tac[])) >>
-     qexists `0` >>
-     simp[] >>
-     irule ptr_inst_ok_result_add_conditional >>
+      >- (simp[Abbr `ia`] >> irule ptr_inst_ok_copy_arith >>
           gvs[ptr_covers_def, eval_operand_def, op_taint_def,
-              allocas_below_fmp_def] >> metis_tac[]) >>
-      simp[GSYM mk_inst_def] >> irule ptr_inst_ok_lower_bound_transport >>
-     (conj_tac >- (fs[allocas_from_def, Abbr `u`, update_var_def] >> metis_tac[])) >>
-     qexists `0` >>
-      simp[] >>
-      irule ptr_inst_ok_result_mstore_conditional >>
+              allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+      simp[GSYM mk_inst_def] >> irule ptr_inst_ok_mstore_tainted >>
       gvs[Abbr `ia`, step_prov_def, set_prov_def, ptr_covers_def,
-          allocas_below_fmp_def, Abbr `u`, update_var_def] >> metis_tac[]) >>
+          allocas_from_def, allocas_below_fmp_def,
+          Abbr `u`, update_var_def] >> metis_tac[]) >>
   `op_taint tm op = {}` by
     (Cases_on `op` >> gvs[] >>
      simp[Abbr `tm`, Abbr `ia`, Abbr `u`, copy_len_binop_ghost_frame,
