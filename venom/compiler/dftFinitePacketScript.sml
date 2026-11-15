@@ -596,6 +596,17 @@ Proof
   gvs[mem_inv_raw_reachable] >> metis_tac[]
 QED
 
+Theorem dft_packet_active_block:
+  wf_function sf /\ active_inst sf inst u /\
+  lookup_block lbl sf.fn_blocks = SOME bb /\ MEM inst bb.bb_instructions ==>
+  u.vs_current_bb = bb.bb_label
+Proof
+  rpt strip_tac >>
+  gvs[contextCodegenRelTheory.active_inst_def] >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  metis_tac[venomWfPropsTheory.wf_function_instruction_block, MEM_EL]
+QED
+
 (* Delayed unfinished projection: C1.2.8.3 owns proof and export. *)
 fun dft_packet_source_projection_pending () =
   (``
