@@ -1998,3 +1998,1032 @@ Proof
     [deploy_source_calls_within_def, deploy_entry_run_def, LET_THM] >>
   rpt TOP_CASE_TAC >> simp[] >> metis_tac[fn_entry_run_truncate]
 QED
+
+(* Exhausted-mode primitive interfaces. *)
+Theorem source_exhausted_create_oracle_safety[local]:
+  !salt value code rof s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    create_oracle_result salt value code rof s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (GEN_ALL (REWRITE_RULE [GSYM AND_IMP_INTRO]
+    take_create_outcome_exhausted)) >>
+  simp[] >>
+  disch_tac >>
+  Cases_on `salt` >> Cases_on `rof` >>
+  gvs[vyperCreateTheory.create_oracle_result_def, adopt_call_outcome_equation,
+      failed_outcome_def, create_outcome_request_def]
+QED
+
+Theorem source_exhausted_create_safety[local]:
+  !cx kind has_salt rof tys vs cs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_create cx kind has_salt rof tys vs cs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `dest_create_args kind has_salt vs` >>
+  gvs[vyperCreateTheory.eval_create_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.lift_option_type_def,
+      vyperStateTheory.lift_option_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def] >>
+  Cases_on `create_arg_ctor_types kind has_salt tys` >>
+  gvs[vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_type_def,
+      vyperStateTheory.lift_option_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def] >>
+  Cases_on `build_create_code (get_tenv cx) kind x s.accounts x' cs` >>
+  gvs[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+      vyperStateTheory.raise_def, vyperStateTheory.return_def,
+      vyperStateTheory.check_def, vyperStateTheory.assert_def,
+      vyperStateTheory.check_not_static_def, AllCaseEqs()] >>
+  drule_all source_exhausted_create_oracle_safety >> simp[]
+QED
+
+Theorem source_exhausted_send_safety[local]:
+  !cx gas vs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_send cx gas vs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `vs`
+  >- gvs[eval_send_def, vyperStateTheory.raise_def] >>
+  rename1 `h::tl` >> Cases_on `tl`
+  >- gvs[eval_send_def, vyperStateTheory.raise_def] >>
+  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
+  Cases_on `cx.txn.is_static` >>
+  gvs[eval_send_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.type_check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.check_def,
+      vyperStateTheory.lift_option_type_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, frame_call_value_def,
+      AllCaseEqs()] >>
+  gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def,
+      failed_outcome_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, AllCaseEqs()]
+QED
+
+Theorem source_exhausted_raw_call_safety[local]:
+  !cx flags addr data amount gas s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_raw_call cx flags addr data amount gas s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `cx.txn.is_static` >> Cases_on `flags.rcf_is_static` >>
+  Cases_on `flags.rcf_is_delegate` >>
+  gvs[eval_raw_call_def, frame_call_value_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.type_check_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, take_call_outcome_def,
+      take_delegate_outcome_def, take_request_outcome_def, take_outcome_def,
+      failed_outcome_def, adopt_call_outcome_equation,
+      call_outcome_request_def, delegate_outcome_request_def, AllCaseEqs()] >>
+  Cases_on `flags.rcf_revert_on_failure` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def]
+QED
+
+Theorem source_exhausted_ext_call_safety[local]:
+  !cx static skip sig opts vs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_ext_call cx static skip sig opts vs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >> PairCases_on `sig` >> Cases_on `vs`
+  >- gvs[eval_ext_call_def, vyperStateTheory.raise_def] >>
+  Cases_on `static` >> Cases_on `dest_AddressV h` >>
+  Cases_on `cx.txn.is_static` >>
+  gvs[eval_ext_call_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.type_check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.check_def,
+      vyperStateTheory.lift_option_type_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_accounts_def,
+      AllCaseEqs()] >>
+  gvs[COND_RATOR, vyperMiscTheory.option_CASE_rator,
+      vyperMiscTheory.sum_CASE_rator, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, AllCaseEqs()] >>
+  gvs[frame_call_value_def, eval_ext_call_effects_def,
+      take_call_outcome_def, take_request_outcome_def, take_outcome_def,
+      failed_outcome_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, AllCaseEqs()] >>
+  gvs[vyperMiscTheory.option_CASE_rator, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, AllCaseEqs()] >>
+  gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def,
+      failed_outcome_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Theorem source_exhausted_transfer_safety[local]:
+  !a b n s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    transfer_value a b n s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `accounts_runtime_well_typed t.accounts` by
+    (drule (REWRITE_RULE
+       [GSYM vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]
+       vyperTypeExtCallSoundnessTheory.transfer_value_accounts_well_typed) >>
+     disch_then (qspecl_then [`a`,`b`,`n`] mp_tac) >> simp[]) >>
+  gvs[transfer_value_def, vyperStateTheory.bind_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.get_accounts_def,
+      vyperStateTheory.check_def, vyperStateTheory.assert_def,
+      vyperStateTheory.update_accounts_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def, COND_RATOR, AllCaseEqs()]
+QED
+
+Theorem source_exhausted_selfdestruct_update_safety[local]:
+  !a s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    update_accounts (\acc. update_account a
+      (lookup_account a acc with balance := 0) acc) s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperStateTheory.update_accounts_def, vyperStateTheory.return_def] >>
+  rewrite_tac[vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  irule vyperTypeExtCallSoundnessTheory.accounts_well_typed_update_account >>
+  gvs[vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  gvs[vyperTypeInvariantsTheory.accounts_well_typed_def,
+      vyperTypeInvariantsTheory.account_well_typed_def] >>
+  first_x_assum (qspec_then `a` mp_tac) >> simp[]
+QED
+
+Theorem source_exhausted_effect_safety[local]:
+  (!cx gas vs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_send cx gas vs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx static skip sig opts vs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_ext_call cx static skip sig opts vs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx flags addr data amount gas s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_raw_call cx flags addr data amount gas s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx kind salt rof tys vs cs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    eval_create cx kind salt rof tys vs cs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!a b n s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    transfer_value a b n s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!a s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    update_accounts (\acc. update_account a
+      (lookup_account a acc with balance := 0) acc) s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts")))
+Proof
+  rpt conj_tac >> FIRST (map MATCH_ACCEPT_TAC
+    [source_exhausted_send_safety, source_exhausted_ext_call_safety,
+     source_exhausted_raw_call_safety, source_exhausted_create_safety,
+     source_exhausted_transfer_safety, source_exhausted_selfdestruct_update_safety])
+QED
+
+(* Reviewed exhausted-oracle replay: erase only synthetic ghost traces.
+ * The original actual storage certificates retain their original traces. *)
+Theorem source_array_set_excludes_create_error[local]:
+  !tv av i v. array_set_index tv av i v <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >> Cases_on `av` >>
+  simp[vyperValueOperationTheory.array_set_index_def] >>
+  rpt (CASE_TAC >> gvs[])
+QED
+
+Theorem source_assign_subscripts_excludes_create_error[local]:
+  !path tv v op.
+    assign_subscripts tv v path op <>
+      INR (RuntimeError "create outcome accounts")
+Proof
+  Induct_on `path`
+  >- (rpt gen_tac >> Cases_on `op` >> Cases_on `v` >>
+      simp[vyperStateTheory.assign_subscripts_def,
+           oneline vyperValueOperationTheory.append_element_def,
+           oneline vyperValueOperationTheory.pop_element_def] >>
+      rpt (CASE_TAC >> gvs[])) >>
+  rpt gen_tac >> Cases_on `h`
+  >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
+      simp[vyperStateTheory.assign_subscripts_def] >>
+      Cases_on `v` >> simp[vyperStateTheory.assign_subscripts_def] >>
+      qmatch_goalsub_rename_tac `array_index tv av idx` >>
+      Cases_on `array_index tv av idx` >> simp[] >>
+      qmatch_goalsub_abbrev_tac `assign_subscripts etv elem path op` >>
+      Cases_on `assign_subscripts etv elem path op` >>
+      gvs[source_array_set_excludes_create_error] >> metis_tac[]) >>
+  Cases_on `v` >> simp[vyperStateTheory.assign_subscripts_def] >>
+  qmatch_goalsub_rename_tac `ALOOKUP fields id` >>
+  Cases_on `ALOOKUP fields id` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `assign_subscripts ftv elem path op` >>
+  Cases_on `assign_subscripts ftv elem path op` >> gvs[] >> metis_tac[]
+QED
+
+Theorem source_write_place_excludes_create_error[local]:
+  !cx p v s r t.
+    write_place cx p v s = (r,t) ==>
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `p` >> strip_tac >>
+  gvs prefix_atomic_defs >>
+  rpt (FULL_CASE_TAC >>
+    gvs (prefix_atomic_defs @
+      [vyperStateTheory.replace_memory_entry_def, AllCaseEqs()])) >>
+  gvs (prefix_atomic_defs @ [vyperStateTheory.replace_memory_entry_def,
+    vyperMiscTheory.prod_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+    vyperMiscTheory.option_CASE_rator, AllCaseEqs()])
+  >~ [`find_containing_scope _ _ = SOME parts`]
+  >- (PairCases_on `parts` >>
+      gvs (prefix_atomic_defs @ [vyperStateTheory.replace_memory_entry_def,
+        AllCaseEqs()]) >>
+      rpt (FULL_CASE_TAC >> gvs (prefix_atomic_defs @ [AllCaseEqs()])) >>
+      metis_tac[source_assign_subscripts_excludes_create_error]) >>
+  metis_tac[source_assign_subscripts_excludes_create_error]
+QED
+
+Theorem source_exhausted_write_place_safety[local]:
+  !cx p v s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    write_place cx p v s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `accounts_runtime_well_typed t.accounts` by
+    (gvs[vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+     drule_all vyperPlaceWriteSoundnessTheory.write_place_preserves_accounts_well_typed >>
+     simp[]) >>
+  `t.outcomes = SOME []` by
+    (mp_tac (MATCH_MP outcomes_suffix_frame
+       (SPEC_ALL outcomes_frame_write_place)) >>
+     simp[outcomes_suffix_def] >> disch_then (qspec_then `s` mp_tac) >>
+     simp[outcome_suffix_def]) >>
+  drule source_write_place_excludes_create_error >> simp[]
+QED
+
+Theorem source_read_place_excludes_create_error[local]:
+  !cx p s r t. read_place cx p s = (r,t) ==>
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `p` >> strip_tac >>
+  gvs prefix_atomic_defs >>
+  rpt (FULL_CASE_TAC >> gvs (prefix_atomic_defs @ [AllCaseEqs()]))
+  >~ [`read_memory_path _ _ = INR _`]
+  >- (drule vyperStateTheory.read_memory_path_error_shape >> strip_tac >> gvs[]) >>
+  drule vyperStateTheory.evaluate_subscripts_error_shape >> strip_tac >> gvs[]
+QED
+
+Theorem source_exhausted_read_place_safety[local]:
+  !cx p s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    read_place cx p s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule vyperStateTheory.read_place_state >> strip_tac >> gvs[] >>
+  drule source_read_place_excludes_create_error >> simp[]
+QED
+
+Theorem source_exhausted_write_storage_safety[local]:
+  !cx tr slot tv v s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    write_storage_slot cx tr slot tv v s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule source_exhausted_write_place_safety >>
+  qexistsl_tac [`cx`,`StoragePlace tr slot tv`,`s`,`v`] >>
+  simp[vyperStateTheory.write_place_def]
+QED
+
+Theorem source_exhausted_place_type_safety[local]:
+  !cx p s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    place_type_value cx p s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `p` >> strip_tac >>
+  gvs prefix_atomic_defs >>
+  rpt (FULL_CASE_TAC >> gvs (prefix_atomic_defs @ [AllCaseEqs()]))
+QED
+
+Theorem source_append_element_excludes_create_error[local]:
+  !tv old v. append_element tv old v <> INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >> Cases_on `old` >>
+  simp[oneline vyperValueOperationTheory.append_element_def] >>
+  rpt (CASE_TAC >> gvs[])
+QED
+
+Theorem source_append_fallback_safety[local]:
+  !cx p v s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    bind (place_type_value cx p) (\tv.
+      bind (read_place cx p) (\old.
+        bind (lift_sum (append_element tv old v)) (\updated. write_place cx p updated))) s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
+  imp_res_tac vyperStateTheory.place_type_value_state >>
+  imp_res_tac vyperStateTheory.read_place_state >> gvs[] >>
+  gvs[vyperStateTheory.lift_sum_def, vyperMiscTheory.sum_CASE_rator,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()]
+  >~ [`write_place _ _ _ _ = (_,_)`]
+  >- (drule_all source_exhausted_write_place_safety >> simp[]) >>
+  metis_tac[source_exhausted_place_type_safety,
+    source_exhausted_read_place_safety, source_append_element_excludes_create_error]
+QED
+
+Theorem source_exhausted_append_place_safety[local]:
+  !cx p v s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    append_place cx p v s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `p`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+      simp_tac bool_ss [vyperStateTheory.append_place_def] >>
+      all_tac
+      >~ [`ArrayTV tv bd`]
+      >- (Cases_on `bd` >>
+          simp_tac bool_ss [vyperStateTheory.append_place_def] >> strip_tac
+          >- (gvs[ETA_THM] >> drule_all source_append_fallback_safety >> simp[]) >>
+          gvs[vyperStorageBackendTheory.get_storage_backend_eq,
+              vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+              vyperStateTheory.check_def, vyperStateTheory.assert_def,
+              vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+          drule_all source_exhausted_write_storage_safety >> strip_tac >>
+          gvs[] >> drule_all source_exhausted_write_storage_safety >> simp[]) >>
+      simp[ETA_THM] >> metis_tac[source_append_fallback_safety]) >>
+  simp_tac bool_ss [vyperStateTheory.append_place_def] >>
+  simp[ETA_THM] >> metis_tac[source_append_fallback_safety]
+QED
+
+Theorem source_pop_values_exclude_create_error[local]:
+  (!v. popped_value v <> INR (RuntimeError "create outcome accounts")) /\
+  (!v. pop_element v <> INR (RuntimeError "create outcome accounts"))
+Proof
+  conj_tac >> gen_tac >> Cases_on `v` >>
+  simp[oneline vyperValueOperationTheory.popped_value_def,
+       oneline vyperValueOperationTheory.pop_element_def] >>
+  rpt (CASE_TAC >> gvs[])
+QED
+
+Theorem source_exhausted_pop_place_safety[local]:
+  !cx p s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    pop_place cx p s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `p`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+      simp_tac bool_ss [vyperStateTheory.pop_place_def]
+      >~ [`ArrayTV tv bd`]
+      >- (Cases_on `bd` >>
+          simp_tac bool_ss [vyperStateTheory.pop_place_def] >> strip_tac >>
+          gvs[vyperStorageBackendTheory.get_storage_backend_eq,
+              vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+              vyperStateTheory.check_def, vyperStateTheory.assert_def,
+              vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+          drule_all source_exhausted_write_storage_safety >> simp[]) >>
+      rpt strip_tac >> gvs[vyperStateTheory.raise_def]) >>
+  strip_tac >> gvs prefix_atomic_defs >>
+  rpt (FULL_CASE_TAC >> gvs (prefix_atomic_defs @ [AllCaseEqs()])) >>
+  all_tac
+  >~ [`find_containing_scope _ _ = SOME parts`]
+  >- (PairCases_on `parts` >>
+      gvs (prefix_atomic_defs @ [AllCaseEqs()]) >>
+      gvs (prefix_atomic_defs @ [vyperMiscTheory.sum_CASE_rator,
+        vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator, AllCaseEqs()]) >>
+      all_tac
+      >~ [`read_memory_path _ _ = INR _`]
+      >- (drule vyperStateTheory.read_memory_path_error_shape >> strip_tac >> gvs[])
+      >~ [`evaluate_subscripts _ _ _ = INR _`]
+      >- (drule vyperStateTheory.evaluate_subscripts_error_shape >> strip_tac >> gvs[]) >>
+      metis_tac[source_assign_subscripts_excludes_create_error,
+        source_pop_values_exclude_create_error]) >>
+  gvs (prefix_atomic_defs @ [vyperMiscTheory.sum_CASE_rator,
+    vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator, AllCaseEqs()]) >>
+  all_tac
+  >~ [`evaluate_subscripts _ _ _ = INR _`]
+  >- (drule vyperStateTheory.evaluate_subscripts_error_shape >> strip_tac >> gvs[]) >>
+  metis_tac[source_assign_subscripts_excludes_create_error,
+    source_pop_values_exclude_create_error]
+QED
+
+Theorem source_exhausted_read_result_safety[local]:
+  !cx v s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    read_result cx v s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `v` >>
+  simp_tac bool_ss [vyperStateTheory.read_result_def] >> strip_tac
+  >- gvs[vyperStateTheory.return_def]
+  >- (drule_all source_exhausted_read_place_safety >> simp[]) >>
+  gvs[vyperStateTheory.raise_def]
+QED
+
+Theorem source_exhausted_read_results_safety[local]:
+  !cx vs s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    read_results cx vs s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  gen_tac >> Induct >> rpt gen_tac >> strip_tac
+  >- gvs[vyperStateTheory.read_results_def, vyperStateTheory.return_def] >>
+  gvs[vyperStateTheory.read_results_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, AllCaseEqs()] >>
+  drule_all source_exhausted_read_result_safety >> strip_tac >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem source_exhausted_get_place_safety[local]:
+  !pv s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    get_place pv s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `pv` >>
+  simp[vyperStateTheory.get_place_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem source_exhausted_conditional_safety[local]:
+  !cx pv s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    conditional_result cx pv s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `pv` >> strip_tac >>
+  gvs[vyperStateTheory.conditional_result_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  imp_res_tac vyperStateTheory.place_type_value_state >> gvs[] >>
+  all_tac
+  >~ [`place_type_value _ _ _ = (INR _,_)`]
+  >- (drule_all source_exhausted_place_type_safety >> simp[]) >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all source_exhausted_read_place_safety >> simp[]
+QED
+
+Theorem source_exhausted_length_safety[local]:
+  !cx pv s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    result_array_length cx pv s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[oneline vyperStateTheory.result_array_length_def,
+      vyperStateTheory.eval_result_CASE_rator,
+      vyperStateTheory.place_CASE_rator,
+      vyperValueTheory.type_value_CASE_rator,
+      vyperASTTheory.bound_CASE_rator, AllCaseEqs()] >>
+  gvs[vyperStorageBackendTheory.get_storage_backend_eq,
+      vyperStateTheory.bind_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs()] >>
+  drule_all source_exhausted_read_result_safety >> strip_tac >> gvs[] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+QED
+
+Theorem source_exhausted_extend_storage_safety[local]:
+  !cx tr slot tv sb s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    extend_storage_place cx tr slot tv sb s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule vyperPlaceFramesTheory.extend_storage_place_state >> strip_tac >> gvs[] >>
+  Cases_on `tv` >> Cases_on `sb` >>
+  gvs[vyperStateTheory.extend_storage_place_def,
+      vyperStateTheory.raise_def] >>
+  rpt (qpat_x_assum `extend_storage_place _ _ _ _ (ValueSubscript _) _ = _` mp_tac >>
+       rename1 `ValueSubscript v` >> Cases_on `v` >> strip_tac >>
+       gvs[vyperStateTheory.extend_storage_place_def,
+           vyperStateTheory.raise_def]) >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.check_def, vyperStateTheory.assert_def,
+      vyperStateTheory.lift_option_type_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  gvs[pairTheory.UNCURRY, vyperStateTheory.return_def] >>
+  Cases_on `b` >>
+  fs[Once vyperStateTheory.resolve_array_element_def] >>
+  Cases_on `t` >> fs[Once vyperStateTheory.resolve_array_element_def] >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.check_def, vyperStateTheory.assert_def,
+      vyperStorageBackendTheory.get_storage_backend_eq,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  fs[Once vyperStateTheory.resolve_array_element_def,
+     vyperStateTheory.return_def]
+QED
+
+Theorem source_exhausted_extend_place_safety[local]:
+  !cx pv sb s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    extend_place cx pv sb s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `pv` >> strip_tac >>
+  gvs[vyperStateTheory.extend_place_def, vyperStateTheory.raise_def] >>
+  all_tac
+  >~ [`extend_place cx (PlaceR p) sb s = _`]
+  >- (Cases_on `p` >>
+      gvs[vyperStateTheory.extend_place_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+          vyperStateTheory.lift_sum_def, AllCaseEqs()] >>
+      imp_res_tac vyperStateTheory.place_type_value_state >>
+      imp_res_tac vyperStateTheory.read_place_state >> gvs[] >>
+      all_tac
+      >~ [`extend_storage_place _ _ _ _ _ _ = _`]
+      >- (drule_all source_exhausted_extend_storage_safety >> simp[]) >>
+      all_tac
+      >~ [`extend_storage_place _ _ _ _ _ _ = _`]
+      >- (drule_all source_exhausted_extend_storage_safety >> simp[]) >>
+      all_tac
+      >>~- ([`place_type_value _ _ _ = (INR _,_)`],
+            drule_all source_exhausted_place_type_safety >> simp[]) >>
+      all_tac
+      >>~- ([`read_place _ _ _ = (INR _,_)`],
+            drule_all source_exhausted_read_place_safety >> simp[]) >>
+      rpt (FULL_CASE_TAC >>
+        gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+      drule vyperStateTheory.evaluate_subscripts_error_shape >> strip_tac >> gvs[]) >>
+  Cases_on `sb` >>
+  gvs[vyperStateTheory.extend_place_def, vyperStateTheory.raise_def] >>
+  Cases_on `v` >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.lift_option_type_def,
+      vyperStateTheory.record_storage_event_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+QED
+
+Theorem source_exhausted_select_safety[local]:
+  !cx ty pv sb s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    select_result cx ty pv sb s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> Cases_on `pv` >> strip_tac >>
+  gvs[vyperStateTheory.select_result_def]
+  >- (gvs[vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
+          vyperStateTheory.lift_sum_def, vyperStateTheory.return_def,
+          vyperStateTheory.raise_def, AllCaseEqs()] >>
+      rpt (FULL_CASE_TAC >>
+        gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+      drule vyperStateTheory.evaluate_subscripts_error_shape >> strip_tac >> gvs[]) >>
+  drule_all source_exhausted_extend_place_safety >> simp[]
+QED
+
+Theorem source_exhausted_flag_safety[local]:
+  !cx fid mid s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    lookup_flag_mem cx fid mid s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> PairCases_on `fid` >> strip_tac >>
+  gvs[vyperStateTheory.lookup_flag_mem_def] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+QED
+
+Theorem source_exhausted_global_safety[local]:
+  !cx src id s r t.
+    accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    lookup_global cx src id s = (r,t) ==>
+    accounts_runtime_well_typed t.accounts /\ t.outcomes = SOME [] /\
+    r <> INR (Error (RuntimeError "create outcome accounts"))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperStateTheory.lookup_global_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.lift_option_type_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.lift_option_type_def,
+        vyperStateTheory.record_storage_event_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  imp_res_tac vyperStatePreservationTheory.get_immutables_state >> gvs[] >>
+  gvs[vyperStateTheory.get_immutables_def,
+      vyperStateTheory.get_address_immutables_def,
+      vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt (FULL_CASE_TAC >>
+    gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+QED
+
+Theorem source_exhausted_place_safety[local]:
+  (!cx p s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    read_place cx p s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx p v s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    write_place cx p v s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx p v s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    append_place cx p v s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx p s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    pop_place cx p s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx tr slot tv v s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    write_storage_slot cx tr slot tv v s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx p s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    place_type_value cx p s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx pv s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    read_result cx pv s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx pvs s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    read_results cx pvs s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!pv s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    get_place pv s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx pv s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    conditional_result cx pv s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx pv s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    result_array_length cx pv s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx tr slot tv sb s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    extend_storage_place cx tr slot tv sb s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx pv sb s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    extend_place cx pv sb s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx ty pv sb s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    select_result cx ty pv sb s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx src id s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    lookup_global cx src id s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts"))) /\
+  (!cx fid mid s r t. accounts_runtime_well_typed s.accounts /\ s.outcomes = SOME [] /\
+    lookup_flag_mem cx fid mid s = (r,t) ==> accounts_runtime_well_typed t.accounts /\
+    t.outcomes = SOME [] /\ r <> INR (Error (RuntimeError "create outcome accounts")))
+Proof
+  rpt conj_tac >> FIRST (map MATCH_ACCEPT_TAC
+    [source_exhausted_read_place_safety, source_exhausted_write_place_safety,
+     source_exhausted_append_place_safety, source_exhausted_pop_place_safety,
+     source_exhausted_write_storage_safety, source_exhausted_place_type_safety,
+     source_exhausted_read_result_safety, source_exhausted_read_results_safety,
+     source_exhausted_get_place_safety, source_exhausted_conditional_safety,
+     source_exhausted_length_safety, source_exhausted_extend_storage_safety,
+     source_exhausted_extend_place_safety, source_exhausted_select_safety,
+     source_exhausted_global_safety, source_exhausted_flag_safety])
+QED
+
+Theorem source_range_excludes_create_error[local]:
+  !v1 v2. get_range_limits v1 v2 <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >> Cases_on `v1` >> Cases_on `v2` >>
+  simp[vyperInterpreterTheory.get_range_limits_def] >>
+  rpt (CASE_TAC >> gvs[])
+QED
+
+Theorem source_binop_excludes_create_error[local]:
+  !u tv bop v1 v2. evaluate_binop u tv bop v1 v2 <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >> Cases_on `bop` >>
+  simp[vyperValueOperationTheory.evaluate_binop_def,
+       vyperValueOperationTheory.binop_negate_def,
+       vyperValueOperationTheory.bounded_int_op_def,
+       vyperValueOperationTheory.bounded_decimal_op_def,
+       vyperValueOperationTheory.wrapped_int_op_def,
+       AllCaseEqs()] >>
+  simp[oneline vyperValueOperationTheory.binop_negate_def, AllCaseEqs()]
+QED
+
+Theorem source_concat_loop_excludes_create_error[local]:
+  !n v sa ba vs. evaluate_concat_loop n v sa ba vs <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  recInduct vyperValueOperationTheory.evaluate_concat_loop_ind >>
+  rpt strip_tac >>
+  gvs[vyperValueOperationTheory.evaluate_concat_loop_def, AllCaseEqs()]
+QED
+
+Theorem source_builtin_delegates_exclude_create_error[local]:
+  (!n vs. evaluate_concat n vs <> INR (RuntimeError "create outcome accounts")) /\
+  (!v sv lv n. evaluate_slice v sv lv n <> INR (RuntimeError "create outcome accounts")) /\
+  (!dn v. evaluate_as_wei_value dn v <> INR (RuntimeError "create outcome accounts")) /\
+  (!tx n. evaluate_block_hash tx n <> INR (RuntimeError "create outcome accounts"))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[vyperValueOperationTheory.evaluate_concat_def,
+       source_concat_loop_excludes_create_error,
+       vyperValueOperationTheory.evaluate_slice_def,
+       vyperValueOperationTheory.evaluate_as_wei_value_def,
+       vyperContextTheory.evaluate_block_hash_def, AllCaseEqs()]
+QED
+
+Theorem source_ec_delegates_exclude_create_error[local]:
+  (!vs. evaluate_ecrecover vs <> INR (RuntimeError "create outcome accounts")) /\
+  (!vs. evaluate_ecadd vs <> INR (RuntimeError "create outcome accounts")) /\
+  (!vs. evaluate_ecmul vs <> INR (RuntimeError "create outcome accounts"))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[oneline vyperContextTheory.evaluate_ecrecover_def,
+       oneline vyperContextTheory.evaluate_ecadd_def,
+       oneline vyperContextTheory.evaluate_ecmul_def, AllCaseEqs()]
+QED
+
+Theorem source_builtin_excludes_create_error[local]:
+  (!u tv bop v1 v2. evaluate_binop u tv bop v1 v2 <>
+    INR (RuntimeError "create outcome accounts")) ==>
+  !cx acc ty bt tys vs. evaluate_builtin cx acc ty bt tys vs <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `bt` >>
+  simp[vyperContextTheory.evaluate_builtin_def,
+       vyperContextTheory.evaluate_calldata_slice_def,
+       source_builtin_delegates_exclude_create_error,
+       source_ec_delegates_exclude_create_error,
+       vyperValueOperationTheory.bounded_int_op_def,
+       vyperValueOperationTheory.bounded_decimal_op_def, AllCaseEqs()]
+QED
+
+Theorem source_ordinary_pure_exclusions[local]:
+  (!u tv bop v1 v2. evaluate_binop u tv bop v1 v2 <>
+    INR (RuntimeError "create outcome accounts")) ==>
+  (!cx acc ty bt tys vs. evaluate_builtin cx acc ty bt tys vs <>
+    INR (RuntimeError "create outcome accounts")) /\
+  (!cx acc self cty aty avs. evaluate_code_source cx acc self cty aty avs <>
+    INR (RuntimeError "create outcome accounts")) /\
+  (!tv neg v1 v2. evaluate_membership tv neg v1 v2 <>
+    INR (RuntimeError "create outcome accounts"))
+Proof
+  strip_tac >>
+  `!cx acc ty bt tys vs. evaluate_builtin cx acc ty bt tys vs <>
+     INR (RuntimeError "create outcome accounts")` by
+    (irule source_builtin_excludes_create_error >> simp[]) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[vyperContextTheory.evaluate_code_source_def,
+       vyperValueOperationTheory.evaluate_membership_def, AllCaseEqs()]
+QED
+
+Theorem source_convert_excludes_create_error[local]:
+  !env v ty. evaluate_convert env v ty <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >>
+  simp[oneline vyperValueOperationTheory.evaluate_convert_def,
+       vyperValueOperationTheory.bounded_decimal_op_def, AllCaseEqs()]
+QED
+
+Theorem source_convert_from_excludes_create_error[local]:
+  !env from_ty v ty. evaluate_convert_from env from_ty v ty <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >>
+  simp[vyperValueOperationTheory.evaluate_convert_from_def,
+       source_convert_excludes_create_error, AllCaseEqs()]
+QED
+
+Theorem source_extract32_excludes_create_error[local]:
+  !bs n bt. evaluate_extract32 bs n bt <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  rpt gen_tac >>
+  simp[vyperContextTheory.evaluate_extract32_def,
+       source_convert_excludes_create_error, AllCaseEqs()]
+QED
+
+val source_type_builtin_eq = oneline vyperContextTheory.evaluate_type_builtin_def;
+
+Theorem source_type_pure_exclusions[local]:
+  (!env ty bs. evaluate_abi_decode env ty bs <> INR "create outcome accounts") ==>
+  !cx tb typ tys vs. evaluate_type_builtin cx tb typ tys vs <>
+    INR (RuntimeError "create outcome accounts")
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `tb` >>
+  simp[source_type_builtin_eq,
+       source_convert_from_excludes_create_error,
+       source_extract32_excludes_create_error,
+       oneline vyperValueOperationTheory.evaluate_max_value_def,
+       oneline vyperValueOperationTheory.evaluate_min_value_def,
+       vyperABITheory.evaluate_abi_encode_bytes_def, AllCaseEqs()]
+QED
+
+Theorem source_abi_decode_excludes_create_error[local]:
+  !env ty bs. evaluate_abi_decode env ty bs <> INR "create outcome accounts"
+Proof
+  simp[vyperABITheory.evaluate_abi_decode_def,
+       vyperABITheory.decode_abi_value_def, AllCaseEqs()]
+QED
+
+Theorem eval_outcome_probe_replay_mutual:
+  (!cx stmt st0 os res_p st_p.
+    eval_stmt cx stmt (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_stmt cx stmt (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_stmt cx stmt (st0 with outcomes := SOME
+      (os ++ [case eval_stmt cx stmt (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx stmts st0 os res_p st_p.
+    eval_stmts cx stmts (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_stmts cx stmts (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_stmts cx stmts (st0 with outcomes := SOME
+      (os ++ [case eval_stmts cx stmts (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx it st0 os res_p st_p.
+    eval_iterator cx it (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_iterator cx it (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_iterator cx it (st0 with outcomes := SOME
+      (os ++ [case eval_iterator cx it (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx tyv id fbody vs st0 os res_p st_p.
+    eval_for cx tyv id fbody vs (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_for cx tyv id fbody vs (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_for cx tyv id fbody vs (st0 with outcomes := SOME
+      (os ++ [case eval_for cx tyv id fbody vs (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx e st0 os res_p st_p.
+    eval_expr cx e (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_expr cx e (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_expr cx e (st0 with outcomes := SOME
+      (os ++ [case eval_expr cx e (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx es st0 os res_p st_p.
+    eval_exprs cx es (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_exprs cx es (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_exprs cx es (st0 with outcomes := SOME
+      (os ++ [case eval_exprs cx es (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx t st0 os res_p st_p.
+    eval_base_place cx t (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_base_place cx t (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_base_place cx t (st0 with outcomes := SOME
+      (os ++ [case eval_base_place cx t (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx t st0 os res_p st_p.
+    eval_target_place cx t (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_target_place cx t (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_target_place cx t (st0 with outcomes := SOME
+      (os ++ [case eval_target_place cx t (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx g v st0 os res_p st_p.
+    assign_tuple_targets cx g v (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (assign_tuple_targets cx g v (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (assign_tuple_targets cx g v (st0 with outcomes := SOME
+      (os ++ [case assign_tuple_targets cx g v (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx gs vs st0 os res_p st_p.
+    assign_tuple_target_list cx gs vs (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (assign_tuple_target_list cx gs vs (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (assign_tuple_target_list cx gs vs (st0 with outcomes := SOME
+      (os ++ [case assign_tuple_target_list cx gs vs (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome])))) /\
+  (!cx es st0 os res_p st_p.
+    eval_expr_results cx es (st0 with outcomes := SOME (os ++ [probe_failed_outcome])) =
+      (res_p,st_p) /\ st_p.outcomes = SOME [] ==>
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_expr_results cx es (st0 with outcomes := SOME os)) =
+    (\(r,s). (r,erase_storage_trace s))
+      (eval_expr_results cx es (st0 with outcomes := SOME
+      (os ++ [case eval_expr_results cx es (st0 with outcomes :=
+                    SOME (os ++ [empty_failed_outcome])) of
+        (res_e,_) =>
+          if res_p = INR (Error (RuntimeError "create outcome accounts")) /\
+             res_e <> INR (Error (RuntimeError "create outcome accounts")) /\
+             ~NULL st_p.requests
+          then failed_outcome (LAST st_p.requests)
+          else empty_failed_outcome]))))
+Proof
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+QED
