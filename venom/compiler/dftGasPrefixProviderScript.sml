@@ -2080,6 +2080,51 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES] >> disch_then (mp_tac o cj 4) >> metis_tac[]
 QED
 
+Theorem native_stopping_call_partner[local]:
+  inst_wf z /\ inst_shape_ok z /\ dft_gas_swap_pair z call /\
+  call.inst_opcode = INVOKE /\
+  (!op. MEM op z.inst_operands ==> IS_SOME (eval_operand op s)) /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C z s = OK u)) ==> F
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `dft_gas_swap_pair call z` by metis_tac[dft_gas_swap_pair_sym] >>
+  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
+  `z.inst_opcode = GAS \/ is_effect_free_op z.inst_opcode` by
+    (qpat_x_assum `dft_gas_swap_pair z call` mp_tac >>
+     simp[dft_gas_swap_pair_def] >> strip_tac >>
+     Cases_on `z.inst_opcode` >>
+     gvs[is_effect_free_op_def, read_effects_def, write_effects_def,
+         is_terminator_def, is_alloca_op_def, is_ext_call_op_def, is_pseudo_def,
+         dft_abort_compatible_def, dft_abort_kind_def, empty_effects_def]) >>
+  Cases_on `z.inst_opcode = GAS`
+  >- (fs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      metis_tac[step_inst_gas_single]) >>
+  `is_effect_free_op z.inst_opcode` by metis_tac[] >>
+  `z.inst_opcode <> PHI /\ z.inst_opcode <> PARAM /\ z.inst_opcode <> FMP_PARAM` by
+    (Cases_on `z.inst_opcode` >> gvs[is_pseudo_def]) >>
+  `?u. step_inst_base z s = OK u` by
+    (irule effect_free_step_inst_base_ok >>
+     simp[] >> metis_tac[optionTheory.IS_SOME_EQ_NOT_NONE]) >>
+  metis_tac[step_inst_non_invoke]
+QED
+
+Theorem native_bubbles_perm[local]:
+  !src dst. dft_head_bubbles A src dst ==> PERM src dst
+Proof
+  ho_match_mp_tac dft_head_bubbles_ind >> simp[] >>
+  rpt strip_tac >> (simp[sortingTheory.PERM_FUN_APPEND_CONS])
+QED
+
+Theorem native_bubbles_filter[local]:
+  (!x y. A x y ==> ~(P x /\ P y)) ==>
+  !src dst. dft_head_bubbles A src dst ==> FILTER P src = FILTER P dst
+Proof
+  strip_tac >> ho_match_mp_tac dft_head_bubbles_ind >> simp[] >>
+  rpt strip_tac >> Cases_on `P y` >> gvs[FILTER_APPEND_DISTRIB] >>
+  `FILTER P pre = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM] >> metis_tac[]) >> gvs[]
+QED
+
 Theorem native_bubbles_prefix_remaining[local]:
   !done todo rest s t.
     wf_function fn /\ EVERY inst_wf bb.bb_instructions /\
