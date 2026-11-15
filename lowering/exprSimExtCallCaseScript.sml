@@ -1511,6 +1511,73 @@ Proof
   goal_assum (drule_at Any)
 QED
 
+Theorem extcall_request_positionals_counted[local]:
+  !xs ca cb ea r0 done kont av.
+  expr_body_pre ce cx env
+    (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) root_es /\
+  DROP 1 args = done ++ xs ++ kws /\
+  expr_sim_inv ce cx env ea /\
+  exprs_case nocalls ctx func ce cx xs /\
+  (nocalls ==> int_calls_expr
+    (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) = []) /\
+  compile_ext_call_args compile_expr ce kws
+    (MAP (lowered_value_type ce) xs) xs ca = (av,cb) /\
+  fn_has_code ca cb func /\ fn_inst_ids_distinct func /\
+  (!H. valid_horizon cx st0 H ea.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ea r0 /\
+    storage_well_formed_on cx ea (FST H)) /\
+  ~r0.vs_halted /\ r0.vs_current_bb = ca.cs_current_bb /\
+  r0.vs_inst_idx = LENGTH ca.cs_current_insts /\ local_ptrs_reserved ce ca /\
+  gas_admissible (bind (eval_exprs cx xs) kont) expr_vv_res_ok ea /\
+  (!vs. storage_trace_frame (kont vs)) /\
+  (!vs ee t.
+    (?H0. valid_horizon cx st0 H0 ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee t /\
+      storage_well_formed_on cx ee (FST H)) /\
+    wb_frame ce ea ee ca r0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = cb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH cb.cs_current_insts /\ ee.gas_obs = [] /\
+    outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM ea.scopes = MAP FDOM ee.scopes /\
+    ca.cs_next_var <= cb.cs_next_var /\ ca.cs_next_id <= cb.cs_next_id /\
+    local_ptrs_reserved ce cb /\ expr_sim_inv ce cx env ee /\
+    LENGTH xs = LENGTH vs /\
+    LIST_REL
+      (\(e,v) snap. ?raw cut sv dv.
+        ca.cs_next_id <= cut.cs_next_id /\
+        cut.cs_next_id <= cb.cs_next_id /\
+        ca.cs_next_var <= cut.cs_next_var /\
+        cut.cs_next_var <= cb.cs_next_var /\
+        evaluate_type (get_tenv cx) (post_value_type ce e) = SOME sv /\
+        evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME dv /\
+        value_has_type sv v /\ val_wf sv v /\
+        value_has_type dv v /\ val_wf dv v /\
+        val_footprint sv v = val_footprint dv v /\
+        read_result cx raw ee = (INL v,ee) /\
+        (!x. vv_operand snap = Var x ==> not_fresh_at cb x) /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==>
+          vv_holds ce cx (lowered_value_type ce e) raw snap ee t /\
+          vv_at ce cx (post_value_type ce e) cut cb ee raw snap t /\
+          vv_storage_live H cx snap ee t))
+      (ZIP (xs,vs)) av /\
+    (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+      (ea with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+    pure_frame ce func ea ca r0 t ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (kont vs) (ee,t) Q
+      (\H res ee r. expr_exit res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (eval_exprs cx xs) kont) (ea,r0) Q (\H res ee r. expr_exit res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule extcall_request_positionals_counted_horizon >>
+  qpat_assum `expr_body_pre ce cx env _ root_es` (irule_at Any) >>
+  qpat_assum `DROP 1 args = done ++ xs ++ kws` (irule_at Any) >>
+  qexistsl_tac [`nocalls`, `cb`, `ca`, `av`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
    opts args dflt ty es st0 sa sb vv s0 Q.
