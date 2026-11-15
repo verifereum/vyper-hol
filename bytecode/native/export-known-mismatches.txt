@@ -107,9 +107,7 @@ a32a2a9b9e62f137 bytes #543  # functional/codegen/calling_convention/test_extern
 08a842909b536cc7 bytes #543  # functional/codegen/features/iteration/test_for_range::test_for_range_edge[int128]
 b41c50467855505b bytes #543  # functional/codegen/features/iteration/test_for_range::test_for_range_edge[uint256]
 dba6af8d75ca4102 bytes #543  # functional/codegen/features/iteration/test_for_range::test_for_range_edge[uint8]
-1f9dede7da1a6061 bytes #543  # functional/codegen/features/test_assert::test_assert_reason_revert_length
 634c88eb902cfc0a bytes #543  # functional/codegen/features/test_assignment::test_invalid_uint256_assignment_calculate_literals
-b7552221a5882d04 bytes #543  # functional/codegen/features/test_conditionals::test_conditional_return_code
 a40d35b7df85c6e3 bytes #543  # functional/codegen/types/numbers/test_modulo::test_literals_vs_evm
 3d29dcaec7fd7418 bytes #543  # functional/codegen/types/numbers/test_modulo::test_modulo
 b2926bef9ffb6308 bytes #543  # functional/codegen/types/numbers/test_signed_ints::test_negative_nums[typ0]
@@ -247,3 +245,5 @@ f1763e7310560b5e bytes decode-guards  # functional/codegen/features/test_assignm
 8b916b035ccb9592 bytes decode-guards  # functional/codegen/test_interfaces::test_self_interface_via_calldata
 f37c861c5f2ffafe bytes decode-guards  # functional/codegen/types/test_array_indexing::test_array_index_overlap_extcall2
 73ec3b3f35a1c2d7 bytes decode-guards  # functional/codegen/types/test_string::test_tuple_return_external_contract_call_string
+826b1d2f5a81841d bytes #543  # functional/syntax/test_as_wei_value::test_as_wei_success[as_wei_value(5, "finney") + as_wei_value(2, "babbage") + as_wei_value(8, "shannon")]
+fff9f81f76af309b bytes #543  # functional/syntax/test_as_wei_value::test_as_wei_success[z: int128 = 2 + 3; x: uint256 = as_wei_value(2 + 3, "finney")]

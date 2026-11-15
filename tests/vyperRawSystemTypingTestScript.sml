@@ -20,8 +20,8 @@ Proof
   simp[well_typed_expr_def]
 QED
 
-(* A constant topic array (Vyper accepts a DynArray[bytes32, 4] constant)
-   stays a top-level name, whatever its type, and is rejected. *)
+(* The checker rejects a raw top-level name. The frontend expands constant
+   topics to a literal array before checking. *)
 Theorem raw_log_rejects_constant_topics:
   !env ty nm data.
     ~well_typed_expr env (Call NoneT RawLog [TopLevelName ty nm; data] NONE)
@@ -142,22 +142,16 @@ val () = case find_terms (aconv expected_literal_call)
 val _ = save_thm ("raw_log_literal_topics_frontend_accepted",
   #theorem literal_topics_fixture);
 
-(* raw_log(TOPICS, b'') with TOPICS a DynArray[bytes32, 4] constant: the
-   topics stay a top-level name, and the checker rejects the contract. *)
-val constant_topics_input = vyperCheckContractFrontendLib.prepare_check_input
+(* Constant topics normalize to the same call as the literal-list fixture. *)
+val constant_topics_fixture = vyperCheckContractFrontendLib.check_contract_result
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
      "fixtures/check_contract/raw_log_constant_topics.json",
    storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
      "fixtures/check_contract/raw_log_constant_topics.json"};
-val () =
-  if can (find_term (can (match_term
-        ``Call NoneT RawLog [TopLevelName ty nm; d] NONE``)))
-      (#modules constant_topics_input)
-  then () else raise Fail "constant raw_log topics are not a top-level name";
-val () =
-  ((vyperCheckContractLib.check_contract constant_topics_input;
-    raise Fail "checker accepted raw_log with constant topics")
-   handle Fail message =>
-     if String.isSubstring "check_contract returned NONE" message then ()
-     else raise Fail message);
+val () = case find_terms (aconv expected_literal_call)
+    (#modules constant_topics_fixture) of
+    [_] => ()
+  | _ => raise Fail "constant raw_log frontend witness lost its topics or data";
+val _ = save_thm ("raw_log_constant_topics_frontend_accepted",
+  #theorem constant_topics_fixture);
