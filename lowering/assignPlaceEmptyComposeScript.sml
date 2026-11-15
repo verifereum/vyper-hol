@@ -3,10 +3,12 @@ Ancestors
   loweringStateRelDefs
   assignPlaceEmpty assignPlacePureCode assignPlaceGasCompose placeStore
   targetPlaceSimCases stmtSimDefs gasContext vyperExprNoControl vyperState
-  assignPlaceEmptySource assignPlaceEmptyStore assignPlaceTargetLive exprSimHyps stmtLoweringMono
+  assignPlaceEmptySource assignPlaceEmptyStore placeRelayoutOutcome assignPlaceTargetLive exprSimHyps stmtLoweringMono
   memoryLocalRhsProps vyperTypeArgFits exprSimHypsDefs vyperTypeInvariants
   bodySimAugPlaceLoad vyperStoragePlaceProvenance stmtSimAugAssign storageStoreFrame
   vyperTypeDefaults vyperStorageFrame stmtSimAugAssignPlaceMemory
+  tuplePlaceStep vyperStorageFootprint vyperStorageTrace gasStorage
+  vyperTypeValues
   loweringPosts compileEnv valueEncoding exprLowering
   vyperTypeSystem option immutableAssignEmpty targetPlaceSim exprLoweringProps fragExec
 Libs monadsyntax
@@ -32,16 +34,13 @@ Proof
 QED
 
 
+(* Empty values still emit one header store. Static storage faults belong
+   after target evaluation; the memory branch remains a successful write. *)
 Theorem assign_place_empty_stmt_frag:
   !ctx func cx lctx RetQ cenv ty env bt e es dty.
-    ~expr_can_mutate cenv (target_to_expr bt) /\
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
     assignable_type env.type_defs (expr_type e) /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e) /\
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     ((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
                            read_result cx pv sread = (INL v,s2)) ==>
      target_case F ctx func cenv cx bt) /\
@@ -50,13 +49,12 @@ Theorem assign_place_empty_stmt_frag:
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    ~expr_has_effect e /\ has_length_word (expr_type e) /\ is_empty_value_expr e ==>
+    has_length_word (expr_type e) /\ is_empty_value_expr e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
       (eval_stmt cx (Assign (BaseTarget bt) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `lowered_value_type _ _ = _ \/ _` kall_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
@@ -83,15 +81,39 @@ Proof
     metis_tac[assign_place_empty_target_admissible] >>
   irule assign_place_empty_prefix_outcome >>
   simp[] >> qexistsl_tac [`cenv`, `dtv`, `dty`, `env`] >> simp[] >>
-  irule assign_place_target_outcome >>
-  qexistsl_tac [`\res ee t. ?p. res = INL p /\
-    target_post ctx func cenv cx (es with gas_obs := []) sa st s0 ee
+  MATCH_MP_TAC (Q.INST [
+    `Qa` |-> `\H res ee t. ?p. res = INL p /\
+    target_post H ctx func cenv cx (es with gas_obs := []) sa st s0 ee
       (PlaceR p) (Type dty) tr t /\
     t.vs_current_bb = st.cs_current_bb /\
     t.vs_inst_idx = LENGTH st.cs_current_insts`,
-    `\res ee r. expr_exit res r`] >>
+    `Ra` |-> `\H res ee r. expr_exit res r`]
+    assign_place_target_outcome) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+  >- (simp[] >> irule target_place_sim >> simp[] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _ /\ _`
+            (drule_then strip_assume_tac) >>
+          `!b. get_storage cx (es with gas_obs := []) b =
+               get_storage cx es b` by
+            (Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+          fs[vyperStorageFootprintTheory.storage_well_formed_on_def]) >>
+      qexists_tac `env` >> simp[] >> fs[target_case_def] >>
+      first_x_assum irule >> simp[target_pre_def, expr_sim_inv_def]) >>
+  conj_tac >- (rpt gen_tac >> BETA_TAC >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> fs[] >>
+      reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+      >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+          irule gas_bad_storage_at_initial >> simp[storage_trace_frame_write_place]) >>
+      `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
+        metis_tac[storage_trace_domain_def] >>
+      `target_post H0 ctx func cenv cx (es with gas_obs := []) sa st s0
+          (mid with gas_obs := []) (PlaceR p) (Type dty) tr t /\
+        t.vs_current_bb = st.cs_current_bb /\
+        t.vs_inst_idx = LENGTH st.cs_current_insts` by metis_tac[] >>
+      gvs[] >>
       `eval_target_place cx bt
          (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
          (INL p, mid with gas_obs := [])` by
@@ -105,9 +127,19 @@ Proof
       `has_length_word dty` by metis_tac[type_widens_to_has_length_word] >>
       `local_ptrs_reserved cenv st` by
         (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+      `valid_horizon cx st0 H0 es.storage_trace` by
+        (`valid_horizon cx st0 H0
+            (es with gas_obs := gas_explicit marks s0.vs_gas_readings).storage_trace`
+           suffices_by simp[] >>
+         irule (INST_TYPE [alpha |-> ``:place``] valid_horizon_frame) >>
+         qexistsl_tac [`eval_target_place cx bt`, `INL p`, `mid with gas_obs := []`] >>
+         simp[evaluate_storage_trace_frame]) >>
+      `target_post H0 ctx func cenv cx (es with gas_obs := []) sa st s0
+          (mid with gas_obs := []) (PlaceR p) (Type dty) tr t` by metis_tac[] >>
       `alloca_frame cenv (es with gas_obs := []) sa s0 cenv (mid with gas_obs := []) t` by
         (drule target_post_alloca_frame >> disch_then irule >>
-         fs[target_post_def, locals_kept_def]) >>
+         fs[target_post_def, locals_kept_def, stmt_state_rel_start_gas_obs] >>
+         metis_tac[]) >>
       `alloca_frame cenv es sa s0 cenv (mid with gas_obs := []) t` by
         (gvs[alloca_frame_def, local_region_def] >> first_assum ACCEPT_TAC) >>
       `?dst loc. tr = (dst,SOME loc,SOME (ValPT dty)) /\
@@ -136,9 +168,13 @@ Proof
       `~t.vs_halted` by
         (irule aug_place_marked_path_not_halted >>
          fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `H0`
+          (drule_then (strip_assume_tac o REWRITE_RULE [target_post_def]))) >>
       Cases_on `loc <> LocMemory /\ cx.txn.is_static`
-      >- (`t.vs_call_ctx.cc_static` by
-            fs[target_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      >- (`t.vs_call_ctx.cc_static = cx.txn.is_static` by
+            fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+          `t.vs_call_ctx.cc_static` by metis_tac[] >>
           Cases_on `p` >> gvs[target_post_def, place_ptr_rel_def] >>
           rename1 `StoragePlace transient slot tv` >>
           `emit_void (if transient then TSTORE else SSTORE) [dst; Lit 0w] st = ((),sb)` by
@@ -148,7 +184,7 @@ Proof
             (irule storage_emit_static_path >>
              qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
              simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
-          simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+          simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
           simp[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
           qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
             `mid with gas_obs := []`,
@@ -164,7 +200,7 @@ Proof
                metis_tac[default_value_has_type_thm] >>
              gvs[write_place_def] >>
              metis_tac[write_storage_slot_succeeds, pairTheory.FST])
-         >- (drule_all assign_place_pure_memory_write_success >> simp[]) >>
+         >- (drule_all placeRelayoutOutcomeTheory.memory_write_admissible_success >> simp[]) >>
          fs[target_post_def, place_ptr_rel_def]) >>
       gvs[] >>
       `!id path entry t0.
@@ -173,18 +209,23 @@ Proof
          evaluate_type (get_tenv cx) t0 = SOME entry.type` by
         (metis_tac[aug_place_store_entry_types]) >>
       `?u. gas_marked_path F ctx func t 0 (OK u) /\
-           stmt_state_rel ctx func cenv cx ff u /\
+           (!H. valid_horizon cx st0 H mid.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ff u) /\
            (!x. not_fresh_at st x ==> lookup_var x u = lookup_var x t) /\
            (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
                     FLOOKUP u.vs_allocas aid = SOME b) /\
            ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
            u.vs_inst_idx = LENGTH sb.cs_current_insts /\
            alloca_frame cenv es sa s0 cenv ff u` by
-        (irule assign_place_empty_store_framed >>
+        (irule (SIMP_RULE (srw_ss()) []
+           (Q.INST [`ee` |-> `mid with gas_obs := []`]
+             (SPEC_ALL assign_place_empty_store_framed))) >>
          qpat_assum `compile_store_at_loc _ _ _ _ _ = _` (irule_at Any) >>
-         qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
-         fs[target_post_def] >>
-         qexistsl_tac [`env`, `dty`] >> simp[]) >>
+         qexistsl_tac [`w`, `p`, `env`, `dty`, `dtv`, `H0`] >> simp[] >>
+         rpt strip_tac >>
+         qpat_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (qspec_then `H` (drule_then strip_assume_tac)) >>
+         fs[target_post_def, stmt_state_rel_start_gas_obs]) >>
       `!tail. write_place cx p (default_value dtv) (mid with gas_obs := tail) =
           (INL (), ff with gas_obs := tail)` by
         (Cases_on `p`
@@ -194,24 +235,41 @@ Proof
                AllCaseEqs()] >> rpt strip_tac >> gvs[])
          >- (drule aug_place_memory_write_gas_obs >> simp[]) >>
          fs[target_post_def, place_ptr_rel_def]) >>
-      `stmt_post ctx func cx lctx cenv cenv sa sb es s0
+      `eval_base_place cx bt
+         (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+         (INL (PlaceR p),mid with gas_obs := [])` by
+        (qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+         simp[Once vyperInterpreterTheory.evaluate_def, bind_def, AllCaseEqs()] >>
+         rpt strip_tac >> rename1 `get_place pv _ = _` >> Cases_on `pv` >>
+         gvs[get_place_def, return_def, raise_def]) >>
+      `!H. valid_horizon cx st0 H mid.storage_trace ==>
+         storage_well_formed_on cx ff (FST H)` by
+        (rpt strip_tac >>
+         qpat_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (qspec_then `H`
+             (drule_then (strip_assume_tac o REWRITE_RULE [target_post_def]))) >>
+         irule tuple_place_write_storage_wf >>
+         qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+         qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
+         simp[] >> qexists_tac `st0` >> simp[] >>
+         rpt strip_tac >> gvs[place_ptr_rel_def, slot_loc_def] >>
+         metis_tac[default_value_has_type_thm,
+           evaluate_type_well_formed_type_value]) >>
+      `ff.storage_trace = mid.storage_trace` by
+        (qpat_assum `write_place _ _ _ _ = _`
+           (mp_tac o MATCH_MP write_place_storage_trace) >> simp[]) >>
+      `!H. valid_horizon cx st0 H ff.storage_trace ==>
+         stmt_post H ctx func cx lctx cenv cenv sa sb es s0
           (INL ()) (ff with gas_obs := []) u` by
-        (irule aug_place_normal_post >> simp[] >>
+        (rpt strip_tac >> irule aug_place_normal_post >> simp[] >>
          conj_tac
          >- (fs[target_post_def] >>
              metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh]) >>
          fs[target_post_def] >> metis_tac[]) >>
-      simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
       simp[gasSummaryTheory.gas_summary_at_def, gasSummaryTheory.gas_marked_exec_def] >>
       qexistsl_tac [`INL ()`, `ff`, `OK u`] >> simp[]) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_INL, stmt_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  irule target_place_sim >>
-  simp[] >>
-  qexists_tac `env` >> simp[] >>
-  fs[target_case_def] >>
-  first_x_assum irule >>
-  simp[target_pre_def, expr_sim_inv_def]
+  rpt gen_tac >> strip_tac >>
+  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_INL, stmt_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
