@@ -134,6 +134,15 @@ Proof
       simp[vv_post_def, vv_at_def, mk_ptr_def, expr_val_at_def] >>
       strip_tac >> rpt strip_tac >> gvs[] >>
       simp[local_place_at_def] >> metis_tac[])
+  >- (strip_tac >> disj1_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+      qpat_x_assum `vv_at _ _ _ sa sm _ _ _ _` mp_tac >>
+      simp[vv_at_def, mk_ptr_def, expr_val_at_def] >>
+      strip_tac >> rpt strip_tac >> gvs[] >>
+      simp[local_place_at_def] >> metis_tac[])
   >> qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
   simp[vv_store_bound_def, expr_store_bound_def] >> rpt strip_tac >>
   metis_tac[]
@@ -249,6 +258,13 @@ Proof
         (drule_then mp_tac) >>
       simp[vv_post_def] >> strip_tac >>
       qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_at_def, mk_ptr_def])
+  >- (disj1_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+      qpat_x_assum `vv_at _ _ _ sa sm _ _ _ _` mp_tac >>
       simp[vv_at_def, mk_ptr_def])
   >> qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
   simp[vv_store_bound_def, expr_store_bound_def] >> rpt strip_tac >>
