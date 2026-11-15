@@ -2,7 +2,16 @@
 Theory abiValidAllocatedJoint
 Ancestors
  abiValidAllocatedMembersJoint abiValidAllocatedMemberEntry abiValidMembers
- abiDecodePtrArrayJoint abiDecodePtrBulkJoint
+ abiDecodePtrArrayJoint abiDecodePtrBulkJoint abiValidAllocatedBulkReach
+ abiValidAllocatedBulk abiDecoderBulk abiDecoderDynarrayPrefix abiDecoderArrayHeader
+ abiDecoderArrayInitExec abiDecoderBulkExecute exprPtrCleanBufferPost
+ ghostPcTransportPtr instIdxIndep emitHelper emitHelperProps
+ abiDecoderTypedCompose abiDecoderComposition abiDecoderVarSequence
+ instSeqComposePtr stateFrame exprSimAccounts
+ abiDecodePtrMemberFrame fragExec bodyPtrBopScalarOutcome
+ venomExecSemantics venomInst venomMemDefs words
+ allocaHistory bodyPtrBopHashSuffix entryDecoderHistoryFrame
+ abiDecodePtrScalarFrame
  abiValidAllocatedComplexJoint abiValidAllocatedComplex abiValidAllocatedObservations
  abiDecoderComplexExecute abiDecoderComplexGuard ctorAbiActualWorld fragGasOriginPtr
  abiDecoderFixedMemory abiDecoderMembers abiDecoderStruct abiValidAggregateHeads
@@ -89,6 +98,322 @@ Proof
    [`H` |-> `H0`, `base_op` |-> `Var source`, `dst` |-> `Var output`, `src` |-> `pos`]) >>
  (impl_tac >- simp[]) >> strip_tac >>
  qexistsl_tac [`s`, `G`, `tn`] >> simp[val_in_memory_def, type_memory_size_def]
+QED
+
+Theorem abi_valid_allocated_joint_bulk:
+ type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
+   DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei ==>
+ (^C) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+ strip_tac >> BETA_TAC >> rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+ mp_tac (abi_valid_allocated_bulk_reach_run |> Q.INST
+   [`H` |-> `H0`, `base_op` |-> `Var source`, `src` |-> `pos`, `dst` |-> `Var output`]) >>
+ (impl_tac >- simp[]) >> strip_tac >>
+ qhdtm_assum `abi_valid_allocated_entry`
+   (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_valid_allocated_entry_def]) >>
+ `DecDynArray ei abi_sz mem_sz F maxn =
+    type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))` by simp[] >>
+ drule_all abi_decoder_bulk_metadata >> strip_tac >>
+ `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+ `compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi
+    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),en)` by metis_tac[] >>
+ `?addr c1 cnt c2.
+    abi_decode_dynarray_position_prefix pos MLOAD (Var source) hi maxn abi_sz st = (addr,c1) /\
+    abi_decode_array_header (Var output) addr MLOAD c1 = (cnt,c2) /\
+    abi_decode_bulk_payload (Var output) pos cnt mem_sz MLOAD (Var source) c2 = ((),en)` by
+   (drule_all abi_decode_bulk_phases >>
+    disch_then (fn th =>
+      qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ (DecDynArray _ _ _ _ _) _ = _`
+        (mp_tac o SIMP_RULE bool_ss [th, abi_decode_bulk_body_def, comp_bind_def, LET_THM])) >>
+    rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[]) >>
+ drule abi_decode_dynarray_position_prefix_joint_code >> strip_tac >>
+ drule abi_decode_bulk_payload_joint_code >> strip_tac >>
+ `?middle. emit_op MLOAD [addr] c1 = (cnt,middle) /\
+    emit_void MSTORE [Var output;cnt] middle = ((),c2)` by
+   (qpat_assum `abi_decode_array_header _ _ _ _ = _`
+      (mp_tac o SIMP_RULE bool_ss [abi_decode_array_header_def, comp_bind_def,
+        comp_ignore_bind_def, comp_return_def, LET_THM]) >>
+    rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[]) >>
+ `inst_extends c1 middle /\ inst_extends middle c2 /\
+  same_blocks c1 middle /\ same_blocks middle c2` by
+   metis_tac[inst_extends_emit_op, inst_extends_emit_void, emit_op_extends, emit_void_extends] >>
+ drule emitted_insts_emit_op >> strip_tac >>
+ drule emitted_insts_emit_void >> strip_tac >>
+ `inst_extends c1 c2 /\ inst_extends st c2` by metis_tac[inst_extends_trans] >>
+ `st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
+  same_blocks c1 c2` by
+   (imp_res_tac emit_op_extends_next_var >> fs[same_blocks_def] >> decide_tac) >>
+ `cs_extends st c1 /\ cs_extends c1 c2 /\ cs_extends c2 en` by
+   (rpt conj_tac >> irule cs_extends_same_block >>
+    fs[inst_extends_def, same_blocks_def, IS_PREFIX_APPEND] >> metis_tac[]) >>
+ `cs_extends c1 en` by metis_tac[cs_extends_trans] >>
+ `fn_has_code st c1 func /\ fn_has_code c1 c2 func /\ fn_has_code c2 en func` by
+   metis_tac[fn_has_code_split] >>
+ `emitted_insts st en = emitted_insts st c1 ++ emitted_insts c1 c2 ++ emitted_insts c2 en /\
+  emitted_insts c1 c2 = emitted_insts c1 middle ++ emitted_insts middle c2` by
+   (`emitted_insts st en = emitted_insts st c2 ++ emitted_insts c2 en` by
+      (irule emitted_insts_append >> fs[inst_extends_def]) >>
+    `emitted_insts st c2 = emitted_insts st c1 ++ emitted_insts c1 c2` by
+      (irule emitted_insts_append >> fs[inst_extends_def]) >>
+    conj_tac >- simp[APPEND_ASSOC] >>
+    irule emitted_insts_append >> fs[inst_extends_def]) >>
+ `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts c1 c2)` by
+   (qpat_assum `emitted_insts c1 c2 = _` (fn th => pure_rewrite_tac[th]) >>
+    simp[mk_inst_def, is_terminator_def]) >>
+ `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c1 c2) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c2 en)` by fs[EVERY_MEM] >>
+ `?r1 r2. run_inst_seq (emitted_insts st c1) s = OK r1 /\
+    run_inst_seq (emitted_insts c1 c2) r1 = OK r2 /\
+    run_inst_seq (emitted_insts c2 en) r2 = OK actual` by
+   (qpat_assum `run_inst_seq (emitted_insts st en) s = OK actual` mp_tac >>
+    qpat_assum `emitted_insts st en = _` (fn th => pure_rewrite_tac[th]) >>
+    simp[bop_run_inst_seq_append_ok] >> metis_tac[]) >>
+ qhdtm_assum `abi_malformed_entry`
+   (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_malformed_entry_def]) >>
+ `alloca_inv s` by fs[stmt_state_rel_def] >>
+ drule_all abi_malformed_allocated_bounds >>
+ disch_then (map_every assume_tac o CONJUNCTS) >>
+ `d+32+maxn*type_memory_size tv <= s.vs_alloca_next /\
+  d+32+maxn*type_memory_size tv < dimword (:256)` by
+   (qpat_assum `d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= _` mp_tac >>
+    qpat_assum `d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < _` mp_tac >>
+    qpat_assum `type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = _`
+      (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `mem_sz = type_memory_size tv` (fn th => pure_rewrite_tac[th]) >>
+    POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+ `B+L < dimword (:256)` by fs[abi_malformed_allocated_window_def] >>
+ `B < dimword (:256)` by decide_tac >>
+ `maxn*abi_sz < dimword (:256)` by
+   (qpat_assum `d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < _` mp_tac >>
+    qpat_assum `type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = _`
+      (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `abi_sz = type_memory_size tv` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `mem_sz = type_memory_size tv` (fn th => pure_rewrite_tac[th]) >>
+    POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+ `not_fresh_at st source /\ not_fresh_at st output /\
+  (!x. pos = Var x ==> not_fresh_at st x) /\
+  (!x. hi = Var x ==> not_fresh_at st x)` by
+   (qpat_assum `EVERY (abi_decoder_operand_live st.cs_next_var) _` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `pos` >> Cases_on `hi` >>
+    simp[EVERY_DEF, abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       not_fresh_at_def]) >>
+ mp_tac (abi_decode_dynarray_position_prefix_success_joint |> Q.INST
+   [`sa` |-> `st`, `sb` |-> `c1`, `u` |-> `r1`, `stride` |-> `abi_sz`]) >>
+ (impl_tac >- simp[]) >>
+ disch_then (qx_choose_then `ar` (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
+ qpat_x_assum `addr = Var ar` SUBST_ALL_TAC >>
+ qabbrev_tac `s1 = r1 with vs_inst_idx := LENGTH c1.cs_current_insts` >>
+ qabbrev_tac `s2 = r2 with vs_inst_idx := LENGTH c2.cs_current_insts` >>
+ `run_inst_seq (emitted_insts c1 c2) s1 =
+    OK (r2 with vs_inst_idx := LENGTH c1.cs_current_insts) /\
+  run_inst_seq (emitted_insts c2 en) s2 =
+    OK (actual with vs_inst_idx := LENGTH c2.cs_current_insts)` by
+   simp[Abbr `s1`, Abbr `s2`, run_inst_seq_inst_idx, exec_result_map_def] >>
+ `r1.vs_halted = s.vs_halted /\ r1.vs_current_bb = s.vs_current_bb /\
+  r1.vs_alloca_next = s.vs_alloca_next /\ r1.vs_memory = s.vs_memory /\
+  r1.vs_labels = s.vs_labels` by
+   (qpat_assum `r1 = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+ `lookup_var output s = SOME (n2w d)` by
+   (qpat_assum `eval_operand (Var output) s = _`
+      (ACCEPT_TAC o PURE_REWRITE_RULE [eval_operand_def])) >>
+ `lookup_var output r1 = SOME (n2w d)` by
+   (qpat_assum `!x. not_fresh_at st x ==> _ /\ _ /\ _`
+      (qspec_then `output` mp_tac) >> simp[] >> strip_tac >> simp[]) >>
+ qpat_assum `same_blocks st c1`
+   (strip_assume_tac o PURE_REWRITE_RULE [same_blocks_def]) >>
+ qpat_assum `abi_decode_ptr_window G1 tn1 r1 source _ _`
+   (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_ptr_window_def]) >>
+ qpat_assum `abi_decode_ptr_window G1 tn1 r1 ar _ _`
+   (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_ptr_window_def]) >>
+ qpat_assum `allocas_from lo r1` (assume_tac o PURE_REWRITE_RULE [allocas_from_def]) >>
+ qpat_assum `lookup_var output r1 = _` (assume_tac o PURE_REWRITE_RULE [lookup_var_def]) >>
+ qpat_assum `lookup_var source r1 = _` (assume_tac o PURE_REWRITE_RULE [lookup_var_def]) >>
+ qpat_assum `lookup_var ar r1 = _` (assume_tac o PURE_REWRITE_RULE [lookup_var_def]) >>
+ `~s1.vs_halted /\ s1.vs_current_bb = c1.cs_current_bb /\
+  s1.vs_inst_idx = LENGTH c1.cs_current_insts /\
+  lookup_var output s1 = SOME (n2w d) /\
+  s1.vs_alloca_next = s.vs_alloca_next /\
+  abi_decode_ptr_window G1 tn1 s1 source (n2w B) L /\
+  abi_decode_ptr_window G1 tn1 s1 ar (n2w (B+p)) 32 /\ allocas_from lo s1` by
+   simp[Abbr `s1`, abi_decode_ptr_window_def, allocas_from_def, lookup_var_def] >>
+ `ptr_covers G1 tn1 output s1 (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))` by
+   (irule ptr_covers_frame >> qexistsl_tac [`G`, `s`, `tn`] >>
+    simp[Abbr `s1`, lookup_var_def] >> metis_tac[]) >>
+ `not_fresh_at c1 output /\ not_fresh_at c1 source /\
+  (!x. pos = Var x ==> not_fresh_at c1 x)` by
+   (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+ `B+p+32 < dimword (:256) /\ B+p+32 <= s1.vs_alloca_next` by decide_tac >>
+ mp_tac (abi_decode_array_header_success_joint |> Q.INST
+   [`sa` |-> `c1`, `sb` |-> `c2`, `s` |-> `s1`, `u` |-> `r2 with vs_inst_idx := LENGTH c1.cs_current_insts`,
+    `addr` |-> `ar`, `a` |-> `B+p`, `cap` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`,
+    `G` |-> `G1`, `tn` |-> `tn1`]) >>
+ (impl_tac >- simp[]) >>
+ disch_then (qx_choose_then `G2` (qx_choose_then `tn2` (strip_assume_tac o SRULE []))) >>
+ `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c1 c2)` by
+   (qpat_assum `emitted_insts c1 c2 = _` (fn th => pure_rewrite_tac[th]) >>
+    simp[mk_inst_def, is_terminator_def]) >>
+ `r2.vs_current_bb = r1.vs_current_bb /\ r2.vs_halted = r1.vs_halted` by
+   (conj_tac
+    >- (irule (run_inst_seq_preserves_field |> Q.ISPEC `\s:venom_state. s.vs_current_bb` |> BETA_RULE) >>
+        qexists_tac `emitted_insts c1 c2` >> reverse conj_tac
+        >- first_assum ACCEPT_TAC >> rpt strip_tac >>
+        qpat_assum `step_inst_base _ _ = OK _` mp_tac >>
+        qpat_assum `MEM _ (emitted_insts c1 c2)` mp_tac >>
+        qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c1 c2)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM] >>
+        metis_tac[history_base_control_flow]) >>
+    irule run_inst_seq_preserves_halted >> qexists_tac `emitted_insts c1 c2` >>
+    simp[mk_inst_def, is_terminator_def]) >>
+ qpat_assum `same_blocks c1 c2` (strip_assume_tac o PURE_REWRITE_RULE [same_blocks_def]) >>
+ qpat_assum `allocas_from lo r2` (assume_tac o PURE_REWRITE_RULE [allocas_from_def]) >>
+ `~s2.vs_halted /\ s2.vs_current_bb = c2.cs_current_bb /\
+  s2.vs_inst_idx = LENGTH c2.cs_current_insts /\
+  s2.vs_alloca_next = s.vs_alloca_next /\ allocas_from lo s2` by
+   simp[Abbr `s2`, Abbr `s1`, allocas_from_def] >>
+ `mload (B+p) s1 = mload (B+p) s` by
+   simp[Abbr `s1`, mload_def] >>
+ `abi_decoder_operand_live middle.cs_next_var cnt` by
+   metis_tac[abi_decoder_operand_live_emit] >>
+ `not_fresh_at c2 output /\ not_fresh_at c2 source /\
+  (!x. pos = Var x ==> not_fresh_at c2 x) /\
+  (!x. cnt = Var x ==> not_fresh_at c2 x)` by
+   (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+    metis_tac[LESS_EQ_TRANS]) >>
+ `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts c1 c2)` by
+   (qpat_assum `emitted_insts c1 c2 = _` (fn th => pure_rewrite_tac[th]) >>
+    simp[mk_inst_def, abi_decoder_reentry_opcode_def]) >>
+ mp_tac (Q.SPECL [`emitted_insts c1 c2`, `r1`, `r2`] abi_valid_allocated_sequence_static) >>
+ (impl_tac >- simp[]) >> strip_tac >>
+ mp_tac (abi_decode_scalar_protected_operand |> Q.INST
+   [`op` |-> `pos`, `s` |-> `s`, `t` |-> `r1`, `G` |-> `G`, `H` |-> `G1`,
+    `tn` |-> `tn`, `tm` |-> `tn1`, `R` |-> `{x | not_fresh_at st x}`]) >>
+ (impl_tac >- simp[]) >> strip_tac >>
+ mp_tac (abi_decode_scalar_protected_operand |> Q.INST
+   [`op` |-> `pos`, `s` |-> `s1`, `t` |-> `r2`, `G` |-> `G1`, `H` |-> `G2`,
+    `tn` |-> `tn1`, `tm` |-> `tn2`, `R` |-> `{x | not_fresh_at c1 x}`]) >>
+ (impl_tac >-
+   (qunabbrev_tac `s1` >>
+    qpat_assum `!x. not_fresh_at c1 x ==> _ /\ _ /\ _` mp_tac >>
+    qpat_assum `!x. pos = Var x ==> not_fresh_at c1 x` mp_tac >>
+    qpat_assum `r2.vs_labels = r1.vs_labels` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[lookup_var_def])) >> strip_tac >>
+ `lookup_var output r2 = SOME (n2w d)` by
+   (qpat_assum `!x. not_fresh_at c1 x ==> _ /\ _ /\ _`
+      (qspec_then `output` mp_tac) >>
+    qpat_assum `lookup_var output s1 = _` mp_tac >>
+    qpat_assum `not_fresh_at c1 output` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[lookup_var_def]) >>
+ qpat_assum `lookup_var output r2 = _` (assume_tac o PURE_REWRITE_RULE [lookup_var_def]) >>
+ `lookup_var output s2 = SOME (n2w d) /\
+  eval_operand pos s2 = SOME (n2w p) /\
+  eval_operand cnt s2 = SOME (n2w (w2n (mload (B+p) s))) /\
+  op_prov G2 pos = NONE /\ op_taint tn2 pos = {} /\
+  op_prov G2 cnt = NONE /\ op_taint tn2 cnt = {} /\
+  ptr_covers G2 tn2 output s2 (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))` by
+   simp[Abbr `s2`, Abbr `s1`, lookup_var_def] >>
+ `lookup_var source s2 = lookup_var source s1 /\
+  FLOOKUP G2 source = FLOOKUP G1 source /\
+  op_taint tn2 (Var source) = op_taint tn1 (Var source)` by
+   (qpat_assum `!x. not_fresh_at c1 x ==> _ /\ _ /\ _`
+      (qspec_then `source` mp_tac) >>
+    qpat_assum `not_fresh_at c1 source` mp_tac >>
+    qunabbrev_tac `s2` >> POP_ASSUM_LIST (K ALL_TAC) >> simp[lookup_var_def]) >>
+ `!i. B <= i /\ i < B+L ==> i NOTIN tn.t_mem` by
+   (qpat_assum `abi_decode_ptr_window G tn s source (n2w B) L` mp_tac >>
+    qpat_assum `B < dimword (:256)` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[abi_decode_ptr_window_def, w2n_n2w]) >>
+ `!i. B <= i /\ i < B+L ==> (i IN tn2.t_mem <=> i IN tn1.t_mem)` by
+   (rpt strip_tac >> simp[IN_DIFF] >> decide_tac) >>
+ `abi_decode_ptr_window G2 tn2 s2 source (n2w B) L` by
+   (irule abi_decode_ptr_window_frame >> qexistsl_tac [`G1`, `s1`, `tn1`] >>
+    simp[w2n_n2w]) >>
+ mp_tac (abi_decode_bulk_payload_success_joint |> Q.INST
+   [`sa` |-> `c2`, `sb` |-> `en`, `s` |-> `s2`,
+    `u` |-> `actual with vs_inst_idx := LENGTH c2.cs_current_insts`,
+    `n` |-> `w2n (mload (B+p) s)`, `G` |-> `G2`, `tn` |-> `tn2`,
+    `cap` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]) >>
+ (impl_tac >-
+   (simp[] >>
+    qpat_assum `p+32+w2n (mload (B+p) s)*abi_sz <= L` mp_tac >>
+    qpat_assum `w2n (mload (B+p) s) <= maxn` mp_tac >>
+    qpat_assum `abi_sz = type_memory_size tv` (fn th => pure_rewrite_tac[th]) >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    rpt disch_tac >> conj_tac
+    >- (qpat_assum `p+32+_ <= L` (mp_tac o ONCE_REWRITE_RULE [MULT_COMM]) >> decide_tac) >>
+    CONV_TAC (RAND_CONV (REWR_CONV MULT_COMM)) >> simp[LE_MULT_LCANCEL])) >>
+ disch_then (qx_choose_then `G3` (qx_choose_then `tn3` (strip_assume_tac o SRULE []))) >>
+ `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK (actual with vs_inst_idx := LENGTH en.cs_current_insts),G3,tn3)` by
+   (rpt gen_tac >>
+    `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK s1,G1,tn1)` by
+      simp[Abbr `s1`] >>
+    `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s1,G1,tn1) [] (OK s2,G2,tn2)` by
+      simp[Abbr `s2`] >>
+    metis_tac[gas_origin_ptr_path_append, APPEND]) >>
+ drule_all abi_valid_allocated_bulk_count >> strip_tac >>
+ `LENGTH vs < dimword (:256)` by decide_tac >>
+ `LENGTH (vs:value list)*type_memory_size tv <= maxn*type_memory_size tv` by
+   (qpat_assum `LENGTH (vs:value list) <= maxn` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[LE_MULT_RCANCEL]) >>
+ `!i. d <= i /\ i < d+32+LENGTH vs*type_memory_size tv ==> i NOTIN tn3.t_mem` by
+   (qpat_assum `tn3.t_mem = _` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `tn2.t_mem = _` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `mload (B+p) s = _` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `mem_sz = type_memory_size tv` (fn th => pure_rewrite_tac[th]) >>
+    qpat_assum `LENGTH vs < dimword (:256)` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >>
+    simp[w2n_n2w, IN_DIFF] >> decide_tac) >>
+ `val_wf (ArrayTV tv (Dynamic maxn)) v` by
+   (irule (cj 1 value_has_type_val_wf) >>
+    irule (cj 1 vyperTypeABITheory.abi_to_vyper_well_typed) >>
+    drule abi_decoder_coherent_header >> fs[abi_decoder_header_def] >> metis_tac[]) >>
+ `!mem. mem_agree_outside tn3.t_mem actual.vs_memory mem ==>
+    val_in_memory (ArrayTV tv (Dynamic maxn)) v d mem` by
+   (`val_in_memory (ArrayTV tv (Dynamic (LENGTH vs)))
+       (ArrayV (DynArrayV vs)) d actual.vs_memory` by
+      fs[abi_valid_allocated_post_def, val_in_memory_dynarray] >>
+    `val_wf (ArrayTV tv (Dynamic (LENGTH vs))) (ArrayV (DynArrayV vs))` by
+      (qpat_assum `val_wf (ArrayTV tv (Dynamic maxn)) v` mp_tac >>
+       qpat_assum `v = ArrayV (DynArrayV vs)` (fn th => pure_rewrite_tac[th]) >>
+       POP_ASSUM_LIST (K ALL_TAC) >> simp[val_wf_def]) >>
+    mp_tac (clean_window_value_robust |> Q.INST
+      [`ty` |-> `ArrayTV tv (Dynamic (LENGTH (vs:value list)))`, `v` |-> `ArrayV (DynArrayV vs)`,
+       `off` |-> `d`, `mem` |-> `actual.vs_memory`,
+       `nb` |-> `32+LENGTH (vs:value list)*type_memory_size tv`, `dirty` |-> `tn3.t_mem`]) >>
+    (impl_tac >-
+      (qpat_assum `val_in_memory (ArrayTV tv (Dynamic (LENGTH vs)))
+         (ArrayV (DynArrayV vs)) d actual.vs_memory` mp_tac >>
+       qpat_assum `val_wf (ArrayTV tv (Dynamic (LENGTH vs)))
+         (ArrayV (DynArrayV vs))` mp_tac >>
+       qpat_assum `!i. d <= i /\ i < d+32+LENGTH (vs:value list)*_ ==> _` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+       RULE_ASSUM_TAC (REWRITE_RULE [ADD_ASSOC]) >>
+       simp_tac std_ss [type_memory_size_def, ADD_ASSOC] >>
+       rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    simp[val_in_memory_dynarray]) >>
+ drule_all abi_decoder_bulk_allocation_shape >> strip_tac >>
+ drule_all abi_valid_allocated_sequence_static >> strip_tac >>
+ drule_all ctor_actual_sequence_world >> strip_tac >>
+ drule_all abi_decoder_bulk_shape >> strip_tac >>
+ `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st en)` by fs[EVERY_MEM] >>
+ `alloca_history func (actual with vs_inst_idx := LENGTH en.cs_current_insts)` by
+   (irule entry_straight_line_alloca_history >>
+    conj_tac >- first_assum ACCEPT_TAC >> qexistsl_tac [`s`, `st`] >> simp[]) >>
+ `abi_decode_ptr_window G3 tn3 (actual with vs_inst_idx := LENGTH en.cs_current_insts)
+    source (n2w B) L` by
+   (qpat_assum `abi_decode_ptr_window G3 tn3 _ source (n2w B) L` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> simp[abi_decode_ptr_window_def, lookup_var_def]) >>
+ `!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+    FLOOKUP G3 x = FLOOKUP G x /\ op_taint tn3 (Var x) = op_taint tn (Var x)` by
+   (rpt strip_tac >>
+    `not_fresh_at st x /\ not_fresh_at c1 x /\ not_fresh_at c2 x` by
+      (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+       metis_tac[LESS_EQ_TRANS]) >> metis_tac[]) >>
+ qexistsl_tac [`actual with vs_inst_idx := LENGTH en.cs_current_insts`, `G3`, `tn3`] >>
+ simp[] >>
+ qpat_assum `LENGTH (vs:value list)*type_memory_size tv <= maxn*type_memory_size tv` mp_tac >>
+ POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> decide_tac
 QED
 
 Theorem abi_valid_allocated_joint_members_cons[local]:
