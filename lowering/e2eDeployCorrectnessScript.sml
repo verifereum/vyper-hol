@@ -134,6 +134,8 @@ Proof
     fs[deploy_phases_def] >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all deploy_entry_state_ok >> strip_tac >>
+  `(deploy_entry_state prog cplan tops es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+    simp[deploy_entry_state_def, entry_venom_state_def] >>
   `!eom. max_live_eom dout.po_unit.cu_context = SOME eom ==>
          eom <= w2n (deploy_entry_state prog cplan tops es).vs_initial_fmp` by
     metis_tac[generate_context_plan_eom_room] >>
@@ -178,8 +180,6 @@ Proof
                `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
     deploy_venom_result_rel_dead >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  `(deploy_entry_state prog cplan tops es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
-    simp[deploy_entry_state_def, entry_venom_state_def] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
