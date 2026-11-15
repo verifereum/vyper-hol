@@ -139,7 +139,10 @@ Proof
   drule expr_body_pre_vv_gas_admissible >> strip_tac >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
-  disch_then irule >> simp[]
+  disch_then (qspecl_then [`st0`, `sa`, `sb`, `vv`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  irule aggregate_tuple_gas_outcome_mono >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem aggregate_mem_tuple_local_region_backward:
