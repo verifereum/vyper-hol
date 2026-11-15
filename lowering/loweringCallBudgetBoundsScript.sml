@@ -197,7 +197,15 @@ Theorem lower_budget_completed_allocation_charge_bound:
   pair a < LENGTH h ==>
   ceil32 (w2n sz) <= 2 ** 64
 Proof
-  FAIL_TAC "Pending allocation charge proof"
+  strip_tac >>
+  drule_all lower_budget_path_charge_facts >> strip_tac >>
+  `LENGTH pre.vs_call_ctx.cc_calldata < 2 ** 64` by
+    (qpat_x_assum `lower_alloc_record h a fn ai pre op sz post` mp_tac >>
+     rewrite_tac[lower_alloc_record_def] >> strip_tac >> metis_tac[]) >>
+  `!n p i fuel t r.
+    n < LENGTH h /\ EL n h = BudgetStep n p i fuel (OK t) r ==>
+    step_inst fuel ctx i p.bp_state = OK t` by metis_tac[] >>
+  drule_all lower_budget_completed_charge_from_records >> simp[]
 QED
 
 Theorem lower_budget_history_allocation_charge_bound:
@@ -220,6 +228,29 @@ Theorem lower_budget_history_allocation_charge_bound:
       (FILTER (\a. lower_event_allocates (EL a h))
         (GENLIST I (LENGTH h)))) < dimword (:256))
 Proof
-  FAIL_TAC "Pending allocation charge proof"
+  strip_tac >>
+  `!a. a < LENGTH h /\ lower_event_allocates (EL a h) /\
+       pair a < LENGTH h ==> charge a <= 2 ** 64` by
+    (rpt strip_tac >>
+     qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _`
+       (qspec_then `a` mp_tac) >>
+     simp[] >> strip_tac >>
+     drule_all lower_budget_completed_allocation_charge_bound >> simp[]) >>
+  `!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+       charge a <= 2 ** 255 + 2 ** 64` by
+    (rpt strip_tac >>
+     qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _`
+       (qspec_then `a` mp_tac) >>
+     simp[] >> strip_tac >>
+     `w2n sz <= 32 * (2 ** 250 + 2 ** 59)` by
+       fs[lower_alloc_record_def] >>
+     drule ceil32_le_multiple >>
+     simp[contractABITheory.ceil32_def,
+          fmpAlignmentTheory.ceil32_div_mul, MULT_COMM]) >>
+  drule_all lower_budget_history_charge_from_bounds >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  drule_all dalloca_split_budget >> decide_tac
 QED
 
