@@ -15,9 +15,10 @@
  *)
 Theory bodyPtrCallCalldata
 Ancestors
-  rawCallCalldataDalloca bodyPtrDefs exprSimSend exprSimHypsDefs exprLoweringProps fragExec
+  rawCallCalldataDalloca bodyPtrDefs exprSimHypsDefs exprLoweringProps fragExec
   compileEnv exprLowering builtinSystem context ptrDiscipline venomInst
   stmtLoweringMono vyperTypeSystem vyperAST list rich_list pair
+  gasStorage fragGasPathPtr vyperStorageTrace vyperStorageFootprint
 
 (* A function stmt_state_rel runs is one of ctx's. *)
 Theorem stmt_state_rel_dalloca:
@@ -42,8 +43,16 @@ Proof
   rpt gen_tac >> strip_tac >>
   `args <> []` by (strip_tac >> gvs[well_typed_expr_def]) >>
   rw[expr_sim_ptr_def, expr_vv_sim_ptr_def] >>
+  (reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+   >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+       irule gas_bad_storage_at_initial >>
+       simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+            storage_trace_frame_read_result])) >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace)
+     ctx func cenv cx es s0` by
+    (fs[storage_trace_domain_def] >> metis_tac[]) >>
   `ctx_has_dalloca ctx` suffices_by simp[] >>
-  irule stmt_state_rel_dalloca >> first_assum (irule_at Any)
+  drule stmt_state_rel_dalloca >> disch_then irule
   >- (drule lower_value_compile_expr_split >> strip_tac >>
       `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
       drule_all compile_expr_raw_call_calldata_dalloca >> simp[]) >>

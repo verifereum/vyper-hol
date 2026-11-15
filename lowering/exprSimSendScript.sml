@@ -758,12 +758,19 @@ Theorem send_tail_summary[local]:
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
-       expr_exit res r)
+       expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `(do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
        read_result cx tv od) es1 = (res, es')` by
     (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
+  `res <> INR HaltException` by
+    (qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     drule_all send_call_read_step >>
+     disch_then (qspecl_then [`""`, `sm.cs_next_id`] strip_assume_tac) >>
+     gvs[]) >>
   drule_all send_tail_path >> strip_tac >>
   drule send_read_gas_obs >> strip_tac >>
   `es1 with gas_obs := [] = es1` by
@@ -780,7 +787,7 @@ Proof
               gas_explicit_replicate_false, APPEND] >>
   BETA_TAC >> pop_assum SUBST1_TAC >> conj_tac
   >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
-  gvs[] >> metis_tac[]
+  gvs[halt_exit_def] >> metis_tac[]
 QED
 
 (* ===== send ===== *)
@@ -821,14 +828,14 @@ Proof
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `!es gs. expr_sim_inv cenv cx env es ==>
            expr_sim_inv cenv cx env (es with gas_obs := gs)` by simp[] >>
-  drule_all lower_typed_args_sim >> strip_tac >>
+  drule_all exprSimPrecompilesTheory.lower_typed_args_sim >> strip_tac >>
   drule_then (fn th => rewrite_tac[th]) eval_expr_send_read_action >>
-  irule eval_exprs_suffix >> rpt conj_tac
+  irule exprSimPrecompilesTheory.eval_exprs_suffix >> rpt conj_tac
   >~ [`storage_trace_frame _`]
   >- (rw[] >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.storage_trace_frame_send,
            vyperStorageTraceTheory.storage_trace_frame_read_result])
-  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def] >>
+  >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def, halt_exit_def] >>
   qexists_tac `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee args
                  ([addr_op; val_op] ++ (if has_gas then [gas_op] else []))
                  vs t /\ t.vs_current_bb = sm.cs_current_bb /\
