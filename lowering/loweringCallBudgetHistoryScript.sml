@@ -367,6 +367,14 @@ val call_budget_headers = [
     initial_venom_state_rel tops am tx vs /\
     k <= 2 ** 64 /\
     (!obs. source_calls_within k am tx vs.vs_outcomes obs) /\
+    (!marks.
+      source_storage_ok am tx vs.vs_outcomes
+        (gas_explicit marks vs.vs_gas_readings) /\
+      call_outcomes_storage_ok am tx vs.vs_outcomes
+        (gas_explicit marks vs.vs_gas_readings)) /\
+    (!marks. ~source_exempt tops
+      (call_external (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     vs.vs_fmp = vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254 /\
     unit_alloca_budget unit.cu_context +
@@ -400,6 +408,14 @@ val call_budget_headers = [
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    (!marks.
+      source_storage_ok am tx vs.vs_outcomes
+        (gas_explicit marks vs.vs_gas_readings) /\
+      call_outcomes_storage_ok am tx vs.vs_outcomes
+        (gas_explicit marks vs.vs_gas_readings)) /\
+    (!marks. ~source_exempt tops
+      (call_external (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     vs.vs_fmp = vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254 /\
     unit_alloca_budget unit.cu_context +
@@ -482,6 +498,11 @@ val call_budget_headers = [
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     (!obs. source_calls_within (2 ** 64) am tx vs.vs_outcomes obs) /\
+    (!gs.
+      source_storage_ok am tx vs.vs_outcomes gs /\
+      call_outcomes_storage_ok am tx vs.vs_outcomes gs) /\
+    (!gs. ~source_exempt tops
+      (call_external (SOME vs.vs_outcomes) gs am tx)) /\
     w2n fmp < 2 ** 254 /\
     unit_alloca_budget unit.cu_context +
       32 * ctx_dload_count unit.cu_context <= w2n fmp /\
