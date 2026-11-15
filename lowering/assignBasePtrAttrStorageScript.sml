@@ -17,6 +17,9 @@ Ancestors assignBasePtrAttrLocal assignBasePtrFieldAddress assignTuplePtrStorage
   stmtSimAssignAttr supportedExprForms assignBasePtrStorageBody
 Libs monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem assign_base_attr_storage_target:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
@@ -410,7 +413,7 @@ Proof
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat,supported_stmt_expr_exists_def,
        supported_assignment_exists_def,supported_expr_exists_def,
        int_calls_stmt_def,int_calls_atarget_def,int_calls_expr_def] >>

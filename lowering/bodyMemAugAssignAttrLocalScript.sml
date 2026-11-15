@@ -28,6 +28,9 @@ Ancestors
 Libs
   monadsyntax emitTacticsLib
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* Pure source boundaries; all observations remain available to the RHS. *)
 Theorem augassign_attr_place_reads_mem_src[local]:
   lookup_scopes id es.scopes = SOME entry /\
@@ -139,7 +142,7 @@ Proof
   simp[GSYM bind_assoc, bind_def]
 QED
 
-Theorem augassign_attr_rhs_normal_mem_src[local]:
+Theorem augassign_attr_rhs_normal_mem_src:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
@@ -2103,7 +2106,7 @@ Proof
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>

@@ -25,6 +25,7 @@ Theorem target_indices_pre_of_body:
     call_evaluation_safe cx (int_calls_target bt) /\
     ~supported_target_exists expr_evm_run_root bt /\
     ~supported_target_exists call_operands_effect_root bt /\
+    ~supported_target_exists (const_name_root cx) bt /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
                       get_module_code cx NONE = SOME tops /\
@@ -58,7 +59,8 @@ Proof
   gvs[Once well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
       expr_abi_decode_target_root_def, expr_evm_run_root_def,
-      call_operands_effect_root_def] >>
+      call_operands_effect_root_def,
+        exprSimHypsDefsTheory.const_name_root_def] >>
   irule target_indices_pre_of_body >> simp[] >> metis_tac[]
 QED
 
@@ -123,7 +125,8 @@ Proof
   `FLOOKUP env.bare_globals (src,id) = SOME ty` by
     (fs[env_context_consistent_def] >> metis_tac[]) >>
   `?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off)` by
-    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+    (`IS_SOME (FLOOKUP env.bare_global_assignable (src,id))` by fs[] >>
+     fs[expr_sim_inv_def] >> metis_tac[]) >>
   `target_in_immutables cenv.ce_module_vars bt` by
     (simp[target_in_immutables_root] >> metis_tac[]) >>
   fs[alloc_limits_expr_def]
