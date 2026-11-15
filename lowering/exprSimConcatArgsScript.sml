@@ -875,9 +875,8 @@ QED
 Theorem concat_args_sim:
   !args P k ctx func cenv cx env nocalls st0 es sa sb s0 dv ov ow
    binst B bsz oinst.
-    compile_concat compile_expr cenv args (Var dv) (MAP (\e. let ety = expr_type e in
-                if is_bytestring_type ety then (T, 0:num)
-                else case ety of
+    compile_concat compile_expr cenv args (Var dv) (MAP (\e. if is_bytestring_type (expr_type e) then (T, 0:num)
+                else case expr_type e of
                        BaseT (BytesT (Fixed m)) => (F, m)
                      | _ => (F, 32:num)) args)
       (Var ov) sa = ((), sb) /\
@@ -975,7 +974,7 @@ Proof
     (drule (cj 2 compile_expr_grows) >> simp[ci_mono_def]) >>
   `ci_mono s1 sb` by
     (qspecl_then [`cenv`, `e`, `args`, `dv`, `ov`, `sa`, `sb`, `op`, `s1`]
-       mp_tac concat_cons_mono >>
+       mp_tac (SIMP_RULE bool_ss [LET_THM] concat_cons_mono) >>
      impl_tac >- (rpt conj_tac >- first_assum ACCEPT_TAC
                   >- first_assum ACCEPT_TAC >> metis_tac[]) >>
      disch_then ACCEPT_TAC) >>
