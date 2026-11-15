@@ -99,7 +99,7 @@ Resume abi_builtin_decode_phased_ready_ptr[compose]:
    isPREFIX (emitted_insts sh ready) (DROP h.vs_inst_idx bb.bb_instructions)` by
     (conj_tac >- metis_tac[] >>
      qpat_x_assum `[_] ≼ _` mp_tac >> simp[]) >>
-  drule_all hash_literal_alloc_counted_path >>
+  drule_all (cj 2 hash_literal_alloc_counted_path) >>
   disch_then assume_tac >>
   `step_inst 0 ctx (mk_inst sh.cs_next_id ALLOCA [Lit (n2w outsz)]
      [STRING #"%" (toString sh.cs_next_var)]) h = OK t` by
@@ -241,7 +241,7 @@ Resume abi_builtin_decode_phased_ready_ptr[clean]:
       simp_tac bool_ss [regions_disjoint_def] >> decide_tac) >>
   qpat_x_assum `!t' s'' fn es' cx' ctx' cenv' b. _` irule >>
   asm_rewrite_tac [] >>
-  qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >>
+  qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es`, `func`] >>
   asm_rewrite_tac []
 QED
 

@@ -127,6 +127,19 @@ Proof
   simp[]
 QED
 
+Theorem abi_decode_extend_same_lookup:
+  abi_decoder_vars_extend s.vs_vars u v /\ lookup_var x u = lookup_var x s ==>
+  lookup_var x v = lookup_var x s
+Proof
+  simp_tac bool_ss [abi_decoder_vars_extend_def, abi_decoder_var_map_def,
+    lookup_var_def] >> strip_tac >>
+  Cases_on `FLOOKUP s.vs_vars x`
+  >- (fs[SUBMAP_FLOOKUP_EQN, FLOOKUP_FUNION] >>
+      Cases_on `FLOOKUP v.vs_vars x` >> fs[] >>
+      first_x_assum drule >> simp[]) >>
+  metis_tac[FLOOKUP_SUBMAP]
+QED
+
 Theorem abi_decoder_vars_extend_fresh:
   abi_decoder_vars_extend extras s t /\ fresh_vars_wrt st s /\
   (!n. st.cs_next_var <= n ==> STRING #"%" (toString n) NOTIN FDOM extras) ==>
