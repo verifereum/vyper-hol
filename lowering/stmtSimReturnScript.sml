@@ -1059,7 +1059,7 @@ Proof
       drule_all (Q.INST
         [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
         constructor_exit_state_rel) >> simp[]) >>
-  simp[]
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* A word return releases the guard and then RETs the value and the PC. *)
@@ -1372,5 +1372,5 @@ Proof
       drule_all (Q.INST
         [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
         constructor_exit_state_rel) >> simp[]) >>
-  simp[]
+  conj_tac >> first_assum ACCEPT_TAC
 QED
