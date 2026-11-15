@@ -9,7 +9,7 @@
 Theory bodyFullCases
 Ancestors
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
-  bodyFullAppend bodyFullIfExp bodyFullAttribute
+  bodyFullAppend bodyFullIfExp bodyFullAttribute bodyFullIntCall
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
@@ -581,7 +581,26 @@ Theorem body_intcall_case_full:
        body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  ONCE_REWRITE_TAC[body_expr_full_ok_def] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all body_intcall_source_selection >> strip_tac >>
+  `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
+    (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
+     simp[]) >>
+  `!s1 vs t1 penv rtv.
+     ~MEM (src_id_opt,fn) cx.stk /\
+     eval_exprs cx es s1 = (INL vs,t1) /\
+     bind_arguments (get_tenv cx) args vs = SOME penv /\
+     (nr ==> IS_SOME cx.nonreentrant_slot) /\
+     (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) /\
+     evaluate_type (get_tenv cx) ret = SOME rtv ==>
+     body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
+    (rpt strip_tac >> drule intcall_body_full_ih >> disch_then drule_all >>
+     simp[]) >>
+  gvs[] >> conj_tac
+  >- (irule intcall_sim_full >> simp[] >> metis_tac[]) >>
+  irule intcall_vv_full >> simp[] >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)

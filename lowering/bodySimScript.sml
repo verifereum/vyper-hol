@@ -39,7 +39,7 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
-  immutableLocationProps exprSimMapDefs
+  immutableLocationProps exprSimMapDefs nonreentrantLowering
 Libs
   monadsyntax
 
@@ -123,8 +123,19 @@ Definition body_inv_def:
     (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
     (!vis mut nr rr fn args dflts ret body.
        MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
-       function_mutability_ok [(NONE, tops)] vis mut nr dflts body)
+       function_mutability_ok [(NONE, tops)] vis mut nr dflts body) /\
+    (!vis mut rr name args dflts ret ss.
+       MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+       cx.nonreentrant_slot = SOME global_nonreentrant_slot)
 End
+
+Theorem body_inv_nonreentrant_slot:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot
+Proof
+  rw[body_inv_def] >> res_tac
+QED
 
 (* The type checker gives every function of the main module its declared
    mutability (function_mutability_ok), as body_inv has it. *)
