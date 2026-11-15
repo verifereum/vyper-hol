@@ -1145,8 +1145,9 @@ Resume compile_augassign_local_case[rhs_summary]:
   >- (irule augassign_rhs_exception_exec >> conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
       qexists_tac `t` >> simp[]) >>
-  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def]
+  >- (disj1_tac >> metis_tac[expr_exit_INR_type]) >>
+  gvs[halt_exit_def]
 QED
 
 Resume compile_augassign_local_case[rhs_normal]:
@@ -1373,8 +1374,9 @@ Resume compile_augassign_local_case[operator_exit]:
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >>
       irule augassign_error_continuation_exec >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac
+  >- metis_tac[expr_exit_INR_type] >>
+  simp[halt_exit_def]
 QED
 
 Finalise compile_augassign_local_case

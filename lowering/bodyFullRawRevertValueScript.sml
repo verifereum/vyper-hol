@@ -1,7 +1,7 @@
 (* Joint RawRevert value composition, conditional on the compiled abort tail. *)
 Theory bodyFullRawRevertValue
 Ancestors
-  bodyFullRawRevertInterfaces bodyFullPreds bodySimFull exprSimHypsDefs
+  bodyFullRawRevertInterfaces bodyFullPreds bodySimFull exprSimHypsDefs bodyInvNoDalloca
   exprLowering gasOutcomeFullCompose
   exprOperandVar exprSimProps loweringPosts bodyPtrDefs exprSimMemDefs
   gasExemptCert vyperSystemControl vyperStorageFootprint
@@ -39,6 +39,8 @@ Theorem raw_revert_value_full_from_tail:
       cenv cx ty (Call ann RawRevert args dflt) es
 Proof
   disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by
+    metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
   drule raw_revert_source_pre >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (first_x_assum irule >> gvs[expr_body_pre_def]) >>
@@ -208,7 +210,7 @@ Resume raw_revert_value_full_from_tail[tail]:
   simp[lift_option_type_def, vyperValueTheory.dest_BytesV_def,
     bind_def, return_def, raise_def, Abbr `childR`,
     exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def] >>
-  gvs[vyperValueTheory.dest_BytesV_def]
+  gvs[vyperValueTheory.dest_BytesV_def, exprSimDefsTheory.halt_exit_def]
 QED
 
 Finalise raw_revert_value_full_from_tail
