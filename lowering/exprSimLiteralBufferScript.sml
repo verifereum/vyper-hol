@@ -749,53 +749,6 @@ Proof
   simp[listTheory.FILTER_APPEND_DISTRIB]
 QED
 
-Theorem literal_bytelike_run_frag[local]:
-  !bs ml sa buf sb ctx P Q R.
-    compile_bytelike_literal bs ml sa = (buf,sb) /\
-    (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-    frag_exec ctx sa sb P Q R
-Proof
-  `!ptr bs off sa sb.
-    compile_store_byte_chunks ptr bs off sa = ((),sb) ==>
-    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    same_blocks sa sb /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-      (emitted_insts sa sb)` by metis_tac[literal_chunks_shape] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_bytelike_literal _ _ _ = _` mp_tac >>
-  simp_tac (bool_ss ++ pairSimps.PAIR_ss)
-    [compile_bytelike_literal_def, LET_THM, comp_bind_def, comp_ignore_bind_def] >>
-  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
-  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
-  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [comp_return_def] >>
-  strip_tac >> gvs[] >>
-  rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
-  rename1 `emit_void MSTORE _ sm = (u,sh)` >> Cases_on `u` >>
-  rename1 `compile_store_byte_chunks _ _ _ sh = (v,sb)` >> Cases_on `v` >>
-  qpat_x_assum `!ptr bs off sa sb. _` drule >> strip_tac >>
-  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh /\
-   same_blocks sa sh /\
-   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts sa sh)` by suspend "header_shape" >>
-  `emitted_insts sa sb = emitted_insts sa sh ++ emitted_insts sh sb` by
-    (irule exprLoweringPropsTheory.emitted_insts_append >> simp[]) >>
-  irule fragExecTheory.frag_exec_run_inst_seq >>
-  gvs[exprLoweringPropsTheory.same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  metis_tac[APPEND_ASSOC]
-QED
-
-Resume literal_bytelike_run_frag[header_shape]:
-  gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-      emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  simp[exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_APPEND1,
-       exprLoweringPropsTheory.same_blocks_def, venomInstTheory.mk_inst_def,
-       venomInstTheory.is_terminator_def]
-QED
-
-Finalise literal_bytelike_run_frag
-
 Theorem literal_bytelike_counted_shape:
   !bs ml sa buf sb.
     compile_bytelike_literal bs ml sa = (buf,sb) ==>

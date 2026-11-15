@@ -24,6 +24,7 @@ Ancestors
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
+  constSubstStmts constSubstStmtsPreserve
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
   staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory

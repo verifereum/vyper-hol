@@ -119,24 +119,8 @@ Theorem body_terminator_last:
       bb.bb_label ps = SOME (ops, ps') ==>
     ps' = ps_after
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >>
-  drule_all body_inv_step >> strip_tac >>
-  `k = PRE (LENGTH bb.bb_instructions)` by
-    (qpat_x_assum `bb_well_formed bb`
-       (strip_assume_tac o REWRITE_RULE [bb_well_formed_def]) >>
-     qpat_x_assum `!i. i < LENGTH _ /\ is_terminator _ ==> _`
-       (qspec_then `k` mp_tac) >>
-     fs[]) >>
-  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (ops, ps')`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  `DROP (SUC k - LENGTH (get_params bb.bb_instructions))
-     (non_param_insts bb) = []` by
-    (qpat_x_assum `non_param_insts bb = _` SUBST1_TAC >>
-     irule DROP_LENGTH_TOO_LONG >> fs[LENGTH_DROP]) >>
-  qpat_x_assum `DROP (SUC k - _) _ = []`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ [] _ = _` mp_tac >>
-  simp[Once generate_block_insts_plan_def] >> fs[]
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule_all body_plan_terminator_last >> disch_then ACCEPT_TAC
 QED
 
 Theorem body_plan_succ_placed:
@@ -203,26 +187,8 @@ Theorem body_succ_placed:
       ps_tdfs.ps_alloc.sa_spill_base = spill_base /\
       ps_tdfs.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
 Proof
-  strip_tac >> drule body_inv_facts >> strip_tac >> unpack_inv >>
-  qspecl_then [`fn`, `bb`, `k`, `inst`, `t`] mp_tac body_succ_block >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
-               `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `t`, `tbb`]
-    mp_tac fnPlanCoverTheory.dfs_block_state_reachable >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`, `i`,
-               `fn`, `r`, `liveness`, `dfg`, `cfg`, `ch`, `growth`, `lbl_ctr`,
-               `ps_end`, `t`, `tbb`, `ps_dfs'`, `block_ops'`,
-               `ps_dfs_after'`] mp_tac dfs_block_code_placed >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
-  strip_tac >>
-  qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`, `spill_base`,
-               `lbl_ctr`, `fn_ops`, `ps_end`, `t`, `ps_dfs'`, `tbb`,
-               `block_ops'`, `ps_dfs_after'`] mp_tac body_dfs_state_region >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qexistsl_tac [`tbb`, `ps_dfs'`, `block_ops'`, `ps_dfs_after'`, `off`,
-                `pc`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
+  strip_tac >> drule body_inv_plan >> strip_tac >>
+  drule_all body_plan_succ_placed >> disch_then ACCEPT_TAC
 QED
 
 (* ===== The callee of an INVOKE ===== *)

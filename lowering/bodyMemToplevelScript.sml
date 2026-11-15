@@ -31,7 +31,9 @@ Proof
        ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
          !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
               off + type_memory_size tv < dimword (:256)` by
-        (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+        (fs[expr_sim_pre_def, expr_sim_inv_def, supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def] >>
+         metis_tac[]) >>
       qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
       simp[compile_expr_def]) >>
   rename1 `find_var_decl_by_name id ts = SOME di` >>

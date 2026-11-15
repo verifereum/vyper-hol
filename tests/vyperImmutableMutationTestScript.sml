@@ -68,10 +68,14 @@ fun check mode visibility ty body =
          FunctionDecl ^visibility Nonpayable F F "__init__" [] [] NoneT ^body])]
          : (num option # toplevel list) list``});
 val checked_count = ref 0;
+(* Every result that passes is saved, for accepted and rejected programs
+   alike, so `holbuild check` covers its tags. *)
 fun expect label accepted th =
   if null (Thm.hyp th) andalso
      (if accepted then optionSyntax.is_some else optionSyntax.is_none) (rhs (concl th))
-  then checked_count := !checked_count + 1
+  then (checked_count := !checked_count + 1;
+        ignore (save_thm ("immutable_mutation_result_" ^
+                          Int.toString (!checked_count), th)))
   else raise Fail ("immutable mutation checker: " ^ label);
 fun reject label ty mutation = (
   expect (label ^ " deploy") false

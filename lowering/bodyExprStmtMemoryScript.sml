@@ -9,6 +9,9 @@ Ancestors
   vyperTypeSystem vyperState vyperAST list finite_map
   stmtMemory exprOpenMain
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 val _ = Parse.hide "body";
 
 (* Previous successful proof (before counted source-action composition):
@@ -23,7 +26,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
+    (irule_body_pre stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim_mem ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_mem_ok _ _`
@@ -58,7 +61,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >> simp[] >>
+    (irule_body_pre stmt_expr_body_pre >> simp[] >>
      gvs[body_inv_def] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim_mem ctx func cenv cx (expr_type e) e es` by

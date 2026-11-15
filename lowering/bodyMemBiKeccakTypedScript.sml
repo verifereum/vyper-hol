@@ -85,8 +85,10 @@ Resume compile_keccak256_sim_mem[normal_or_exception]:
       disch_then drule >> strip_tac >>
       drule (CONV_RULE (DEPTH_CONV ETA_CONV) forced_eval_expr_preserves_scopes_dom) >> simp[] >> strip_tac >>
       `env.type_defs = get_tenv cx` by
-        fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-           env_context_consistent_def] >>
+        (qpat_x_assum `expr_body_pre cenv cx env e es`
+           (strip_assume_tac o REWRITE_RULE[expr_body_pre_def, expr_sim_inv_def,
+              env_consistent_def, env_context_consistent_def]) >>
+         first_assum ACCEPT_TAC) >>
       `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
        value_has_type (BaseTV bty) v` by
         (gvs[expr_result_typed_def, expr_runtime_typed_def,

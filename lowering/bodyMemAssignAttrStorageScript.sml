@@ -22,6 +22,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem eval_assign_attr_toplevel_action_mem_src[local]:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -156,7 +159,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem vv_post_emit_cursor_mem_src[local]:
+Theorem vv_post_emit_cursor_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
   sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\
@@ -533,7 +536,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e` by gvs[type_stmt_def, atarget_accepts_def] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>

@@ -1760,7 +1760,7 @@ Proof
       gvs[] >> metis_tac[]) >>
   `mode = CalldataMerge \/ mode = DloadMerge` by gvs[] >>
   gvs[mode_load_opcode_def, venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_read1_def,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomExecSemanticsTheory.exec_read1_def,
     venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
     venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
