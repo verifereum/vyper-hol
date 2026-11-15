@@ -16,6 +16,9 @@ Libs EmitML finite_mapLib wordsLib cv_typeLib memoryStoreWitnessLib
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
 val () = computeLib.upd_compset (computeLib.add_thms [alistTheory.fmap_to_alist_FEMPTY]);
 val () = computeLib.upd_compset (computeLib.add_thms [integer_wordTheory.i2w_pos]);
+val () = computeLib.upd_compset (computeLib.add_thms
+  [vyperPinFoldTheory.pin_fold_expr_def,
+   vyperOriginFoldTheory.origin_fold_value_def]);
 
 (* Static annotations read by holbuild; no-ops when the script runs. *)
 fun holbuild_extra_outputs (_ : string list) = ();
@@ -338,14 +341,14 @@ val native_names = [
   ("words", ["n2w_itself", "w2n", "w2w_itself", "sw2sw_itself", "word_concat_itself",
              "word_extract_itself", "word_eq", "word_add", "word_sub", "word_mul",
              "word_2comp", "word_1comp", "word_and", "word_or", "word_xor", "word_lsl",
-             "word_lsr", "word_asr", "word_ror", "word_rol", "word_msb", "word_lsb",
+             "word_lsr", "word_ror", "word_rol", "word_msb", "word_lsb",
              "word_lo", "word_ls", "word_hi", "word_hs", "word_lt", "word_le", "word_gt",
-             "word_ge", "word_div", "word_mod", "word_sdiv", "word_bits", "word_slice",
+             "word_ge", "word_sdiv", "word_bits", "word_slice",
              "word_bit", "word_index", "dimword", "INT_MIN", "INT_MAX", "UINT_MAX",
              "concat_word_list", "word_log2", "w2i", "n2w", "w2w", "sw2sw"]),
   ("integer", ["int_of_num", "int_neg", "Num", "int_lt", "int_le", "int_gt", "int_ge",
                "int_add", "int_sub", "int_mul", "int_div", "int_mod", "int_quot",
-               "int_rem", "ABS", "int_exp"]),
+               "int_rem", "ABS"]),
   ("integer_word", ["i2w", "w2i"]),
   ("string", ["CHR", "ORD"]),
   ("finite_map", ["FEMPTY", "FUPDATE", "FLOOKUP", "FAPPLY", "FDOM", "FUNION", "DRESTRICT",
@@ -448,6 +451,9 @@ val code_rewrites = [
   (* alloc_limits_expr asks whether a builtin is a Slice *)
   prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
     Cases_on `bi` >> rw[]),
+  (* pin_fold_builtin asks whether an argument type is a BaseT *)
+  prove (``(?bt. ty = BaseT bt) <=> (case ty of BaseT _ => T | _ => F)``,
+    Cases_on `ty` >> rw[]),
   GSYM listTheory.EXISTS_MEM, GSYM listTheory.EVERY_MEM,
   (* entry_instructions' no-effects test. *)
   prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
@@ -463,7 +469,19 @@ val code_rewrites = [
     val eta = QCONV (DEPTH_CONV ETA_CONV) (lhs (concl abstracted))
   in [th, TRANS (GSYM eta) abstracted] end)
     [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
-     wordsTheory.word_from_bin_list_def]);
+     wordsTheory.word_from_bin_list_def, wordsTheory.word_div_def,
+     wordsTheory.word_mod_def, wordsTheory.word_quot_def,
+     wordsTheory.word_rem_def, wordsTheory.word_asr_n2w,
+     prove (``(i : int) ** (n : num) =
+                if i < 0 /\ ODD n then ~&(Num i EXP n) else &(Num i EXP n)``,
+       Cases_on `i` >> simp[integerTheory.INT_EXP, integerTheory.NUM_OF_INT] >>
+       Cases_on `EVEN n` >>
+       full_simp_tac std_ss
+         [arithmeticTheory.ODD_EVEN, integerTheory.INT_EXP_NEG]),
+     prove (``word_exp (b : 'a word) e =
+                n2w (vfmExecution$modexp (w2n b) (w2n e) (dimword (:'a)) 1)``,
+       simp[wordsTheory.word_exp_def, vfmExecutionTheory.modexp_exp,
+            wordsTheory.ZERO_LT_dimword, wordsTheory.n2w_mod])]);
 fun rewrite_rhs eq = let val r = rhs eq
   in mk_eq (lhs eq, rhs (concl (QCONV (Ho_Rewrite.PURE_REWRITE_CONV code_rewrites) r))) end;
 fun def_rules k = map rewrite_rhs (case Lib.assoc1 k code_equations of
