@@ -851,7 +851,7 @@ Proof
         simp[local_place_at_def, mem_path_offset_def, mem_step_offset_def] >>
       simp[] >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
-      TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))
+      fs[local_region_def, lookup_var_inst_idx] >> metis_tac[])
   >~ [`vv_place_ptr`]
   >- (`LENGTH vs - 1 < n` by decide_tac >>
       `n2w (LENGTH vs) - 1w = n2w (LENGTH vs - 1) : bytes32` by
