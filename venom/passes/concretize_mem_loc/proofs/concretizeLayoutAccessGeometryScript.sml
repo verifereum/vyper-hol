@@ -62,9 +62,9 @@ Theorem memory_offset_taint_empty:
   op_taint tn ops.iao_ofst = {}
 Proof
   Cases_on `inst.inst_opcode` >>
-  gvs[mem_write_ops_def] >>
-  gvs[mem_read_ops_def, AllCaseEqs()] >>
-  fs[taint_ok_def] >>
+  simp[mem_write_ops_def, mem_read_ops_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[taint_ok_def] >>
   spose_not_then assume_tac >>
   qmatch_asmsub_rename_tac `op_taint tn addr <> {}` >>
   qpat_x_assum `!op. _` (qspec_then `addr` mp_tac) >> simp[] >>

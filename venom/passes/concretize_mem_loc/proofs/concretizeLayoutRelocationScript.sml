@@ -27,8 +27,8 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `gas_cut ncut vs0 s` by
-    (drule_all layout_cut_safe_frame >> simp[]) >>
+  `n <= LENGTH es` by decide_tac >>
+  `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
   `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   `access_ok lo G fn inst s` by metis_tac[ptr_discipline_upto_at] >>
   `byte IN range_bytes (source_memory_write_ranges inst s)` by
@@ -198,7 +198,8 @@ Resume concretize_relocation_write_demand_noncollision[dynamic_cached]:
       decide_tac) >>
   `?d' owner' aid' b' sz'. activation_cache (EL j (q0::qs)) d' owner' aid' (b',sz') /\
      b' <= a /\ a < b' + sz'` by
-    (irule joint_observed_read_cached >> metis_tac[]) >>
+    (irule joint_observed_read_cached_upto >>
+     fs[layout_cut_safe_def] >> metis_tac[]) >>
   `b' + sz' <= joint_initial_fmp (EL j (q0::qs))` by metis_tac[] >>
   decide_tac
 QED
@@ -307,5 +308,6 @@ Proof
      strip_tac >> qpat_x_assum `ctx_has_dalloca C ==> ?eom. _` drule >>
      strip_tac >> drule_all concretize_positions_cache_room >> decide_tac) >>
   irule concretize_relocation_demand_write_complement >> asm_rewrite_tac[] >>
-  qexistsl_tac [`C`, `C'`, `names`, `q`, `rpolicy`, `vs0`] >> asm_rewrite_tac[]
+  qexistsl_tac [`C`, `C'`, `D`, `names`, `ncut`, `q`, `rpolicy`, `vs0`] >>
+  asm_rewrite_tac[]
 QED
