@@ -206,9 +206,7 @@ Proof
   qpat_x_assum `MEM _ _ ==> _` drule >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es1 s` by simp[Abbr `es1`] >>
   `~cx.txn.is_static` by
-    (qpat_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` mp_tac >>
-     Cases_on `cx.txn.is_static` >>
-     simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+    (CCONTR_TAC >> fs[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   qspecl_then [`H`, `func`, `cenv`, `cx`, `es1`, `s`, `tr`, `slot`, `tv`, `v`,
     `typed_val_to_w256 tv v`, `INL ()`, `es'`, `ctx`] mp_tac
     stmt_state_rel_write_storage_word >>
@@ -423,7 +421,7 @@ Proof
        stmt_state_rel_write_local >>
      disch_then irule >>
      rpt conj_tac >~ [`immutables_rel`] >- suspend "immutables" >>
-     first_assum ACCEPT_TAC) >>
+     fs[] >> first_assum ACCEPT_TAC) >>
   qexistsl [`dw`, `t`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -651,8 +649,7 @@ Resume tuple_target_nonlocal_head_path[toplevel]:
   disch_then (qspec_then `es` assume_tac) >>
   drule_all tuple_target_storage_assignment >> strip_tac >>
   `~cx.txn.is_static` by
-    (qpat_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` mp_tac >>
-     Cases_on `cx.txn.is_static` >> simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+    (CCONTR_TAC >> fs[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   `~s.vs_call_ctx.cc_static` by metis_tac[] >>
   drule_all compile_get_target_ptr_toplevel >>
   disch_then (qspec_then `st` assume_tac) >> gvs[] >>
@@ -695,8 +692,7 @@ Resume tuple_target_nonlocal_head_path[field]:
   disch_then (qspec_then `es` assume_tac) >>
   drule_all tuple_target_storage_assignment >> strip_tac >>
   `~cx.txn.is_static` by
-    (qpat_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` mp_tac >>
-     Cases_on `cx.txn.is_static` >> simp[vyperStorageBackendTheory.write_storage_slot_eq]) >>
+    (CCONTR_TAC >> fs[vyperStorageBackendTheory.write_storage_slot_eq]) >>
   `~s.vs_call_ctx.cc_static` by metis_tac[] >>
   Cases_on `emit_op ADD [Lit (n2w k); Lit (n2w (struct_field_offset_slots
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] st` >>
@@ -981,7 +977,13 @@ Proof
   `value_has_type tv v /\ val_wf tv v` by
     (qpat_x_assum `ih :- _` kall_tac >>
      fs[value_has_type_def, val_wf_def]) >>
-  drule_all tuple_target_list_cons_success >> strip_tac >>
+  `?es1. assign_tuple_targets cx h v es = (INL (),es1) /\
+         assign_tuple_target_list cx gs vs1 es1 = (INL (),es')` by
+    (qpat_x_assum `ih :- _` kall_tac >>
+     qpat_x_assum `assign_tuple_target_list _ (_::_) _ _ = _`
+       (mp_tac o REWRITE_RULE [assign_tuple_target_list_cons]) >>
+     disch_then (qx_choosel_then [`head_res`, `es1`] strip_assume_tac) >>
+     Cases_on `head_res` >> gvs[]) >>
   drule_all tuple_target_aligned_compiler >> strip_tac >>
   drule tuple_compiler_target_base >>
   disch_then (qx_choose_then `bt` SUBST_ALL_TAC) >>
