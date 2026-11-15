@@ -77,13 +77,8 @@ Theorem current_rename_owner_latest:
   current_rename_owner V H s rs /\ v IN V ==>
   (latest_current_name rs v,v) IN H
 Proof
-  PairCases_on `rs` >>
-  simp[current_rename_owner_def, latest_current_name_def] >> strip_tac >>
-  Cases_on `ALOOKUP rs1 v`
-  >- (simp[] >> drule_all current_name_owner_identity >> simp[]) >>
-  rename1 `ALOOKUP rs1 v = SOME ns` >> Cases_on `ns` >> simp[]
-  >- (simp[] >> drule_all current_name_owner_identity >> simp[]) >>
-  drule_all current_stack_owner_lookup >> simp[]
+  PairCases_on `rs` >> simp[current_rename_owner_def] >>
+  metis_tac[current_fixed_owner_latest, SND]
 QED
 
 Theorem current_stack_owner_push:

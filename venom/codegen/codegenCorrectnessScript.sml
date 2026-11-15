@@ -133,34 +133,6 @@ QED
 
 
 
-(* run_blocks never returns OK — it always terminates with
-   Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
-   step either recurses (smaller fuel) or passes through non-OK. *)
-Theorem run_blocks_never_ok:
-  !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
-Proof
-  Induct >- simp[Once run_blocks_def] >>
-  simp[Once run_blocks_unfold] >>
-  rpt gen_tac >> every_case_tac
-QED
-
-(* run_function never returns OK — unfolds to run_blocks. *)
-Theorem run_function_never_ok:
-  !fuel ctx fn vs vs1. run_function fuel ctx fn vs <> OK vs1
-Proof
-  simp[run_function_def] >>
-  rpt gen_tac >> every_case_tac >> simp[run_blocks_never_ok]
-QED
-
-(* run_context also never returns OK — it either dispatches to
-   run_function (which never returns OK) or returns Error. *)
-Theorem run_context_never_ok:
-  !fuel ctx vs vs1. run_context fuel ctx vs <> OK vs1
-Proof
-  rpt gen_tac >> simp[Once run_context_def] >>
-  every_case_tac >> simp[run_function_never_ok]
-QED
-
 (* ===== Whole-Context Frame Interface ===== *)
 
 Theorem initial_codegen_state_rel_def = codegenEntryRelTheory.initial_codegen_state_rel_def
