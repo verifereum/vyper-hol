@@ -546,7 +546,7 @@ Proof
       `(EL n brest).bb_label <> b0.bb_label` by
         (strip_tac >> qpat_x_assum `~MEM b0.bb_label _` mp_tac >>
          simp[MEM_MAP] >> metis_tac[EL_MEM]) >>
-      simp[] >> TRY (conj_tac >- metis_tac[]) >> rpt strip_tac >>
+      simp[] >> conj_tac >- metis_tac[] >> rpt strip_tac >>
       qpat_x_assum `!j' v. j' < LENGTH (EL n erest).bb_instructions /\ _ ==> _`
         drule_all >> strip_tac >>
       qexists `j` >> simp[] >>

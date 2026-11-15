@@ -21,6 +21,9 @@ Ancestors
   o1PreDftStaticMem
   (* lower dload/dloadbytes *)
   lowerDload
+  lowerDloadCoverageOrdinary
+  lowerDloadOracleCallCoverage
+  lowerDloadRetpcProducer
   (* branch optimization *)
   branchOpt
   (* single use expansion *)

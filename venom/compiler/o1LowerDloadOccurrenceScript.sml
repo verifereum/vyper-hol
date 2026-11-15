@@ -210,16 +210,18 @@ Proof
   rpt strip_tac >> simp[first_prov_def] >>
   `occurrence_param_ok fl B owners (op_prov H h) (op_prov G h)` by
     metis_tac[occurrence_op_erasure] >>
-  Cases_on `op_prov G h` >> Cases_on `op_prov H h` >> gvs[] >>
-  TRY (gvs[occurrence_param_ok_def] >> NO_TAC) >>
-  TRY (first_x_assum irule >> metis_tac[MEM] >> NO_TAC) >>
-  (`first_prov H ops = NONE` suffices_by (strip_tac >> gvs[]) >>
+  Cases_on `op_prov G h`
+  >- (Cases_on `op_prov H h` >> gvs[occurrence_param_ok_def] >>
+      first_x_assum irule >> metis_tac[MEM]) >>
+  Cases_on `op_prov H h` >> gvs[]
+  >- (`first_prov H ops = NONE` suffices_by (strip_tac >> gvs[]) >>
       irule first_prov_all_none >> rpt strip_tac >> CCONTR_TAC >>
       `occurrence_param_ok fl B owners (op_prov H op) (op_prov G op)` by
         metis_tac[occurrence_op_erasure] >>
       Cases_on `op_prov H op` >> gvs[occurrence_param_ok_def] >>
       `op = h` by (qpat_x_assum `!o1 o2. _` irule >> simp[]) >>
-      gvs[])
+      gvs[]) >>
+  gvs[occurrence_param_ok_def]
 QED
 
 Theorem occurrence_set_erasure:

@@ -217,19 +217,3 @@ Proof
   Cases_on `SND entry = site` >>
   gvs[resolve_tag_def, resolved_op_def, unresolved_tag_def]
 QED
-
-(* Parallel PHIs select from the same pre-map, even when the first output
-   overwrites a variable selected by a later PHI.  resolution_phis therefore
-   requires no artificial sequential-definedness premise. *)
-Theorem resolved_parallel_phi_probe[local]:
-  resolution ct rp om rv /\ first.inst_opcode = PHI /\ second.inst_opcode = PHI ==>
-  resolution ct rp
-    (origin_set (origin_set om second.inst_outputs (origin_phi prev om second))
-      first.inst_outputs (origin_phi prev om first))
-    (origin_set (origin_set rv second.inst_outputs (resolved_phi prev rv second))
-      first.inst_outputs (resolved_phi prev rv first))
-Proof
-  strip_tac >>
-  drule resolution_phis >> disch_then (qspecl_then [`prev`, `[first;second]`] mp_tac) >>
-  simp[origin_phis_def, resolved_phis_def]
-QED

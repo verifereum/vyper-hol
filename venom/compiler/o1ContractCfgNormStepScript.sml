@@ -622,17 +622,6 @@ Proof
 QED
 
 
-(* Arity well-formedness alone does not bound a REVERT's syntactic successors. *)
-Theorem supply_revert_multisucc_probe[local]:
-  inst_wf <|inst_id := 0; inst_opcode := REVERT;
-    inst_operands := [Label "a"; Label "b"]; inst_outputs := []|> /\
-  num_succs <|bb_label := "p"; bb_instructions :=
-    [<|inst_id := 0; inst_opcode := REVERT;
-      inst_operands := [Label "a"; Label "b"]; inst_outputs := []|>]|> = 2
-Proof
-  CONV_TAC EVAL
-QED
-
 Theorem insert_split_supply_inst_id_inj:
   wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\

@@ -55,16 +55,6 @@ Proof
   simp[Once lower_dload_insts_supply_def, APPEND_ASSOC]
 QED
 
-Theorem dload_insts_supply_prefix_suc[local]:
-  !xs n q ps u i after.
-    n < LENGTH xs /\ i = EL n xs /\
-    lower_dload_insts_supply q (TAKE n xs) = (ps,u) /\
-    lower_dload_inst_supply u i = ([i],after) ==>
-    lower_dload_insts_supply q (TAKE (SUC n) xs) = (ps ++ [i],after)
-Proof
-  metis_tac[dload_insts_supply_prefix_emission]
-QED
-
 Theorem dload_active_at_block[local]:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\ MEM bb g.fn_blocks /\
   bb.bb_label = t.vs_current_bb /\ active_inst g j t ==>
