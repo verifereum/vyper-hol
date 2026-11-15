@@ -2263,7 +2263,7 @@ val _ = overload_on ("source_wrapper_cut_at", ``\f s os.
       (!q u. f (s with outcomes := SOME (os ++ [empty_failed_outcome])) = (q,u) ==>
          u.outcomes = SOME [] /\ accounts_runtime_well_typed u.accounts)))``);
 
-Theorem source_replay_cut_postprocess[local]:
+Theorem source_replay_cut_postprocess:
   !K f s os.
     ((!r t xs. K (r,t with outcomes := xs) =
        (FST (K (r,t)), (SND (K (r,t))) with outcomes := xs)) /\
@@ -3633,7 +3633,7 @@ Proof
   rpt strip_tac >> gvs[vyperStateTheory.return_def]
 QED
 
-Theorem source_exhausted_internal_call_safety[local]:
+Theorem source_exhausted_internal_call_safety:
   (!cx nr view. source_exhausted_safe (lock_if_nr cx nr view)) /\
   (!cx nr view. source_exhausted_safe (unlock_if_nr cx nr view)) /\
   (!fn sc cx. source_exhausted_safe (push_function fn sc cx)) /\
@@ -3809,7 +3809,7 @@ Proof
   rpt EXHAUSTED_SAFETY_STEP
 QED
 
-Theorem source_exhausted_eval_safety_mutual[local]:
+Theorem source_exhausted_eval_safety_mutual:
   (!cx stmt. source_exhausted_safe (eval_stmt cx stmt)) /\
   (!cx stmts. source_exhausted_safe (eval_stmts cx stmts)) /\
   (!cx it. source_exhausted_safe (eval_iterator cx it)) /\
@@ -4229,7 +4229,7 @@ QED
 Resume source_exhausted_eval_safety_mutual[c63]:
   EXHAUSTED_CONSTRUCTOR_TAC
 QED
-Finalise source_exhausted_eval_safety_mutual[local]
+Finalise source_exhausted_eval_safety_mutual
 
 Theorem source_replay_cleanup_scopes[local]:
   (!cx tv ss1 ss2 s r t.
@@ -4261,7 +4261,7 @@ Proof
   gvs[] >> metis_tac[LENGTH_NIL]
 QED
 
-Theorem source_replay_cut_bind_reachable[local]:
+Theorem source_replay_cut_bind_reachable:
   !f g s os.
     source_wrapper_cut_at f s os /\
     (!v u pre.
@@ -4334,7 +4334,7 @@ Resume source_replay_cut_bind_reachable[create]:
   qpat_x_assum `source_exhausted_safe (g x)`
     (qspecl_then [`se`,`q`,`u`] mp_tac) >> simp[]
 QED
-Finalise source_replay_cut_bind_reachable[local]
+Finalise source_replay_cut_bind_reachable
 
 Theorem source_take_request_residual[local]:
   !rq s oc rest r t.
@@ -5100,7 +5100,7 @@ val REPLAY_SAFETY_STEP = FIRST [FIRST (map MATCH_ACCEPT_TAC replay_internal_supp
 val REPLAY_SAFETY_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
   rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >> BETA_TAC >> rpt REPLAY_SAFETY_STEP;
 
-Theorem eval_outcome_probe_cut_mutual[local]:
+Theorem eval_outcome_probe_cut_mutual:
   (!cx stmt s os. source_wrapper_cut_at (eval_stmt cx stmt) s os) /\
   (!cx stmts s os. source_wrapper_cut_at (eval_stmts cx stmts) s os) /\
   (!cx it s os. source_wrapper_cut_at (eval_iterator cx it) s os) /\
