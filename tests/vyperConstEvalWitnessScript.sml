@@ -1,7 +1,7 @@
 Theory vyperConstEvalWitness
 Ancestors
   jsonToVyper jsonToVyperExpr vyperConstEval vyperConstEvalProps vyperPinFold
-  vyperPinFoldProps
+  vyperPinFoldProps vyperOriginFold
   vyperAST vyperInterpreter
   vyperState vyperValue
 Libs
@@ -12,6 +12,16 @@ Libs
    contract translates to. *)
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [
+  "../tests/fixtures/check_contract/constant_general_builtins.json",
+  "../tests/fixtures/check_contract/constant_mixed_bytes_equality.json",
+  "../tests/fixtures/check_contract/constant_hexand.json",
+  "../tests/fixtures/check_contract/constant_hexinvert.json",
+  "../tests/fixtures/check_contract/constant_hexeq.json",
+  "../tests/fixtures/check_contract/constant_origin.json",
+  "../tests/fixtures/check_contract/constant_origin_import/main.json",
+  "../tests/fixtures/check_contract/constant_mixed_bytes_select.json",
+  "../tests/fixtures/check_contract/constant_mixed_bytes_offset.json",
+  "../tests/fixtures/check_contract/constant_mixed_high_offset.json",
   "../tests/fixtures/check_contract/constant_bound.json",
   "../tests/fixtures/check_contract/constant_shifts.json",
   "../tests/fixtures/check_contract/constant_shift_overflow.json",
@@ -30,13 +40,14 @@ val fixture_dir = "../tests/fixtures/check_contract/";
 
 fun remove_folded (JSON.OBJECT fields) = JSON.OBJECT
       (List.map (fn (key,v) => (key,remove_folded v))
-        (List.filter (fn (key,_) => key <> "folded_value") fields))
+        (List.filter (fn (key,_) => key <> "folded_value" andalso key <> "_folded_value") fields))
   | remove_folded (JSON.ARRAY values) = JSON.ARRAY (List.map remove_folded values)
   | remove_folded value = value;
 fun poison_folded (JSON.OBJECT fields) = JSON.OBJECT
       (("folded_value", JSON.STRING "untrusted") ::
+       ("_folded_value", JSON.STRING "untrusted") ::
        List.map (fn (key,v) => (key,poison_folded v))
-        (List.filter (fn (key,_) => key <> "folded_value") fields))
+        (List.filter (fn (key,_) => key <> "folded_value" andalso key <> "_folded_value") fields))
   | poison_folded (JSON.ARRAY values) = JSON.ARRAY (List.map poison_folded values)
   | poison_folded value = value;
 
@@ -128,12 +139,8 @@ Theorem runtime_consumers_original_residual = EQT_ELIM projection_residual;
 (* The pin widens each literal's annotation to the list element type;
    decoding must retain that bound rather than derive it from the payload. *)
 val widened_subscript = translate "constant_widened_subscript.json";
-val () = contains "widened list literals"
-  ``Builtin (ArrayT (BaseT (BytesT (Dynamic 2))) (Fixed 2))
-      (MakeArray (SOME (BaseT (BytesT (Dynamic 2)))) (Fixed 2))
-      [Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w]);
-       Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w; 98w])]``
-  widened_subscript;
+val () = contains "selected literal retains the inferred element bound"
+  ``Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w])`` widened_subscript;
 Theorem constant_widened_subscript_translation = widened_subscript;
 
 (* Runtime-safe evaluation has different values and coverage from the pin's
@@ -345,3 +352,142 @@ val () = app (fn (label, e) =>
    ("negative shift count",
     op2 uint256 ``vyperAST$ShR`` (lit uint256 1) (lit int8 (~1))),
    ("runtime name", op2 uint256 ``vyperAST$Add`` (lit uint256 1) ``Name ^uint256 "x"``)];
+
+(* These fixtures were accepted by the pin. Hex spelling remains relevant to
+   membership after aliases, imports and selectors; topic arrays stay closed. *)
+val origins = translate "constant_origin.json";
+val () = contains "case-sensitive Hex membership"
+  ``VariableDecl Private (Constant (Literal (BaseT BoolT) (BoolL F)))
+      "FOUND" (BaseT BoolT) NONE`` origins;
+val () = contains "forward closed-container reference"
+  ``VariableDecl Private (Constant (Literal (BaseT BoolT) (BoolL T)))
+      "FORWARD" (BaseT BoolT) NONE`` origins;
+(* Check the actual translated call, since check_contract accepts both the
+   declaration bound 2 and the compiler's reference-position bound 4. *)
+fun check_raw_log_topics expected th = let
+  val calls = find_terms (fn tm =>
+    case strip_comb tm of
+    | (head, [_, target, _, _]) =>
+        same_const head ``vyperAST$Call`` andalso aconv target ``vyperAST$RawLog``
+    | _ => false) (rhs (concl th))
+  val () = if length calls = expected then ()
+           else raise Fail ("unexpected number of translated RawLog calls: " ^
+             Int.toString (length calls))
+  fun check call = let
+    val args = List.nth (#2 (strip_comb call), 2)
+    val topics = hd (#1 (listSyntax.dest_list args))
+    val result = EVAL ``
+      expr_type ^topics = ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4) /\
+      case ^topics of
+      | Builtin _ (MakeArray (SOME elem) bd) es =>
+          elem = BaseT (BytesT (Fixed 32)) /\ bd = Dynamic 4 /\
+          pin_literal_trees es
+      | _ => F``
+  in EQT_ELIM result end
+in LIST_CONJ (map check calls) end;
+Theorem constant_origin_raw_log_reference_bounds = check_raw_log_topics 2 origins;
+Theorem constant_origin_translation = origins;
+Theorem constant_origin_contract_checked = checked "constant_origin.json";
+val imported_origins = translate "constant_origin_import/main.json";
+val () = contains "imported Hex alias retains spelling"
+  ``VariableDecl Private (Constant (Literal (BaseT BoolT) (BoolL F)))
+      "FOUND" (BaseT BoolT) NONE`` imported_origins;
+Theorem constant_origin_import_raw_log_reference_bound =
+  check_raw_log_topics 1 imported_origins;
+Theorem constant_origin_import_translation = imported_origins;
+Theorem constant_origin_import_contract_checked =
+  checked "constant_origin_import/main.json";
+
+fun json_field key (JSON.OBJECT fields) =
+      Option.map #2 (List.find (fn (name, _) => name = key) fields)
+  | json_field _ _ = NONE;
+fun json_string key node =
+  case json_field key node of SOME (JSON.STRING value) => value | _ => "";
+fun first_body node =
+  case json_field "body" node of SOME (JSON.ARRAY (head::_)) => head
+  | _ => raise Fail "expected a nonempty module or function body";
+fun check_offset_runtime name = let
+  val json = JSONDecode.decodeFile JSONDecode.raw (fixture_dir ^ name)
+  val call = valOf (json_field "value"
+    (first_body (first_body (valOf (json_field "ast" json)))))
+  val keywords = case json_field "keywords" call of
+    SOME (JSON.ARRAY keywords) => keywords | _ => raise Fail "blueprint keywords"
+  val keyword = valOf (List.find (fn kw => json_string "arg" kw = "code_offset") keywords)
+  val node = JSONDecode.decode jsonASTLib.json_expr (valOf (json_field "value" keyword))
+  val th = EVAL ``is_int_literal (origin_fold_value (translate_expr ^residual_ctx ^node))``
+  val () = if aconv (rhs (concl th)) ``F`` then ()
+           else raise Fail (name ^ ": source-refused selector acquired a literal marker")
+  val _ = translate name
+in EQF_ELIM th end;
+Theorem mixed_bytes_offset_remains_runtime =
+  check_offset_runtime "constant_mixed_bytes_offset.json";
+Theorem mixed_high_offset_remains_runtime =
+  check_offset_runtime "constant_mixed_high_offset.json";
+
+fun returned_source name = let
+  val json = JSONDecode.decodeFile JSONDecode.raw (fixture_dir ^ name)
+  val value = valOf (json_field "value"
+    (first_body (first_body (valOf (json_field "ast" json)))))
+in JSONDecode.decode jsonASTLib.json_expr value end;
+fun check_refused_fold name = let
+  val node = returned_source name
+  val th = EVAL ``origin_fold_value (translate_expr ^residual_ctx ^node)``
+  val () = if can (find_term (fn term =>
+      case strip_comb term of
+      (head, _) => is_const head andalso fst (dest_const head) = "Literal"))
+      (rhs (concl th)) then () else raise Fail (name ^ ": expected literal operands")
+  val (head, _) = strip_comb (rhs (concl th))
+  val () = if is_const head andalso fst (dest_const head) <> "Literal" then ()
+           else raise Fail (name ^ ": source-refused expression became literal")
+  val _ = translate name
+in th end;
+Theorem mixed_bytes_equality_remains_runtime =
+  check_refused_fold "constant_mixed_bytes_equality.json";
+Theorem hex_bitwise_remains_runtime = check_refused_fold "constant_hexand.json";
+Theorem hex_inversion_remains_runtime = check_refused_fold "constant_hexinvert.json";
+val same_class_hex = returned_source "constant_hexeq.json";
+val same_class_hex_value = EVAL ``translate_expr ^residual_ctx ^same_class_hex``;
+val () = if aconv (rhs (concl same_class_hex_value))
+    ``Literal (BaseT BoolT) (BoolL T)`` then ()
+  else raise Fail ("same-class Hex equality lost its case-insensitive fold: " ^
+    term_to_string (rhs (concl same_class_hex_value)));
+Theorem same_class_hex_equality = same_class_hex_value;
+
+val general_builtins = translate "constant_general_builtins.json";
+fun check_general_builtin_sites th = let
+  val funcs = find_terms (fn tm =>
+    case strip_comb tm of
+    | (head, [_, _, _, _, _, _, _, _, _]) =>
+        same_const head ``vyperAST$FunctionDecl``
+    | _ => false) (rhs (concl th))
+  fun check name location expected = let
+    val decl = valOf (List.find (fn tm =>
+      aconv (List.nth (#2 (strip_comb tm), 4))
+        (stringSyntax.fromMLstring name)) funcs)
+    val site = List.nth (#2 (strip_comb decl), location)
+  in
+    if can (find_term (aconv expected)) site then ()
+    else raise Fail ("missing closed builtin in " ^ name)
+  end
+  val wei = ``Literal (BaseT (UintT 256)) (IntL 1000000000000000000)``
+  val text = ``Literal (BaseT (StringT 78)) (StringL "1")``
+  val () = check "wei_default" 6 wei
+  val () = check "wei_body" 8 wei
+  val () = check "text_default" 6 text
+  val () = check "text_body" 8 text
+in () end;
+val () = check_general_builtin_sites general_builtins;
+Theorem general_builtin_body_default_translation = general_builtins;
+Theorem general_builtin_body_default_contract_checked =
+  checked "constant_general_builtins.json";
+
+Theorem aswei_runtime_original_residual:
+  make_builtin_call (BaseT (UintT 256)) "as_wei_value"
+    [Name (BaseT (UintT 256)) "amount";
+     Literal (BaseT (StringT 5)) (StringL "ether")]
+    [] (JT_Integer 256 F) =
+  Builtin (BaseT (UintT 256)) (AsWeiValue Ether)
+    [Name (BaseT (UintT 256)) "amount"]
+Proof
+  EVAL_TAC
+QED
