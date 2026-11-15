@@ -101,7 +101,9 @@ QED
 (* A source segment from the initial config is a joint trace with one
    coherent annotation sequence. *)
 Theorem layout_stage_segment_annotations[local]:
-  joint_segment C q0 w qe /\ joint_initial vs0 C q0 /\ ptr_discipline lo C vs0 ==>
+  joint_segment C q0 w qe /\ joint_initial vs0 C q0 /\
+  (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\
+    gas_cut ncut vs0 (joint_state qe)) ==>
   ?ass.
     selected_segment C q0 w 0 q0 w qe /\
     joint_trace vs0 C q0 (MAP FST w) (MAP SND w) qe /\
@@ -116,8 +118,7 @@ Proof
   strip_tac >>
   `joint_trace vs0 C q0 (MAP FST w) (MAP SND w) qe` by
     (simp[joint_trace_def] >> metis_tac[layout_segment_chain]) >>
-  `ctx_has_dalloca C ==> ptr_discipline lo C vs0` by simp[] >>
-  drule_all joint_trace_coherent_annotations >> strip_tac >>
+  drule_all joint_trace_coherent_annotations_upto >> strip_tac >>
   qexists `ass` >> simp[] >>
   simp[selected_segment_def, joint_segment_def] >>
   rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >>
@@ -147,6 +148,10 @@ Proof
   disch_then (qspecl_then [`q0`, `0`, `p`] mp_tac) >>
   simp[] >> strip_tac >>
   `joint_segment C q0 w qe` by metis_tac[cj 3 decorated_execution_segment] >>
+  `ctx_has_dalloca C ==>
+     ptr_discipline_upto lo (SUC (LENGTH vs0.vs_gas_readings)) C vs0 /\
+     gas_cut (SUC (LENGTH vs0.vs_gas_readings)) vs0 (joint_state qe)` by
+    simp[ptr_discipline_upto_whole] >>
   drule_all layout_stage_segment_annotations >> strip_tac >>
   qexistsl [`w`, `qe`, `d`, `ass`] >> fs[]
 QED
@@ -354,6 +359,15 @@ Proof
   drule (cj 2 finite_prefix_decoration_complete) >>
   disch_then (qspecl_then [`q0`, `0`, `p`] mp_tac) >> simp[] >> strip_tac >>
   `joint_segment C q0 w qe` by metis_tac[cj 2 decorated_prefix_segment] >>
+  drule (cj 2 decorated_prefix_end) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choosel_then [`fe`, `ie`, `se`] strip_assume_tac)) >>
+  `n <> 0` by (strip_tac >> fs[LENGTH_NIL]) >>
+  `joint_state qe = se` by
+    (Cases_on `qe` >> fs[decoration_at_def, joint_state_def]) >>
+  `gas_cut n vs (joint_state qe)` by fs[gas_cut_def, LENGTH_DROP] >>
+  `ctx_has_dalloca C ==>
+     ptr_discipline_upto lo n C vs /\ gas_cut n vs (joint_state qe)` by simp[] >>
   drule_all layout_stage_segment_annotations >> strip_tac >>
   `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
   `vs.vs_allocas = FEMPTY /\ s.vs_allocas = FEMPTY` by
@@ -368,13 +382,6 @@ Proof
   `fn2 = fn'` by fs[] >> qpat_x_assum `fn2 = fn'` SUBST_ALL_TAC >>
   `activation_depth q0 = 0` by
     simp[Abbr `q0`, frameActivationCacheTheory.activation_depth_def] >>
-  drule (cj 2 decorated_prefix_end) >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (qx_choosel_then [`fe`, `ie`, `se`] strip_assume_tac)) >>
-  `n <> 0` by (strip_tac >> fs[LENGTH_NIL]) >>
-  `joint_state qe = se` by
-    (Cases_on `qe` >> fs[decoration_at_def, joint_state_def]) >>
-  `gas_cut n vs (joint_state qe)` by fs[gas_cut_def, LENGTH_DROP] >>
   `layout_cut_safe D lo n vs C qe` by fs[layout_cut_safe_def] >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     metis_tac[o1_ctx_shape_instructions_wf] >>

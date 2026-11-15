@@ -242,7 +242,7 @@ QED
    the fresh region lies above every relocated cache, so its taint only
    pairs with itself. *)
 Theorem concretize_dalloca_local_complete:
-  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\

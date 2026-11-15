@@ -4,19 +4,19 @@ Ancestors
   venomExecSemantics venomState venomInst ptrDiscipline finite_map pred_set list
 
 Theorem ptr_dalloca_runtime_restrict:
-  ptr_dalloca_ghost_vars G V s Gt Vt t /\
-  (!v site. FLOOKUP Gt v = SOME site ==> FLOOKUP TG v = NONE) /\
+  ptr_dalloca_ghost_vars G V s target_prov Vt t /\
+  (!v site. FLOOKUP target_prov v = SOME site ==> FLOOKUP TG v = NONE) /\
   (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
-     FLOOKUP Gt v = SOME site) /\
+     FLOOKUP target_prov v = SOME site) /\
   (!v. v IN A ==> lookup_var v s1 = lookup_var v s /\
                    lookup_var v t1 = lookup_var v t) ==>
   ptr_dalloca_ghost_vars (DRESTRICT G A) (DRESTRICT V A) s1
-    (DRESTRICT Gt A) (DRESTRICT Vt A) t1 /\
-  (!v site. FLOOKUP (DRESTRICT Gt A) v = SOME site ==>
+    (DRESTRICT target_prov A) (DRESTRICT Vt A) t1 /\
+  (!v site. FLOOKUP (DRESTRICT target_prov A) v = SOME site ==>
      FLOOKUP (DRESTRICT TG A) v = NONE) /\
   (!v site. FLOOKUP (DRESTRICT TG A) v = NONE /\
      FLOOKUP (DRESTRICT G A) v = SOME site ==>
-     FLOOKUP (DRESTRICT Gt A) v = SOME site)
+     FLOOKUP (DRESTRICT target_prov A) v = SOME site)
 Proof
   simp[ptr_dalloca_ghost_vars_def, op_taint_def, FLOOKUP_DRESTRICT] >>
   strip_tac >> rpt conj_tac >> rpt gen_tac >>
