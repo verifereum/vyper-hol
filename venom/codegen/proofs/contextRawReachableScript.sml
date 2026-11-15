@@ -17,7 +17,8 @@
 
 Theory contextRawReachable
 Ancestors
-  contextCodegenRelProps contextCodegenRel venomExecSemantics
+  contextCodegenRelProps contextCodegenRel venomExecSemantics venomFnInstsProofs
+  venomInst list
 
 (* ===== Definition ===== *)
 
@@ -49,6 +50,18 @@ Inductive frag_reachable:
      enters_block callee cs s1 /\ active_inst callee inst s1 ==>
      frag_reachable ctx fn0 s0 callee inst s1)
 End
+
+Theorem frag_reachable_members:
+  !ctx fn0 s0 fn inst s.
+    frag_reachable ctx fn0 s0 fn inst s ==>
+    MEM fn0 ctx.ctx_functions ==>
+    MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn)
+Proof
+  ho_match_mp_tac frag_reachable_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac >>
+  fs[active_inst_def] >>
+  metis_tac[MEM_fn_insts, EL_MEM, lookup_function_MEM]
+QED
 
 Inductive raw_reachable:
 [~entry:]

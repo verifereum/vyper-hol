@@ -55,7 +55,20 @@ Proof
   disch_then (qspecl_then [`st0`, `sb0`, `sb1`, `s2`,
     `FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)`] mp_tac) >>
   impl_tac
-  >- (fs[for_code_def, compile_stmts_env] >> metis_tac[pairTheory.PAIR]) >> simp[]
+  >- (fs[for_code_def, compile_stmts_env] >> metis_tac[pairTheory.PAIR]) >> simp[] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >>
+  rpt (pop_assum kall_tac) >> strip_tac
+  >- (qexists_tac `marks` >> simp[])
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      disj1_tac >> qexists_tac `t` >> fs[])
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      disj2_tac >> fs[])
+  >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem for_body_original_frame_mem:
