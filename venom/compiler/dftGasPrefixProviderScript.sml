@@ -722,8 +722,7 @@ Proof
   qabbrev_tac `aG = (update_var out w (a with vs_gas_readings := readings)) with
     vs_inst_idx := SUC j` >> strip_tac >>
   `!n s u. run_blocks n C callee s <> OK u` by
-    (Induct >- simp[Once run_blocks_def] >>
-     simp[run_blocks_unfold] >> rpt gen_tac >> rpt (CASE_TAC >> fs[])) >>
+    metis_tac[o1PassLiftTheory.run_blocks_not_OK] >>
   `step_inst n C gas (a with vs_gas_readings := w::readings) =
     OK (update_var out w (a with vs_gas_readings := readings))` by
     simp[Once step_inst_def, step_inst_base_def, exec_gas_def] >>
