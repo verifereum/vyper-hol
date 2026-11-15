@@ -694,50 +694,6 @@ Proof
   qpat_assum `!aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) ==> lo <= b` ACCEPT_TAC
 QED
 
-Theorem rest_word_membership_ctor_load_joint:
-  compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
-  (!x. arr = Var x ==> not_fresh_at sa x) /\
-  (!ib x. imm = SOME ib /\ ib = Var x ==> not_fresh_at sa x) /\
-  q = (case bound_opt of NONE => 0 | SOME cap => 2) /\
-  delta = (if 0 < skip then 1 else 0) /\
-  width = (if IS_SOME imm then 2 else 1) /\
-  dst = "%" ++ toString (sa.cs_next_var+4+q+delta+width) /\
-  (!i. addr i = bw + n2w (skip+stride*i)) /\
-  (!H:num. guard H ==>
-    ~s0.vs_halted /\ allocas_from lo s0 /\ lo <= s0.vs_alloca_next /\
-    eval_operand arr s0 = SOME bw /\ op_prov (G0 H) arr = NONE /\
-    op_taint (T0 H) arr = {} /\
-    (!ib. imm = SOME ib ==>
-      eval_operand ib s0 = SOME 0w /\ op_prov (G0 H) ib = NONE /\
-      op_taint (T0 H) ib = {}) /\
-    (!i. i < LENGTH ws ==>
-      w2n (addr i) + 32 <= lo /\
-      mem_word_taint (T0 H).t_mem (w2n (addr i)) = {} /\
-      mload (w2n (addr i)) s0 = EL i ws)) ==>
-  !i s Gs Ts. i < LENGTH ws /\
-    (!H:num. guard H ==>
-      membership_loop_frame sa (G0 H) (T0 H) s0 (Gs H) (Ts H) s /\
-      membership_loop_registers sa i 0w (Gs H) (Ts H) s /\
-      ~s.vs_halted /\ allocas_from lo s /\
-      s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
-      s.vs_inst_idx = 0) ==>
-    ?t Gt Tt. !H:num. guard H ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
-        (s,Gs H,Ts H) [] (OK t,Gt H,Tt H) /\
-      membership_loop_frame sa (G0 H) (T0 H) s0 (Gt H) (Tt H) t /\
-      membership_loop_registers sa i 0w (Gt H) (Tt H) t /\
-      ~t.vs_halted /\ allocas_from lo t /\
-      t.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
-      t.vs_inst_idx = 2+delta+width /\
-      eval_operand (Var dst) t = SOME (EL i ws) /\
-      op_prov (Gt H) (Var dst) = NONE /\
-      op_taint (Tt H) (Var dst) = {}
-Proof
-  MATCH_ACCEPT_TAC rest_word_membership_ctor_load_joint_indexed
-QED
-
 Theorem rest_word_membership_ctor_load_joint_const:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load T imm LocCode) bound_opt is_in sa = (op,sb) /\
