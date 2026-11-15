@@ -112,7 +112,9 @@ Proof
   `DROP i (MAPi (\n inst. (n,inst)) insts) =
     (i,EL i insts)::DROP (SUC i) (MAPi (\n inst. (n,inst)) insts)` by
     metis_tac[ptr_indexed_drop] >>
-  simp[ml_liveat_before_bit_def] >> metis_tac[ptr_read_seed_not_kill]
+  asm_rewrite_tac[] >>
+  irule (SIMP_RULE (srw_ss()) []
+    (Q.INST [`pre` |-> `[]`] ptr_liveat_before_seed)) >> simp[]
 QED
 
 Theorem ptr_liveat_suffix_step[local]:
