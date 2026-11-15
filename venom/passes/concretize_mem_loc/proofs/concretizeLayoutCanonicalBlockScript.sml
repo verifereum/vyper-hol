@@ -605,7 +605,7 @@ Theorem layout_canonical_nop_reenter:
   decoration_at fn i s q /\ decoration_entry fn sn qn /\
   sn.vs_current_bb = s.vs_current_bb /\
   sn.vs_inst_idx = SUC s.vs_inst_idx /\
-  k.lop_origin = a.lop_origin /\ k.lop_cursor = SUC n /\ k.lop_config = qn /\ 
+  k.lop_origin = a.lop_origin /\ k.lop_cursor = SUC n /\ k.lop_config = qn /\
   k.lop_pending /\ layout_driver_indexed es ass k /\
   layout_aligned_entry D lo vs0 C C' q0 es qs qend k post t /\
   post.vs_inst_idx = s.vs_inst_idx /\
@@ -629,7 +629,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_next_witness:
-  o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\
   layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -723,7 +723,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_next_execution:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -861,7 +861,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_next:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -969,7 +969,7 @@ Proof
 QED
 
 Theorem layout_canonical_next_entry_certificate:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -997,7 +997,7 @@ Proof
 QED
 
 Theorem layout_canonical_next_certificate_fuel:
-  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
