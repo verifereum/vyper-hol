@@ -74,6 +74,16 @@ Definition split_blocks_at_def:
       | SOME (prefix, suffix) => SOME (bb :: prefix, suffix)
 End
 
+Theorem split_blocks_at_partition:
+  !blocks label prefix suffix.
+    split_blocks_at label blocks = SOME (prefix,suffix) ==>
+    blocks = prefix ++ suffix
+Proof
+  Induct >> simp[split_blocks_at_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
 Theorem split_blocks_at_append_delimiter:
   ~MEM label (MAP (\b. b.bb_label) prefix) /\ bb.bb_label = label ==>
   split_blocks_at label (prefix ++ bb :: suffix) =

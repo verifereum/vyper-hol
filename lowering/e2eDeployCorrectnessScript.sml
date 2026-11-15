@@ -11,6 +11,8 @@ Ancestors
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
+  codegenAsmOpt e2eAsmOpt e2eDeployAsmOpt deployOutcomesFreeUnit asmOptCodeDeploy
+  deploySymSrcUnit
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
@@ -26,13 +28,6 @@ Proof
   qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
     (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
   goal_assum $ drule_at Any >> gvs[]
-QED
-
-Theorem gas_variant_code_layout_valid:
-  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
-Proof
-  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  fs[code_layout_valid_def]
 QED
 
 (* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
@@ -169,7 +164,17 @@ Theorem e2e_deploy_correctness_asm_opt:
       (creation_resource_starved es r es' \/
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
-  cheat
+  rpt strip_tac >>
+  drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
+  drule compile_vyper_runtime_nonempty_asm_opt >> strip_tac >>
+  drule compile_vyper_deploy_nonempty_asm_opt >> strip_tac >>
+  `asm_opt_finalizer IN accepted_finalizers` by
+    simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  drule_all compile_vyper_runtime_not_ef >> strip_tac >>
+  qpat_x_assum `deploy_bc = assemble prog'` SUBST_ALL_TAC >>
+  `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
+  drule_all asm_opt_deploy_result >>
+  simp[deploy_result_rel_def]
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
@@ -195,7 +200,7 @@ Proof
   pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
   >- (drule_all e2e_deploy_correctness_identity >> simp[])
   >> `~program_reads_self_code tops` by fs[] >>
-  drule_all e2e_deploy_correctness_asm_opt >> simp[]
+  drule_all e2e_deploy_correctness_asm_opt >> simp[LET_THM]
 QED
 
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds

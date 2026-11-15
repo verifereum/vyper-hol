@@ -34,7 +34,7 @@
  *)
 Theory e2eGasSufficient
 Ancestors
-  e2eCorrectness e2eDefs e2eProducers e2eEntry unitTransformDefs
+  e2eCorrectness asmOptCodeRuntime e2eAsmOpt e2eDefs e2eProducers e2eEntry unitTransformDefs
   ptrDiscipline lowerDloadDefs e2eComposition
   o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
