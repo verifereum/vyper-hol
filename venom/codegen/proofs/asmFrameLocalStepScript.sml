@@ -784,3 +784,18 @@ Proof
   >- metis_tac[frame_gas_step] >>
   metis_tac[frame_plain_step]
 QED
+
+(* Padding stays unread until GAS consumes the recorded prefix. *)
+Theorem asm_step_gas_readings_append:
+  inst <> AsmOp "GAS" \/ a.as_gas_readings <> [] ==>
+  asm_step labels pc inst
+    (a with as_gas_readings := a.as_gas_readings ++ tail) =
+  case asm_step labels pc inst a of
+    AsmOK b => AsmOK (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmHalt b => AsmHalt (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmRevert b => AsmRevert (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmFault b => AsmFault (b with as_gas_readings := b.as_gas_readings ++ tail)
+  | AsmError err => AsmError err
+Proof
+  cheat
+QED
