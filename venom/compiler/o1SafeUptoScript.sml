@@ -67,7 +67,7 @@ End
 Definition o1_ptr_safe_upto_def:
   o1_ptr_safe_upto D lo n C vs <=>
     reserved_intervals_wf C.ctx_global_reserved /\
-    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
+    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
     fmp_free_ctx C /\ fixed_region_reserved lo C /\
     ptr_discipline_upto lo n C vs /\ taint_within_upto D n C vs
 End
