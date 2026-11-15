@@ -907,7 +907,7 @@ Proof
   simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def,
        eval_raise_reason_lit, gas_explicit_def] >>
   qexistsl_tac [`INR (AssertException str)`, `es`, `Abort Revert_abort t`] >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def]
+  simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def]
 QED
 
 Theorem bytelike_revert_extends[local]:
@@ -1124,10 +1124,12 @@ Theorem assert_reason_false_outcome_prefix[local]:
     (eval_stmt cx (Raise (RaiseReason r)))
     (mid with gas_obs := [],jump_to fl t)
     (\H. stmt_post H ctx func cx lctx cenv cenv entry last (mid with gas_obs := []) (jump_to fl t))
-    (\H res ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr) ==>
+    (\H res ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr) /\
+      halt_exit H cx ee res rr) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assert e (AssertReason r))) (es,s0) Q
-    (\H res ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr)
+    (\H res ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr) /\
+      halt_exit H cx ee res rr)
 Proof
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -1236,7 +1238,8 @@ Resume compile_assert_reason_frag_general[exception]:
       simp[]) >>
   `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H0` mp_tac) >> simp[] >>
+  qpat_assum `!H. _ ==> expr_exit _ _ /\ halt_exit _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >> simp[] >>
   strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
   rename1 `expr_exit (INR ex) rr` >>
@@ -1245,7 +1248,11 @@ Resume compile_assert_reason_frag_general[exception]:
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> simp[eval_assert_reason_bind, Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac
+  >- metis_tac[expr_exit_INR_type] >>
+  qpat_assum `!H. _ ==> expr_exit _ _ /\ halt_exit _ _ _ _ _`
+    (qspec_then `H` (mp_tac o REWRITE_RULE [halt_exit_def])) >>
+  simp[halt_exit_def]
 QED
 Resume compile_assert_reason_frag_general[normal]:
   gvs[] >>
