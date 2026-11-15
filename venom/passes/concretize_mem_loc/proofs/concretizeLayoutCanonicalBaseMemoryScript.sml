@@ -34,16 +34,18 @@ Proof
   fs[revert_forward_pair_def] >> gvs[]
 QED
 
-Theorem layout_canonical_exempt_returncopy_success[local]:
+Theorem layout_canonical_exempt_returncopy_scalar_success:
   o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
     q n i s j t (INL g) /\ decoration_at fn i s q /\
   i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+  i.inst_operands = [opd;ops;opn] /\
   step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
-    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost /\
+    eval_operand opn s = eval_operand opn t
 Proof
   strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
   `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
@@ -70,6 +72,14 @@ Proof
   simp[layout_ordinary_state_def] >> strip_tac >>
   `resolved_config_ok (JointConfig stk PG G tn fn i s oms om hs h)
     (birth::ids) ((rp,rv)::anns)` by metis_tac[] >>
+  `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
+    (drule frameResolvedTraceTheory.resolved_config_current >> simp[] >> strip_tac >>
+     rpt strip_tac >> irule frameRelocationReachableSupportTheory.reachable_resolved_support >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `eval_operand opn s = eval_operand opn t` by
+    (drule_at (Pat `local_rel _ _ _ _ _ _ _`)
+       concretizeLayoutLocalCalldataCopyTheory.calldatacopy_scalar_agreement >>
+     strip_tac >> fs[relocation_env_def] >> metis_tac[MEM]) >>
   drule_all concretize_returncopy_success_complete >> strip_tac >>
   `variable_domains s t` by metis_tac[local_rel_domains] >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
@@ -81,7 +91,25 @@ Proof
   fs[layout_corridor_entry_def]
 QED
 
-Theorem layout_canonical_ordinary_memory_success[local]:
+Theorem layout_canonical_exempt_returncopy_success[local]:
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\ decoration_at fn i s q /\
+  i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+  step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+Proof
+  strip_tac >>
+  `?opd ops opn. i.inst_operands = [opd;ops;opn]` by
+    (qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
+     simp[step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all layout_canonical_exempt_returncopy_scalar_success >> metis_tac[]
+QED
+
+Theorem layout_canonical_ordinary_memory_pending:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
@@ -106,8 +134,12 @@ Theorem layout_canonical_ordinary_memory_success[local]:
     CALLDATACOPY; CODECOPY; EXTCODECOPY; RETURNDATACOPY; DLOADBYTES; SHA3; LOG] /\
   (i.inst_opcode = RETURNDATACOPY ==> ~in_revert_forward fn s) /\
   step_inst_base i s = OK post ==>
-  ?tpost. step_inst_base j t = OK tpost /\
-    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+  ?k tpost. step_inst_base j t = OK tpost /\ k.lop_pending /\
+    k.lop_cursor = SUC g.lop_cursor /\ k.lop_ids = g.lop_ids /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs qend
+      (INL g) (INL k) (OK post) (OK tpost)
 Proof
   strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
   `i.inst_opcode <> ALLOCA /\ i.inst_opcode <> INVOKE /\
@@ -162,9 +194,58 @@ Proof
            simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >>
            gvs[write_memory_with_expansion_def, write_memory_def] >> metis_tac[]) >>
         drule_all layout_returncopy_trace_step)] >> strip_tac >> metis_tac[]) >>
-  qexists `tpost` >> conj_tac >- simp[] >>
+  metis_tac[]
+QED
+
+Theorem layout_canonical_ordinary_memory_success[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  MEM i.inst_opcode [MLOAD; MCOPY; ILOAD; ISTORE; CALLDATALOAD; CALLDATASIZE;
+    CALLDATACOPY; CODECOPY; EXTCODECOPY; RETURNDATACOPY; DLOADBYTES; SHA3; LOG] /\
+  (i.inst_opcode = RETURNDATACOPY ==> ~in_revert_forward fn s) /\
+  step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+Proof
+  strip_tac >>
+  `?k tpost. step_inst_base j t = OK tpost /\ k.lop_pending /\
+    k.lop_cursor = SUC g.lop_cursor /\ k.lop_ids = g.lop_ids /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs qend
+      (INL g) (INL k) (OK post) (OK tpost)` by
+    (irule layout_canonical_ordinary_memory_pending >>
+     pure_asm_rewrite_tac[] >> metis_tac[]) >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `i.inst_opcode <> ALLOCA /\ i.inst_opcode <> INVOKE /\
+   ~is_terminator i.inst_opcode` by
+    (fs[MEM] >> simp[is_terminator_def]) >>
+  `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
+  drule layout_canonical_ordinary_edge >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >> simp[] >> strip_tac >>
   drule layout_canonical_ordinary_success >>
-  disch_then (qspecl_then [`tpost`, `EL g.lop_cursor (MAP SND path)`, `post`, `k`, `i`] mp_tac) >>
+  disch_then (drule_at (Pat `layout_phase_ok_abort _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `step_inst_base _ _ = OK _`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
   simp[] >> metis_tac[]
 QED
 

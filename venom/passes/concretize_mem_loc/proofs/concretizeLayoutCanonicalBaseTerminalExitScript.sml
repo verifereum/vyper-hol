@@ -7,6 +7,102 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalBase concretizeLayout
   concretizeLayoutPhaseHalt concretizeLayoutPhaseReturn
   concretizeLayoutPhaseSelfdestruct concretizeLayoutLocalSelfdestruct
   ptrDiscipline venomExecSemantics venomInst list
+  frameResolvedTrace frameRelocationReachableSupport frameRelocationValues
+  frameRelocationCleanOperands pointerConfinedDefs memLocDefs
+  concretizeLayoutAlignedControl frameJointTrace frameOriginHistory
+  frameOriginReachable frameAllocationOwnership frameJointTransition o1PassContract
+  contextCodegenRel
+
+Theorem layout_ordinary_revert_empty:
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  ptr_static_support P fn G /\
+  resolved_frame_ok birth cache PG G om rp rv ids frames /\
+  taint_ok fn tn inst s /\ inst.inst_opcode = REVERT /\
+  s.vs_labels = t.vs_labels /\ variable_domains s t /\
+  local_rel (\u. F) (guarded_ptr (retpc_var fn) L rv)
+    (guarded_bytes (retpc_var fn) rv tn) R Obs s t /\
+  step_inst_base inst s = Abort Revert_abort post /\
+  post.vs_returndata = [] ==>
+  ?post'. step_inst_base inst t = Abort Revert_abort post' /\
+    post'.vs_returndata = []
+Proof
+  strip_tac >>
+  `!v. FLOOKUP rv v <> NONE ==> v IN fn_pv P fn` by
+    (drule resolved_frame_erasure >> strip_tac >>
+     metis_tac[resolved_static_support]) >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `!op. eval_operand op s = NONE <=> eval_operand op t = NONE` by
+    (gen_tac >> irule operand_domain_agreement >> simp[]) >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `!v. sz_op = Var v ==> FLOOKUP rv v = NONE` by
+    (rpt strip_tac >>
+     qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+          mem_read_ops_def, mem_write_ops_def] >>
+     disch_then (qspec_then `v` mp_tac) >>
+     Cases_on `off_op = Var v` >> gvs[] >> metis_tac[]) >>
+  `eval_operand sz_op s = eval_operand sz_op t` by
+    (`MEM sz_op inst.inst_operands` by simp[] >>
+     `~MEM inst.inst_opcode
+       [ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]`
+       by simp[] >>
+     drule_all disciplined_scalar_operand >> simp[]) >>
+  fs[venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def] >>
+  (Cases_on `eval_operand off_op t`
+   >- metis_tac[optionTheory.NOT_NONE_SOME] >> gvs[] >>
+   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+   simp[venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def])
+QED
+
+Theorem layout_canonical_ordinary_revert_empty:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\ decoration_at fn i s q /\
+  i.inst_opcode = REVERT /\ step_inst_base i s = Abort Revert_abort post /\
+  post.vs_returndata = [] /\ step_inst fuel C' j t = Abort Revert_abort post' ==>
+  post'.vs_returndata = []
+Proof
+  strip_tac >> drule layout_canonical_ordinary_step_witness >> strip_tac >>
+  `layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
+   layout_ordinary_trace vs0 C q0 es qs qend g s /\
+   layout_ordinary_state D lo C' q0 es qs g s t` by
+    fs[layout_aligned_entry_def, layout_ordinary_entry_def] >>
+  `joint_config_reachable vs0 C g.lop_config` by
+    (fs[layout_ordinary_trace_def] >>
+     drule joint_trace_prefix_reachable >> pure_rewrite_tac[EVERY_EL] >>
+     disch_then (qspec_then `g.lop_cursor` mp_tac) >> gvs[]) >>
+  Cases_on `q` >> gvs[decoration_at_def] >>
+  rename1 `g.lop_config = JointConfig stk PG G tn fn i s oms om hs h` >>
+  `frame_reachable vs0 C stk PG G tn fn i s` by
+    (gvs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `o1_fn_shape C fn /\ fn_ptr_ok P fn` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM i (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `taint_ok fn tn i s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `?birth ids rp rv anns. g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns` by
+    (qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[layout_ordinary_state_def] >> asm_rewrite_tac[] >> metis_tac[]) >>
+  gvs[concretize_positions_unchanged] >>
+  `resolved_config_ok (JointConfig stk PG G tn fn i s oms om hs h)
+     (birth::ids) ((rp,rv)::anns)` by
+    (fs[layout_ordinary_trace_def] >> metis_tac[]) >>
+  qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >>
+  `variable_domains s t /\ s.vs_labels = t.vs_labels` by
+    fs[local_rel_def, relocation_env_def] >>
+  drule_all concretizePtrParamSupportTheory.ptr_frame_current_static >> strip_tac >>
+  fs[resolved_config_ok_def] >>
+  drule_all layout_ordinary_revert_empty >> gvs[step_inst_non_invoke]
+QED
 
 Theorem terminal_exit_cases[local]:
   is_terminator i.inst_opcode /\ i.inst_opcode <> DRET /\

@@ -131,6 +131,37 @@ Proof
   simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
 QED
 
+(* Empty terminal data depends only on the scalar length, not the
+   relocated address or the contents of target memory. *)
+Theorem ptr_terminal_revert_empty:
+  ptr_ledger_erases births TG G /\
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\ ptr_use_ok P pv inst /\
+  FDOM G SUBSET pv /\ taint_ok f tn inst s /\
+  ptr_nonopaque_operand f lenop /\
+  inst.inst_operands = [addr;lenop] /\ inst.inst_opcode = REVERT /\
+  IS_SOME (eval_operand addr t) /\
+  step_inst fuel C inst s = Abort Revert_abort s1 /\
+  s1.vs_returndata = [] ==>
+  ?t1. step_inst fuel Ct inst t = Abort Revert_abort t1 /\
+    t1.vs_returndata = []
+Proof
+  strip_tac >>
+  `op_prov G lenop = NONE` by metis_tac[ptr_terminal_length_prov] >>
+  `op_taint tn lenop = {}` by metis_tac[ptr_terminal_length_taint] >>
+  `eval_operand lenop s = eval_operand lenop t` by
+    (irule ptr_mixed_scalar_eval >> metis_tac[]) >>
+  qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  fs[venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def] >>
+  gvs[] >> Cases_on `eval_operand addr t` >> gvs[] >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def]
+QED
+
 Theorem ptr_terminal_read_range_transport:
   ptr_ledger_erases births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\

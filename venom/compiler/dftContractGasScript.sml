@@ -272,6 +272,101 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem dft_ctx_sim_gas_revert_empty_conditional:
+  (!C C' s orc fuel a.
+    LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+    ctx_labels_bound C s.vs_labels /\ o1_run_state_ok s /\
+    ev_context orc fuel C s = Abort Revert_abort a /\ a.vs_returndata = [] ==>
+    ?b. ev_context orc fuel C' s = Abort Revert_abort b /\ b.vs_returndata = []) ==>
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
+  ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
+       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs') /\
+       (!fuel s. run_context fuel C vs = Abort Revert_abort s /\
+                 s.vs_returndata = [] ==>
+          ?t. run_context fuel C' vs' = Abort Revert_abort t /\
+              t.vs_returndata = [])
+Proof
+  strip_tac >> strip_tac >>
+  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
+    metis_tac[dft_ctx_functions_map] >>
+  drule dft_ctx_block_ids_distinct >> strip_tac >>
+  drule_all o1_ctx_shape_wf_functions >> strip_tac >>
+  drule_all dft_ctx_wf_functions >> strip_tac >>
+  mp_tac (Q.INST [`ctx:venom_context` |-> `C'`, `s:venom_state` |-> `vs'`]
+            gas_oracle_from_list) >>
+  impl_tac >- simp[] >> strip_tac >>
+  mp_tac (Q.INST [`ctx:venom_context` |-> `C`, `s:venom_state` |-> `vs'`]
+            gas_oracle_to_list) >>
+  impl_tac >- simp[] >> strip_tac >>
+  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  qexists_tac `vs' with vs_gas_readings := rds` >>
+  conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
+  conj_tac
+  >- (rw[ctx_sim_fuel_def] >>
+      irule gas_dft_dead_result >>
+      simp[run_context_not_ok, o1_ctx_shape_run_context_no_intret] >>
+      qexistsl [`ev_context orc fuel C vs'`, `ev_context orc fuel C' vs'`] >>
+      simp[] >> irule dft_ev_context_sim >> simp[] >>
+      metis_tac[gas_res_rel_terminates]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!fuel. gas_res_rel (run_context fuel C _) _`
+        (qspec_then `fuel` mp_tac) >>
+      Cases_on `ev_context orc fuel C vs'` >>
+      simp[gas_res_rel_def] >> strip_tac >> gvs[] >>
+      `v.vs_returndata = []` by
+        fs[gas_variant_def, venom_state_component_equality] >>
+      qpat_assum `!C C' s orc fuel a. _`
+        (drule_at (Pat `ev_context _ _ _ _ = _`)) >>
+      simp[] >> disch_then (qspec_then `C'` mp_tac) >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `!fuel. gas_res_rel (run_context fuel C' _) _`
+        (qspec_then `fuel` mp_tac) >>
+      Cases_on `run_context fuel C' vs'` >>
+      simp[gas_res_rel_def, gas_variant_def, venom_state_component_equality] >>
+      rpt strip_tac >> gvs[] >> qexists_tac `v'` >> simp[]) >>
+  rw[o1_lowered_inv_def] >> qexists_tac `eom` >>
+  conj_tac >- gvs[max_live_eom_def, collect_fn_eoms_dft] >>
+  gvs[mem_inv_raw_reachable] >>
+  `!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
+     static_mem_ok eom C fn inst t` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `!p d fn inst t. ev_reachable orc vs' C' p d fn inst t ==>
+     static_mem_ok eom C' fn inst t` by
+    (mp_tac (Q.INST [`s:venom_state` |-> `vs'`] dft_ev_lowered_inv) >>
+     simp[] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  conj_tac
+  >- (simp[lookup_function_map, dft_fn_entry_label] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Publish the observation with the same gas witness as the simulation. *)
+Theorem dft_ctx_sim_gas_revert_empty:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
+  ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
+       (o1_lowered_inv C vs ==> o1_lowered_inv C' vs') /\
+       (!fuel s. run_context fuel C vs = Abort Revert_abort s /\
+                 s.vs_returndata = [] ==>
+          ?t. run_context fuel C' vs' = Abort Revert_abort t /\
+              t.vs_returndata = [])
+Proof
+  strip_tac >>
+  irule dft_ctx_sim_gas_revert_empty_conditional >>
+  simp[] >> metis_tac[dft_ev_context_revert_empty]
+QED
+
 Theorem dft_out_wf_ssa:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions ==>
