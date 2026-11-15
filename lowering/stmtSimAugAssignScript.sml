@@ -1374,8 +1374,9 @@ Resume compile_augassign_local_case[operator_exit]:
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >>
       irule augassign_error_continuation_exec >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac
+  >- metis_tac[expr_exit_INR_type] >>
+  simp[halt_exit_def]
 QED
 
 Finalise compile_augassign_local_case
