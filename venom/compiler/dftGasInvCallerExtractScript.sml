@@ -1,5 +1,6 @@
 Theory dftGasInvCallerExtract
 Ancestors
+  dftGasNativePrefixReplay dftGasInvReachSlice dftGasInvReturnReflect
   dftGasInvCallerInput dftGasInvExtraction dftGasInvReachAvailability dftGasInvPrefixReach
   o1PassContract contextCodegenRel venomInstProofs1 venomExecProofs
   dftGasInvInversion dftGasInvFlexibleTrace dftGasInvResidualTrace
@@ -337,4 +338,44 @@ Proof
   qpat_x_assum `!op. MEM op argops ==> _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   Induct_on `argops` >> simp[eval_operands_def] >> metis_tac[]
+QED
+
+
+(* Clipped native prefixes construct the same INVOKE caller observation;
+   the current child is excluded from both prefix traces. *)
+Theorem native_invoke_caller:
+  !C C' func func' bb bb' name ps pre i post scheduled yi later
+    be u b0 gs p d source_fuel target_fuel orc.
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    dft_fn_rel func func' /\ MEM bb func.fn_blocks /\
+    lookup_block name func.fn_blocks = SOME bb /\
+    lookup_block name func'.fn_blocks = SOME bb' /\
+    bb.bb_instructions = ps ++ (pre ++ i::post) /\
+    EVERY (\x. is_pseudo x.inst_opcode) ps /\
+    EVERY (\x. ~is_pseudo x.inst_opcode) (pre ++ i::post) /\
+    EVERY inst_shape_ok bb.bb_instructions /\
+    bb'.bb_instructions = ps ++ (scheduled ++ yi::later) /\
+    yi.inst_id = i.inst_id /\
+    dft_remaining_inv func bb (pre ++ i::post) be /\
+    be.vs_inst_idx = LENGTH ps /\ i.inst_opcode = INVOKE /\
+    EVERY (\x. ~is_terminator x.inst_opcode) pre /\
+    EVERY (\x. ~is_terminator x.inst_opcode) scheduled /\
+    FOLDR (dft_exec_cons source_fuel C) OK pre
+      (be with vs_gas_readings := gs) = OK u /\
+    FOLDR (dft_exec_cons target_fuel C') OK scheduled be = OK b0 /\
+    dftGasFromListTraceDefs$trace_agrees orc
+      (dftGasFromListTraceDefs$trace_block p d source_fuel C func
+        (bb with bb_instructions :=
+          TAKE (LENGTH ps + LENGTH pre) bb.bb_instructions)
+        (be with vs_gas_readings := gs)) /\
+    dftGasFromListTraceDefs$trace_agrees orc
+      (dftGasFromListTraceDefs$trace_block p d target_fuel C' func'
+        (bb' with bb_instructions :=
+          TAKE (LENGTH ps + LENGTH scheduled) bb'.bb_instructions) be) ==>
+    (!op. MEM op i.inst_operands ==> eval_operand op u = eval_operand op b0) /\
+    (!callee args.
+      setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
+      setup_callee callee args b0)
+Proof
+  cheat
 QED
