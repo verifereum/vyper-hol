@@ -1,7 +1,7 @@
 (* Normal exits expose the actual terminal instruction, including in callees. *)
 Theory loweringTerminalHistory
 Ancestors
-  loweringJointPrefixHistory loweringCallBudgetHistory
+  loweringBudgetRunHistory loweringCallBudgetHistory
   ptrSafeRun ptrDiscipline memSafeRun gasEvents
   contextCodegenRel contextCodegenRelProps venomExecSemantics venomExecProofs
   venomInstProofs venomInst venomState finite_map list arithmetic
