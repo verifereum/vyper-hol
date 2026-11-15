@@ -301,10 +301,10 @@ Proof
   recInduct type_to_abi_enc_info_ind >> rpt strip_tac >>
   drule type_memory_bytes_frame >> strip_tac >>
   simp[Ntimes type_to_abi_enc_info_def 2]
-  >- (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
-      first_x_assum drule >> simp[])
-  >- (irule MAP_CONG >> simp[])
-  >> Cases_on `FLOOKUP sf (nsid_to_string nsid)` >> simp[] >>
+  >- (rw[] >> irule GENLIST_CONG >> simp[] >> metis_tac[])
+  >- (rw[] >> irule MAP_CONG >> simp[] >> metis_tac[])
+  >> rw[] >> rename1 `FLOOKUP sf (nsid_to_string sid)` >>
+  Cases_on `FLOOKUP sf (nsid_to_string sid)` >> simp[] >>
   irule MAP_CONG >> simp[pairTheory.FORALL_PROD] >> metis_tac[]
 QED
 
@@ -322,7 +322,11 @@ Proof
     (ce with <|ce_nonreentrant := nr; ce_target := target|>) ty =
     type_to_abi_dec_info ce.ce_struct_fields ce ty` by
     (gen_tac >> irule type_to_abi_dec_info_layout_cong >> simp[]) >>
-  simp[update_cenv_ret_abi_def] >> Cases_on `ce` >> simp[]
+  `type_memory_bytes
+    (ce with <|ce_nonreentrant := nr; ce_target := target|>) =
+    type_memory_bytes ce` by
+    (irule type_memory_bytes_frame >> simp[]) >>
+  fs[update_cenv_ret_abi_def] >> Cases_on `ce` >> fs[]
 QED
 
 Theorem default_return_abi_idempotent[local]:
@@ -339,7 +343,11 @@ Proof
     type_to_abi_dec_info ce.ce_struct_fields ce ty` by
     (gen_tac >> irule type_to_abi_dec_info_layout_cong >>
      simp[update_cenv_ret_abi_def]) >>
-  fs[update_cenv_ret_abi_def]
+  `type_memory_bytes (update_cenv_ret_abi ce ret) = type_memory_bytes ce` by
+    (irule type_memory_bytes_frame >> simp[update_cenv_ret_abi_def]) >>
+  Cases_on `external_return_needs_wrap ret` >>
+  Cases_on `is_abi_dynamic ce.ce_struct_fields ret` >>
+  fs[update_cenv_ret_abi_def] >> rfs[]
 QED
 
 Theorem default_empty_package_return_layout:
@@ -367,8 +375,11 @@ Proof
   Cases_on `ret = NoneT` >>
   simp[update_cenv_nonreentrant_def, default_return_abi_idempotent] >>
   rpt strip_tac >> gvs[] >>
-  simp[default_target_return_abi, update_cenv_ret_abi_def,
-       build_compile_env_def, allocate_args_def] >>
+  simp[SIMP_RULE (srw_ss()) [] default_target_return_abi,
+       default_return_abi_idempotent] >>
+  simp[compile_env_component_equality] >>
+  fs[update_cenv_ret_abi_def] >>
+  fs[build_compile_env_def, allocate_args_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
 
@@ -511,8 +522,7 @@ Proof
     (MAP (\(sel,lbl,z). (sel,lbl))
       (build_selectors (type_env tops) (FST (classify_functions tops))))
     fallback = fallback` by metis_tac[default_raw_fallback_target] >>
-  qexistsl [`"fn_" ++ "__default__"`, `ce`, `ce_fb`, `[]`, `4`, `pay`,
-    `key`, `ut`, `iv`, `rt`, `fallback`, `label_st`, `dispatch_st`,
+  qexistsl [`ce_fb`, `fallback`, `label_st`, `dispatch_st`,
     `opened`, `checks`, `st`, `ce_fb`, `st`, `st'`] >>
   gvs[compileEnvTheory.cs_extends_refl] >>
   (conj_tac >- (irule compileEnvTheory.cs_extends_trans >>
