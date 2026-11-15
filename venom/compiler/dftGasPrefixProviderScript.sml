@@ -388,6 +388,49 @@ Proof
   gvs[MEM_MAP] >> drule trace_blocks_region >> simp[]
 QED
 
+Theorem crossed_schedule_probe[local]:
+  dft_block ["g"]
+      <| bb_label := "entry"; bb_instructions :=
+        [mk_inst 2 GAS [] ["g"];
+         mk_inst 1 INVOKE [Label "child"] ["x"];
+         mk_inst 3 RET [Var "x"; Var "g"; Lit 0w] []] |> =
+      <| bb_label := "entry"; bb_instructions :=
+        [mk_inst 1 INVOKE [Label "child"] ["x"];
+         mk_inst 2 GAS [] ["g"];
+         mk_inst 3 RET [Var "x"; Var "g"; Lit 0w] []] |>
+Proof
+  EVAL_TAC
+QED
+
+Theorem crossed_target_stopped_probe[local]:
+  s.vs_inst_idx = 0 /\
+  lookup_function "child" C.ctx_functions = SOME callee /\
+  setup_callee callee [] s = SOME cs /\
+  run_blocks b C callee cs = Halt t ==>
+  exec_block b C
+    (dft_block ["g"]
+      <| bb_label := "entry"; bb_instructions :=
+        [mk_inst 2 GAS [] ["g"];
+         mk_inst 1 INVOKE [Label "child"] ["x"];
+         mk_inst 3 RET [Var "x"; Var "g"; Lit 0w] []] |>) s = Halt t /\
+  trace_gas (dftGasFromListTraceDefs$trace_block p d b C fn
+    (dft_block ["g"]
+      <| bb_label := "entry"; bb_instructions :=
+        [mk_inst 2 GAS [] ["g"];
+         mk_inst 1 INVOKE [Label "child"] ["x"];
+         mk_inst 3 RET [Var "x"; Var "g"; Lit 0w] []] |>) s) =
+  trace_gas (dftGasFromListTraceDefs$trace_blocks ((d,1)::p) d b C callee cs)
+Proof
+  strip_tac >>
+  simp[crossed_schedule_probe, Once exec_block_def,
+       get_instruction_def, Once step_inst_def, decode_invoke_def,
+       eval_operands_def, mk_inst_def,
+       Once (cj 2 dftGasFromListTraceDefsTheory.trace_defs),
+       cj 1 dftGasFromListTraceDefsTheory.trace_defs,
+       trace_gas_def, visit_gas_def] >>
+  simp[Once step_inst_def, decode_invoke_def, eval_operands_def]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
