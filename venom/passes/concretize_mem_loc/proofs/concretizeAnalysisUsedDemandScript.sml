@@ -51,7 +51,7 @@ Theorem concretize_untainted_local_read_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   joint_trace vs0 C q0 es qs q /\ m <= n /\ n <= j /\ j <= LENGTH es /\
@@ -121,7 +121,7 @@ Theorem concretize_untainted_incoming_read_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ (ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp) /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   FLOOKUP om v = SOME (OriginParameter param,(b,sz)) /\
@@ -225,7 +225,7 @@ Theorem concretize_untainted_local_read_past_write_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   joint_trace vs0 C q0 es qs q /\ m <= n /\ n <= j /\ j <= LENGTH es /\

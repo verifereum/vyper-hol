@@ -457,11 +457,10 @@ Theorem ptr_stage_owner_interval_liveat:
     (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
       MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
       ~(off <= byte /\ byte < off + len))) /\
-  o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
   (!nm. OL alloc_to (mems nm)) /\
