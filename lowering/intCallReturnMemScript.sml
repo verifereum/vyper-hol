@@ -160,7 +160,7 @@ Resume compile_internal_return_memory_frag_raw[store]:
   drule_all compile_store_memory_run_capacity >> strip_tac >>
   rename1 `run_inst_seq _ s = OK t1` >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) s` by fs[stmt_state_rel_def, state_rel_def] >>
+     (es with scopes := []) s` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `t1.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = s`
        (mp_tac o AP_TERM ``\z. z.vs_data_section``) >> simp[]) >>
@@ -208,7 +208,7 @@ QED
    epilogue-aware contract, including persistent and transient guards. *)
 Theorem compile_internal_return_memory_frag:
   !ctx func cenv cx es ty tv v val_op rpc elem_types buf_op sa su sb bw.
-    compile_return_unlock cenv sa = ((),su) /\
+    ~cx.txn.is_static /\ compile_return_unlock cenv sa = ((),su) /\
     compile_internal_return cenv (SOME val_op) rpc cenv.ce_returns_count
       ty ty elem_types (SOME buf_op) su = ((),sb) /\
     cenv.ce_returns_count = 0 /\
@@ -238,7 +238,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
   rename1 `stmt_state_rel H ctx func cenv cx (es with scopes := []) s0` >>
-  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\
@@ -278,7 +278,7 @@ Resume compile_internal_return_memory_frag[frame]:
                   `LENGTH sm.cs_current_insts`, `sa.cs_next_id`]
        mp_tac return_unlock_memory_frame >> simp[Abbr `pre`]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) s0` by fs[stmt_state_rel_def, state_rel_def] >>
+     (es with scopes := []) s0` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
      (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
