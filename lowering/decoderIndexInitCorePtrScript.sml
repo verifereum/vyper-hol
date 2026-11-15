@@ -1,17 +1,23 @@
 (* Allocation and zero-store share one endpoint ghost and continuation. *)
 Theory decoderIndexInitCorePtr
 Ancestors wordLoadStorePtr decoderBudgetAllocaCorePtr decoderSetupStepPtr ptrSafetyTransport decoderAllocationBoundsPtr
+  fragGasSeqPtr fragExecMem calldataDynInit
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map
   words list rich_list arithmetic pred_set instIdxIndep codegenRel contextCodegenRel
 
-Theorem abi_decode_index_init_endpoint_exact_ptr_core:
+Theorem abi_decode_index_init_endpoint_sequence_ptr_core:
   abi_decode_index_init sa = (ip,sb) /\
   abi_decoder_budget first last b cap s /\
   sa.cs_next_id IN abi_decoder_ids first last /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u q p. ip = Var q /\ eval_operand ip t = SOME (n2w p) /\
+  ?HG u q p.
+    run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+    (!D lower ctx' func. allocas_from lower s /\ lower <= s.vs_alloca_next /\
+       ~ctx_has_dalloca ctx' ==>
+       inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb) s HG u) /\
+    ip = Var q /\ eval_operand ip t = SOME (n2w p) /\
     b <= p /\ p + 32 <= b + cap /\ mload p t = 0w /\
     ptr_covers HG u q (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
     frag_exec_ptr H cx ctx PG sa sb
@@ -42,8 +48,12 @@ Proof
        run_inst_seq (emitted_insts allocation_st sb) v = OK t` by
     (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK t` mp_tac >>
      simp[run_inst_seq_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all budget_alloca_endpoint_exact_ptr_core >>
+  drule_all budget_alloca_endpoint_computed_ptr_core >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
+  qpat_x_assum `HG = step_prov _ _ _ _` SUBST_ALL_TAC >>
+  qpat_x_assum `u = step_taint _ _ _ _` SUBST_ALL_TAC >>
+  qmatch_asmsub_abbrev_tac
+    `ptr_covers HG u q (v with vs_inst_idx := SUC s.vs_inst_idx) 32` >>
   `t = mstore p 0w v` by
     (qpat_x_assum `run_inst_seq (emitted_insts allocation_st sb) v = OK t` mp_tac >>
      simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
@@ -83,6 +93,68 @@ Proof
      simp[Abbr `v1`, lookup_var_def, eval_operand_def, w2n_n2w] >>
      gvs[lookup_var_def, mstore_def, ADD1, ADD_ASSOC]) >>
   qexistsl_tac [`HG`,`u1`,`q`,`p`] >>
+  conj_tac >-
+    (`step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) s = OK v` by
+       gvs[run_inst_seq_def, AllCaseEqs()] >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`abi_decode_index_init sa = (ip,sb)`,
+        `abi_decoder_budget first last b cap s`,
+        `sa.cs_next_id IN abi_decoder_ids first last`,
+        `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) s = OK v`,
+        `ip = Var q`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `q = STRING #"%" (toString sa.cs_next_var)` by
+       (drule abi_decode_index_init_shape >> simp[]) >>
+     `exec_alloca (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) s (32w:bytes32) = OK v` by
+       (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+        simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
+     `?pa. abi_decoder_budget first last b cap v /\
+       lookup_var q v = SOME (n2w pa) /\
+       FLOOKUP v.vs_allocas sa.cs_next_id = SOME (pa,32) /\
+       b <= pa /\ pa+32 <= b+cap` by
+       (drule abi_decoder_alloca32 >>
+        disch_then (qspecl_then [`q`,
+          `mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]`] mp_tac) >>
+        simp[mk_inst_def] >> strip_tac >> gvs[] >> metis_tac[]) >>
+     `pa+32 <= v.vs_alloca_next` by
+       (qpat_x_assum `abi_decoder_budget first last b cap v` mp_tac >>
+        simp_tac bool_ss [abi_decoder_budget_def] >> strip_tac >>
+        qpat_x_assum `!id off sz. _ ==> _`
+          (qspecl_then [`sa.cs_next_id`,`pa`,`32`] mp_tac) >> simp[]) >>
+     `pa < dimword (:256)` by
+       (drule abi_decoder_budget_word_bound >> decide_tac) >>
+     `EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+       (emitted_insts sa sb)` by
+       (drule abi_decode_index_init_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
+     irule run_inst_seq_mem_ok_of_prefix_safe >> asm_rewrite_tac[] >>
+     ho_match_mp_tac (GEN_ALL calldata_index_init_prefix_safe) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     gvs[eval_operand_def, lookup_var_def]) >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >>
+     `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) s = OK v` by
+       gvs[run_inst_seq_def, AllCaseEqs()] >>
+     `allocas_from lower v` by
+       (irule (INST_TYPE [alpha |-> ``:256``] exec_alloca_preserves_allocas_from) >>
+        qexistsl_tac [`32w:bytes32`,
+          `mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]`, `s`] >>
+        simp[] >> qpat_x_assum `step_inst_base _ s = OK v` mp_tac >>
+        simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
+     `allocas_from lower v1` by
+       (simp[Abbr `v1`, allocas_from_def] >> metis_tac[allocas_from_def]) >>
+     `ptr_inst_ok D lower 0 ctx' func G tn
+        (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) s` by
+       (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+        qexists_tac `0` >> simp[ptr_inst_ok_alloca]) >>
+     `ptr_inst_ok D lower 0 ctx' func HG u ins v1` by
+       (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+        qexists_tac `0` >> simp[Abbr `ins`] >>
+        irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
+     `step_inst_base ins v1 = OK (mstore p 0w v1)` by
+       (simp[Abbr `ins`, Abbr `v1`, step_inst_base_opcode_eqs, mk_inst_def,
+          exec_write2_def, eval_operand_def, lookup_var_def, w2n_n2w] >>
+        gvs[lookup_var_def]) >>
+     gvs[inst_seq_ptr_def, Abbr `HG`, Abbr `u`, Abbr `u1`, Abbr `v1`, Abbr `ins`]) >>
   gvs[eval_operand_def] >>
   conj_tac >- simp[mload_mstore_same] >>
   conj_tac >- (fs[ptr_covers_def, Abbr `v1`, eval_operand_def, lookup_var_def] >>
@@ -130,4 +202,32 @@ Proof
   simp[Abbr `v1`, step_inst_base_opcode_eqs, mk_inst_def,
        exec_write2_def, eval_operand_def, lookup_var_def, w2n_n2w] >>
   gvs[lookup_var_def, mstore_def]
+QED
+
+Theorem abi_decode_index_init_endpoint_exact_ptr_core:
+  abi_decode_index_init sa = (ip,sb) /\
+  abi_decoder_budget first last b cap s /\
+  sa.cs_next_id IN abi_decoder_ids first last /\ ~s.vs_halted /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u q p. ip = Var q /\ eval_operand ip t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ mload p t = 0w /\
+    ptr_covers HG u q (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem = tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
+    (!a. p <= a /\ a < p + 32 ==> a NOTIN u.t_mem) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >> drule_all abi_decode_index_init_endpoint_sequence_ptr_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> asm_rewrite_tac[]
 QED

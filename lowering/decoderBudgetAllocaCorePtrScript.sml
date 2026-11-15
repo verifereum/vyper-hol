@@ -91,11 +91,14 @@ Proof
   gvs[]
 QED
 
-Theorem budget_alloca_endpoint_exact_ptr_core:
+Theorem budget_alloca_endpoint_computed_ptr_core:
   emit_op ALLOCA [Lit 32w] sa = (ip,sb) /\
   abi_decoder_budget first last b cap s /\ sa.cs_next_id IN abi_decoder_ids first last /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?HG u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
+  ?HG u q p.
+    HG = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) t /\
+    u = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [q]) s t tn /\
+    ip = Var q /\ lookup_var q t = SOME (n2w p) /\
     b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
     ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
     frag_exec_ptr H cx ctx PG sa sb
@@ -129,7 +132,7 @@ Proof
    tn.t_mem DIFF {a | p <= a /\ a < p + 32}` by
     (simp[Abbr `u`] >> irule budget_alloca_mem_difference >>
      metis_tac[]) >>
-  qexistsl_tac [`HG`,`u`,`p`] >> simp[] >>
+  qexists_tac `p` >> simp[] >>
   conj_tac >- fs[ptr_covers_def, eval_op_inst_idx, eval_operand_def, lookup_var_def] >>
   conj_tac
   >- (irule ptr_fragment_step >> simp[mk_inst_def, is_terminator_def] >>
@@ -146,4 +149,31 @@ Proof
   simp[Abbr `HG`, Abbr `u`, is_terminator_def] >>
   gen_tac >> irule ptr_inst_ok_lower_bound_transport >> simp[] >>
   qexists_tac `0` >> simp[ptr_inst_ok_alloca]
+QED
+
+Theorem budget_alloca_endpoint_exact_ptr_core:
+  emit_op ALLOCA [Lit 32w] sa = (ip,sb) /\
+  abi_decoder_budget first last b cap s /\ sa.cs_next_id IN abi_decoder_ids first last /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem DIFF {a | p <= a /\ a < p + 32} =
+      tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >> drule_all budget_alloca_endpoint_computed_ptr_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> asm_rewrite_tac[]
 QED
