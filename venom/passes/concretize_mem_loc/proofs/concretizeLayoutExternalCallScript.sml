@@ -500,6 +500,30 @@ Proof
 QED
 
 
+(* Pure transport for clean output prefixes and synchronized snapshot reset. *)
+Theorem concretize_reset_write_taint_order[local]:
+  relocation_taint_le R tn un /\
+  (!a b. next a b /\ a IN written ==> b IN writtenT) /\
+  (!a b. next a b /\ a NOTIN written ==> R a b) ==>
+  relocation_taint_le next
+    (tn with <|t_mem := tn.t_mem DIFF written;
+       t_var := tn.t_var |+ (v,{});
+       t_stor := if reset then {} else tn.t_stor;
+       t_trans := if reset then {} else tn.t_trans|>)
+    (un with <|t_mem := un.t_mem DIFF writtenT;
+       t_var := un.t_var |+ (v,{});
+       t_stor := if reset then {} else un.t_stor;
+       t_trans := if reset then {} else un.t_trans|>)
+Proof
+  strip_tac >> fs[relocation_taint_le_def] >>
+  simp[relocation_taint_le_def] >> conj_tac
+  >- (fs[demand_taint_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
+      IF_CASES_TAC >> simp[] >> fs[op_taint_def]) >>
+  Cases_on `reset` >> simp[]
+QED
+
 Theorem ext_call_taint[local]:
   MEM inst.inst_opcode [CALL; STATICCALL] /\ inst.inst_outputs = [v] /\
   inst.inst_operands = [opg;opa] ++ vals ++ [opd;opn;opr;opm] /\
@@ -610,7 +634,9 @@ Theorem concretize_ext_call_local_complete:
   EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -618,6 +644,7 @@ Theorem concretize_ext_call_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -643,7 +670,6 @@ Theorem concretize_ext_call_local_complete:
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       concretize_local_obs post tpost /\
     concretize_supplement D (step_taint inst s post tn) post tpost /\
-    step_prov PG G inst post = SND o_f (origin_set rv inst.inst_outputs NONE) /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
@@ -786,19 +812,6 @@ Proof
       simp[Excl "consume_call_outcome_eq"] >>
       qpat_x_assum `exec_ext_call inst t _ _ _ _ _ _ _ _ = OK post'` mp_tac >>
       asm_rewrite_tac[] >> simp[]))) >>
-  (conj_tac >- ((
-      `SND o_f rv = G` by
-        (drule resolved_config_current >> simp[] >>
-         metis_tac[resolved_frame_erasure]) >>
-      `inst_wf inst` by
-        (fs[o1_fn_shape_def, venomWfTheory.fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
-         metis_tac[]) >>
-      `?v. inst.inst_outputs = [v]` by
-        (qpat_x_assum `inst_wf inst` mp_tac >>
-         asm_rewrite_tac[venomWfTheory.inst_wf_def, venomInstTheory.opcode_case_def] >>
-         simp[LENGTH_EQ_NUM_compute]) >>
-      qpat_x_assum `SND o_f rv = G` (SUBST_ALL_TAC o SYM) >>
-      irule ext_call_prov >> simp[] >> metis_tac[]))) >>
   (conj_tac >- ((
       `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
       qpat_assum `exec_ext_call inst s _ _ _ _ _ _ _ _ = OK post`
