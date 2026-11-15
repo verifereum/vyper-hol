@@ -136,6 +136,13 @@ Proof
   strip_tac >> drule_all unwrap_alloc_entry >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   rename1 `buf.buf_operand = Var root` >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
+    (strip_tac >> drule_all unwrap_alloc_below_fmp >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp a)` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     qpat_x_assum `a = u with vs_inst_idx := _`
+       (fn th => REWRITE_TAC [th]) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `!x. src = Var x ==> x <> root` by
     metis_tac[unwrap_alloc_old_operand_distinct] >>
   drule_all unwrap_alloc_old_operand_ghost >>
