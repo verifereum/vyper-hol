@@ -131,7 +131,7 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
     (irule forced_then_admissible >> goal_assum (drule_at Any)) >>
   irule for_expr_endpoint_outcome_mem >>
   simp range_frame_rules >> conj_tac
-  >- (rpt strip_tac >> conj_tac >- (qpat_x_assum `expr_exit _ _` mp_tac >>
+  >- (rpt gen_tac >> strip_tac >> conj_tac >- (qpat_x_assum `expr_exit _ _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >>
       Cases_on `ex` >> Cases_on `r'` >>
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def] >>
@@ -181,7 +181,7 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
      pure_rewrite_tac[expr_post_def] >> strip_tac >> simp[]) >>
   qunabbrev_tac `suffix` >>
   irule for_expr_endpoint_outcome_mem >> simp range_frame_rules >> conj_tac
-  >- (rpt strip_tac >> conj_tac >- (qpat_x_assum `expr_exit _ _` mp_tac >>
+  >- (rpt gen_tac >> strip_tac >> conj_tac >- (qpat_x_assum `expr_exit _ _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >>
       Cases_on `ex` >> Cases_on `r'` >>
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def] >>
@@ -374,7 +374,8 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
   >> simp[gas_summary_at_def, gas_marked_exec_def]
   >> qexistsl_tac [`INR (Error (RuntimeError "no range"))`,`ee2`,
        `Abort Revert_abort t`]
-  >> simp[bind_def, raise_def, exit_result_def, stmt_exit_def, expr_exit_def]
+  >> simp[bind_def, raise_def, exit_result_def, stmt_exit_def, expr_exit_def,
+       exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume compile_for_range_checked_frag_active_mem[valid_order]:
@@ -396,7 +397,8 @@ Resume compile_for_range_checked_frag_active_mem[valid_order]:
   >> qexistsl_tac [`INR (Error (RuntimeError "For too long"))`,`ee2`,
        `Abort Revert_abort t`]
   >> simp[bind_def, return_def, assert_def, raise_def,
-       exit_result_def, stmt_exit_def, expr_exit_def]
+       exit_result_def, stmt_exit_def, expr_exit_def,
+       exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume compile_for_range_checked_frag_active_mem[valid_bound]:
