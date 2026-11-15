@@ -42,7 +42,7 @@ Proof
   `gas_marked_path T ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (mp_tac (Q.INST [`sa` |-> `sa`, `sb` |-> `sb`, `s` |-> `s`, `t` |-> `t`]
-       (SPEC_ALL body_decl_zero_gas_path)) >>
+       (SPEC_ALL bodyDeclZeroGasPathTheory.body_decl_zero_gas_path)) >>
      impl_tac >- simp[] >> simp[gas_marked_path_def]) >>
   qexists_tac `t` >>
   gvs[venomStateTheory.venom_state_component_equality]

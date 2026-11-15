@@ -16,7 +16,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem aggregate_store_body_rebased_slice_fields[local]:
+Theorem aggregate_store_body_rebased_slice_fields:
   compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e)
     su = ((),sb) /\
   expr_body_pre ce cx env e es /\
@@ -673,7 +673,7 @@ Proof
   strip_tac >>
   mp_tac (Q.INST [`mty` |-> `expr_type e`]
             (SPEC_ALL aggregate_body_tuple_head_path_widened)) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
   strip_tac >> qexistsl_tac [`v`, `q`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

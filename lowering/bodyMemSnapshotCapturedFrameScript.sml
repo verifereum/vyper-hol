@@ -41,8 +41,8 @@ Proof
 QED
 
 Theorem snapshot_captured_memory_target:
-  target_post ctx func ce cx es sa sb s0 ee pv vt r z /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  target_post H ctx func ce cx es sa sb s0 ee pv vt r z /\
+  stmt_state_rel H ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\

@@ -26,11 +26,21 @@ Proof
   gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
       unwrap_value_def, comp_return_def] >>
   qexistsl_tac [`[]`, `BytesV (TAKE 4 (Keccak_256_w64 x))`, `es`, `s0`] >>
+  conj_tac
+  >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
+           bind_def, read_result_def, return_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (drule_then strip_assume_tac) >>
   simp[gas_value_prefix_def] >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[gas_marked_exec_def, gas_marked_path_def, bind_def,
        read_result_def, return_def, expr_post_def, expr_val_rel_def,
        expr_val_at_def, expr_type_def, eval_operand_def,

@@ -66,7 +66,7 @@ Proof
 QED
 
 Theorem immutable_assignment_destination:
-  stmt_state_rel ctx func cenv cx es s /\ alloca_room ctx func s /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_room ctx func s /\
   cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ity /\

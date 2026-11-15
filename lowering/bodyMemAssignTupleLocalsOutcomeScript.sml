@@ -310,6 +310,10 @@ Proof
   drule forced_then_admissible >> strip_tac >>
   pure_rewrite_tac[eval_assign_tuple_action] >>
   irule forced_then_outcome >>
+  conj_tac
+  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  conj_tac
+  >- (gen_tac >> simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   qexists_tac `\H v ee t.
     expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -317,10 +321,6 @@ Proof
     t.vs_inst_idx = LENGTH su.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (gen_tac >> simp[vyperStorageTraceTheory.evaluate_storage_trace_frame])
-  >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
   >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>

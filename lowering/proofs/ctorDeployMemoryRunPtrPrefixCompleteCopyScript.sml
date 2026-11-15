@@ -263,7 +263,7 @@ Resume prefix_bytestring_complete_mode_contract[package]:
               i.inst_opcode <> GAS) (emitted_insts st st')` by
     (drule prefix_bytestring_sentinel_code >>
      pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-     asm_rewrite_tac[inst_extends_def] >>
+     asm_rewrite_tac[emitHelperPropsTheory.inst_extends_def] >>
      simp[mk_inst_def, is_terminator_def]) >>
   `checked ==> !D' explicit.
      gas_origin_ptr_path (D', lo, explicit, ctx, func, PG) (initial, G, tn) []
@@ -275,7 +275,7 @@ Resume prefix_bytestring_complete_mode_contract[package]:
        (irule ctor_bytes_reentry_mem_ok >>
         qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
         simp[] >> decide_tac) >>
-     rpt gen_tac >> irule emitted_origin_ptr_path >>
+     rpt gen_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
      simp[] >> qexists_tac `st` >> simp[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>

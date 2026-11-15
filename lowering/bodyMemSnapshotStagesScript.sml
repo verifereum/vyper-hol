@@ -51,7 +51,7 @@ Theorem snapshot_lowered_encoding:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   evaluate_type (get_tenv cx) lt = SOME ltv /\
   value_has_type ltv v /\
-  expr_post ctx func ce cx e es sa sc s0 ee v src s ==>
+  expr_post H ctx func ce cx e es sa sc s0 ee v src s ==>
   val_wf ltv v /\ ?w. eval_operand src s = SOME w /\
     val_in_memory ltv v (w2n w) s.vs_memory
 Proof
@@ -80,7 +80,7 @@ Theorem snapshot_unwrap_source_mem:
   (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
     type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
     type_memory_size tvt < 2**64) /\
-  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee raw vv s /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -92,7 +92,7 @@ Theorem snapshot_unwrap_source_mem:
   (!n b len. local_region ce ee.scopes s n b len ==>
     regions_disjoint (w2n d) cap b len) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\
-    expr_post ctx func ce cx e es sa sc s0 ee v src z /\
+    expr_post H ctx func ce cx e es sa sc s0 ee v src z /\
     (!w ltv. eval_operand src z = SOME w /\
       evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME ltv ==>
       type_memory_size ltv = 0 \/ w2n w + type_memory_size ltv <= z.vs_alloca_next) /\

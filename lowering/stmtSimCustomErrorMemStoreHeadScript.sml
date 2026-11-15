@@ -25,7 +25,7 @@ Theorem unwrap_value_body_rebased_path_mem:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tv vv r /\
   alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
@@ -33,22 +33,24 @@ Theorem unwrap_value_body_rebased_path_mem:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path T ctx func r 0 (OK u) /\
-    expr_post ctx func ce cx e es'
+    expr_post H ctx func ce cx e es'
       (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
     ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts /\
-    alloca_history func u /\ r.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ r.vs_alloca_next <= u.vs_alloca_next /\
+    u.vs_accounts = r.vs_accounts /\ u.vs_transient = r.vs_transient /\
+    u.vs_requests = r.vs_requests /\ u.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >>
   drule vv_post_rebase >> disch_then assume_tac >>
-  `vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  `vv_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
      sm r es' (Value v) vv r` by metis_tac[vv_post_read_result] >>
   `vv_store_bound cx (expr_type e) (lowered_value_type ce e)
      es' (Value v) vv r` by
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      simp[vv_store_bound_def, read_result_def, return_def] >> metis_tac[]) >>
-  qpat_x_assum `vv_post _ _ _ _ _ es _ _ _ _ tv _ _` kall_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ es' _ _ _ _ tv _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ es _ _ _ _ tv _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ es' _ _ _ _ tv _ _` kall_tac >>
   Cases_on `vv`
   >- (gvs[exprLoweringTheory.unwrap_value_def, comp_return_def] >>
       qexists_tac `r` >> simp[gas_marked_path_def, gas_path_mem_rules] >>
@@ -72,7 +74,7 @@ Proof
      `is_word_type (expr_type e)` by metis_tac[arg_type_fits_word_type] >>
      metis_tac[post_value_type_word]) >>
   mp_tac (GEN_ALL unwrap_memory_marked_read_mem) >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   (impl_tac >- simp[]) >>
   strip_tac >> gvs[gas_marked_exec_def, read_result_def, return_def] >>
@@ -82,7 +84,7 @@ QED
 
 Resume unwrap_value_body_rebased_path_mem[same]:
   mp_tac unwrap_value_path_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   (impl_tac >- (simp[] >> rpt conj_tac
     >- (gvs[local_ptrs_reserved_def, not_fresh_at_def] >> metis_tac[])
@@ -99,7 +101,7 @@ Theorem custom_error_optional_offset_mem[local]:
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
   (if off = 0 then comp_return (Var x)
    else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   eval_operand (Var x) r = SOME w /\
   fn_has_code sm sn func /\ alloca_history func r /\
@@ -108,13 +110,15 @@ Theorem custom_error_optional_offset_mem[local]:
   ?q. gas_marked_path T ctx func r 0 (OK q) /\
     ~q.vs_halted /\ q.vs_current_bb = sn.cs_current_bb /\
     q.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post ctx func ce cx e es sa sn s0 es' tvv vv q /\
+    vv_post H ctx func ce cx e es sa sn s0 es' tvv vv q /\
     vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv q /\
     eval_operand dst q = SOME (w + n2w off) /\
     q.vs_memory = r.vs_memory /\ q.vs_allocas = r.vs_allocas /\
     q.vs_alloca_next = r.vs_alloca_next /\
     (!z. not_fresh_at sm z ==> lookup_var z q = lookup_var z r) /\
-    alloca_history func q
+    alloca_history func q /\
+    q.vs_accounts = r.vs_accounts /\ q.vs_transient = r.vs_transient /\
+    q.vs_requests = r.vs_requests /\ q.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >> Cases_on `off = 0`
   >- (gvs[comp_return_def] >> qexists_tac `r` >>
@@ -124,7 +128,7 @@ Proof
   qexists_tac `q` >> simp[]
 QED
 
-Theorem custom_error_store_head_path_mem:
+Theorem custom_error_store_head_path_mem_at_horizon[local]:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   (if off = 0 then comp_return (Var x)
    else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
@@ -134,7 +138,7 @@ Theorem custom_error_store_head_path_mem:
   expr_body_pre ce cx env e es /\
   gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
     marks (INL tvv) mid (OK r) /\
-  vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e)
     (mid with gas_obs := []) tvv vv r /\
   alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
@@ -155,7 +159,7 @@ Theorem custom_error_store_head_path_mem:
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v q.
@@ -167,7 +171,7 @@ Theorem custom_error_store_head_path_mem:
     q.vs_inst_idx = LENGTH st.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+    stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q /\
     (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
@@ -190,7 +194,9 @@ Theorem custom_error_store_head_path_mem:
           sa.cs_next_id <= i.inst_id /\
           FLOOKUP q.vs_allocas i.inst_id = SOME (c,sz) ==>
           regions_disjoint p n c sz) ==>
-        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory))
+        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory)) /\
+    q.vs_accounts = r.vs_accounts /\ q.vs_transient = r.vs_transient /\
+    q.vs_requests = r.vs_requests /\ q.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >>
   `?v. read_result cx tvv (mid with gas_obs := []) =
@@ -209,7 +215,7 @@ Proof
                expr_body_pre_gas_obs]) >>
   suspend "store"
 QED
-Resume custom_error_store_head_path_mem[store]:
+Resume custom_error_store_head_path_mem_at_horizon[store]:
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sm sn` by
     (Cases_on `off = 0` >> gvs[comp_return_def] >>
@@ -245,14 +251,14 @@ Resume custom_error_store_head_path_mem[store]:
   `type_memory_bytes ce (expr_type e) = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size, expr_body_pre_def] >>
   `type_memory_size tv < dimword (:256)` by decide_tac >>
-  `stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+  `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q /\
    FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz)` by fs[vv_post_def] >>
   suspend "bounds"
 QED
-Resume custom_error_store_head_path_mem[bounds]:
+Resume custom_error_store_head_path_mem_at_horizon[bounds]:
   `lookup_var y q = SOME (n2w (b+off))` by
     fs[eval_operand_def, wordsTheory.word_add_n2w] >>
-  `stmt_state_rel ctx func ce cx mid q /\ not_local_ptr ce mid.scopes x` by
+  `stmt_state_rel H ctx func ce cx mid q /\ not_local_ptr ce mid.scopes x` by
     (conj_tac
      >- (fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
          metis_tac[]) >>
@@ -289,9 +295,9 @@ Resume custom_error_store_head_path_mem[bounds]:
     metis_tac[fn_has_code_split] >>
   suspend "checked_store"
 QED
-Resume custom_error_store_head_path_mem[checked_store]:
+Resume custom_error_store_head_path_mem_at_horizon[checked_store]:
   `?u. gas_marked_path T ctx func q 0 (OK u) /\
-    expr_post ctx func ce cx e (mid with gas_obs := [])
+    expr_post H ctx func ce cx e (mid with gas_obs := [])
       (sa with cs_next_var := sn.cs_next_var) su q (mid with gas_obs := []) v op u /\
     expr_store_bound cx (expr_type e) v op u /\
     (post_value_type ce e <> expr_type e /\
@@ -303,7 +309,9 @@ Resume custom_error_store_head_path_mem[checked_store]:
        w2n sw + type_memory_size stv <= u.vs_alloca_next) /\
     ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts /\
-    alloca_history func u /\ q.vs_alloca_next <= u.vs_alloca_next` by
+    alloca_history func u /\ q.vs_alloca_next <= u.vs_alloca_next /\
+    u.vs_accounts = q.vs_accounts /\ u.vs_transient = q.vs_transient /\
+    u.vs_requests = q.vs_requests /\ u.vs_call_ctx = q.vs_call_ctx` by
     suspend "unwrap_capacity" >>
   `w2n (n2w (b+off):256 word) + type_memory_size tv <= u.vs_alloca_next` by
     (irule bodyMemAggregateSideTheory.aggregate_allocated_slice_capacity >>
@@ -311,7 +319,7 @@ Resume custom_error_store_head_path_mem[checked_store]:
      qexistsl_tac [`inst.inst_id`, `asz`] >>
      fs[expr_post_def, stmt_state_rel_def, arithmeticTheory.ADD_COMM]) >>
 
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (Q.INST [`sa` |-> `sa`, `sm` |-> `sn`]
       (SPEC_ALL aggregate_store_body_rebased_slice_path_mem)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
@@ -324,7 +332,7 @@ Resume custom_error_store_head_path_mem[checked_store]:
   `r.vs_alloca_next <= stored.vs_alloca_next` by metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   suspend "frames"
 QED
-Resume custom_error_store_head_path_mem[frames]:
+Resume custom_error_store_head_path_mem_at_horizon[frames]:
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (drule_all aggregate_body_marked_replay >>
      disch_then assume_tac >> drule eval_expr_preserves_scopes_dom >> simp[]) >>
@@ -335,6 +343,9 @@ Resume custom_error_store_head_path_mem[frames]:
      >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sa`, `mid.scopes`, `q`] >> simp[] >>
      fs[vv_post_def]) >>
+  `stored.vs_accounts = r.vs_accounts /\ stored.vs_transient = r.vs_transient /\
+   stored.vs_requests = r.vs_requests /\ stored.vs_call_ctx = r.vs_call_ctx` by
+    metis_tac[] >>
   qexists_tac `stored` >> simp[] >>
   conj_tac
   >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] (SPEC_ALL gas_marked_path_then))) >>
@@ -352,11 +363,11 @@ Resume custom_error_store_head_path_mem[frames]:
   conj_tac >- metis_tac[vv_post_def] >>
   suspend "memory_frames"
 QED
-Resume custom_error_store_head_path_mem[memory_frames]:
+Resume custom_error_store_head_path_mem_at_horizon[memory_frames]:
   conj_tac
   >- (rpt strip_tac >> (
       `mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
-        (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ q`
+        (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ sn _ _ _ _ q`
            (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
          qpat_x_assum `!aid off sz. _` irule >>
          conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
@@ -371,7 +382,7 @@ Resume custom_error_store_head_path_mem[memory_frames]:
       >- (pure_asm_rewrite_tac[] >> decide_tac))) >>
   suspend "allocated_frame"
 QED
-Resume custom_error_store_head_path_mem[allocated_frame]:
+Resume custom_error_store_head_path_mem_at_horizon[allocated_frame]:
   conj_tac
   >- (`!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           lo+sz <= b \/ b+asz <= lo` by
@@ -382,7 +393,7 @@ Resume custom_error_store_head_path_mem[allocated_frame]:
          simp[] >> disch_then irule >> simp[] >>
          metis_tac[expr_body_pre_def]) >>
       `mem_bytes_at b asz q.vs_memory = mem_bytes_at b asz s0.vs_memory` by
-        (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ q`
+        (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ sn _ _ _ _ q`
            (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
          qpat_x_assum `!aid off sz. _` irule >>
          conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
@@ -405,7 +416,7 @@ Resume custom_error_store_head_path_mem[allocated_frame]:
       simp[] >> metis_tac[vv_post_def]) >>
   suspend "pure_frame"
 QED
-Resume custom_error_store_head_path_mem[pure_frame]:
+Resume custom_error_store_head_path_mem_at_horizon[pure_frame]:
   strip_tac >>
   `pure_frame ce func es sa s0 q` by fs[vv_post_def] >>
   `pure_frame ce func (mid with gas_obs := [])
@@ -430,9 +441,9 @@ Resume custom_error_store_head_path_mem[pure_frame]:
       simp[regions_disjoint_def]) >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
-Resume custom_error_store_head_path_mem[unwrap_capacity]:
+Resume custom_error_store_head_path_mem_at_horizon[unwrap_capacity]:
   drule vv_post_rebase >> disch_then assume_tac >>
-  `vv_post ctx func ce cx e (mid with gas_obs := [])
+  `vv_post H ctx func ce cx e (mid with gas_obs := [])
      (sa with cs_next_var := sn.cs_next_var) sn q
      (mid with gas_obs := []) (Value v) vv q` by
     metis_tac[vv_post_read_result] >>
@@ -450,13 +461,15 @@ Resume custom_error_store_head_path_mem[unwrap_capacity]:
          type_memory_size tvt < 2 ** 64` by
         metis_tac[body_post_type_allocation_bound] >>
       `?u. gas_path_mem ctx func q 0 (OK u) /\
-        expr_post ctx func ce cx e (mid with gas_obs := [])
+        expr_post H ctx func ce cx e (mid with gas_obs := [])
           (sa with cs_next_var := sn.cs_next_var) su q
           (mid with gas_obs := []) v op u /\
         expr_store_bound cx (expr_type e) v op u /\
         u.vs_current_bb = su.cs_current_bb /\
         u.vs_inst_idx = LENGTH su.cs_current_insts /\
-        alloca_history func u /\ q.vs_alloca_next <= u.vs_alloca_next` by
+        alloca_history func u /\ q.vs_alloca_next <= u.vs_alloca_next /\
+        u.vs_accounts = q.vs_accounts /\ u.vs_transient = q.vs_transient /\
+        u.vs_requests = q.vs_requests /\ u.vs_call_ctx = q.vs_call_ctx` by
         (Cases_on `is_word_type (expr_type e)`
          >- (qspecl_then [`ctx`, `func`, `ce`, `cx`, `e`,
                `mid with gas_obs := []`, `sa with cs_next_var := sn.cs_next_var`,
@@ -504,4 +517,93 @@ Resume custom_error_store_head_path_mem[unwrap_capacity]:
   fs[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def] >>
   metis_tac[]
 QED
-Finalise custom_error_store_head_path_mem
+Finalise custom_error_store_head_path_mem_at_horizon
+
+(* The concrete endpoint is chosen once, before the horizon family. *)
+Theorem custom_error_store_head_path_mem:
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  (if off = 0 then comp_return (Var x)
+   else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e)
+    su = ((),st) /\
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tvv) mid (OK r) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     vv_post H ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r) /\
+  vv_store_bound cx (expr_type e) (lowered_value_type ce e)
+    (mid with gas_obs := []) tvv vv r /\
+  alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
+  (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
+    acyclic_struct_metadata ce.ce_struct_fields) /\
+  fn_has_code sa st func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
+  inst.inst_id < sa.cs_next_id /\
+  (!ee. expr_sim_inv ce cx env ee ==> not_local_ptr ce ee.scopes x) /\
+  not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
+  FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  off + type_memory_size tv <= asz /\ b+asz < dimword (:256) /\
+  (ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0) /\
+  (?H. valid_horizon cx st0 H mid.storage_trace) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?v q.
+    read_result cx tvv (mid with gas_obs := []) =
+      (INL v,mid with gas_obs := []) /\
+    expr_sim_inv ce cx env (mid with gas_obs := []) /\
+    gas_marked_path T ctx func r 0 (OK q) /\
+    ~q.vs_halted /\ q.vs_current_bb = st.cs_current_bb /\
+    q.vs_inst_idx = LENGTH st.cs_current_insts /\
+    alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
+    val_in_memory tv v (b+off) q.vs_memory /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q) /\
+    (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
+      lookup_var z q = SOME a) /\
+    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+      FLOOKUP q.vs_allocas aid = SOME a) /\
+    (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      aid < sa.cs_next_id /\
+      (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+        p+n <= lo \/ lo+sz <= p) /\
+      (p+n <= b+off \/ b+off+type_memory_size tv <= p) ==>
+      mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    (!p n. b <= p /\ p+n <= b+asz /\
+      (p+n <= b+off \/ b+off+type_memory_size tv <= p) ==>
+      mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    locals_kept ce es (mid with gas_obs := []) s0 q /\
+    (~expr_has_effect e ==>
+      (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+        mem_bytes_at lo sz q.vs_memory = mem_bytes_at lo sz s0.vs_memory) /\
+      (!p n. (p+n <= b \/ b+asz <= p) /\
+        (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= i.inst_id /\
+          FLOOKUP q.vs_allocas i.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory))
+Proof
+  strip_tac >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by metis_tac[] >>
+  `vv_post H0 ctx func ce cx e es sa sm s0
+     (mid with gas_obs := []) tvv vv r /\
+   stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
+  drule_at (Pat `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    custom_error_store_head_path_mem_at_horizon >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  qexistsl_tac [`v`, `q`] >> simp[] >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) r` by
+    metis_tac[vv_post_def] >>
+  irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+  qexistsl_tac [`H0`, `r`] >> simp[]
+QED

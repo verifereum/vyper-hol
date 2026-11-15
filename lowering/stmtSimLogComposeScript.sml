@@ -8,8 +8,7 @@ Ancestors
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list vyperEvalExprPreservesScopesDom
-  fragGasSeqAbort
-  eventLoweringStructure stmtSimLogTopics logComposeFacts
+  eventLoweringStructure stmtSimLogTopics logComposeFacts fragGasSeqAbort
 Libs
   monadsyntax
 
@@ -155,7 +154,10 @@ QED
 
 val log_cont_frame_tac =
   simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
        vyperStorageTraceTheory.storage_trace_frame_lifts,
+       vyperStorageTraceTheory.storage_trace_frame_checks,
+       vyperStorageTraceTheory.storage_trace_frame_check_not_static,
        vyperStorageTraceTheory.storage_trace_frame_state_updates];
 
 val log_out_of_domain_tac =
@@ -210,7 +212,7 @@ Proof
   impl_tac
   >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[] >>
       first_assum ACCEPT_TAC) >>
-  rewrite_tac[log_eval_bind] >>
+  rewrite_tac[stmtSimLogSourceTheory.log_eval_bind] >>
   simp[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_bind_left >>
@@ -337,7 +339,7 @@ Resume compile_log_ready_stmt_frag[static_suffix]:
      (Abort ExHalt_abort (u with vs_inst_idx := j))` by
     (irule gas_marked_exec_no_source_read >>
      simp[bind_def, lift_option_def, return_def, ignore_bind_def, Excl "enc_def"]) >>
-  qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
+  qexists_tac `marks ++ REPLICATE n F` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def, Excl "enc_def"] >>
   qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
                `es_end`,`Abort ExHalt_abort (u with vs_inst_idx := j)`] >>
@@ -411,8 +413,7 @@ Resume compile_log_ready_stmt_frag[post]:
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
     (qpat_assum `stmt_state_rel H1 _ _ _ _ _ t`
        (mp_then (Pos hd) irule log_suffix_alloca_frame) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     simp[Excl "enc_def"]) >>
+     simp[Excl "enc_def"] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `sa.cs_next_id <= sm.cs_next_id` by
     (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>

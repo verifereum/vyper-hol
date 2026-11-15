@@ -22,7 +22,8 @@ Theorem custom_error_store_head_path:
   expr_body_pre ce cx env e es /\
   gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
     marks (INL tvv) mid (OK r) /\
-  vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     vv_post H ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r) /\
   (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa st func /\ fn_inst_ids_distinct func /\
@@ -40,7 +41,9 @@ Theorem custom_error_store_head_path:
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0) /\
+  (?H. valid_horizon cx st0 H mid.storage_trace) /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v q.
@@ -51,7 +54,8 @@ Theorem custom_error_store_head_path:
     ~q.vs_halted /\ q.vs_current_bb = st.cs_current_bb /\
     q.vs_inst_idx = LENGTH st.cs_current_insts /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q) /\
     (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
@@ -83,6 +87,10 @@ Proof
 QED
 
 Resume custom_error_store_head_path[zero]:
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by metis_tac[] >>
+  `vv_post H0 ctx func ce cx e es sa sm s0
+     (mid with gas_obs := []) tvv vv r /\
+   stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
   `?v. read_result cx tvv (mid with gas_obs := []) =
     (INL v,mid with gas_obs := [])` by metis_tac[vv_post_materialises] >>
   `expr_body_pre ce cx env e
@@ -107,7 +115,10 @@ Resume custom_error_store_head_path[zero]:
   `!z. vv_operand vv = Var z ==> not_fresh_at sm z` by
     metis_tac[cj 1 compiler_compile_var] >>
   `sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
-  drule_all unwrap_value_body_rebased_path >> strip_tac >>
+  drule_all unwrap_value_body_rebased_path_horizons >> strip_tac >>
+  `expr_post H0 ctx func ce cx e (mid with gas_obs := [])
+     (sa with cs_next_var := sm.cs_next_var) su r
+     (mid with gas_obs := []) v op u` by metis_tac[] >>
   suspend "store"
 QED
 
@@ -119,14 +130,14 @@ Resume custom_error_store_head_path[store]:
     metis_tac[expr_sim_inv_memory_size, expr_body_pre_def] >>
   `type_memory_size tv < dimword (:256) /\
    b + type_memory_size tv < dimword (:256)` by decide_tac >>
-  `stmt_state_rel ctx func ce cx (mid with gas_obs := []) r /\
+  `stmt_state_rel H0 ctx func ce cx (mid with gas_obs := []) r /\
    FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz) /\
    lookup_var x r = SOME (n2w b)` by fs[vv_post_def] >>
   `not_fresh_at sm x /\ sm.cs_next_var <= su.cs_next_var` by
     (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
   `w2n (n2w b:256 word) = b` by
     (simp[wordsTheory.w2n_n2w] >> `b < dimword (:256)` by decide_tac >> simp[]) >>
-  `stmt_state_rel ctx func ce cx mid r /\ not_local_ptr ce mid.scopes x` by
+  `stmt_state_rel H0 ctx func ce cx mid r /\ not_local_ptr ce mid.scopes x` by
     (conj_tac
      >- (fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
          metis_tac[]) >> gvs[]) >>
@@ -134,7 +145,8 @@ Resume custom_error_store_head_path[store]:
     lo+sz <= b \/ b+type_memory_size tv <= lo` by
     (rpt strip_tac >> irule (SRULE [] (Q.INST [`off` |-> `0`]
        (SPEC_ALL aggregate_alloca_slice_excludes_local))) >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`H0`,`asz`,`ctx`,`cx`,`func`,`inst`,`x`] >> simp[]) >>
   `immutable_metadata_frame es mid` by
     (drule_all aggregate_body_marked_replay >> strip_tac >>
      drule eval_expr_immutable_metadata_frame >>
@@ -146,9 +158,9 @@ Resume custom_error_store_head_path[store]:
     regions_disjoint io (type_memory_size itv) b (type_memory_size tv)` by
     (strip_tac >> ho_match_mp_tac immutable_metadata_frame_property >>
      metis_tac[]) >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (Q.INST [`sa` |-> `sa`, `sm` |-> `sm`]
-      (SPEC_ALL aggregate_store_body_rebased_slice_path)) >>
+      (SPEC_ALL exprSimAggregateBodyHeadTheory.aggregate_store_body_rebased_slice_fields)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
   disch_then (qspecl_then [`tv`, `asz`,
@@ -167,6 +179,14 @@ Resume custom_error_store_head_path[frames]:
     (rpt strip_tac >> irule local_region_frame >> conj_tac
      >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sa`, `mid.scopes`, `r`] >> simp[] >> fs[vv_post_def]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q` by
+    (rpt strip_tac >>
+     `expr_post H ctx func ce cx e (mid with gas_obs := [])
+        (sa with cs_next_var := sm.cs_next_var) su r
+        (mid with gas_obs := []) v op u` by metis_tac[] >>
+     irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+     qexistsl_tac [`H0`, `u`] >> fs[expr_post_def]) >>
   qexistsl_tac [`v`, `q`] >> simp[] >>
   conj_tac >- gvs[] >>
   conj_tac >- metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES] >>
@@ -191,7 +211,7 @@ QED
 Resume custom_error_store_head_path[old]:
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
      qpat_x_assum `!aid off sz. _` irule >>
      conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
@@ -214,7 +234,7 @@ Resume custom_error_store_head_path[buffer]:
      simp[] >> disch_then irule >> simp[] >>
      metis_tac[expr_body_pre_def]) >>
   `mem_bytes_at b asz r.vs_memory = mem_bytes_at b asz s0.vs_memory` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
      qpat_x_assum `!aid off sz. _` irule >>
      conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>

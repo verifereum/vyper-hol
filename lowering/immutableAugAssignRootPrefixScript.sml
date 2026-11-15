@@ -62,7 +62,7 @@ Proof
     (metis_tac[eval_operand_def, emit_mload_mem_ok]) >>
   conj_tac
   >- (simp[gas_marked_path_def] >>
-      drule_at (Pat `run_inst_seq _ _ = _`) body_decl_zero_gas_path >> simp[]) >>
+      drule_at (Pat `run_inst_seq _ _ = _`) bodyDeclZeroGasPathTheory.body_decl_zero_gas_path >> simp[]) >>
   irule bodyDeclMemoryCoreTheory.body_store_memory_history >> simp[] >>
   qexistsl [`s`, `sa`] >> fs[listTheory.EVERY_MEM]
 QED
@@ -70,12 +70,12 @@ QED
 Theorem immutable_augassign_root_prefix_mem:
   emit_op MLOAD [Lit w] sa = (op,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   w2n w + 32 <= s.vs_alloca_next ==>
   ?u. gas_marked_path T ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx es u /\ alloca_history func u /\
+    stmt_state_rel H ctx func cenv cx es u /\ alloca_history func u /\
     eval_operand op u = SOME (mload (w2n w) s) /\
     (!z. op = Var z ==> not_fresh_at sb z) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\

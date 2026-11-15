@@ -50,6 +50,7 @@ Proof
       rewrite_tac[ifexp_root_eval_forced] >>
       irule gas_bad_storage_at_bind_left >> simp[ifexp_root_cont_frame])
   >- (qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
+      rename1 `gas_marked_exec T (ctx,func) _ _ _ _ es_end (OK condition_state)` >>
       qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
       reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
@@ -66,7 +67,7 @@ Proof
       `?sel. v = BoolV sel` by (irule ifexp_root_condition_bool >> metis_tac[]) >>
       qpat_x_assum `v = BoolV sel` SUBST_ALL_TAC >>
       qpat_x_assum `!marks sel mid u. _` (qspecl_then
-        [`marks`,`sel`,`es_end`,`t`] mp_tac) >>
+        [`marks`,`sel`,`es_end`,`condition_state`] mp_tac) >>
       impl_tac
       >- (rpt conj_tac
           >- first_assum ACCEPT_TAC

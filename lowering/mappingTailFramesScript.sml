@@ -3,9 +3,9 @@ Ancestors
   exprSimWordArgs exprSimProps loweringPosts freshWrites
 
 Theorem expr_post_suffix_frames:
-  expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
+  expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
   wb_frame cenv en en sn t u /\ pure_frame cenv func en sn t u /\
-  stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
   MAP FDOM em.scopes = MAP FDOM en.scopes /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id ==>
   wb_frame cenv em en sm s1 u /\
@@ -15,9 +15,9 @@ Proof
   `wb_frame cenv em en sm s1 t` by
     (drule expr_post_frame >> simp[]) >>
   conj_tac
-  >- (irule wb_frame_trans >> simp[] >>
-      reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
-      goal_assum (drule_at Any)) >>
+  >- (irule (Q.SPECL [`func`, `cenv`, `cx`, `em`, `s1`, `sm`,
+        `en`, `en`, `sn`, `t`, `u`, `ctx`]
+        (Q.INST [`H` |-> `H`] exprSimWordArgsTheory.wb_frame_trans)) >> simp[]) >>
   strip_tac >>
   `pure_frame cenv func em sm s1 t` by
     (drule_all expr_post_pure_frame >> simp[]) >>

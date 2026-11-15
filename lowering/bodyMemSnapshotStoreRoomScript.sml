@@ -51,7 +51,7 @@ Theorem snapshot_store_result_room_mem:
   alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  expr_post ctx func ce cx e es sa sc s0 ee v src s /\
+  expr_post H ctx func ce cx e es sa sc s0 ee v src s /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id <= inst.inst_id /\
@@ -64,7 +64,7 @@ Theorem snapshot_store_result_room_mem:
     aid < sa.cs_next_id ==>
     regions_disjoint (w2n d) (type_memory_size ltv) off len) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\
-    vv_post ctx func ce cx e es sa sb s0 ee raw
+    vv_post H ctx func ce cx e es sa sb s0 ee raw
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
     vv_own ce cx (expr_type e) sm sb ee raw
       (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) z /\
@@ -92,7 +92,7 @@ Proof
          simp[regions_disjoint_def] >> rpt strip_tac >>
          qpat_x_assum `!n b len. local_region _ _ _ _ _ _ ==> _` drule >>
          simp[regions_disjoint_def]) >>
-      `vv_post ctx func ce cx e es sa sc s0 ee raw
+      `vv_post H ctx func ce cx e es sa sc s0 ee raw
          (LocatedValue lt <|ptr_location := LocMemory; ptr_operand := dst|>) s /\
        pure_frame ce func ee sm s s` by
         (irule snapshot_store_post_frame >> simp[] >>

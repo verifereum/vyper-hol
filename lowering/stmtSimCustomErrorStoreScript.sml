@@ -5,7 +5,7 @@ Ancestors
   abiEncoderAdmissible bodyCustomErrorWindowBounds valueEncoding valueEncodingDefs venomState
 
 Theorem custom_error_store_args_sim:
-  !args ce cx env off sa sb es tvs func inst x b asz s0 ctx tys.
+  !args ce cx env off sa sb es tvs func inst x b asz s0 ctx tys st0.
   tys = MAP expr_type args /\
   compile_custom_error_store_args ce args tys (Var x) off sa = ((),sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
@@ -29,13 +29,16 @@ Theorem custom_error_store_args_sim:
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res ee r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res ee r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env ee /\
-      stmt_state_rel ctx func ce cx ee r /\
+      stmt_state_rel H ctx func ce cx ee r /\
+      storage_well_formed_on cx ee (FST H) /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -59,7 +62,7 @@ Theorem custom_error_store_args_sim:
             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
-    (\res ee exit. ?exc. res = INR exc /\
+    (\H res ee exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   match_mp_tac custom_error_store_args_sim_using_head >>

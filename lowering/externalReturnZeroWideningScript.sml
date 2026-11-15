@@ -1,6 +1,6 @@
 (* Zero compiler layouts under source widening; no copy semantics. *)
 Theory externalReturnZeroWidening
-Ancestors externalReturnDeclarationProvenance vyperTypeSystem compileEnv
+Ancestors vyperTypeSystem compileEnv
 
 Theorem return_arg_fits_zero_layout_mutual:
   (!phy dst. arg_type_fits phy dst ==>

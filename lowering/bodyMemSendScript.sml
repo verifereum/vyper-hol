@@ -6,7 +6,7 @@
    which touches memory, allocates or reads GAS. *)
 Theory bodyMemSend
 Ancestors
-  bodyMemoryPreds bodyArgsMemory exprSimSend exprSimMemoryStack
+  bodyMemoryPreds bodyArgsMemory exprSimSend exprSimMemoryStack sendSourceFrame
   exprSimMemDefs exprSimPrecompiles exprSimWordArgs exprSimHypsDefs
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasPathMem fragGasSeqMem fragGasSeqAbort
@@ -35,20 +35,10 @@ Theorem eval_send_read_gas_obs[local]:
     !g. (do tv <- eval_send cx has_gas vs; read_result cx tv od)
           (st with gas_obs := g) = (res, st' with gas_obs := g)
 Proof
-  rpt gen_tac >> strip_tac >> drule eval_send_read >> strip_tac >>
-  drule exprSimSendTheory.eval_send_gas_obs >> strip_tac >>
-  conj_tac
-  >- (qpat_assum `!tail. _` (qspec_then `st.gas_obs` mp_tac) >>
-      `st with gas_obs := st.gas_obs = st` by
-        simp[evaluation_state_component_equality] >>
-      pop_assum (fn th => rewrite_tac[th]) >>
-      qpat_x_assum `eval_send _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
-      simp[evaluation_state_component_equality]) >>
-  gen_tac >> qpat_x_assum `!tail. _` (qspec_then `g` assume_tac) >>
-  Cases_on `r`
-  >- (drule eval_send_value >> strip_tac >>
-      gvs[bind_def, read_result_def, return_def]) >>
-  gvs[bind_def]
+  rpt gen_tac >> strip_tac >> fs[SF ETA_ss] >>
+  qspec_then `read_result cx` mp_tac (GEN_ALL send_bind_gas_frame) >>
+  simp[read_result_def, return_def, SF ETA_ss] >>
+  disch_then drule >> simp[]
 QED
 
 Theorem eval_expr_send_action[local]:
@@ -193,6 +183,7 @@ Proof
          qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
          drule_all send_call_read_step >>
          disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac)
+         >- gvs[]
          >- (`update_var out 1w t' = update_var out 1w s'` by fs[] >>
              pop_assum mp_tac >>
              simp[update_var_def, venom_state_component_equality] >>

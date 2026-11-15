@@ -102,24 +102,31 @@ Proof
 QED
 
 Theorem send_call_step:
-  ~s.vs_call_ctx.cc_static /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
-  eval_operand value s = SOME vw ==>
+  eval_operand value s = SOME vw /\ step_inst_base inst s = OK u ==>
   step_inst_base inst s =
     OK (update_var out
       (FST (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s))
       (SND (consume_call_outcome (venom_call_request s aw vw 0w 0w F) 0 0 s)))
 Proof
   strip_tac >>
-  simp[Once step_inst_base_def, eval_operand_def, Excl "consume_call_outcome_eq"] >>
-  simp[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
+  `venom_call_request s aw vw 0w 0w s.vs_call_ctx.cc_static =
+   venom_call_request s aw vw 0w 0w F` by simp[venom_call_request_def] >>
+  `~(s.vs_call_ctx.cc_static /\ vw <> 0w)` by
+    (Cases_on `s.vs_call_ctx.cc_static` >> simp[] >>
+     Cases_on `vw = 0w` >> simp[] >>
+     qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+     simp[step_inst_base_opcode_eqs, eval_operand_def,
+          Excl "consume_call_outcome_eq"]) >>
+  qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  simp[step_inst_base_opcode_eqs, eval_operand_def, exec_ext_call_def,
+       Excl "consume_call_outcome_eq"] >>
   pairarg_tac >> simp[Excl "consume_call_outcome_eq"]
 QED
 
 Theorem send_call_runtime_frame:
-  ~s.vs_call_ctx.cc_static /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
@@ -136,7 +143,7 @@ Proof
 QED
 
 Theorem send_call_stor_taint:
-  ~s.vs_call_ctx.cc_static /\ stor_taint_ok H cx tn s /\
+  stor_taint_ok H cx tn s /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
@@ -153,7 +160,7 @@ Proof
 QED
 
 Theorem send_call_ghost_inv:
-  ~s.vs_call_ctx.cc_static /\ ghost_inv H d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   es'.scopes = es.scopes /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -175,7 +182,7 @@ Proof
 QED
 
 Theorem send_call_ghost_kept:
-  ~s.vs_call_ctx.cc_static /\ ~not_fresh_at sa out /\
+  ~not_fresh_at sa out /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
@@ -187,7 +194,7 @@ Proof
 QED
 
 Theorem send_call_stor_taint_at:
-  ~s.vs_call_ctx.cc_static /\ stor_taint_ok_at D tn s /\
+  stor_taint_ok_at D tn s /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
@@ -208,7 +215,7 @@ Proof
 QED
 
 Theorem send_call_ghost_inv_at:
-  ~s.vs_call_ctx.cc_static /\ ghost_inv_at D lo d cenv cx es G tn s /\
+  ghost_inv_at D lo d cenv cx es G tn s /\
   es'.scopes = es.scopes /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -337,7 +344,9 @@ Theorem send_read_call_step:
                       vs_logs := s'.vs_logs;
                       vs_pending_deletions := s'.vs_pending_deletions;
                       vs_returndata := s'.vs_returndata |> /\
-    ((res = INL NoneV /\ step_inst_base inst s = OK (update_var out 1w s') /\
+    ((res = INR (Error (RuntimeError "write in static context")) /\
+      step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
+     (res = INL NoneV /\ step_inst_base inst s = OK (update_var out 1w s') /\
       state_rel H fn cenv cx es' s') \/
      (res = INR (Error (RuntimeError "send failed")) /\
       step_inst_base inst s = OK (update_var out 0w s')))
@@ -346,12 +355,10 @@ Proof
   `state_rel H fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   `?os. es.outcomes = SOME os` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   drule_all eval_send_outcome_typed >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by fs[loweringStateRelDefsTheory.state_rel_def] >>
-  Cases_on `eval_operand gas s` >> gvs[] >>
-  drule_all send_call_step >> strip_tac >>
-  `IS_SOME (eval_operand gas s)` by simp[] >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
-  strip_tac >> gvs[] >> metis_tac[]
+  strip_tac >> gvs[]
+  >- (qexists_tac `s` >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem send_read_checked_tail:
@@ -370,6 +377,9 @@ Theorem send_read_checked_tail:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
+  (res = INR (Error (RuntimeError "write in static context")) /\
+   gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G tn
+     (Abort ExHalt_abort (halt_state (set_returndata [] s)))) \/
   ?t u w.
     t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
                   vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
@@ -394,8 +404,13 @@ Proof
   `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
     simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   drule_all send_read_call_step >> strip_tac
-  >- (qexistsl_tac [`s'`, `update_var out 1w s'`, `1w`] >> simp[] >>
+  >- (disj1_tac >> simp[] >>
+      drule_at (Pat `step_inst_base _ _ = _`) gas_path_ptr_abort >>
+      simp[is_terminator_def])
+  >- (disj2_tac >>
+      qexistsl_tac [`s'`, `update_var out 1w s'`, `1w`] >> simp[] >>
       irule call_assert_ok_path_ptr >> simp[] >> metis_tac[]) >>
+  disj2_tac >>
   qexistsl_tac [`s'`, `update_var out 0w s'`, `0w`] >> simp[] >>
   irule call_assert_fail_path_ptr >> simp[] >> metis_tac[]
 QED
@@ -444,6 +459,10 @@ Theorem send_read_checked_tail_uniform[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es = (res, es') ==>
+  (res = INR (Error (RuntimeError "write in static context")) /\
+   !H. valid_horizon cx st0 H es'.storage_trace ==>
+     gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G tn
+       (Abort ExHalt_abort (halt_state (set_returndata [] s)))) \/
   ?t u w.
     t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
                   vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
@@ -468,7 +487,14 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_all send_read_checked_tail >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac)
+  >- (disj1_tac >> simp[] >> qx_gen_tac `H1` >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H1` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+      drule_all send_read_checked_tail >>
+      disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >> gvs[]) >>
+  disj2_tac >>
   qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `stor_taint_ok H0 _ _ _` kall_tac >>
   qexistsl_tac [`t`, `u`, `w`] >>
@@ -597,7 +623,10 @@ Proof
        stmt_state_rel H ctx fn cenv cx es1 s /\ stor_taint_ok H cx tn s` by
     (rpt strip_tac >> res_tac >> fs[bodyPtrDefsTheory.ghost_inv_def]) >>
   drule_all send_read_checked_tail_uniform >>
-  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac)
+  >- (qexistsl_tac [`G`, `tn`,
+         `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
+      simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]) >>
   qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
   qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
   qpat_x_assum `fn_has_code _ _ _` kall_tac >>
@@ -619,12 +648,6 @@ QED
 
 Resume send_tail_path_ptr[normal]:
   qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
-  `~s.vs_call_ctx.cc_static` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==>
-                     stmt_state_rel _ _ _ _ _ _ _ /\ stor_taint_ok _ _ _ _`
-       (qspec_then `H0` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def, state_rel_def]) >>
   `ghost_kept cenv es sa G tn s (step_prov PG G inst u)
      (step_taint inst s u tn)` by
     (irule send_call_ghost_kept >> metis_tac[]) >>
