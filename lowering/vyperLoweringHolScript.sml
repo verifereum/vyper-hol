@@ -12,7 +12,7 @@ Ancestors
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
   bodyPtrMakeArrayMemoryFrame
-  fragGasOrigin fragGasOriginPtrSafeUpto
+  fragGasOrigin fragGasOriginPtrSafeUpto gasMaskProjection
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
