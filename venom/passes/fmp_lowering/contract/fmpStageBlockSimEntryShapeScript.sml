@@ -1,7 +1,8 @@
 Theory fmpStageBlockSimEntryShape
 Ancestors
   fmpStageControl fmpStageOpBase venomExecProofs venomWfProps
-  cfgWf cfgHelpers livenessProofs fmpStepRewrite makeSsaCurrentLiveTransport
+  cfgWf cfgHelpers livenessProofs fmpStepRewrite fmpStepRewriteSupply
+  fmpStepRewriteOrigin makeSsaCurrentLiveTransport
   venomExecSemantics venomState venomInst frameCfgBoundary list
 
 Theorem fmp_entry_jump_successor[local]:

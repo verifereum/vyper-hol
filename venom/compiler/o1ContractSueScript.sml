@@ -1039,7 +1039,7 @@ Proof
   `EVERY wf_ssa C'.ctx_functions` by (irule sue_stage_wf_ssa >> metis_tac[]) >>
   simp[] >> qexists_tac `eom` >>
   conj_tac >- metis_tac[sue_stage_max_live_eom] >>
-  irule sue_stage_mem_inv >>
+  irule sue_stage_mem_inv_rf >>
   metis_tac[mem_corr_closed_rf_lowered_mem_fact]
 QED
 

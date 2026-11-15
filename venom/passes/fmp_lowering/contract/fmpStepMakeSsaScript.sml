@@ -21,7 +21,8 @@
 Theory fmpStepMakeSsa
 Ancestors
   fmpStepReclaimDefined fmpStepRetpcShape fmpStepShape fmpStepLayout
-  fmpStepRewrite fmpLowerIndexedProps fmpLowerProps fmpLowerDefs
+  fmpStepRewrite fmpStepRewriteSupply fmpStepRewriteOrigin
+  fmpLowerIndexedProps fmpLowerProps fmpLowerDefs
   fmpAnalysisProps fmpAnalysisDefs o1PassContract cfgWf venomWf venomInst
   irSupply venomFnScheduleRunner dretDesugarProofs cfgNormSupplyProofs list
   rich_list arithmetic

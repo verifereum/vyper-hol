@@ -1,7 +1,8 @@
 (* Exact code positions in the indexed lowering walk. *)
 Theory fmpStageControlWalk
 Ancestors
-  fmpLowerDefs fmpLowerIndexedProps fmpStepRewrite fmpLowerSequenceExec finite_map list arithmetic
+  fmpLowerDefs fmpLowerIndexedProps fmpStepRewrite fmpStepRewriteSupply
+  fmpLowerSequenceExec finite_map list arithmetic
 
 Theorem fmp_control_inst_length:
   fmp_lower_inst infos ctx runner s inst = SOME (out,s') ==>
