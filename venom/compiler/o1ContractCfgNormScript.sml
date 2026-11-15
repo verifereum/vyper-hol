@@ -1296,7 +1296,8 @@ Proof
   Cases_on `MEM inst.inst_opcode [PHI; JMP; JNZ]`
   >- (`inst_mem_ranges next v = []` by
         (irule supply_inst_mem_ranges_empty >> gvs[]) >>
-      gvs[mem_corr_def, call_corr_def, supply_state_agree_def, stateFrameTheory.execution_frame_def]) >>
+      gvs[mem_corr_def, call_corr_def, dalloca_no_wrap_def,
+          supply_state_agree_def, stateFrameTheory.execution_frame_def]) >>
   `next = inst` by
     (gvs[] >> irule supply_block_image_index_unchanged >> simp[]) >>
   gvs[] >> irule supply_unchanged_inst_projection >> metis_tac[listTheory.EL_MEM]
