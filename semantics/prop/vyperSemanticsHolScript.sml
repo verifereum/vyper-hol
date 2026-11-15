@@ -2,6 +2,7 @@ Theory vyperSemanticsHol
 Ancestors
   sourceCallCount
   sourceCallCountMonotone
+  sourceCallCountEntryReplay
   sourceCallCountWitnessTest
   vyperFiniteStoragePreservation
   vyperLogPreservation
