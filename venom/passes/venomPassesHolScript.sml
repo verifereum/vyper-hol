@@ -29,6 +29,7 @@ Ancestors
   (* CFG structural passes *)
   tailMerge
   simplifyCfg
+  o1SimplifyCfgGasEvents
   cfgNorm
   o1ContractCfgNormGas
   o1ContractCfgNormCursorBlocks
