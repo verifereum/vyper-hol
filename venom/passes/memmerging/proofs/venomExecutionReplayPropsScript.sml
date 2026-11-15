@@ -726,7 +726,8 @@ Theorem same_block_static:
 Proof
   strip_tac >>
   `s.vs_inst_idx = t.vs_inst_idx /\
-   s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
+   s.vs_call_entry_fmp = t.vs_call_entry_fmp /\
+   s.vs_fmp = t.vs_fmp /\ s.vs_initial_fmp = t.vs_initial_fmp` by
     fs[state_equiv_def, execution_equiv_def,
        stateFrameTheory.execution_frame_def] >>
   `inst_mem_ranges inst s = inst_mem_ranges inst t` by
@@ -736,7 +737,12 @@ Proof
          execution_equiv_def] >> metis_tac[]) >>
   `in_revert_forward fn s <=> in_revert_forward fn' t` by
     (gvs[contextCodegenRelTheory.in_revert_forward_def] >> metis_tac[]) >>
-  gvs[unitMemInvTheory.static_mem_ok_def]
+  `!op. MEM op inst.inst_operands ==>
+    eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule stateEquivProofsTheory.eval_operand_equiv >>
+     qexists_tac `excluded` >> metis_tac[]) >>
+  gvs[unitMemInvTheory.static_mem_ok_def,
+      unitMemInvTheory.dalloca_no_wrap_def] >> metis_tac[MEM]
 QED
 
 Theorem same_block_exec_result:
