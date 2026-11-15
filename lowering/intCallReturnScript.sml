@@ -29,6 +29,7 @@ Ancestors
   list rich_list finite_map
   intCallStep intCallFrame stmtSimReturn exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs
   accountsRelProps
+  execMemoryLength ctxLookupAgreeHelpers
   vyperCall vyperTyping vyperInterpreter vyperState
   venomExecSemantics venomExecProofs venomInstProofs opcodeClass venomInst
   venomState
@@ -260,6 +261,9 @@ Proof
   `bind_outputs inst.inst_outputs ret.iret_values
      (adopt_return_fmp ret (merge_callee_state s cs')) = SOME s'` by
     (drule_all step_inst_invoke_intret >> strip_tac >> gvs[]) >>
+  `s'.vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH s'.vs_memory` by
+    metis_tac[step_inst_initial_fmp, step_inst_memory_length] >>
   drule_all bind_outputs_lookup >> strip_tac >>
   `immutable_base_zero cenv s'` by
     (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>

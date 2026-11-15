@@ -566,6 +566,9 @@ Proof
      disch_then drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `LENGTH s.vs_memory <= LENGTH (mcopy dst src sz s).vs_memory` by
+    (simp_tac bool_ss [mcopy_def, LET_THM] >>
+     irule venomMemPropsTheory.write_memory_with_expansion_nondecreasing) >>
   irule result_state_memory_frame >> reverse conj_tac
   >- (qexists_tac `s` >> simp[] >>
       rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
