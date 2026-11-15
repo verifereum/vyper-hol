@@ -1,5 +1,6 @@
 Theory frameResolvedTrace
 Ancestors venomWfProps ctxLookupAgreeHelpers frameResolvedOrigins frameActivationLifetime frameActivationCache
+  concretizeLayoutCutSafe o1SafeUpto
   frameJointTrace frameOriginCache
   frameOriginUpdates ptrDiscipline ptrDisciplineEmptyTaint frameJointTransition venomExecSemantics
   venomState venomInst venomMemProps frameAllocationOwnership frameOriginHistory
@@ -627,8 +628,10 @@ Proof
   metis_tac[MEM_EL]
 QED
 
-Theorem resolved_reachable_transition:
-  joint_config_reachable vs0 C q /\ ptr_discipline lo C vs0 /\
+Theorem resolved_reachable_transition_upto:
+  joint_config_reachable vs0 C q /\
+  (ctx_has_dalloca C ==>
+    ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q)) /\
   joint_transition C q ev q' /\ resolved_config_ok q ids anns ==>
   ?anns'. resolved_config_ok q' (lifetime_step n ev ids) anns'
 Proof
@@ -639,9 +642,46 @@ Proof
      `frame_reachable vs0 C stk PG G tn fn inst s` by
        (fs[joint_config_reachable_def] >>
         metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-     fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]) >>
+     fs[ptr_discipline_upto_def, gas_cut_def, joint_state_def, allocas_below_fmp_def] >> metis_tac[]) >>
   irule resolved_config_transition >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)
+QED
+
+Theorem resolved_reachable_transition:
+  joint_config_reachable vs0 C q /\ ptr_discipline lo C vs0 /\
+  joint_transition C q ev q' /\ resolved_config_ok q ids anns ==>
+  ?anns'. resolved_config_ok q' (lifetime_step n ev ids) anns'
+Proof
+  metis_tac[resolved_reachable_transition_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem resolved_chain_annotations_upto:
+  !es n ids anns q qs r.
+  joint_chain C q es qs r /\ joint_config_reachable vs0 C q /\
+  (ctx_has_dalloca C ==>
+    ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state r)) /\
+  resolved_config_ok q ids anns ==>
+  ?ass. HD ass = anns /\ LENGTH ass = SUC (LENGTH es) /\
+    !k. k <= LENGTH es ==>
+      resolved_config_ok (EL k (q::qs))
+        (EL k (lifetime_annotations n ids es)) (EL k ass)
+Proof
+  Induct >> Cases_on `qs` >> simp[joint_chain_def]
+  >- (rpt strip_tac >> qexists_tac `[anns]` >> simp[lifetime_annotations_def]) >>
+  rpt strip_tac >> rename1 `joint_transition C q ev next` >>
+  `ctx_has_dalloca C ==> gas_cut ncut vs0 (joint_state q)` by
+    (strip_tac >>
+     `LENGTH (joint_state r).vs_gas_readings <=
+      LENGTH (joint_state next).vs_gas_readings` by
+       (drule joint_chain_readings_le >> simp[]) >>
+     drule joint_transition_readings_le >> fs[gas_cut_def]) >>
+  `?anns1. resolved_config_ok next (lifetime_step n ev ids) anns1` by
+    metis_tac[resolved_reachable_transition_upto] >>
+  `joint_config_reachable vs0 C next` by metis_tac[joint_transition_reachable] >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`SUC n`, `lifetime_step n ev ids`, `anns1`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `anns::ass` >> simp[] >>
+  gen_tac >> Cases_on `k` >> simp[lifetime_annotations_def]
 QED
 
 Theorem resolved_chain_annotations:
@@ -653,16 +693,21 @@ Theorem resolved_chain_annotations:
       resolved_config_ok (EL k (q::qs))
         (EL k (lifetime_annotations n ids es)) (EL k ass)
 Proof
-  Induct >> Cases_on `qs` >> simp[joint_chain_def]
-  >- (rpt strip_tac >> qexists_tac `[anns]` >> simp[lifetime_annotations_def]) >>
-  rpt strip_tac >> rename1 `joint_transition C q ev next` >>
-  `?anns1. resolved_config_ok next (lifetime_step n ev ids) anns1` by
-    metis_tac[resolved_reachable_transition] >>
-  `joint_config_reachable vs0 C next` by metis_tac[joint_transition_reachable] >>
-  first_x_assum drule >>
-  disch_then (qspecl_then [`SUC n`, `lifetime_step n ev ids`, `anns1`] mp_tac) >>
-  simp[] >> strip_tac >> qexists_tac `anns::ass` >> simp[] >>
-  gen_tac >> Cases_on `k` >> simp[lifetime_annotations_def]
+  metis_tac[resolved_chain_annotations_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem joint_trace_resolved_annotations_upto:
+  joint_trace vs0 C q0 es qs q /\ (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q)) ==>
+  ?ass. HD ass = [([],FEMPTY)] /\ LENGTH ass = SUC (LENGTH es) /\
+    !k. k <= LENGTH es ==>
+      resolved_config_ok (EL k (q0::qs))
+        (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+Proof
+  simp[joint_trace_def] >> strip_tac >>
+  `resolved_config_ok q0 [0] [([],FEMPTY)]` by metis_tac[resolved_config_initial] >>
+  `joint_config_reachable vs0 C q0` by metis_tac[joint_initial_reachable] >>
+  drule_all resolved_chain_annotations_upto >>
+  disch_then (qspec_then `0` mp_tac) >> simp[]
 QED
 
 Theorem joint_trace_resolved_annotations:
@@ -672,11 +717,7 @@ Theorem joint_trace_resolved_annotations:
       resolved_config_ok (EL k (q0::qs))
         (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
 Proof
-  simp[joint_trace_def] >> strip_tac >>
-  `resolved_config_ok q0 [0] [([],FEMPTY)]` by metis_tac[resolved_config_initial] >>
-  `joint_config_reachable vs0 C q0` by metis_tac[joint_initial_reachable] >>
-  drule_all resolved_chain_annotations >>
-  disch_then (qspec_then `0` mp_tac) >> simp[]
+  metis_tac[joint_trace_resolved_annotations_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
 
 Theorem resolved_live_activation_cache:
