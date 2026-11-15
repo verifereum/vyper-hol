@@ -1241,7 +1241,7 @@ Proof
   pure_rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
                            `shadow_op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   `eval_stmt cx (Return (SOME e)) =
    bind (bind (eval_expr cx e) (read_result cx))
      (\v. raise (ReturnException v))` by
