@@ -58,6 +58,14 @@ Definition state_insts_def:
     FLAT (MAP (\bb. bb.bb_instructions) (all_blocks st))
 End
 
+Theorem state_insts_emit:
+  EVERY P (state_insts (SND (emit inst st))) <=>
+  EVERY P (state_insts st) /\ P inst
+Proof
+  simp[state_insts_def, all_blocks_def, emit_def, MAP_APPEND,
+       FLAT_APPEND, EVERY_APPEND]
+QED
+
 (* Internal entry labels are internal_fn_label's "internal ..." spelling;
    every internal function's code starts with a block of one, and no other
    block has one. *)

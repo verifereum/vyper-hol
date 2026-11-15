@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeGenerators
 Ancestors
-  deployOutcomesFreeLowering exprLowering context emitHelper compileEnv
+  deployOutcomesFreeLowering loweringShapeDefs exprLowering context emitHelper compileEnv
   exprBopLowering builtinSimple list pair venomInst
 
 Theorem outcomes_free_alloc_buffer:
@@ -486,7 +486,7 @@ Theorem outcomes_free_fixed_region:
     (state_insts (SND (compile_fixed_region_with_id sz s)))
 Proof
   simp[compile_fixed_region_with_id_def, fresh_id_def, fresh_var_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def, outcomes_free_emit,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, state_insts_emit,
     outcomes_free_state_insts, mk_inst_def, emit_def]
 QED
 
