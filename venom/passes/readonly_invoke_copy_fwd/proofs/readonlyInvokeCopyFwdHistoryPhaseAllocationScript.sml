@@ -37,7 +37,7 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ricf_source_ledger_occurrence] >>
   `occurrence_allocas_ok B a s` by
-    (drule occ_frame_reachable_annotation >>
+    (drule occ_frame_reachable_annotation_static >>
      simp[occurrence_annotation_ok_def]) >>
   simp[ricf_source_ledger_def, EVERY_MEM] >> conj_tac
   >- (irule occ_frame_reachable_next >>
