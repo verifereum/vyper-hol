@@ -996,7 +996,7 @@ QED
 Theorem memory_copy_loop_origin_ptr:
   compile_word_copy_loop (Var x) dst n LocMemory loc F sa = (u,sb) /\
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
   not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
   lookup_var x s = SOME b /\ ptr_covers G tn x s (32*n) /\
   eval_operand dst s = SOME k /\ op_taint tn dst = {} /\

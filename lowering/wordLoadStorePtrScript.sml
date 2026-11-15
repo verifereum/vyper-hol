@@ -86,7 +86,7 @@ QED
 
 Theorem ptr_inst_ok_mload:
   !D ctx fn G tn s id src tmp fuel.
-    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx ==>
+    ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id MLOAD [Var src] [tmp]) s
 Proof

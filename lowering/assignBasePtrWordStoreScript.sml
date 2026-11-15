@@ -32,7 +32,7 @@ Theorem assign_base_ptr_inst_ok_storage_word:
   !D ctx fn G tn s id opc addr src fuel.
     (opc = SSTORE \/ opc = TSTORE) /\
     op_taint tn addr = {} /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ptr_inst_ok D 0 fuel ctx fn G tn
       (mk_inst id opc [addr; src] []) s
 Proof

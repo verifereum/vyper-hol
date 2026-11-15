@@ -57,7 +57,7 @@ Theorem ptr_inst_ok_scalar_builtin_at:
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id opc ops [out]) s
 Proof
   strip_tac >>
@@ -77,7 +77,7 @@ Theorem ptr_inst_ok_scalar_builtin:
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s
 Proof
   strip_tac >> irule ptr_inst_ok_scalar_builtin_at >>
