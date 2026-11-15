@@ -77,7 +77,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
                     `es`, `Abort a t`] >>
-      simp[gas_marked_exec_def, exit_result_def, expr_exit_def] >>
+      simp[gas_marked_exec_def, exit_result_def, expr_exit_def, halt_exit_def] >>
       gen_tac >> irule pop_local_source_empty >> simp[]) >>
   `mload (w2n w) s0 <> 0w` by
     (`LENGTH vs <> 0 /\ LENGTH vs < dimword (:256)` by
@@ -104,7 +104,7 @@ Proof
                   [ValueSubscript (IntV &(LENGTH vs - 1))]))`,
                `es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest`,
                `OK (u with vs_inst_idx := LENGTH sc.cs_current_insts)`] >>
-  simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def, halt_exit_def] >>
   conj_tac >-
     (gen_tac >> irule pop_local_source_nonempty >> simp[]) >>
   gen_tac >> strip_tac >>
