@@ -2080,6 +2080,34 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES] >> disch_then (mp_tac o cj 4) >> metis_tac[]
 QED
 
+Theorem native_bubbles_prefix_remaining[local]:
+  !done todo rest s t.
+    wf_function fn /\ EVERY inst_wf bb.bb_instructions /\
+    dft_remaining_inv fn bb todo s /\ ~s.vs_call_ctx.cc_static /\
+    dft_head_bubbles A todo (done ++ rest) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) done /\
+    FOLDR (dft_exec_cons b C) OK done s = OK t ==>
+    ?residual. dft_remaining_inv fn bb residual t /\
+      ~t.vs_call_ctx.cc_static /\ dft_head_bubbles A residual rest
+Proof
+  Induct >- (simp[] >> metis_tac[]) >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `dft_head_bubbles _ _ _` mp_tac >>
+  simp[Once dft_head_bubbles_cases] >> strip_tac >> gvs[] >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def, AllCaseEqs()] >>
+  rename1 `step_inst b C h s = OK u` >>
+  `dft_remaining_inv fn bb (pre ++ post)
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule dft_remaining_inv_step >> simp[] >>
+     qexistsl_tac [`C`, `b`, `h`] >> simp[] >>
+     qpat_x_assum `dft_remaining_inv fn bb _ s` mp_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  `~u.vs_call_ctx.cc_static` by
+    metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
+  first_x_assum (qspecl_then [`pre ++ post`, `rest`,
+    `u with vs_inst_idx := SUC s.vs_inst_idx`, `t`] mp_tac) >> simp[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
