@@ -1,5 +1,6 @@
 Theory frameResolvedCoherent
 Ancestors venomWfProps frameResolvedReturn frameResolvedTrace frameJointTrace frameActivationLifetime
+  concretizeLayoutCutSafe o1SafeUpto
   frameJointTransition frameOriginCache venomExecSemantics venomInst
   ptrDisciplineEmptyTaint venomMemProps frameOriginHistory frameOriginReachable
   frameAllocationOwnership frameHistoryDefinitions ptrDiscipline
@@ -281,8 +282,8 @@ Proof
   simp[] >> Cases_on `q` >> simp[] >> metis_tac[joint_reachable_dalloca]
 QED
 
-Theorem resolved_annotation_reachable_transition:
-  joint_config_reachable vs0 C q /\ ptr_discipline lo C vs0 /\
+Theorem resolved_annotation_reachable_transition_upto:
+  joint_config_reachable vs0 C q /\ (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q)) /\
   joint_transition C q ev q' /\ resolved_config_ok q ids anns ==>
   ?anns'. resolved_config_ok q' (lifetime_step n ev ids) anns' /\
     resolved_annotation_edge C n q ev q' ids anns
@@ -295,15 +296,25 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
     (strip_tac >> drule_all joint_reachable_dalloca >> strip_tac >>
-     fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]) >>
+     fs[ptr_discipline_upto_def, gas_cut_def, joint_state_def, allocas_below_fmp_def] >> metis_tac[]) >>
   irule resolved_annotation_transition >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
 
-Theorem resolved_chain_coherent_annotations:
+Theorem resolved_annotation_reachable_transition:
+  joint_config_reachable vs0 C q /\ ptr_discipline lo C vs0 /\
+  joint_transition C q ev q' /\ resolved_config_ok q ids anns ==>
+  ?anns'. resolved_config_ok q' (lifetime_step n ev ids) anns' /\
+    resolved_annotation_edge C n q ev q' ids anns
+      (lifetime_step n ev ids) anns'
+Proof
+  metis_tac[resolved_annotation_reachable_transition_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem resolved_chain_coherent_annotations_upto:
   !es n ids anns q qs r.
   joint_chain C q es qs r /\ joint_config_reachable vs0 C q /\
-  ptr_discipline lo C vs0 /\ resolved_config_ok q ids anns /\
+  (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state r)) /\ resolved_config_ok q ids anns /\
   (~ctx_has_dalloca C ==> resolved_complete q anns) ==>
   ?ass. HD ass = anns /\ LENGTH ass = SUC (LENGTH es) /\
     (!k. k <= LENGTH es ==>
@@ -320,10 +331,16 @@ Proof
   Induct >> Cases_on `qs` >> simp[joint_chain_def]
   >- (rpt strip_tac >> qexists_tac `[anns]` >> fs[lifetime_annotations_def]) >>
   rpt strip_tac >> rename1 `joint_transition C q ev next` >>
+  `ctx_has_dalloca C ==> gas_cut ncut vs0 (joint_state q)` by
+    (strip_tac >>
+     `LENGTH (joint_state r).vs_gas_readings <=
+      LENGTH (joint_state next).vs_gas_readings` by
+       (drule joint_chain_readings_le >> simp[]) >>
+     drule joint_transition_readings_le >> fs[gas_cut_def]) >>
   `?anns1. resolved_config_ok next (lifetime_step n ev ids) anns1 /\
     resolved_annotation_edge C n q ev next ids anns
       (lifetime_step n ev ids) anns1` by
-    metis_tac[resolved_annotation_reachable_transition] >>
+    metis_tac[resolved_annotation_reachable_transition_upto] >>
   `joint_config_reachable vs0 C next` by metis_tac[joint_transition_reachable] >>
   `~ctx_has_dalloca C ==> resolved_complete next anns1` by
     metis_tac[resolved_edge_complete] >>
@@ -344,8 +361,28 @@ Proof
   qpat_x_assum `~ctx_has_dalloca C ==> !k. _` (drule_then irule) >> fs[]
 QED
 
-Theorem joint_trace_coherent_annotations:
-  joint_trace vs0 C q0 es qs q /\ ptr_discipline lo C vs0 ==>
+Theorem resolved_chain_coherent_annotations:
+  !es n ids anns q qs r.
+  joint_chain C q es qs r /\ joint_config_reachable vs0 C q /\
+  ptr_discipline lo C vs0 /\ resolved_config_ok q ids anns /\
+  (~ctx_has_dalloca C ==> resolved_complete q anns) ==>
+  ?ass. HD ass = anns /\ LENGTH ass = SUC (LENGTH es) /\
+    (!k. k <= LENGTH es ==>
+      resolved_config_ok (EL k (q::qs))
+        (EL k (lifetime_annotations n ids es)) (EL k ass)) /\
+    (!k. k < LENGTH es ==>
+      resolved_annotation_edge C (n+k) (EL k (q::qs)) (EL k es)
+        (EL (SUC k) (q::qs))
+        (EL k (lifetime_annotations n ids es)) (EL k ass)
+        (EL (SUC k) (lifetime_annotations n ids es)) (EL (SUC k) ass)) /\
+    (~ctx_has_dalloca C ==>
+      !k. k <= LENGTH es ==> resolved_complete (EL k (q::qs)) (EL k ass))
+Proof
+  metis_tac[resolved_chain_coherent_annotations_upto, ptr_discipline_upto_whole, gas_cut_whole]
+QED
+
+Theorem joint_trace_coherent_annotations_upto:
+  joint_trace vs0 C q0 es qs q /\ (ctx_has_dalloca C ==> ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q)) ==>
   ?ass. HD ass = [([],FEMPTY)] /\ LENGTH ass = SUC (LENGTH es) /\
     (!k. k <= LENGTH es ==>
       resolved_config_ok (EL k (q0::qs))
@@ -362,7 +399,24 @@ Proof
   `resolved_config_ok q0 [0] [([],FEMPTY)]` by
     metis_tac[resolved_config_initial] >>
   `joint_config_reachable vs0 C q0` by metis_tac[joint_initial_reachable] >>
-  drule resolved_chain_coherent_annotations >> rpt (disch_then drule) >>
+  drule resolved_chain_coherent_annotations_upto >> rpt (disch_then drule) >>
   disch_then (qspec_then `0` mp_tac) >> impl_tac
   >- (strip_tac >> irule resolved_complete_initial >> metis_tac[]) >> simp[]
+QED
+
+Theorem joint_trace_coherent_annotations:
+  joint_trace vs0 C q0 es qs q /\ ptr_discipline lo C vs0 ==>
+  ?ass. HD ass = [([],FEMPTY)] /\ LENGTH ass = SUC (LENGTH es) /\
+    (!k. k <= LENGTH es ==>
+      resolved_config_ok (EL k (q0::qs))
+        (EL k (lifetime_annotations 0 [0] es)) (EL k ass)) /\
+    (!k. k < LENGTH es ==>
+      resolved_annotation_edge C k (EL k (q0::qs)) (EL k es)
+        (EL (SUC k) (q0::qs))
+        (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+        (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+    (~ctx_has_dalloca C ==>
+      !k. k <= LENGTH es ==> resolved_complete (EL k (q0::qs)) (EL k ass))
+Proof
+  metis_tac[joint_trace_coherent_annotations_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED

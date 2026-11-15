@@ -30,10 +30,12 @@ Proof
 QED
 
 Theorem joint_incoming_production_argument:
+  gas_cut ncut vs0 s /\
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
   o1_ctx_shape ctx /\ ptr_discipline_upto lo ncut ctx vs0 /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid u nm ops.
     k < LENGTH stk /\ k < LENGTH oms /\
     (EL k stk).cf_inst.inst_opcode = INVOKE /\
@@ -56,11 +58,14 @@ Theorem joint_incoming_production_argument:
       MEM (Allocation aid) (ml_lookup us
         ((EL k stk).cf_state.vs_current_bb,(EL k stk).cf_state.vs_inst_idx)))
 Proof
-  strip_tac >> drule_all joint_incoming_argument >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==>
+     ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s` by simp[] >>
+  drule_all joint_incoming_argument_upto >> strip_tac >>
   drule joint_origin_history_erasure >> strip_tac >>
   `MEM (EL k stk).cf_fn ctx.ctx_functions` by
     (drule origin_frame_erasure >> strip_tac >>
-     drule_all frame_allocation_ownership >> simp[EVERY_EL] >> metis_tac[]) >>
+     drule_all frame_reachable_functions_member >> simp[EVERY_EL] >> metis_tac[]) >>
   `EVERY wf_function ctx.ctx_functions` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `wf_function (EL k stk).cf_fn /\ all_reachable (EL k stk).cf_fn /\
@@ -82,7 +87,8 @@ Theorem concretize_untainted_incoming_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp) /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   FLOOKUP om v = SOME (OriginParameter param,(b,sz)) /\
@@ -112,6 +118,10 @@ Proof
   `joint_origin_history vs0 C stk PG G tn current inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
   `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
+  `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
+  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> `byte < w2n vs0.vs_initial_fmp` by metis_tac[] >>
+     rewrite_tac[pairTheory.FST] >> decide_tac) >>
   drule_all joint_incoming_production_argument >> strip_tac >>
   qabbrev_tac `d = LENGTH stk - SUC k` >>
   qabbrev_tac `owner = (EL k stk).cf_fn` >>
@@ -138,7 +148,7 @@ Proof
   `MEM owner C.ctx_functions` by
     (drule joint_origin_history_erasure >> strip_tac >>
      drule origin_frame_erasure >> strip_tac >>
-     drule_all frame_allocation_ownership >> simp[EVERY_EL, Abbr `owner`] >> metis_tac[]) >>
+     drule_all frame_reachable_functions_member >> simp[EVERY_EL, Abbr `owner`] >> metis_tac[]) >>
   `wf_function owner /\ all_reachable owner` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   qexistsl_tac [`k`,`aid`,`owner`,`d`] >>
@@ -177,10 +187,12 @@ QED
 
 (* Incoming provenance selects the suspended owner, not the physical writer. *)
 Theorem joint_incoming_used_generator:
+  gas_cut ncut vs0 s /\
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
   o1_ctx_shape ctx /\ ptr_discipline_upto lo ncut ctx vs0 /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid owner d.
     k < LENGTH stk /\ owner = (EL k stk).cf_fn /\ d = LENGTH stk - SUC k /\
     FLOOKUP (EL k stk).cf_state.vs_allocas aid = SOME site /\

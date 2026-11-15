@@ -5,7 +5,7 @@ Ancestors
   concretizeAnalysisReadOrigin frameActivationSeparation frameJointTrace
   frameJointTransition frameOriginHistory frameActivationCache o1PassContract
   concretizeAnalysisPastUse concretizeAnalysisUsedDemand concretizePtrOrdering
-  frameDemandTaint frameJointRevert frameOriginReachable frameAllocationOwnership
+  frameDemandTaint frameJointRevert frameOriginReachable frameAllocationOwnership frameDemandOwnership
   ptrDiscipline unitTransformDefs venomWf venomInst finite_map list pred_set enumeral arithmetic
 
 Theorem concretize_untainted_owner_read_liveat:
@@ -14,7 +14,7 @@ Theorem concretize_untainted_owner_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
@@ -37,6 +37,11 @@ Proof
   `joint_config_reachable vs0 C (EL j (q0::qs))` by
     metis_tac[trace_config_at] >>
   `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `gas_cut ncut vs0 s` by metis_tac[layout_cut_safe_frame] >>
+  `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
+  `ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> Cases_on `EL j (q0::qs)` >> gvs[] >>
+     drule_all joint_config_cache_below_upto >> decide_tac) >>
   drule_all joint_read_production_origin >> strip_tac
   >- suspend "local"
   >> suspend "incoming"
@@ -88,7 +93,7 @@ Theorem concretize_untainted_owner_read_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
@@ -116,7 +121,7 @@ Proof
        gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>
      drule origin_frame_erasure >> strip_tac >>
-     drule_all frame_allocation_ownership >> strip_tac >>
+     drule_all frame_reachable_functions_member >> strip_tac >>
      qpat_x_assum `activation_cache (EL j _) _ _ _ _` mp_tac >>
      simp[activation_cache_def] >> strip_tac >>
      fs[EVERY_EL] >> metis_tac[]) >>

@@ -50,7 +50,7 @@ QED
 
 Theorem istore_access_fixed[local]:
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
-  op_prov G opd = NONE /\ 
+  op_prov G opd = NONE /\
   inst.inst_opcode = ISTORE /\ inst.inst_operands = [opd;opv] /\
   eval_operand opd s = SOME dst /\ eval_operand opv s = SOME value ==>
   w2n dst + 32 <= lo
@@ -69,7 +69,9 @@ Theorem concretize_istore_demand_geometry:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   fixed_region_reserved lo C /\ vs0.vs_allocas = FEMPTY /\
   joint_trace vs0 C q0 es qs q /\ activation_depth q0 = 0 /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
@@ -92,8 +94,9 @@ Proof
   >- (rpt strip_tac >> irule joint_mstore_demand_address_coherence >>
       `post.vs_allocas = s.vs_allocas` by
         simp[istore_def, mstore_def, write_memory_with_expansion_def] >>
+      `a < lo` by decide_tac >>
       `relocation_pair lo (concretize_positions C') (EL c (q0::qs)) a a` by
-        (simp[relocation_pair_def] >> decide_tac) >>
+        (irule relocation_pair_static >> simp[]) >>
       metis_tac[]) >>
   rpt strip_tac >>
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by
@@ -103,7 +106,8 @@ Proof
     (irule concretizeLayoutRelocationTheory.concretize_positions_demand_write_complement >>
      conj_tac
      >- (rpt strip_tac >> qexists_tac `w` >> simp[] >>
-         simp[relocation_pair_def] >> fs[range_bytes_def] >> decide_tac) >>
+         `w < lo` by (fs[range_bytes_def] >> decide_tac) >>
+         simp[relocation_pair_def]) >>
      simp[] >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >> metis_tac[]) >>
@@ -156,7 +160,9 @@ Theorem concretize_istore_demand_execution:
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
@@ -176,7 +182,7 @@ Theorem concretize_istore_demand_execution:
   ?valueT. eval_operand opd t = SOME dst /\
     eval_operand opv t = SOME valueT /\
     step_inst_base inst t = OK (istore (w2n dst) valueT t) /\
-    post = istore (w2n dst) value s /\ SND o_f rv = G /\
+    post = istore (w2n dst) value s /\
     op_prov G opd = NONE /\ w2n dst+32 <= lo /\
     word_agree_except (op_taint tn opv) value valueT /\
     demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
@@ -190,12 +196,15 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
-  `?Q. fn_ptr_ok Q fn /\ (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
+  `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_erasure >> simp[]) >>
+  `?Q. fn_ptr_ok Q fn /\ ptr_static_support Q fn G /\
+       (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
     suspend "support" >> pop_assum strip_assume_tac >>
   `!op v. MEM op inst.inst_operands /\ op = Var v ==>
-      ~retpc_var fn v /\ FLOOKUP rv v = NONE` by suspend "origins" >>
+      ~retpc_var fn v /\ v NOTIN fn_pv Q fn /\ FLOOKUP rv v = NONE` by
+    suspend "origins" >>
   `op_prov G opd = NONE` by suspend "erasure" >>
   `eval_operand opd t = SOME dst` by suspend "address" >>
   `?valueT. eval_operand opv t = SOME valueT /\
@@ -229,6 +238,7 @@ Resume concretize_istore_demand_execution[support]:
         fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_frame_current_static >> strip_tac >>
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  conj_tac >- simp[] >>
   metis_tac[resolved_static_support]
 QED
 Resume concretize_istore_demand_execution[origins]:
@@ -239,9 +249,9 @@ Resume concretize_istore_demand_execution[origins]:
   `v NOTIN fn_pv Q fn` by (fs[fn_ptr_ok_def] >> metis_tac[]) >> metis_tac[]
 QED
 Resume concretize_istore_demand_execution[erasure]:
-  Cases_on `opd` >> gvs[op_prov_def] >>
-  `FLOOKUP rv s' = NONE` by metis_tac[listTheory.MEM] >>
-  simp[finite_mapTheory.FLOOKUP_o_f]
+  Cases_on `opd` >> gvs[op_prov_def] >> rename1 `FLOOKUP G u` >>
+  `u NOTIN fn_pv Q fn` by metis_tac[listTheory.MEM] >>
+  Cases_on `FLOOKUP G u` >> fs[ptr_static_support_def] >> metis_tac[]
 QED
 Resume concretize_istore_demand_execution[address]:
   `op_taint tn opd = {}` by
