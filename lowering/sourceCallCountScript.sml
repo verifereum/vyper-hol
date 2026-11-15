@@ -2550,6 +2550,27 @@ Finalise source_replay_cut_wrappers[local]
 
 val _ = clear_overloads_on "source_wrapper_cut_at";
 
+Theorem source_create_empty_cut_state[local]:
+  !salt value code rof k st re se.
+    (!v s r t. s.outcomes = SOME [] /\
+      accounts_runtime_well_typed s.accounts /\ k v s = (r,t) ==>
+      t.outcomes = SOME [] /\ accounts_runtime_well_typed t.accounts) /\
+    bind (create_oracle_result salt value code rof) k
+      (st with outcomes := SOME [empty_failed_outcome]) = (re,se) ==>
+    se.outcomes = SOME [] /\ accounts_runtime_well_typed se.accounts
+Proof
+  rpt gen_tac >> strip_tac >>
+  `accounts_runtime_well_typed empty_failed_outcome.co_accounts` by
+    simp[empty_failed_outcome_def, accounts_runtime_well_typed_def,
+      vfmStateTheory.lookup_account_def] >>
+  gvs[vyperStateTheory.bind_def, vyperCreateTheory.create_oracle_result_def,
+      take_create_outcome_def, take_outcome_def, record_request_def,
+      create_outcome_request_def, computed_precompile_def] >>
+  Cases_on `salt` >> gvs[] >> Cases_on `rof` >>
+  gvs[empty_failed_outcome_def, adopt_call_outcome_equation] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem source_create_probe_cut[local]:
   !salt value code rof k st rp sp.
     (!v s. s.outcomes = SOME [] /\ accounts_runtime_well_typed s.accounts ==>
