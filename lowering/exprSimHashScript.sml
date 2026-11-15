@@ -692,13 +692,13 @@ Theorem sha256_tail_run:
   eval_operand ptr_op s = SOME p /\
   eval_operand len_op s = SOME n /\
   eval_operand ret_op s = SOME r /\
-  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_var) /\
+  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_name) /\
   (!x. ret_op = Var x ==> x <> success_var) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   run_inst_seq
-    [mk_inst i0 GAS [] [gas_var];
-     mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+    [mk_inst i0 GAS [] [gas_name];
+     mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
        [success_var];
      mk_inst i2 ASSERT [Var success_var] [];
      mk_inst i3 MLOAD [ret_op] [out]] s =
@@ -706,7 +706,7 @@ Theorem sha256_tail_run:
     (update_var success_var 1w
       ((write_memory_with_expansion (w2n r)
           (word_to_bytes (SHA_256_bytes bs) T)
-          (update_var gas_var (HD (s.vs_gas_readings ++ [0w]))
+          (update_var gas_name (HD (s.vs_gas_readings ++ [0w]))
              (s with vs_gas_readings := DROP 1 s.vs_gas_readings))) with
         <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
            vs_outcomes := rest |>)))
@@ -714,29 +714,29 @@ Proof
   strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
   qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
-  `step_inst_base (mk_inst i0 GAS [] [gas_var]) s = OK (update_var gas_var g s0)` by
+  `step_inst_base (mk_inst i0 GAS [] [gas_name]) s = OK (update_var gas_name g s0)` by
     simp[Abbr `g`, Abbr `s0`, step_GAS] >>
   `!x. eval_operand x s0 = eval_operand x s` by
     (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
   `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
   `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
   `mem_bytes_at (w2n p) (w2n n) s0.vs_memory = bs` by simp[Abbr `s0`] >>
-  `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
-   eval_operand len_op (update_var gas_var g s0) = SOME n /\
-   eval_operand ret_op (update_var gas_var g s0) = SOME r` by
+  `eval_operand ptr_op (update_var gas_name g s0) = SOME p /\
+   eval_operand len_op (update_var gas_name g s0) = SOME n /\
+   eval_operand ret_op (update_var gas_name g s0) = SOME r` by
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
   simp[Once run_inst_seq_def] >>
-  `read_memory (w2n p) (w2n n) (update_var gas_var g s0) = bs` by
+  `read_memory (w2n p) (w2n n) (update_var gas_name g s0) = bs` by
     simp[read_memory_def, update_var_def, GSYM mem_bytes_at_def] >>
-  `eval_operand (Var gas_var) (update_var gas_var g s0) = SOME g` by
+  `eval_operand (Var gas_name) (update_var gas_name g s0) = SOME g` by
     simp[eval_operand_def, lookup_var_update_var] >>
   `step_inst_base
-    (mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
-      [success_var]) (update_var gas_var g s0) =
+    (mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+      [success_var]) (update_var gas_name g s0) =
    OK (update_var success_var 1w
      ((write_memory_with_expansion (w2n r) (word_to_bytes (SHA_256_bytes bs) T)
-       (update_var gas_var g s0)) with
+       (update_var gas_name g s0)) with
        <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
           vs_outcomes := rest |>))` by
     (irule step_STATICCALL_sha256 >> simp[] >>
@@ -763,11 +763,11 @@ Theorem sha256_tail_fail:
   eval_operand ptr_op s = SOME p /\
   eval_operand len_op s = SOME n /\
   eval_operand ret_op s = SOME r /\
-  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_var) /\
+  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_name) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   ?t. run_inst_seq
-    [mk_inst i0 GAS [] [gas_var];
-     mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+    [mk_inst i0 GAS [] [gas_name];
+     mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
        [success_var];
      mk_inst i2 ASSERT [Var success_var] [];
      mk_inst i3 MLOAD [ret_op] [out]] s = Abort Revert_abort t
@@ -775,25 +775,25 @@ Proof
   strip_tac >>
   qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
   qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
-  `step_inst_base (mk_inst i0 GAS [] [gas_var]) s = OK (update_var gas_var g s0)` by
+  `step_inst_base (mk_inst i0 GAS [] [gas_name]) s = OK (update_var gas_name g s0)` by
     simp[Abbr `g`, Abbr `s0`, step_GAS] >>
   `!x. eval_operand x s0 = eval_operand x s` by
     (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
   `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
   `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
-  `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
-   eval_operand len_op (update_var gas_var g s0) = SOME n /\
-   eval_operand ret_op (update_var gas_var g s0) = SOME r` by
+  `eval_operand ptr_op (update_var gas_name g s0) = SOME p /\
+   eval_operand len_op (update_var gas_name g s0) = SOME n /\
+   eval_operand ret_op (update_var gas_name g s0) = SOME r` by
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
   `?t. step_inst_base
-    (mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
-      [success_var]) (update_var gas_var g s0) =
+    (mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+      [success_var]) (update_var gas_name g s0) =
     OK (update_var success_var 0w t)` by
     (qexists `(write_memory_with_expansion (w2n r) []
-       (update_var gas_var g s0)) with
+       (update_var gas_name g s0)) with
        <| vs_returndata := [];
-          vs_outcomes := DROP 1 (update_var gas_var g s0).vs_outcomes |>` >>
+          vs_outcomes := DROP 1 (update_var gas_name g s0).vs_outcomes |>` >>
      irule step_STATICCALL_sha256_fail >>
      simp[eval_operand_def, lookup_var_update_var, Abbr `s0`, update_var_def] >>
      metis_tac[]) >>
@@ -806,12 +806,12 @@ QED
 Theorem sha256_tail_frame:
   eval_operand ptr_op s = SOME p /\ eval_operand len_op s = SOME n /\
   eval_operand ret_op s = SOME r /\
-  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_var) /\
+  (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> x <> gas_name) /\
   (!x. ret_op = Var x ==> x <> success_var) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  (!x. not_fresh_at sa x ==> x <> gas_var /\ x <> success_var /\ x <> out) /\
+  (!x. not_fresh_at sa x ==> x <> gas_name /\ x <> success_var /\ x <> out) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
   (cenv.ce_is_ctor ==> !name tv v off.
@@ -822,8 +822,8 @@ Theorem sha256_tail_frame:
        SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) (w2n r) 32) ==>
   ?t. run_inst_seq
-    [mk_inst i0 GAS [] [gas_var];
-     mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
+    [mk_inst i0 GAS [] [gas_name];
+     mk_inst i1 STATICCALL [Var gas_name; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
        [success_var];
      mk_inst i2 ASSERT [Var success_var] [];
      mk_inst i3 MLOAD [ret_op] [out]] s = OK t /\
@@ -2571,7 +2571,7 @@ Proof
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  >- (rpt strip_tac >> fs[halt_exit_def] >> metis_tac[expr_exit_INR_cast]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
@@ -2585,12 +2585,15 @@ Proof
     (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>
+  `builtin_result cx ee.accounts ann bt [expr_type e] [v] <> INR HaltException` by
+    (simp[builtin_result_def] >> CASE_TAC >> simp[]) >>
   qexists_tac `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+  gvs[halt_exit_def]
 QED
 
 Theorem sha256_continuation_frame:
@@ -2664,7 +2667,7 @@ Proof
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  >- (rpt strip_tac >> fs[halt_exit_def] >> metis_tac[expr_exit_INR_cast]) >>
   conj_tac >- simp[sha256_continuation_frame] >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
@@ -2676,6 +2679,11 @@ Proof
             | INL w => (do precompile_call_success Sha256;
                            return (Value w) od) ee` >>
   rename1 `_ = (res, es2)` >>
+  `res <> INR HaltException` by
+    (qpat_assum `_ = (res, es2)` mp_tac >>
+     simp[builtin_result_def, sha256_source_outcome_step,
+          ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[]) >>
   `expr_vv_res_ok res` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      disch_then irule >> gvs[]) >>
@@ -2692,7 +2700,7 @@ Proof
   qexists_tac `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`res`, `es2`, `r`] >>
-  simp[] >> metis_tac[]
+  simp[halt_exit_def] >> metis_tac[]
 QED
 
 Theorem hash_eval_operand_inst_idx[simp]:
