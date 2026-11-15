@@ -20,6 +20,7 @@ Ancestors
   loweringShapeSource supportedNames o1PipelineCorrect
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 (* Value rejection follows the installed dispatcher into the nonpayable check. *)
 Theorem external_entry_value_revert_ptr:
