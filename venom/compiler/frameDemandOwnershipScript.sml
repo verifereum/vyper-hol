@@ -203,11 +203,12 @@ Proof
   metis_tac[joint_provenance_activation_owner_upto, ptr_discipline_upto_whole, gas_cut_whole]
 QED
 
-Theorem joint_provenance_birth:
+Theorem joint_provenance_birth_upto:
   joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
   j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP G v = SOME site ==>
+  (ctx_has_dalloca ctx ==> ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\ FLOOKUP G v = SOME site ==>
   ?d owner aid t.
     t < j /\ allocation_birth ctx (EL t (q0::qs)) (EL t es) d owner aid site /\
     (!i. t < i /\ i <= j ==>
@@ -221,17 +222,36 @@ Proof
      Cases_on `j` >> gvs[EVERY_EL] >>
      rename1 `SUC k <= LENGTH qs` >> `k < LENGTH qs` by decide_tac >> metis_tac[]) >>
   `?d owner aid. activation_cache (EL j (q0::qs)) d owner aid site` by
-    (gvs[] >> irule joint_provenance_activation_owner >> simp[] >>
+    (gvs[] >> irule joint_provenance_activation_owner_upto >> simp[] >>
      metis_tac[]) >>
   drule_all joint_cache_birth >> strip_tac >>
   qexistsl_tac [`d`,`owner`,`aid`,`t`] >> simp[]
 QED
 
-Theorem joint_demand_owner_birth:
+Theorem joint_provenance_birth:
+  joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
+  j <= LENGTH es /\
+  EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
+  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\ FLOOKUP G v = SOME site ==>
+  ?d owner aid t.
+    t < j /\ allocation_birth ctx (EL t (q0::qs)) (EL t es) d owner aid site /\
+    (!i. t < i /\ i <= j ==>
+      d <= activation_depth (EL i (q0::qs)) /\
+      activation_cache (EL i (q0::qs)) d owner aid site)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    joint_provenance_birth_upto) >>
+  simp[ptr_discipline_upto_whole]
+QED
+
+Theorem joint_demand_owner_birth_upto:
   joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
   n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP G v = SOME site /\
+  (ctx_has_dalloca ctx ==> ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\ FLOOKUP G v = SOME site /\
   byte IN joint_reads (EL j (q0::qs)) /\
   (!k. n <= k /\ k < j ==>
     byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
@@ -244,7 +264,31 @@ Theorem joint_demand_owner_birth:
     (!k. MAX n (SUC t) <= k /\ k < j ==>
       byte NOTIN joint_writes (EL k (q0::qs)) (EL k es))
 Proof
-  strip_tac >> drule_all joint_provenance_birth >> strip_tac >>
+  strip_tac >> drule_all joint_provenance_birth_upto >> strip_tac >>
   qexistsl_tac [`d`,`owner`,`aid`,`t`] >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem joint_demand_owner_birth:
+  joint_trace vs0 ctx q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
+  n <= j /\ j <= LENGTH es /\
+  EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
+  (ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0) /\
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\ FLOOKUP G v = SOME site /\
+  byte IN joint_reads (EL j (q0::qs)) /\
+  (!k. n <= k /\ k < j ==>
+    byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
+  ?d owner aid t.
+    t < j /\ allocation_birth ctx (EL t (q0::qs)) (EL t es) d owner aid site /\
+    (!i. t < i /\ i <= j ==>
+      d <= activation_depth (EL i (q0::qs)) /\
+      activation_cache (EL i (q0::qs)) d owner aid site) /\
+    byte IN joint_reads (EL j (q0::qs)) /\
+    (!k. MAX n (SUC t) <= k /\ k < j ==>
+      byte NOTIN joint_writes (EL k (q0::qs)) (EL k es))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    joint_demand_owner_birth_upto) >>
+  simp[ptr_discipline_upto_whole]
 QED

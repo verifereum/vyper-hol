@@ -225,10 +225,10 @@ Proof
   Cases_on `k` >> simp[] >> first_x_assum irule >> decide_tac
 QED
 
-(* Without DALLOCA every observed byte at or above lo lies in a live cache. *)
+(* Observed bytes below the dynamic region lie in a live cache. *)
 Theorem joint_observed_read_cached_upto:
   joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
-  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q) /\ ~ctx_has_dalloca C /\ j <= LENGTH es /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 (joint_state q) /\ (ctx_has_dalloca C ==> a < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
   joint_observed_read (EL j (q0::qs)) a /\ lo <= a ==>
   ?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
     b <= a /\ a < b + sz
@@ -245,12 +245,15 @@ QED
 
 Theorem joint_observed_read_cached:
   joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\ j <= LENGTH es /\
+  ptr_discipline lo C vs0 /\ (ctx_has_dalloca C ==> a < w2n vs0.vs_initial_fmp) /\ j <= LENGTH es /\
   joint_observed_read (EL j (q0::qs)) a /\ lo <= a ==>
   ?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
     b <= a /\ a < b + sz
 Proof
-  metis_tac[joint_observed_read_cached_upto, ptr_discipline_upto_whole, gas_cut_whole]
+  strip_tac >>
+  mp_tac (Q.INST [`ncut` |-> `SUC (LENGTH vs0.vs_gas_readings)`]
+    joint_observed_read_cached_upto) >>
+  simp[ptr_discipline_upto_whole]
 QED
 
 Theorem joint_initial_fmp_trace:
