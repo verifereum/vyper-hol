@@ -158,8 +158,10 @@ Proof
          [`\v ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
                     !H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t`,
           `cx`, `st0`] >>
-       conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-       conj_tac
+       BETA_TAC >> rpt conj_tac
+       >~ [`!ex ee r. expr_exit (INR ex) r /\ _ ==> _`]
+       >- (rpt strip_tac >> metis_tac[])
+       >~ [`!v ee t. _ ==> ?res ee' r. _`]
        >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
            rename1 `gas_marked_path _ _ _ tt 0 _` >>
            qpat_x_assum `!v ee t. _ ==> ?res ee' r. _`
@@ -299,8 +301,10 @@ Proof
          [`\tv ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
                      !H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t`,
           `cx`, `st0`] >>
-       conj_tac >- (rpt strip_tac >> metis_tac[]) >>
-       conj_tac
+       BETA_TAC >> rpt conj_tac
+       >~ [`!ex ee r. expr_exit (INR ex) r /\ _ ==> _`]
+       >- (rpt strip_tac >> metis_tac[])
+       >~ [`!v ee t. _ ==> ?res ee' r. _`]
        >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
            rename1 `gas_marked_path _ _ _ tt 0 _` >>
            qpat_x_assum `!tv ee t. _ ==> ?res ee' r. _`
