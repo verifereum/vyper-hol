@@ -100,7 +100,10 @@ Proof
        (FEMPTY |+ (id, <| assignable := F; type := tyv;
                           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
      (mstore (w2n w) (i2w (n1 + &k)) s1)` by
-    (irule (SRULE [] (Q.SPECL [`H`, `func`, `bc`, `cx`,
+    (`LENGTH s1.vs_memory <= LENGTH
+        (mstore (w2n w) (i2w (n1 + &k)) s1).vs_memory` by
+       simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
+     irule (SRULE [] (Q.SPECL [`H`, `func`, `bc`, `cx`,
        `esk with scopes := FEMPTY :: esk.scopes`] stmt_state_rel_declare_memory)) >>
      simp[lookup_scopes_def] >>
      conj_tac >- metis_tac[word_value_wf, word_value_def] >>
