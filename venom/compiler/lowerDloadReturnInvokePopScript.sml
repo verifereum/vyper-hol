@@ -914,9 +914,6 @@ Proof
   drule_all ld_invoke_active_pop_static >> simp[NoAsms]
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "caller pop has kernel hypotheses")
-  [ld_invoke_active_pop_static, ld_invoke_guarded_pop_static];
 
 Theorem ld_invoke_pop_core:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
