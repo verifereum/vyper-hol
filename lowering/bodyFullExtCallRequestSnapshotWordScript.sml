@@ -4,6 +4,7 @@ Ancestors
   bodyFullExtCallRequestSnapshot exprSimHypsDefs exprSimHyps
   aggregateEvaluatedLayout loweringPosts exprLowering context compileEnv
   exprSimUnwrap valueEncodingProofs valueEncodingDefs valueCopyBytes
+  exprPtrUnwrapFacts abiStaticAggregateProps
 
 Theorem extcall_request_word_snapshot_unwrap:
   expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
@@ -325,4 +326,126 @@ Proof
       loweringStateRelDefsTheory.transient_rel_def,
       vyperStorageBackendTheory.get_storage_def,
       vfmStateTheory.lookup_account_def])
+QED
+
+Theorem extcall_capture_read_result_frame:
+  (ef with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+  (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) ==>
+  FST (read_result cx raw ef) = FST (read_result cx raw ee)
+Proof
+  strip_tac >>
+  `ef.scopes = ee.scopes /\ ef.accounts = ee.accounts /\
+   ef.tStorage = ee.tStorage /\ ef.immutables = ee.immutables` by
+    (qpat_x_assum `_ with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _`
+       (fn th => map_every (mp_tac o (fn f => AP_TERM f th))
+          [``\z:evaluation_state. z.scopes``, ``\z:evaluation_state. z.accounts``,
+           ``\z:evaluation_state. z.tStorage``, ``\z:evaluation_state. z.immutables``]) >> simp[]) >>
+  qpat_x_assum `_ with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _` kall_tac >>
+  Cases_on `raw` >> simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rename1 `read_place cx place` >> Cases_on `place`
+  >- (rename1 `StoragePlace tr slot vt` >> Cases_on `tr` >>
+      simp[vyperStateTheory.read_place_def, vyperStateTheory.read_storage_slot_def,
+           vyperStateTheory.get_storage_backend_def, vyperStateTheory.get_accounts_def,
+           vyperStateTheory.get_transient_storage_def, vyperStateTheory.bind_def,
+           vyperStateTheory.return_def, vyperStateTheory.lift_option_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >> simp[vyperStateTheory.bind_def,
+           vyperStateTheory.return_def, vyperStateTheory.raise_def]))
+  >- (rename1 `MemoryPlace id path` >>
+      simp[vyperStateTheory.read_place_def, vyperStateTheory.get_scopes_def,
+           vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+      Cases_on `lookup_scopes id ee.scopes` >>
+      simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+           vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      Cases_on `read_memory_path x path` >>
+      simp[vyperStateTheory.lift_sum_def, vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  rename1 `ImmutablePlace src id path` >>
+  simp[vyperStateTheory.read_place_def, vyperStateTheory.get_immutables_def,
+       vyperStateTheory.get_address_immutables_def, vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+  Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
+  simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  Cases_on `FLOOKUP (get_source_immutables src x) id` >>
+  simp[vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  Cases_on `evaluate_subscripts (FST x') (SND x') path` >>
+  simp[vyperStateTheory.lift_sum_def, vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Theorem extcall_capture_value_transport:
+  vv_holds ce cx dst raw snap ee s /\
+  vv_at ce cx src ca cb ee raw snap s /\ vv_storage_live H cx snap ee s /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) src = SOME sv /\
+  evaluate_type (get_tenv cx) dst = SOME dv /\ val_wf dv v /\
+  val_footprint sv v = val_footprint dv v /\
+  (is_word_type src <=> is_word_type dst) /\
+  (is_word_type src ==> src = dst) /\
+  wb_frame ce ee ef cb s u /\ pure_frame ce func ee cut s u /\
+  (ef with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) =
+  (ee with <|gas_obs := []; outcomes := NONE; storage_trace := []|>) /\
+  stmt_state_rel H ctx func ce cx ef u /\
+  (!w. eval_operand (vv_operand snap) s = SOME w ==>
+       eval_operand (vv_operand snap) u = SOME w) /\
+  (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+             FLOOKUP u.vs_allocas aid = SOME row) /\
+  (!n b sz. local_region ce ef.scopes u n b sz <=>
+             local_region ce ee.scopes s n b sz) /\
+  cb.cs_next_id <= cc.cs_next_id ==>
+  vv_holds ce cx dst raw snap ef u /\
+  vv_at ce cx src ca cc ef raw snap u /\ vv_storage_live H cx snap ef u
+Proof
+  strip_tac >>
+  `FST (read_result cx raw ef) = FST (read_result cx raw ee)` by
+    (irule extcall_capture_read_result_frame >> simp[]) >>
+  `read_result cx raw ef = (INL v,ef)` by
+    (Cases_on `read_result cx raw ef` >>
+     imp_res_tac vyperStateTheory.read_result_state >> gvs[]) >>
+  `ef.scopes = ee.scopes` by
+    (qpat_assum `_ with <|gas_obs := []; outcomes := NONE; storage_trace := []|> = _`
+      (mp_tac o AP_TERM ``\z:evaluation_state. z.scopes``) >> simp[]) >>
+  Cases_on `snap`
+  >- (rename1 `StackValue tag op` >>
+      Cases_on `is_word_type src`
+      >- (gvs[vv_holds_def, vv_at_def, expr_val_at_def, expr_val_rel_def,
+              vv_operand_def] >> metis_tac[]) >>
+      `?w. eval_operand op s = SOME w /\
+           val_in_memory dv v (w2n w) s.vs_memory` by
+        gvs[vv_holds_def, expr_val_rel_def] >>
+      `val_in_memory dv v (w2n w) u.vs_memory /\
+       vv_at ce cx src ca cc ef raw (StackValue tag op) u` by
+        (irule extcall_capture_stack_memory_transport >>
+         simp[vv_operand_def] >>
+         conj_tac >- gvs[vv_operand_def] >>
+         qexistsl_tac [`cut`, `ee`, `func`, `s`, `cb`] >> simp[] >> metis_tac[]) >>
+      gvs[vv_operand_def] >>
+      simp[vv_holds_def, expr_val_rel_def] >>
+      qexists_tac `w` >> simp[]) >>
+  rename1 `LocatedValue tag p` >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (`?w. eval_operand p.ptr_operand s = SOME w /\
+            val_in_memory dv v (w2n w) s.vs_memory /\
+            (is_word_type dst ==> mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 dv v)` by
+        gvs[vv_holds_def] >>
+      `val_in_memory dv v (w2n w) u.vs_memory /\
+       vv_at ce cx src ca cc ef raw (LocatedValue tag p) u` by
+        (irule extcall_capture_located_memory_transport >> simp[] >>
+         qexistsl_tac [`cut`, `ee`, `func`, `s`, `cb`] >>
+         gvs[vv_operand_def]) >>
+      `is_word_type dst ==> mem_word_at (w2n w) u.vs_memory = typed_val_to_w256 dv v` by
+        (strip_tac >>
+         `val_footprint sv v = 32` by metis_tac[word_value_memory_extent] >>
+         `mem_bytes_at (w2n w) 32 u.vs_memory = mem_bytes_at (w2n w) 32 s.vs_memory` by
+           (drule_all extcall_capture_memory_bytes_frame >> simp[]) >>
+         gvs[mem_word_at_bytes]) >>
+      gvs[vv_operand_def, vv_holds_def] >>
+      qexists_tac `w` >> simp[]) >>
+  `vv_at ce cx dst ca cb ee raw (LocatedValue tag p) s` by
+    gvs[vv_at_def] >>
+  `vv_holds ce cx dst raw (LocatedValue tag p) ef u /\
+   vv_at ce cx dst ca cc ef raw (LocatedValue tag p) u /\
+   vv_storage_live H cx (LocatedValue tag p) ef u` by
+    (irule extcall_capture_nonmemory_transport >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexistsl_tac [`ee`, `s`, `cb`] >> gvs[vv_operand_def]) >>
+  gvs[vv_at_def]
 QED
