@@ -1018,6 +1018,35 @@ Proof
   simp[]
 QED
 
+Theorem dft_packet_guarded_cursor:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+    inst.inst_opcode = INVOKE) /\ ~in_revert_forward fn s) ==>
+  ?sf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q z.
+    FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE) /\
+    LAST order = d /\
+    FLOOKUP blocks (p,d) =
+      SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
+    q = EL count rho /\ q < LENGTH xs /\ EL q xs = inst /\
+    z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+    (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+      MEM r (TAKE count rho))
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  drule dft_packet_guarded_cursor_structure >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `PERM sched (COUNT_LIST (LENGTH xs))` >>
+  rename1 `q = EL pos sched` >>
+  qexistsl_tac [`sf`, `inc`, `entry`, `order`, `bb`, `bt`, `ps`, `xs`, `ys`,
+    `sched`, `in_state`, `h0`, `be`, `hbe`, `pos`, `q`, `z`] >> simp[] >>
+  Cases_on `inv_memory_observation inst.inst_opcode`
+  >- metis_tac[] >>
+  irule dft_packet_schedule_predecessors >> metis_tac[]
+QED
+
 Theorem dft_packet_setup_readings:
   (!callee args.
     setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
