@@ -750,6 +750,8 @@ Proof
        qpat_assum `!H'. stmt_state_rel H' _ _ _ _ _ s0 ==> _` irule >>
        first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
+  qpat_x_assum `compile_concat _ _ _ _ _ _ s4 = _`
+    (assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qspecl_then [`args`, `0`, `0`, `ctx`, `func`, `cenv`, `cx`, `env`, `nocalls`,
                `st0`, `es`, `s4`, `s5`, `t`, `(STRING #"%" (toString (sa.cs_next_var + 1)))`, `(STRING #"%" (toString (sa.cs_next_var + 2)))`, `ow`, `binst`, `B`, `bsz`,
                `oinst`] mp_tac concat_args_sim >>
