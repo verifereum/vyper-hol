@@ -8,6 +8,9 @@ Ancestors
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem log_pure_expr_body_pre:
   !tops ctx cenv cx env e calls es.
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
@@ -27,7 +30,7 @@ Proof
   drule_then strip_assume_tac supported_expr_body_calls >>
   `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
-  irule stmt_expr_body_pre >> simp[] >>
+  irule_body_pre stmt_expr_body_pre >> simp[] >>
   conj_tac >- (fs[body_inv_def] >> metis_tac[]) >>
   qexists_tac `calls` >> gvs[]
 QED

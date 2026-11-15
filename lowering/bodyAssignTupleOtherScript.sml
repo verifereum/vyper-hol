@@ -21,6 +21,9 @@ Ancestors
   vyperTypeArgFits vyperAST
   bodyAugPlaceTarget
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 (* A supported, typed tuple assignment with an element outside
    body_assign_tuple_targets' (a local of nonzero size, a word scalar, a word
    field of a storage struct) has an element of one of three kinds: an
@@ -134,7 +137,7 @@ Proof
      `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
        is_dynamic (vyper_to_abi_type (type_env tops) target)` by
        gvs[body_inv_def] >>
-     irule stmt_expr_body_pre >>
+     bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
      qexists_tac `[]` >> simp[] >>
      metis_tac[call_evaluation_safe_append_right]) >>
@@ -484,7 +487,7 @@ Proof
      supported_stmt_expr_exists p (Assign (TupleTarget gs) e)` by
     (rpt strip_tac >> irule tuple_places_member_occurs >>
      goal_assum drule >> simp[supported_expr_exists_def]) >>
-  irule stmt_expr_body_pre >> simp[] >>
+  irule_body_pre stmt_expr_body_pre >> simp[] >>
   conj_tac >- gvs[body_inv_def] >>
   conj_tac >- (gvs[stmt_exprs_ok_flat] >> metis_tac[]) >>
   conj_tac >- (strip_tac >> qexists_tac `tops` >> gvs[body_inv_def]) >>

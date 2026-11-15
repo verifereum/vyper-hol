@@ -68,7 +68,10 @@ Resume compile_extract32_sim_mem[source_normal]:
   drule_at (Pos (el 2)) (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.expr_body_pre_eval) >>
   disch_then drule >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+    (qpat_assum `expr_sim_inv cenv cx env _`
+       (strip_assume_tac o PURE_REWRITE_RULE
+         [expr_sim_inv_def, env_consistent_def, env_context_consistent_def]) >>
+     first_assum ACCEPT_TAC) >>
   `?bs. v = BytesV bs /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
       SOME (BaseTV (BytesT (Dynamic cap)))` by

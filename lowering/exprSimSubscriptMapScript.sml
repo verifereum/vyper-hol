@@ -316,6 +316,9 @@ Proof
       Once supported_expr_exists_def] >>
   conj_tac >- metis_tac[call_evaluation_safe_append_left] >>
   rpt strip_tac >>
+  TRY (qpat_x_assum `~supported_expr_exists (const_name_root _) (Subscript _ _ _)`
+         mp_tac >>
+       simp[Once supported_expr_exists_def] >> NO_TAC) >>
   qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _` irule >>
   simp[Once supported_expr_exists_def]
 QED

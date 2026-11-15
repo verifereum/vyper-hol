@@ -41,7 +41,7 @@ Proof
     FLOOKUP (get_source_immutables ce.ce_module mods) id = SOME (tv,old)` by
     (drule_all immutable_assign_source_lookup >> simp[]) >>
   `ce.ce_module_var_type (ce.ce_module,id) = SOME ty` by
-    (drule_all immutable_assign_target_layout >> simp[]) >>
+    (fs[expr_sim_inv_def, bare_globals_layout_def]) >>
   `local_ptrs_rel func ce es.scopes s /\
    immutable_decl_sep ce cx es.scopes s.vs_vars s.vs_allocas s.vs_alloca_next /\
    immutable_alloca_sep func ce cx es s /\ immutable_base_zero ce s /\

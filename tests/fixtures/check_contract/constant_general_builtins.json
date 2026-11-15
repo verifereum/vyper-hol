@@ -1013,7 +1013,7 @@
     "name": null,
     "node_id": 0,
     "path": "constant_general_builtins.vy",
-    "resolved_path": "/home/claude/tasks/seq-5174-general-builtins/constant_general_builtins.vy",
+    "resolved_path": "constant_general_builtins.vy",
     "settings": {},
     "source_id": 0,
     "src": "0:368:0",
