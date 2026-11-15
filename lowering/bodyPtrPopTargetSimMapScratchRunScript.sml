@@ -1,6 +1,6 @@
 (* Fresh two-word scratch hashing for mapping slots. *)
 Theory bodyPtrPopTargetSimMapScratchRun
-Ancestors bodyPtrPopTargetSimMapKeyRun exprSimMapKey exprLowering
+Ancestors wordLoadStorePtr bodyPtrPopTargetSimMapKeyRun exprSimMapKey exprLowering
   exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs context
   codegenRel ASCIInumbers rich_list venomInst
   bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsSelectorBuffer
