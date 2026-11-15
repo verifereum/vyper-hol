@@ -3,7 +3,7 @@ Theory runtimeLabelGenerators
 Ancestors
   runtimeLabelExprCallbacks runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   moduleLowering stmtLowering compileEnv context emitHelper venomInst list
-  loweringShapeDefs combinatorics alist
+  loweringShapeDefs alist
 
 Theorem rb_compile_selector_checks:
   !sels. rb_operand_ok mid /\
@@ -121,6 +121,14 @@ Proof
   gen_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind) >> simp[rb_emit_data_item]
 QED
 
+Triviality rb_mem_map2:
+  !f x xs ys. MEM x (MAP2 f xs ys) ==>
+    ?a b. x = f a b /\ MEM a xs /\ MEM b ys
+Proof
+  ntac 2 gen_tac >> Induct >> Cases_on `ys` >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem rb_sparse_target_list:
   EVERY (\l. rb_operand_ok (Label l)) labels /\
   rb_operand_ok (Label fallback) ==>
@@ -131,7 +139,7 @@ Proof
   strip_tac >> simp[EVERY_GENLIST] >> gen_tac >> strip_tac >>
   CASE_TAC >> gvs[] >>
   drule alistTheory.ALOOKUP_MEM >>
-  disch_then (mp_tac o MATCH_MP combinatoricsTheory.MEM_MAP2) >>
+  disch_then (mp_tac o MATCH_MP rb_mem_map2) >>
   simp[pairTheory.EXISTS_PROD] >> rpt strip_tac >> gvs[] >>
   gvs[EVERY_MEM]
 QED
