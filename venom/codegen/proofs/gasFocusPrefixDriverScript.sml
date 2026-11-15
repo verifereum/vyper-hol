@@ -3,7 +3,8 @@ Ancestors
   o1PipelineCorrect o1SafeUpto o1PassContract o1RequestContract o1PassLift gasEvents
   codegenEntryRel codegenAsmProgOk asmFrameRel frameJointTrace asmSem symbolResolve
   frameOutcome callTrace vfmExecution frameHistoryCfg frameOriginHistory
-  frameJointTransition venomExecProps blockSimHelpers list rich_list pred_set words arithmetic
+  frameJointTransition venomExecProps blockSimHelpers fnSimSpec
+  list rich_list pred_set words arithmetic
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
    The packet, CFG cursor and frame-plan conjuncts will be joined here once
@@ -125,7 +126,7 @@ val focus_cfg_cursor_step_goal : term = ``
       ~in_revert_forward fn8 s8) /\
     ?cursors' q8'.
       ((q8' = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8 /\
-        MEM inst9.inst_opcode [ASSIGN; JMP] /\
+        MEM inst9.inst_opcode [ASSIGN; JMP; JNZ] /\
         inst9.inst_opcode <> GAS /\ inst9.inst_opcode <> INVOKE /\
         inst_mem_ranges inst9 s9 = []) \/
        ?ev8. joint_transition C8
@@ -162,6 +163,14 @@ val focus_s7_frame_step_goal : term = ``
             LENGTH bb.bb_instructions - s.vs_inst_idx))
 ``;
 
+val focus_s7_guard : term = ``
+  \cpl q. case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+    ~in_revert_forward fn s /\
+    (inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+      source_memory_reads_disjoint cpl inst s /\
+      context_source_memory_writes_disjoint cpl inst s)
+``;
+
 (* Every free name is intentional. A missing imported constant must fail
    this check rather than silently becoming a universally bound predicate. *)
 val producer_parameters =
@@ -190,7 +199,7 @@ val _ = app
     then ()
     else raise Fail "focus component interface has free names or a non-Boolean body")
   [focus_joint_motive, focus_dft_packet_step_goal,
-   focus_cfg_cursor_step_goal, focus_s7_frame_step_goal];
+   focus_cfg_cursor_step_goal, focus_s7_frame_step_goal, focus_s7_guard];
 
 val _ = app
   (fn (thy, name) =>
@@ -275,6 +284,32 @@ Proof
   metis_tac[asm_steps_compose_ok]
 QED
 
+Theorem focus_s7_chain_progress:
+  ^(focus_s7_frame_step_goal) frame_rel ==>
+  !evs q qs r ast.
+    joint_config_reachable vs0 unit.cu_context q /\
+    joint_chain unit.cu_context q evs qs r /\
+    frame_rel rpolicy unit cpl prog vs0 es0 q ast /\
+    EVERY (^(focus_s7_guard) cpl) (TAKE (LENGTH evs) (q::qs)) ==>
+    ?costs final_ast.
+      frame_rel rpolicy unit cpl prog vs0 es0 r final_ast /\
+      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog (SUM costs) ast = AsmOK final_ast /\
+      LIST_REL (\cost pair. 0 < cost \/
+        ^(focus_block_rank) (SND pair) < ^(focus_block_rank) (FST pair))
+        costs (ZIP (q::qs, qs))
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> strip_tac >>
+  ho_match_mp_tac focus_frame_chain_progress >>
+  map_every qx_gen_tac [`q`, `ev`, `next`, `ast`] >>
+  Cases_on `q` >> Cases_on `next` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!rpolicy unit cpl prog vs0 es0 stk PG G tn fn inst s oms om hs h
+    ast ev stk' PG' G' tn' fn' inst' t oms' om' hs' h'. _` drule_all >>
+  disch_then (qx_choosel_then [`cost`, `mid`] strip_assume_tac) >>
+  qexistsl_tac [`cost`, `mid`] >> simp[] >>
+  gvs[] >> simp[]
+QED
+
 Theorem focus_joint_block_rank_bound:
   joint_config_reachable vs0 ctx
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
@@ -291,19 +326,9 @@ Proof
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
   rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `LENGTH bb.bb_instructions <=
-    SUM (MAP (\b. LENGTH b.bb_instructions) fn.fn_blocks)` by
-    (mp_tac (Q.ISPECL [`\b:basic_block. LENGTH b.bb_instructions`,
-       `bb:basic_block`, `(fn:ir_function).fn_blocks`]
-       SUM_MAP_MEM_bound) >> simp[]) >>
-  `SUM (MAP (\b. LENGTH b.bb_instructions) fn.fn_blocks) <=
-    SUM (MAP (\func. SUM (MAP (\b. LENGTH b.bb_instructions) func.fn_blocks))
-      ctx.ctx_functions)` by
-    (mp_tac (Q.ISPECL
-       [`\func:ir_function. SUM (MAP (\b. LENGTH b.bb_instructions) func.fn_blocks)`,
-        `fn:ir_function`, `(ctx:venom_context).ctx_functions`]
-       SUM_MAP_MEM_bound) >> simp[]) >>
-  decide_tac
+  `LENGTH bb.bb_instructions <= context_inst_count ctx` by
+    metis_tac[context_inst_count_block] >>
+  fs[context_inst_count_def] >> decide_tac
 QED
 
 Theorem focus_execution_initial:
