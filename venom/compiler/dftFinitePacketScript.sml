@@ -604,6 +604,76 @@ Proof
        venomEffectsTheory.opcode_fail_class_def, venomInstTheory.is_pseudo_def]
 QED
 
+Theorem dft_packet_guarded_cursor_structure:
+  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry packet
+    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d
+    (JointConfig stk PG G tn fn inst s oms om hs h) raw_slots sites unused /\
+  ((inv_memory_observation inst.inst_opcode \/ is_fallible inst \/
+    inst.inst_opcode = INVOKE) /\ ~in_revert_forward fn s) ==>
+  ?sf inc entry order bb bt ps xs ys rho in_state h0 be hbe count q z.
+    FLOOKUP acts p = SOME (sf,fn,inc,entry,order,NONE,NONE) /\
+    LAST order = d /\
+    FLOOKUP blocks (p,d) =
+      SOME (bb,bt,ps,xs,ys,rho,in_state,h0,SOME (be,hbe),count,OK s,F,NONE) /\
+    q = EL count rho /\ q < LENGTH xs /\ EL q xs = inst /\
+    z = DROP (phi_prefix_length bb.bb_instructions) ps ++ TAKE q xs /\
+    dft_fn_rel sf fn /\
+    lookup_block bb.bb_label sf.fn_blocks = SOME bb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bt /\
+    bb.bb_instructions = ps ++ xs /\ bt.bb_instructions = ps ++ ys /\
+    EVERY (\x. is_pseudo x.inst_opcode) ps /\
+    EVERY (\x. ~is_pseudo x.inst_opcode) xs /\
+    EVERY (\x. ~is_pseudo x.inst_opcode) ys /\
+    LENGTH xs = LENGTH ys /\ PERM rho (COUNT_LIST (LENGTH xs)) /\
+    LIST_REL (\q y. q < LENGTH xs /\ y.inst_id = (EL q xs).inst_id /\
+      from_block [EL q xs] y) rho ys /\
+    count < LENGTH ys /\ inst = EL count ys /\
+    (inv_memory_observation inst.inst_opcode ==>
+      EVERY (\i. ~is_terminator i.inst_opcode) (TAKE q xs) /\
+      (!r. r < q /\ (EL r xs).inst_opcode = INVOKE ==>
+        MEM r (TAKE count rho)))
+Proof
+  disch_then (CONJUNCTS_THEN2
+    (strip_assume_tac o REWRITE_RULE [dft_focus_packet_rel_def]) assume_tac) >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `FLOOKUP acts p = _` mp_tac >>
+  qpat_x_assum `LAST _ = d` mp_tac >>
+  qpat_x_assum `FLOOKUP blocks (p,d) = _` mp_tac >>
+  qpat_x_assum `lookup_block st.vs_current_bb _ = _` mp_tac >>
+  qpat_x_assum `get_instruction _ _ = _` mp_tac >>
+  qpat_x_assum `case body_entry of NONE => _ | SOME v => _` mp_tac >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,row_order,in_state,h0,body_entry,count,front,closed,brest) ==>
+    ?sf tf inc entry order res nrest sp. _` mp_tac >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _` mp_tac >>
+  qpat_x_assum `!bb bt ps xs ys rho in_state h0 be hbe count sf inc entry order.
+    FLOOKUP acts p = _ /\ FLOOKUP blocks (p,d) = _ /\ inv_memory_observation _ ==> _` mp_tac >>
+  qpat_x_assum `(_ \/ _ \/ _) /\ _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qpat_x_assum `JointConfig _ _ _ _ _ _ _ _ _ _ _ = _`
+    (strip_assume_tac o SRULE []) >>
+  gnvs[] >>
+  qpat_x_assum `!a e bb bt ps xs ys row_order in_state h0 body_entry count front closed brest.
+    FLOOKUP blocks (a,e) = _ ==> _` drule >> strip_tac >>
+  gnvs[] >> Cases_on `body_entry`
+  >- (gvs[] >>
+      `~is_pseudo inst.inst_opcode` by metis_tac[dft_packet_guard_not_pseudo] >>
+      gvs[venomInstTheory.get_instruction_def, EL_APPEND, EVERY_EL] >>
+      metis_tac[]) >>
+  PairCases_on `x` >> gvs[] >>
+  `count' < LENGTH rho'` by metis_tac[LIST_REL_LENGTH] >>
+  qpat_assum `LIST_REL _ rho' ys`
+    (mp_tac o SRULE [LIST_REL_EL_EQN]) >> strip_tac >>
+  first_x_assum (qspec_then `count'` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `EL (EL count' rho') xs = EL count' ys` by
+    metis_tac[dft_packet_guard_from_block, MEM] >>
+  qpat_x_assum `!a sf tf inc entry order res nrest.
+    FLOOKUP acts a = _ ==> _` drule >> strip_tac >>
+  simp[]
+QED
+
 Theorem dft_packet_setup_readings:
   (!callee args.
     setup_callee callee args (u with vs_gas_readings := b0.vs_gas_readings) =
