@@ -1141,7 +1141,8 @@ Theorem native_plan_prefix_inclusive:
     (!r bb e z es s.
       r < LENGTH plan /\ EL r plan = (bb,e,z) /\
       B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
-      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\ ~s.vs_halted)) /\
+      lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+      (0 < r ==> ~s.vs_halted))) /\
   levels_ok = (\F C levels paths incoming root_fn root_entry root_path root_depth.
     levels <> [] /\ LENGTH paths = LENGTH levels /\
     LENGTH incoming = LENGTH levels /\
@@ -1185,4 +1186,78 @@ Theorem native_plan_prefix_inclusive:
       FST (W F C levels root_entry))
 Proof
   FAIL_TAC "inclusive boundary proof pending"
+QED
+
+Theorem native_single_plan_prefix_inclusive:
+  !A B plan_ok.
+    A = (\F C owner (bb,e,z) s.
+      case eval_phis s bb.bb_instructions of
+        OK sp =>
+         (gas_events_block (F-e) C owner
+           (bb with bb_instructions :=
+             TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions ++ z)
+           (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions),
+          FOLDR (dft_exec_cons (F-e) C) OK z
+           (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+      | other => ([],other)) /\
+    B = (\F C owner plan entry.
+      FOLDL (\(es,r) row.
+        case r of
+          OK s => (es ++ FST (A F C owner row s), SND (A F C owner row s))
+        | other => (es,other)) ([],OK entry) plan) /\
+    plan_ok = (\F C sf a plan entry.
+      plan <> [] /\
+      MAP (\(bb,e,z). e) plan =
+        GENLIST (\r. a + SUC r) (LENGTH plan) /\
+      (!r bb e z. r < LENGTH plan /\ EL r plan = (bb,e,z) ==>
+        e <= F /\ MEM bb sf.fn_blocks /\
+        (if SUC r < LENGTH plan then
+          bb.bb_instructions <> [] /\
+          EVERY (\i. ~is_terminator i.inst_opcode) (FRONT bb.bb_instructions) /\
+          is_terminator (LAST bb.bb_instructions).inst_opcode /\
+          ~MEM (LAST bb.bb_instructions).inst_opcode [RET;RETFMP;DRET] /\
+          z = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions
+         else
+          LENGTH z < LENGTH (DROP (phi_prefix_length bb.bb_instructions)
+            bb.bb_instructions) /\
+          z = TAKE (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+            bb.bb_instructions) /\
+          EVERY (\i. ~is_terminator i.inst_opcode) z)) /\
+      (!r bb e z es s.
+        r < LENGTH plan /\ EL r plan = (bb,e,z) /\
+        B F C sf.fn_name (TAKE r plan) entry = (es,OK s) ==>
+        lookup_block s.vs_current_bb sf.fn_blocks = SOME bb /\
+      (0 < r ==> ~s.vs_halted))) ==>
+    !plan F C sf a entry bb e z x es r p.
+      plan_ok F C sf a plan entry /\ LAST plan = (bb,e,z) /\
+      x = EL (LENGTH z) (DROP (phi_prefix_length bb.bb_instructions)
+        bb.bb_instructions) /\
+      B F C sf.fn_name plan entry = (es,r) ==>
+      (!ir u. r <> IntRet ir u) /\
+      (case r of
+        OK u =>
+          get_instruction bb u.vs_inst_idx = SOME x /\
+          (?before.
+            trace_blocks p a (F-a) C sf entry =
+              before ++ trace_block p e (F-e) C sf bb u ++
+              (case exec_block (F-e) C bb u of
+                 OK v => if v.vs_halted then []
+                         else trace_blocks p e (F-e) C sf v
+               | _ => []) /\
+            FLAT (MAP (\(key,sf,i,s).
+              if i.inst_opcode = GAS then [(sf.fn_name,i.inst_id)] else []) before) = es) /\
+          run_blocks (F-a) C sf entry =
+            (case exec_block (F-e) C bb u of
+               OK v => if v.vs_halted then Halt v else run_blocks (F-e) C sf v
+             | other => other) /\
+          gas_events_blocks (F-a) C sf entry =
+            es ++ gas_events_block (F-e) C sf.fn_name bb u ++
+            (case exec_block (F-e) C bb u of
+               OK v => if v.vs_halted then []
+                       else gas_events_blocks (F-e) C sf v
+             | _ => [])
+      | other => run_blocks (F-a) C sf entry = other /\
+          gas_events_blocks (F-a) C sf entry = es)
+Proof
+  FAIL_TAC "inclusive single-plan proof pending"
 QED
