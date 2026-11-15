@@ -341,39 +341,6 @@ Definition immutable_alloca_sep_def:
          regions_disjoint off (type_memory_size tv) b sz))
 End
 
-(* A live borrowed local needs no tracked allocation.  The same initialized
-   constructor immutable admits [64,96), but rejects a local alias at zero. *)
-Theorem immutable_alloca_sep_borrowed_probe[local]:
-  !func ce cx es s entry c v t u.
-    (c,v,t,u) =
-      (ce with <| ce_is_ctor := T; ce_module := NONE; ce_module_var_type := K NONE;
-          ce_module_vars := FEMPTY |+ ((NONE,"imm"), ImmutableLoc 0);
-          ce_vars := FEMPTY |+ ("local", PtrVar (Var "p") 32) |>,
-       es with <| scopes := [FEMPTY |+ ("local",entry)];
-          immutables := [(cx.txn.target,
-            [(NONE,FEMPTY |+ ("imm",(BaseTV BoolT,BoolV T)))])] |>,
-       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
-                 vs_vars := FEMPTY |+ ("p",64w) |>,
-       s with <| vs_allocas := FEMPTY; vs_alloca_next := 96;
-                 vs_vars := FEMPTY |+ ("p",0w) |>) ==>
-      local_region c v.scopes t "local" 64 32 /\
-      t.vs_allocas = FEMPTY /\
-      immutable_alloca_sep func c cx v t /\
-      local_region c v.scopes u "local" 0 32 /\
-      ~immutable_alloca_sep func c cx v u
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[local_region_def, lookup_scopes_def, lookup_var_def,
-       immutable_alloca_sep_def, immutable_decl_sep_alt, get_source_immutables_def,
-       finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
-       type_memory_size_def, loweringStateRelDefsTheory.regions_disjoint_def, wordsTheory.dimword_def,
-       venomMemPropsTheory.dimindex_256] >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
-      Cases_on `id = "local"` >> gvs[]) >>
-  qexistsl_tac [`"local"`, `0`, `32`] >> simp[]
-QED
-
 Theorem immutable_alloca_sep_fields:
   !func cenv cx vs vs' ss ss'.
     immutable_alloca_sep func cenv cx vs ss /\
@@ -1479,68 +1446,6 @@ Proof
   metis_tac[]
 QED
 
-(* Primitive isPREFIX lemmas *)
-Theorem comp_return_isPREFIX[local]:
-  !x sa av sb. comp_return x sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[comp_return_def]
-QED
-
-Theorem emit_isPREFIX[local]:
-  !inst sa av sb. emit inst sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_def] >> simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-Theorem fresh_var_ci_eq[local]:
-  !sa av sb. fresh_var sa = (av, sb) ==> sa.cs_current_insts = sb.cs_current_insts
-Proof
-  rw[fresh_var_def] >> simp[]
-QED
-
-Theorem fresh_id_ci_eq[local]:
-  !sa av sb. fresh_id sa = (av, sb) ==> sa.cs_current_insts = sb.cs_current_insts
-Proof
-  rw[fresh_id_def] >> simp[]
-QED
-
-Theorem fresh_label_ci_eq[local]:
-  !pfx sa av sb. fresh_label pfx sa = (av, sb) ==> sa.cs_current_insts = sb.cs_current_insts
-Proof
-  rw[fresh_label_def] >> simp[]
-QED
-
-Theorem emit_op_isPREFIX[local]:
-  !opc ops sa av sb. emit_op opc ops sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-     emit_def, comp_return_def, venomInstTheory.mk_inst_def, pairTheory.UNCURRY] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-Theorem emit_void_isPREFIX[local]:
-  !opc ops sa av sb. emit_void opc ops sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
-     emit_def, comp_return_def, venomInstTheory.mk_inst_def, pairTheory.UNCURRY] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-Theorem emit_inst_isPREFIX[local]:
-  !opc ops outs sa av sb. emit_inst opc ops outs sa = (av, sb) ==> isPREFIX sa.cs_current_insts sb.cs_current_insts
-Proof
-  rw[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
-     emit_def, comp_return_def, venomInstTheory.mk_inst_def, pairTheory.UNCURRY] >>
-  simp[rich_listTheory.IS_PREFIX_APPEND3]
-QED
-
-(* new_block changes cs_blocks (needed for vacuous cases) *)
-Theorem new_block_changes_blocks[local]:
-  !label st. (SND (new_block label st)).cs_blocks <> st.cs_blocks
-Proof
-  rw[new_block_def, LET_THM]
-QED
-
 (* ===== ci_mono: Compile monad monotonicity ===== *)
 
 (* ci_mono st st' holds when the compile state transition from st to st'
@@ -2395,12 +2300,6 @@ Theorem ci_mono_compile_store_byte_chunks:
   ∀ data_ptr bs offset sa. ci_mono sa (SND (compile_store_byte_chunks data_ptr bs offset sa))
 Proof
   ho_match_mp_tac compile_store_byte_chunks_ind >> rpt strip_tac >- simp[compile_store_byte_chunks_def, ci_mono_comp_return] >> simp[Once compile_store_byte_chunks_def, LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> first_x_assum (qspecl_then [`TAKE 32 (v4::v5 ++ REPLICATE 31 0w)`, `word_of_bytes T 0w (TAKE 32 (v4::v5 ++ REPLICATE 31 0w))`] mp_tac) >> simp[]
-QED
-
-Theorem ci_mono_compile_store_words[local]:
-  ∀ buf_op vs offset sa. ci_mono sa (SND (compile_store_words buf_op vs offset sa))
-Proof
-  Induct_on `vs` >- simp[compile_store_words_def, ci_mono_comp_return] >> rpt strip_tac >> once_rewrite_tac[compile_store_words_def] >> simp_tac std_ss [LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> simp[ci_mono_emit_void]
 QED
 
 Theorem ci_mono_clamp_and_return[local]:
@@ -3341,95 +3240,6 @@ Proof
   ho_match_mp_tac ci_mono_bind >> conj_tac
   >- (first_x_assum irule >> simp[]) >>
   simp[ci_mono_comp_return]
-QED
-
-Theorem ci_mono_compile_abi_encode_child_branches[local]:
-  (¬is_dyn ⇒ ∀dst sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  (is_dyn ⇒ ∀dst sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  ∀dst static_ofst dyn_ofst_ptr sa.
-    ci_mono sa (SND (compile_abi_encode_child dst child_ptr child_info
-      is_dyn static_ofst dyn_ofst_ptr sa))
-Proof
-  rpt strip_tac >>
-  simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
-  ho_match_mp_tac ci_mono_bind >>
-  conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >> Cases_on `is_dyn` >> gvs[]
-  >- (rpt (ho_match_mp_tac ci_mono_bind ORELSE
-           ho_match_mp_tac ci_mono_ignore_bind ORELSE
-           (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void,
-                             ci_mono_comp_return]) ORELSE
-           gen_tac ORELSE strip_tac) >>
-      simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-      first_x_assum irule >> simp[])
-QED
-
-(* Helper: the unfolded child body produced by the mutual induction rule. *)
-Theorem ci_mono_compile_abi_encode_child_body[local]:
-  (∀dst. ¬is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  (∀dst. is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  ∀dst static_ofst dyn_ofst_ptr sa.
-    ci_mono sa
-      (SND
-        (do static_loc <- emit_op ADD [dst; Lit (n2w static_ofst)];
-            if ¬is_dyn then
-              compile_abi_encode_to_buf static_loc child_ptr child_info
-            else
-              do dyn_ofst <- emit_op MLOAD [dyn_ofst_ptr];
-                 child_dst <- emit_op ADD [dst; dyn_ofst];
-                 child_len <-
-                   compile_abi_encode_to_buf child_dst child_ptr child_info;
-                 emit_void MSTORE [static_loc; dyn_ofst];
-                 new_dyn <- emit_op ADD [dyn_ofst; child_len];
-                 emit_void MSTORE [dyn_ofst_ptr; new_dyn];
-                 comp_return child_len
-              od
-         od sa))
-Proof
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >>
-  conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >> Cases_on `is_dyn` >> gvs[]
-  >- (rpt (ho_match_mp_tac ci_mono_bind ORELSE
-           ho_match_mp_tac ci_mono_ignore_bind ORELSE
-           (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void,
-                             ci_mono_comp_return]) ORELSE
-           gen_tac ORELSE strip_tac) >>
-      simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-      first_x_assum irule >> simp[])
-QED
-
-(* Helper: premise shape emitted by compile_abi_encode_child_ind. *)
-Theorem ci_mono_compile_abi_encode_child_body_ind[local]:
-  (∀dst. ¬is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  (∀dst. ¬¬is_dyn ⇒ ∀sa.
-     ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
-  ∀dst static_ofst dyn_ofst_ptr sa.
-    ci_mono sa
-      (SND
-        (do static_loc <- emit_op ADD [dst; Lit (n2w static_ofst)];
-            if ¬is_dyn then
-              compile_abi_encode_to_buf static_loc child_ptr child_info
-            else
-              do dyn_ofst <- emit_op MLOAD [dyn_ofst_ptr];
-                 child_dst <- emit_op ADD [dst; dyn_ofst];
-                 child_len <-
-                   compile_abi_encode_to_buf child_dst child_ptr child_info;
-                 emit_void MSTORE [static_loc; dyn_ofst];
-                 new_dyn <- emit_op ADD [dyn_ofst; child_len];
-                 emit_void MSTORE [dyn_ofst_ptr; new_dyn];
-                 comp_return child_len
-              od
-         od sa))
-Proof
-  rpt strip_tac >>
-  irule ci_mono_compile_abi_encode_child_body >>
-  simp[]
 QED
 
 Theorem ci_mono_compile_abi_encode_complex_step[local]:

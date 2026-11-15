@@ -1903,33 +1903,6 @@ Proof
 QED
 
 
-Theorem iterator_range_expr_error_eq[local]:
-  !cx e' y st1 res st'.
-    (case (INR y,st1) of
-       (INL tv1,s'') =>
-         (case read_result cx tv1 s'' of
-            (INL v1,s'') =>
-              (case eval_expr cx e' s'' of
-                 (INL tv2,s'') =>
-                   (case read_result cx tv2 s'' of
-                      (INL v2,s'') =>
-                        (case lift_sum (get_range_limits v1 v2) s'' of
-                           (INL rl,s'') =>
-                             (let n1 = FST rl; n2 = SND rl in
-                                return (GENLIST (\n. Value (IntV (n1 + &n))) n2)) s''
-                         | (INR err,s'') => (INR err,s''))
-                    | (INR err,s'') => (INR err,s''))
-               | (INR err,s'') => (INR err,s''))
-          | (INR err,s'') => (INR err,s''))
-     | (INR err,s'') => (INR err,s'')) = (res,st') ==>
-    res = INR y /\ st' = st1
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `(case (INR y,st1) of _ => _ | _ => _) = (res,st')` mp_tac >>
-  simp[]
-QED
-
-
 (* The trusted history is only the prefix created while a place is live. *)
 Definition typed_scope_transition_def:
   typed_scope_transition st st' <=>
@@ -4485,14 +4458,6 @@ Proof
   Cases_on `tvs` >> Cases_on `vs` >> gvs[Once value_has_type_def]
 QED
 
-
-Theorem OPT_MMAP_from_LIST_REL_evaluate_type_stmt[local]:
-  !tys tvs tenv.
-    LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs ==>
-    OPT_MMAP (evaluate_type tenv) tys = SOME tvs
-Proof
-  Induct >> Cases_on `tvs` >> simp[OPT_MMAP_def]
-QED
 
 Theorem OPT_MMAP_evaluate_type_mono_stmt:
   !types tenv nid tvs.
