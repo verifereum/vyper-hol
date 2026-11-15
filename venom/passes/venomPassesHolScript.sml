@@ -35,6 +35,7 @@ Ancestors
   o1ContractCfgNormCursorReturns
   o1ContractCfgNormCursorProjection
   o1ContractCfgNormJointCursors
+  o1ContractCfgNormJointTrace
   (* memory passes *)
   loadElim
   deadStoreElim
