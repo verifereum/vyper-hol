@@ -86,3 +86,53 @@ Proof
     `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `end_state`, `following`]
     mp_tac gas_origin_ptr_focus_certificate >> simp[Abbr`p`] >> metis_tac[]
 QED
+
+(* Certificates retain the selected terminal history and actual terminal marks. *)
+Theorem gas_origin_ptr_exit_certificate:
+  !D lo explicit ctx root marks r G' tn'.
+    root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
+    (!fn. MEM fn ctx.ctx_functions ==>
+      ALL_DISTINCT (fn_labels fn) /\
+      !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,root.bp_fn,root.bp_params)
+      (root.bp_state,root.bp_prov,root.bp_taint) marks (r,G',tn') /\
+    exit_result r ==>
+    ?history. lower_budget_certificate (D,lo,explicit,ctx) root history marks
+      (INR (r,G',tn'))
+Proof
+  NO_TAC
+QED
+
+Theorem gas_origin_ptr_ok_certificate:
+  !D lo explicit ctx root marks end_state G' tn' following.
+    root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
+    (!fn. MEM fn ctx.ctx_functions ==>
+      ALL_DISTINCT (fn_labels fn) /\
+      !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,root.bp_fn,root.bp_params)
+      (root.bp_state,root.bp_prov,root.bp_taint) marks (OK end_state,G',tn') /\
+    active_inst root.bp_fn following end_state ==>
+    ?history. lower_budget_certificate (D,lo,explicit,ctx) root history marks
+      (INR (OK end_state,G',tn'))
+Proof
+  NO_TAC
+QED
+
+Theorem lower_vyper_runtime_unit_exit_certificate:
+  !tops rpolicy unit D explicit fn vs marks r G' tn'.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+      ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                   vs_inst_idx := 0 |>),FEMPTY,entry_taint) marks (r,G',tn') /\
+    exit_result r ==>
+    ?p history.
+      p = <| bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+        bp_taint := entry_taint; bp_fn := fn;
+        bp_state := vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                               vs_inst_idx := 0 |> |> /\
+      lower_budget_certificate (D,0,explicit,unit.cu_context) p history marks
+        (INR (r,G',tn'))
+Proof
+  NO_TAC
+QED
