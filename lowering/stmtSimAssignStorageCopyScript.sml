@@ -10,6 +10,7 @@ Ancestors
   placeStoreStorage placeStaticCopyExit
   exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
+  gasStorage gasSummaryCompose gasExemptCert vyperStorageFootprint vyperStorageTrace
   stmtSimProps stmtSimForced
   exprSimProps
   stmtSimDefs
@@ -1563,6 +1564,80 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+(* A bad natural root invalidates the selected trace after the RHS,
+   including when its write fails in a static context. *)
+Theorem assign_toplevel_bad_slot_outcome:
+  !ctx func cx st0 e es s0 tr slot tvt P Q RetQ.
+    ~(slot + type_slot_size tvt <= dimword (:256)) /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      (\H res ee t. ?v. res = INL v /\ P H v ee t)
+      (\H res ee r. expr_exit res r) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
+      (bind (bind (eval_expr cx e) (read_result cx))
+        (\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+          (write_storage_slot cx tr (n2w slot) tvt v))) (es,s0) Q
+      (\H res ee r. !tail.
+        stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. storage_trace_frame
+    (ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+      (write_storage_slot cx tr (n2w slot) tvt v))` by
+    (gen_tac >> irule storage_trace_frame_ignore_bind >>
+     simp[storage_trace_frame_event, storage_trace_frame_write_storage_slot]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
+  >- suspend "summary" >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
+  irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Resume assign_toplevel_bad_slot_outcome[summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
+  qexists_tac `marks` >>
+  (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+   >- (disj1_tac >> irule gas_bad_storage_at_bind_left >> simp[] >>
+       metis_tac[gas_bad_storage_at_counted_prefix])) >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[storage_trace_domain_def]
+  >- suspend "success" >>
+  suspend "exception"
+QED
+
+Resume assign_toplevel_bad_slot_outcome[success]:
+  fs[] >>
+  `?v. res = INL v` by metis_tac[] >>
+  pop_assum strip_assume_tac >> gvs[] >> disj1_tac >>
+  irule (SRULE [] (Q.INST [`right` |-> `[]`] gas_bad_storage_at_bind_right)) >>
+  goal_assum (drule_at Any) >>
+  rewrite_tac[gas_bad_storage_at_def] >> gen_tac >>
+  simp[ignore_bind_def, bind_def, record_storage_event_def, return_def] >>
+  Cases_on `cx.txn.is_static` >>
+  simp[write_storage_slot_eq] >>
+  Cases_on `encode_value tvt v` >> simp[] >> Cases_on `tr` >>
+  fs[storage_trace_domain_def, valid_horizon_def, storage_observations_ok_def,
+     storage_roots_fit_def, EVERY_APPEND, set_storage_def]
+QED
+
+Resume assign_toplevel_bad_slot_outcome[exception]:
+  fs[] >>
+  `expr_exit res r` by metis_tac[] >>
+  Cases_on `res` >- fs[expr_exit_def] >> rename1 `INR ex` >>
+  disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >>
+  conj_tac >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> simp[stmt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
+QED
+
+Finalise assign_toplevel_bad_slot_outcome
+
 Theorem assign_storage_empty_stmt_frag[local]:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
@@ -1608,26 +1683,37 @@ Proof
         simp[eval_operand_def] >>
       Cases_on `cx.txn.is_static`
       >- (`s0.vs_call_ctx.cc_static` by
-            fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+            (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+             fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
           drule_all storageStoreFrameTheory.storage_emit_static_path >>
           disch_then (qspec_then `ctx` assume_tac) >>
-          simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-          simp[gas_summary_at_def, gas_marked_exec_def] >>
-          qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `es`,
-            `Abort ExHalt_abort (halt_state (set_returndata [] s0))`] >>
+          qabbrev_tac `es1 = es with storage_trace :=
+            es.storage_trace ++ [StorageRoot tr slot tvt]` >>
+          `!tail. eval_stmt cx
+             (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)
+             (es with gas_obs := tail) =
+             (INR (Error (RuntimeError "write in static context")),
+              es1 with gas_obs := tail)` by
+            (gen_tac >>
+             qpat_x_assum `!tail. _ = (INL v, _)`
+               (qspec_then `tail` mp_tac) >>
+             simp[bind_def, ignore_bind_def, record_storage_event_def,
+                  return_def, write_storage_slot_eq] >>
+             strip_tac >> gvs[Abbr `es1`]) >>
+          rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+          disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+          qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+            `es1`, `Abort ExHalt_abort (halt_state (set_returndata [] s0))`] >>
           conj_tac
-          >- (conj_tac
-              >- (gen_tac >>
-                  qpat_x_assum `!tail. _ = (INL v, _)`
-                    (qspec_then `tail` mp_tac) >>
-                  simp[bind_def] >> strip_tac >>
-                  gvs[AllCaseEqs(), write_storage_slot_eq]) >>
-              first_assum ACCEPT_TAC) >>
+          >- (rewrite_tac[gas_marked_exec_def] >> conj_tac
+              >- (qpat_x_assum `eval_stmt _ _ = _`
+                    (fn th => rewrite_tac[GSYM th]) >>
+                  simp[gas_explicit_def]) >>
+              simp[]) >>
           simp[exit_result_def, stmt_exit_def, expr_exit_def]) >>
       `~s0.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
         (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
          fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
-      `eval_operand (Lit 0w) s0 = SOME 0w` by simp[eval_operand_def] >>
       drule_all assign_storage_store_path >>
       disch_then (qspec_then `ctx` assume_tac) >>
       qabbrev_tac `ez = set_storage cx es tr
@@ -1773,8 +1859,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~cx.txn.is_static` by
     (Cases_on `cx.txn.is_static` >> gvs[write_storage_slot_eq]) >>
-  `~s1.vs_call_ctx.cc_static` by
-    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule compile_lower_value_var >> simp[] >> disch_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
@@ -1790,7 +1874,7 @@ Proof
      qexists_tac `w` >> simp[] >>
      drule_all storage_copy_post_words >> simp[]) >>
   `~s1.vs_call_ctx.cc_static` by
-    fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     (INST_TYPE [alpha |-> ``:256``] storage_copy_suffix_run) >>
@@ -1839,12 +1923,6 @@ Theorem compile_assign_storage_copy_stmt_frag:
     type_memory_bytes cenv typ = type_memory_size tvt /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME typ /\
-    slot + type_slot_size tvt <= dimword (:256) /\
-    (!mid' n' subs' k' tv'.
-       declared_storage_region cx mid' n' subs' = SOME (tr, k', tv') /\
-       (k', tv') <> (n2w slot, tvt) ==>
-       ranges_disjoint slot (type_slot_size tvt)
-                       (w2n k') (type_slot_size tv')) /\
     (!gs v es1.
        (do result <- eval_expr cx e; read_result cx result od)
          (es with gas_obs := gs) = (INL v, es1) ==>
@@ -1881,6 +1959,19 @@ Proof
     metis_tac[fn_has_code_split] >>
   drule_all eval_assign_toplevel_action >>
   disch_then (qspec_then `e` assume_tac) >>
+  reverse (Cases_on `slot + type_slot_size tvt <= dimword (:256)`)
+  >- (qpat_x_assum `eval_stmt _ _ = _` SUBST_ALL_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`st0`, `sa`, `sB`, `op`, `s0`] mp_tac) >>
+      (impl_tac >- (fs[] >> metis_tac[forced_then_admissible])) >>
+      disch_tac >>
+      drule_all (BETA_RULE (Q.INST
+        [`P` |-> `\H v ee t. expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+          t.vs_current_bb = sB.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sB.cs_current_insts`]
+        (SPEC_ALL assign_toplevel_bad_slot_outcome))) >>
+      disch_then MATCH_ACCEPT_TAC) >>
   match_mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `st0`, `lctx`, `RetQ`, `cenv`,
       `cenv`, `sa`, `sb`, `s0`,
       `Assign (BaseTarget (TopLevelNameTarget (src, id))) e`, `e`,
@@ -1925,8 +2016,8 @@ Proof
   Cases_on `cx.txn.is_static`
   >- (`post_value_type cenv e = expr_type e` by
         (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
-      `expr_val_rel cx (expr_type e) v op t /\ stmt_state_rel ctx func cenv cx ee t` by
-        fs[expr_post_def] >>
+      `expr_val_rel cx (expr_type e) v op t /\
+       stmt_state_rel H1 ctx func cenv cx ee t` by fs[expr_post_def] >>
       `?sw. eval_operand op t = SOME sw` by
         (gvs[expr_val_rel_def] >> metis_tac[]) >>
       `t.vs_call_ctx.cc_static` by
@@ -1944,9 +2035,12 @@ Proof
       qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
         (assume_tac o REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
       drule_all storage_copy_static_suffix >>
-      disch_then (qspecl_then [`ee`,`ctx`,`RetQ`] strip_assume_tac) >>
-      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`, `ee`, `r`] >>
-      fs[write_storage_slot_eq, stmt_exit_def]) >>
+      disch_then (qspecl_then [`ee`, `ctx`, `RetQ H1`] strip_assume_tac) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
+        `r`] >>
+      fs[ignore_bind_def, bind_def, record_storage_event_def, return_def,
+         write_storage_slot_eq, stmt_exit_def]) >>
   drule typed_storage_copy_write >>
   disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>

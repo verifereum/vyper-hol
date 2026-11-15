@@ -134,7 +134,8 @@ Proof
 QED
 
 (* Assignment to a non-word storage or transient variable with no length
-   word, by the live-slot store.  The region fits the slot space. *)
+   word, by the live-slot store. Invalid roots produce a bad-storage
+   outcome after evaluating the RHS. *)
 Theorem compile_assign_storage_sparse_stmt_frag:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt env.
     get_module_code cx src = SOME ts /\
@@ -147,7 +148,6 @@ Theorem compile_assign_storage_sparse_stmt_frag:
     type_memory_bytes cenv typ = type_memory_size tvt /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME typ /\
-    slot + type_slot_size tvt <= dimword (:256) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     (!gs v es1.
        (do result <- eval_expr cx e; read_result cx result od)
@@ -183,6 +183,19 @@ Proof
     metis_tac[fn_has_code_split] >>
   drule_all eval_assign_toplevel_action >>
   disch_then (qspec_then `e` assume_tac) >>
+  reverse (Cases_on `slot + type_slot_size tvt <= dimword (:256)`)
+  >- (qpat_x_assum `eval_stmt _ _ = _` SUBST_ALL_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`st0`, `sa`, `sB`, `op`, `s0`] mp_tac) >>
+      (impl_tac >- (fs[] >> metis_tac[forced_then_admissible])) >>
+      disch_tac >>
+      drule_all (BETA_RULE (Q.INST
+        [`P` |-> `\H v ee t. expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+          t.vs_current_bb = sB.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sB.cs_current_insts`]
+        (SPEC_ALL assign_toplevel_bad_slot_outcome))) >>
+      disch_then MATCH_ACCEPT_TAC) >>
   match_mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `st0`, `lctx`, `RetQ`, `cenv`,
       `cenv`, `sa`, `sb`, `s0`,
       `Assign (BaseTarget (TopLevelNameTarget (src, id))) e`, `e`,
@@ -213,10 +226,6 @@ Proof
   `value_has_type tvt v /\ expr_sim_inv cenv cx env ee` by
     (qpat_x_assum `!gs v es1. _ ==> _ /\ _` irule >>
      fs[ETA_THM] >> metis_tac[]) >>
-  `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
-  drule typed_storage_copy_write >>
-  disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   qpat_assum `expr_post H1 _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -247,8 +256,41 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `!x. op = Var x ==> not_fresh_at sB x` by
     metis_tac[compile_lower_value_var] >>
-  `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `slot < dimword (:256)` by decide_tac >>
+  Cases_on `cx.txn.is_static`
+  >- (`t.vs_call_ctx.cc_static` by
+        fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+      `val_wf tvt v` by
+        metis_tac[cj 1 valueEncodingTypingTheory.value_has_type_val_wf] >>
+      `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+       (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+          ALL_DISTINCT (MAP FST fields) /\
+          EVERY (\(fname,fty,sz). !tv.
+            evaluate_type (get_tenv cx) fty = SOME tv ==>
+            sz = type_memory_size tv) fields)` by
+        (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+      `?r. gas_marked_path F ctx func t 0 r /\ exit_result r /\
+           stmt_exit (RetQ H1) ee
+             (INR (Error (RuntimeError "write in static context"))) r` by
+        (irule place_store_slots_static_exit >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexistsl_tac [`cenv`, `n2w slot`, `sB`, `sb`, `Lit (n2w slot)`,
+                       `op`, `sw`, `get_tenv cx`, `tr`, `tvt`,
+                       `expr_type e`, `v`] >>
+         simp[eval_operand_def, wordsTheory.w2n_n2w,
+              arithmeticTheory.LESS_MOD] >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+        `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
+        `r`] >>
+      fs[ignore_bind_def, bind_def, record_storage_event_def, return_def,
+         write_storage_slot_eq, stmt_exit_def]) >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  drule typed_storage_copy_write >>
+  disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
   qspecl_then [`cenv`, `op`, `Lit (n2w slot)`, `expr_type e`, `tr`, `sB`, `sb`,
     `tvt`, `func`, `t`, `sw`, `slot`, `ctx`, `cx`, `env`, `ee`, `writes`, `v`]
     mp_tac place_store_slots_suffix_run_horizons >>
