@@ -6,6 +6,7 @@ Ancestors
   compileEnv fragExec
 
 Theorem topcopy_assign_store_endpoint:
+  ~cx.txn.is_static /\
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (Assign target e) = SOME env' /\
   lowered_value_type cenv e = expr_type e /\

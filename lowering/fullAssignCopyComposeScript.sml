@@ -11,6 +11,7 @@ Ancestors
 Libs monadsyntax
 
 Theorem topcopy_store_entry_resources:
+  ~cx.txn.is_static /\
   lowered_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
@@ -55,7 +56,7 @@ Proof
   >- (fs[expr_post_def] >> drule_all expr_val_at_bound >> simp[])
   >- (fs[expr_store_bound_def, eval_operand_def] >>
       first_x_assum (qspec_then `tv` mp_tac) >> simp[ADD_COMM]) >>
-  fs[expr_post_def, stmt_state_rel_def, state_rel_def]
+  fs[expr_post_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def]
 QED
 
 (* The continuation receives the actual source run and a running endpoint. *)
