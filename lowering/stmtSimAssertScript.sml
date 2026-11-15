@@ -115,7 +115,8 @@ Resume compile_assert_frag[exception]:
   >- assert_out_of_domain_tac >>
   `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H0` mp_tac) >> simp[] >>
+  qpat_assum `!H. _ ==> expr_exit _ _ /\ halt_exit _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >> simp[] >>
   strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
   rename1 `expr_exit (INR ex) rr` >>
@@ -127,7 +128,7 @@ Resume compile_assert_frag[exception]:
       gen_tac >> asm_simp_tac (srw_ss()) [eval_assert_bind] >>
       simp[Once bind_def]) >>
   disj2_tac >> simp[stmt_exit_def] >>
-  metis_tac[expr_exit_INR_type])
+  fs[halt_exit_def] >> metis_tac[expr_exit_INR_type])
 QED
 
 Resume compile_assert_frag[true]:
@@ -179,7 +180,7 @@ Resume compile_assert_frag[false]:
       >- (gen_tac >> simp[Abbr `ak`, eval_assert_bind] >>
           simp[Once bind_def, raise_def]) >>
       metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]) >>
-  disj2_tac >> simp[exit_result_def, stmt_exit_def])
+  disj2_tac >> simp[exit_result_def, stmt_exit_def, halt_exit_def])
 QED
 
 Finalise compile_assert_frag
