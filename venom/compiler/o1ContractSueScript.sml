@@ -971,7 +971,7 @@ Proof
        venomPassScheduleTheory.fn_pass_tag_def]
 QED
 
-Theorem sue_stage_mem_inv:
+Theorem sue_stage_mem_inv_rf:
   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions /\
@@ -994,6 +994,17 @@ Proof
          listTheory.EVERY_EL] >> metis_tac[]) >>
   metis_tac[sue_expand_function_supply_frame_sim,
             sue_expand_function_supply_frame_sim_rf]
+QED
+
+Theorem sue_stage_mem_inv:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY (o1_fn_row 6) C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  mem_inv (static_mem_ok eom) C vs ==>
+  mem_inv (static_mem_ok eom) C' vs
+Proof
+  metis_tac[sue_stage_mem_inv_rf, mem_corr_closed_rf_static_mem_ok]
 QED
 
 (* SUE's output is wf_ssa when every block of its input is reachable (row

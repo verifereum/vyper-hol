@@ -134,7 +134,7 @@ Theorem fmp_lower_blocks_preserves_labels:
     SOME (FmpBlocksResult blocks' leftover s') ==>
   MAP (\bb. bb.bb_label) blocks' = MAP (\bb. bb.bb_label) blocks
 Proof
-  strip_tac >> drule fmpStepRewriteTheory.fmp_lower_blocks_successors >>
+  strip_tac >> drule fmpStepRewriteSupplyTheory.fmp_lower_blocks_successors >>
   disch_then (mp_tac o AP_TERM ``MAP (FST : string # string list -> string)``) >> simp[MAP_MAP_o, combinTheory.o_DEF]
 QED
 
@@ -174,7 +174,7 @@ Proof
   drule_all irSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
   Cases_on `root_layout` >> gvs[] >>
   drule_all fmp_make_root_layout_inst_ok >> strip_tac >>
-  drule_all fmpStepRewriteTheory.fmp_lower_blocks_supply >> strip_tac >>
+  drule_all fmpStepRewriteSupplyTheory.fmp_lower_blocks_supply >> strip_tac >>
   drule fmp_install_root_supply >> gvs[]
 QED
 
@@ -228,7 +228,7 @@ Proof
   `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
     (Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
   drule_all fmp_install_root_exact_prefix >> strip_tac >> gvs[] >>
-  drule fmpStepRewriteTheory.fmp_lower_blocks_successors >>
+  drule fmpStepRewriteSupplyTheory.fmp_lower_blocks_successors >>
   simp[MAP_APPEND, FLAT_APPEND] >>
   Cases_on `fn_is_context_entry ctx fn` >> simp[]
 QED
@@ -371,7 +371,7 @@ Proof
     (gvs[EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\bb. EVERY (\i. P i.inst_id) bb.bb_instructions) blocks` by
     (simp[EVERY_MEM] >> rpt strip_tac >>
-     drule_all fmpStepRewriteTheory.fmp_lower_blocks_id_origin >> strip_tac
+     drule_all fmpStepRewriteOriginTheory.fmp_lower_blocks_id_origin >> strip_tac
      >- (gvs[EVERY_MEM] >> metis_tac[]) >>
      metis_tac[LESS_EQ_TRANS]) >>
   drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
@@ -473,7 +473,7 @@ Proof
   `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
     (Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
   drule_all fmp_install_root_exact_prefix >> strip_tac >> gvs[] >>
-  drule fmpStepRewriteTheory.fmp_lower_blocks_retained_opcodes >>
+  drule fmpStepRewriteOriginTheory.fmp_lower_blocks_retained_opcodes >>
   disch_then (qspec_then `PARAM` mp_tac) >> simp[] >>
   drule split_fmp_entry_reconstruct >> strip_tac >>
   Cases_on `fn_is_context_entry ctx fn` >>

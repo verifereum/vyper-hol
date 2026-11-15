@@ -370,13 +370,15 @@ Proof
        fmpAnalysisDefsTheory.fmp_invoke_target_def]
 QED
 
-Theorem EL_segment[local]:
-  LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg ==>
-  EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg
-Proof
-  rw[EL_APPEND_EQN]
-QED
-
+(* One reachable block of the lowered function, against a raw run R relates
+ * to it.  The block invariant carries the restore selection, the analysis
+ * state, the runner, the frontier relation between the raw FMP and the runner
+ * (fmp0 is the lowered base, raw0 the raw one) and the ledger.  The caller
+ * owes, per original instruction: for DALLOCA, the expansion's operand,
+ * no-wrap and freshness facts and R across the computed raw and lowered
+ * steps; for any other instruction, the lowered head's run, R, the frontier
+ * relation afterwards, and (unless it clears the marks) an unchanged runner
+ * and marks. *)
 (* Splitting a lowered instruction list, so a block can be taken a segment at
  * a time (e.g. the body before a terminator). *)
 Theorem fmp_lower_indexed_append:
@@ -541,7 +543,7 @@ Proof
   rename1 `df_at NONE states bb.bb_label j = SOME ast` >>
   `EL (j - LENGTH pre) seg = EL j bb.bb_instructions` by
     (`EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg` by
-       (irule EL_segment >> fs[]) >>
+       (fs[] >> simp[EL_APPEND_EQN]) >>
      metis_tac[]) >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `j < LENGTH bb.bb_instructions` by fs[] >>

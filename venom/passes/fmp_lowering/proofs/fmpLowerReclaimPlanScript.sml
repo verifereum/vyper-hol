@@ -456,6 +456,15 @@ Proof
   drule fmp_option_join_prefix >> simp[] >> metis_tac[]
 QED
 
+Theorem fmp_join_fold_none:
+  !vs acc. FOLDL fmp_reclaim_option_join acc vs = NONE ==>
+    acc = NONE /\ EVERY IS_NONE vs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> Cases_on `acc` >> Cases_on `h` >>
+  simp[fmp_reclaim_option_join_def]
+QED
+
 Theorem fmp_joined_pred_prefix:
   fmp_process_block transfer entry cfg bbs pred states = states /\
   MEM pred (cfg_preds_of cfg succ) /\
@@ -474,12 +483,8 @@ Proof
      first_x_assum drule >> strip_tac >> metis_tac[APPEND_ASSOC]) >>
   `?z. FOLDL fmp_reclaim_option_join NONE vals = SOME z` by
     (Cases_on `FOLDL fmp_reclaim_option_join NONE vals` >> simp[] >>
-     `!vs acc. FOLDL fmp_reclaim_option_join acc vs = NONE ==>
-        acc = NONE /\ EVERY IS_NONE vs` by
-       (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-        first_x_assum drule >> Cases_on `acc` >> Cases_on `h` >>
-        simp[fmp_reclaim_option_join_def]) >>
-     first_x_assum drule >> simp[EXISTS_MEM] >> qexists `SOME b` >> simp[]) >>
+     drule fmp_join_fold_none >>
+     simp[EXISTS_MEM] >> qexists `SOME b` >> simp[]) >>
   qexists `z` >> simp[] >>
   qpat_x_assum `fmp_joined _ _ _ _ = _` mp_tac >>
   Cases_on `vals` >> gvs[] >>
@@ -529,16 +534,6 @@ Proof
 QED
 
 (* ===== Joined entry states ===== *)
-
-Theorem fmp_join_fold_none:
-  !vs acc. FOLDL fmp_reclaim_option_join acc vs = NONE ==>
-    acc = NONE /\ EVERY IS_NONE vs
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> Cases_on `acc` >> Cases_on `h` >>
-  simp[fmp_reclaim_option_join_def]
-QED
-
 
 Theorem fmp_option_join_some:
   y <> NONE ==> ?st. fmp_reclaim_option_join x y = SOME st
