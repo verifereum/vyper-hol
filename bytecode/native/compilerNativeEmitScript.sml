@@ -452,8 +452,7 @@ val code_rewrites = [
   prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
     Cases_on `bi` >> rw[]),
   (* pin_fold_builtin asks whether an argument type is a BaseT *)
-  prove (``(?bt. ty = BaseT bt) <=> (case ty of BaseT _ => T | _ => F)``,
-    Cases_on `ty` >> rw[]),
+  vyperPinFoldTheory.pin_base_type_case,
   GSYM listTheory.EXISTS_MEM, GSYM listTheory.EVERY_MEM,
   (* entry_instructions' no-effects test. *)
   prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,

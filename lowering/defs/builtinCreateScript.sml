@@ -223,7 +223,8 @@ End
    args_ptr / args_len: pre-encoded constructor arguments to append.
      NONE means no ctor args.
    code_offset_op: offset into blueprint code (usually 3 for ERC-5202).
-     Can be literal or runtime value. *)
+     Can be literal or runtime value. Literal offsets use SUB/SGT;
+     runtime offsets use unsigned GT before SUB. *)
 Definition compile_create_blueprint_check_def:
   compile_create_blueprint_check is_lit target_op code_offset_op =
     do full_size <- emit_op EXTCODESIZE [target_op];
