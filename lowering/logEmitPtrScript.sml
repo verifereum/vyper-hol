@@ -1,7 +1,7 @@
 (* Pointer-check boundary for LOG, including literal-zero empty data. *)
 Theory logEmitPtr
 Ancestors
-  stmtSimLogEmit stmtSimLogSuffix emitHelperProps emitHelper compileEnv loweringStateRelDefs
+  stmtSimLogEmit stmtSimLogSuffix logEmitStep emitHelperProps emitHelper compileEnv loweringStateRelDefs
   ghostPcTransportPtr stmtFragPtr exprSimPtrLiteralBuffer
   ptrSafeRun ptrDiscipline bodyPtrDefs contextCodegenRel
   logInstSeqPtr fragGasSeqPtr exprLoweringProps codegenRel memLocDefs venomExecSemantics venomState venomInst finite_map words list
@@ -49,6 +49,40 @@ Proof
       qpat_x_assum `EVERY _ inst.inst_operands` mp_tac >>
       rewrite_tac[EVERY_MEM] >> disch_then drule >> simp[]) >>
   asm_simp_tac bool_ss [] >> simp[] >> metis_tac[ADD_COMM]
+QED
+
+Theorem compile_log_emit_static_path_ptr:
+  emit_inst LOG
+    (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) [] sa = ((),sb) /\
+  LENGTH topic_ops < dimword(:256) /\ eval_operands topic_ops s = SOME topics /\
+  eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME len /\
+  EVERY (\op. op_taint tn op = {}) (ptr_op::len_op::topic_ops) /\
+  (w2n len <> 0 ==> ?v. ptr_op = Var v /\ ptr_covers G tn v s (w2n len)) /\
+  (!i. w2n off <= i /\ i < w2n off + w2n len ==> i NOTIN tn.t_mem) /\
+  s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0 G tn
+    (Abort ExHalt_abort (halt_state (set_returndata [] s)))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule emitted_insts_emit_inst >> strip_tac >>
+  qabbrev_tac `i = mk_inst sa.cs_next_id LOG
+    (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]) []` >>
+  `i.inst_opcode = LOG /\ i.inst_operands =
+    Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [len_op;ptr_op]` by
+    simp[Abbr `i`, mk_inst_def] >>
+  drule_all log_emit_access_taint >> strip_tac >>
+  drule_all log_emit_static_step >> disch_tac >>
+  `ptr_inst_ok D 0 0 ctx func G tn i s` by
+    (simp[ptr_inst_ok_def, allocas_from_def] >> rpt strip_tac >>
+     gvs[step_inst_non_invoke]) >>
+  `isPREFIX [i] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    fs[Abbr `i`] >>
+  drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+    simp[is_terminator_def] >>
+  drule_all gas_path_ptr_abort >> simp[]
 QED
 
 Theorem log_emit_inst_ok:

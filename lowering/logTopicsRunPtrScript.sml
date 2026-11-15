@@ -272,7 +272,7 @@ Resume compile_split_log_topics_seq_ptr[post]:
 QED
 Finalise compile_split_log_topics_seq_ptr
 
-Theorem compile_split_log_topics_path_ptr:
+Theorem compile_split_log_topics_frame_path_ptr:
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
@@ -313,7 +313,9 @@ Theorem compile_split_log_topics_path_ptr:
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     (!limit_st. sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
-      fresh_vars_wrt limit_st t)
+      fresh_vars_wrt limit_st t) /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm
 Proof
   strip_tac >>
   qpat_assum `LIST_REL (\arg v. supported_scalar_type _ /\ _) xs vs` mp_tac >>
@@ -394,7 +396,7 @@ Proof
      qexistsl_tac [`G`, `sm`] >> simp[]) >>
   suspend "path"
 QED
-Resume compile_split_log_topics_path_ptr[path]:
+Resume compile_split_log_topics_frame_path_ptr[path]:
   drule log_topics_opcode_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sm sb)` by
@@ -411,7 +413,7 @@ Resume compile_split_log_topics_path_ptr[path]:
   simp[stmt_state_rel_inst_idx, lookup_var_def] >>
   suspend "endpoint"
 QED
-Resume compile_split_log_topics_path_ptr[endpoint]:
+Resume compile_split_log_topics_frame_path_ptr[endpoint]:
   conj_tac >- gvs[] >>
   conj_tac >- gvs[LIST_REL_EL_EQN] >>
   conj_tac >- gvs[LIST_REL_EL_EQN] >>
@@ -428,4 +430,53 @@ Resume compile_split_log_topics_path_ptr[endpoint]:
   gvs[lookup_var_def] >>
   simp[fresh_vars_wrt_def] >> metis_tac[fresh_vars_wrt_def]
 QED
-Finalise compile_split_log_topics_path_ptr
+Finalise compile_split_log_topics_frame_path_ptr
+
+Theorem compile_split_log_topics_path_ptr:
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  LENGTH flags = LENGTH xs /\
+  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
+  EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
+              (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      ptr_val_ok cx aty v (FST arg) G tn s /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
+  encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
+  LIST_REL (\arg v. log_arg_rel cenv cx sa sm es s arg v /\
+    ptr_val_ok cx (SND arg) v (FST arg) G tn s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  ghost_inv H d cenv cx es G tn s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  ghost_kept cenv es sa0 G0 tn0 s0 G tn /\ sa0.cs_next_var <= sm.cs_next_var ==>
+  ?t Gf tnf. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
+    LIST_REL (\op w. eval_operand op t = SOME w) ops topics /\
+    EVERY (\op. op_taint tnf op = {}) ops /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    LIST_REL (log_arg_rel cenv cx sa sb es t)
+      (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
+    LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) Gf tnf t)
+      (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
+    EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops /\
+    ghost_inv H d cenv cx es Gf tnf t /\ ghost_kept cenv es sa0 G0 tn0 s0 Gf tnf /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sm sb) /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_memory = s.vs_memory /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!p. not_fresh_at sm p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!limit_st. sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+      fresh_vars_wrt limit_st t)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac (SPEC_ALL compile_split_log_topics_frame_path_ptr) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[]
+QED

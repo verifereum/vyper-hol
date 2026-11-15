@@ -167,7 +167,7 @@ Resume log_buffer_encoder_entry_ptr[entry_post]:
 QED
 Finalise log_buffer_encoder_entry_ptr
 
-Theorem log_allocated_tuple_sequence_ptr:
+Theorem log_allocated_tuple_frame_sequence_ptr:
   compile_alloc_buffer outcap st = (dst,prepared) /\ fn_has_code st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand (Var src) ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
@@ -204,7 +204,11 @@ Theorem log_allocated_tuple_sequence_ptr:
     (?dv. dst.buf_operand = Var dv /\ ptr_covers HG tm dv actual outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op actual = SOME w) /\
-    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx /\
+    actual.vs_immutables = s.vs_immutables /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule abi_encoder_counters >> strip_tac >>
@@ -214,6 +218,8 @@ Proof
     (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `HG`
       (qx_choose_then `tm` (qx_choose_then `dv`
         (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))) >>
+  drule_all log_buffer_external_frame_ptr >> strip_tac >>
+  drule log_encode_external_fields >> strip_tac >>
   `!p. not_fresh_at st p ==> FLOOKUP HG p = FLOOKUP G p /\
      op_taint tm (Var p) = op_taint tn (Var p)` by
     (match_mp_tac (Q.INST [`sb` |-> `prepared`, `cap` |-> `outcap`,
@@ -224,7 +230,7 @@ Proof
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   suspend "dispatch"
 QED
-Resume log_allocated_tuple_sequence_ptr[dispatch]:
+Resume log_allocated_tuple_frame_sequence_ptr[dispatch]:
   markerLib.RESUME_TAC >>
   mp_tac (Q.INST [`st` |-> `prepared`, `dst` |-> `dv`,
     `dstid` |-> `st.cs_next_id`, `d` |-> `db`, `cap` |-> `outcap`,
@@ -238,7 +244,7 @@ Resume log_allocated_tuple_sequence_ptr[dispatch]:
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)))) >>
   suspend "ownership"
 QED
-Resume log_allocated_tuple_sequence_ptr[ownership]:
+Resume log_allocated_tuple_frame_sequence_ptr[ownership]:
   markerLib.RESUME_TAC >>
   `?fp.
     abi_decode_footprint_frame fp
@@ -281,7 +287,7 @@ Resume log_allocated_tuple_sequence_ptr[ownership]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "ghosts"
 QED
-Resume log_allocated_tuple_sequence_ptr[ghosts]:
+Resume log_allocated_tuple_frame_sequence_ptr[ghosts]:
   markerLib.RESUME_TAC >>
   `log_encode_external u = log_encode_external
     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st prepared))` by
@@ -312,7 +318,7 @@ Resume log_allocated_tuple_sequence_ptr[ghosts]:
      metis_tac[]) >>
   suspend "compose"
 QED
-Resume log_allocated_tuple_sequence_ptr[compose]:
+Resume log_allocated_tuple_frame_sequence_ptr[compose]:
   markerLib.RESUME_TAC >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st prepared)` by
@@ -340,7 +346,7 @@ Resume log_allocated_tuple_sequence_ptr[compose]:
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   suspend "result"
 QED
-Resume log_allocated_tuple_sequence_ptr[result]:
+Resume log_allocated_tuple_frame_sequence_ptr[result]:
   markerLib.RESUME_TAC >>
   `lookup_var dv u = SOME (n2w db)` by
     (qpat_x_assum `!v. not_fresh_at prepared v ==> _`
@@ -366,4 +372,49 @@ Resume log_allocated_tuple_sequence_ptr[result]:
      drule emitted_insts_emit_op >> strip_tac >> simp[]) >>
   metis_tac[]
 QED
-Finalise log_allocated_tuple_sequence_ptr
+Finalise log_allocated_tuple_frame_sequence_ptr
+
+Theorem log_allocated_tuple_sequence_ptr:
+  compile_alloc_buffer outcap st = (dst,prepared) /\ fn_has_code st prepared func /\
+  compile_abi_encode_to_buf dst.buf_operand (Var src) ei prepared = (out,end_st) /\
+  fn_has_code prepared end_st func /\
+  FLOOKUP s.vs_allocas srcid = SOME (sb,srcCap) /\ srcid < st.cs_next_id /\
+  inputCap <= srcCap /\ sb+srcCap < dimword (:256) /\ outcap < dimword (:256) /\
+  not_fresh_at st src /\ lookup_var src s = SOME (n2w sb) /\
+  ptr_covers G tn src s srcCap /\ ~ctx_has_dalloca ctx /\
+  ghost_inv H d ce cx es G tn s /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
+  (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
+    abi_encoder_input ei (Tuple ats) (ListV avs) sb inputCap q) /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st s /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\
+  LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
+  ((?n. ei = AbiCopy n /\ n < dimword (:256)) \/
+   (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
+      EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) ==>
+  ?actual db HG tm.
+    run_inst_seq (emitted_insts st end_st) s = OK actual /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s HG tm /\
+    inst_extends st end_st /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st end_st) /\ fresh_vars_wrt limit_st actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
+    eval_operand dst.buf_operand actual = SOME (n2w db) /\ db < dimword (:256) /\
+    mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
+      enc (Tuple ats) (ListV avs) /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
+    (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
+    ghost_inv H d ce cx es HG tm actual /\ ghost_kept ce es st G tn s HG tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers HG tm dv actual outcap) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op actual = SOME w) /\
+    (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac (SPEC_ALL log_allocated_tuple_frame_sequence_ptr) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexistsl_tac [`actual`,`db`,`HG`,`tm`] >> simp[]
+QED

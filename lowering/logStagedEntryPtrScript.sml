@@ -56,6 +56,78 @@ Proof
   simp[mk_inst_def, loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
+Theorem compile_log_store_data_ready_frame_path_ptr:
+  compile_log_store_data ce xs (MAP SND xs) (Var buf) 0 sa = ((),sb) /\
+  LIST_REL (log_data_source cx b cap s) xs vs /\
+  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
+  EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
+  not_fresh_at sa buf /\ lookup_var buf s = SOME (n2w b) /\
+  ptr_covers G tn buf s cap /\
+  SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
+  b+cap < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
+  local_ptrs_reserved ce sa /\ fresh_vars_wrt limit_st s /\
+  sb.cs_next_var <= limit_st.cs_next_var /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  (!name p sz. local_region ce es.scopes s name p sz ==> p+sz <= b \/ b+cap <= p) /\
+  (ce.ce_is_ctor ==> !name tv v p.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    p+type_memory_size tv <= b \/ b+cap <= p) /\
+  ghost_kept ce es se G0 tn0 s0 G tn /\ se.cs_next_var <= sa.cs_next_var /\
+  (!aid p sz. FLOOKUP s0.vs_allocas aid = SOME (p,sz) /\ aid < se.cs_next_id /\
+    (!name a k. local_region ce es.scopes s0 name a k ==> p+sz <= a \/ a+k <= p) ==>
+    p+sz <= b \/ b+cap <= p) /\
+  (!name p sz. local_region ce es.scopes s0 name p sz ==> p+sz <= b \/ b+cap <= p) ==>
+  ?HG tm t.
+    gas_path_ptr D 0 ctx func PG G tn s
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) HG tm
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      log_data_layout cx (MAP SND xs) vs b m) /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    ghost_inv H d ce cx es HG tm t /\ ghost_kept ce es se G0 tn0 s0 HG tm /\
+    log_write_frame sa b (SUM (MAP (type_memory_bytes ce) (MAP SND xs))) s t /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
+      op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  drule_all (SRULE [] (Q.INST [`off` |-> `0`] compile_log_store_data_path_ptr)) >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `EVERY (supported_scalar_type o SND) xs` by metis_tac[log_data_sources_types] >>
+  `local_ptrs_rel func ce es.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
+  `!name p sz. local_region ce es.scopes s name p sz ==>
+     p+sz <= b \/ b+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p` by
+    (rpt strip_tac >> res_tac >> decide_tac) >>
+  `ce.ce_is_ctor ==> !name tv v p.
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+     p+type_memory_size tv <= b \/ b+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p` by
+    (rpt strip_tac >> res_tac >> decide_tac) >>
+  drule_all (SRULE [] (Q.INST [`off` |-> `0`] log_staged_entry_state_ptr)) >> strip_tac >>
+  drule_all (SRULE [] log_data_write_ghost_inv) >> disch_tac >>
+  `ghost_kept ce es se G0 tn0 s0 HG tm` by
+    (irule log_data_write_ghost_kept >>
+     qexistsl_tac [`G`,`b`,`cap`,`sa`,`tn`] >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!p. not_fresh_at sa p ==> _` drule >> simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!i. _ ==> mem_bytes_at _ _ _ = _ /\ _` (qspec_then `i` mp_tac) >>
+       impl_tac >- decide_tac >> simp[]) >>
+     simp[]) >>
+  qexistsl_tac [`HG`,`tm`,`t`] >> fs[]
+QED
+
 Theorem compile_log_store_data_ready_path_ptr:
   compile_log_store_data ce xs (MAP SND xs) (Var buf) 0 sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
@@ -97,32 +169,7 @@ Theorem compile_log_store_data_ready_path_ptr:
       lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >>
-  drule_all (SRULE [] (Q.INST [`off` |-> `0`] compile_log_store_data_path_ptr)) >>
+  strip_tac >> drule_all compile_log_store_data_ready_frame_path_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `EVERY (supported_scalar_type o SND) xs` by metis_tac[log_data_sources_types] >>
-  `local_ptrs_rel func ce es.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
-  `!name p sz. local_region ce es.scopes s name p sz ==>
-     p+sz <= b \/ b+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p` by
-    (rpt strip_tac >> res_tac >> decide_tac) >>
-  `ce.ce_is_ctor ==> !name tv v p.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
-     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
-     p+type_memory_size tv <= b \/ b+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p` by
-    (rpt strip_tac >> res_tac >> decide_tac) >>
-  drule_all (SRULE [] (Q.INST [`off` |-> `0`] log_staged_entry_state_ptr)) >> strip_tac >>
-  drule_all (SRULE [] log_data_write_ghost_inv) >> disch_tac >>
-  `ghost_kept ce es se G0 tn0 s0 HG tm` by
-    (irule log_data_write_ghost_kept >>
-     qexistsl_tac [`G`,`b`,`cap`,`sa`,`tn`] >>
-     conj_tac >- (rpt strip_tac >>
-       qpat_x_assum `!p. not_fresh_at sa p ==> _` drule >> simp[]) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- (rpt strip_tac >>
-       qpat_x_assum `!i. _ ==> mem_bytes_at _ _ _ = _ /\ _` (qspec_then `i` mp_tac) >>
-       impl_tac >- decide_tac >> simp[]) >>
-     simp[]) >>
-  qexistsl_tac [`HG`,`tm`,`t`] >> fs[]
+  qexistsl_tac [`HG`,`tm`,`t`] >> simp[]
 QED

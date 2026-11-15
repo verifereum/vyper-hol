@@ -5,7 +5,25 @@ Ancestors logDataAllocPtr loweringHalt logValueFramePtr logGhostFramePtr
   venomExecSemantics finite_map words list arithmetic compileEnv loweringStateRelDefs exprSimDefs
   exprLoweringProps venomMemDefs abiBuiltinAllocation emitHelperProps stmtSimLogTrace
   ASCIInumbers string context stmtLowering fragGasSeqPtr ghostPcTransportPtr
-  logTopicsRunPtr abiDecoderReentry
+  logTopicsRunPtr abiDecoderReentry stmtSimLogExecFields decoderGhostFramePtr
+
+Theorem log_buffer_external_frame_ptr:
+  compile_alloc_buffer cap sa = (buf,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tm ==>
+  log_encode_external t = log_encode_external s /\
+  tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `log_encode_external t = log_encode_external s` by
+    (irule log_encode_run_external >> qexists_tac `emitted_insts sa sb` >>
+     simp[log_encode_safe_opcode_def, mk_inst_def]) >>
+  simp[] >>
+  gvs[inst_seq_ptr_def, run_inst_seq_def, AllCaseEqs(),
+    step_taint_nonmemory_frame, mk_inst_def]
+QED
 
 Theorem alloca_step_old_ghost:
   stmt_state_rel H ctx func ce cx es s /\
