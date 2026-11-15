@@ -8,14 +8,14 @@ Ancestors
    contain any of its bytes.  Shared by read and write boundaries below. *)
 Theorem occurrence_access_site_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\ FLOOKUP B id = SOME (b,z) /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\ FLOOKUP B id = SOME (b,z) /\
   FLOOKUP G v = SOME (c,w) /\ (c,w) <> (b,z) /\
   c <= off /\ off+len <= c+w /\ k < z ==>
   ~(off <= b+k /\ b+k < off+len)
 Proof
   strip_tac >> Cases_on `len = 0` >- simp[] >>
   `FLOOKUP H v <> SOME id` by
-    (strip_tac >> fs[occurrence_env_ok_def] >>
+    (strip_tac >> fs[occurrence_env_ok_ceil] >>
      first_x_assum drule >> simp[]) >>
   `0 < z /\ 0 < w` by decide_tac >>
   drule_all occurrence_env_var_site_exclusion >> decide_tac
@@ -23,7 +23,7 @@ QED
 
 Theorem occurrence_access_write_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\ FLOOKUP B id = SOME (b,z) /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\ FLOOKUP B id = SOME (b,z) /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
   (!ops. mem_write_ops inst = SOME ops ==>
      op_prov G ops.iao_ofst <> SOME (b,z)) /\
@@ -44,7 +44,7 @@ QED
 
 Theorem occurrence_access_read_exclusion:
   occurrence_natural_geometry lo a U B stk s /\
-  occurrence_env_ok B owners H G /\ FLOOKUP B id = SOME (b,z) /\
+  occurrence_env_ok (dimword (:256)) B owners H G /\ FLOOKUP B id = SOME (b,z) /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
   (!ops. mem_read_ops inst = SOME ops ==>
      op_prov G ops.iao_ofst <> SOME (b,z)) /\
