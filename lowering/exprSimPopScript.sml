@@ -564,6 +564,9 @@ Theorem pop_stmt_state_rel:
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv es'.scopes u id b sz ==>
        ?id0. local_region cenv es.scopes s0 id0 b sz) /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s0.vs_memory <= LENGTH u.vs_memory) /\
     immutable_base_zero cenv u ==>
     stmt_state_rel H ctx func cenv cx es' u
 Proof
@@ -594,7 +597,7 @@ Proof
       qexistsl_tac [`es`, `s0`] >> simp[]) >>
   simp[] >>
   qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>`
-    (fn th => once_rewrite_tac[th]) >> simp[]
+    (fn th => once_rewrite_tac[th]) >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem pop_stmt_state_rel_scopes:
@@ -604,11 +607,14 @@ Theorem pop_stmt_state_rel_scopes:
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv sc u id b sz ==>
        ?id0. local_region cenv es.scopes s0 id0 b sz) /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s0.vs_memory <= LENGTH u.vs_memory) /\
     immutable_base_zero cenv u ==>
     stmt_state_rel H ctx func cenv cx (es with scopes := sc) u
 Proof
   rpt strip_tac >> irule pop_stmt_state_rel >> simp[] >>
-  qexistsl_tac [`es`, `s0`] >> fs[] >> first_assum ACCEPT_TAC
+  qexistsl_tac [`es`, `s0`] >> fs[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem lookup_var_inst_idx[local]:
@@ -771,6 +777,9 @@ Proof
   `u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next /\
    u.vs_labels = s0.vs_labels` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  `LENGTH s0.vs_memory <= LENGTH u.vs_memory` by
+    simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+         arithmeticTheory.MAX_DEF] >>
   `immutable_base_zero cenv u` by
     (irule immutable_base_zero_frame >> qexists_tac `s0` >>
      fs[stmt_state_rel_def]) >>
@@ -998,7 +1007,8 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
                     `es`, `Abort a (s' with vs_inst_idx := j)`] >>
-      simp[gas_marked_exec_def, exit_result_def, expr_exit_def] >>
+      simp[gas_marked_exec_def, exit_result_def, expr_exit_def,
+           halt_exit_def] >>
       gen_tac >> irule eval_pop_name_empty >> simp[]) >>
   `n2w (LENGTH vs) <> 0w : bytes32` by
     (`LENGTH vs <> 0 /\ LENGTH vs < dimword (:256)` by

@@ -125,7 +125,7 @@ Theorem snapshot_storage_suffix_value_path[local]:
    else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
     mid = (result,sb) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   storage_holds cx (loc = LocTransient) t (Value v) a es u /\
   evaluate_type (get_tenv cx) t = SOME tv /\ n = type_slot_size tv /\
   eval_operand src u = SOME a /\ eval_operand dst u = SOME w /\
@@ -208,12 +208,12 @@ QED
 
 Theorem snapshot_storage_types[local]:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
     type_memory_bytes cenv t = type_memory_size tvt /\
     type_memory_size tvt < 2**64) ==>
-  t = expr_type e /\ stmt_state_rel ctx func cenv cx es' s /\
+  t = expr_type e /\ stmt_state_rel H ctx func cenv cx es' s /\
   ?a tv. eval_operand p.ptr_operand s = SOME a /\
     storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' s /\
     evaluate_type (get_tenv cx) t = SOME tv /\
@@ -224,11 +224,11 @@ Theorem snapshot_storage_types[local]:
     type_slot_size tv < 2**256
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `t = expr_type e /\ stmt_state_rel ctx func cenv cx es' s` by
+  `t = expr_type e /\ stmt_state_rel H ctx func cenv cx es' s` by
     (Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >> simp[] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
        storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' s` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[storage_holds_def] >> metis_tac[]) >>
@@ -251,17 +251,19 @@ Theorem snapshot_storage_composite_frame:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
       type_memory_bytes cenv t = type_memory_size tvt /\
       type_memory_size tvt < 2**64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?z. gas_marked_path F ctx func s 0 (OK z) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op z /\
       (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP z.vs_allocas aid = SOME entry) /\
       alloca_frame cenv es' sm s cenv es' z /\
       ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
-      z.vs_inst_idx = LENGTH sb.cs_current_insts
+      z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+      z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all snapshot_storage_layout >> strip_tac >>
@@ -271,13 +273,15 @@ Proof
   rename1 `eval_operand buf.buf_operand u = SOME w` >>
   `contract_storage u = contract_storage s /\
    contract_transient u = contract_transient s` by
-    (qpat_x_assum `(u with <|vs_vars := _; vs_allocas := _;
+    (qpat_assum `(u with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|>) = s` mp_tac >>
      simp[venom_state_component_equality, contract_storage_def,
           contract_transient_def] >> metis_tac[]) >>
   `storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' u` by
     (qpat_x_assum `storage_holds _ _ _ _ _ _ s` mp_tac >> simp[storage_holds_def]) >>
-  `u.vs_labels = s.vs_labels` by
+  `u.vs_labels = s.vs_labels /\
+   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `(u with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -301,7 +305,7 @@ Proof
     val_footprint tv v <= type_memory_size tv /\
     eval_operand buf.buf_operand z = SOME w` by
     (irule snapshot_storage_suffix_value_path >> simp[] >>
-     qexistsl_tac [`a`, `cenv`, `cx`, `es'`, `p.ptr_location`,
+     qexistsl_tac [`H`, `a`, `cenv`, `cx`, `es'`, `p.ptr_location`,
        `p.ptr_operand`, `t`] >> simp[] >> conj_tac
      >- (qpat_x_assum `!x. p.ptr_operand = Var x \/ buf.buf_operand = Var x ==> _`
            mp_tac >> simp[]) >>
@@ -329,12 +333,12 @@ QED
 
 Resume snapshot_storage_composite_frame[package]:
   markerLib.RESUME_TAC >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v op z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v op z` by
     (irule copy_buffer_post_transport >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[] >> (conj_tac >- metis_tac[]) >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `val_in_memory _ _ _ _`)) >>
@@ -356,7 +360,9 @@ Resume snapshot_storage_composite_frame[package]:
            qexists_tac `aid` >> simp[]) >>
         gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
      metis_tac[]) >>
-  `z.vs_allocas = u.vs_allocas /\ z.vs_halted = u.vs_halted` by
+  `z.vs_allocas = u.vs_allocas /\ z.vs_halted = u.vs_halted /\
+   z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
+   z.vs_requests = u.vs_requests /\ z.vs_call_ctx = u.vs_call_ctx` by
     (qpat_x_assum `copy_static z = copy_static u` mp_tac >>
      simp[copy_static_def, venom_state_component_equality]) >>
   qexists_tac `z` >> simp[] >>

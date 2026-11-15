@@ -40,7 +40,7 @@ Theorem cond_jump_expr_post_frag_mem[local]:
         ~u.vs_halted /\
         expr_post H ctx func cenv cx e es sa s1 s0 ee (BoolV b) op u /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
@@ -98,7 +98,7 @@ Resume cond_jump_expr_post_frag_mem[path]:
   qexistsl_tac [`INL (BoolV b)`,`es_end`,
                 `OK (jump_to (if b then lt else lf) t)`] >>
   conj_tac >- fs[gas_marked_exec_def] >>
-  disj1_tac >> simp[] >> qexists_tac `t` >> simp[]
+  disj1_tac >> simp[] >> rpt strip_tac >> qexists_tac `t` >> simp[]
 QED
 Finalise cond_jump_expr_post_frag_mem
 
@@ -142,7 +142,7 @@ Proof
        >- (qexists_tac `marks` >> disj1_tac >>
            rewrite_tac[eval_assert_custom_error_bind] >>
            irule gasStorageTheory.gas_bad_storage_at_bind_left >>
-           conj_tac
+           reverse conj_tac
            >- (irule gasStorageTheory.gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
            rw[] >> rpt IF_CASES_TAC >>
            simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
@@ -153,7 +153,7 @@ Proof
       fs[] >>
       qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
         (qspec_then `H0` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> gvs[]
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[]
       >- suspend "normal"
       >> suspend "exception") >>
   suspend "cert"
@@ -166,7 +166,8 @@ Resume compile_assert_custom_error_frag_general_mem[exception]:
   qexistsl_tac [`INR ex`, `es_end`, `rr`] >> conj_tac
   >- (rewrite_tac[eval_assert_custom_error_bind] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+  gvs[halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_custom_error_frag_general_mem[cert]:
@@ -200,9 +201,9 @@ Resume compile_assert_custom_error_frag_general_mem[true]:
       >- simp[eval_assert_custom_error_bind, Once bind_def, return_def] >>
       gvs[gas_marked_exec_def]) >>
   disj1_tac >> simp[] >> rpt strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> ?b u. _`
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?u. _`
     (qspec_then `H` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> gvs[] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
   drule_all assert_success_post_mem >> simp[]
 QED
 Resume compile_assert_custom_error_frag_general_mem[false]:
@@ -233,10 +234,12 @@ Resume compile_assert_custom_error_frag_general_mem[false]:
        (jump_to entry.cs_current_bb u) /\
      storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
     (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> ?b u. _`
+     qpat_assum `!H. valid_horizon _ _ H _ ==> ?u. _`
        (qspec_then `H` mp_tac) >>
-     impl_tac >- simp[] >> strip_tac >>
-     gvs[expr_post_def, stmt_state_rel_jump_to]) >>
+     (impl_tac >- fs[]) >> strip_tac >>
+     qpat_x_assum `jump_to _ _ = jump_to _ _`
+       (fn th => once_rewrite_tac[th]) >>
+     fs[expr_post_def, stmt_state_rel_jump_to]) >>
   qpat_x_assum `stmt_frag_mem _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_mem_def] >>
   disch_then (qspec_then `st0` mp_tac) >>
@@ -247,12 +250,25 @@ Resume compile_assert_custom_error_frag_general_mem[false]:
   >- (qexists_tac `marks ++ marks'` >> disj1_tac >>
       rewrite_tac[eval_assert_custom_error_bind] >>
       irule gasStorageTheory.gas_bad_storage_at_bind_right >>
-      qexistsl_tac [`es_end`, `jump_to entry.cs_current_bb u`, `BoolV F`] >> simp[])
+      qexistsl_tac [`ctx`, `func`, `T`, `es_end`,
+        `jump_to entry.cs_current_bb u`, `BoolV F`] >> simp[])
   >- suspend "false_normal"
   >- suspend "false_exit"
   >> suspend "false_cert"
 QED
 Resume compile_assert_custom_error_frag_general_mem[false_normal]:
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+  reverse (Cases_on `storage_trace_domain cx st0 es_end'.storage_trace`)
+  >- (qexists_tac `marks ++ marks'` >> disj1_tac >>
+      rewrite_tac[eval_assert_custom_error_bind] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_right >>
+      qexistsl_tac [`ctx`, `func`, `T`, `es_end`,
+        `jump_to entry.cs_current_bb u`, `BoolV F`] >> simp[] >>
+      irule gasStorageTheory.gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+  `?H1. valid_horizon cx st0 H1 es_end'.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> _`
+    (qspec_then `H1` mp_tac) >> simp[] >> strip_tac >>
   gvs[gas_marked_exec_def] >>
   qpat_x_assum `!tail. eval_stmt _ (Raise _) _ = _`
     (qspec_then `[]` mp_tac) >> simp[] >>

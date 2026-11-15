@@ -164,6 +164,9 @@ Theorem pop_path_stmt_state_rel:
   stmt_state_rel H ctx func cenv cx (es with scopes := scopes') u
 Proof
   strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+         arithmeticTheory.MAX_DEF] >>
   `u.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es

@@ -85,7 +85,11 @@ Theorem fixed_array_subscript_counted_mem_ok:
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
+    t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t /\
+    t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `eval_operand base_op (drop_fresh sa s) = SOME b /\
@@ -101,7 +105,14 @@ Proof
   drule_all array_fresh_success_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule_all straight_fresh_run_post >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+  rename1 `run_inst_seq _ s = OK tq` >>
+  `tq.vs_accounts = s.vs_accounts /\ tq.vs_transient = s.vs_transient /\
+   tq.vs_requests = s.vs_requests /\ tq.vs_call_ctx = s.vs_call_ctx` by
+    (qspecl_then [`emitted_insts sa sb`,`sa`,`s`,`tq`] mp_tac run_inst_seq_writes_fresh >>
+     impl_tac >- simp[] >>
+     disch_then (fn th => once_rewrite_tac[CONJUNCT1 th]) >> simp[]) >>
+  qexists_tac `tq with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
 QED
 
 Theorem fixed_array_subscript_counted_mem_oob:
@@ -196,7 +207,11 @@ Theorem runtime_length_mem_frame[local]:
     (!z. lop = Var z ==> not_fresh_at sm z) /\
     sa.cs_next_var <= sm.cs_next_var /\ local_ptrs_reserved cenv sm /\
     ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sm.cs_current_insts
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\
+    u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\
+    u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> `alloca_inv s` by fs[stmt_state_rel_def] >>
   drule_all array_length_runtime_mem >>
@@ -216,9 +231,12 @@ Proof
       drule lookup_var_update_not_fresh >> simp[]) 
   >- (Cases_on `idx_op` >> gvs[eval_operand_def] >>
       drule lookup_var_update_not_fresh >> simp[]) >>
-  simp[not_fresh_at_def] >> rpt strip_tac >>
-  first_x_assum drule >> simp[not_fresh_at_def] >>
-  disch_then irule >> decide_tac
+  simp[venomStateTheory.update_var_def] >> rpt conj_tac
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `sa` >> simp[])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `sa` >> simp[]) >>
+  simp[not_fresh_at_def]
 QED
 
 Theorem runtime_array_mem_split[local]:
@@ -315,7 +333,11 @@ Theorem runtime_array_subscript_counted_mem_ok:
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
+    t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t /\
+    t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all runtime_array_mem_split >> strip_tac >>
   drule_all runtime_length_mem_frame >> strip_tac >>
@@ -333,6 +355,12 @@ Proof
   drule_all array_fresh_success_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule_all straight_fresh_run_post >> strip_tac >>
+  `writes_fresh sm (emitted_insts sm sb)` by metis_tac[straight_fresh_def] >>
+  `t'.vs_accounts = u.vs_accounts /\ t'.vs_transient = u.vs_transient /\
+   t'.vs_requests = u.vs_requests /\ t'.vs_call_ctx = u.vs_call_ctx` by
+    (qspecl_then [`emitted_insts sm sb`,`sm`,`u`,`t'`] mp_tac run_inst_seq_writes_fresh >>
+     impl_tac >- simp[] >>
+     disch_then (fn th => once_rewrite_tac[CONJUNCT1 th]) >> simp[]) >>
   `gas_marked_path T ctx func s 0
     (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_marked_path_then >> simp[]) >>

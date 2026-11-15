@@ -48,7 +48,7 @@ Proof
   Cases_on `tr` >> simp[vyperStorageBackendTheory.set_storage_def]
 QED
 
-Theorem eval_pop_storage_static[local]:
+Theorem eval_pop_storage_static:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT et (Dynamic n)), name) /\
   lookup_var_slot_from_layout cx tr src name = SOME slot /\
@@ -496,7 +496,7 @@ Proof
   strip_tac >> fs storage_pop_run_simps
 QED
 
-Theorem dynarray_pop_storage_run_static[local]:
+Theorem dynarray_pop_storage_run_static:
   ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\ s.vs_call_ctx.cc_static /\
   (if tr then tload slot s else sload slot s) <> 0w ==>
   ?u. run_inst_seq
@@ -937,7 +937,7 @@ Proof
                     `es with storage_trace := es.storage_trace ++
                        [StorageRoot tr slot (ArrayTV tv (Dynamic n))]`,
                     `Abort a (s' with vs_inst_idx := j)`] >>
-      simp[gas_marked_exec_def, exit_result_def, expr_exit_def, LET_THM,
+      simp[gas_marked_exec_def, exit_result_def, expr_exit_def, halt_exit_def, LET_THM,
            pop_storage_gas_obs, evaluation_state_component_equality]) >>
   Cases_on `cx.txn.is_static`
   >- (`s0.vs_call_ctx.cc_static` by fs[] >>
@@ -956,7 +956,7 @@ Proof
                     `es with storage_trace := es.storage_trace ++
                        [StorageRoot tr slot (ArrayTV tv (Dynamic n))]`,
                     `Abort ExHalt_abort (s' with vs_inst_idx := j)`] >>
-      simp[gas_marked_exec_def, exit_result_def, expr_exit_def,
+      simp[gas_marked_exec_def, exit_result_def, expr_exit_def, halt_exit_def,
            pop_storage_gas_obs, evaluation_state_component_equality]) >>
   drule_all eval_pop_storage >> strip_tac >>
   `~s0.vs_call_ctx.cc_static` by fs[] >>
@@ -1076,7 +1076,7 @@ Resume compile_pop_storage_normalized_sim[positive]:
       with storage_trace :=
         es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))]`,
      `OK (u with vs_inst_idx := LENGTH sa.cs_current_insts + 9)`] >>
-  simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def, LET_THM,
+  simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def, halt_exit_def, LET_THM,
        pop_storage_gas_obs, evaluation_state_component_equality] >>
   qpat_x_assum `!H. _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED

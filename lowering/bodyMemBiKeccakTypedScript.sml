@@ -63,7 +63,8 @@ Proof
   >- (qexists_tac `marks` >> disj1_tac >>
       asm_simp_tac (srw_ss()) [eval_expr_unop_action_general,
         builtin_args_length_ok_def, precompile_builtin_def] >>
-      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[])
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_def, unop_result_def])
   >- suspend "normal_or_exception" >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
@@ -77,7 +78,8 @@ Resume compile_keccak256_sim_mem[normal_or_exception]:
    >- (qexists_tac `marks` >> disj1_tac >>
        asm_simp_tac (srw_ss()) [eval_expr_unop_action_general,
          builtin_args_length_ok_def, precompile_builtin_def] >>
-       irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
+       irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+       simp[storage_trace_frame_def, unop_result_def] >>
        irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
        metis_tac[])) >>
   `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
@@ -122,8 +124,9 @@ Resume compile_keccak256_sim_mem[normal_or_exception]:
       `~t.vs_halted` by
         metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
       fs[Abbr `suffix`] >>
-      qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (qspec_then `storage_trace_horizon es_end.storage_trace` assume_tac) >>
+      qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
       drule_at (Pos hd) keccak_typed_suffix_counted_open_free >>
       simp[] >> strip_tac >>
       rewrite_tac[gas_summary_at_def] >>
@@ -141,20 +144,25 @@ Resume compile_keccak256_sim_mem[normal_or_exception]:
       `vv_post H2 ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
          es sa sb s0 (es_end with gas_obs := []) (Value r)
          (StackValue (BaseT (BytesT (Fixed 32))) op) t'` by
-        (irule vv_post_fields_transport >>
-         qexistsl_tac [`storage_trace_horizon es_end.storage_trace`, `t`] >>
-         simp[vv_storage_live_def] >>
+        (MATCH_MP_TAC (Q.SPECL [`storage_trace_horizon es_end.storage_trace`, `H2`,
+           `ctx`, `func`, `cenv`, `cx`,
+           `Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e]`,
+           `es`, `sa`, `sb`, `s0`, `es_end with gas_obs := []`,
+           `Value r`, `StackValue (BaseT (BytesT (Fixed 32))) op`, `t'`, `t`]
+           vv_post_fields_transport) >>
+         simp[loweringPostsTheory.vv_storage_live_def] >>
          qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
            (qspec_then `H2` mp_tac) >>
          simp[expr_post_def]) >>
       drule expr_post_of_vv_post_stack >> simp[])
   >> Cases_on `res`
-  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
         (drule_then mp_tac) >> simp[]) >>
   simp[gas_summary_at_def] >> qexistsl_tac [`INR y`, `es_end`, `r`] >>
   simp[] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  gvs[] >> disj2_tac >> first_assum ACCEPT_TAC
+  gvs[] >> disj2_tac >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 
 Finalise compile_keccak256_sim_mem

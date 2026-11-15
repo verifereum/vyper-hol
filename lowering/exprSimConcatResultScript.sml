@@ -525,7 +525,8 @@ Theorem concat_values_then_outcome:
    es s0 Q1.
     gas_outcome F tops (ctx,func) cx st0 a (es,s0) Q1
       (\H rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r) ==>
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit H cx ee (INR exc : eval_result + exception) r) ==>
     !k Q R.
       (!vs. storage_trace_frame (k vs)) /\
       (!H rr ee t. Q1 H rr ee t ==> ?vs. rr = INL vs) /\
@@ -544,7 +545,8 @@ Theorem concat_values_then_outcome:
             (exit_result r /\
              !H. valid_horizon cx st0 H ee'.storage_trace ==>
                  R H res (ee' with gas_obs := []) r))) /\
-      (!H ex ee r. expr_exit (INR ex : eval_result + exception) r ==>
+      (!H ex ee r. expr_exit (INR ex : eval_result + exception) r /\
+                   halt_exit H cx ee (INR ex : eval_result + exception) r ==>
                    R H (INR ex) ee r) ==>
       gas_outcome F tops (ctx,func) cx st0 (bind a k) (es,s0) Q R
 Proof
@@ -596,8 +598,11 @@ Proof
              qexistsl_tac [`es_end`, `t`, `vs`] >> simp[]) >>
           qexistsl_tac [`res`, `ee'`, `r`] >> fs[]) >>
       `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
-        (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?exc. _` drule >>
-         simp[]) >>
+        (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+           (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         disch_then (qx_choose_then `exc` strip_assume_tac) >>
+         qexists_tac `exc` >> conj_tac >> first_assum ACCEPT_TAC) >>
       gvs[] >> qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -745,6 +750,8 @@ Proof
        qpat_assum `!H'. stmt_state_rel H' _ _ _ _ _ s0 ==> _` irule >>
        first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
+  qpat_x_assum `compile_concat _ _ _ _ _ _ s4 = _`
+    (assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qspecl_then [`args`, `0`, `0`, `ctx`, `func`, `cenv`, `cx`, `env`, `nocalls`,
                `st0`, `es`, `s4`, `s5`, `t`, `(STRING #"%" (toString (sa.cs_next_var + 1)))`, `(STRING #"%" (toString (sa.cs_next_var + 2)))`, `ow`, `binst`, `B`, `bsz`,
                `oinst`] mp_tac concat_args_sim >>
