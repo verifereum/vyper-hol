@@ -142,6 +142,9 @@ Theorem stmt_state_rel_write_local:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    ((ptrDiscipline$ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
     (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
@@ -156,7 +159,7 @@ Proof
   qabbrev_tac `entry' = entry with <|value := v; popped := []|>` >>
   qabbrev_tac `scs' = pre ++ (env |+ (id, entry')) :: rest` >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_fmp = s.vs_fmp /\
+   t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
@@ -216,7 +219,8 @@ Proof
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `fmp_room ctx func t` by
-    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def] >>
+     first_assum ACCEPT_TAC) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
@@ -301,6 +305,10 @@ Proof
      first_x_assum drule_all >> simp[]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
      (mstore (w2n w) wd s)` by (drule_all local_mstore_immutables >> simp[]) >>
+  `(mstore (w2n w) wd s).vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH (mstore (w2n w) wd s).vs_memory` by
+    (conj_tac >- simp[mstore_def] >>
+     simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
   irule stmt_state_rel_write_local >> asm_rewrite_tac[] >>
   qexistsl_tac [`p`, `s`, `sz`, `w`] >> asm_rewrite_tac[] >>
   rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]
