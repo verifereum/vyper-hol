@@ -3,7 +3,7 @@ Ancestors
   fmpStageFmpStepsRetpcLayout fmpStageFmpStepsRetpcPrefix
   fmpStageOpBase fmpStageControl fmpStageRel fmpLowerDefs fmpWfDefs
   o1PassContract unitShapeDefs callLayoutDefs contextCodegenRel venomExecProofs
-  fmpLowerProps fmpStepLayout combinatorics
+  fmpLowerProps fmpStepLayout
   venomInst venomState list rich_list finite_map words
 
 Theorem fmp_retpc_source_facts:
@@ -82,9 +82,9 @@ Proof
        (irule fmp_retpc_prefix_plan_absent >> simp[] >> metis_tac[]) >>
      `EL m entry.bb_instructions = EL m users` by simp[EL_APPEND1] >>
      fs[EVERY_EL, EL_APPEND1]) >>
-  pop_assum mp_tac >> simp[SUM_GENLIST_K] >>
+  pop_assum mp_tac >> simp[GSYM REPLICATE_GENLIST, SUM_REPLICATE] >>
   disch_then (mp_tac o AP_TERM ``SUM : num list -> num``) >>
-  simp[SUM_GENLIST_K]
+  simp[GSYM REPLICATE_GENLIST, SUM_REPLICATE]
 QED
 
 Theorem fmp_retpc_target_prefix:

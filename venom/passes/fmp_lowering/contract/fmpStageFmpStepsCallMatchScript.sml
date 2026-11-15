@@ -13,7 +13,7 @@ Ancestors
   venomInstIdsProps unitShapeDefs
   fmpStageOpBase fmpStageControl fmpStageRel fmpLowerDefs fmpLowerProps fmpStepLayout fcgBridge
   fmpAnalysisDefs fmpAnalysisProps fmpWfDefs o1PassContract contextCodegenRel
-  venomInst venomExecSemantics venomWf list rich_list finite_map words arithmetic combinatorics
+  venomInst venomExecSemantics venomWf list rich_list finite_map words arithmetic
 
 Theorem call_collect_member[local]:
   !insts targets inst nm ops.
