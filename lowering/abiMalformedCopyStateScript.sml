@@ -39,6 +39,10 @@ Proof
      `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
      irule mem_bytes_at_mcopy_disjoint >>
      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `(mcopy dst src n s).vs_initial_fmp = s.vs_initial_fmp /\
+   LENGTH s.vs_memory <= LENGTH (mcopy dst src n s).vs_memory` by
+    (conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
+     simp[mcopy_def, venomMemPropsTheory.write_memory_with_expansion_nondecreasing]) >>
   irule stmt_state_rel_allocas_frame >> conj_tac
   >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
       simp[mcopy_def, write_memory_with_expansion_def, lookup_var_def] >>
