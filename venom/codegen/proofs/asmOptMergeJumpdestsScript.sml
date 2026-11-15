@@ -112,7 +112,7 @@ Proof
   rpt strip_tac >> gvs[EL_MAP, rename_push_label_facts]
 QED
 
-Theorem rename_static_wf[local]:
+Theorem rename_static_wf:
   asm_static_wf p ∧ (MEM (AsmLabel y) p ∨ MEM y (asm_label_refs p)) ⇒
   asm_static_wf (MAP (rename_push_label x y) p)
 Proof
