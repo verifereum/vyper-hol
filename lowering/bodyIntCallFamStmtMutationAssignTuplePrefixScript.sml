@@ -176,4 +176,3 @@ Proof
      qexistsl [`es`,`sl`,`a`] >> simp[]) >>
   fs[intcall_expr_cont_def,intcall_joint_res_def]
 QED
-
