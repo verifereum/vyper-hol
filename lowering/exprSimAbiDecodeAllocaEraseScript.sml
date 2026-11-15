@@ -68,7 +68,8 @@ Proof
   rw[decode_site_resources_def]
   >- gvs[alloca_room_def, abi_decode_clean_pending]
   >- metis_tac[abi_decode_clean_inv]
-  >- (gvs[fmp_room_def, abi_decode_clean_pending] >> metis_tac[]) >>
+  >- (gvs[fmp_room_def, abi_decode_clean_pending] >>
+      gvs[abi_decode_clean_allocas_def] >> metis_tac[]) >>
   fs[abi_decode_clean_lookup, AllCaseEqs()] >> metis_tac[]
 QED
 

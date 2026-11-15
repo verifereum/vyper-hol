@@ -6,13 +6,15 @@ Ancestors
   context compileEnv venomState venomInst exprSimAlloc fragExec
   loweringHalt abiTupleProps rich_list exprSimCopy localMemoryStorePath
   stmtSimDefs venomMemDefs emitHelperProps exprSimStorageCopy
+Libs horizonTypeLib
 
 (* The staging copy is a snapshot. Only the value's live footprint needs
    to be valid at the source; the dead capacity may overlap the temporary. *)
 Theorem assign_place_staging_live:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand op n sm = ((),sn) /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   fn_has_code sa sn func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -22,7 +24,7 @@ Theorem assign_place_staging_live:
   val_wf stv v /\ val_in_memory stv v (w2n sw) s.vs_memory ==>
   ?r u tw.
     gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func cenv cx ee r /\
+    stmt_state_rel H0 ctx func cenv cx ee r /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
     w2n tw + n < dimword (:256) /\ r.vs_memory = s.vs_memory /\
@@ -54,8 +56,12 @@ Theorem assign_place_staging_live:
     ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts /\
     eval_operand buf.buf_operand u = SOME tw /\
-    stmt_state_rel ctx func cenv cx ee u /\
-    alloca_frame cenv ee sa s cenv ee u
+    stmt_state_rel H0 ctx func cenv cx ee u /\
+    alloca_frame cenv ee sa s cenv ee u /\
+    (!(H : (bool # bytes32 # type_value) list # num list).
+      stmt_state_rel H ctx func cenv cx ee s ==>
+      stmt_state_rel H ctx func cenv cx ee r /\
+      stmt_state_rel H ctx func cenv cx ee u)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
@@ -76,8 +82,26 @@ Proof
   `val_in_memory stv v (w2n tw) t.vs_memory` by
     (irule valueCopyTheory.val_in_memory_relocate >> simp[] >>
      qexistsl_tac [`w2n sw`, `n`, `s.vs_memory`] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ee t` by suspend "copy_state" >>
+  `stmt_state_rel H0 ctx func cenv cx ee t` by suspend "copy_state" >>
   `alloca_frame cenv ee sa s cenv ee t` by suspend "copy_frame" >>
+  `r.vs_accounts = s.vs_accounts /\ r.vs_transient = s.vs_transient /\
+   r.vs_requests = s.vs_requests /\ r.vs_call_ctx = s.vs_call_ctx /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `(r with <|vs_vars := _; vs_allocas := _;
+        vs_alloca_next := _; vs_inst_idx := _|>) = s`
+       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
+     qpat_assum `(t with <|vs_vars := _; vs_memory := _;
+        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = r`
+       (strip_assume_tac o SRULE [venom_state_component_equality]) >> simp[]) >>
+  `!(H : (bool # bytes32 # type_value) list # num list).
+    stmt_state_rel H ctx func cenv cx ee s ==>
+    stmt_state_rel H ctx func cenv cx ee r /\
+    stmt_state_rel H ctx func cenv cx ee t` by
+    (gen_tac >> strip_tac >> conj_tac >>
+     irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       stmt_state_rel_fields_transport) >>
+     simp[] >> metis_tac[]) >>
   qexistsl_tac [`r`, `t`, `tw`] >> simp[] >>
   rpt conj_tac >> rpt strip_tac >>
   gvs[loweringStateRelDefsTheory.regions_disjoint_def, eval_operand_def, lookup_var_def] >>
@@ -112,10 +136,10 @@ Resume assign_place_staging_live[copy_frame]:
   `!ad len. ad + len <= w2n tw \/ w2n tw + n <= ad ==>
     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory` by
     (gvs[] >> metis_tac[]) >>
-  irule alloca_frame_owned_copy >> simp[] >>
+  irule (at_horizon_named "H" alloca_frame_owned_copy) >> simp[] >>
   rpt conj_tac
   >- (qexistsl_tac [`w2n tw`, `sa.cs_next_id`, `n`] >> gvs[] >> metis_tac[]) >>
-  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[])
+  qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >> simp[])
 QED
 
 Finalise assign_place_staging_live

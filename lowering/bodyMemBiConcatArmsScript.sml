@@ -96,7 +96,8 @@ Proof
     qexists_tac `mload (w2n ow) (mstore (w2n ow) (n2w (k + m)) (mstore a wd t))` >>
     conj_tac >- simp[Abbr `t2`, mload_def] >> simp[mload_mstore_same]) >>
   conj_tac >- suspend "frame" >>
-  conj_tac >- suspend "history" >> simp[Abbr `t2`, mstore_def]
+  conj_tac >- suspend "history" >>
+  simp_tac (srw_ss()) [Abbr `t2`, mstore_def, LET_THM]
 QED
 
 Resume concat_fixed_arm_mem[relation]:
@@ -241,7 +242,8 @@ Proof
     conj_tac >- simp[Abbr `t2`, mload_def] >> simp[mload_mstore_same]) >>
   conj_tac >- suspend "frame" >>
   conj_tac >- suspend "history" >>
-  simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def, write_memory_with_expansion_def]
+  simp_tac (srw_ss()) [Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
+                       write_memory_with_expansion_def, LET_THM]
 QED
 
 Resume concat_bytes_arm_mem[path]:
