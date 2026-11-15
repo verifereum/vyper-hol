@@ -1153,7 +1153,7 @@ Resume concat_args_sim[head_exit]:
      step. *)
   disj2_tac >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
-    drule >> simp[]
+    (qspec_then `H` mp_tac) >> simp[]
 QED
 
 Resume concat_args_sim[head_exempt]:
