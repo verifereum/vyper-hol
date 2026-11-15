@@ -3,7 +3,7 @@ Theory defaultDispatchFacts
 Ancestors sourceEntryCode runtimeBodyStartDefs checkedSelectorTableProps entryStateRel
   vyperCalldata compileVyper vyperABIEntries publicGetterProps list entryDispatchProps
   defaultDispatchRouting defaultDispatchPlacement supportedDecls loweringShapeSource
-  entrySelectedPackageCoherence calldataSourceSize
+  entrySelectedPackageCoherence calldataSourceSize exprLowering compileEnv
 
 Theorem default_dispatch_raw_cases:
   calldata_dispatch tops cd = SOME (name,vals) ==>
