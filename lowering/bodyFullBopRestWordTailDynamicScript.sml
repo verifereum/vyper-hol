@@ -1424,7 +1424,498 @@ Resume rest_word_membership_tail_dynamic_const_full[ctor_none_elements]:
 QED
 
 Resume rest_word_membership_tail_dynamic_const_full[runtime_callback]:
-  cheat
+  `compile_array_membership_loop needleop (vv_operand nv) len
+     (elem_size_in_location cenv loc ety) (word_scale loc)
+     (compile_ptr_load F cenv.ce_imm_alloca loc) (SOME cap) is_in sl = (out,ct)` by
+    (`compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc =
+       compile_ptr_load F cenv.ce_imm_alloca loc` by
+       (simp[FUN_EQ_THM] >> Cases_on `loc` >> fs[contextTheory.compile_ptr_load_def]) >>
+     metis_tac[]) >>
+  `?sp gp tp. !h. guard h ==>
+    gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG)
+      (s,Gs,Ts) [] (OK sp,gp,tp) /\
+    membership_loop_frame sl Gh Th sh gp tp sp /\
+    membership_loop_registers sl i 0w gp tp sp /\
+    ~sp.vs_halted /\ allocas_from lo sp /\
+    sp.vs_current_bb = s.vs_current_bb /\
+    sp.vs_inst_idx = 2 + (if 0 < word_scale loc then 1 else 0) /\
+    lookup_var ("%" ++ toString (sl.cs_next_var+6+(if 0 < word_scale loc then 1 else 0))) sp =
+      SOME (w+n2w (word_scale loc+elem_size_in_location cenv loc ety*i)) /\
+    FLOOKUP gp ("%" ++ toString (sl.cs_next_var+6+(if 0 < word_scale loc then 1 else 0))) =
+      op_prov Gh (vv_operand nv) /\
+    op_taint tp (Var ("%" ++ toString (sl.cs_next_var+6+(if 0 < word_scale loc then 1 else 0)))) = {}` by
+      suspend "runtime_prefix" >>
+  suspend "runtime_read"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[runtime_prefix]:
+  irule rest_word_membership_runtime_address_operand_joint_bounded_const >>
+  conj_tac >- suspend "runtime_prefix_guard" >>
+  conj_tac >- (rpt strip_tac >> fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[runtime_prefix_guard]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. guard H ==> membership_loop_frame _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> array_length _ _ <= _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  simp[] >> suspend "runtime_prefix_operand"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[runtime_prefix_operand]:
+  qpat_assum `!sl t Gt Tt. sm.cs_next_var <= sl.cs_next_var /\ _ ==> _`
+    (qspecl_then [`sm`, `sh`, `Gh`, `Th`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `vv_location vv`
+  >- (qpat_x_assum `_ \/ _ ==> ?w. eval_operand _ u = _ /\ op_taint Tu _ = _ /\ _` mp_tac >>
+      simp[] >> metis_tac[]) >>
+  rename1 `vv_location vv = SOME vl` >>
+  Cases_on `vl`
+  >- (qpat_x_assum `_ \/ _ ==> ?w. eval_operand _ u = _ /\ op_taint Tu _ = _ /\ _` mp_tac >>
+      simp[] >> metis_tac[])
+  >- (qpat_x_assum `!tr. _ = SOME (if tr then _ else _) ==> ?w. eval_operand _ u = _ /\ op_taint Tu _ = _ /\ _`
+        (qspec_then `F` mp_tac) >> simp[] >> metis_tac[])
+  >- (qpat_x_assum `!tr. _ = SOME (if tr then _ else _) ==> ?w. eval_operand _ u = _ /\ op_taint Tu _ = _ /\ _`
+        (qspec_then `T` mp_tac) >> simp[] >> metis_tac[])
+  >- (qpat_x_assum `~cenv.ce_is_ctor /\ _ ==> ?w. eval_operand _ u = _ /\ op_taint Tu _ = _ /\ _` mp_tac >>
+      simp[] >> metis_tac[]) >>
+  qpat_x_assum `loc = case _ of NONE => _ | SOME l => l` mp_tac >> simp[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[runtime_read]:
+  simp[] >> Cases_on `loc`
+  >- suspend "runtime_memory_read"
+  >- suspend "runtime_storage_read"
+  >- suspend "runtime_transient_read"
+  >- suspend "runtime_code_read"
+  >> fs[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[runtime_storage_read]:
+  `?t gt tt. !h. guard h ==>
+    gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG) (sp,gp,tp) [] (OK t,gt,tt) /\
+    membership_loop_frame sl Gh Th sh gt tt t /\
+    membership_loop_registers sl i 0w gt tt t /\
+    ~t.vs_halted /\ allocas_from lo t /\ t.vs_current_bb = sp.vs_current_bb /\
+    t.vs_inst_idx = 4 /\
+    lookup_var ("%" ++ toString (sl.cs_next_var+8)) t = SOME (sload (w+n2w (i+1)) sp) /\
+    FLOOKUP gt ("%" ++ toString (sl.cs_next_var+8)) = NONE /\
+    op_taint tt (Var ("%" ++ toString (sl.cs_next_var+8))) = {}` by
+    suspend "storage_load" >>
+  suspend "storage_finish"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[storage_load]:
+  simp[NoAsms, stringTheory.STRCAT] >>
+  irule (rest_word_membership_slot_read_joint_bounded_const
+    |> Q.INST [`tr` |-> `F`, `delta` |-> `1`]
+    |> PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC]
+    |> SRULE []) >>
+  simp[] >> conj_tac >- suspend "storage_guard" >>
+  qexistsl_tac [`vv_operand nv`, `cap`, `cenv.ce_imm_alloca`, `is_in`, `len`, `needleop`, `out`, `ct`, `word_scale LocStorage`, `elem_size_in_location cenv LocStorage ety`] >>
+  fs[compileEnvTheory.word_scale_def] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[storage_guard]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> membership_loop_frame sl _ _ sh _ _ s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[compileEnvTheory.word_scale_def,
+     exprSimBopRestWordTailTheory.rest_word_word_stride, stringTheory.STRCAT] >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  `vv_location vv = SOME LocStorage` by (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_x_assum `!tr. vv_location vv = SOME (if tr then _ else _) ==> _`
+    (qspec_then `F` mp_tac) >> simp[] >> strip_tac >>
+  fs[Abbr `ws`, bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[storage_finish]:
+  qexistsl_tac [`t`, `gt`, `tt`] >> gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (sp,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  `vv_location vv = SOME LocStorage` by (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_x_assum `LocStorage = case vv_location vv of NONE => LocMemory | SOME l => l` kall_tac >>
+  simp[compileEnvTheory.word_scale_def, GSYM arithmeticTheory.ADD_ASSOC] >>
+  conj_tac >- (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >> metis_tac[]) >>
+  qpat_assum `!h. guard h ==> array_length _ _ <= cap /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_x_assum `!tr. vv_location vv = SOME (if tr then _ else _) ==> _`
+    (qspec_then `F` mp_tac) >> simp[] >> strip_tac >>
+  fs[Abbr `ws`, listTheory.EL_GENLIST,
+     bodyPtrBopInLoopContractTheory.membership_loop_frame_def, venomStateTheory.sload_def] >>
+  qpat_assum `!H. guard H ==> _ /\ membership_loop_registers sl i 0w Gs Ts s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+     venomStateTheory.contract_storage_def] >>
+  qpat_x_assum `sp = _` (fn th => simp[Once th] >> simp[Once th]) >>
+  qpat_x_assum `sh = _` (fn th => simp[Once th] >> simp[Once th]) >> simp[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[runtime_memory_read]:
+  `?t gt tt. !h. guard h ==>
+    gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG) (sp,gp,tp) [] (OK t,gt,tt) /\
+    membership_loop_frame sl Gh Th sh gt tt t /\
+    membership_loop_registers sl i 0w gt tt t /\
+    ~t.vs_halted /\ allocas_from lo t /\ t.vs_current_bb = sp.vs_current_bb /\
+    t.vs_inst_idx = 4 /\
+    lookup_var ("%" ++ toString (sl.cs_next_var+8)) t = SOME (mload (w2n (w+n2w (32*i+32))) sp) /\
+    FLOOKUP gt ("%" ++ toString (sl.cs_next_var+8)) = NONE /\
+    op_taint tt (Var ("%" ++ toString (sl.cs_next_var+8))) = {}` by
+    suspend "memory_load" >> suspend "memory_finish"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_load]:
+  simp[NoAsms, stringTheory.STRCAT] >>
+  irule (rest_word_membership_memory_read_joint_bounded_const
+    |> Q.INST [`delta` |-> `1`]
+    |> PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC]
+    |> SRULE []) >>
+  simp[] >>
+  conj_tac >- suspend "memory_bound" >>
+  conj_tac >- suspend "memory_guard" >>
+  qexistsl_tac [`vv_operand nv`, `cap`, `cenv.ce_imm_alloca`, `is_in`, `len`, `needleop`, `out`, `ct`, `word_scale LocMemory`, `elem_size_in_location cenv LocMemory ety`] >>
+  fs[compileEnvTheory.word_scale_def] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_bound]:
+  qpat_assum `!h. guard h ==> read_result _ _ _ = _ /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  `vv_location vv = NONE \/ vv_location vv = SOME LocMemory` by
+    (Cases_on `vv_location vv` >> fs[]) >>
+  fs[] >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `i < array_length (ArrayTV et (Dynamic pcap)) av` by
+    fs[Abbr `ws`, vyperValueOperationTheory.array_length_def] >>
+  `val_wf (ArrayTV et (Dynamic pcap)) (ArrayV av)` by
+    fs[loweringPostsTheory.expr_val_at_def, compileEnvTheory.is_word_type_def] >>
+  `32 + i * 32 + 32 <= type_memory_size (ArrayTV et (Dynamic pcap))` by
+    (qpat_x_assum `val_wf _ _` mp_tac >>
+     qpat_x_assum `i < array_length (ArrayTV et (Dynamic pcap)) av` mp_tac >>
+     Cases_on `av` >>
+     simp[NoAsms, valueEncodingDefsTheory.val_wf_def,
+         vyperValueOperationTheory.array_length_def,
+         valueEncodingTheory.type_memory_size_def] >>
+     simp[Once (GSYM arithmeticTheory.MULT_COMM)] >> decide_tac) >>
+  `type_memory_size (ArrayTV et (Dynamic pcap)) + w2n w <= u.vs_alloca_next` by
+    (qpat_x_assum `0 < type_memory_size _ ==> _` mp_tac >> simp[]) >>
+  `sp.vs_alloca_next = u.vs_alloca_next` by
+    (qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     qpat_x_assum `membership_loop_frame sl _ _ sh _ _ sp` mp_tac >>
+     qpat_x_assum `membership_loop_frame sm _ _ u _ _ sh` mp_tac >>
+     simp[NoAsms, bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `sp = _` (fn th => simp[Once th]) >>
+     qpat_x_assum `sh = _` (fn th => simp[Once th])) >>
+  `u.vs_alloca_next < dimword (:256)` by
+    metis_tac[loweringPostsTheory.vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+              exprLoweringPropsTheory.alloca_room_next_lt] >>
+  `w2n w + (32*i+32) < dimword (:256)` by decide_tac >>
+  drule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >>
+  disch_then SUBST1_TAC >> decide_tac
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_guard]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> membership_loop_frame sl _ _ sh _ _ s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[compileEnvTheory.word_scale_def,
+     exprSimBopRestWordTailTheory.rest_word_word_stride,
+     stringTheory.STRCAT] >>
+  suspend "memory_guard_coverage"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_guard_coverage]:
+  qpat_assum `!h. guard h ==> read_result _ _ _ = _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  `vv_location vv = NONE \/ vv_location vv = SOME LocMemory` by
+    (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[] >>
+  `?p. vv_operand vv = Var p /\ ptr_covers Gu Tu p u 32` by
+    (irule sized_ptr_val_header_covers >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`cx`, `ArrayTV et (Dynamic pcap)`,
+       `ArrayT ety (Dynamic pcap)`, `ArrayV av`] >>
+     simp[bodyPtrDefsTheory.ptr_val_ok_def,
+       compileEnvTheory.is_word_type_def,
+       vyperTypeSystemTheory.is_sized_type_def]) >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `i < array_length (ArrayTV et (Dynamic pcap)) av` by
+    fs[Abbr `ws`, vyperValueOperationTheory.array_length_def] >>
+  `val_wf (ArrayTV et (Dynamic pcap)) (ArrayV av)` by
+    (fs[loweringPostsTheory.expr_val_at_def, compileEnvTheory.is_word_type_def]) >>
+  `32 + i * 32 + 32 <= type_memory_size (ArrayTV et (Dynamic pcap))` by
+    (qpat_x_assum `val_wf _ _` mp_tac >>
+     qpat_x_assum `i < array_length (ArrayTV et (Dynamic pcap)) av` mp_tac >>
+     Cases_on `av` >>
+     simp[NoAsms, valueEncodingDefsTheory.val_wf_def,
+         vyperValueOperationTheory.array_length_def,
+         valueEncodingTheory.type_memory_size_def] >>
+     simp[Once (GSYM arithmeticTheory.MULT_COMM)] >> decide_tac) >>
+  suspend "memory_coverage_arith"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_coverage_arith]:
+  markerLib.RESUME_TAC >> fs[] >>
+  `u.vs_alloca_next < dimword (:256)` by
+    metis_tac[loweringPostsTheory.vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+              exprLoweringPropsTheory.alloca_room_next_lt] >>
+  `w2n w + (32*i+32) < dimword (:256)` by decide_tac >>
+  drule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> disch_then SUBST1_TAC >>
+  suspend "memory_coverage_transport"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_coverage_transport]:
+  markerLib.RESUME_TAC >>
+  (conj_tac >- suspend "memory_pointer_transport") >>
+  `tp.t_mem = Tu.t_mem` by
+    (qpat_x_assum `membership_loop_frame sl _ _ sh _ _ sp` mp_tac >>
+     qpat_x_assum `membership_loop_frame sm _ _ u _ _ sh` mp_tac >>
+     simp[NoAsms, bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
+     metis_tac[]) >>
+  simp[] >>
+  `i < array_length (ArrayTV et (Dynamic cap)) av` by fs[Abbr `ws`] >>
+  `32 * i + (w2n w + 32) = w2n w + (32*i+32)` by decide_tac >>
+  qpat_x_assum `!i'. i' < array_length _ _ ==> mem_word_taint _ _ = {} /\ _`
+    (qspec_then `i` (drule_then strip_assume_tac))
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_pointer_transport]:
+  markerLib.RESUME_TAC >>
+  `not_fresh_at sm p` by metis_tac[] >>
+  `FLOOKUP Gh p = FLOOKUP Gu p` by
+    (qpat_assum `membership_loop_frame sm _ _ u _ _ sh` mp_tac >>
+     simp[NoAsms, bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >> metis_tac[]) >>
+  qpat_x_assum `!off n dst t G' T'. _`
+    (qspec_then `32*i+32` mp_tac) >>
+  disch_then irule >>
+  simp[exprSimBopRestWordTailTheory.rest_word_word_stride,
+       compileEnvTheory.word_scale_def,
+       ptrDisciplineTheory.op_prov_def] >>
+  `i * 32 = 32 * i` by decide_tac >> simp[] >> decide_tac
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[memory_finish]:
+  qexistsl_tac [`t`, `gt`, `tt`] >> gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (sp,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  simp[compileEnvTheory.word_scale_def, GSYM arithmeticTheory.ADD_ASSOC] >>
+  conj_tac >- (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >> metis_tac[]) >>
+  `vv_location vv = NONE \/ vv_location vv = SOME LocMemory` by
+    (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_x_assum `LocMemory = case vv_location vv of NONE => LocMemory | SOME l => l` kall_tac >>
+  qpat_assum `!h. guard h ==> array_length _ _ <= cap /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[Abbr `ws`, listTheory.EL_GENLIST,
+     compileEnvTheory.word_scale_def] >>
+  `sp.vs_memory = u.vs_memory` by
+    (qpat_x_assum `membership_loop_frame sl _ _ sh _ _ sp` mp_tac >>
+     qpat_x_assum `membership_loop_frame sm _ _ u _ _ sh` mp_tac >>
+     simp[NoAsms, bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `sp = _` (fn th => simp[Once th]) >>
+     qpat_x_assum `sh = _` (fn th => simp[Once th])) >>
+  `mload (w2n (w+n2w (32*i+32))) sp =
+    mload (w2n (w+n2w (32*i+32))) u` by
+    simp[venomStateTheory.mload_def] >>
+  qpat_assum `vv_location vv = _` (fn th => rewrite_tac[th]) >>
+  simp[NoAsms, compileEnvTheory.word_scale_def] >>
+  qpat_assum `!H. guard H ==> membership_loop_frame sl _ _ sh _ _ s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> read_result _ _ _ = _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  simp[ptrDisciplineTheory.op_prov_def, venomStateTheory.eval_operand_def] >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `val_wf (ArrayTV et (Dynamic pcap)) (ArrayV av)` by
+    fs[loweringPostsTheory.expr_val_at_def, compileEnvTheory.is_word_type_def] >>
+  `32 + i * 32 + 32 <= type_memory_size (ArrayTV et (Dynamic pcap))` by
+    (qpat_x_assum `val_wf _ _` mp_tac >>
+     qpat_x_assum `i < array_length (ArrayTV et (Dynamic cap)) av` mp_tac >>
+     Cases_on `av` >>
+     simp[NoAsms, valueEncodingDefsTheory.val_wf_def,
+         vyperValueOperationTheory.array_length_def,
+         valueEncodingTheory.type_memory_size_def] >>
+     simp[Once (GSYM arithmeticTheory.MULT_COMM)] >> decide_tac) >>
+  `type_memory_size (ArrayTV et (Dynamic pcap)) + w2n w <= u.vs_alloca_next` by
+    (qpat_x_assum `0 < type_memory_size _ ==> _` mp_tac >> simp[]) >>
+  `u.vs_alloca_next < dimword (:256)` by
+    metis_tac[loweringPostsTheory.vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+              exprLoweringPropsTheory.alloca_room_next_lt] >>
+  `w2n w + (32*i+32) < dimword (:256)` by decide_tac >>
+  drule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> strip_tac >>
+  `w2n w + (32*i+32) = 32*i+(w2n w+32)` by decide_tac >>
+  fs[]
+QED
+Resume rest_word_membership_tail_dynamic_const_full[runtime_transient_read]:
+  `?t gt tt. !h. guard h ==>
+    gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG) (sp,gp,tp) [] (OK t,gt,tt) /\
+    membership_loop_frame sl Gh Th sh gt tt t /\
+    membership_loop_registers sl i 0w gt tt t /\
+    ~t.vs_halted /\ allocas_from lo t /\ t.vs_current_bb = sp.vs_current_bb /\
+    t.vs_inst_idx = 4 /\
+    lookup_var ("%" ++ toString (sl.cs_next_var+8)) t = SOME (tload (w+n2w (i+1)) sp) /\
+    FLOOKUP gt ("%" ++ toString (sl.cs_next_var+8)) = NONE /\
+    op_taint tt (Var ("%" ++ toString (sl.cs_next_var+8))) = {}` by
+    suspend "transient_load" >> suspend "transient_finish"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[transient_load]:
+  simp[NoAsms, stringTheory.STRCAT] >>
+  irule (rest_word_membership_slot_read_joint_bounded_const
+    |> Q.INST [`tr` |-> `T`, `delta` |-> `1`]
+    |> PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC] |> SRULE []) >>
+  simp[] >> conj_tac >- suspend "transient_guard" >>
+  qexistsl_tac [`vv_operand nv`, `cap`, `cenv.ce_imm_alloca`, `is_in`, `len`, `needleop`, `out`, `ct`, `word_scale LocTransient`, `elem_size_in_location cenv LocTransient ety`] >>
+  fs[compileEnvTheory.word_scale_def] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[transient_guard]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> membership_loop_frame sl _ _ sh _ _ s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[compileEnvTheory.word_scale_def,
+     exprSimBopRestWordTailTheory.rest_word_word_stride, stringTheory.STRCAT] >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  `vv_location vv = SOME LocTransient` by (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_x_assum `!tr. vv_location vv = SOME (if tr then _ else _) ==> _`
+    (qspec_then `T` mp_tac) >> simp[] >> strip_tac >>
+  fs[Abbr `ws`, bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[transient_finish]:
+  qexistsl_tac [`t`, `gt`, `tt`] >> gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (sp,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  `vv_location vv = SOME LocTransient` by (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_x_assum `LocTransient = case vv_location vv of NONE => LocMemory | SOME l => l` kall_tac >>
+  simp[compileEnvTheory.word_scale_def, GSYM arithmeticTheory.ADD_ASSOC] >>
+  conj_tac >- (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >> metis_tac[]) >>
+  qpat_assum `!h. guard h ==> array_length _ _ <= cap /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_x_assum `!tr. vv_location vv = SOME (if tr then _ else _) ==> _`
+    (qspec_then `T` mp_tac) >> simp[] >> strip_tac >>
+  fs[Abbr `ws`, listTheory.EL_GENLIST,
+     bodyPtrBopInLoopContractTheory.membership_loop_frame_def, venomStateTheory.tload_def] >>
+  qpat_assum `!H. guard H ==> _ /\ membership_loop_registers sl i 0w Gs Ts s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
+  qpat_x_assum `sp = _` (fn th => simp[Once th] >> simp[Once th]) >>
+  qpat_x_assum `sh = _` (fn th => simp[Once th] >> simp[Once th]) >>
+  fs[venomStateTheory.contract_transient_def]
+QED
+Resume rest_word_membership_tail_dynamic_const_full[runtime_code_read]:
+  `?t gt tt. !h. guard h ==>
+    gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG) (sp,gp,tp) [] (OK t,gt,tt) /\
+    membership_loop_frame sl Gh Th sh gt tt t /\
+    membership_loop_registers sl i 0w gt tt t /\
+    ~t.vs_halted /\ allocas_from lo t /\ t.vs_current_bb = sp.vs_current_bb /\
+    t.vs_inst_idx = 4 /\
+    lookup_var ("%" ++ toString (sl.cs_next_var+8)) t = SOME
+      (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n (w+n2w (32*i+32))) sp.vs_data_section ++ REPLICATE 32 0w))) /\
+    FLOOKUP gt ("%" ++ toString (sl.cs_next_var+8)) = NONE /\
+    op_taint tt (Var ("%" ++ toString (sl.cs_next_var+8))) = {}` by
+    suspend "code_load" >> suspend "code_finish"
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[code_load]:
+  simp[NoAsms, stringTheory.STRCAT] >>
+  irule (rest_word_membership_code_read_joint_bounded_const
+    |> Q.INST [`delta` |-> `1`]
+    |> PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC] |> SRULE []) >>
+  simp[] >> conj_tac >- suspend "code_bound" >>
+  conj_tac >- suspend "code_guard" >>
+  qexistsl_tac [`vv_operand nv`, `cap`, `cenv.ce_imm_alloca`, `is_in`, `len`, `needleop`, `out`, `ct`, `word_scale LocCode`, `elem_size_in_location cenv LocCode ety`] >>
+  fs[compileEnvTheory.word_scale_def] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[code_guard]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> membership_loop_frame sl _ _ sh _ _ s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[compileEnvTheory.word_scale_def,
+     exprSimBopRestWordTailTheory.rest_word_word_stride, stringTheory.STRCAT] >> metis_tac[]
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[code_bound]:
+  `vv_location vv = SOME LocCode` by (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_assum `!h. guard h ==> array_length _ _ <= cap /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  `~cenv.ce_is_ctor` by fs[] >>
+  qpat_x_assum `~cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==> _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `LocCode = case vv_location vv of NONE => LocMemory | SOME l => l` kall_tac >>
+  fs[bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `i < array_length (ArrayTV et (Dynamic pcap)) av` by
+    (fs[Abbr `ws`, vyperValueOperationTheory.array_length_def]) >>
+  drule_all bodyPtrBopInCodeContentsTheory.membership_array_element_extent >>
+  simp[] >> strip_tac >>
+  `w2n (w+n2w (32*i+32)) <= w2n w + (32*i+32)` by
+    (CONV_TAC (LAND_CONV (RAND_CONV (LAND_CONV
+       (REWR_CONV (GSYM wordsTheory.n2w_w2n))))) >>
+     simp[NoAsms, wordsTheory.word_add_n2w, wordsTheory.w2n_n2w,
+       arithmeticTheory.MOD_LESS_EQ]) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  fs[bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
+  qpat_x_assum `sp = _` (fn th => simp[Once th]) >>
+  qpat_x_assum `sh = _` (fn th => simp[Once th]) >> gvs[] >> decide_tac
+QED
+
+Resume rest_word_membership_tail_dynamic_const_full[code_finish]:
+  qexistsl_tac [`t`, `gt`, `tt`] >> gen_tac >> disch_tac >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (sp,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  `vv_location vv = SOME LocCode` by (Cases_on `vv_location vv` >> fs[]) >>
+  qpat_x_assum `LocCode = case vv_location vv of NONE => LocMemory | SOME l => l` kall_tac >>
+  simp[compileEnvTheory.word_scale_def, GSYM arithmeticTheory.ADD_ASSOC] >>
+  conj_tac >- (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >> metis_tac[]) >>
+  qpat_assum `!h. guard h ==> array_length _ _ <= cap /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  qpat_assum `!h. guard h ==> membership_loop_frame sl _ _ sh _ _ s /\ _`
+    (qspec_then `H'` (drule_then strip_assume_tac)) >>
+  fs[Abbr `ws`, listTheory.EL_GENLIST,
+     bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
+  `sp.vs_data_section = u.vs_data_section` by
+    (qpat_x_assum `sp = _` (fn th => simp[Once th]) >>
+     qpat_x_assum `sh = _` (fn th => simp[Once th])) >>
+  fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def]
 QED
 
 Resume rest_word_membership_tail_dynamic_const_full[dynamic_post]:
