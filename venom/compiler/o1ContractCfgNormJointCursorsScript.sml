@@ -140,6 +140,192 @@ Proof
   gvs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def]
 QED
 
+Theorem cfg_norm_joint_cursors_ordinary:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+  joint_transition C9
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9)
+    (SOME (OriginOrdinary fuel post)) q9' ==>
+  ?current' q8'.
+    ((q8' = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8 /\
+      MEM inst9.inst_opcode [ASSIGN; JMP; JNZ] /\
+      inst9.inst_opcode <> GAS /\ inst9.inst_opcode <> INVOKE /\
+      inst_mem_ranges inst9 s9 = []) \/
+     ?ev8. joint_transition C8
+       (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) ev8 q8') /\
+    cfg_norm_joint_cursors C8 C9 (schedules,current',saved) q8' q9'
+Proof
+  strip_tac >> Cases_on `current` >>
+  gvs[cfg_norm_joint_cursors_def, joint_transition_ordinary] >>
+  qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  drule_all cfg_norm_cursors_next_classified >> strip_tac
+  >- (`inst_mem_ranges inst9 s9 = []` by
+        (irule supply_inst_mem_ranges_empty >> gvs[]) >>
+      Cases_on `HD cursors'` >> gvs[] >>
+      qexistsl [`(q,cursors')`,
+        `JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8`] >>
+      simp[cfg_norm_joint_cursors_def] >> gvs[]) >>
+  `r <> [] /\ cursors' <> []` by metis_tac[cfg_norm_cursors_lengths] >>
+  Cases_on `HD cursors'` >> gvs[] >>
+  `active_inst fn8 first a /\
+   active_inst fn8 after (u with vs_inst_idx := SUC a.vs_inst_idx)` by
+    (Cases_on `q` >> Cases_on `r` >> Cases_on `cursors'` >> gvs[] >>
+     metis_tac[cfg_norm_cursors_head]) >>
+  qexists_tac `(q,cursors')` >>
+  qexists_tac `JointConfig stk8 PG8 (step_prov PG8 G8 first u)
+    (step_taint first a u tn8) fn8 after
+    (u with vs_inst_idx := SUC a.vs_inst_idx) oms8 (origin_step PG8 om8 first u) hs8
+    (h8 ++ [OriginOrdinary fuel u; OriginObserve
+      (OriginSnapshot fn8 PG8 (step_prov PG8 G8 first u)
+        (origin_step PG8 om8 first u) after (u with vs_inst_idx := SUC a.vs_inst_idx))])` >>
+  conj_tac >- (disj2_tac >> qexists_tac `SOME (OriginOrdinary fuel u)` >>
+    simp[joint_transition_ordinary]) >>
+  simp[cfg_norm_joint_cursors_def] >> gvs[]
+QED
+
+Theorem cfg_norm_joint_cursors_block:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+  joint_transition C9
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9)
+    (SOME (OriginBlock fuel post)) q9' ==>
+  ?current' q8'.
+    ((q8' = JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8 /\
+      MEM inst9.inst_opcode [ASSIGN; JMP; JNZ] /\
+      inst9.inst_opcode <> GAS /\ inst9.inst_opcode <> INVOKE /\
+      inst_mem_ranges inst9 s9 = []) \/
+     ?ev8. joint_transition C8
+       (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) ev8 q8') /\
+    cfg_norm_joint_cursors C8 C9 (schedules,current',saved) q8' q9'
+Proof
+  strip_tac >> Cases_on `current` >>
+  gvs[cfg_norm_joint_cursors_def, joint_transition_block_iff] >>
+  qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  drule_all cfg_norm_cursors_block_classified >> strip_tac
+  >- (`inst_mem_ranges inst9 s9 = []` by
+        (irule supply_inst_mem_ranges_empty >> gvs[]) >>
+      Cases_on `HD cursors'` >> gvs[] >>
+      qexistsl [`(q,cursors')`,
+        `JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8`] >>
+      simp[cfg_norm_joint_cursors_def] >> gvs[]) >>
+  `r <> [] /\ cursors' <> []` by metis_tac[cfg_norm_cursors_lengths] >>
+  Cases_on `HD cursors'` >> gvs[] >>
+  `active_inst fn8 first a /\ active_inst fn8 after b` by
+    (Cases_on `q` >> Cases_on `r` >> Cases_on `cursors'` >> gvs[] >>
+     metis_tac[cfg_norm_cursors_head]) >>
+  qexists_tac `(q,cursors')` >>
+  qexists_tac `JointConfig stk8 PG8 (entry_prov fn8 u G8)
+    (entry_taint_vars fn8 u tn8) fn8 after b oms8 (origin_entry fn8 u om8) hs8
+    (h8 ++ [OriginBlock k u; OriginObserve
+      (OriginSnapshot fn8 PG8 (entry_prov fn8 u G8)
+        (origin_entry fn8 u om8) after b)])` >>
+  conj_tac >- (disj2_tac >> qexists_tac `SOME (OriginBlock k u)` >>
+    simp[joint_transition_block_iff]) >>
+  simp[cfg_norm_joint_cursors_def] >> gvs[]
+QED
+
+Theorem cfg_norm_joint_cursors_call:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+  joint_transition C9
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) NONE q9' ==>
+  ?current' q8'.
+    joint_transition C8
+      (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) NONE q8' /\
+    cfg_norm_joint_cursors C8 C9 (schedules,current',current::saved) q8' q9'
+Proof
+  strip_tac >> Cases_on `current` >>
+  gvs[cfg_norm_joint_cursors_def, joint_transition_call_iff] >>
+  `LIST_REL (\sf tf. ?rs. MEM (sf,tf,rs) schedules)
+    C8.ctx_functions C9.ctx_functions` by
+    (qpat_x_assum `MAP FST schedules = _` (SUBST1_TAC o SYM) >>
+     qpat_x_assum `MAP (FST o SND) schedules = _` (SUBST1_TAC o SYM) >>
+     simp[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
+     qexists_tac `SND (SND (EL n schedules))` >>
+     simp[] >> metis_tac[MEM_EL]) >>
+  qpat_assum `LIST_REL (\sf tf. ?rs. MEM (sf,tf,rs) schedules) _ _`
+    (mp_then Any mp_tac list_rel_lookup_function) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+    disch_then drule >> simp[] >> metis_tac[])) >>
+  disch_then (qspec_then `nm` mp_tac) >> simp[] >>
+  Cases_on `lookup_function nm C8.ctx_functions` >> simp[] >> strip_tac >>
+  qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  drule_all cfg_norm_cursors_call >> strip_tac >> gvs[] >>
+  first_x_assum (qspec_then `C8` mp_tac) >>
+  disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
+  `active_inst fn8 inst8 s8` by
+    (qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `(fn8,fn9,q)` mp_tac) >> simp[] >> strip_tac >>
+     `q <> [] /\ r <> []` by metis_tac[cfg_norm_cursors_lengths] >>
+     Cases_on `q` >> Cases_on `r` >> gvs[] >>
+     metis_tac[cfg_norm_cursors_head]) >>
+  `active_inst x first a` by
+    (`cur <> []` by metis_tac[cfg_norm_cursors_lengths] >>
+     Cases_on `rs` >> Cases_on `cur` >> gvs[] >>
+     metis_tac[cfg_norm_cursors_head]) >>
+  qexistsl [`(rs,cur)`,
+    `JointConfig
+      (<|cf_fn := fn8; cf_inst := inst8; cf_state := s8; cf_params := PG8;
+         cf_prov := G8; cf_tvar := tn8.t_var |> :: stk8)
+      (MAP (op_prov G8) ops) FEMPTY (tn8 with t_var := FEMPTY) x first a
+      (om8::oms8) FEMPTY (h8::hs8)
+      [OriginCallee cs; OriginObserve
+        (OriginSnapshot x (MAP (op_prov G8) ops) FEMPTY FEMPTY first a)]`] >>
+  simp[cfg_norm_joint_cursors_def]
+QED
+
+Theorem cfg_norm_joint_cursors_return:
+  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
+    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
+  joint_transition C9
+    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9)
+    (SOME (OriginResume fuel fn9 inst9 s9 ret send post)) q9' ==>
+  ?current' saved' q8' ev8.
+    joint_transition C8
+      (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) ev8 q8' /\
+    cfg_norm_joint_cursors C8 C9 (schedules,current',saved') q8' q9'
+Proof
+  strip_tac >> Cases_on `current` >>
+  gvs[cfg_norm_joint_cursors_def, joint_transition_return] >>
+  Cases_on `stk8` >> gvs[] >>
+  Cases_on `oms8` >> gvs[] >> Cases_on `hs8` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then (qspec_then `(h.cf_fn,f.cf_fn,x0)` mp_tac) >> simp[] >> strip_tac >>
+  drule_all cfg_norm_cursors_ret >> strip_tac >>
+  `active_inst fn8 inst8 s8` by
+    (qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `(fn8,fn9,q)` mp_tac) >> simp[] >> strip_tac >>
+     `q <> [] /\ r <> []` by metis_tac[cfg_norm_cursors_lengths] >>
+     Cases_on `q` >> Cases_on `r` >> gvs[] >>
+     metis_tac[cfg_norm_cursors_head]) >>
+  `active_inst h.cf_fn next8 (w8 with vs_inst_idx := SUC h.cf_state.vs_inst_idx)` by
+    (`saved' <> []` by metis_tac[cfg_norm_cursors_lengths] >>
+     Cases_on `x0` >> Cases_on `saved'` >> gvs[] >>
+     metis_tac[cfg_norm_cursors_head]) >>
+  qexistsl [`(x0,saved')`, `xs`,
+    `JointConfig t h.cf_params
+      (DRESTRICT h.cf_prov (COMPL (set h.cf_inst.inst_outputs)))
+      (tn8 with t_var := DRESTRICT h.cf_tvar (COMPL (set h.cf_inst.inst_outputs)))
+      h.cf_fn next8 (w8 with vs_inst_idx := SUC h.cf_state.vs_inst_idx) t'
+      (DRESTRICT h' (COMPL (set h.cf_inst.inst_outputs))) t''
+      (h'' ++ [OriginResume fuel fn8 inst8 s8 ret e8 w8; OriginObserve
+        (OriginSnapshot h.cf_fn h.cf_params
+          (DRESTRICT h.cf_prov (COMPL (set h.cf_inst.inst_outputs)))
+          (DRESTRICT h' (COMPL (set h.cf_inst.inst_outputs)))
+          next8 (w8 with vs_inst_idx := SUC h.cf_state.vs_inst_idx))])`,
+    `SOME (OriginResume fuel fn8 inst8 s8 ret e8 w8)`] >>
+  simp[joint_transition_return, cfg_norm_joint_cursors_def]
+QED
+
 (* Stronger than the generic ML goal only in explicitly retaining the
    SAME schedules. Current/saved cells evolve through actual transitions. *)
 Theorem cfg_norm_joint_cursors_step:
@@ -163,6 +349,19 @@ Theorem cfg_norm_joint_cursors_step:
          (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8) ev8 q8') /\
       cfg_norm_joint_cursors C8 C9 (schedules,current',saved') q8' q9'
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `current` >>
-  fs[cfg_norm_joint_cursors_def]
+  rpt gen_tac >> strip_tac >>
+  `mem_corr inst8 s8 inst9 s9 /\ call_corr inst8 s8 inst9 s9 /\
+   (inst_mem_ranges inst9 s9 <> [] /\ ~in_revert_forward fn9 s9 ==>
+     ~in_revert_forward fn8 s8)` by
+    (Cases_on `current` >> gvs[cfg_norm_joint_cursors_def] >>
+     qpat_assum `EVERY _ schedules` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> simp[] >> strip_tac >>
+     metis_tac[cfg_norm_cursors_projection]) >>
+  simp[] >> drule joint_transition_label_cases >> strip_tac >> gvs[]
+  >- (drule_all cfg_norm_joint_cursors_call >> metis_tac[])
+  >- (drule_all cfg_norm_joint_cursors_ordinary >> simp[] >> metis_tac[])
+  >- (drule_all cfg_norm_joint_cursors_block >> simp[] >> metis_tac[]) >>
+  `fn = fn9 /\ inst = inst9 /\ s = s9` by
+    gvs[joint_transition_return] >> gvs[] >>
+  drule_all cfg_norm_joint_cursors_return >> metis_tac[]
 QED
