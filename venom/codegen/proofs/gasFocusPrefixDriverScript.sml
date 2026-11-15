@@ -2,7 +2,7 @@ Theory gasFocusPrefixDriver
 Ancestors
   o1PipelineCorrect o1SafeUpto o1PassContract o1RequestContract o1PassLift gasEvents
   codegenEntryRel codegenAsmProgOk asmFrameRel frameJointTrace asmSem symbolResolve
-  frameOutcome callTrace vfmExecution list rich_list pred_set words
+  frameOutcome callTrace vfmExecution list rich_list pred_set words arithmetic
 
 (* Proof goals only. These ML values register no HOL definitions or theorems.
    The packet, CFG cursor and frame-plan conjuncts will be joined here once
@@ -211,6 +211,28 @@ Proof
   qexists_tac `raw` >> simp[]
 QED
 
+(* A zero-assembly edge must spend rank; a positive edge can reset it.
+   Costs are indexed by occurrences in this actual joint chain. *)
+Theorem focus_joint_chain_length_bound:
+  !evs q qs r costs.
+    joint_chain ctx q evs qs r /\
+    EVERY (\u. rank u <= bound) (q::qs) /\
+    LIST_REL (\cost pair. 0 < cost \/ rank (SND pair) < rank (FST pair))
+      costs (ZIP (q::qs, qs)) ==>
+    LENGTH evs <= (bound + 1) * SUM costs + rank q
+Proof
+  Induct_on `evs` >- simp[] >> rpt gen_tac >>
+  Cases_on `qs` >- simp[joint_chain_def] >>
+  Cases_on `costs` >- simp[] >>
+  rename1 `joint_chain ctx q (_::evs) (next::rest_qs) r` >>
+  rename1 `LIST_REL _ (cost::rest_costs) _` >>
+  simp[joint_chain_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  qpat_x_assum `!costs. _` (qspec_then `rest_costs` mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `cost` >> fs[SUM, LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
+QED
+
 Theorem focus_execution_initial:
   codegen_assembly rpolicy unit = SOME prog /\
   initial_ctx_rel_tail tail cpl prog unit.cu_context vs0 es0 /\
@@ -234,24 +256,44 @@ Proof
   simp[joint_trace_def, joint_chain_def, asm_steps_def]
 QED
 
-(* Early stopping is allowed only when every compatible filling is covered
-   and every conditional Exit antecedent is false. Actual terminal stopping
-   has a separate simulation and output-invariant obligation. *)
-Theorem focus_early_stop_extract[local]:
-  LENGTH raw_slots = LENGTH sites /\
-  PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
-  (!raw.
-    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
-    ?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
-  (!raw D.
-    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw /\
-    (?fr. terminates (run_context fr unit.cu_context
-      (vs0 with vs_gas_readings := raw ++ [0w]))) /\
-    dead_wf D /\
-    o1_pre_walk_inv D unit.cu_context
-      (vs0 with vs_gas_readings := raw ++ [0w]) ==> F) ==>
-  ^(snd (dest_imp focus_producer_goal))
+(* The concrete fold must supply the cost bound from its same EVM run.
+   This lemma only performs the finite frontier search over actual edges. *)
+Theorem focus_bounded_frontier_stops:
+  joint_initial vs0 ctx q0 /\ frontier q0 [] [] /\
+  (!q evs qs.
+    joint_trace vs0 ctx q0 evs qs q /\ frontier q evs qs /\
+    ~stop q evs qs ==>
+    ?ev next. joint_transition ctx q ev next /\
+      frontier next (evs ++ [ev]) (qs ++ [next])) /\
+  (!q evs qs.
+    joint_trace vs0 ctx q0 evs qs q /\ frontier q evs qs ==>
+    ?costs.
+      EVERY (\u. rank u <= bound) (q0::qs) /\
+      LIST_REL (\cost pair. 0 < cost \/ rank (SND pair) < rank (FST pair))
+        costs (ZIP (q0::qs, qs)) /\ SUM costs <= max_cost) ==>
+  ?q evs qs. joint_trace vs0 ctx q0 evs qs q /\
+    frontier q evs qs /\ stop q evs qs
 Proof
-  strip_tac >> qexistsl_tac [`raw_slots`, `sites`, `unused`] >>
-  simp[] >> metis_tac[]
+  strip_tac >> spose_not_then assume_tac >>
+  `!n. ?q evs qs. joint_trace vs0 ctx q0 evs qs q /\
+     frontier q evs qs /\ LENGTH evs = n` by
+    (Induct
+     >- (qexistsl_tac [`q0`, `[]`, `[]`] >>
+         simp[joint_trace_def, joint_chain_def]) >>
+     pop_assum (qx_choosel_then [`q`, `evs`, `qs`] strip_assume_tac) >>
+     `~stop q evs qs` by metis_tac[] >>
+     qpat_x_assum `!q evs qs. _ /\ _ /\ _ ==> _` drule_all >>
+     disch_then (qx_choosel_then [`ev`, `next`] strip_assume_tac) >>
+     qexistsl_tac [`next`, `evs ++ [ev]`, `qs ++ [next]`] >>
+     simp[] >> metis_tac[joint_trace_snoc]) >>
+  pop_assum (qspec_then `SUC ((bound + 1) * max_cost + rank q0)`
+    (qx_choosel_then [`q`, `evs`, `qs`] strip_assume_tac)) >>
+  qpat_x_assum `!q evs qs. _ ==> ?costs. _` drule_all >>
+  disch_then (qx_choose_then `costs` strip_assume_tac) >>
+  `LENGTH evs <= (bound + 1) * SUM costs + rank q0` by
+    (irule focus_joint_chain_length_bound >>
+     qexistsl_tac [`ctx`, `qs`, `q`] >>
+     gvs[joint_trace_def]) >>
+  `(bound + 1) * SUM costs <= (bound + 1) * max_cost` by
+    simp[] >> decide_tac
 QED
