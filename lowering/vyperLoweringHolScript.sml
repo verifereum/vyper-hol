@@ -10,6 +10,7 @@ Ancestors
   entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
+  dallocaCreateCopy
   bodyPtrMakeArrayMemoryFrame
   fragGasOrigin fragGasOriginPtrSafeUpto
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
