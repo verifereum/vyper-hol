@@ -4336,12 +4336,10 @@ Theorem source_take_request_residual[local]:
     t.outcomes = SOME rest
 Proof
   rpt gen_tac >>
-  Cases_on `computed_precompile rq` >>
-  Cases_on `precompile_result rq.cr_target rq.cr_data` >>
-  gvs[take_request_outcome_def, take_outcome_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `x` >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  Cases_on `oc.co_success` >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  simp[take_request_outcome_def] >>
+  pairarg_tac >>
+  mp_tac (Q.INST [`os` |-> `oc::rest`] take_outcome_rest) >>
+  simp[] >> rpt strip_tac >> gvs[AllCaseEqs()]
 QED
 
 Theorem source_take_request_bind_consumed[local]:
@@ -4990,7 +4988,7 @@ fun REPLAY_CUT_STEP g = FIRST
 
 Theorem source_replay_internal_suppliers[local]:
   !cx src_id_opt fn args dflts es ret mut nr stmts vs.
-    let t = do
+    outcomes_suffix (do
       prev <- get_scopes;
       dflt_vs <- finally
         do set_scopes [FEMPTY];
@@ -5007,8 +5005,43 @@ Theorem source_replay_internal_suppliers[local]:
           (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv)
-    od in
-    outcomes_suffix t /\ storage_trace_frame t /\ source_exhausted_safe t
+    od) /\
+    storage_trace_frame (do
+      prev <- get_scopes;
+      dflt_vs <- finally
+        do set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od (set_scopes prev);
+      env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf stmts; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+    od) /\
+    source_exhausted_safe (do
+      prev <- get_scopes;
+      dflt_vs <- finally
+        do set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od (set_scopes prev);
+      env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf stmts; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+    od)
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >>
   BETA_TAC >> conj_tac
@@ -5044,7 +5077,7 @@ val REPLAY_SAFETY_TAC = REPLAY_DROP_IHS >> BETA_TAC >>
 
 Theorem source_replay_internal_args_suppliers[local]:
   !cx src_id_opt fn args dflts es ret mut nr stmts.
-    let t = do
+    outcomes_suffix (do
       type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
         "IntCall args length";
       vs <- eval_exprs cx es;
@@ -5064,8 +5097,49 @@ Theorem source_replay_internal_args_suppliers[local]:
           (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv)
-    od in
-    outcomes_suffix t /\ storage_trace_frame t /\ source_exhausted_safe t
+    od) /\
+    storage_trace_frame (do
+      type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+        "IntCall args length";
+      vs <- eval_exprs cx es;
+      prev <- get_scopes;
+      dflt_vs <- finally
+        do set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od (set_scopes prev);
+      env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf stmts; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+    od) /\
+    source_exhausted_safe (do
+      type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+        "IntCall args length";
+      vs <- eval_exprs cx es;
+      prev <- get_scopes;
+      dflt_vs <- finally
+        do set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od (set_scopes prev);
+      env <- lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf stmts; return NoneV od) handle_function)
+          (pop_function prev)) (unlock_if_nr cx nr (is_view_mut mut));
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+    od)
 Proof
   rpt gen_tac >> rewrite_tac[LET_THM, vyperStateTheory.ignore_bind_def] >>
   BETA_TAC >> conj_tac
