@@ -55,11 +55,12 @@ Theorem assign_local_rhs_outcome:
     (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r) ==>
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+    (\H res ee r. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+      halt_exit H cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
@@ -114,7 +115,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>

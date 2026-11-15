@@ -34,6 +34,6 @@ Proof
   qexists_tac `Abort a t` >> simp[exit_result_def, stmt_exit_def] >>
   (conj_tac >- (irule emit_abort_zero_path >> simp[] >>
      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[]) >>
-   gvs[expr_exit_def])
+   gvs[expr_exit_def, halt_exit_def])
 QED
 
