@@ -120,7 +120,7 @@ Theorem target_place_sim:
         target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty) r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `gas_admissible _ _ _`
@@ -164,9 +164,10 @@ Proof
           >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
               first_assum ACCEPT_TAC) >>
           disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-          qpat_x_assum `expr_exit _ _` mp_tac >>
-          simp[oneline expr_exit_def] >>
-          BasicProvers.every_case_tac >> simp[]) >>
+          qx_gen_tac `H1` >> strip_tac >>
+          qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (qspec_then `H1` mp_tac) >>
+          simp[expr_exit_INR_type, halt_exit_def]) >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> ?pv. _`
         (drule_then strip_assume_tac) >>
       gvs[] >>
