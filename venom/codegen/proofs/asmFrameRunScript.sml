@@ -122,5 +122,44 @@ Theorem asm_frame_step_tail:
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) ==>
   asm_frame_step_ok_tail tail prog data es0 a es
 Proof
-  cheat
+  strip_tac >>
+  fs[asm_frame_rel_tail_def] >>
+  qabbrev_tac `b = a with as_gas_readings := gas_readings es` >>
+  `asm_frame_rel prog data es0 b es /\ b.as_pc = a.as_pc` by
+    simp[Abbr `b`] >>
+  Cases_on `?r es'. run_call es = SOME (r,es') /\
+    frame_resource_starved es0 r es' /\ call_requests es = []`
+  >- simp[asm_frame_step_ok_tail_def] >>
+  `EL b.as_pc prog <> AsmOp "GAS" \/ b.as_gas_readings <> []` by
+    (Cases_on `EL b.as_pc prog = AsmOp "GAS"` >> simp[] >>
+     drule_at (Pat `asm_frame_rel _ _ _ _ _`) asm_frame_gas_readings_available >>
+     simp[is_data_inst_def] >> simp[Abbr `b`]) >>
+  `asm_frame_step_ok prog data es0 b es` by
+    (irule (cj 1 asm_frame_step) >> simp[]) >>
+  qpat_x_assum `asm_frame_step_ok _ _ _ _ _` mp_tac >>
+  simp[asm_frame_step_ok_def] >> strip_tac >>
+  `a = b with as_gas_readings := b.as_gas_readings ++ tail` by
+    simp[Abbr `b`, asm_state_component_equality] >>
+  `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a =
+   case asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL b.as_pc prog) b of
+     AsmOK c => AsmOK (c with as_gas_readings := c.as_gas_readings ++ tail)
+   | AsmHalt c => AsmHalt (c with as_gas_readings := c.as_gas_readings ++ tail)
+   | AsmRevert c => AsmRevert (c with as_gas_readings := c.as_gas_readings ++ tail)
+   | AsmFault c => AsmFault (c with as_gas_readings := c.as_gas_readings ++ tail)
+   | AsmError e => AsmError e` by
+    metis_tac[asm_step_gas_readings_append] >>
+  qpat_x_assum `a = b with as_gas_readings := _` kall_tac >>
+  qpat_x_assum `Abbrev _` kall_tac >>
+  Cases_on `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL b.as_pc prog) b` >>
+  gvs[asm_frame_step_ok_tail_def]
+  >>~- ([`asm_step _ _ _ b = AsmOK c`],
+    rename1 `asm_frame_rel prog data es0 c next` >>
+    disj2_tac >> qexists_tac `next` >>
+    `c with as_gas_readings := gas_readings next = c` by
+      (gvs[asm_frame_rel_def, asm_state_component_equality]) >>
+    simp[asm_frame_rel_tail_def] >> gvs[asm_frame_rel_def]) >>
+  metis_tac[asm_frame_terminal_gas_readings]
 QED
