@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinWordModCompose
 Ancestors
   bodyFullPreds bodySimFull bodyFullShared gasOutcomeFullCompose
-  bodyFullBuiltinWordModPost bodyFullGhostFrame
+  bodyFullBuiltinWordModPost bodyFullGhostFrame bodyFullBuiltinWordPowCompose
   exprSimWordBuiltins exprSimSource exprSimHypsDefs exprLowering
   compileEnv exprLoweringProps vyperTyping vyperTypeSystem list finite_map
   gasShadowCompileStmtHelpers gasShadowState builtinMath fragExec wordArgsPtr
@@ -17,7 +17,7 @@ Theorem modular_sim_full_from_suffix:
     eval_operand z t = SOME vc /\
     op_taint tn1 x = {} /\ op_taint tn1 y = {} /\ op_taint tn1 z = {} /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sm /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ local_ptrs_reserved cenv sm /\
     (!q sz. cenv.ce_return_buf = SOME (PtrVar (Var q) sz) ==> not_fresh_at sm q) /\
     (!q sz. cenv.ce_return_pc = SOME (PtrVar (Var q) sz) ==> not_fresh_at sm q) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -46,6 +46,7 @@ Theorem modular_sim_full_from_suffix:
         ~t'.vs_halted /\ t'.vs_current_bb = sb.cs_current_bb /\
         t'.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t' /\
         t'.vs_alloca_next = t.vs_alloca_next /\ t'.vs_allocas = t.vs_allocas /\
+      t'.vs_fmp = t.vs_fmp /\
         t'.vs_memory = t.vs_memory /\ t'.vs_call_ctx = t.vs_call_ctx /\
         t'.vs_accounts = t.vs_accounts /\ t'.vs_transient = t.vs_transient /\
         t'.vs_immutables = t.vs_immutables /\
@@ -190,9 +191,9 @@ Proof
       qpat_x_assum `expr_sim_full _ _ _ _ e1 es`
         (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
       disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `sh1`, `x`, `s0`, `G0`, `tn0`] mp_tac) >>
-      (impl_tac >- (simp[] >>
+      (impl_tac >- (simp[] >> conj_tac >- (
         qpat_assum `expr_body_pre cenv cx env e1 es`
-          (ACCEPT_TAC o MATCH_MP expr_body_pre_gas_admissible))) >>
+          (ACCEPT_TAC o MATCH_MP expr_body_pre_gas_admissible)) >> first_assum ACCEPT_TAC)) >>
       disch_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ P1 E1` >>
       `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -276,6 +277,7 @@ Proof
         conj_tac >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
           metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)]) >>
+        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
         gen_tac >> strip_tac >>
         qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _ /\ _`
           (qspec_then `H` mp_tac) >>
@@ -375,6 +377,7 @@ Proof
           irule bodyMemoryDefsTheory.return_buf_frame_frame >>
           qexistsl [`cenv`, `s0`, `sa`] >> simp[] >>
           metis_tac[cj 6 (iffLR loweringPostsTheory.expr_post_def)]) >>
+        conj_tac >- (rpt strip_tac >> irule pow_compose_reachable_no_wrap >> metis_tac[]) >>
         gen_tac >> strip_tac >>
         qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _ /\ _`
           (qspec_then `H` mp_tac) >>
@@ -629,7 +632,9 @@ Proof
           qpat_assum `expr_exit (builtin_result _ _ _ _ _ _) _` mp_tac >>
           qpat_assum `v = IntV _` (fn th => PURE_REWRITE_TAC[GSYM th]) >>
           qpat_assum `v' = IntV _` (fn th => PURE_REWRITE_TAC[GSYM th]) >>
-          qpat_assum `v'' = IntV _` (fn th => PURE_REWRITE_TAC[GSYM th]) >> simp[]) >>
+          qpat_assum `v'' = IntV _` (fn th => PURE_REWRITE_TAC[GSYM th]) >>
+          simp[exprSimDefsTheory.halt_exit_def] >> rpt strip_tac >>
+          gvs[exprSimDefsTheory.expr_exit_def]) >>
       qpat_assum `val_to_w256 v'' <> 0w ==> suffix_r = OK u /\ _`
         (fn th => qpat_assum `val_to_w256 v'' <> 0w` (strip_assume_tac o MP th)) >>
       disj1_tac >> qexists_tac `u` >> simp[] >>
@@ -674,7 +679,9 @@ Proof
           qexistsl_tac [`storage_trace_horizon mid.storage_trace`,
             `storage_trace_horizon mid'.storage_trace`, `H`, `mid`, `mid'`,
             `s1`, `s2`, `s3`, `t`, `t'`, `t''`, `v`, `v'`, `v''`, `x`, `y`, `z`] >>
-          simp[] >> rpt conj_tac >> metis_tac[]) >>
+          simp[] >> rpt conj_tac >> metis_tac[])
+      >~ [`allocas_below_fmp u`]
+      >- metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
       `wb_frame cenv es mid sa s0 t /\
        wb_frame cenv mid mid' s1 t t' /\
        wb_frame cenv mid' mid'' s2 t' t''` by

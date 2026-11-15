@@ -15,7 +15,7 @@ Theorem pow_mod256_suffix_full:
   eval_operand x t = SOME va /\ eval_operand y t = SOME vb /\
   op_taint tn1 x = {} /\ op_taint tn1 y = {} /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sm /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ local_ptrs_reserved cenv sm /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -33,6 +33,7 @@ Theorem pow_mod256_suffix_full:
     ~t'.vs_halted /\ t'.vs_current_bb = sb.cs_current_bb /\
     t'.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t' /\
     t'.vs_alloca_next = t.vs_alloca_next /\ t'.vs_allocas = t.vs_allocas /\
+      t'.vs_fmp = t.vs_fmp /\
     t'.vs_memory = t.vs_memory /\ t'.vs_call_ctx = t.vs_call_ctx /\
     t'.vs_accounts = t.vs_accounts /\ t'.vs_transient = t.vs_transient /\
     t'.vs_immutables = t.vs_immutables /\ t'.vs_gas_readings = t.vs_gas_readings /\
