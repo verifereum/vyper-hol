@@ -764,6 +764,44 @@ Resume frame_gas_step[continue]:
 QED
 Finalise frame_gas_step[local]
 
+Theorem asm_frame_gas_readings_available:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog = AsmOp "GAS" ==>
+  ((?r es'. run_call es = SOME (r,es') /\
+      frame_resource_starved es0 r es' /\ call_requests es = []) \/
+   gas_readings es <> [])
+Proof
+  strip_tac >>
+  `EL a.as_pc prog <> AsmOp "CALL" /\
+   EL a.as_pc prog <> AsmOp "STATICCALL" /\
+   EL a.as_pc prog <> AsmOp "DELEGATECALL" /\
+   EL a.as_pc prog <> AsmOp "CREATE" /\
+   EL a.as_pc prog <> AsmOp "CREATE2" /\
+   EL a.as_pc prog <> AsmOp "SELFDESTRUCT"` by simp[] >>
+  `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a es /\ wf_state es` by
+    gvs[asm_frame_rel_def] >>
+  drule_all frame_local_opcode >> strip_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a
+    (es with contexts := [(c,rb)])` by metis_tac[frame_rel_singleton] >>
+  `asm_encoding_wf prog /\ (!j. j <= a.as_pc ==>
+    ~is_data_inst (EL j prog))` by metis_tac[frame_local_instruction] >>
+  `LENGTH (es with contexts := [(c,rb)]).contexts = 1` by simp[] >>
+  drule_all asm_evm_gas_step >> strip_tac
+  >- (drule (SRULE [MEM] frame_starved_lift) >>
+      disch_then drule >> simp[] >>
+      impl_tac >- gvs[MEM] >> metis_tac[])
+  >- (drule (SRULE [MEM] frame_starved_lift) >>
+      disch_then drule >> simp[] >>
+      impl_tac >- gvs[MEM] >> metis_tac[]) >>
+  rename1 `step (es with contexts := [(c,rb)]) = (INL (),t)` >>
+  drule_all frame_continue_transplant >> strip_tac >>
+  `LENGTH es1.contexts = LENGTH es.contexts /\
+   next_opcode (FST (HD es.contexts)) = SOME Gas` by simp[] >>
+  drule_all frame_obs_gas_step >> simp[]
+QED
+
 Theorem asm_frame_noncall_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
