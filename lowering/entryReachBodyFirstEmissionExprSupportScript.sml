@@ -1019,11 +1019,11 @@ Proof
   >- (irule multi_vvs_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
   >- (rw[cs_appends_def] >>
-      qspecl_then [`type_memory_bytes ce (TupleT (MAP expr_type es))`, `st`]
+      qspecl_then [`type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) es))`, `st`]
         mp_tac (cj 1 compile_alloc_buffer_labels) >> simp[]) >>
   gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
   >- (rw[cs_appends_def] >>
-      qspecl_then [`ce`, `ZIP (a,MAP expr_type es)`, `a'.buf_operand`, `0`, `st`]
+      qspecl_then [`ce`, `ZIP (a,MAP (lowered_value_type ce) es)`, `a'.buf_operand`, `0`, `st`]
         mp_tac (cj 1 compile_extcall_store_values_labels) >> simp[]) >>
   simp[cs_appends_return]
 QED
