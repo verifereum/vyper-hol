@@ -153,6 +153,12 @@ Proof
   `well_formed_type_value ptv /\ value_has_type ptv owner` by
     (fs[vyperPlaceInvariantsTheory.popped_history_typed_def] >>
      res_tac >> gvs[]) >>
+  `!old. lookup_scopes id es0.scopes = SOME old /\
+         MEM (prefix,owner) old.popped ==>
+         snapshot_in old.type b sz (prefix,owner) s0.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `!old prefix owner. _`
+       (qspecl_then [`old`,`prefix`,`owner`] mp_tac) >> simp[]) >>
   drule_all popped_snapshot_path_in_memory >> simp[ADD_ASSOC]
 QED
 
