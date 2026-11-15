@@ -1296,6 +1296,51 @@ Proof
    asm_rewrite_tac [])
 QED
 
+Theorem native_pseudo_fold_readings[local]:
+  !xs s t.
+    EVERY (\i. is_pseudo i.inst_opcode) xs /\
+    FOLDR (dft_exec_cons b C) OK xs s = OK t ==>
+    t.vs_gas_readings = s.vs_gas_readings /\
+    !n D W. FOLDR (dft_exec_cons n D) OK xs
+      (s with vs_gas_readings := W) = OK (t with vs_gas_readings := W)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `h.inst_opcode <> INVOKE /\ h.inst_opcode <> GAS /\
+   ~is_terminator h.inst_opcode` by
+    (Cases_on `h.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def, AllCaseEqs()] >>
+  drule_all dftBlockSimTheory.step_inst_ok_non_gas_oracle >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def, step_inst_non_invoke] >>
+  metis_tac[step_inst_non_invoke, venom_state_component_equality]
+QED
+
+Theorem native_pseudo_phase_readings:
+  EVERY (\i. is_pseudo i.inst_opcode) pre /\
+  eval_phis s pre = OK u /\
+  FOLDR (dft_exec_cons b C) OK (DROP (phi_prefix_length pre) pre)
+    (u with vs_inst_idx := phi_prefix_length pre) = OK t ==>
+  t.vs_gas_readings = s.vs_gas_readings /\
+  !n D W.
+    eval_phis (s with vs_gas_readings := W) pre =
+      OK (u with vs_gas_readings := W) /\
+    FOLDR (dft_exec_cons n D) OK (DROP (phi_prefix_length pre) pre)
+      ((u with vs_gas_readings := W) with vs_inst_idx := phi_prefix_length pre) =
+      OK (t with vs_gas_readings := W)
+Proof
+  strip_tac >>
+  `EVERY (\i. is_pseudo i.inst_opcode)
+    (DROP (phi_prefix_length pre) pre)` by metis_tac[rich_listTheory.EVERY_DROP] >>
+  drule_all native_pseudo_fold_readings >> strip_tac >>
+  qspecl_then [`pre`, `s`] mp_tac gas_eval_phis >>
+  simp[gas_replay_at_def] >>
+  disch_then (qspec_then `s.vs_gas_readings` mp_tac) >>
+  simp[stateEquivTheory.lift_result_def] >> strip_tac >>
+  simp[] >> rpt gen_tac >> conj_tac
+  >- metis_tac[eval_phis_restore, restore_rel_cases] >>
+  (bossLib.gvs [])
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
