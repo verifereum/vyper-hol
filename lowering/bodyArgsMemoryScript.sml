@@ -124,7 +124,7 @@ Theorem lower_typed_args_nil_sim_mem:
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -158,7 +158,7 @@ Theorem lower_typed_args_sim_mem:
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-      (\H rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -278,7 +278,7 @@ Resume lower_typed_args_sim_mem[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 
 Resume lower_typed_args_sim_mem[head_exempt]:
@@ -342,7 +342,7 @@ Resume lower_typed_args_sim_mem[tail_exit]:
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >>
       first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[wb_args_exit_def]
+  disj2_tac >> gvs[wb_args_exit_def, halt_exit_def]
 QED
 
 Resume lower_typed_args_sim_mem[tail_exempt]:
