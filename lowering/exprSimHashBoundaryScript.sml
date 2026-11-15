@@ -49,7 +49,8 @@ Theorem expr_sim_suffix:
      storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc) r ==>
      R H (INR exc) ee r) /\
   (!v. storage_trace_frame (k v)) /\
   (!gs v ee t.
@@ -111,7 +112,7 @@ Proof
           rewrite_tac[gas_summary_at_def] >>
           qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[])
       >> Cases_on `res`
-      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
             (drule_then mp_tac) >> simp[]) >>
       rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -119,7 +120,7 @@ Proof
       qexistsl_tac [`INR exc`, `es_end`, `r`] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
       BETA_TAC >> disj2_tac >> simp[] >> rpt strip_tac >>
-      first_x_assum irule >> metis_tac[]) >>
+      first_x_assum irule >> fs[halt_exit_def] >> metis_tac[]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qabbrev_tac `a = bind (eval_expr cx e) (read_result cx)` >>
   `ignore_bind (bind a k) (return ()) =
