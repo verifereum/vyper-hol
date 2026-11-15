@@ -69,7 +69,9 @@ val focus_finalizer_prefix_bridge_goal : term = ``
     ~frame_resource_starved es0 result final ==>
     ?max_cost. !n ast.
       asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-        prog n (entry_asm_state vs0 es0) = AsmOK ast ==>
+        prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+      (?ss. sym_steps prog (asm_data_env prog vs0.vs_code) n
+        (sym_init (entry_asm_state vs0 es0)) = SymOK ss) ==>
       n <= max_cost /\
       (ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" ==>
         ast.as_gas_readings <> [])
@@ -99,7 +101,7 @@ val focus_block_rank : term = ``
 val focus_joint_motive : term = ``
   \packet_rel cursor_rel frame_rel
     rpolicy unit cpl prog vs0 es0 ast0 result final data tail
-    (N:num) (C7:venom_context) C8 C9
+    (C7:venom_context) C8 C9
     (root_sf:ir_function) (root_tf:ir_function) (root_entry:venom_state)
     packet
     (acts : ((num # num) list,
@@ -118,7 +120,7 @@ val focus_joint_motive : term = ``
     (ks_tab : (((num # num) list # num), gas_event list list) fmap)
     rooted_eval p d cursors
     q8 q0 evs qs q9 n ast es raw_slots sites unused.
-    packet_rel N C7 C8 root_sf root_tf root_entry packet
+    ?N:num. packet_rel N C7 C8 root_sf root_tf root_entry packet
       acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
     cursor_rel C8 C9 cursors q8 q9 /\
     frame_rel rpolicy unit cpl prog vs0 es0 q9 ast /\
@@ -159,9 +161,9 @@ val focus_dft_packet_step_goal : term = ``
     PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
     (inst.inst_opcode = GAS ==> s.vs_gas_readings <> []) /\
     joint_transition C8 (JointConfig stk PG G tn fn inst s oms om hs h) ev q8' ==>
-    (?packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' p' d'
+    (?N' packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' p' d'
       raw_slots' sites' unused'.
-      packet_rel N C7 C8 root_sf root_tf root_entry
+      packet_rel N' C7 C8 root_sf root_tf root_entry
         packet' acts' blocks' calls' ms_tab' es_tab' ks_tab' rooted_eval p' d'
         q8' raw_slots' sites' unused' /\
       LENGTH raw_slots' = LENGTH sites' /\
