@@ -1,11 +1,25 @@
 Theory assignEffectfulIndexAllocUnwrap
 Ancestors
   exprSimIfExpWidenedAdapter exprSimAlloc exprSimConcatResult
-  stmtSimDefs exprSimCopy
+  stmtSimDefs exprSimCopy fragGasStraight
   exprLoweringProps exprLowering context compileEnv fragGasMode
   venomState venomInst venomExecSemantics loweringPosts
   exprSimVVFrame freshWrites loweringStateRelDefs
   exprSafeOperand valueEncoding
+
+Theorem assign_effectful_alloc_world[local]:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  run_inst_seq (emitted_insts sa sm) s = OK t ==>
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def, comp_bind_def,
+       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >>
+  gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
+      step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  gvs[update_var_def]
+QED
 
 (* Allocation transports the original post; the physical retag is used only
    by the subsequent unwrap, not to change that post's semantic type. *)
@@ -13,7 +27,7 @@ Theorem assign_effectful_alloc_post[local]:
   compile_alloc_buffer sz sm = (buf,sn) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sm /\ sz < dimword (:256) /\
-  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
   sa.cs_next_var <= sm.cs_next_var /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
@@ -22,8 +36,8 @@ Theorem assign_effectful_alloc_post[local]:
     buf.buf_operand = Var x /\ not_fresh_at sn x /\
     sm.cs_next_id < sn.cs_next_id /\
     gas_marked_path F ctx func s 0 (OK u) /\
-    vv_post ctx func ce cx e es sa sn s0 ee tv vv u /\
-    stmt_state_rel ctx func ce cx ee u /\
+    vv_post H ctx func ce cx e es sa sn s0 ee tv vv u /\
+    stmt_state_rel H ctx func ce cx ee u /\
     lookup_var x u = SOME (n2w b) /\
     FLOOKUP u.vs_allocas sm.cs_next_id = SOME (b,sz) /\
     b + sz < dimword (:256) /\
@@ -34,12 +48,15 @@ Theorem assign_effectful_alloc_post[local]:
       FLOOKUP u.vs_allocas aid = SOME a) /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sn.cs_current_insts
+    u.vs_inst_idx = LENGTH sn.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
+  drule_all assign_effectful_alloc_world >> strip_tac >>
   `contract_storage t = contract_storage s /\
    contract_transient t = contract_transient s` by
     metis_tac[alloc_buffer_storage] >>
@@ -51,7 +68,7 @@ Proof
   `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
     (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
   `sm.cs_next_id <= sn.cs_next_id` by decide_tac >>
-  `vv_post ctx func ce cx e es sa sn s0 ee tv vv t` by
+  `vv_post H ctx func ce cx e es sa sn s0 ee tv vv t` by
     (irule vv_post_alloc_mono_frame >> simp[] >> qexistsl_tac [`s`,`sm`] >> simp[] >>
      rpt strip_tac >> first_x_assum irule >>
      irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
@@ -83,19 +100,19 @@ Theorem assign_effectful_alloc_unwrap_path:
   unwrap_value ce (vv_with_type pty vv) sn = (op,sk) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sm /\ sz < dimword (:256) /\
-  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
   sa.cs_next_var <= sm.cs_next_var /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  (!u. vv_post ctx func ce cx e es sa sn s0 ee tv vv u /\
+  (!u. vv_post H ctx func ce cx e es sa sn s0 ee tv vv u /\
        ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
     ?t vty a.
       evaluate_type (get_tenv cx) pty = SOME vty /\
       value_has_type vty v /\ val_wf vty v /\
       gas_marked_path F ctx func u 0 (OK t) /\
-      stmt_state_rel ctx func ce cx ee t /\
+      stmt_state_rel H ctx func ce cx ee t /\
       eval_operand op t = SOME a /\ safe_operand sk op /\
       val_in_memory vty v (w2n a) t.vs_memory /\
       (!z. not_fresh_at sn z ==> lookup_var z t = lookup_var z u) /\
@@ -103,12 +120,14 @@ Theorem assign_effectful_alloc_unwrap_path:
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame ce ee sn u ce ee t /\
       ~t.vs_halted /\ t.vs_current_bb = sk.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sk.cs_current_insts) ==>
+      t.vs_inst_idx = LENGTH sk.cs_current_insts /\
+      t.vs_accounts = u.vs_accounts /\ t.vs_transient = u.vs_transient /\
+      t.vs_requests = u.vs_requests /\ t.vs_call_ctx = u.vs_call_ctx) ==>
   ?t vty a x b.
     evaluate_type (get_tenv cx) pty = SOME vty /\
     value_has_type vty v /\ val_wf vty v /\
     gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func ce cx ee t /\
+    stmt_state_rel H ctx func ce cx ee t /\
     eval_operand op t = SOME a /\ safe_operand sk op /\
     val_in_memory vty v (w2n a) t.vs_memory /\
     buf.buf_operand = Var x /\ not_fresh_at sn x /\
@@ -123,7 +142,9 @@ Theorem assign_effectful_alloc_unwrap_path:
       FLOOKUP t.vs_allocas aid = SOME entry) /\
     alloca_frame ce ee sm s ce ee t /\
     ~t.vs_halted /\ t.vs_current_bb = sk.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sk.cs_current_insts
+    t.vs_inst_idx = LENGTH sk.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all assign_effectful_alloc_post >> strip_tac >>
