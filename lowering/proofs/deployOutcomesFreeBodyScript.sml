@@ -43,9 +43,6 @@ Proof
   impl_tac >- (simp safe_generators >>
     conj_tac >- metis_tac[SRULE [] outcomes_free_compile_expr] >>
     conj_tac >- metis_tac[SRULE [] outcomes_free_compile_get_target_ptr] >>
-    conj_tac >- (rpt gen_tac >> strip_tac >>
-      irule (List.nth (safe_generators, 23)) >> simp safe_generators >>
-      gvs[] ) >>
     rpt gen_tac >> strip_tac >>
     irule (List.nth (safe_generators, 17)) >> simp[] >>
     rpt gen_tac >> strip_tac >>

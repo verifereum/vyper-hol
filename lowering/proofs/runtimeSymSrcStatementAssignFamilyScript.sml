@@ -175,12 +175,11 @@ Theorem runtime_sym_assignment_append:
     EVERY runtime_sym_inst (state_insts s) /\
     lower_value compile_expr ce t val_e s = (op,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!base v ws es et st cap prim load store s u s'.
+  (!base v ws es et st cap prim loc s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
-    load <> CODESIZE /\ load <> CODECOPY /\
-    store <> CODESIZE /\ store <> CODECOPY /\
+    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_append ce base v ws es et st cap prim load store s = (u,s') ==>
+    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Append target val_e)
 Proof

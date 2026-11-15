@@ -127,7 +127,7 @@ Theorem outcomes_free_stmt_append:
     EVERY (\i. P i.inst_opcode) (state_insts (SND
       (compile_dynarray_append ce ptr value (word_scale loc)
         (elem_size_in_location ce loc et) et sty cap prim
-        (load_opc_for loc) (store_opc_for loc) s)))) ==>
+        loc s)))) ==>
   !lc ty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmt ce lc ty (Append target e) s)))

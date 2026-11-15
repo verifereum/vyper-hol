@@ -107,11 +107,9 @@ Theorem outcomes_free_compile_statements_mutual:
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slot_to_memory a b n loc s)))) /\
   (!ctor imm a b n k s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_imm_copy_to_memory ctor imm a b n k s)))) /\
-  (!ce a b ws sz ty sty cap prim load store s.
-    MEM load [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD; CALLDATALOAD] /\
-    MEM store [MSTORE; SSTORE; TSTORE; ISTORE; INVALID] /\
+  (!ce a b ws sz ty sty cap prim loc s.
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim load store s)))) /\
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim loc s)))) /\
   (!ce ty op es s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_save_arg ce ty op es s)))) /\
   (!topics s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
@@ -260,8 +258,7 @@ Resume outcomes_free_compile_statements_mutual[append]:
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
   irule outcomes_free_stmt_append >> simp[] >> rpt conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[])
-  >- (rpt strip_tac >> first_x_assum irule >> Cases_on `loc` >>
-      simp[compileEnvTheory.load_opc_for_def, compileEnvTheory.store_opc_for_def]) >>
+  >>
   rpt strip_tac >> simp[lower_value_def] >>
   irule outcomes_free_bind >> simp[] >> metis_tac[]
 QED
@@ -411,7 +408,7 @@ Theorem outcomes_free_compile_stmt_conditional:
   (!ctor imm loc ptr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_ptr_load ctor imm loc ptr s)))) /\
   (!a b n loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slot_to_memory a b n loc s)))) /\
   (!ctor imm a b n k s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_imm_copy_to_memory ctor imm a b n k s)))) /\
-  (!ce a b ws sz ty sty cap prim load store s. MEM load [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD; CALLDATALOAD] /\ MEM store [MSTORE; SSTORE; TSTORE; ISTORE; INVALID] /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim load store s)))) /\
+  (!ce a b ws sz ty sty cap prim loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim loc s)))) /\
   (!ce ty op es s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_save_arg ce ty op es s)))) /\
   (!topics s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_topic_ops topics s)))) /\
   (!ce ops tys buf n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_store_data ce ops tys buf n s)))) /\
@@ -454,7 +451,7 @@ Theorem outcomes_free_compile_stmts_conditional:
   (!ctor imm loc ptr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_ptr_load ctor imm loc ptr s)))) /\
   (!a b n loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slot_to_memory a b n loc s)))) /\
   (!ctor imm a b n k s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_imm_copy_to_memory ctor imm a b n k s)))) /\
-  (!ce a b ws sz ty sty cap prim load store s. MEM load [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD; CALLDATALOAD] /\ MEM store [MSTORE; SSTORE; TSTORE; ISTORE; INVALID] /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim load store s)))) /\
+  (!ce a b ws sz ty sty cap prim loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim loc s)))) /\
   (!ce ty op es s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_save_arg ce ty op es s)))) /\
   (!topics s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_topic_ops topics s)))) /\
   (!ce ops tys buf n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_log_store_data ce ops tys buf n s)))) /\

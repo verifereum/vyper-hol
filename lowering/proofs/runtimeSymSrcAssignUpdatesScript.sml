@@ -52,7 +52,7 @@ QED
    boundary (discharged by the assignment join); lower_value is C1.1.3's
    guarded callback boundary. Allocation/store are C1.1.3.2 context facts;
    compile_dynarray_append is the C1.1.3 expression dynarray primitive.
-   Opcode side conditions are retained literally for that primitive. *)
+   Its immutable-buffer operand condition comes from runtime_sym_env. *)
 Theorem runtime_sym_stmt_append:
   (!s op loc pt s'. runtime_sym_env ce /\ supported_append_target tops target /\
     ~supported_target_exists is_self_code target /\
@@ -71,12 +71,11 @@ Theorem runtime_sym_stmt_append:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_store_memory ce v d dt st s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
-  (!base v ws es et st cap prim load store s u s'.
+  (!base v ws es et st cap prim loc s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
-    load <> CODESIZE /\ load <> CODECOPY /\
-    store <> CODESIZE /\ store <> CODECOPY /\
+    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_append ce base v ws es et st cap prim load store s = (u,s') ==>
+    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Append target val_e)
 Proof
@@ -99,12 +98,10 @@ Proof
     (case result2 of SOME (ValPT (ArrayT t _)) => t | _ => BaseT (UintT 256))` >>
   gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
-  >- (asm "append" (drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-      Cases_on `result1` >> simp[load_opc_for_def, store_opc_for_def] >> Cases_on `x` >>
-      simp[load_opc_for_def, store_opc_for_def]) >>
+  >- (asm "append" (drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      fs[runtime_sym_env_def]) >>
   asm "alloc" drule_all >> strip_tac >>
   asm "store" drule_all >> strip_tac >>
-  asm "append" (drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  Cases_on `result1` >> simp[load_opc_for_def, store_opc_for_def] >> Cases_on `x` >>
-  simp[load_opc_for_def, store_opc_for_def]
+  asm "append" (drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  fs[runtime_sym_env_def]
 QED

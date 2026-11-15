@@ -67,12 +67,11 @@ Theorem runtime_sym_stmt:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!ce base v ws es et st cap prim load store s u s'.
+  (!ce base v ws es et st cap prim loc s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
-    load <> CODESIZE /\ load <> CODECOPY /\
-    store <> CODESIZE /\ store <> CODECOPY /\
+    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_append ce base v ws es et st cap prim load store s = (u,s') ==>
+    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
   (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
     EVERY runtime_sym_inst (state_insts s) /\
@@ -160,12 +159,11 @@ Theorem runtime_sym_stmts:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!ce base v ws es et st cap prim load store s u s'.
+  (!ce base v ws es et st cap prim loc s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
-    load <> CODESIZE /\ load <> CODECOPY /\
-    store <> CODESIZE /\ store <> CODECOPY /\
+    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_append ce base v ws es et st cap prim load store s = (u,s') ==>
+    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
   (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
     EVERY runtime_sym_inst (state_insts s) /\

@@ -354,8 +354,8 @@ Theorem deploy_blocks_frame_stmt_cond:
     deploy_blocks_frame (compile_external_return rv p r i n nr k t v)) /\
   (!c b t v s. deploy_blocks_frame (compile_store_memory_typed c b t v s)) /\
   (!c v b t s. deploy_blocks_frame (compile_store_memory c v b t s)) /\
-  (!c a b w n t s cap p load store.
-    deploy_blocks_frame (compile_dynarray_append c a b w n t s cap p load store)) /\
+  (!c a b w n t s cap p loc.
+    deploy_blocks_frame (compile_dynarray_append c a b w n t s cap p loc)) /\
   (!c ty stage ts op. deploy_blocks_frame (compile_tuple_unpack c ty stage ts op)) /\
   (!ctor i l v. deploy_blocks_frame (compile_ptr_load ctor i l v)) /\
   (!c a b n l slot t s.

@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeBodyGenerators
 Ancestors
-  deployOutcomesFreeLowering exprLowering context
+  deployOutcomesFreeLowering deployOutcomesFreeGenerators exprLowering context
 
 Theorem outcomes_free_snapshot:
   (!ce v st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -25,20 +25,23 @@ Proof
 QED
 
 Theorem outcomes_free_dynarray_append:
-  P load /\ P store /\ P LT /\ P ASSERT /\ P ADD /\ P MUL /\
+  P LT /\ P ASSERT /\ P ADD /\ P MUL /\
+  P ILOAD /\ P DLOAD /\ P MLOAD /\ P SLOAD /\ P TLOAD /\ P CALLDATALOAD /\
+  P ISTORE /\ P INVALID /\ P MSTORE /\ P SSTORE /\ P TSTORE /\
   (!ce a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_store_memory ce a b ty sty st)))) /\
   (!ce src slot ty tr st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_store_slots ce src slot ty tr st)))) ==>
-  !ce a b ws sz ty sty cap prim s.
+  !ce a b ws sz ty sty cap prim loc s.
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim load store s)))
+      (state_insts (SND (compile_dynarray_append ce a b ws sz ty sty cap prim loc s)))
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >> simp[compile_dynarray_append_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return]),
+  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops, outcomes_free_return,
+    outcomes_free_ptr_load, outcomes_free_ptr_store, outcomes_free_imm_store_words]),
     gen_tac, strip_tac, irule outcomes_free_bind,
     irule outcomes_free_ignore_bind, conj_tac, IF_CASES_TAC,
     first_assum (fn th => irule th >> simp[] >> NO_TAC)])

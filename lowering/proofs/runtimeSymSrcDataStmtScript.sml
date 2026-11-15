@@ -298,8 +298,8 @@ Theorem runtime_data_frame_compile_stmt_conditional:
     runtime_data_frame (compile_external_return rv p r i n nr k t v)) /\
   (!c b t v s. runtime_data_frame (compile_store_memory_typed c b t v s)) /\
   (!c v b t s. runtime_data_frame (compile_store_memory c v b t s)) /\
-  (!c a b w n t s cap p load store.
-    runtime_data_frame (compile_dynarray_append c a b w n t s cap p load store)) /\
+  (!c a b w n t s cap p loc.
+    runtime_data_frame (compile_dynarray_append c a b w n t s cap p loc)) /\
   (!c ty stage ts op. runtime_data_frame (compile_tuple_unpack c ty stage ts op)) /\
   (!ctor i l v. runtime_data_frame (compile_ptr_load ctor i l v)) /\
   (!c a b n l slot t s.

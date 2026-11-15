@@ -1,6 +1,8 @@
 Theory runtimeSymSrcDataExprNonCallback
 Ancestors
-  runtimeSymSrcDataFrame exprLowering compileEnv
+  runtimeSymSrcDataFrame runtimeSymSrcDataContext exprLowering compileEnv
+
+val _ = temp_delsimps ["runtime_data_frame_cond"];
 
 fun frame_tac g = (simp[comp_ignore_bind_def] >> rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
   >- (simp[] >> frame_tac) >> gen_tac >> BETA_TAC) >> simp[]) g;
@@ -234,7 +236,7 @@ Theorem runtime_data_frame_dynarray_append:
   (!v dst dt st. runtime_data_frame (compile_store_memory cenv v dst dt st)) /\
   (!src dst n sl dl imm. runtime_data_frame (compile_word_copy_loop src dst n sl dl imm)) /\
   (!src slot ty trans. runtime_data_frame (compile_store_slots cenv src slot ty trans)) ==>
-  runtime_data_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim ld sd)
+  runtime_data_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim loc)
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
   frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)

@@ -8,7 +8,7 @@ Ancestors
    - TupleAssign: supported_target-selected compile_get_target_ptr contract.
    - AugAssign: supported_target/supported_aug_target-selected pointer contract.
      These target interfaces belong to C1.1.3; expression contracts to C1.1.4.
-   - Append: the literal nonlabel/opcode-guarded compile_dynarray_append
+   - Append: the literal nonlabel/immutable-buffer-guarded compile_dynarray_append
      contract below (C1.1.3). All unwrap, snapshot, binop, allocation and
      memory-store premises are discharged by their published boundaries.
    No whole-statement callback assumption is used. *)
@@ -76,12 +76,11 @@ Theorem runtime_sym_assignment_append_closed:
     compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!t. runtime_sym_expr_contract tops compile_expr ce t val_e) /\
-  (!base v ws es et st cap prim load store s u s'.
+  (!base v ws es et st cap prim loc s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
-    load <> CODESIZE /\ load <> CODECOPY /\
-    store <> CODESIZE /\ store <> CODECOPY /\
+    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_append ce base v ws es et st cap prim load store s = (u,s') ==>
+    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Append target val_e)
 Proof

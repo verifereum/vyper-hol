@@ -1,7 +1,9 @@
 Theory deploySymSrcFrameExprHelpers
 Ancestors
-  deploySymSrcBlockFrame exprLowering compileEnv
+  deploySymSrcBlockFrame deploySymSrcFrameContext exprLowering compileEnv
   targetPlaceLive targetPlaceSimCasesBase
+
+val _ = temp_delsimps ["deploy_blocks_frame_cond"];
 
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];
@@ -234,7 +236,7 @@ Theorem deploy_blocks_frame_dynarray_append:
   (!v dst dt st. deploy_blocks_frame (compile_store_memory cenv v dst dt st)) /\
   (!src dst n sl dl imm. deploy_blocks_frame (compile_word_copy_loop src dst n sl dl imm)) /\
   (!src slot ty trans. deploy_blocks_frame (compile_store_slots cenv src slot ty trans)) ==>
-  deploy_blocks_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim ld sd)
+  deploy_blocks_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim loc)
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
   frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
