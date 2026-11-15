@@ -1,6 +1,6 @@
 Theory assignEffectfulIndexSnapshotRun
 Ancestors
-  assignEffectfulIndexPhysical assignEffectfulIndexAllocUnwrap bodyMemSnapshotSourceLocation
+  assignEffectfulIndexPhysical assignEffectfulIndexAllocUnwrap
   assignEffectfulIndexWord assignEffectfulIndexBytesCopy assignEffectfulIndexMemoryCopy
   exprSimMemoryRead exprSimMemoryPath exprSimUnwrapProps exprSimCopy
   stmtSimDefs exprSimProps freshWrites venomState loweringPosts
@@ -12,7 +12,7 @@ Ancestors
   assignEffectfulIndexCodeCompositeFrame assignEffectfulIndexSnapshotSeparation
   immutableDeployPhysicalSource exprSimIfExpWidenedPhysicalType
   aggregateEvaluatedLayout exprSimIfExpWidenedCounted exprReasonOperand exprOperandVar exprSafeOperand exprSimHypsDefs
-  annassignRelayoutSource exprSimHyps
+  annassignRelayoutSource exprSimHyps exprLoweringProps vyperStorageFootprint
 
 (* Memory unwrap does not write memory.  Unlike the ordinary read boundary,
    this retains entry-relative frames even for allocations made after the
@@ -21,17 +21,19 @@ Theorem snapshot_memory_unwrap_frame[local]:
   unwrap_value ce (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = LocMemory /\ fn_has_code sm sb func /\
   local_ptrs_reserved ce sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func ce cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   read_result cx tv ee = (INL v,ee) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_memory = s.vs_memory /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `(is_word_type t ==> t = post_value_type ce e) /\
@@ -41,7 +43,7 @@ Proof
        (is_word_type (post_value_type ce e) ==>
          mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tvt v))` by
     (gvs[vv_post_def, vv_holds_def, is_bytestring_word_type] >> metis_tac[]) >>
-  `vv_post ctx func ce cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
+  `vv_post H ctx func ce cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
     metis_tac[vv_post_read_result] >>
   Cases_on `is_word_type t`
   >- (gvs[unwrap_memory_compile] >>
@@ -58,6 +60,9 @@ Proof
       `alloca_frame ce ee sm s ce ee u` by
         (simp[alloca_frame_def] >> rpt strip_tac >>
          drule_all copy_buffer_local_region_frame >> metis_tac[]) >>
+      `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+       u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
+        simp[Abbr `u`, update_var_def] >>
       qexists_tac `u` >> simp[] >> conj_tac
       >- (drule_all emit_mload_marked_path >> simp[Abbr `u`]) >>
       conj_tac
@@ -66,7 +71,7 @@ Proof
           conj_tac
           >- (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
               irule stmt_state_rel_update_var >>
-              `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+              `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
               simp[] >> irule local_ptrs_reserved_fresh >>
               qexists_tac `sm` >> simp[]) >>
           qexistsl_tac [`p`,`s`,`sm`,`post_value_type ce e`] >> simp[]) >>
@@ -81,22 +86,24 @@ Theorem snapshot_storage_word_frame[local]:
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   is_word_type t /\ fn_has_code sm sb func /\
   local_ptrs_reserved ce sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func ce cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_memory = s.vs_memory /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `t = post_value_type ce e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
      storage_holds cx (p.ptr_location = LocTransient) (post_value_type ce e)
-       (Value v) w ee s /\ stmt_state_rel ctx func ce cx ee s` by
+       (Value v) w ee s /\ stmt_state_rel H ctx func ce cx ee s` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   qabbrev_tac `ld = if p.ptr_location = LocTransient then tload w s else sload w s` >>
@@ -125,10 +132,12 @@ Proof
     (simp[Abbr `u`, lookup_var_def, update_var_def, not_fresh_at_def] >>
      rpt strip_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `stmt_state_rel ctx func ce cx ee u` by
+  `stmt_state_rel H ctx func ce cx ee u` by
     (simp[Abbr `u`, stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >>
      simp[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sm` >> simp[]) >>
-  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     simp[Abbr `u`, update_var_def] >>
   `alloca_frame ce ee sm s ce ee u` by
     (simp[alloca_frame_def] >> rpt strip_tac >>
@@ -143,7 +152,7 @@ Proof
 QED
 
 (* All representation cases retain the frame at the very endpoint carrying
-   expr_post; ownership remains relative to the original expression origin. *)
+   expr_post H; ownership remains relative to the original expression origin. *)
 Theorem snapshot_unwrap_frame[local]:
   (post_value_type ce e <> expr_type e ==>
     ((?t a. vv = StackValue t a) \/
@@ -159,17 +168,19 @@ Theorem snapshot_unwrap_frame[local]:
     ~is_word_type (post_value_type ce e) ==>
     type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
     type_memory_size tvt < 2**64) /\
-  vv_post ctx func ce cx e es sa sm s0 ee (Value v) vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee (Value v) vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
       FLOOKUP u.vs_allocas aid = SOME entry) /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> Cases_on `vv`
   >- (gvs[unwrap_value_def, comp_return_def] >>
@@ -254,14 +265,14 @@ Theorem snapshot_physical_unwrap_frame[local]:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   read_result cx tv ee = (INL v,ee) /\
-  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u stv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv /\
     value_has_type stv v /\ val_wf stv v /\
     type_memory_bytes ce (lowered_value_type ce e) = type_memory_size stv /\
     gas_marked_path F ctx func s 0 (OK u) /\
-    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
     safe_operand sb op /\
     (is_word_type (lowered_value_type ce e) ==>
       eval_operand op u = SOME (typed_val_to_w256 stv v)) /\
@@ -272,7 +283,9 @@ Theorem snapshot_physical_unwrap_frame[local]:
       FLOOKUP u.vs_allocas aid = SOME entry) /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all snapshot_physical_unwrap_path >> strip_tac >>
@@ -294,10 +307,10 @@ Proof
     (strip_tac >> irule compile_changed_physical_unwrap_shape >>
      goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
      metis_tac[post_value_type_word, post_value_type_nonword]) >>
-  `vv_post ctx func ce cx e es sa sm s0 ee (Value v) vv s` by
+  `vv_post H ctx func ce cx e es sa sm s0 ee (Value v) vv s` by
     metis_tac[vv_post_read_result] >>
   drule_all snapshot_unwrap_frame >> strip_tac >>
-  rename1 `expr_post ctx func ce cx e es sa sb s0 ee v op z` >>
+  rename1 `expr_post H ctx func ce cx e es sa sb s0 ee v op z` >>
   qexistsl_tac [`z`,`stv`] >> simp[] >> conj_tac
   >- (strip_tac >>
       `post_value_type ce e = lowered_value_type ce e` by
@@ -311,7 +324,7 @@ Theorem assign_effectful_snapshot_path:
   eval_expr cx e es = (INL pv,ee) /\ read_result cx pv ee = (INL v,ee) /\
   compile_expr ce (expr_type e) e sa = (vv0,sm) /\
   compile_snapshot_vv ce T (vv_with_type (lowered_value_type ce e) vv0) sm = (snap,sb) /\
-  vv_post ctx func ce cx e es sa sm s0 ee pv vv0 s /\
+  vv_post H ctx func ce cx e es sa sm s0 ee pv vv0 s /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
@@ -323,7 +336,7 @@ Theorem assign_effectful_snapshot_path:
   ?u tv w. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
     value_has_type tv v /\ val_wf tv v /\
     gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func ce cx ee u /\
+    stmt_state_rel H ctx func ce cx ee u /\
     eval_operand (vv_operand snap) u = SOME w /\
     (!x. vv_operand snap = Var x ==> not_fresh_at sb x) /\
     (!lbl. vv_operand snap <> Label lbl) /\
@@ -340,7 +353,9 @@ Theorem assign_effectful_snapshot_path:
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     alloca_frame ce ee sm s ce ee u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `(do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee)` by
@@ -391,27 +406,35 @@ Proof
               cs_extends_trans] >>
   `local_ptrs_reserved ce sn /\ local_ptrs_reserved ce sk` by
     metis_tac[local_ptrs_reserved_next_var, ci_mono_def, arithmeticTheory.LESS_EQ_TRANS] >>
-  `!u. vv_post ctx func ce cx e es sa sn s0 ee pv vv0 u /\
+  `!u. vv_post H ctx func ce cx e es sa sn s0 ee pv vv0 u /\
        ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
     ?t vty a. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME vty /\
       value_has_type vty v /\ val_wf vty v /\
       gas_marked_path F ctx func u 0 (OK t) /\
-      stmt_state_rel ctx func ce cx ee t /\ eval_operand op t = SOME a /\
+      stmt_state_rel H ctx func ce cx ee t /\ eval_operand op t = SOME a /\
       safe_operand sk op /\ val_in_memory vty v (w2n a) t.vs_memory /\
       (!z. not_fresh_at sn z ==> lookup_var z t = lookup_var z u) /\
       (!aid entry. FLOOKUP u.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame ce ee sn u ce ee t /\
       ~t.vs_halted /\ t.vs_current_bb = sk.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sk.cs_current_insts` by
+      t.vs_inst_idx = LENGTH sk.cs_current_insts /\
+      t.vs_accounts = u.vs_accounts /\ t.vs_transient = u.vs_transient /\
+      t.vs_requests = u.vs_requests /\ t.vs_call_ctx = u.vs_call_ctx` by
     (rpt strip_tac >>
      `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
        (fs[ci_mono_def] >> decide_tac) >>
      `!x. vv_operand vv0 = Var x ==> not_fresh_at sn x` by
        metis_tac[not_fresh_at_mono, ci_mono_def] >>
-     drule_all snapshot_physical_unwrap_frame >> strip_tac >>
-     gvs[] >> metis_tac[expr_post_def]) >>
+     drule_all snapshot_physical_unwrap_frame >>
+     disch_then (qx_choosel_then [`phys`, `vty`] strip_assume_tac) >>
+     `vty = stv` by gvs[] >>
+     qpat_x_assum `vty = stv` SUBST_ALL_TAC >>
+     `?a. eval_operand op phys = SOME a /\
+       val_in_memory stv v (w2n a) phys.vs_memory` by metis_tac[] >>
+     `stmt_state_rel H ctx func ce cx ee phys` by fs[expr_post_def] >>
+     qexistsl_tac [`phys`, `stv`, `a`] >> simp[]) >>
   drule_all assign_effectful_alloc_unwrap_path >> strip_tac >>
   `vty = stv` by gvs[] >> gvs[] >>
   `eval_operand (Var x) t = SOME (n2w b)` by simp[eval_operand_def] >>
@@ -440,7 +463,7 @@ Proof
   Cases_on `is_bytestring_type (lowered_value_type ce e)`
   >- (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
         assign_effectful_bytes_copy_path >>
-      disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `eval_operand op _ = _`)) >>
       simp[] >>
       disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
@@ -457,7 +480,7 @@ Proof
       suspend "copy_endpoint") >>
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
     assign_effectful_memory_copy_path >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >> simp[] >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -491,3 +514,58 @@ Resume assign_effectful_snapshot_path[copy_endpoint]:
 QED
 
 Finalise assign_effectful_snapshot_path
+
+Theorem assign_effectful_snapshot_path_horizons:
+  expr_body_pre ce cx env e es /\
+  eval_expr cx e es = (INL pv,ee) /\ read_result cx pv ee = (INL v,ee) /\
+  compile_expr ce (expr_type e) e sa = (vv0,sm) /\
+  compile_snapshot_vv ce T (vv_with_type (lowered_value_type ce e) vv0) sm = (snap,sb) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func ce cx e es sa sm s0 ee pv vv0 s) /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv0 = Var x ==> not_fresh_at sm x) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u tv w. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+    value_has_type tv v /\ val_wf tv v /\
+    gas_marked_path F ctx func s 0 (OK u) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee u) /\
+    eval_operand (vv_operand snap) u = SOME w /\
+    (!x. vv_operand snap = Var x ==> not_fresh_at sb x) /\
+    (!lbl. vv_operand snap <> Label lbl) /\
+    (if is_word_type (lowered_value_type ce e) then
+       vv_location snap = NONE /\ w = typed_val_to_w256 tv v
+     else vv_location snap = SOME LocMemory /\
+       val_in_memory tv v (w2n w) u.vs_memory /\
+       ?aid. sm.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+         FLOOKUP u.vs_allocas aid =
+           SOME (w2n w,type_memory_bytes ce (lowered_value_type ce e)) /\
+         (!n b sz. local_region ce ee.scopes u n b sz ==>
+           w2n w + type_memory_bytes ce (lowered_value_type ce e) <= b \/
+           b+sz <= w2n w)) /\
+    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+    alloca_frame ce ee sm s ce ee u /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H0` assume_tac) >>
+  `vv_post H0 ctx func ce cx e es sa sm s0 ee pv vv0 s` by metis_tac[] >>
+  drule_all assign_effectful_snapshot_path >> strip_tac >>
+  qexistsl_tac [`u`, `tv`, `w`] >> simp[] >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func ce cx ee s` by
+    (fs[vv_post_def] >> metis_tac[]) >>
+  irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    stmt_state_rel_fields_transport) >>
+  simp[] >> metis_tac[]
+QED
