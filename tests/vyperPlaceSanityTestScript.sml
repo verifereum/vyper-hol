@@ -353,11 +353,14 @@ Theorem eval_target_place_nested_mapping_probe:
       (Literal (BaseT (UintT 256)) (IntL 2))) st =
     (INL (StoragePlace F
       (hashmap_slot (hashmap_slot slot (encode_hashmap_key (BaseT (UintT 256)) (IntV 1)))
-        (encode_hashmap_key (BaseT (UintT 256)) (IntV 2))) (BaseTV (UintT 256))), st)
+        (encode_hashmap_key (BaseT (UintT 256)) (IntV 2))) (BaseTV (UintT 256))),
+     st with storage_trace := st.storage_trace ++
+       [StorageRoot F (w2n (hashmap_slot (hashmap_slot slot (encode_hashmap_key (BaseT (UintT 256)) (IntV 1)))
+        (encode_hashmap_key (BaseT (UintT 256)) (IntV 2)))) (BaseTV (UintT 256))])
 Proof
   strip_tac >> simp[evaluate_def, bind_def, return_def, evaluate_literal_def,
     read_result_def, extend_place_nested_mapping,
-    extend_place_def, lift_option_type_def, evaluate_type_def, get_place_def]
+    extend_place_def, record_storage_event_def, ignore_bind_def, lift_option_type_def, evaluate_type_def, get_place_def]
 QED
 
 Theorem encode_hashmap_key_bytes4_left_aligned:
