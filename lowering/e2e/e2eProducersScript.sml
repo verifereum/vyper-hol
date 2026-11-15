@@ -14,11 +14,18 @@
  *)
 Theory e2eProducers
 Ancestors
-  compilePhasesProps e2eDefs o1PipelineCorrect
+  compilePhasesProps e2eDefs o1PipelineCorrect o1PassContract lowerDloadDefs
   compileVyper codegen vyperContext finite_map
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
+
+Theorem gas_variant_code_layout_valid:
+  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
+Proof
+  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
+  fs[code_layout_valid_def]
+QED
 
 (* The program reads its own code: self.code occurs in a function body or a
    default argument (the only places code is generated from), as
