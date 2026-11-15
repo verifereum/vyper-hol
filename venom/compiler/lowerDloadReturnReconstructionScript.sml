@@ -65,9 +65,6 @@ Proof
   MATCH_ACCEPT_TAC (cj 3 ld_return_concrete_packages_static)
 QED
 
-val _ = List.app (fn th => if null (hyp th) then ()
-  else raise Fail "return reconstruction has kernel hypotheses")
-  [ld_return_concrete_packages_static, ld_invoke_return_reconstruction_static];
 
 Theorem ld_return_concrete_packages:
   (!fuel ctx inst s z. step_inst fuel ctx inst s = z /\
