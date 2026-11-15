@@ -441,6 +441,13 @@ QED
 
 Finalise target_call_free_evaluate
 
+Theorem target_call_free_exprs_frame:
+  EVERY (expr_mutability_ok mods View) es /\ int_calls_exprs es = [] ==>
+  state_rel_frame machine_frame (eval_exprs cx es)
+Proof
+  metis_tac[target_call_free_evaluate |> cj 6]
+QED
+
 Theorem target_call_free_stmts_frame:
   stmts_mutability_ok mods View body /\ int_calls_stmts body = [] ==>
   state_rel_frame machine_frame (eval_stmts cx body)

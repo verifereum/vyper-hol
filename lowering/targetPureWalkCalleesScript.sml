@@ -3,7 +3,7 @@ Theory targetPureWalkCallees
 Ancestors
   bodyIntCallSource bodyExprPreFacts supportedNames compileVyper loweringShapeProps
   vyperReadOnlySyntax vyperTypeCallGraph supportedStmtTraverse supportedExprTraverse
-  supportedProgram exprLowering compileEnv vyperTypeContract list
+  supportedProgram supportedExprs exprLowering compileEnv vyperTypeContract list
   exprOracleStorageInterfaces
 
 val _ = Parse.hide "body";
@@ -82,7 +82,8 @@ Theorem target_walk_callee_syntax:
   ~call_can_mutate cenv (IntCall (NONE,name)) /\
   lookup_callable_function cx.in_deploy name (cx_tops cx) =
     SOME (mut,nr,args,dflts,ret,body) ==>
-  dflts = [] /\ (mut = View \/ mut = Pure) /\
+  EVERY (expr_mutability_ok [(NONE,cx_tops cx)] View) dflts /\
+  int_calls_exprs dflts = [] /\ (mut = View \/ mut = Pure) /\
   stmts_mutability_ok [(NONE,cx_tops cx)] View body /\
   int_calls_stmts body = []
 Proof
@@ -92,8 +93,14 @@ Proof
   drule_all target_walk_mutability_lookup >> strip_tac >>
   `mut = View \/ mut = Pure` by
     (Cases_on `mut` >> gvs[call_can_mutate_def, nsid_to_string_def]) >>
-  `function_mutability_ok [(NONE,cx_tops cx)] Internal mut nr [] body` by
+  `function_mutability_ok [(NONE,cx_tops cx)] Internal mut nr dflts body` by
     metis_tac[] >>
+  `EVERY (expr_mutability_ok [(NONE,cx_tops cx)] View) dflts` by
+    (fs[function_mutability_ok_def, EVERY_MEM] >>
+     metis_tac[expr_target_mutability_view]) >>
+  `int_calls_exprs dflts = []` by
+    (fs[supported_pure_exprs_every, int_calls_exprs_empty_every, EVERY_MEM] >>
+     metis_tac[supported_pure_int_calls]) >>
   gvs[function_mutability_ok_def] >>
   metis_tac[stmt_mutability_view, target_walk_stmts_no_calls,
             supported_internal_body_contract]

@@ -45,6 +45,10 @@ Proof
   gvs[occurs_abi_decode_target_def, EXISTS_MEM] >>
   rename1 `declaration_abi_decode_target target decl` >> Cases_on `decl` >>
   gvs[declaration_abi_decode_target_def]
+  >~ [`supported_exprs_exists _ defaults`]
+  >- (drule_all supported_program_defaults >>
+      simp[EVERY_MEM, supported_default_expression_def,
+           supported_exprs_exists_every, EXISTS_MEM] >> metis_tac[])
   >~ [`FunctionDecl`]
   >- (rename1 `MEM (FunctionDecl fvis _ _ _ _ fargs _ _ fbody) tops` >>
       `supported_function_body tops fvis fargs fbody` by
