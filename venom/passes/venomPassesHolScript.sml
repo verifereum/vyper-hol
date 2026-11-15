@@ -50,6 +50,7 @@ Ancestors
   (* dead function traversal *)
   dftCorrectnessFinal
   dftGasOracleKeyReplay
+  dftGasPrefixProvider
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
