@@ -3,7 +3,7 @@ Ancestors
   o1CodeEndCfgBoundary o1ContractSimplifyCfg
   o1ContractMakeSsa o1ContractMakeSsaSrc makeSsaCurrentLockstep
   o1FrameLockstep lowerDloadPublicTrace memSafeRun
-  o1SymStaticMakeSSA o1SymStaticSimplifyCFG unitMemInv ctxLookupAgreeHelpers
+  o1SymStaticMakeSSA o1SymStaticSimplifyCFG o1SafeUpto unitMemInv ctxLookupAgreeHelpers
   o1ContractSimplifyCfgSrcFrame o1PassLift simplifyCfgControl
   simplifyCfgCorrectness simplifyCfgStaticInterface simplifyCfgProof
   simplifyCfgDefs venomInst venomWf list rich_list o1PassContract
@@ -194,7 +194,7 @@ Proof
   `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
     s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
     pre.cu_context vs` by
-    (fs[mem_inv_raw_reachable] >> metis_tac[ld_raw_reachable_code_data]) >>
+    (fs[mem_inv_raw_reachable] >> metis_tac[raw_reachable_code_data]) >>
   `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
     s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
     (prune_unit_fcg_unreachable pre fcg).cu_context vs` by
@@ -207,7 +207,7 @@ Proof
   `mem_inv (\ctx fn inst s. inst_dload_in_section inst s) C1 vs` by
     metis_tac[code_end_make_ssa_section] >>
   conj_tac
-  >- (fs[mem_inv_raw_reachable] >> metis_tac[ld_raw_reachable_code_data]) >>
+  >- (fs[mem_inv_raw_reachable] >> metis_tac[raw_reachable_code_data]) >>
   `!f i. MEM f (prune_unit_fcg_unreachable pre fcg).cu_context.ctx_functions /\
          MEM i (fn_insts f) ==> ~MEM (Label "code_end") i.inst_operands` by
     (mp_tac (Q.INST [`unit` |-> `pre`, `P` |-> `\f. !i.
