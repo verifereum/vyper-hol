@@ -91,8 +91,8 @@ Resume compile_abi_encode_word_vv_sim[compose]:
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> conj_tac
-  >- (rpt gen_tac >> Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
+  >- (rpt gen_tac >> Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def, halt_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def, halt_exit_def]) >>
   conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `?H. valid_horizon _ _ _ _` (qx_choose_then `H0` assume_tac) >>
