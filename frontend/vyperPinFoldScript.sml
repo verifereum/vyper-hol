@@ -79,7 +79,7 @@ Definition pin_fold_builtin_def:
   pin_fold_builtin ty b es = Builtin ty b es
 End
 
-Triviality pin_base_type_case:
+Theorem pin_base_type_case:
   (?bt. ty = BaseT bt) = (case ty of BaseT _ => T | _ => F)
 Proof
   Cases_on `ty` >> simp[]
