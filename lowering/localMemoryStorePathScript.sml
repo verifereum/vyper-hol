@@ -157,6 +157,9 @@ Proof
         stmt_state_rel H' ctx func cenv cx es1 t` by
     (gen_tac >> strip_tac >>
      qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+     `(ptrDiscipline$ctx_has_dalloca ctx \/
+       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+       LENGTH s.vs_memory <= LENGTH t.vs_memory` by simp[] >>
      drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `stmt_state_rel H ctx func cenv cx es1 t` by (first_assum drule >> simp[]) >>
   `t.vs_allocas = s.vs_allocas` by
@@ -199,6 +202,9 @@ Proof
         (rpt strip_tac >>
          qpat_x_assum `!a len. a + len <= w2n w \/ type_memory_size _ + w2n w <= a ==> _`
            irule >> decide_tac) >>
+      `(ptrDiscipline$ctx_has_dalloca ctx \/
+        EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+        LENGTH s.vs_memory <= LENGTH t.vs_memory` by simp[] >>
       drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
