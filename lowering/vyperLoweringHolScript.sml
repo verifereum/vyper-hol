@@ -5,6 +5,7 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
+  bodyFullExtCallRequestOperands
   bodyMemStorageCopyStage
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
