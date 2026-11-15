@@ -942,7 +942,8 @@ Theorem concat_args_sim:
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\H rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r)
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit H cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -1139,7 +1140,7 @@ QED
 Resume concat_args_sim[head_exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
   `expr_exit res r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
        (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
      simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>
@@ -1150,10 +1151,9 @@ Resume concat_args_sim[head_exit]:
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   (* Rewrite only the goal: gvs[] over this context was too slow for one
      step. *)
-  disj2_tac >> simp[] >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
-  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+  disj2_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _ /\ _`
+    drule >> simp[]
 QED
 
 Resume concat_args_sim[head_exempt]:
@@ -1325,7 +1325,7 @@ QED
 Resume concat_args_sim[tail_exit]:
   qpat_x_assum `(\rr ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
   `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
        (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac) >>
      simp[]) >>
   qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
