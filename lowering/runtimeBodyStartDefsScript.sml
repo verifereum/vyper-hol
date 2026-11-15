@@ -30,3 +30,32 @@ Definition runtime_selected_body_start_def:
       new_block lbl opened = (opened.cs_current_bb,checks) /\
       compile_entry_checks mincd pay checks = ((),st)
 End
+
+Definition runtime_fallback_body_start_def:
+  runtime_fallback_body_start tops rpolicy
+      (lbl,ce,args,mincd,pay,nr,key,ut,iv,body,rt) st <=>
+    ?exts ints fb ctor fallback_lbl label_st dispatch_st opened checks.
+      classify_functions tops = (exts,ints,SOME fb,ctor) /\
+      set_fallback_package_target rpolicy.rpol_target
+        (package_fallback_fn tops T (K global_nonreentrant_slot) (SOME fb)) =
+        SOME (ce,pay,nr,key,ut,iv,body,rt) /\
+      args = [] /\ mincd = 4 /\
+      fresh_label "fallback" (initial_compile_state "__entry") =
+        (fallback_lbl,label_st) /\
+      compile_selector_dispatch_linear
+        (MAP (\(sel,lbl,z). (sel,lbl))
+           (build_selectors (type_env tops) exts))
+        fallback_lbl label_st = ((),dispatch_st) /\
+      compile_external_fn_bodies
+        (MAP (set_external_package_target rpolicy.rpol_target o
+              package_external_fn tops T (K global_nonreentrant_slot)) exts)
+        dispatch_st = ((),opened) /\
+      new_block fallback_lbl opened = (opened.cs_current_bb,checks) /\
+      compile_entry_checks mincd pay checks = ((),st)
+End
+
+Definition runtime_entry_body_start_def:
+  runtime_entry_body_start tops rpolicy pkg st <=>
+    runtime_selected_body_start tops rpolicy pkg st \/
+    runtime_fallback_body_start tops rpolicy pkg st
+End

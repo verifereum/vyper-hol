@@ -28,13 +28,7 @@ Ancestors
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
-
-Theorem vars_pc_only_gas_readings:
-  !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
-Proof
-  rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
-QED
+  bodyPtrDefs moduleLowering venomWf
 
 Theorem prefix_mem_then[local]:
   gas_path_mem ctx fn s 0 (OK u) /\ gas_path_mem ctx fn u 0 (OK t) ==>

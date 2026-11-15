@@ -50,6 +50,7 @@ Ancestors
      arguments, nonreentrancy, byte-builtin and concat memory, conversion from
      bytes, widened returns, body memory *)
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
+  fallbackEntryEndpoint
   allocaHistoryFragment ctorRegisterArgs
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
