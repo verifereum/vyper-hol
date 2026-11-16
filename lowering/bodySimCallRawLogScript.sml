@@ -417,12 +417,17 @@ Proof
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   BETA_TAC >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  match_mp_tac (Q.INST [`data` |-> `data`, `cap` |-> `cap`,
+  qmatch_goalsub_abbrev_tac `expr_post _ ctx func cenv cx call es sa sb s0` >>
+  mp_tac (Q.INST [`data` |-> `data`, `cap` |-> `cap`,
+    `e` |-> `call`, `es2` |-> `mid2 with gas_obs := []`, `s` |-> `td`,
     `es1` |-> `mid with gas_obs := []`, `s1` |-> `sm`, `sd` |-> `sn`,
     `t0` |-> `t`, `H0` |-> `H2`, `ptr_op` |-> `data_op`,
     `len_op` |-> `len_op`, `sl` |-> `sl`, `data_op` |-> `ptr_op`,
     `sm` |-> `sp`, `ops` |-> `ops`, `vs` |-> `vs`, `u` |-> `()`]
-    (SPEC_ALL raw_log_dynamic_tail_summary)) >> simp[]
+    (SPEC_ALL raw_log_dynamic_tail_summary)) >>
+  (impl_tac >- simp[Abbr `call`]) >> strip_tac >> fs[Abbr `call`] >>
+  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+  simp[gas_summary_at_def] >> metis_tac[]
 QED
 
 Resume raw_log_dynamic_frag[static]:
@@ -862,15 +867,20 @@ Proof
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   BETA_TAC >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  match_mp_tac (Q.INST [`data` |-> `data`,
+  qmatch_goalsub_abbrev_tac `expr_post _ ctx func cenv cx call es sa sb s0` >>
+  mp_tac (Q.INST [`data` |-> `data`,
+    `e` |-> `call`, `es2` |-> `mid2 with gas_obs := []`, `s` |-> `td`,
     `es1` |-> `mid with gas_obs := []`, `s1` |-> `sk`, `sd` |-> `sn`,
     `t0` |-> `ta`, `H0` |-> `H2`, `val_op` |-> `data_op`,
     `ptr_op` |-> `Var p`, `sm` |-> `sp`, `u` |-> `()`,
     `b` |-> `w2n (w:bytes32)`, `inst` |->
       `mk_inst sm.cs_next_id ALLOCA [Lit 32w]
         [STRING #"%" (toString sm.cs_next_var)]`]
-    raw_log_fixed_tail_summary) >> Cases_on `u` >> fs[] >>
-  first_assum ACCEPT_TAC
+    raw_log_fixed_tail_summary) >>
+  (impl_tac >- (Cases_on `u` >> fs[Abbr `call`] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> fs[Abbr `call`] >>
+  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+  simp[gas_summary_at_def] >> metis_tac[]
 QED
 
 Resume raw_log_fixed32_body_frag[static]:
