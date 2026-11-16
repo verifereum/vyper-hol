@@ -34,6 +34,93 @@ Definition active_frame_plan_reloc_def:
         rest_ops k ps pc0 s a ra pc_ret rest mem0
 End
 
+Theorem active_frame_plan_reloc_specialize:
+  active_frame_plan_reloc (SND (compute_label_offsets prog))
+    rpolicy unit cpl prog fn s a ra rest mem0 <=>
+  active_frame_plan rpolicy unit cpl prog fn s a ra rest mem0
+Proof
+  simp[active_frame_plan_def, active_frame_plan_reloc_def,
+       body_plan_inv_reloc_specialize]
+QED
+
+Theorem entry_body_plan_reloc:
+  !rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
+   ra pc_ret rest mem0.
+  ctx = unit.cu_context /\ code_labels_agree prog lo /\
+  o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cpl /\
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  i < LENGTH ctx.ctx_functions /\ EL i ctx.ctx_functions = fn /\
+  EL i cpl.cp_regions = r /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  (!f inst callee_name args callee.
+    MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+    MEM inst (fn_insts f) /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label callee_name :: args /\
+    lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+    fn_has_retpc callee) /\
+  (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  codegen_context_obligations (\_ _ _ _. F) ctx cpl /\
+
+  liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+  cfg = cfg_analyze fn /\
+  ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+         (fcg_analyze ctx) fn.fn_name /\
+  growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+  ps0 = init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+  ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  dfs_block_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0 /\
+  generate_block_plan liveness dfg cfg fn (HD fn.fn_blocks) ps0 =
+    SOME (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops, ps_after) /\
+  block_plan_state liveness dfg cfg fn (HD fn.fn_blocks) ps0
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+  generate_block_insts_plan liveness dfg cfg fn (HD fn.fn_blocks).bb_label
+    (bb_is_halting (HD fn.fn_blocks))
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+    (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+    (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
+  vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+  asm_block_at prog pc_bb (execute_plan cpl.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
+  as.as_pc = pc_bb + LENGTH (execute_plan cpl.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+  fn_frame_inv ctx cpl lo fn ra rest mem0 ps1 vs as /\
+  (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+  (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth r.sr_spill_base lbl_ctr r.sr_plan ps_end (HD fn.fn_blocks) ps0
+    ps0.ps_cleanup_height ps0.ps_cleanup_promised ps0
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)
+    ps_after ps_after param_ops body_ops
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 pc_bb
+    vs as ra pc_ret rest mem0
+Proof
+  rpt gen_tac >> strip_tac >>
+  `codegen_ready_fn fn` by metis_tac[body_fn_shape] >>
+  `fn_reachable fn (HD fn.fn_blocks).bb_label` by
+    (simp[venomWfTheory.fn_reachable_def] >>
+     metis_tac[relationTheory.RTC_REFL]) >>
+  drule entry_step_phi_bound >> strip_tac >>
+  `lineage_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0` by
+    metis_tac[lineage_state_rules] >>
+  `!i j. revert_forward_pair (HD fn.fn_blocks) i j ==>
+         LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= i \/
+         j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[revert_forward_pair_past_params] >>
+  simp[body_plan_inv_reloc_def] >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexistsl_tac [`[]`, `[]`, `ps_after.ps_stack`] >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem entry_body_plan:
   !rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
@@ -94,25 +181,14 @@ Theorem entry_body_plan:
     vs as ra pc_ret rest mem0
 Proof
   rpt gen_tac >> strip_tac >>
-  `codegen_ready_fn fn` by metis_tac[body_fn_shape] >>
-  `fn_reachable fn (HD fn.fn_blocks).bb_label` by
-    (simp[venomWfTheory.fn_reachable_def] >>
-     metis_tac[relationTheory.RTC_REFL]) >>
-  drule entry_step_phi_bound >> strip_tac >>
-  `lineage_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0` by
-    metis_tac[lineage_state_rules] >>
-  `!i j. revert_forward_pair (HD fn.fn_blocks) i j ==>
-         LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= i \/
-         j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
-    metis_tac[revert_forward_pair_past_params] >>
-  PURE_REWRITE_TAC [body_plan_inv_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC) >>
-  gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
-  qexistsl_tac [`[]`, `[]`, `ps_after.ps_stack`] >> simp[]
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule entry_body_plan_reloc >> gvs[] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem body_plan_gas_ready:
-  body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+Theorem body_plan_gas_ready_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast
       ra pc_ret rest mem0 /\
@@ -121,8 +197,8 @@ Theorem body_plan_gas_ready:
   ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" /\
   ast.as_gas_readings = vs.vs_gas_readings
 Proof
-  strip_tac >> drule_all body_plan_inv_inst >> strip_tac >>
-  drule_all body_plan_inv_step >> strip_tac >>
+  strip_tac >> drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_step_reloc >> strip_tac >>
   drule_all gas_source_shape >> strip_tac >>
   `generate_inst_plan liveness dfg cfg fn inst
       (live_vars_at liveness bb.bb_label (k+1)) (bb_is_halting bb)
@@ -146,9 +222,9 @@ Proof
     (irule gas_plan_shape >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?tail. ops = SOEmit "GAS" :: tail` by
     (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (if _ then _ else _)`
-       (fn shape =>
-        qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (ops, ps')`
-          (fn actual => mp_tac (TRANS (SYM actual) shape))) >>
+       mp_tac >>
+     qpat_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = SOME (ops, ps')`
+       (fn th => rewrite_tac[th]) >>
      Cases_on `MEM out (live_vars_at liveness bb.bb_label (k+1))`
      >- (simp[] >> Cases_on `optimistic_swap_plan dfg inst
        (live_vars_at liveness bb.bb_label (k+1))
@@ -161,7 +237,36 @@ Proof
      (AsmOp "GAS" :: execute_plan cpl.cp_initial_fmp tail)` by
     gvs[execute_plan_def, exec_stack_op_def] >>
   gvs[asm_block_at_cons] >>
-  fs[body_plan_inv_def] >> metis_tac[fn_frame_inv_gas_readings]
+  fs[body_plan_inv_reloc_def] >> metis_tac[fn_frame_inv_gas_readings]
+QED
+
+Theorem body_plan_gas_ready:
+  body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast
+      ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = GAS ==>
+  ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" /\
+  ast.as_gas_readings = vs.vs_gas_readings
+Proof
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >>
+  strip_tac >> drule_all body_plan_gas_ready_reloc >> simp[]
+QED
+
+Theorem body_plan_active_inst_reloc:
+  body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast
+      ra pc_ret rest mem0 /\ active_inst fn inst vs ==>
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst
+Proof
+  strip_tac >> drule body_plan_inv_facts_reloc >> strip_tac >>
+  `wf_function fn` by fs[stackPlanGenTheory.codegen_ready_fn_def] >>
+  `vs.vs_inst_idx = k` by fs[body_plan_inv_reloc_def] >>
+  fs[active_inst_def] >>
+  `bb = bb'` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[]
 QED
 
 Theorem body_plan_active_inst:
@@ -171,12 +276,19 @@ Theorem body_plan_active_inst:
       ra pc_ret rest mem0 /\ active_inst fn inst vs ==>
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst
 Proof
-  strip_tac >> drule body_plan_inv_facts >> strip_tac >>
-  `wf_function fn` by fs[stackPlanGenTheory.codegen_ready_fn_def] >>
-  `vs.vs_inst_idx = k` by fs[body_plan_inv_def] >>
-  fs[active_inst_def] >>
-  `bb = bb'` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
-  gvs[]
+  pure_rewrite_tac[body_plan_inv_reloc_specialize] >>
+  strip_tac >> drule_all body_plan_active_inst_reloc >> simp[]
+QED
+
+Theorem active_frame_gas_ready_reloc:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn vs ast ra rest mem0 /\
+  active_inst fn inst vs /\ inst.inst_opcode = GAS ==>
+  ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" /\
+  ast.as_gas_readings = vs.vs_gas_readings
+Proof
+  rw[active_frame_plan_reloc_def] >>
+  drule_all body_plan_active_inst_reloc >> strip_tac >>
+  drule_all body_plan_gas_ready_reloc >> simp[]
 QED
 
 Theorem active_frame_gas_ready:
@@ -185,9 +297,8 @@ Theorem active_frame_gas_ready:
   ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" /\
   ast.as_gas_readings = vs.vs_gas_readings
 Proof
-  rw[active_frame_plan_def] >>
-  drule_all body_plan_active_inst >> strip_tac >>
-  drule_all body_plan_gas_ready >> simp[]
+  pure_rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  strip_tac >> drule_all active_frame_gas_ready_reloc >> simp[]
 QED
 
 
@@ -432,6 +543,21 @@ Proof
     conj_tac >> first_assum ACCEPT_TAC]
 QED
 
+Theorem active_frame_block_rank_reloc:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn vs ast ra rest mem0 /\
+  active_inst fn inst vs ==>
+  ?bb. lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    vs.vs_inst_idx < LENGTH bb.bb_instructions /\
+    LENGTH bb.bb_instructions - SUC vs.vs_inst_idx <
+      LENGTH bb.bb_instructions - vs.vs_inst_idx
+Proof
+  rw[active_frame_plan_reloc_def] >>
+  drule_all body_plan_active_inst_reloc >> strip_tac >>
+  `lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+   vs.vs_inst_idx = k` by fs[body_plan_inv_reloc_def] >>
+  qexists_tac `bb` >> simp[]
+QED
+
 Theorem active_frame_block_rank:
   active_frame_plan rpolicy unit cpl prog fn vs ast ra rest mem0 /\
   active_inst fn inst vs ==>
@@ -440,9 +566,6 @@ Theorem active_frame_block_rank:
     LENGTH bb.bb_instructions - SUC vs.vs_inst_idx <
       LENGTH bb.bb_instructions - vs.vs_inst_idx
 Proof
-  rw[active_frame_plan_def] >>
-  drule_all body_plan_active_inst >> strip_tac >>
-  `lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
-   vs.vs_inst_idx = k` by fs[body_plan_inv_def] >>
-  qexists_tac `bb` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac
+  pure_rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  strip_tac >> drule_all active_frame_block_rank_reloc >> simp[]
 QED
