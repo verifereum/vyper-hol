@@ -20,6 +20,7 @@
  *)
 Theory fmpStepMakeSsa
 Ancestors
+  lowerDloadMakeSsaInput
   fmpStepReclaimDefined fmpStepRetpcShape fmpStepShape fmpStepLayout
   fmpStepRewrite fmpStepRewriteSupply fmpStepRewriteOrigin
   fmpLowerIndexedProps fmpLowerProps fmpLowerDefs
@@ -568,16 +569,6 @@ Proof
   gen_tac >> Cases_on `p` >> gvs[is_fn_path_def]
 QED
 
-Theorem fmp_source_var_reserved[local]:
-  ir_supply_covers_fn s f /\ MEM b f.fn_blocks /\
-  MEM i b.bb_instructions /\ MEM v (inst_ir_vars i) ==>
-  MEM v s.irs_used_vars
-Proof
-  simp[ir_supply_covers_fn_def, list_subset_def, fn_ir_vars_def,
-       block_ir_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
-  metis_tac[]
-QED
-
 (* A definition at the end of a source block is still there at the end of
    its lowered partner, or in the same earlier block of the path. *)
 Theorem fmp_def_on_all_paths_end[local]:
@@ -751,7 +742,7 @@ Proof
       `MEM v (inst_ir_vars inst)` by
         (simp[inst_ir_vars_def, inst_uses_def] >>
          metis_tac[MEM_phi_pairs_SND_operand_vars]) >>
-      `MEM v s.irs_used_vars` by metis_tac[fmp_source_var_reserved] >>
+      `MEM v s.irs_used_vars` by metis_tac[lowerDloadMakeSsaInputTheory.lower_dload_source_var_reserved] >>
       `LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1` by
         (qpat_x_assum `fn_phi_operands_single_def fn` mp_tac >>
          simp[fn_phi_operands_single_def_def] >> metis_tac[]) >>
@@ -765,7 +756,7 @@ Proof
       `?a. MEM a fn.fn_blocks /\ a.bb_label = bb.bb_label /\
            MEM inst a.bb_instructions` by metis_tac[] >>
       `MEM v (inst_ir_vars inst)` by simp[inst_ir_vars_def] >>
-      `MEM v s.irs_used_vars` by metis_tac[fmp_source_var_reserved] >>
+      `MEM v s.irs_used_vars` by metis_tac[lowerDloadMakeSsaInputTheory.lower_dload_source_var_reserved] >>
       `LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1` by
         (qpat_x_assum `fn_phi_outputs_single_def fn` mp_tac >>
          simp[fn_phi_outputs_single_def_def] >> metis_tac[]) >>

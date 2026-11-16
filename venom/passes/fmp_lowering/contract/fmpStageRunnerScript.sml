@@ -27,6 +27,8 @@
  *)
 Theory fmpStageRunner
 Ancestors
+  frameGasEvents
+  concretizeLayoutEntryFlags
   o1PassContract venomPassSchedule venomCompilerTypes fmpStageRel
   fmpStageRunnerFacts fmpStageFmpSteps fmpStageOpSteps fmpStageBlockSim
   fmpStageBlockSimCode
@@ -39,12 +41,6 @@ Ancestors
 (* The step lemmas name the relation's fmp0 and raw0 by equations; unwind
    them so drule_all matches the relation as the runner states it. *)
 fun unw th = SIMP_RULE bool_ss [] (GEN_ALL th);
-
-Theorem run_blocks_zero[local]:
-  run_blocks 0 C fn s = Error "out of fuel"
-Proof
-  simp[Once run_blocks_def]
-QED
 
 Theorem fmp_stage_ctx_live[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom ==>
@@ -83,7 +79,7 @@ Proof
   `!r. step_inst 0 C inst s = r ==> ?e. r = Error e` suffices_by
     (disch_then (qspec_then `step_inst 0 C inst s` mp_tac) >>
      simp[] >> strip_tac >> simp[terminates_def]) >>
-  simp[Once step_inst_def, run_blocks_zero, AllCaseEqs()] >>
+  simp[Once step_inst_def, frameGasEventsTheory.run_blocks_zero_error, AllCaseEqs()] >>
   Cases_on `decode_invoke inst` >> simp[] >>
   PairCases_on `x` >> simp[] >>
   Cases_on `lookup_function x0 C.ctx_functions` >> simp[] >>
@@ -141,7 +137,7 @@ Theorem fmp_runner_jump[local]:
 Proof
   simp[Once fmp_stage_result_def] >> strip_tac >> gvs[] >>
   `~vs.vs_halted` by metis_tac[fmp_stage_ctx_live] >>
-  `~sb.vs_halted` by metis_tac[fmp_frame_reachable_not_halted] >>
+  `~sb.vs_halted` by metis_tac[concretizeLayoutEntryFlagsTheory.layout_reachable_frame_flags] >>
   `terminates (step_inst kb C bi sb)` by simp[terminates_def] >>
   `MEM bi.inst_opcode [JMP; JNZ; DJMP]` by simp[] >>
   drule_all (unw fmp_stage_jump_step) >> strip_tac >> gvs[] >>
@@ -246,7 +242,7 @@ Theorem fmp_runner_return[local]:
 Proof
   simp[Once fmp_stage_result_def] >> strip_tac >> gvs[] >>
   `~vs.vs_halted` by metis_tac[fmp_stage_ctx_live] >>
-  `~se.vs_halted` by metis_tac[fmp_frame_reachable_not_halted] >>
+  `~se.vs_halted` by metis_tac[concretizeLayoutEntryFlagsTheory.layout_reachable_frame_flags] >>
   `wf_function fn /\ ALL_DISTINCT (fn_labels fn')` by
     metis_tac[fmp_target_wf] >>
   `s1.vs_current_bb = s.vs_current_bb` by metis_tac[fmp_return_current_bb] >>
@@ -291,7 +287,7 @@ Proof
   >- (conj_tac
       >- (simp[fmp_invoke_sim_def] >> rpt strip_tac >>
           gvs[] >> metis_tac[fmp_invoke_zero]) >>
-      simp[run_blocks_zero, terminates_def]) >>
+      simp[frameGasEventsTheory.run_blocks_zero_error, terminates_def]) >>
   pop_assum strip_assume_tac >>
   conj_asm2_tac
   >- (simp[fmp_invoke_sim_def] >> rpt strip_tac >>
@@ -325,7 +321,7 @@ Proof
       simp[Once step_inst_def] >> strip_tac >> gvs[]) >>
   rpt strip_tac >>
   `~vs.vs_halted` by metis_tac[fmp_stage_ctx_live] >>
-  `~s1.vs_halted` by metis_tac[fmp_frame_reachable_not_halted] >>
+  `~s1.vs_halted` by metis_tac[concretizeLayoutEntryFlagsTheory.layout_reachable_frame_flags] >>
   qpat_assum `enters_block fn s0 s1`
     (strip_assume_tac o MATCH_MP fmp_run_blocks_entered) >>
   qpat_assum `enters_block fn' t0 tp`

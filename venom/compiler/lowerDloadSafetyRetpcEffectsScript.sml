@@ -5,7 +5,7 @@ Ancestors
   lowerDloadSafetyValues ptrDiscipline venomState venomExecSemantics
   venomInst unitShapeDefs memLocDefs codegenRel contextCodegenRel finite_map list pred_set words
 
-Theorem ld_retpc_taint[local]:
+Theorem ld_retpc_taint:
   inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] ==>
   step_taint inst s (update_var v x s) tn =
     tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}
