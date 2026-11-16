@@ -63,3 +63,10 @@ Ancestors
   asmOptOwnInefficientJumps
   asmOptOwnPruneUnused
   asmOptOwnPruneJumps
+  (* reached here instead of as holproject.toml roots *)
+  targetPtrFacts bodyFullTarget
+  extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
+  extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
+  abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  (* providers awaiting their consumers *)
+  sourceUnitExitSafe intCallMaterializeFull bodyPtrIfExpAllocationSite
