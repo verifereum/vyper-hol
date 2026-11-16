@@ -211,6 +211,50 @@ QED
 
 (* The schedule's stage contexts, for a row family R (rows_step_contract)
    that every input function is at row 0 of. *)
+Theorem o1_schedule_stages_observations:
+  (!k fn. R k fn ==> P fn) /\
+  rows_step_contracts_from R rp 0 passes /\
+  EVERY (R 0) u.cu_context.ctx_functions /\
+  run_named_fn_schedules execute_configured_fn_pass rp passes names u s =
+    SOME (u',s') /\
+  o1_ctx_shape u.cu_context /\
+  ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
+  (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
+  ir_supply_inst_ok s ==>
+  unit_labels_wf u' /\ ir_supply_inst_ok s' /\
+  ?stage.
+    stage 0 = u.cu_context /\ stage (LENGTH passes) = u'.cu_context /\
+    (!k. k <= LENGTH passes ==>
+      o1_ctx_shape (stage k) /\
+      (stage k).ctx_entry = u.cu_context.ctx_entry /\
+      (stage k).ctx_global_reserved = u.cu_context.ctx_global_reserved /\
+      ctx_fn_names (stage k) = ctx_fn_names u.cu_context /\
+      EVERY (R k) (stage k).ctx_functions) /\
+    (!k. k < LENGTH passes ==>
+      ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
+      (callee_first names u.cu_context.ctx_functions ==>
+       ctx_pass_stage rp (EL k passes) (\C' f observed. walk_view R rp (SUC k) (DROP (SUC k) passes) C' f observed /\
+           EVERY P observed.cu_context.ctx_functions)
+         (stage k) (stage (SUC k))))
+Proof
+  strip_tac >> drule_all run_named_fn_schedules_decomp_observations >>
+  disch_then (qx_choose_then `chains` strip_assume_tac) >>
+  `names <> []` by
+    (drule o1_ctx_shape_wf >>
+     gvs[ctx_wf_def, ctx_has_entry_def] >> metis_tac[MEM]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- simp[] >>
+  qexists_tac `stage_ctx u.cu_context chains` >>
+  conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
+  conj_tac >- simp[] >> conj_tac
+  >- (qx_gen_tac `k` >> disch_tac >>
+      `EVERY (R k) (stage_ctx u.cu_context chains k).ctx_functions` by
+        (irule stage_ctx_rows >> metis_tac[]) >>
+      drule_all chain_facts_stage_shape >> strip_tac >>
+      fs[stage_ctx_def]) >>
+  qx_gen_tac `k` >> disch_tac >> drule_all chain_facts_stages_observations >> simp[]
+QED
+
 Theorem o1_schedule_stages:
   rows_step_contracts_from R rp 0 passes /\
   EVERY (R 0) u.cu_context.ctx_functions /\
@@ -236,21 +280,9 @@ Theorem o1_schedule_stages:
          (walk_view R rp (SUC k) (DROP (SUC k) passes))
          (stage k) (stage (SUC k))))
 Proof
-  strip_tac >> drule_all run_named_fn_schedules_decomp >> strip_tac >>
-  `names <> []` by
-    (drule o1_ctx_shape_wf >>
-     gvs[ctx_wf_def, ctx_has_entry_def] >> metis_tac[MEM]) >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- simp[] >>
-  qexists_tac `stage_ctx u.cu_context chains` >>
-  conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
-  conj_tac >- simp[] >> conj_tac
-  >- (qx_gen_tac `k` >> disch_tac >>
-      `EVERY (R k) (stage_ctx u.cu_context chains k).ctx_functions` by
-        (irule stage_ctx_rows >> metis_tac[]) >>
-      drule_all chain_facts_stage_shape >> strip_tac >>
-      fs[stage_ctx_def]) >>
-  qx_gen_tac `k` >> disch_tac >> drule_all chain_facts_stages >> simp[]
+  strip_tac >>
+  mp_tac (Q.INST [`P` |-> `\fn. T`] o1_schedule_stages_observations) >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
 
 Theorem mapped_pass_stage:

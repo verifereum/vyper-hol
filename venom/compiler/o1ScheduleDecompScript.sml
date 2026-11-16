@@ -185,6 +185,44 @@ Proof
 QED
 
 
+Theorem run_named_fn_schedules_decomp_observations:
+  (!k fn. R k fn ==> P fn) /\
+  rows_step_contracts_from R rpolicy 0 passes /\
+  EVERY (R 0) unit.cu_context.ctx_functions /\
+  run_named_fn_schedules execute_configured_fn_pass rpolicy passes names
+    unit s = SOME (unit', s') /\
+  o1_ctx_shape unit.cu_context /\
+  ALL_DISTINCT (unit_label_namespace unit) /\
+  ALL_DISTINCT names /\
+  (!n. MEM n names <=> MEM n (ctx_fn_names unit.cu_context)) /\
+  ir_supply_inst_ok s ==>
+  ?chains.
+    LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
+    (!i. i < LENGTH chains ==>
+         chain_facts R rpolicy passes unit names chains i) /\
+    unit'.cu_context = stage_ctx unit.cu_context chains (LENGTH passes) /\
+    (names <> [] ==> unit_labels_wf unit') /\
+    chains_ids_apart chains /\
+  ir_supply_inst_ok s' /\
+    (!j. j < LENGTH chains ==> EVERY (\u. EVERY P u.cu_context.ctx_functions) (SND (EL j chains)))
+Proof
+  strip_tac >>
+  `partial_schedule R rpolicy passes unit names []
+    (MAP (\f. ([f],[])) unit.cu_context.ctx_functions) unit` by
+    (irule partial_schedule_initial >> simp[]) >>
+  mp_tac (Q.INST [`P` |-> `P`, `original` |-> `unit`]
+    partial_schedule_suffix_observations) >>
+  disch_then (qspecl_then [`names`, `[]`,
+    `MAP (\f. ([f],[])) unit.cu_context.ctx_functions`, `unit`,
+    `s`, `unit'`, `s'`, `names`] mp_tac) >>
+  (impl_tac >- (simp[chains_ids_used_def, EL_MAP] >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `chains` strip_assume_tac) >>
+  qexists_tac `chains` >>
+  drule partial_schedule_exhausted >> simp[] >> strip_tac >>
+  drule partial_schedule_final_context >> simp[] >> strip_tac >>
+  gvs[partial_schedule_def]
+QED
+
 Theorem run_named_fn_schedules_decomp:
   rows_step_contracts_from R rpolicy 0 passes /\
   EVERY (R 0) unit.cu_context.ctx_functions /\
@@ -205,17 +243,9 @@ Theorem run_named_fn_schedules_decomp:
   ir_supply_inst_ok s'
 Proof
   strip_tac >>
-  `partial_schedule R rpolicy passes unit names []
-    (MAP (\f. ([f],[])) unit.cu_context.ctx_functions) unit` by
-    (irule partial_schedule_initial >> simp[]) >>
-  drule_at (Pat `partial_schedule _ _ _ _ _ _ _ _`) partial_schedule_suffix >>
-  disch_then (drule_at (Pat `run_named_fn_schedules _ _ _ _ _ _ = _`)) >>
-  simp[] >> impl_tac >- simp[chains_ids_used_def] >>
-  disch_then (qx_choose_then `chains` strip_assume_tac) >>
-  qexists_tac `chains` >>
-  drule partial_schedule_exhausted >> simp[] >> strip_tac >>
-  drule partial_schedule_final_context >> simp[] >> strip_tac >>
-  gvs[partial_schedule_def]
+  mp_tac (Q.INST [`P` |-> `\fn. T`] run_named_fn_schedules_decomp_observations) >>
+  simp[] >> disch_then (qx_choose_then `chains` strip_assume_tac) >>
+  qexists_tac `chains` >> simp[]
 QED
 
 (* ===== Stage contexts ===== *)
@@ -286,6 +316,63 @@ Proof
   simp[] >> irule chain_facts_suffix_from >> metis_tac[]
 QED
 
+Theorem chain_facts_stages_observations:
+  LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
+  o1_ctx_shape unit.cu_context /\
+  (!i. i < LENGTH chains ==> chain_facts R rpolicy passes unit names chains i) /\
+  k < LENGTH passes /\
+  (!j. j < LENGTH chains ==> EVERY (\u. EVERY P u.cu_context.ctx_functions) (SND (EL j chains))) ==>
+  ctx_pass_stage rpolicy (EL k passes) any_view
+    (stage_ctx unit.cu_context chains k)
+    (stage_ctx unit.cu_context chains (SUC k)) /\
+  (callee_first names unit.cu_context.ctx_functions ==>
+   ctx_pass_stage rpolicy (EL k passes)
+     (\C' f observed. walk_view R rpolicy (SUC k) (DROP (SUC k) passes) C' f observed /\
+       EVERY P observed.cu_context.ctx_functions)
+     (stage_ctx unit.cu_context chains k)
+     (stage_ctx unit.cu_context chains (SUC k)))
+Proof
+  strip_tac >> conj_tac
+  >- suspend "any_stage" >>
+  strip_tac >> suspend "walk_stage"
+QED
+
+Resume chain_facts_stages_observations[any_stage]:
+  `k <= LENGTH passes` by simp[] >>
+  irule ctx_pass_stage_indexed >> simp[stage_ctx_def, stage_fns_def] >>
+  qx_gen_tac `i` >> strip_tac >> simp[EL_MAP] >>
+  `chain_facts R rpolicy passes unit names chains i` by simp[] >>
+  drule chain_facts_step >> disch_then (qspec_then `k` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `s` (qx_choose_then `out` strip_assume_tac)) >>
+  qexistsl_tac [`EL k (SND (EL i chains))`,`s`,`out`] >>
+  simp[any_view_def] >>
+  `ctx_fn_names (stage_ctx unit.cu_context chains k) =
+     ctx_fn_names unit.cu_context` by (irule stage_ctx_names >> metis_tac[]) >>
+  gvs[stage_ctx_def, stage_fns_def, chain_facts_def]
+QED
+
+Resume chain_facts_stages_observations[walk_stage]:
+  `k <= LENGTH passes` by simp[] >>
+  irule ctx_pass_stage_indexed >> simp[stage_ctx_def, stage_fns_def] >>
+  qx_gen_tac `i` >> strip_tac >> simp[EL_MAP] >>
+  `chain_facts R rpolicy passes unit names chains i` by simp[] >>
+  drule chain_facts_step >> disch_then (qspec_then `k` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `s` (qx_choose_then `out` strip_assume_tac)) >>
+  qexistsl_tac [`EL k (SND (EL i chains))`,`s`,`out`] >> simp[] >>
+  `ctx_fn_names (stage_ctx unit.cu_context chains k) =
+     ctx_fn_names unit.cu_context` by (irule stage_ctx_names >> metis_tac[]) >>
+  `walk_view R rpolicy (SUC k) (DROP (SUC k) passes)
+     (stage_ctx unit.cu_context chains (SUC k))
+     (EL k (FST (EL i chains))) (EL k (SND (EL i chains)))` by
+    (irule chain_facts_walk_view >> metis_tac[]) >>
+  `EVERY P (EL k (SND (EL i chains))).cu_context.ctx_functions` by
+    (drule chain_facts_length >> strip_tac >> fs[EVERY_EL]) >>
+  gvs[stage_ctx_def, stage_fns_def, chain_facts_def] >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[]
+QED
+
+Finalise chain_facts_stages_observations
+
 Theorem chain_facts_stages:
   LENGTH chains = LENGTH unit.cu_context.ctx_functions /\
   o1_ctx_shape unit.cu_context /\
@@ -300,41 +387,7 @@ Theorem chain_facts_stages:
      (stage_ctx unit.cu_context chains k)
      (stage_ctx unit.cu_context chains (SUC k)))
 Proof
-  strip_tac >> conj_tac
-  >- suspend "any_stage" >>
-  strip_tac >> suspend "walk_stage"
+  strip_tac >>
+  mp_tac (Q.INST [`P` |-> `\fn. T`] chain_facts_stages_observations) >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
-
-Resume chain_facts_stages[any_stage]:
-  `k <= LENGTH passes` by simp[] >>
-  irule ctx_pass_stage_indexed >> simp[stage_ctx_def, stage_fns_def] >>
-  qx_gen_tac `i` >> strip_tac >> simp[EL_MAP] >>
-  `chain_facts R rpolicy passes unit names chains i` by simp[] >>
-  drule chain_facts_step >> disch_then (qspec_then `k` mp_tac) >> simp[] >>
-  disch_then (qx_choose_then `s` (qx_choose_then `out` strip_assume_tac)) >>
-  qexistsl_tac [`EL k (SND (EL i chains))`,`s`,`out`] >>
-  simp[any_view_def] >>
-  `ctx_fn_names (stage_ctx unit.cu_context chains k) =
-     ctx_fn_names unit.cu_context` by (irule stage_ctx_names >> metis_tac[]) >>
-  gvs[stage_ctx_def, stage_fns_def, chain_facts_def]
-QED
-
-Resume chain_facts_stages[walk_stage]:
-  `k <= LENGTH passes` by simp[] >>
-  irule ctx_pass_stage_indexed >> simp[stage_ctx_def, stage_fns_def] >>
-  qx_gen_tac `i` >> strip_tac >> simp[EL_MAP] >>
-  `chain_facts R rpolicy passes unit names chains i` by simp[] >>
-  drule chain_facts_step >> disch_then (qspec_then `k` mp_tac) >> simp[] >>
-  disch_then (qx_choose_then `s` (qx_choose_then `out` strip_assume_tac)) >>
-  qexistsl_tac [`EL k (SND (EL i chains))`,`s`,`out`] >> simp[] >>
-  `ctx_fn_names (stage_ctx unit.cu_context chains k) =
-     ctx_fn_names unit.cu_context` by (irule stage_ctx_names >> metis_tac[]) >>
-  `walk_view R rpolicy (SUC k) (DROP (SUC k) passes)
-     (stage_ctx unit.cu_context chains (SUC k))
-     (EL k (FST (EL i chains))) (EL k (SND (EL i chains)))` by
-    (irule chain_facts_walk_view >> metis_tac[]) >>
-  gvs[stage_ctx_def, stage_fns_def, chain_facts_def] >>
-  first_x_assum (qspec_then `k` mp_tac) >> simp[]
-QED
-
-Finalise chain_facts_stages

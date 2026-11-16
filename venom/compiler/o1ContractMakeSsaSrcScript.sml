@@ -155,7 +155,7 @@ Proof
   first_x_assum drule >> strip_tac >> gvs[fn_bisim_def] >> metis_tac[]
 QED
 
-Theorem make_ssa_src_stage_frame_sim[local]:
+Theorem make_ssa_src_stage_frame_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions ==>
   LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
@@ -214,7 +214,7 @@ QED
 
 (* Each function of the output is MakeSSA's run on the input function of
    its name. *)
-Theorem make_ssa_src_stage_lookup[local]:
+Theorem make_ssa_src_stage_lookup:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
   lookup_function nm C.ctx_functions = SOME fn ==>
@@ -231,14 +231,17 @@ Proof
   simp[optionTheory.OPTREL_def] >> metis_tac[]
 QED
 
-(* The DLOAD offset bound: a reachable DLOAD of the output reads the value
-   of the one of the input it renames, from the same code. *)
-Theorem make_ssa_src_stage_dload_ok[local]:
+Theorem make_ssa_src_stage_observation:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv dload_offset_ok C vs ==>
-  mem_inv dload_offset_ok C' vs
+  raw_reachable vs C' fn' inst' s' /\
+  inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP ==>
+  ?fn inst s. raw_reachable vs C fn inst s /\
+    inst.inst_opcode = inst'.inst_opcode /\
+    execution_frame s' = execution_frame s /\
+    LIST_REL (\op op'. eval_operand op' s' = eval_operand op s)
+      inst.inst_operands inst'.inst_operands
 Proof
   strip_tac >>
   `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
@@ -248,14 +251,6 @@ Proof
     metis_tac[make_ssa_src_stage_frame_sim] >>
   `ctx_bisim C C'` by metis_tac[make_ssa_src_stage_frame] >>
   `C'.ctx_entry = C.ctx_entry` by metis_tac[make_ssa_src_stage_fns] >>
-  fs[mem_inv_raw_reachable] >> conj_tac
-  >- (drule_all make_ssa_src_stage_lookup >> strip_tac >> metis_tac[]) >>
-  rpt strip_tac >> rename1 `raw_reachable vs C' fn' inst' s'` >>
-  reverse (Cases_on
-    `inst'.inst_opcode = DLOAD \/ inst'.inst_opcode = DLOADBYTES`)
-  >- fs[dload_offset_ok_def] >>
-  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP` by
-    (qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
   `frame_origin vs C C' fn' inst' s'` by
     (irule frame_sim_raw_origins >> fs[]) >>
   fs[frame_origin_def] >>
@@ -273,6 +268,29 @@ Proof
     (irule frame_reach_lockstep >> fs[] >> metis_tac[]) >>
   `raw_reachable vs C g inst s` by
     (irule frame_reach_raw_reachable >> metis_tac[]) >>
+  qexistsl_tac [`g`, `inst`, `s`] >>
+  fs[execution_frame_def, venom_state_component_equality]
+QED
+
+(* A reachable DLOAD reads the offset of the input instruction it renames. *)
+Theorem make_ssa_src_stage_dload_ok[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  mem_inv dload_offset_ok C vs ==>
+  mem_inv dload_offset_ok C' vs
+Proof
+  strip_tac >>
+  `C'.ctx_entry = C.ctx_entry` by metis_tac[make_ssa_src_stage_fns] >>
+  fs[mem_inv_raw_reachable] >> conj_tac
+  >- (drule_all make_ssa_src_stage_lookup >> strip_tac >> metis_tac[]) >>
+  rpt strip_tac >> rename1 `raw_reachable vs C' fn' inst' s'` >>
+  reverse (Cases_on
+    `inst'.inst_opcode = DLOAD \/ inst'.inst_opcode = DLOADBYTES`)
+  >- fs[dload_offset_ok_def] >>
+  `inst'.inst_opcode <> ASSIGN /\ inst'.inst_opcode <> NOP` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
+  drule_all make_ssa_src_stage_observation >> strip_tac >>
   `s'.vs_code = s.vs_code /\ s'.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `execution_frame s' = execution_frame s` mp_tac >>
      simp[execution_frame_def, venom_state_component_equality]) >>

@@ -678,6 +678,63 @@ Proof
   irule sue_rewritten_read_ranges_plain >> simp[]
 QED
 
+Theorem sue_segment_operand_eval:
+  ir_supply_inst_ok si /\
+  sue_expand_inst_supply dfg si inst = (segment,sj) /\
+  P SUBSET set si.irs_used_vars /\
+  (!v. MEM (Var v) inst.inst_operands ==> v IN P) /\
+  sue_state_rel P u b /\ j < LENGTH segment /\
+  run_insts 0 ctx (TAKE j (BUTLAST segment)) b = OK (sue_idx0 t) ==>
+  sue_state_rel P u t /\
+  ((EL j segment).inst_opcode = ASSIGN \/
+   (EL j segment = LAST segment /\
+    (EL j segment).inst_opcode = inst.inst_opcode /\
+    LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
+      inst.inst_operands (EL j segment).inst_operands /\
+    (!k. k < LENGTH inst.inst_operands ==>
+      !lbl. EL k inst.inst_operands = Label lbl ==>
+        EL k (EL j segment).inst_operands = Label lbl) /\
+    (inst.inst_opcode = LOG ==>
+      HD (EL j segment).inst_operands = HD inst.inst_operands) /\
+    (inst.inst_opcode = DRET ==>
+      parse_dret_shape (EL j segment) = parse_dret_shape inst)))
+Proof
+  strip_tac >> drule_all sue_expand_inst_supply_segment >> strip_tac >>
+  `sue_state_rel P u t` by
+    (irule sue_assign_prefix_normalized_rel >> goal_assum (drule_at Any) >>
+     simp[] >> fs[rich_listTheory.FRONT_APPEND_NOT_NIL,
+       listTheory.EVERY_MEM, listTheory.MEM_FLAT, listTheory.MEM_MAP, pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `j < LENGTH assigns`
+  >- (disj1_tac >> gvs[listTheory.EL_APPEND_EQN, listTheory.EVERY_EL]) >>
+  disj2_tac >> `j = LENGTH assigns` by fs[] >>
+  gvs[rich_listTheory.FRONT_APPEND_NOT_NIL, listTheory.EL_APPEND_EQN,
+      listTheory.LAST_APPEND_CONS] >>
+  Cases_on `sue_should_skip inst.inst_opcode`
+  >- (drule sue_expand_inst_supply_skip >> strip_tac >>
+      `inst with inst_operands := new_ops = inst` by
+        (qpat_x_assum `sue_expand_inst_supply _ _ _ = _` mp_tac >>
+         simp[] >> strip_tac >>
+         pop_assum (mp_tac o AP_TERM ``LAST : instruction list -> instruction``) >>
+         simp[listTheory.LAST_APPEND_CONS]) >>
+      qpat_x_assum `inst with inst_operands := new_ops = inst` mp_tac >>
+      simp[instruction_component_equality] >> strip_tac >>
+      simp[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
+      irule sue_state_rel_eval_operand >> qexists_tac `P` >>
+      simp[] >> metis_tac[listTheory.MEM_EL]) >>
+  Cases_on `sue_expand_ops_supply dfg inst si inst.inst_operands 0` >>
+  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 =
+    (operand_prefix,operand_tail)` >>
+  PairCases_on `operand_tail` >>
+  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 =
+    (operand_prefix,expanded_ops,expanded_supply)` >> gvs[sue_expand_inst_supply_def] >>
+  `expanded_ops = new_ops` by
+    (qpat_x_assum `inst with inst_operands := _ = _` mp_tac >>
+     simp[instruction_component_equality]) >>
+  gvs[] >> drule_all sue_expand_ops_supply_normalized_eval >> strip_tac >>
+  drule sue_expand_ops_supply_structure >> strip_tac >> simp[]
+QED
+
 Theorem sue_segment_observations:
   inst_wf inst /\ ir_supply_inst_ok si /\
   sue_expand_inst_supply dfg si inst = (segment,sj) /\
@@ -687,50 +744,17 @@ Theorem sue_segment_observations:
   run_insts 0 ctx (TAKE j (BUTLAST segment)) b = OK (sue_idx0 t) ==>
   mem_corr inst u (EL j segment) t /\ call_corr inst u (EL j segment) t
 Proof
-  strip_tac >>
-  drule_all sue_expand_inst_supply_segment >> strip_tac >>
-  `sue_state_rel P u t` by
-    (irule sue_assign_prefix_normalized_rel >> goal_assum (drule_at Any) >>
-     simp[] >> fs[rich_listTheory.FRONT_APPEND_NOT_NIL,
-       listTheory.EVERY_MEM, listTheory.MEM_FLAT, listTheory.MEM_MAP,
-       pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
-  Cases_on `j < LENGTH assigns`
-  >- (`(EL j segment).inst_opcode = ASSIGN` by
-        (gvs[listTheory.EL_APPEND_EQN, listTheory.EVERY_EL]) >>
-      irule sue_assign_observations >> simp[] >> qexists_tac `P` >> simp[]) >>
-  `j = LENGTH assigns` by fs[] >>
-  gvs[rich_listTheory.FRONT_APPEND_NOT_NIL, listTheory.EL_APPEND_EQN] >>
-  Cases_on `sue_should_skip inst.inst_opcode`
-  >- (drule sue_expand_inst_supply_skip >> strip_tac >>
-      `assigns ++ [inst with inst_operands := new_ops] = [inst]` by
-        metis_tac[pairTheory.PAIR_EQ] >>
-      `LAST (assigns ++ [inst with inst_operands := new_ops]) = inst` by
-        metis_tac[listTheory.LAST_DEF] >>
-      `inst with inst_operands := new_ops = inst` by
-        fs[listTheory.LAST_APPEND_CONS] >>
-      `LIST_REL (\op newop. eval_operand newop t = eval_operand op u)
-         inst.inst_operands inst.inst_operands` by
-        (simp[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
-         irule sue_state_rel_eval_operand >> qexists_tac `P` >>
-         simp[] >> metis_tac[listTheory.MEM_EL]) >>
-      simp[] >> conj_tac
-      >- (`mem_corr inst u (inst with inst_operands := inst.inst_operands) t`
-            suffices_by simp[] >>
-          irule sue_rewritten_mem_observation >> fs[sue_state_rel_def]) >>
-      `call_corr inst u (inst with inst_operands := inst.inst_operands) t`
-        suffices_by simp[] >>
-      irule sue_rewritten_call_observation >> fs[sue_state_rel_def]) >>
-  Cases_on `sue_expand_ops_supply dfg inst si inst.inst_operands 0` >>
-  PairCases_on `r` >> gvs[sue_expand_inst_supply_def] >>
-  `r0 = new_ops` by
-    (qpat_x_assum `inst with inst_operands := _ = _` mp_tac >>
-     simp[venomInstTheory.instruction_component_equality]) >>
-  gvs[] >>
-  drule_all sue_expand_ops_supply_normalized_eval >> strip_tac >>
-  drule sue_expand_ops_supply_structure >> strip_tac >>
-  conj_tac
-  >- (irule sue_rewritten_mem_observation >> fs[sue_state_rel_def]) >>
-  irule sue_rewritten_call_observation >> fs[sue_state_rel_def]
+  strip_tac >> drule_all sue_segment_operand_eval >> strip_tac
+  >- (irule sue_assign_observations >> simp[] >> qexists_tac `P` >> simp[]) >>
+  `(EL j segment) = inst with inst_operands := (EL j segment).inst_operands` by
+    (drule_all sue_expand_inst_supply_segment >> strip_tac >>
+     gvs[listTheory.LAST_APPEND_CONS]) >>
+  `mem_corr inst u (inst with inst_operands := (EL j segment).inst_operands) t /\
+   call_corr inst u (inst with inst_operands := (EL j segment).inst_operands) t` by
+    (conj_tac
+     >- (irule sue_rewritten_mem_observation >> fs[sue_state_rel_def] >> metis_tac[]) >>
+     irule sue_rewritten_call_observation >> fs[sue_state_rel_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem sue_frame_align_observations:
