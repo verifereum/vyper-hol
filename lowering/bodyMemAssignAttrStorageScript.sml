@@ -416,7 +416,8 @@ Proof
           mp_tac (Q.INST
             [`H` |-> `storage_trace_horizon es_end.storage_trace`,
              `ee` |-> `es_end with gas_obs := []`, `s` |-> `t1`]
-            (SPEC_ALL vv_post_add_read_mem_src)) >>
+            (SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
+              vv_post_add_read_mem_src))) >>
           impl_tac >- simp[] >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           `s0.vs_alloca_next <= u2.vs_alloca_next` by decide_tac >>
