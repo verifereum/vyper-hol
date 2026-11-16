@@ -41,13 +41,25 @@ Proof
        sval_val_map, sym_lift_def, sym_state_component_equality]
 QED
 
+Theorem sym_step_op_plain_mode:
+  !allow_own own.
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "ADD"; "MSTORE";
+             "MLOAD"; "CODECOPY"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE ==>
+  (if allow_own then sym_step_op_own p env own name ss
+   else sym_step_op p env name ss) = sym_step_concrete name ss
+Proof
+  rpt gen_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_op_own_def, sym_step_op_def]
+QED
+
 Theorem sym_step_op_plain:
   ~MEM name ["POP"; "JUMP"; "JUMPI"; "ADD"; "MSTORE";
              "MLOAD"; "CODECOPY"; "CODESIZE"] /\
   ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE ==>
   sym_step_op p env name ss = sym_step_concrete name ss
 Proof
-  simp[sym_step_op_def]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_op_plain_mode) >> simp[]
 QED
 
 Theorem sym_step_add_data_left_mode:
@@ -101,18 +113,50 @@ Theorem sym_step_add_data_right:
 Proof
   mp_tac (Q.SPECL [`F`, `[]`] sym_step_add_data_right_mode) >> simp[]
 QED
+Theorem sym_step_add_words_mode:
+  !allow_own own.
+  ss.sym_stack = Val a :: Val b :: tail ==>
+  (if allow_own then sym_step_op_own p env own "ADD" ss
+   else sym_step_op p env "ADD" ss) = sym_step_concrete "ADD" ss
+Proof
+  rpt gen_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_op_own_def, sym_step_op_def, sym_add_def]
+QED
+
 Theorem sym_step_add_words:
   ss.sym_stack = Val a :: Val b :: tail ==>
   sym_step_op p env "ADD" ss = sym_step_concrete "ADD" ss
 Proof
-  simp[sym_step_op_def, sym_add_def]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_add_words_mode) >> simp[]
+QED
+
+Theorem sym_step_mstore_words_mode:
+  !allow_own own.
+  ss.sym_stack = Val a :: Val b :: tail ==>
+  (if allow_own then sym_step_op_own p env own "MSTORE" ss
+   else sym_step_op p env "MSTORE" ss) = sym_step_concrete "MSTORE" ss
+Proof
+  rpt gen_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_op_own_def, sym_step_op_def, sym_mstore_def]
 QED
 
 Theorem sym_step_mstore_words:
   ss.sym_stack = Val a :: Val b :: tail ==>
   sym_step_op p env "MSTORE" ss = sym_step_concrete "MSTORE" ss
 Proof
-  simp[sym_step_op_def, sym_mstore_def]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_mstore_words_mode) >> simp[]
+QED
+
+Theorem sym_step_mload_word_mode:
+  !allow_own own.
+  ss.sym_stack = Val off :: tail /\
+  w2n off NOTIN FDOM ss.sym_mem_labels ==>
+  (if allow_own then sym_step_op_own p env own "MLOAD" ss
+   else sym_step_op p env "MLOAD" ss) = sym_step_concrete "MLOAD" ss
+Proof
+  rpt gen_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_op_own_def, sym_step_op_def,
+       sym_mload_def, mem_label_at_def, FLOOKUP_DEF]
 QED
 
 Theorem sym_step_mload_word:
@@ -120,7 +164,31 @@ Theorem sym_step_mload_word:
   w2n off NOTIN FDOM ss.sym_mem_labels ==>
   sym_step_op p env "MLOAD" ss = sym_step_concrete "MLOAD" ss
 Proof
-  simp[sym_step_op_def, sym_mload_def, mem_label_at_def, FLOOKUP_DEF]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_mload_word_mode) >> simp[]
+QED
+
+Theorem sym_step_codecopy_data_mode:
+  !allow_own own.
+  ss.sym_stack = Val dst :: Lab l d :: Val sz :: tail /\
+  sym_data_label p env l /\ sym_delta_ok d /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+       ~in_mem_range (w2n dst) (w2n sz) b) /\
+  asm_copy_to_mem (DROP d (env ' l))
+    (ss.sym_base with as_stack := [dst; 0w; sz]) = AsmOK cs ==>
+  (if allow_own then sym_step_own p env own (AsmOp "CODECOPY") ss
+   else sym_step p env (AsmOp "CODECOPY") ss) = SymOK
+    (ss with <| sym_base := cs with as_stack := [];
+                sym_stack := MAP Val cs.as_stack ++ tail |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) =
+   ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
+  Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_own_def,
+       asmSymOwnCodeTheory.sym_step_op_own_def,
+       asmSymOwnCodeTheory.sym_codecopy_own_def,
+       sym_step_def, sym_step_op_def, sym_codecopy_def, sym_lift_def,
+       sym_state_component_equality]
 QED
 
 Theorem sym_step_codecopy_data:
@@ -134,11 +202,7 @@ Theorem sym_step_codecopy_data:
     (ss with <| sym_base := cs with as_stack := [];
                 sym_stack := MAP Val cs.as_stack ++ tail |>)
 Proof
-  strip_tac >>
-  `mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) =
-   ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
-  simp[sym_step_def, sym_step_op_def, sym_codecopy_def, sym_lift_def,
-       sym_state_component_equality]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_step_codecopy_data_mode) >> simp[]
 QED
 
 Theorem sym_steps_single_emit:
@@ -225,20 +289,34 @@ Proof
   simp[sym_step_push_bytes]
 QED
 
+Theorem sym_add_word_step_mode:
+  !allow_own own.
+  ss.sym_stack = Val a :: Val b :: tail ==>
+  (if allow_own then sym_step_own p env own (AsmOp "ADD") ss
+   else sym_step p env (AsmOp "ADD") ss) = SymOK
+    (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
+                sym_stack := Val (a + b) :: tail |>)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_own_def,
+       asmSymOwnCodeTheory.sym_step_op_own_def, sym_step_def] >>
+  simp[sym_step_op_def, sym_add_def, sym_step_concrete_def,
+       sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
+       mem_labels_hit_def, mem_labels_clear_def,
+       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV] >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_binop_def, sym_lift_def,
+       asm_next_def] >>
+  simp[sym_state_component_equality, asm_state_component_equality]
+QED
+
 Theorem sym_add_word_step:
   ss.sym_stack = Val a :: Val b :: tail ==>
   sym_step p env (AsmOp "ADD") ss = SymOK
     (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
                 sym_stack := Val (a + b) :: tail |>)
 Proof
-  simp[sym_step_def, sym_step_op_def, sym_add_def,
-       sym_step_concrete_def, sym_lift_def, sval_val_def,
-       asm_op_arity_def, asm_op_arity_table_def,
-       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
-       mem_labels_hit_def, mem_labels_clear_def,
-       asm_step_op_def, asm_step_arith_def, asm_binop_def, asm_next_def,
-       sym_state_component_equality, asm_state_component_equality,
-       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_add_word_step_mode) >> simp[]
 QED
 
 Theorem sym_bump_success_run:
@@ -264,6 +342,34 @@ Proof
        sym_state_component_equality, asm_state_component_equality]
 QED
 
+Theorem sym_mstore_word_step_mode:
+  !allow_own own.
+  ss.sym_stack = Val off :: Val value :: tail /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+       ~in_mem_range (w2n off) 32 b) ==>
+  (if allow_own then sym_step_own p env own (AsmOp "MSTORE") ss
+   else sym_step p env (AsmOp "MSTORE") ss) = SymOK
+    (ss with <| sym_base := ss.sym_base with <| as_stack := [];
+                  as_memory := mem_write32 (w2n off) value ss.sym_base.as_memory;
+                  as_pc := ss.sym_base.as_pc + 1 |>;
+                sym_stack := tail |> )
+Proof
+  rpt gen_tac >> strip_tac >>
+  `mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n off) 32) =
+   ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
+  Cases_on `allow_own` >>
+  simp[asmSymOwnCodeTheory.sym_step_own_def,
+       asmSymOwnCodeTheory.sym_step_op_own_def, sym_step_def] >>
+  simp[sym_step_op_def, sym_mstore_def, sym_step_concrete_def,
+       sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
+       mem_labels_hit_def] >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def, asm_mstore_def,
+       sym_lift_def, spillSimTheory.mem_write32_def, asm_next_def] >>
+  simp[sym_state_component_equality, asm_state_component_equality]
+QED
+
 Theorem sym_mstore_word_step:
   ss.sym_stack = Val off :: Val value :: tail /\
   (!b. b IN FDOM ss.sym_mem_labels ==>
@@ -274,17 +380,7 @@ Theorem sym_mstore_word_step:
                   as_pc := ss.sym_base.as_pc + 1 |>;
                 sym_stack := tail |> )
 Proof
-  strip_tac >>
-  `mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n off) 32) =
-   ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
-  simp[sym_step_def, sym_step_op_def, sym_mstore_def,
-       sym_step_concrete_def, sym_lift_def, sval_val_def,
-       asm_op_arity_def, asm_op_arity_table_def,
-       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
-       mem_labels_hit_def, asm_step_op_def, asm_step_arith_def,
-       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
-       asm_mstore_def, spillSimTheory.mem_write32_def, asm_next_def, sym_state_component_equality,
-       asm_state_component_equality]
+  mp_tac (Q.SPECL [`F`, `[]`] sym_mstore_word_step_mode) >> simp[]
 QED
 
 Theorem sym_istore_success_run:
