@@ -92,7 +92,8 @@ Theorem immutable_code_loop_outcome_mem:
   0 < type_memory_size tv /\ type_memory_bytes cenv et + 64 < dimword (:256) /\
   LENGTH vs < dimword (:256) /\ copy_old_operand st1 lvo /\
   eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
-  (!H ei t k. P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
+  (!(H : (bool # bytes32 # type_value) list # num list) ei t k.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL k vs))
       (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei t) /\
   (!st0 bc sd ex inc ei k.
@@ -111,7 +112,8 @@ Theorem immutable_code_loop_outcome_mem:
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
       ((r = INL () \/ r = INR ContinueException) ==>
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
-  (!H ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
+  (!(H : (bool # bytes32 # type_value) list # num list)
+      ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
     compile_iter_elem_copy ce srcop dstop bytes LocCode F ety ety cs = ((),ct) /\
     bytes = type_memory_size tyv /\ 0 < bytes /\
     evaluate_type (get_tenv cxx) ety = SOME tyv /\

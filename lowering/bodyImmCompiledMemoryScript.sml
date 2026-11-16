@@ -24,7 +24,8 @@ Theorem immutable_compiled_loop_outcome_mem:
   LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
   (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
   (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
-  (!H ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!(H : (bool # bytes32 # type_value) list # num list) ei s.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     (case bd of Fixed cap => T | Dynamic cap =>
        ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
                (Value (ArrayV av)) (n2w off) ei s /\
@@ -160,7 +161,8 @@ Proof
      simp[array_round_frame_def] >>
      qpat_x_assum `array_caller_frame st1 u cc` mp_tac >>
      simp[array_caller_frame_def]) >>
-  `!H ei t k. P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
+  `!(H : (bool # bytes32 # type_value) list # num list) ei t k.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL k vs))
       (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei t` by
     (qpat_x_assum `!H ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ _ ==> _` mp_tac >>

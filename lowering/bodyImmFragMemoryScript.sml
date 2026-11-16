@@ -22,7 +22,8 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
   LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
   (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
   (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
-  (!H ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!(H : (bool # bytes32 # type_value) list # num list) ei s.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     (case bd of Fixed cap => T | Dynamic cap =>
        ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
                (Value (ArrayV av)) (n2w off) ei s /\
@@ -81,7 +82,8 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
   LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
   (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
   (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
-  (!H ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!(H : (bool # bytes32 # type_value) list # num list) ei s.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     (case bd of Fixed cap => T | Dynamic cap =>
        ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
                (Value (ArrayV av)) (n2w off) ei s /\
@@ -219,7 +221,8 @@ Theorem compile_for_immutable_frag_mem:
   LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
   (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
   (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
-  (!H ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!(H : (bool # bytes32 # type_value) list # num list) ei s.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     (case bd of Fixed cap => T | Dynamic cap =>
        ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
                (Value (ArrayV av)) (n2w off) ei s /\
