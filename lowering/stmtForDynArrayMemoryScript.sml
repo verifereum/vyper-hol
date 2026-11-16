@@ -92,7 +92,8 @@ Theorem compile_for_dynarray_frag_mem:
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
   P es /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
-  (!H ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!(H:(bool # bytes32 # type_value) list # num list) ei s.
+    P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     ?base. eval_operand (Var arr_ptr) s = SOME base /\
       mload (w2n base) s = n2w (LENGTH vs) /\
       w2n base + 32 + LENGTH vs * type_memory_size tv <= s.vs_alloca_next /\
@@ -135,7 +136,8 @@ Proof
     (gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
          comp_return_def, AllCaseEqs()] >> pairarg_tac >> gvs[]) >>
   drule_all compile_for_dynarray_code_ready >> strip_tac >>
-  qpat_assum `!H ei s. P ei /\ stmt_state_rel H _ _ _ _ ei s ==> _` drule_all >> strip_tac >>
+  qpat_assum `!H ei s. P ei /\ stmt_state_rel H _ _ _ _ ei s ==> _`
+    (qspecl_then [`H`, `es`, `s0`] mp_tac) >> simp[] >> strip_tac >>
   rename1 `eval_operand (Var arr_ptr) s0 = SOME arr_base` >>
   `type_memory_bytes cenv et < dimword (:256)` by simp[] >>
   `ainst.inst_operands = [Lit (n2w (type_memory_bytes cenv et))] /\
@@ -200,7 +202,8 @@ Resume compile_for_dynarray_frag_mem[loop]:
      (\H res ee t. res = INL () /\
        array_round_done H d ctx func cenv cx st1 cc exit ee t)
      (\H res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)` by
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit H cx ee (INR ex) rr)` by
     (drule dynarray_code_loop_outcome_mem >> disch_then irule >>
      simp[] >> conj_tac
      >- (qhdtm_assum `dynarray_for_code`
@@ -234,9 +237,10 @@ Resume compile_for_dynarray_frag_mem[snapshot]:
   rpt strip_tac >>
   qhdtm_assum `array_loop_inv`
     (strip_assume_tac o PURE_REWRITE_RULE [array_loop_inv_def]) >>
-  `?H'. stmt_state_rel H' ctx func cenv cx ei t` by
+  `?(H':(bool # bytes32 # type_value) list # num list).
+    stmt_state_rel H' ctx func cenv cx ei t` by
     (fs[array_loop_inv_def] >> metis_tac[]) >>
-  qpat_assum `!H ei s. P ei /\ stmt_state_rel H _ _ _ _ ei s ==> _` drule_all >>
+  first_assum (qspecl_then [`H'`, `ei`, `t`] mp_tac) >> simp[] >>
   strip_tac >> gvs[eval_operand_def] >>
   res_tac >> gvs[]
 QED
@@ -249,13 +253,17 @@ Resume compile_for_dynarray_frag_mem[public]:
      (\H res ee t. res = INL () /\
        array_round_done H d ctx func cenv cx st1 cc exit ee t)
      (\H res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)` by
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit H cx ee (INR ex) rr)` by
     (irule array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>
   ` (\H res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) =
-    (\H res ee rr. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr)` by
+       (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit H cx ee (INR ex) rr) =
+    (\H res ee rr. (!tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res rr) /\
+      halt_exit H cx ee res rr)` by
     (simp[FUN_EQ_THM] >> Cases_on `res` >>
-     simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
+     simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
+          exprSimDefsTheory.halt_exit_def]) >>
   gvs[] >>
   drule exprSimMemDefsTheory.gas_outcome_post_mono >> disch_then irule >>
   rpt strip_tac >>
