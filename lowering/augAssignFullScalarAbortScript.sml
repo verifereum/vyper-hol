@@ -60,7 +60,7 @@ Theorem scalar_code_origin_ptr_abort:
   !code A s t a G tn ctx func PG explicit bb.
     scalar_code A code /\
     (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-    ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     run_inst_seq code s = Abort a t ==>
@@ -78,7 +78,8 @@ Proof
   qabbrev_tac `D0 = <|d_stor := K (K {}); d_trans := K (K {});
                      d_imm := K {}; d_ret := K {}|>` >>
   `?G' tn'. inst_seq_ptr D0 0 ctx func PG G tn code s G' tn'` by
-    metis_tac[scalar_code_inst_seq_ptr] >>
+    (irule scalar_code_inst_seq_ptr_lo >>
+     simp[allocas_from_def] >> qexists `A` >> simp[]) >>
   pop_assum strip_assume_tac >>
   qexistsl_tac [`j`, `G'`, `tn'`] >> rpt gen_tac >> strip_tac >>
   `inst_seq_ptr D lo ctx func PG G tn code s G' tn'` by
@@ -93,7 +94,7 @@ Theorem straight_fresh_scalar_origin_ptr_abort:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   scalar_code A (emitted_insts sa sb) /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = Abort a t0 ==>
   ?t j G' tn'.
     run_inst_seq (emitted_insts sa sb) s = Abort a t /\ vars_ext t0 t /\
