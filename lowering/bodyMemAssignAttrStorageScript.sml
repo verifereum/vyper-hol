@@ -351,7 +351,7 @@ Theorem compile_expr_add_read_outcome_mem_src[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
       eval_operand dst u = SOME (kb + ko))
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
@@ -557,7 +557,8 @@ Resume compile_assign_attr_storage_mem[store]:
   rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
   `value_has_type ftv v` by metis_tac[] >>
   `encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)]` by
-    (irule encode_value_word_typed >> metis_tac[]) >>
+    (irule stmtSimAssignStorageFactsTheory.encode_value_word_typed >>
+     metis_tac[]) >>
   `well_formed_type_value ftv` by
     metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
