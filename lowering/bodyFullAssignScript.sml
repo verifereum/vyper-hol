@@ -843,7 +843,7 @@ Proof
   (impl_tac >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
     qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[])) >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def,expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
+    (bossLib.gvs [exprSimHypsDefsTheory.expr_body_pre_def , exprSimHypsDefsTheory.expr_sim_inv_def , vyperTypeInvariantsTheory.env_consistent_def , vyperTypeInvariantsTheory.env_context_consistent_def]) >>
   `value_has_type tvt v` by
     (fs[vyperTypeExprResultTheory.expr_result_typed_def,
        vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
