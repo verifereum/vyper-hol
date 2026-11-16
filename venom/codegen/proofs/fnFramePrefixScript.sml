@@ -309,6 +309,39 @@ val active_plan_witnesses =
    `block_ops`, `ps_dfs_after`, `ps_after`, `prefix_ops ++ ops`, `rest'`,
    `SUC k`, `ps'`, `pc0`, `pc_ret`];
 
+Theorem active_frame_ordinary_step_reloc:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn vs ast ra rest mem0 /\
+  active_inst fn inst vs /\ ~in_revert_forward fn vs /\
+  source_memory_reads_disjoint cpl inst vs /\
+  context_source_memory_writes_disjoint cpl inst vs /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  ~is_terminator inst.inst_opcode /\
+  step_inst fuel unit.cu_context inst vs = OK vs1 ==>
+  ?n ast1.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    active_frame_plan_reloc lo rpolicy unit cpl prog fn
+      (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
+Proof
+  rw[active_frame_plan_reloc_def] >>
+  drule_all body_plan_active_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule body_plan_inv_facts_reloc >> strip_tac >>
+  `vs.vs_inst_idx = k` by fs[body_plan_inv_reloc_def] >>
+  `!j. ~revert_forward_pair bb k j` by
+    (fs[in_revert_forward_def, revert_forward_at_def] >> metis_tac[]) >>
+  drule_all body_operands_le_16 >> strip_tac >>
+  `(inst.inst_opcode = LOG ==>
+     ?tc args. inst.inst_operands = Lit tc :: args /\ w2n tc <= 4)` by
+    (strip_tac >> drule_all body_log_topics >> Cases_on `inst.inst_operands` >> simp[] >>
+     Cases_on `h'` >> simp[] >> metis_tac[]) >>
+  drule_all body_plan_ordinary_ok_reloc >> strip_tac >>
+  drule_all body_plan_advance_reloc >> strip_tac >>
+  qexistsl_tac [`n`, `as1`] >> conj_tac >- first_assum ACCEPT_TAC >>
+  simp[active_frame_plan_reloc_def] >> qexistsl_tac active_plan_witnesses >>
+  gvs[]
+QED
+
 Theorem active_frame_ordinary_step:
   active_frame_plan rpolicy unit cpl prog fn vs ast ra rest mem0 /\
   active_inst fn inst vs /\ ~in_revert_forward fn vs /\
@@ -323,22 +356,38 @@ Theorem active_frame_ordinary_step:
     active_frame_plan rpolicy unit cpl prog fn
       (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
 Proof
-  rw[active_frame_plan_def] >>
-  drule_all body_plan_active_inst >> strip_tac >>
-  drule_all body_plan_inv_inst >> strip_tac >>
-  drule body_plan_inv_facts >> strip_tac >>
-  `vs.vs_inst_idx = k` by fs[body_plan_inv_def] >>
+  pure_rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  strip_tac >> drule_all active_frame_ordinary_step_reloc >> simp[]
+QED
+
+Theorem active_frame_gas_step_reloc:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn vs ast ra rest mem0 /\
+  active_inst fn inst vs /\ ~in_revert_forward fn vs /\
+  inst.inst_opcode = GAS /\
+  step_inst fuel unit.cu_context inst vs = OK vs1 ==>
+  ?n ast1.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    active_frame_plan_reloc lo rpolicy unit cpl prog fn
+      (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
+Proof
+  rw[active_frame_plan_reloc_def] >>
+  `source_memory_reads_disjoint cpl inst vs /\
+   context_source_memory_writes_disjoint cpl inst vs` by
+    simp[source_memory_reads_disjoint_def, context_source_memory_writes_disjoint_def,
+      source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  drule_all body_plan_active_inst_reloc >> strip_tac >>
+  drule_all body_plan_inv_inst_reloc >> strip_tac >>
+  drule body_plan_inv_facts_reloc >> strip_tac >>
+  `vs.vs_inst_idx = k` by fs[body_plan_inv_reloc_def] >>
   `!j. ~revert_forward_pair bb k j` by
     (fs[in_revert_forward_def, revert_forward_at_def] >> metis_tac[]) >>
   drule_all body_operands_le_16 >> strip_tac >>
-  `(inst.inst_opcode = LOG ==>
-     ?tc args. inst.inst_operands = Lit tc :: args /\ w2n tc <= 4)` by
-    (strip_tac >> drule_all body_log_topics >> Cases_on `inst.inst_operands` >> simp[] >>
-     Cases_on `h'` >> simp[] >> metis_tac[]) >>
-  drule_all body_plan_ordinary_ok >> strip_tac >>
-  drule_all body_plan_advance >> strip_tac >>
+  `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
+  drule_all body_plan_gas_ok_reloc >> strip_tac >>
+  drule_all body_plan_advance_reloc >> strip_tac >>
   qexistsl_tac [`n`, `as1`] >> conj_tac >- first_assum ACCEPT_TAC >>
-  simp[active_frame_plan_def] >> qexistsl_tac active_plan_witnesses >>
+  simp[active_frame_plan_reloc_def] >> qexistsl_tac active_plan_witnesses >>
   gvs[]
 QED
 
@@ -353,24 +402,31 @@ Theorem active_frame_gas_step:
     active_frame_plan rpolicy unit cpl prog fn
       (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
 Proof
-  rw[active_frame_plan_def] >>
+  pure_rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  strip_tac >> drule_all active_frame_gas_step_reloc >> simp[]
+QED
+
+Theorem active_frame_total_step_reloc:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn vs ast ra rest mem0 /\
+  active_inst fn inst vs /\ ~in_revert_forward fn vs /\
+  (inst.inst_opcode = GAS \/ inst.inst_opcode = ASSIGN) /\
+  step_inst fuel unit.cu_context inst vs = OK vs1 ==>
+  ?n ast1.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    active_frame_plan_reloc lo rpolicy unit cpl prog fn
+      (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- (drule_all active_frame_gas_step_reloc >> simp[]) >>
+  `inst.inst_opcode = ASSIGN` by fs[] >>
   `source_memory_reads_disjoint cpl inst vs /\
-   context_source_memory_writes_disjoint cpl inst vs` by
+   context_source_memory_writes_disjoint cpl inst vs /\
+   inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode` by
     simp[source_memory_reads_disjoint_def, context_source_memory_writes_disjoint_def,
-      source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-  drule_all body_plan_active_inst >> strip_tac >>
-  drule_all body_plan_inv_inst >> strip_tac >>
-  drule body_plan_inv_facts >> strip_tac >>
-  `vs.vs_inst_idx = k` by fs[body_plan_inv_def] >>
-  `!j. ~revert_forward_pair bb k j` by
-    (fs[in_revert_forward_def, revert_forward_at_def] >> metis_tac[]) >>
-  drule_all body_operands_le_16 >> strip_tac >>
-  `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
-  drule_all body_plan_gas_ok >> strip_tac >>
-  drule_all body_plan_advance >> strip_tac >>
-  qexistsl_tac [`n`, `as1`] >> conj_tac >- first_assum ACCEPT_TAC >>
-  simp[active_frame_plan_def] >> qexistsl_tac active_plan_witnesses >>
-  gvs[]
+      source_memory_read_ranges_def, source_memory_write_ranges_def, is_terminator_def] >>
+  drule_all active_frame_ordinary_step_reloc >> simp[]
 QED
 
 Theorem active_frame_total_step:
@@ -384,16 +440,30 @@ Theorem active_frame_total_step:
     active_frame_plan rpolicy unit cpl prog fn
       (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  pure_rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  strip_tac >> (metis_tac[active_frame_total_step_reloc])
+QED
+
+Theorem active_frame_static_step_reloc:
+  active_frame_plan_reloc lo rpolicy unit cpl prog fn vs ast ra rest mem0 /\
+  active_inst fn inst vs /\ ~in_revert_forward fn vs /\
+  static_mem_ok cpl.cp_max_static_eom unit.cu_context fn inst vs /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+  step_inst fuel unit.cu_context inst vs = OK vs1 ==>
+  ?n ast1.
+    asm_steps lo (build_offset_to_pc prog)
+      prog n ast = AsmOK ast1 /\
+    active_frame_plan_reloc lo rpolicy unit cpl prog fn
+      (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
+Proof
+  strip_tac >>
+  `generate_context_plan unit.cu_context = SOME cpl` by
+    fs[active_frame_plan_reloc_def, body_plan_inv_reloc_def] >>
+  drule contextPlanLayoutPropsTheory.generate_context_plan_spill_gap >> strip_tac >>
+  drule_all static_mem_ok_codegen_disjoint >> strip_tac >>
   Cases_on `inst.inst_opcode = GAS`
-  >- (drule_all active_frame_gas_step >> simp[]) >>
-  `inst.inst_opcode = ASSIGN` by fs[] >>
-  `source_memory_reads_disjoint cpl inst vs /\
-   context_source_memory_writes_disjoint cpl inst vs /\
-   inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode` by
-    simp[source_memory_reads_disjoint_def, context_source_memory_writes_disjoint_def,
-      source_memory_read_ranges_def, source_memory_write_ranges_def, is_terminator_def] >>
-  drule_all active_frame_ordinary_step >> simp[]
+  >- (drule_all active_frame_gas_step_reloc >> simp[]) >>
+  drule_all active_frame_ordinary_step_reloc >> simp[]
 QED
 
 Theorem active_frame_static_step:
@@ -408,14 +478,8 @@ Theorem active_frame_static_step:
     active_frame_plan rpolicy unit cpl prog fn
       (vs1 with vs_inst_idx := SUC vs.vs_inst_idx) ast1 ra rest mem0
 Proof
-  strip_tac >>
-  `generate_context_plan unit.cu_context = SOME cpl` by
-    fs[active_frame_plan_def, body_plan_inv_def] >>
-  drule contextPlanLayoutPropsTheory.generate_context_plan_spill_gap >> strip_tac >>
-  drule_all static_mem_ok_codegen_disjoint >> strip_tac >>
-  Cases_on `inst.inst_opcode = GAS`
-  >- (drule_all active_frame_gas_step >> simp[]) >>
-  drule_all active_frame_ordinary_step >> simp[]
+  pure_rewrite_tac[GSYM active_frame_plan_reloc_specialize] >>
+  strip_tac >> drule_all active_frame_static_step_reloc >> simp[]
 QED
 
 Theorem body_plan_jump_next_reloc:
