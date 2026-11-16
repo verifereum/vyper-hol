@@ -90,12 +90,7 @@ Proof
   conj_tac >- suspend "source_continuation" >>
   irule gas_outcome_full_post_source >>
   qexistsl_tac [`srcQ`,`srcR`] >>
-  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `srcR`]
-  >- (rpt gen_tac >> Cases_on `res` >>
-      simp[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.expr_exit_INL,
-           exprSimDefsTheory.halt_exit_def]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` mp_tac >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `srcR`] >> metis_tac[]
 QED
 
 Resume extract32_vv_full[source_continuation]:
@@ -241,9 +236,7 @@ Resume extract32_vv_full[offset_inputs]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
-  simp[fragExecTheory.exit_result_def] >> rpt strip_tac >>
-  irule bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap >>
-  metis_tac[]
+  simp[fragExecTheory.exit_result_def]
 QED
 
 Resume extract32_vv_full[offset_continuation]:
@@ -264,12 +257,7 @@ Resume extract32_vv_full[offset_continuation]:
   conj_tac >- suspend "suffix_entry" >>
   irule gas_outcome_full_post_source >>
   qexistsl_tac [`offQ`,`offR`] >>
-  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `offR`]
-  >- (rpt gen_tac >> Cases_on `res` >>
-      simp[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.expr_exit_INL,
-           exprSimDefsTheory.halt_exit_def]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ offQ _` mp_tac >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `offR`] >> metis_tac[]
 QED
 
 Resume extract32_vv_full[suffix_entry]:
