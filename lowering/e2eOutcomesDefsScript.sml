@@ -28,7 +28,7 @@ Theorem call_storage_ok_split:
   source_storage_ok am tx os gs /\ call_outcomes_storage_ok am tx os gs
 Proof
   simp[call_storage_ok_def, source_storage_ok_def, call_outcomes_storage_ok_def,
-       storage_trace_horizon_def]
+       storage_trace_horizon_def] >> metis_tac[]
 QED
 
 (* The call theorem's premises other than its storage guards, for one call
