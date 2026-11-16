@@ -45,6 +45,8 @@ Proof
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
          int_calls_raise_reason_def, body_inv_def] >>
+     conj_tac
+     >- simp[supported_expr_exists_def, const_name_root_def] >>
      qexists_tac `[]` >> simp[]) >>
   `type_alloc_ok cenv (BaseT (StringT ml))` by
     metis_tac[expr_body_pre_def, alloc_limits_expr_type_alloc_ok, expr_type_def] >>
