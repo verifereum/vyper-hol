@@ -6824,6 +6824,129 @@ Proof
             LENGTH_DROP, arithmeticTheory.LESS_EQ_ADD_SUB]
 QED
 
+(* Whole-block projections keep the silent entry phase behind its boundary. *)
+val native_block_gasq = ``\q r n D f bx x.
+  case eval_phis x bx.bb_instructions of
+    OK z => trace_gas (dftGasFromListTraceDefs$trace_block q r n D f bx
+      (z with vs_inst_idx := phi_prefix_length bx.bb_instructions))
+  | _ => []``;
+val native_block_sitesq = ``\n D f bx x.
+  case eval_phis x bx.bb_instructions of
+    OK z => gas_events_block n D f.fn_name bx
+      (z with vs_inst_idx := phi_prefix_length bx.bb_instructions)
+  | _ => []``;
+val native_block_packetq = ``\q r bx bx' x K S U.
+  let obsx = ^native_block_gasq q r b C' fn' bx' x;
+      R = run_block b C' bx' x in
+  let M = MAP (ALOOKUP obsx) K in
+  ALL_DISTINCT K /\
+  EVERY (block_region q r (MAP (\i. i.inst_id)
+    (FILTER (\i. ~is_pseudo i.inst_opcode) bx.bb_instructions))) K /\
+  LENGTH K = LENGTH S /\
+  PERM (MAP THE (FILTER IS_SOME M) ++ U) x.vs_gas_readings /\
+  (!u. R = OK u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+  (!v u. R = IntRet v u ==> EVERY IS_SOME M /\ U = u.vs_gas_readings) /\
+  (!g tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) M g ==>
+    (!n. ?k. k <= LENGTH K /\
+      ^native_block_gasq q r n C fn bx (x with vs_gas_readings := g ++ tail) =
+        ZIP (TAKE k K, TAKE k g) /\
+      ^native_block_sitesq n C fn bx (x with vs_gas_readings := g ++ tail) = TAKE k S) /\
+    ((?n. terminates (run_block n C bx (x with vs_gas_readings := g ++ tail))) ==>
+      terminates (run_block b C bx (x with vs_gas_readings := g ++ tail)) /\
+      dft_res_rel (restore_result [] (run_block b C bx (x with vs_gas_readings := g ++ tail)))
+        (restore_result [] R) /\
+      (((?u. R = OK u) \/ (?v u. R = IntRet v u)) ==>
+        ^native_block_sitesq b C fn bx (x with vs_gas_readings := g ++ tail) = S /\
+        (!u. run_block b C bx (x with vs_gas_readings := g ++ tail) = OK u ==>
+          u.vs_gas_readings = tail) /\
+        (!v u. run_block b C bx (x with vs_gas_readings := g ++ tail) = IntRet v u ==>
+          u.vs_gas_readings = tail) /\
+        residual_result tail R (run_block b C bx (x with vs_gas_readings := g ++ tail)))))``;
+
+Theorem native_whole_block_packet[local]:
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
+  MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  strict_dom_vars_defined fn s /\ fn_reachable fn s.vs_current_bb /\
+  ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+  ~s.vs_call_ctx.cc_static /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  terminates (run_block b C' bb' s) /\
+  (case eval_phis s bb'.bb_instructions of
+    OK z => gas_count_block b C' bb'
+      (z with vs_inst_idx := phi_prefix_length bb'.bb_instructions) | _ => 0)
+    <= LENGTH s.vs_gas_readings /\ ^native_inventory_IHq ==>
+  ?K S U. ^native_block_packetq p d bb bb' s K S U
+Proof
+  strip_tac >>
+  drule_all native_block_entry_residual_boundary >>
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
+  qabbrev_tac `pre = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  qabbrev_tac `todo = FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  qabbrev_tac `br = bb with bb_instructions := REPLICATE (LENGTH pre) ARB ++ actual_body` >>
+  qabbrev_tac `sr = bb with bb_instructions := REPLICATE (LENGTH pre) ARB ++ todo` >>
+  `!n ws D f p d.
+    run_block n D bb (s with vs_gas_readings := ws) =
+      exec_block n D sr (t with vs_gas_readings := ws) /\
+    ^native_block_gasq p d n D f bb (s with vs_gas_readings := ws) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n D f sr
+        (t with vs_gas_readings := ws)) /\
+    ^native_block_sitesq n D f bb (s with vs_gas_readings := ws) =
+      gas_events_block n D f.fn_name sr (t with vs_gas_readings := ws)` by
+    (rpt gen_tac >> first_x_assum (qspecl_then [`bb`, `todo`] mp_tac) >>
+     simp[Abbr `sr`, Abbr `pre`, Abbr `todo`]) >>
+  `!n ws D f p d.
+    run_block n D bb' (s with vs_gas_readings := ws) =
+      exec_block n D br (t with vs_gas_readings := ws) /\
+    ^native_block_gasq p d n D f bb' (s with vs_gas_readings := ws) =
+      trace_gas (dftGasFromListTraceDefs$trace_block p d n D f br
+        (t with vs_gas_readings := ws)) /\
+    ^native_block_sitesq n D f bb' (s with vs_gas_readings := ws) =
+      gas_events_block n D f.fn_name br (t with vs_gas_readings := ws)` by
+    (rpt gen_tac >> first_x_assum (qspecl_then [`bb'`, `actual_body`] mp_tac) >>
+     simp[Abbr `br`, Abbr `pre`]) >>
+  `t with vs_gas_readings := s.vs_gas_readings = t` by
+    (qpat_assum `t.vs_gas_readings = s.vs_gas_readings`
+      (fn th => pure_rewrite_tac [GSYM th]) >> simp[]) >>
+  `run_block b C' bb' s = exec_block b C' br t` by
+    (qpat_assum `!n ws D f p d. run_block n D bb' _ = _ /\ _`
+      (qspecl_then [`b`, `s.vs_gas_readings`, `C'`, `fn'`, `p`, `d`] mp_tac) >>
+     simp_tac (srw_ss()) [] >> asm_rewrite_tac[]) >>
+  `terminates (exec_block b C' br t) /\
+   gas_count_block b C' br t <= LENGTH t.vs_gas_readings` by
+    (qpat_x_assum `!bx rest. _` (qspecl_then [`bb'`, `actual_body`] mp_tac) >>
+     qpat_x_assum `bb.bb_instructions = _` kall_tac >>
+     simp[Abbr `br`, Abbr `pre`] >>
+     disch_then (qspecl_then [`b`, `s.vs_gas_readings`, `C'`, `ARB`, `fn'`, `p`, `d`] mp_tac) >>
+     simp_tac (srw_ss()) [] >> asm_rewrite_tac[] >> strip_tac >> fs[]) >>
+  mp_tac (Q.SPEC `actual_body` (Q.INST [`bt` |-> `br`, `s` |-> `t`,
+    `j` |-> `LENGTH (pre:instruction list)`, `pad` |-> `ARB`] native_residual_schedule_packet)) >>
+  (impl_tac >- simp[Abbr `br`, Abbr `pre`, Abbr `todo`]) >>
+  simp_tac pure_ss [LET_THM] >> strip_tac >>
+  rename1 `ALL_DISTINCT keys` >> rename1 `LENGTH keys = LENGTH sites` >>
+  qexistsl_tac [`keys`, `sites`, `U`] >>
+  simp_tac pure_ss [LET_THM] >>
+  suspend "transport"
+QED
+Resume native_whole_block_packet[transport]:
+  qpat_x_assum `bb.bb_instructions = _` kall_tac >>
+  qpat_assum `!n ws D f p d. run_block n D bb' _ = _ /\ _`
+    (qspecl_then [`b`, `s.vs_gas_readings`, `C'`, `fn'`, `p`, `d`] mp_tac) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `t with vs_gas_readings := s.vs_gas_readings = t`
+    (fn th => pure_rewrite_tac [th]) >> strip_tac >>
+  simp_tac (srw_ss()) [] >>
+  gvs[Abbr `todo`, Abbr `sr`] >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!g tail. LIST_REL _ _ g ==> _`
+    (qspecl_then [`g`, `tail`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+Finalise native_whole_block_packet
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
