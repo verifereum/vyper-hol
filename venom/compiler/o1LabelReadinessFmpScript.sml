@@ -1,6 +1,7 @@
 Theory o1LabelReadinessFmp
 Ancestors
-  o1PassContract fmpStepRewrite fmpStepRetpcShape fmpLowerDefs
+  o1PassContract fmpStepRewrite fmpStepRewriteSupply
+  fmpStepRewriteOrigin fmpStepRetpcShape fmpLowerDefs
   fmpAnalysisProps venomInst unitLabelMapIdentity list rich_list
   fmpStepPredicateTransport fmpStepRestrictionClosure venomPassDispatcher
 

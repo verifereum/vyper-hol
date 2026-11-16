@@ -24,6 +24,7 @@ Libs
 Theorem immutable_for_typing_ready[local]:
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   FLOOKUP env.bare_globals (src,name) = SOME (ArrayT typ bd) /\
+  ~cx_const_name cx (src,name) /\
   type_stmt env ret_ty
     (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) =
     SOME env' ==>
@@ -133,6 +134,7 @@ QED
 Theorem immutable_for_source_callback[local]:
   expr_sim_inv cenv cx env ei /\
   FLOOKUP env.bare_globals (src,name) = SOME (ArrayT typ bd) /\
+  ~cx_const_name cx (src,name) /\
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
   lookup_immutable cx ei src name = SOME (ArrayTV tv bd,ArrayV av) /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
@@ -239,6 +241,7 @@ Theorem body_for_immutable_array:
        body_iterator_ok cx
          (Array (TopLevelName (ArrayT typ bd) (src,name)))) /\
     body_inv tops ctx cenv cx /\
+    IS_SOME (supported_immutable_type tops (src,name)) /\
     supported_type_namespace typ /\ supported_stmts tops bindings stmts /\
     ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     bound_length bd <= n /\
@@ -267,6 +270,9 @@ Theorem body_for_immutable_array:
 Proof
   rpt gen_tac >> strip_tac >>
   imp_res_tac body_stmt_safe_for_body >>
+  `~cx_const_name cx (src,name)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     gvs[optionTheory.IS_SOME_EXISTS]) >>
   drule_all immutable_for_typing_ready >> strip_tac >> gvs[] >>
   drule_all immutable_for_elements_ready >> strip_tac >>
   qmatch_asmsub_abbrev_tac `LENGTH vs <= bound_length bd` >>

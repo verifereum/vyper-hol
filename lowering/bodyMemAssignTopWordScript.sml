@@ -5,7 +5,7 @@
    touches no memory. *)
 Theory bodyMemAssignTopWord
 Ancestors
-  fragGasSeqAbort
+  fragGasSeqAbort fragExec
   gasStorage vyperStorageTrace vyperStorageFootprint
   supportedExprTraverse allocLimits allocLimitsProps
   bodySim vyperTypeCallGraph
@@ -23,6 +23,9 @@ Ancestors
   venomExecSemantics venomInst venomState list rich_list finite_map
 Libs
   monadsyntax
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* The SSTORE or TSTORE of w at slot, run on a memory-safe path in a
    non-static call: it touches no memory and lands at the stored state
@@ -142,7 +145,8 @@ Proof
       simp[vyperStorageTraceTheory.storage_trace_frame_event,
            vyperStorageTraceTheory.storage_trace_frame_write_storage_slot])
   >~ [`expr_exit (INR _) _`]
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> fs[stmt_exit_def, halt_exit_def] >>
+      metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\H v ee t.
     expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
@@ -213,7 +217,8 @@ Resume compile_assign_storage_typed_stmt_frag_mem[store]:
         simp[ignore_bind_def,bind_def,record_storage_event_def,return_def,
              write_place_def,write_storage_slot_eq] >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      disj2_tac >> simp[exit_result_def,stmt_exit_def,expr_exit_def]) >>
+      disj2_tac >>
+      simp[exit_result_def,stmt_exit_def,expr_exit_def,halt_exit_def]) >>
   `~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `alloca_inv t` by
@@ -387,7 +392,7 @@ Proof
   `supported_program tops` by gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>

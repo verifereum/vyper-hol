@@ -164,7 +164,8 @@ Theorem code_end_add_output_kind:
   retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"] /\
   MEM x inst.inst_outputs ==>
-  (op_kind_ok fn ret (Var x) sv <=> ?d. sv = Lab "code_end" d)
+  (op_kind_ok fn ret (Var x) sv <=>
+   ?d. d < dimword (:256) /\ sv = Lab "code_end" d)
 Proof
   strip_tac >>
   `code_end_var fn x /\ ~retpc_var fn x` by

@@ -30,11 +30,11 @@
       "source": "sources/dflt_const.vy",
       "source_sha256": "0ff69368dc251e81742d4a1473a14365e67d68b42c60590e86a4a49667c39c9b"
     },
-    "dflt_effectful_constant_index": {
-      "deploy_sha256": "6013f2436d56aa5c46e9013a4efa6e3fe33b6321c905a43367c229bcedfb125f",
-      "runtime_sha256": "d480ffdb7b78338bb7ce953d389f41c9c12bb51070e500e67d3e76579de7067d",
-      "source": "sources/dflt_effectful_constant_index.vy",
-      "source_sha256": "3d95a4b313acb02aa54304a4b85d9cdee4da815049307c20afe3733e06b6b536"
+    "dflt_folded_builtins": {
+      "deploy_sha256": "41b859513fde0709adee48159840a70f3896700b2d6d5fd33d215b1ed3c1b696",
+      "runtime_sha256": "ee945c89108dc369bcacb85474f117c768330c493e14c5581a839d3222bb717a",
+      "source": "sources/dflt_folded_builtins.vy",
+      "source_sha256": "7316277b4f480cd4495ff17930f5167795cca5a50aa8e9132eed7dea97805328"
     },
     "dflt_internal_full": {
       "deploy_sha256": "745e0a4ed32ef1f3d8e179152b2b5bb94f10443aa7bd4165047ba84c055cccac",
@@ -65,6 +65,12 @@
       "runtime_sha256": "7624efc539d6d7c13d1729fef4a0199a1e1e5135be2b813651edabaef976b83f",
       "source": "sources/dflt_payable.vy",
       "source_sha256": "cf31225ad628faad8c1702e15b82261468494e14a377560abe3108d0a54ac1e5"
+    },
+    "dflt_runtime_constant_index": {
+      "deploy_sha256": "5845aafb1cc50990a770fee910088db03bef299211141d6dbf57c886ddaaeaaf",
+      "runtime_sha256": "0f4436b063048d3a799d59b8dcadcf14072b7a435ed9fd974f3dff52924ace4c",
+      "source": "sources/dflt_runtime_constant_index.vy",
+      "source_sha256": "2b9ce552867681c2a8d851d9cfaf82aaaabd18a83301f86a9f9a1d736e7fa974"
     },
     "dflt_sender": {
       "deploy_sha256": "8ddfd237b7d3081c5684e10ef16d065e928514ae4710d168c5cb93bd656ad6e0",
@@ -127,8 +133,8 @@
       "source_sha256": "dd8b8b7dbc69dc004482fc2349a0aff9ff71aa9be71783520c7dcbc108386ab8"
     },
     "nr_internal_return": {
-      "deploy_sha256": "37b6bbf64554ad304b54c931374c65a047289243fbf68d4323208c2e409a861b",
-      "runtime_sha256": "f590f109eef441212abf20d070f6012c6ddc6b7245fc8733745c596a6a50433b",
+      "deploy_sha256": "5bef80847450b52194ab185910a16ef61e30b072d52f7adf38a68ed9c6a065e4",
+      "runtime_sha256": "a51969362d5e81dc6aee4fc4f6e1732f662af1f70c0d2c1759a6f1967811cb27",
       "source": "sources/nr_internal_return.vy",
       "source_sha256": "304a370b06e3d8b8e9450363d720306d81085d392ff84700f7a589f081f97ccc"
     },
@@ -194,6 +200,14 @@
     }
   },
   "python_version": "3.11.11",
+  "rejected_fixtures": {
+    "dflt_effectful_constant_index": {
+      "frozen_ast_sha256": "91696948929811ddbeaeae20848c84c7a2bafb577def4a10afecb7922d1ef48e",
+      "source": "typecheck-rejected/dflt_effectful_constant_index.vy",
+      "source_sha256": "3d95a4b313acb02aa54304a4b85d9cdee4da815049307c20afe3733e06b6b536",
+      "upstream_fix": 5181
+    }
+  },
   "settings": {
     "bytecode_metadata": false,
     "evm_version": "prague",
@@ -203,9 +217,6 @@
   },
   "validation_dependencies": {
     "c28_const_in_default_arg": [
-      565
-    ],
-    "dflt_effectful_constant_index": [
       565
     ],
     "g37_pub_nonreentrancy_pragma": [

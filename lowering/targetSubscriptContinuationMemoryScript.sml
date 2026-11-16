@@ -3,7 +3,7 @@ Theory targetSubscriptContinuationMemory
 Ancestors
   targetSubscriptLocalMemory targetStorageContinuationMemory
   targetLocalLive popTargetPre targetSubscriptSplit exprSimPopNested
-  stmtSimAugAssignPlace exprSimPopNestedBase bodyAttributeMemory
+  exprSimPopNestedBase bodyAttributeMemory
   exprSimMemDefs targetPlaceSimDefs targetPlaceSim exprSimHypsDefs
   vyperInterpreter vyperState allocaHistory vyperTypeCallGraph
 
@@ -29,30 +29,33 @@ Theorem target_subscript_base_continuation_mem:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   ~block_is_terminated sa /\ ~block_is_terminated sm /\
   gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\
   alloca_history func s0 /\ alloca_history func t /\
   s0.vs_alloca_next <= t.vs_alloca_next /\
   gas_marked_exec T (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-  (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    slots_in_range (get_storage cx (mid with gas_obs := []) tr) (w2n slot) tv /\
-    storage_read_live cx tr (get_storage cx (mid with gas_obs := []) tr) slot tv) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+    (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+      slots_in_range (get_storage cx (mid with gas_obs := []) tr) (w2n slot) tv /\
+      storage_read_live H tr (get_storage cx (mid with gas_obs := []) tr) slot tv)) /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
     (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       (!tr slot tv. pv' = PlaceR (StoragePlace tr slot tv) ==>
         slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
-        storage_read_live cx tr (get_storage cx ee tr) slot tv) /\
+        storage_read_live H tr (get_storage cx ee tr) slot tv) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   `!gs. eval_base_place cx bt
@@ -109,10 +112,20 @@ QED
 Resume target_subscript_base_continuation_mem[live]:
   `?path. pv = PlaceR (MemoryPlace id path)` by
     metis_tac[aug_place_name_root_base] >> gvs[] >>
-  drule_all (SRULE [] target_subscript_local_live_continuation_mem) >> strip_tac >>
+  `gas_outcome T (cx_tops cx) (ctx,func) cx st0
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript key)))
+    (mid with gas_obs := [],t)
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
+    (irule target_subscript_local_live_continuation_mem >> simp[] >> metis_tac[]) >>
   drule gas_outcome_link >> strip_tac >>
   irule exprSimMemDefsTheory.gas_outcome_post_mono >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   rpt gen_tac >> simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `bind _ _ _ = (INL pv',ee)` mp_tac >>
   simp[Once bind_def, AllCaseEqs()] >> strip_tac >>

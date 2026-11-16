@@ -10,6 +10,7 @@
 Theory bodyFullSend
 Ancestors
   bodyFullSendPost bodyFullExprGeneric bodyFullShared bodyFullPreds bodySimFull
+  bodyFullBuiltinWordPowCompose bodyInvNoDalloca
   gasOutcomeFullCompose gasOutcomeFull fragGasSeqPtr fragGasEmitCtrl
   gasShadowCompile gasShadowState gasShadow
   exprSendPtr exprSimSend exprSimHypsDefs bodySim
@@ -26,7 +27,9 @@ Theorem send_expr_sim_full:
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (Send has_gas) args dflt) es
 Proof
-  rpt gen_tac >> strip_tac >> drule send_pre_types >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
+  drule send_pre_types >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule lower_value_send >> strip_tac >> gvs[] >>
@@ -98,7 +101,8 @@ Resume send_expr_sim_full[arity]:
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,
     `addr_op`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   asm_rewrite_tac[] >>
   once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
@@ -188,6 +192,11 @@ Resume send_expr_sim_full[after_address]:
     `fn_has_code s1 amount_end func /\
      fn_has_code shadow_s1 shadow_amount_end shadow_func` by
       metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+    `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+      (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (Q.SPEC `t`
+           (MATCH_MP pow_compose_reachable_no_wrap (CONJ inv member)))))) >>
     qpat_x_assum `expr_sim_full _ _ _ _ amount_e _` mp_tac >>
     rewrite_tac[expr_sim_full_def] >>
     disch_then (qspecl_then [`st0`, `s1`, `amount_end`, `shadow_s1`,
@@ -440,6 +449,11 @@ Resume send_expr_sim_full[gas_child]:
     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
      qpat_assum `return_buf_frame d cenv s1 t` (irule_at Any) >>
      fs[loweringPostsTheory.expr_post_def]) >>
+  `!fn inst s. frag_reachable ctx func t' fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+     qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+       ACCEPT_TAC (Q.SPEC `t'`
+         (MATCH_MP pow_compose_reachable_no_wrap (CONJ inv member)))))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ gas_e _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`amount_end`,`sm`,`shadow_amount_end`,`sm'`,
@@ -452,6 +466,7 @@ Resume send_expr_sim_full[gas_child]:
                            arithmeticTheory.LESS_EQ_TRANS] >>
      conj_tac >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono,
                            arithmeticTheory.LESS_EQ_TRANS] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> _`
        (qspec_then `H` (drule_then strip_assume_tac)) >>
@@ -484,7 +499,10 @@ Resume send_expr_sim_full[gas_child]:
   qpat_assum `gas_outcome_full _ _ _ _ _ _ gasQ gasR` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `gasR`,Abbr `amountR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def]
+  Cases_on `res`
+  >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >>
+      simp[exprSimDefsTheory.expr_exit_def]) >>
+  simp[]
 QED
 
 Resume send_expr_sim_full[call_tail]:
@@ -706,8 +724,10 @@ Resume send_expr_sim_full[gas_call_tail]:
     metis_tac[uint256_typed_dest] >>
   `outcomes_accounts_typed gas_end.outcomes /\
    accounts_runtime_well_typed gas_end.accounts` by
-    fs[expr_sim_inv_def,
-       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+    (qpat_assum `expr_sim_inv cenv cx env gas_end` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]) >>
   `s0.vs_alloca_next <= gas_s.vs_alloca_next` by
     metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   `MAP finite_map$FDOM es.scopes = MAP finite_map$FDOM gas_end.scopes` by

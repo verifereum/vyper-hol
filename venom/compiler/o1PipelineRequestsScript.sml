@@ -12,6 +12,7 @@
  *)
 Theory o1PipelineRequests
 Ancestors
+  o1LabelFlowStaticContracts
   o1RequestContract o1RequestRuns o1LowerDloadRequests
   concretizeStageRequests dftRequestsGas o1PipelineCorrect o1PipelineCompose
   o1ComposeSupport o1PassContract o1ContractTheorems o1ScheduleDecomp

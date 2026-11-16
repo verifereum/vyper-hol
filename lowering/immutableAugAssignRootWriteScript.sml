@@ -7,7 +7,7 @@ Ancestors
   bodyImmutableAugAssignPaths bodyDeclMemoryCore bodyDeclMemoryCounted allocaFootprint
   emitHelperProps emitHelper venomInst fragExec fragExecMem venomExecSemantics
   compileEnv fragGasMode venomState valueEncodingDefs loweringStateRelDefs
-  exprLoweringProps venomMemProps finite_map alist
+  exprLoweringProps venomMemProps finite_map alist vyperPlaceFrames vyperStorageFootprint
 
 Theorem immutable_word_store_path_mem[local]:
   emit_void MSTORE [dst;op] sa = ((),sb) /\ fn_has_code sa sb func /\
@@ -35,14 +35,17 @@ Proof
     (irule emit_mstore_mem_ok >> metis_tac[]) >>
   conj_tac
   >- (simp[gas_marked_path_def] >>
-      drule_at (Pat `run_inst_seq _ _ = _`) body_decl_zero_gas_path >> simp[]) >>
+      drule_at (Pat `run_inst_seq _ _ = _`) bodyDeclZeroGasPathTheory.body_decl_zero_gas_path >> simp[]) >>
   irule body_store_memory_history >> simp[] >>
   qexistsl [`s`, `sa`] >> fs[listTheory.EVERY_MEM]
 QED
 
 Theorem immutable_augassign_root_write_callback:
   cenv.ce_is_ctor /\ expr_sim_inv cenv cx env ee /\
-  stmt_state_rel ctx func cenv cx ee t /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee t /\
+    storage_well_formed_on cx ee (FST H)) /\
   ALOOKUP ee.immutables cx.txn.target = SOME imms /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,a) /\
@@ -68,8 +71,9 @@ Theorem immutable_augassign_root_write_callback:
   ?ff u. (!tail. write_place cx (ImmutablePlace cenv.ce_module id []) v
                   (ee with gas_obs := tail) = (INL (),ff with gas_obs := tail)) /\
     gas_marked_path T ctx func t 0 (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry (INL ())
-      (ff with gas_obs := []) u /\ alloca_history func u /\
+    (!H. valid_horizon cx st0 H ff.storage_trace ==>
+      stmt_post H ctx func cx lctx cenv cenv sa sf es_entry s_entry (INL ())
+        (ff with gas_obs := []) u) /\ alloca_history func u /\
     s_entry.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >>
@@ -90,13 +94,7 @@ Proof
     mem_bytes_at a k t.vs_memory` by
     (rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
      fs[regions_disjoint_def] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx ff (mstore off (typed_val_to_w256 tv v) t)` by
-    (irule immutable_store_stmt_state_rel >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`env`, `ee`, `id`, `off`, `t`, `sa`, `cenv.ce_module`, `tv`, `ity`, `v`] >>
-     simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def,
-          venomStateTheory.write_memory_with_expansion_def,
-          venomStateTheory.venom_state_component_equality]) >>
+  `stmt_state_rel H0 ctx func cenv cx ee t` by simp[] >>
   `alloca_inv t` by fs[stmt_state_rel_def] >>
   drule_all immutable_word_store_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -106,17 +104,48 @@ Proof
        vs_inst_idx := LENGTH sf.cs_current_insts)) /\
    alloca_history func (mstore off (typed_val_to_w256 tv v) t with
        vs_inst_idx := LENGTH sf.cs_current_insts)` by metis_tac[] >>
+  `s_entry.vs_alloca_next <=
+     (mstore off (typed_val_to_w256 tv v) t with
+       vs_inst_idx := LENGTH sf.cs_current_insts).vs_alloca_next` by
+    simp[venomStateTheory.mstore_def,
+         venomStateTheory.write_memory_with_expansion_def] >>
   qexistsl [`ff`, `mstore off (typed_val_to_w256 tv v) t with
                     vs_inst_idx := LENGTH sf.cs_current_insts`] >>
+  `?updated_immutables. ff = ee with immutables := updated_immutables` by
+    (drule write_immutable_place_frame >> simp[]) >>
+  `ff.storage_trace = ee.storage_trace /\ ff.accounts = ee.accounts /\
+   ff.tStorage = ee.tStorage` by simp[] >>
   simp[] >> conj_tac
   >- (gen_tac >> drule_all immutable_write_place_gas_obs >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee t /\
+   storage_well_formed_on cx ee (FST H)` by simp[] >>
+  `storage_well_formed_on cx (ff with gas_obs := []) (FST H)` by
+    (`(ff with gas_obs := []).accounts = ee.accounts /\
+      (ff with gas_obs := []).tStorage = ee.tStorage` by simp[] >>
+     metis_tac[storage_well_formed_on_backends]) >>
+  `stmt_state_rel H ctx func cenv cx ff (mstore off (typed_val_to_w256 tv v) t)` by
+    (irule immutable_store_stmt_state_rel >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`env`, `ee`, `id`, `off`, `t`, `sa`, `cenv.ce_module`, `tv`, `ity`, `v`] >>
+     simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def,
+          venomStateTheory.write_memory_with_expansion_def,
+          venomStateTheory.venom_state_component_equality]) >>
   irule aug_place_normal_post >> simp[stmt_state_rel_gas_obs] >>
   `ff.scopes = ee.scopes` by simp[Abbr `ff`] >>
   `alloca_frame cenv es_entry sa s_entry cenv ff
      (mstore off (typed_val_to_w256 tv v) t with
         vs_inst_idx := LENGTH sf.cs_current_insts)` by
-    (irule immutable_mstore_alloca_frame >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  gvs[stmt_state_rel_inst_idx, venomStateTheory.mstore_def,
-      venomStateTheory.lookup_var_def, same_blocks_def]
+    (irule (INST_TYPE [alpha |-> ``:256``] immutable_mstore_alloca_frame) >>
+     simp[] >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `ee`, `func`, `id`, `tv`, `ity`] >>
+     simp[]) >>
+  gvs[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, venomStateTheory.mstore_def,
+      venomStateTheory.lookup_var_def, same_blocks_def] >>
+  conj_tac
+  >- (qpat_x_assum `alloca_frame _ _ _ _ _ (ee with immutables := _) _` mp_tac >>
+      simp[stmtSimDefsTheory.alloca_frame_def]) >>
+  qpat_x_assum `stmt_state_rel H _ _ _ _ (ee with immutables := _) _` mp_tac >>
+  pure_once_rewrite_tac[GSYM evaluation_state_fupdcanon] >>
+  pure_rewrite_tac[stmt_state_rel_gas_obs] >> simp[]
 QED

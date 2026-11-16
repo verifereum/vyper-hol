@@ -217,7 +217,7 @@ Proof
      cx.txn.is_static /\
      res = INR (Error (RuntimeError "write in static context")) /\
      ff = mid with gas_obs := [])` assume_tac
-  >- (irule tuple_place_source_write_outcome >>
+  >- (irule (INST_TYPE [alpha |-> ``:256``] tuple_place_source_write_outcome) >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   reverse (qpat_x_assum `res = INL () \/ _`
     (DISJ_CASES_THEN strip_assume_tac))
@@ -258,6 +258,9 @@ QED
 
 Resume tuple_place_marked_head_step[static]:
   markerLib.RESUME_TAC >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule tuple_place_target_base_inversion >> strip_tac >>
   `target_pre cenv cx env bt
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -281,7 +284,8 @@ Resume tuple_place_marked_head_step[static]:
     sp sa s0 (mid with gas_obs := []) (PlaceR (StoragePlace is_t slot value_ty))
     (Type (EL i tys)) r s` by simp[] >>
   `expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s` by
-    (irule tuplePlacePointerReadyTheory.tuple_place_pointer_value_rel >>
+    (irule (INST_TYPE [alpha |-> ``:256``]
+               tuplePlacePointerReadyTheory.tuple_place_pointer_value_rel) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -313,7 +317,8 @@ Resume tuple_place_marked_head_step[static_value]:
     (irule tuplePlaceBoundsTheory.tuple_place_element_alloc_ok >> metis_tac[]) >>
   `tuple_place_snapshot cenv cx (mid with gas_obs := []) lo sa.cs_next_id
     tys ltys ltvs w s` by
-    (irule tuplePlacePointerReadyTheory.tuple_place_pointer_snapshot >>
+    (irule (INST_TYPE [alpha |-> ``:256``]
+               tuplePlacePointerReadyTheory.tuple_place_pointer_snapshot) >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `LENGTH ltvs = LENGTH ltys /\
@@ -324,7 +329,9 @@ Resume tuple_place_marked_head_step[static_value]:
   `?sw. eval_operand (EL i elems) s = SOME sw /\
     w2n sw = w2n w + SUM (MAP type_memory_size (TAKE i ltvs))` by
     (drule (Q.INST [`j` |-> `i`]
-       tuplePlacePointerReadyTheory.tuple_place_head_pointer_operands) >> simp[] >> metis_tac[]) >>
+       (INST_TYPE [alpha |-> ``:256``]
+          tuplePlacePointerReadyTheory.tuple_place_head_pointer_operands)) >>
+     simp[] >> metis_tac[]) >>
   `EL i tys <> EL i ltys ==>
     w2n sw + type_memory_size (EL i ltvs) <= s.vs_alloca_next /\
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
@@ -362,7 +369,10 @@ Resume tuple_place_marked_head_step[static_value]:
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
-  Cases_on `is_t` >> gvs[] >> metis_tac[]
+  Cases_on `is_t` >> gvs[] >>
+  qexistsl [`cx`, `mid`, `env`, `EL i ltvs`, `EL i vs`] >>
+  asm_simp_tac (srw_ss()) [] >>
+  rpt conj_tac >> rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Finalise tuple_place_marked_head_step
@@ -476,7 +486,7 @@ Proof
     (\H res ee t. ?p. res = INL p /\
       target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\H res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)` by
     (irule target_place_sim >> simp[] >>
      qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [tuplePlaceHeadTheory.tuple_place_head_def]) >>
@@ -510,6 +520,7 @@ Proof
   `~t.vs_halted` by
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [LET_THM]) >>
   drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >>
   disch_then (DISJ_CASES_THEN strip_assume_tac)
   >- (irule tuple_place_write_gas_prefix >>
