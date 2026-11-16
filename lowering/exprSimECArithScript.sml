@@ -2248,7 +2248,7 @@ Proof
   simp[vyperStateTheory.evaluation_state_component_equality]
 QED
 
-Theorem ec_source_tail_storage_frame[local]:
+Theorem ec_source_tail_storage_frame:
   storage_trace_frame (ec_source_tail cx ann bt tys vs)
 Proof
   `!v. storage_trace_frame
