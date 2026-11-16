@@ -18,6 +18,8 @@
 
 Theory placeStoreSlots
 Ancestors
+  storeSlotsMemoryPaths storeSlotsCountedControl
+  fragGasSeqMem
   placeStaticCopyExit placeStaticStoreExit storageStoreFrame
   placeCopyControlPath slotCopyExecution exprSimDefs
   placeStoreCopyPath placeStoreStorage exprSimAlloc loweringSlice emitHelperProps fragExec
@@ -4234,4 +4236,1053 @@ Proof
   fs[store_slots_static_outcome_def] >> first_x_assum drule >>
   disch_then (qspecl_then [`func`, `s`, `sw`, `dw`, `RetQ`, `ee`] mp_tac) >>
   simp[] >> asm_rewrite_tac[]
+QED
+
+
+
+(* The source buffer is allocated even when the first storage write aborts. *)
+Theorem place_slots_emit_static_exit_mem_local[local]:
+  emit_void (if tr then TSTORE else SSTORE) [dst; op] st = ((), st') /\
+  eval_operand dst s = SOME addr /\ eval_operand op s = SOME w /\
+  fn_has_code st st' func /\ ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `st'.cs_current_bb = st.cs_current_bb` by
+    gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH st.cs_current_insts) =
+     SOME (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_marked_path T ctx func s
+     (if (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE) [dst;op] []).inst_opcode = GAS then 1 else 0)
+     (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+    (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
+     Cases_on `tr` >>
+     gvs[mk_inst_def, is_terminator_def, step_inst_base_def, eval_operands_def,
+         unitTransformDefsTheory.inst_mem_below_frontier_def,
+         contextCodegenRelTheory.source_memory_read_ranges_def,
+         codegenRelTheory.source_memory_write_ranges_def,
+         memSafeRunTheory.inst_dload_in_section_def]) >>
+  qexists_tac `Abort ExHalt_abort (halt_state (set_returndata [] s))` >>
+  Cases_on `tr` >>
+  gvs[mk_inst_def, exit_result_def, stmt_exit_def, expr_exit_def]
+QED
+
+Theorem place_slots_singleton_static_exit_mem_local[local]:
+  emit_op MLOAD [src] sa = (op,sm) /\
+  emit_void (if tr then TSTORE else SSTORE) [dst;op] sm = ((),sb) /\
+  fn_has_code sa sb func /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  w2n sw + 32 <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  strip_tac >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    metis_tac[typed_copy_emit_op_mono, ci_mono_emit_void, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    (gvs[ci_mono_def] >> metis_tac[fn_has_code_split]) >>
+  `?u. gas_marked_path T ctx func s 0 (OK u) /\
+       eval_operand op u = SOME (mload (w2n sw) s) /\
+       u.vs_memory = s.vs_memory /\
+       (!off len. typed_copy_state_frame sa off len s u) /\
+       u.vs_alloca_next = s.vs_alloca_next /\
+       ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (irule store_slots_emit_op_path_mem >> simp[] >>
+     qexistsl_tac [`[src]`, `MLOAD`] >>
+     simp[is_terminator_def, instMemFrontierTheory.below_frontier_MLOAD,
+          mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def]) >>
+  `eval_operand dst u = SOME dw` by metis_tac[typed_copy_state_frame_operand] >>
+  `u.vs_call_ctx.cc_static` by
+    fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  drule_all place_slots_emit_static_exit_mem_local >>
+  disch_then (qspecl_then [`ee`, `ctx`, `RetQ`]
+    (qx_choose_then `r` strip_assume_tac)) >>
+  qexists_tac `r` >> simp[] >>
+  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+QED
+
+Theorem place_slots_bytes_static_exit_mem_local[local]:
+  is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\
+  compile_store_slots cenv src slot ty tr sa = ((),sb) /\
+  (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  val_in_memory tv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+  ?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  strip_tac >>
+  `?cap. tv = BaseTV (BytesT (Dynamic cap)) \/ tv = BaseTV (StringT cap)` by
+    (Cases_on `ty` >> gvs[is_bytestring_type_def, evaluate_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_bytestring_type_def, evaluate_type_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >>
+     gvs[is_bytestring_type_def, evaluate_type_def]) >>
+  `?writes. encode_value tv v = SOME writes` by
+    metis_tac[value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
+  drule_at (Pat `val_in_memory _ _ _ _`) store_slots_bytes_footprint >>
+  disch_then (qspecl_then [`writes`, `cap`] mp_tac) >> simp[] >> strip_tac >>
+  `is_abi_dynamic cenv.ce_struct_fields ty` by
+    (qpat_x_assum `is_bytestring_type ty` mp_tac >>
+     Cases_on `ty` >> simp[is_bytestring_type_def, is_abi_dynamic_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     simp[is_bytestring_type_def, is_abi_dynamic_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >>
+     gvs[is_bytestring_type_def, is_abi_dynamic_def]) >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `compile_bytestring_word_count src sa = (cnt,sm)` >>
+  fs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  `ci_mono sa sm /\ (!x. cnt = Var x ==> not_fresh_at sm x)` by
+    (qpat_x_assum `compile_bytestring_word_count _ _ = _` mp_tac >>
+     simp[compile_bytestring_word_count_def, comp_bind_def] >>
+     pairarg_tac >> pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+     imp_res_tac typed_copy_emit_op_mono >> conj_tac
+     >- (fs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+     metis_tac[typed_copy_emit_op_fresh]) >>
+  rename1 `compile_word_copy_loop_op src slot cnt LocMemory
+    (if tr then LocTransient else LocStorage) F sm = (ignored,sb)` >>
+  `ci_mono sm sb` by metis_tac[ci_mono_compile_word_copy_loop_op, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    (fs[ci_mono_def] >> metis_tac[fn_has_code_split]) >>
+  `w2n sw + 32 <= s.vs_alloca_next` by decide_tac >>
+  drule_all store_slots_bytes_count_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  suspend "copy"
+QED
+
+Resume place_slots_bytes_static_exit_mem_local[copy]:
+  markerLib.RESUME_TAC >> (
+  `eval_operand src u = SOME sw /\ eval_operand slot u = SOME dw` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  `!x. src = Var x \/ slot = Var x \/ cnt = Var x ==> not_fresh_at sm x` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `u.vs_call_ctx.cc_static` by
+    fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `0 < 1 + word_size L /\ 1 + word_size L < dimword (:256)` by
+    (fs[type_memory_size_slots] >> decide_tac) >>
+  `w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= u.vs_alloca_next` by
+    decide_tac >>
+  `?r. gas_marked_path T ctx func u 0 r /\ exit_result r /\
+    stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r` by
+    (qpat_assum `compile_word_copy_loop_op _ _ _ _ _ _ _ = _`
+       (mp_then Any mp_tac placeStaticCopyExitTheory.place_static_copy_op_exit_mem) >>
+     metis_tac[]) >>
+  qexists_tac `r` >> simp[] >>
+  metis_tac[gas_marked_path_then, ADD_CLAUSES])
+QED
+
+Finalise place_slots_bytes_static_exit_mem_local
+
+Theorem place_slots_empty_copy_mem_local[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop_op src dst (Lit 0w) LocMemory loc F sa = (u,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_frame sa loc b k s 0 t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all place_store_runtime_copy_code >> strip_tac >>
+  `get_instruction bb0 s.vs_inst_idx =
+     SOME (mk_inst id0 ASSIGN [Lit 0w] [cv])` by
+    (drule fragGasSeqAbortTheory.instruction_prefix_cursor >> simp[]) >>
+  `!x. not_fresh_at sa x ==> x <> cv` by (fs[] >> metis_tac[]) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb0` by simp[] >>
+  drule_all bodyMemAssignTopCopyPathsTheory.topcopy_init_path >>
+  disch_then (qspecl_then [`ctx`, `loc`, `b`, `k`] strip_assume_tac) >>
+  `get_instruction bb0 t.vs_inst_idx =
+     SOME (mk_inst (id0+1) JMP [Label hdr] [])` by
+    (qpat_assum `isPREFIX [mk_inst _ ASSIGN _ _; _] _`
+       (mp_then Any strip_assume_tac fragGasSeqAbortTheory.instruction_prefix_cursor) >>
+     drule fragGasSeqAbortTheory.instruction_prefix_cursor >> simp[ADD1]) >>
+  `step_inst_base (mk_inst (id0+1) JMP [Label hdr] []) t =
+     OK (jump_to hdr t)` by
+    simp[stepInstBaseLib.simp_opcode_clause ``JMP``, mk_inst_def] >>
+  `gas_marked_path T ctx func t 0 (OK (jump_to hdr t))` by
+    (irule bodyMemAssignTopCopyPathsTheory.topcopy_jump_path >> simp[] >>
+     qexists_tac `mk_inst (id0+1) JMP [Label hdr] []` >> gvs[mk_inst_def]) >>
+  qabbrev_tac `r = jump_to hdr t` >>
+  `store_copy_frame sa loc b k s 0 r /\
+   eval_operand (Var cv) r = SOME 0w /\
+   ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0` by
+    gvs[Abbr `r`, bodyMemAssignTopCopyPathsTheory.topcopy_frame_jump,
+        jump_to_def, eval_operand_def, lookup_var_def] >>
+  `get_instruction bbh r.vs_inst_idx =
+     SOME (mk_inst idh EQ [Var cv;Lit (n2w 0)] [tv]) /\
+   get_instruction bbh (SUC r.vs_inst_idx) =
+     SOME (mk_inst (idh+1) JNZ [Var tv;Label exit;Label body_lbl] [])` by
+    (qpat_assum `isPREFIX [mk_inst _ EQ _ _; _] _`
+       (strip_assume_tac o REWRITE_RULE [IS_PREFIX_APPEND]) >>
+     simp[get_instruction_def, EL_APPEND_EQN]) >>
+  `cv <> tv /\ (!x. not_fresh_at sa x ==> x <> tv)` by
+    (gvs[ALL_DISTINCT] >> metis_tac[]) >>
+  `lookup_block r.vs_current_bb func.fn_blocks = SOME bbh` by
+    (fs[store_copy_frame_def] >> metis_tac[place_store_frame_fields]) >>
+  `0 <= (0:num) /\ (0:num) < dimword (:256) /\
+   eval_operand (Var cv) r = SOME (n2w 0)` by simp[] >>
+  drule_all bodyMemAssignTopCopyPathsTheory.topcopy_header_path >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `endpoint` strip_assume_tac) >>
+  qexists_tac `endpoint` >> simp[] >>
+  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+QED
+
+Theorem place_slots_nondynamic_static_exit_mem_local[local]:
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  ~is_abi_dynamic cenv.ce_struct_fields ty /\
+  evaluate_type tenv ty = SOME tv /\
+  compile_store_slots cenv src slot ty tr sa = ((),sb) /\
+  (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+  (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+  (type_slot_size tv = 0 /\
+   ?t. gas_marked_path T ctx func s 0 (OK t) /\
+     store_copy_normalize s t = s /\
+     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+     t.vs_alloca_next = s.vs_alloca_next /\
+     t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `type_memory_bytes cenv ty = type_memory_size tv` by
+    (irule typed_copy_memory_size >> metis_tac[]) >>
+  `type_memory_bytes cenv ty DIV 32 = type_slot_size tv` by
+    simp[type_memory_size_slots] >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, comp_bind_def, comp_return_def] >>
+  Cases_on `type_slot_size tv = 1`
+  >- (simp[comp_bind_def] >> pairarg_tac >> strip_tac >> gvs[] >>
+      irule place_slots_singleton_static_exit_mem_local >>
+      rpt (goal_assum (drule_at Any)) >>
+      fs[type_memory_size_slots] >> decide_tac) >>
+  simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `(if tr then compile_memory_to_transient else compile_memory_to_storage)
+    src slot (type_slot_size tv) sa = (u,sb)` >>
+  `compile_word_copy_loop_op src slot (Lit (n2w (type_slot_size tv)))
+     LocMemory (if tr then LocTransient else LocStorage) F sa = (u,sb)` by
+    (Cases_on `tr` >>
+     gvs[compile_memory_to_storage_def, compile_memory_to_transient_def,
+         compile_word_copy_loop_def]) >>
+  Cases_on `type_slot_size tv = 0`
+  >- (disj2_tac >> simp[] >>
+      `?t. gas_marked_path T ctx func s 0 (OK t) /\
+        store_copy_frame sa (if tr then LocTransient else LocStorage) sw dw s 0 t /\
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+        (gvs[] >> Cases_on `tr` >> gvs[] >>
+         metis_tac[place_slots_empty_copy_mem_local]) >>
+      qexists_tac `t` >>
+      drule place_store_frame_fields >> strip_tac >>
+      fs[store_copy_frame_def, store_copy_prefix_def, COUNT_LIST_def] >>
+      gvs[store_copy_normalize_def, venom_state_component_equality]) >>
+  disj1_tac >>
+  `0 < type_slot_size tv` by decide_tac >>
+  `type_slot_size tv < dimword (:256) /\
+   w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next` by
+    (fs[type_memory_size_slots] >> decide_tac) >>
+  qpat_assum `compile_word_copy_loop_op _ _ _ _ _ _ _ = _`
+    (mp_then Any mp_tac placeStaticCopyExitTheory.place_static_copy_op_exit_mem) >>
+  Cases_on `tr` >> simp[eval_operand_def] >> metis_tac[LESS_MOD]
+QED
+
+Theorem place_slots_member_static_mem_local[local]:
+  compile_lit_byte_offset src mo sa = (ms,a) /\
+  compile_lit_byte_offset slot so a = (ds,b) /\
+  compile_store_slots cenv ms ds ty tr b = ((),sc) /\
+  (!src slot tr sa sb func s sw dw RetQ ee.
+    compile_store_slots cenv src slot ty tr sa = ((),sb) /\
+    (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+    val_in_memory tv v (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size tv < dimword (:256) /\
+    w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+    w2n dw + type_slot_size tv <= dimword (:256) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+    (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+    (type_slot_size tv = 0 /\ ?t. gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_normalize s t = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts)) /\
+  (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  val_in_memory tv v (w2n sw + mo) s.vs_memory /\
+  w2n sw + mo + type_memory_size tv < dimword (:256) /\
+  w2n sw + mo + type_memory_size tv <= s.vs_alloca_next /\
+  w2n dw + so + type_slot_size tv <= dimword (:256) /\
+  fn_has_code sa sc func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+  (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+    stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+  (type_slot_size tv = 0 /\ ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    store_copy_normalize s t = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+    ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sc.cs_current_insts)
+Proof
+  strip_tac >>
+  `ci_mono sa a /\ ci_mono a b /\ ci_mono b sc` by
+    metis_tac[ci_mono_compile_lit_byte_offset,
+              cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
+  `fn_has_code sa a func /\ fn_has_code a b func /\ fn_has_code b sc func` by
+    (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
+  `(!x. slot = Var x ==> not_fresh_at a x) /\
+   (!x. ms = Var x ==> not_fresh_at a x) /\
+   (!x. ms = Var x \/ ds = Var x ==> not_fresh_at b x)` by
+    metis_tac[store_slots_lit_offset_fresh, typed_copy_operand_fresh_mono] >>
+  qpat_assum `compile_lit_byte_offset src _ _ = _`
+    (mp_then Any mp_tac storeSlotsMemoryPathsTheory.store_slots_lit_offset_path_mem) >>
+  disch_then (qspecl_then [`s`, `sw`, `func`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `q1` strip_assume_tac) >>
+  `eval_operand slot q1 = SOME dw` by metis_tac[typed_copy_state_frame_operand] >>
+  qpat_assum `compile_lit_byte_offset slot _ _ = _`
+    (mp_then Any mp_tac storeSlotsMemoryPathsTheory.store_slots_lit_offset_path_mem) >>
+  disch_then (qspecl_then [`q1`, `dw`, `func`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `q2` strip_assume_tac) >>
+  `eval_operand ms q2 = SOME (sw + n2w mo)` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  `w2n (sw + n2w mo) = w2n sw + mo` by
+    (irule typed_copy_offset_nonwrap >> decide_tac) >>
+  `w2n (dw + n2w so) + type_slot_size tv <= dimword (:256)` by
+    (simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >>
+     mp_tac (Q.INST [`x` |-> `so + w2n (dw:bytes32)`, `y` |-> `dimword (:256)`]
+       MOD_LESS_EQ) >> simp[] >> decide_tac) >>
+  `typed_copy_state_frame sa 0 0 s q2` by
+    metis_tac[typed_copy_state_frame_trans, typed_copy_state_frame_mono] >>
+  `q2.vs_call_ctx = s.vs_call_ctx /\ q2.vs_memory = s.vs_memory /\
+   q2.vs_allocas = s.vs_allocas /\ q2.vs_labels = s.vs_labels /\
+   store_copy_normalize s q2 = s /\ q2.vs_alloca_next = s.vs_alloca_next` by
+    fs[typed_copy_state_frame_def, store_copy_normalize_def,
+       venom_state_component_equality] >>
+  suspend "child"
+QED
+
+Resume place_slots_member_static_mem_local[child]:
+  qpat_x_assum `!src slot tr sa sb func s sw dw RetQ ee. _` mp_tac >>
+  disch_then (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`func`, `q2`, `sw + n2w mo`, `dw + n2w so`,
+                         `RetQ`, `ee`] mp_tac) >>
+  simp[] >>
+  (impl_tac >- metis_tac[ADD_COMM]) >> strip_tac
+  >- (disj1_tac >> qexists_tac `r` >> simp[] >>
+      metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
+  disj2_tac >> simp[] >> qexists_tac `t` >> simp[] >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  conj_tac
+  >- (qpat_x_assum `store_copy_normalize q2 t = q2`
+        (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+      simp[store_slots_normalize_compose]) >>
+  fs[typed_copy_state_frame_def, ci_mono_def, not_fresh_at_def] >>
+  metis_tac[LESS_EQ_TRANS]
+QED
+
+Finalise place_slots_member_static_mem_local
+
+Theorem place_slots_members_static_mem_local[local]:
+  !members tvs vs cenv ctx mo so src slot tr sa sb func s sw dw RetQ ee.
+    compile_store_slots_members cenv src slot members mo so tr sa = ((),sb) /\
+    LIST_REL (\(ty,sz) (tv,v). sz = type_memory_size tv /\
+      (!src slot tr sa sb func s sw dw RetQ ee.
+        compile_store_slots cenv src slot ty tr sa = ((),sb) /\
+        (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+        eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+        val_in_memory tv v (w2n sw) s.vs_memory /\
+        w2n sw + type_memory_size tv < dimword (:256) /\
+        w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+        w2n dw + type_slot_size tv <= dimword (:256) /\
+        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+        ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+        (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+          stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+        (type_slot_size tv = 0 /\ ?t. gas_marked_path T ctx func s 0 (OK t) /\
+          store_copy_normalize s t = s /\
+          (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+          t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+          t.vs_alloca_next = s.vs_alloca_next /\
+          t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+          ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts)))
+      members (ZIP (tvs,vs)) /\
+    LENGTH vs = LENGTH tvs /\ mo = 32 * so /\
+    tuple_in_memory vs tvs (w2n sw + mo) s.vs_memory /\
+    (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+    w2n sw + mo + type_memory_size_list tvs < dimword (:256) /\
+    w2n sw + mo + type_memory_size_list tvs <= s.vs_alloca_next /\
+    w2n dw + so + type_slot_size_list tvs <= dimword (:256) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+    (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+    (type_slot_size_list tvs = 0 /\
+     ?t. gas_marked_path T ctx func s 0 (OK t) /\
+       store_copy_normalize s t = s /\
+       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+       t.vs_alloca_next = s.vs_alloca_next /\
+       t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+Proof
+  Induct_on `members`
+  >- (rpt gen_tac >> simp[Once compile_store_slots_def, comp_return_def] >>
+      strip_tac >> `tvs = [] /\ vs = []` by
+        (Cases_on `tvs` >> Cases_on `vs` >> gvs[]) >>
+      gvs[] >> disj2_tac >> simp[type_slot_size_def] >> qexists_tac `s` >>
+      simp[gas_marked_path_def, fragGasPathMemTheory.gas_path_mem_rules,
+           store_copy_normalize_def, venom_state_component_equality]) >>
+  qx_gen_tac `hdmem` >> PairCases_on `hdmem` >>
+  Cases_on `tvs` >> Cases_on `vs` >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots_members _ _ _ (_::_) _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, comp_bind_def, comp_ignore_bind_def,
+       AllCaseEqs()] >> strip_tac >>
+  rename1 `compile_store_slots cenv _ _ ty tr` >>
+  rename1 `val_in_memory tv v _ _` >>
+  rename1 `ZIP (tvs,vs)` >>
+  Cases_on `compile_lit_byte_offset src (32 * so) sa` >>
+  rename1 `compile_lit_byte_offset src (32 * so) sa = (ms,a)` >>
+  Cases_on `compile_lit_byte_offset slot so a` >>
+  rename1 `compile_lit_byte_offset slot so a = (ds,b)` >>
+  Cases_on `compile_store_slots cenv ms ds ty tr b` >>
+  rename1 `compile_store_slots cenv ms ds ty tr b = (u,sc)` >>
+  Cases_on `u` >> gvs[] >>
+  `ci_mono sa a /\ ci_mono a b /\ ci_mono b sc /\ ci_mono sc sb` by
+    metis_tac[ci_mono_compile_lit_byte_offset,
+      cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots,
+      cj 2 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
+  `fn_has_code sa sc func /\ fn_has_code sc sb func` by
+    (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
+  gvs[Once val_in_memory_def, type_memory_size_def, type_slot_size_def] >>
+  `w2n sw + 32 * so + type_memory_size tv < dimword (:256) /\
+   w2n sw + 32 * so + type_memory_size tv <= s.vs_alloca_next /\
+   w2n dw + so + type_slot_size tv <= dimword (:256)` by
+    (fs[type_memory_size_slots] >> decide_tac) >>
+  `val_in_memory tv v (w2n sw + 32 * so) s.vs_memory` by metis_tac[ADD_COMM] >>
+  `(?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+   (type_slot_size tv = 0 /\ ?t. gas_marked_path T ctx func s 0 (OK t) /\
+     store_copy_normalize s t = s /\
+     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+     t.vs_alloca_next = s.vs_alloca_next /\
+     t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+     ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sc.cs_current_insts)` by
+    (irule place_slots_member_static_mem_local >>
+     rpt (goal_assum (drule_at Any)) >> simp[ADD_COMM] >> gvs[])
+  >- (disj1_tac >> metis_tac[]) >>
+  suspend "tail"
+QED
+
+Resume place_slots_members_static_mem_local[tail]:
+  `eval_operand src t = SOME sw /\ eval_operand slot t = SOME dw` by
+    (conj_tac
+     >- (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `slot` >> fs[eval_operand_def] >> metis_tac[]) >>
+  `!x. src = Var x \/ slot = Var x ==> not_fresh_at sc x` by
+    (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `type_memory_size tv = 0` by simp[type_memory_size_slots] >>
+  qpat_x_assum `!tvs vs cenv ctx so src slot tr sa sb func s sw dw RetQ ee. _`
+    (qspecl_then [`tvs`, `vs`, `cenv`, `ctx`, `so`, `src`, `slot`, `tr`,
+                  `sc`, `sb`, `func`, `t`, `sw`, `dw`, `RetQ`, `ee`] mp_tac) >>
+  (impl_tac >- (fs[type_memory_size_slots] >> metis_tac[])) >> strip_tac
+  >- (disj1_tac >> qexists_tac `r` >> simp[] >>
+      metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
+  rename1 `gas_marked_path T ctx func t 0 (OK endpoint)` >>
+  disj2_tac >> simp[] >> qexists_tac `endpoint` >> simp[] >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  conj_tac
+  >- (qpat_x_assum `store_copy_normalize t endpoint = t`
+        (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+      simp[store_slots_normalize_compose]) >>
+  fs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]
+QED
+
+Finalise place_slots_members_static_mem_local
+
+Theorem place_slots_elements_static_mem_local[local]:
+  compile_copy_elements_to_slots cenv src slot elem cnt tr sa = ((),sb) /\
+  type_memory_bytes cenv elem = type_memory_size etv /\
+  (!i. i < N ==> !src slot tr sa sb func s sw dw RetQ ee.
+    compile_store_slots cenv src slot elem tr sa = ((),sb) /\
+    (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+    val_in_memory etv (el i) (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size etv < dimword (:256) /\
+    w2n sw + type_memory_size etv <= s.vs_alloca_next /\
+    w2n dw + type_slot_size etv <= dimword (:256) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+    ?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) /\
+  (!i. i < N ==> val_in_memory etv (el i)
+    (w2n sw + i * type_memory_size etv) s.vs_memory) /\
+  (!x. src = Var x \/ slot = Var x \/ cnt = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  eval_operand cnt s = SOME (n2w N) /\ N < dimword (:256) /\
+  w2n sw + N * type_memory_size etv < dimword (:256) /\
+  w2n sw + N * type_memory_size etv <= s.vs_alloca_next /\
+  w2n dw + N * type_slot_size etv <= dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+  (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+    stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+  (N = 0 /\ ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    store_copy_normalize s t = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >> drule_all store_slots_loop_code >>
+  disch_then (qx_choose_then `layout` assume_tac) >> PairCases_on `layout` >>
+  rename1 `store_slots_loop_code cenv src slot elem cnt tr sa sb func
+    (loophdr,loopbody,loopexit,loopcv,looplv,loopdv,loopiv,loopbs,loopsc,loopsd,loopsp,loopdp)` >>
+  fs[store_slots_loop_code_def] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME ibb /\
+   DROP s.vs_inst_idx ibb.bb_instructions =
+     [mk_inst id1 ASSIGN [Lit 0w] [loopcv]; mk_inst id2 JMP [Label loophdr] []]` by simp[] >>
+  drule_all store_slots_array_init_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func s 0 (OK u)` >>
+  `store_slots_prefix sa etv el tr sw dw s 0 [] u` by
+    (simp[Abbr `u`] >> irule store_slots_prefix_init_control >>
+     simp[store_slots_prefix_empty] >> metis_tac[]) >>
+  `u.vs_alloca_next = s.vs_alloca_next /\ lookup_var loopcv u = SOME 0w /\
+   u.vs_current_bb = loophdr /\ u.vs_inst_idx = 0` by
+    simp[Abbr `u`, jump_to_def, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `~u.vs_halted /\ eval_operand cnt u = SOME (n2w N)` by
+    (fs[store_slots_prefix_def] >> Cases_on `cnt` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME hbb /\
+   eval_operand (Var loopcv) u = SOME (n2w 0) /\ 0 <= N` by
+    simp[eval_operand_def] >>
+  drule_all store_slots_array_condition_mem >> simp[] >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func u 0 (OK hu)` >>
+  `store_slots_prefix sa etv el tr sw dw s 0 [] hu` by
+    (simp[Abbr `hu`] >> irule store_slots_prefix_control >> simp[] >> metis_tac[]) >>
+  Cases_on `N = 0` >- suspend "empty" >>
+  suspend "child"
+QED
+
+Resume place_slots_elements_static_mem_local[empty]:
+  disj2_tac >> simp[] >> qexists_tac `hu` >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  fs[store_slots_prefix_def, store_slots_prefix_empty] >>
+  simp[Abbr `hu`, Abbr `u`, jump_to_def, update_var_def]
+QED
+
+Resume place_slots_elements_static_mem_local[child]:
+  `lookup_var loopcv hu = SOME (n2w 0) /\ ~hu.vs_halted /\
+   hu.vs_current_bb = loopbs.cs_current_bb /\
+   hu.vs_inst_idx = LENGTH loopbs.cs_current_insts` by
+    (simp[Abbr `hu`, jump_to_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `eval_operand src hu = SOME sw /\ eval_operand slot hu = SOME dw` by
+    (fs[store_slots_prefix_def] >>
+     conj_tac >- (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `slot` >> fs[eval_operand_def] >> metis_tac[]) >>
+  `(!x. src = Var x ==> not_fresh_at loopbs x) /\
+   (!x. slot = Var x ==> not_fresh_at loopbs x)` by
+    (fs[ci_mono_def] >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  drule_all store_slots_addresses_sequence >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts loopbs loopsc) hu` by
+    (qpat_x_assum `(do _ <- emit_op MUL _; _ od) _ = _` mp_tac >>
+     simp[comp_bind_def, comp_return_def, emit_op_def, fresh_var_def,
+          emit_inst_def, fresh_id_def, emit_def, comp_ignore_bind_def] >>
+     strip_tac >> gvs[] >> irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND] >> rpt conj_tac >> gen_tac >>
+     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  `LENGTH (FILTER (\j. j.inst_opcode = GAS) (emitted_insts loopbs loopsc)) = 0` by
+    (qpat_x_assum `EVERY (\j. j.inst_opcode <> GAS) _` mp_tac >>
+     simp[LENGTH_NIL, FILTER_EQ_NIL]) >>
+  `gas_marked_path T ctx func hu 0
+     (OK (u' with vs_inst_idx := LENGTH loopsc.cs_current_insts))` by
+    (irule store_slots_emitted_seq_path_mem >> simp[] >>
+     qexists_tac `loopbs` >> gvs[]) >>
+  suspend "exit"
+QED
+
+Resume place_slots_elements_static_mem_local[exit]:
+  qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func hu 0 (OK a)` >>
+  `a.vs_memory = s.vs_memory /\ a.vs_alloca_next = s.vs_alloca_next /\
+   a.vs_call_ctx = s.vs_call_ctx /\ ~a.vs_halted /\
+   a.vs_current_bb = loopsc.cs_current_bb /\
+   a.vs_inst_idx = LENGTH loopsc.cs_current_insts /\
+   eval_operand loopsp a = SOME sw /\ eval_operand loopdp a = SOME dw` by
+    (qpat_x_assum `u' with vs_vars := _ = hu` mp_tac >>
+     fs[store_slots_prefix_def, same_blocks_def] >>
+     simp[venom_state_component_equality] >> strip_tac >>
+     simp[Abbr `a`, eval_operand_def, lookup_var_def] >>
+     simp[Abbr `hu`, Abbr `u`, jump_to_def, update_var_def]) >>
+  `type_memory_size etv <= N * type_memory_size etv /\
+   type_slot_size etv <= N * type_slot_size etv` by
+    (Cases_on `N` >> gvs[MULT_CLAUSES]) >>
+  `w2n sw + type_memory_size etv < dimword (:256) /\
+   w2n sw + type_memory_size etv <= a.vs_alloca_next /\
+   w2n dw + type_slot_size etv <= dimword (:256)` by decide_tac >>
+  `val_in_memory etv (el 0) (w2n sw) a.vs_memory` by
+    (qpat_x_assum `!i. i < N ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  qpat_x_assum `!i. i < N ==> !src slot tr sa sb func s sw dw RetQ ee. _`
+    (qspec_then `0` mp_tac) >>
+  simp[] >> disch_then
+    (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`func`, `a`, `sw`, `dw`, `RetQ`, `ee`] mp_tac) >>
+  (impl_tac >- (gvs[] >> first_assum MATCH_ACCEPT_TAC)) >> strip_tac >>
+  qexists_tac `r` >> simp[] >>
+  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+QED
+
+Finalise place_slots_elements_static_mem_local
+
+Theorem store_slots_rank_static_outcome_mem_local[local]:
+  !n cenv tenv ctx ty tv v.
+    type_rank cenv.ce_struct_fields ty = n /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+    !src slot tr sa sb func s sw dw RetQ ee.
+    compile_store_slots cenv src slot ty tr sa = ((),sb) /\
+    (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+    val_in_memory tv v (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size tv < dimword (:256) /\
+    w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+    w2n dw + type_slot_size tv <= dimword (:256) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+    (?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r) \/
+    (type_slot_size tv = 0 /\ ?t. gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_normalize s t = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts)
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields ty`
+  >- suspend "dynamic" >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!m. m < _ ==> _` kall_tac >>
+  drule_all (SRULE [ADD_COMM] place_slots_nondynamic_static_exit_mem_local) >>
+  simp[]
+QED
+
+Resume store_slots_rank_static_outcome_mem_local[dynamic]:
+  Cases_on `is_bytestring_type ty`
+  >- (rpt gen_tac >> strip_tac >> disj1_tac >>
+      irule place_slots_bytes_static_exit_mem_local >>
+      rpt (goal_assum (drule_at Any)) >> simp[] >>
+      qexists_tac `tenv` >> simp[]) >>
+  Cases_on `ty`
+  >~ [`ArrayT elem bd`]
+  >- (Cases_on `bd` >- suspend "sarray" >> suspend "dynarray")
+  >~ [`TupleT tys`] >- suspend "tuple"
+  >~ [`StructT nsid`] >- suspend "struct"
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> gvs[is_abi_dynamic_def, is_bytestring_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_abi_dynamic_def, is_bytestring_type_def]) >>
+  gvs[is_abi_dynamic_def]
+QED
+
+Resume store_slots_rank_static_outcome_mem_local[sarray]:
+  `n < dimword (:256)` by metis_tac[store_slots_fixed_count_bound] >>
+  qpat_x_assum `evaluate_type tenv (ArrayT elem (Fixed n)) = SOME tv` mp_tac >>
+  simp[Once evaluate_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type tenv elem = SOME etv` >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv (Fixed n)) (ArrayV av)` >>
+  Cases_on `av` >> gvs[value_has_type_def] >>
+  rename1 `sparse_has_type etv n sparse` >>
+  rpt gen_tac >> strip_tac >>
+  `type_memory_bytes cenv elem = type_memory_size etv` by
+    (irule typed_copy_memory_size >> qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_abi_dynamic_def, is_bytestring_type_def] >>
+  strip_tac >>
+  `!i. i < n ==> value_has_type etv
+     (case ALOOKUP sparse i of NONE => default_value etv | SOME v => v)` by
+    (rpt strip_tac >> Cases_on `ALOOKUP sparse i` >> simp[default_value_well_typed] >>
+     metis_tac[valueEncodingProofsTheory.sparse_has_type_lookup]) >>
+  `!i. i < n ==> val_in_memory etv
+     (case ALOOKUP sparse i of NONE => default_value etv | SOME v => v)
+     (w2n sw + i * type_memory_size etv) s.vs_memory` by
+    (gvs[val_in_memory_sarray] >> rpt strip_tac >>
+     Cases_on `ALOOKUP sparse i` >> simp[] >>
+     metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup]) >>
+  drule place_slots_elements_static_mem_local >>
+  disch_then (qspecl_then [`sw`, `s`, `func`, `etv`,
+    `\i. case ALOOKUP sparse i of NONE => default_value etv | SOME v => v`,
+    `ee`, `dw`, `ctx`, `RetQ`, `n`] mp_tac) >>
+  (impl_tac >- (simp[eval_operand_def] >> conj_tac
+    >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    rename1 `compile_store_slots cenv child_src child_slot elem child_tr child_sa = ((),child_sb)` >>
+    rename1 `fn_has_code child_sa child_sb child_func` >>
+    rename1 `eval_operand child_src child_state = SOME child_sw` >>
+    rename1 `eval_operand child_slot child_state = SOME child_dw` >>
+    qpat_x_assum `!m. m < type_rank _ _ ==> _`
+      (qspec_then `type_rank cenv.ce_struct_fields elem` mp_tac) >>
+    simp[type_rank_def] >>
+    disch_then (qspecl_then [`cenv`, `tenv`, `ctx`, `elem`, `etv`,
+      `case ALOOKUP sparse i of NONE => default_value etv | SOME v => v`] mp_tac) >>
+    simp[] >> disch_then
+      (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
+    disch_then (qspecl_then [`child_func`, `child_state`, `child_sw`, `child_dw`, `RetQ`, `ee`] mp_tac) >>
+    simp[] >> gvs[] >> disch_then irule >> conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+    gvs[type_memory_size_def, type_slot_size_def, vyperASTTheory.bound_length_def] >>
+    rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)) >>
+  gvs[]
+QED
+Resume store_slots_rank_static_outcome_mem_local[dynarray]:
+  gvs[Once evaluate_type_def, AllCaseEqs()] >>
+  rename1 `evaluate_type tenv elem = SOME etv` >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV av)` >>
+  Cases_on `av` >> gvs[value_has_type_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_abi_dynamic_def,
+       is_bytestring_type_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, AllCaseEqs()] >>
+  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >>
+  rename1 `emit_op MLOAD [src] sa = (cnt,s1)` >>
+  rename1 `emit_op ADD [src;Lit 32w] s1 = (data,s2)` >>
+  rename1 `emit_op ADD [slot;Lit 1w] s2 = (dst,sc)` >>
+  rename1 `emit_void (if tr then TSTORE else SSTORE) [slot;cnt] se = ((),sb)` >>
+  rename1 `compile_copy_elements_to_slots cenv data dst elem cnt tr sc = (ignored,se)` >>
+  Cases_on `ignored` >> imp_res_tac typed_copy_emit_op_mono >>
+  `ci_mono sc se /\ ci_mono se sb` by
+    metis_tac[cj 3 stmtLoweringMonoTheory.ci_mono_compile_store_slots,
+              ci_mono_emit_void, pairTheory.SND] >>
+  `cs_extends sa sc /\ cs_extends sc se /\ cs_extends se sb /\
+   cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 sc` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
+   fn_has_code s2 sc func /\ fn_has_code sc se func /\ fn_has_code se sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `w2n sw + 32 <= s.vs_alloca_next` by
+    (fs[type_memory_size_def] >> decide_tac) >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id MLOAD [src] [out]) s =
+    OK (update_var out (mload (w2n sw) s) s)` by
+    (gen_tac >> irule step_MLOAD >> simp[eval_operands_def]) >>
+  `!out. inst_mem_below_frontier (mk_inst sa.cs_next_id MLOAD [src] [out]) s /\
+    inst_dload_in_section (mk_inst sa.cs_next_id MLOAD [src] [out]) s` by
+    simp[instMemFrontierTheory.below_frontier_MLOAD, eval_operands_def,
+         memSafeRunTheory.inst_dload_in_section_def, mk_inst_def] >>
+  drule (Q.INST [`opc` |-> `MLOAD`] store_slots_emit_op_path_mem) >>
+  disch_then (qspecl_then [`mload (w2n sw) s`, `s`, `func`, `ctx`] mp_tac) >>
+  simp[is_terminator_def] >> strip_tac >>
+  rename1 `gas_marked_path T ctx func s 0 (OK u)` >>
+  qpat_x_assum `!off len. typed_copy_state_frame sa off len s u`
+    (qspecl_then [`0`,`0`] assume_tac) >>
+  `eval_operand src u = SOME sw /\ eval_operand slot u = SOME dw` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  suspend "dynadds"
+QED
+Resume store_slots_rank_static_outcome_mem_local[dynadds]:
+  `!out. step_inst_base (mk_inst s1.cs_next_id ADD [src; Lit 32w] [out]) u =
+    OK (update_var out (sw + 32w) u)` by
+    (gen_tac >> irule step_ADD >> simp[eval_operand_def]) >>
+  `!out. inst_mem_below_frontier (mk_inst s1.cs_next_id ADD [src; Lit 32w] [out]) u /\
+    inst_dload_in_section (mk_inst s1.cs_next_id ADD [src; Lit 32w] [out]) u` by
+    simp[instMemFrontierTheory.below_frontier_no_ranges,
+         memSafeRunTheory.inst_dload_in_section_def, mk_inst_def] >>
+  qpat_assum `emit_op ADD [src; Lit 32w] s1 = _`
+    (mp_then Any mp_tac store_slots_emit_op_path_mem) >>
+  disch_then (qspecl_then [`sw + 32w`, `u`, `func`, `ctx`] mp_tac) >>
+  simp[is_terminator_def] >> strip_tac >>
+  rename1 `gas_marked_path T ctx func u 0 (OK w)` >>
+  qpat_x_assum `!off len. typed_copy_state_frame s1 off len u w`
+    (qspecl_then [`0`,`0`] assume_tac) >>
+  `!x. slot = Var x ==> not_fresh_at s1 x` by
+    (gvs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `eval_operand slot w = SOME dw` by metis_tac[typed_copy_state_frame_operand] >>
+  `!out. step_inst_base (mk_inst s2.cs_next_id ADD [slot; Lit 1w] [out]) w =
+    OK (update_var out (dw + 1w) w)` by
+    (gen_tac >> irule step_ADD >> simp[eval_operand_def]) >>
+  `!out. inst_mem_below_frontier (mk_inst s2.cs_next_id ADD [slot; Lit 1w] [out]) w /\
+    inst_dload_in_section (mk_inst s2.cs_next_id ADD [slot; Lit 1w] [out]) w` by
+    simp[instMemFrontierTheory.below_frontier_no_ranges,
+         memSafeRunTheory.inst_dload_in_section_def, mk_inst_def] >>
+  qpat_assum `emit_op ADD [slot; Lit 1w] s2 = _`
+    (mp_then Any mp_tac store_slots_emit_op_path_mem) >>
+  disch_then (qspecl_then [`dw + 1w`, `w`, `func`, `ctx`] mp_tac) >>
+  simp[is_terminator_def] >> strip_tac >>
+  rename1 `gas_marked_path T ctx func w 0 (OK p)` >>
+  qpat_x_assum `!off len. typed_copy_state_frame s2 off len w p`
+    (qspecl_then [`0`,`0`] assume_tac) >>
+  `!x. cnt = Var x ==> not_fresh_at s1 x` by metis_tac[typed_copy_emit_op_fresh] >>
+  `!x. data = Var x \/ cnt = Var x \/ slot = Var x ==> not_fresh_at s2 x` by
+    (imp_res_tac typed_copy_emit_op_fresh >>
+     gvs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `eval_operand cnt w = SOME (mload (w2n sw) s)` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  `eval_operand cnt p = SOME (mload (w2n sw) s) /\
+   eval_operand data p = SOME (sw + 32w) /\ eval_operand slot p = SOME dw` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  `typed_copy_state_frame sa 0 0 s p` by
+    metis_tac[typed_copy_state_frame_mono, typed_copy_state_frame_trans] >>
+  `gas_marked_path T ctx func s 0 (OK p)` by
+    metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  suspend "dynelements"
+QED
+
+Resume store_slots_rank_static_outcome_mem_local[dynelements]:
+  `type_memory_bytes cenv elem = type_memory_size etv` by
+    (irule typed_copy_memory_size >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `mload (w2n sw) s = n2w (LENGTH l) /\
+   elems_in_memory l (w2n sw + 32) etv s.vs_memory` by
+    gvs[val_in_memory_dynarray, mem_word_at_eq_mload] >>
+  `!i. i < LENGTH l ==> val_in_memory etv (EL i l)
+      (w2n sw + 32 + i * type_memory_size etv) p.vs_memory` by
+    (rpt strip_tac >>
+     drule_all exprSimAggregateEncodingTheory.elems_in_memory_EL >>
+     fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+     metis_tac[ADD_ASSOC]) >>
+  `LENGTH l * type_slot_size etv <= n * type_slot_size etv /\
+   LENGTH l <= LENGTH l * type_slot_size etv` by simp[] >>
+  `w2n sw + 32 + LENGTH l * type_memory_size etv < dimword (:256) /\
+   w2n dw + 1 + LENGTH l * type_slot_size etv <= dimword (:256) /\
+   LENGTH l < dimword (:256) /\ w2n sw + 32 < dimword (:256) /\
+   w2n sw + 32 + LENGTH l * type_memory_size etv <= p.vs_alloca_next` by
+    (qpat_x_assum `type_memory_size _ + w2n sw < _` mp_tac >>
+     qpat_x_assum `type_memory_size _ + w2n sw <= _` mp_tac >>
+     qpat_x_assum `type_slot_size _ + w2n dw <= _` mp_tac >>
+     pure_rewrite_tac[type_memory_size_slots, type_slot_size_def,
+                       LEFT_ADD_DISTRIB, MULT_ASSOC] >>
+     rpt strip_tac >> simp[] >> decide_tac) >>
+  `0 < n * type_slot_size etv` by simp[] >>
+  `w2n dw + 1 < dimword (:256)` by
+    (qpat_x_assum `type_slot_size _ + w2n dw <= _` mp_tac >>
+     pure_rewrite_tac[type_slot_size_def] >> decide_tac) >>
+  `w2n (sw + 32w) = w2n sw + 32 /\ w2n (dw + 1w) = w2n dw + 1` by
+    gvs[wordsTheory.word_add_def, wordsTheory.dimword_def] >>
+  `!x. data = Var x \/ dst = Var x \/ cnt = Var x \/ slot = Var x ==>
+       not_fresh_at sc x` by
+    (mp_tac (Q.INST
+       [`src` |-> `src`, `slot` |-> `slot`, `sa` |-> `sa`,
+        `cnt` |-> `cnt`, `s1` |-> `s1`, `data` |-> `data`,
+        `s2` |-> `s2`, `dst` |-> `dst`, `sc` |-> `sc`]
+       store_slots_dyn_prefix_fresh) >> simp[] >>
+     disch_then (fn th =>
+       qpat_assum `!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x`
+         (fn fresh => ACCEPT_TAC (MP th fresh)))) >>
+  `~p.vs_halted /\ p.vs_call_ctx.cc_static` by
+    fs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  qpat_assum `compile_copy_elements_to_slots _ _ _ _ _ _ _ = _`
+    (mp_then Any mp_tac place_slots_elements_static_mem_local) >>
+  disch_then (qspecl_then [`sw + 32w`, `p`, `func`, `etv`,
+    `\i. EL i l`, `ee`, `dw + 1w`, `ctx`, `RetQ`, `LENGTH l`] mp_tac) >>
+  (impl_tac >- (simp[] >> conj_tac
+    >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      rename1 `compile_store_slots cenv child_src child_slot elem child_tr child_sa = ((),child_sb)` >>
+      rename1 `fn_has_code child_sa child_sb child_func` >>
+      rename1 `eval_operand child_src child_state = SOME child_sw` >>
+      rename1 `eval_operand child_slot child_state = SOME child_dw` >>
+      `value_has_type etv (EL i l)` by
+        (fs[all_have_type_EVERY, EVERY_EL] >> metis_tac[]) >>
+      qpat_x_assum `!m. m < type_rank _ _ ==> _`
+        (qspec_then `type_rank cenv.ce_struct_fields elem` mp_tac) >>
+      simp[type_rank_def] >>
+      disch_then (qspecl_then [`cenv`, `tenv`, `ctx`, `elem`, `etv`, `EL i l`] mp_tac) >>
+      simp[] >> disch_then
+        (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
+      disch_then (qspecl_then [`child_func`, `child_state`, `child_sw`, `child_dw`, `RetQ`, `ee`] mp_tac) >>
+      simp[] >> gvs[] >> disch_then irule >> conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+    conj_tac >- (gvs[] >> first_assum MATCH_ACCEPT_TAC) >>
+    metis_tac[])) >> strip_tac
+  >- (disj1_tac >> qexists_tac `r` >> simp[] >>
+      metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
+  `eval_operand slot t = SOME dw /\ eval_operand cnt t = SOME (mload (w2n sw) s)` by
+    (conj_tac >- (Cases_on `slot` >> gvs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `cnt` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `t.vs_call_ctx.cc_static` by metis_tac[] >>
+  drule_all place_slots_emit_static_exit_mem_local >>
+  disch_then (qspecl_then [`ee`,`ctx`,`RetQ`] strip_assume_tac) >>
+  disj1_tac >> qexists_tac `r` >> simp[] >>
+  (metisTools.METIS_TAC [arithmeticTheory.ADD_CLAUSES , fragGasModeTheory.gas_marked_path_then])
+QED
+
+Resume store_slots_rank_static_outcome_mem_local[tuple]:
+  drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (TupleTV tvs) (ArrayV av)` >>
+  Cases_on `av` >> gvs[value_has_type_def] >> rename1 `values_have_types tvs vs` >>
+  `LENGTH vs = LENGTH tvs` by metis_tac[values_have_types_length] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_bytestring_type_def] >> strip_tac >>
+  fs[val_in_memory_def, type_memory_size_def, type_slot_size_def] >>
+  irule place_slots_members_static_mem_local >>
+  simp[] >>
+  qexistsl_tac [`cenv`,`dw`,`MAP (\t. (t,type_memory_bytes cenv t)) tys`,
+    `slot`,`0`,`src`,`sw`,`tr`,`vs`] >> simp[ADD_COMM] >>
+  fs[values_have_types_LIST_REL, LIST_REL_EL_EQN] >>
+  simp[LIST_REL_EL_EQN, EL_MAP, EL_ZIP] >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >> gen_tac >> disch_tac >>
+  rename1 `idx < LENGTH tvs` >>
+  `evaluate_type tenv (EL idx tys) = SOME (EL idx tvs)` by metis_tac[] >>
+  `value_has_type (EL idx tvs) (EL idx vs)` by metis_tac[] >> conj_tac
+  >- (irule typed_copy_memory_size >> qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!m. m < type_rank _ _ ==> _`
+    (qspec_then `type_rank cenv.ce_struct_fields (EL idx tys)` mp_tac) >>
+  impl_tac >- (irule member_rank_lt_tuple >> simp[EL_MEM]) >>
+  disch_then (qspecl_then [`cenv`,`tenv`,`ctx`,`EL idx tys`,`EL idx tvs`,`EL idx vs`] mp_tac) >>
+  impl_tac >- (simp[] >> first_assum MATCH_ACCEPT_TAC) >> disch_then MATCH_ACCEPT_TAC
+QED
+Resume store_slots_rank_static_outcome_mem_local[struct]:
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  rename1 `FLOOKUP tenv nsid = SOME (StructArgs args)` >>
+  `?fields. FLOOKUP cenv.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+     MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args` by
+    (fs[sfields_tenv_consistent_def] >> metis_tac[]) >>
+  `evaluate_types tenv (MAP SND args) [] = SOME tvs` by
+    metis_tac[cj 2 vyperTypeExprSoundnessTheory.evaluate_type_mono] >>
+  `LENGTH (MAP FST args) = LENGTH tvs` by
+    (gvs[evaluate_types_OPT_MMAP] >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+  Cases_on `v` >> gvs[value_has_type_def] >> rename1 `struct_has_type _ vals` >>
+  `fields_val_wf vals (ZIP (MAP FST args,tvs))` by
+    metis_tac[cj 5 valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `values_have_types tvs (MAP SND vals) /\ LENGTH vals = LENGTH tvs` by
+    metis_tac[place_store_struct_tuple_values, LENGTH_MAP] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_bytestring_type_def, get_struct_fields_def] >>
+  strip_tac >>
+  fs[val_in_memory_def, valueEncodingProofsTheory.fields_in_memory_tuple, MAP_ZIP,
+     type_memory_size_def, valueEncodingTypingTheory.type_memory_size_fields_zip,
+     type_slot_size_def, vyperStorageRegionWriteTheory.type_slot_size_fields_list] >>
+  `LENGTH (MAP FST args) = LENGTH tvs` by simp[] >>
+  fs[MAP_ZIP, valueEncodingTypingTheory.type_memory_size_fields_zip] >>
+  irule place_slots_members_static_mem_local >> simp[] >>
+  qexistsl_tac [`cenv`,`dw`,`MAP SND fields`,`slot`,`0`,`src`,`sw`,`tr`,`MAP SND vals`] >>
+  simp[ADD_COMM] >> conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  qpat_assum `evaluate_types tenv _ [] = _`
+    (mp_tac o REWRITE_RULE [evaluate_types_OPT_MMAP]) >>
+  simp[] >> strip_tac >> drule vyperTypeABITheory.OPT_MMAP_LIST_REL >> strip_tac >>
+  `EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
+     sz = type_memory_size tv) fields` by metis_tac[] >>
+  `LENGTH fields = LENGTH tvs` by metis_tac[LENGTH_MAP] >>
+  fs[values_have_types_LIST_REL, LIST_REL_EL_EQN, EVERY_EL] >>
+  simp[LIST_REL_EL_EQN, EL_MAP, EL_ZIP] >> gen_tac >> disch_tac >>
+  rename1 `idx < LENGTH tvs` >>
+  Cases_on `EL idx fields` >> rename1 `EL idx fields = (fname,rest)` >>
+  Cases_on `rest` >> rename1 `EL idx fields = (fname,fty,sz)` >>
+  `SND (EL idx args) = fty` by
+    (qpat_x_assum `MAP (FST o SND) fields = MAP SND args`
+       (mp_tac o Q.AP_TERM `EL idx`) >> simp[EL_MAP]) >>
+  `evaluate_type tenv fty = SOME (EL idx tvs)` by
+    (qpat_x_assum `!n. n < LENGTH _ ==> evaluate_type _ _ = _`
+       (qspec_then `idx` mp_tac) >> simp[EL_MAP]) >>
+  `value_has_type (EL idx tvs) (EL idx (MAP SND vals))` by metis_tac[] >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `!n. n < LENGTH tvs ==> (\(fname,fty,sz). _) _`
+        (qspec_then `idx` mp_tac) >> simp[]) >>
+  qpat_x_assum `!m. m < type_rank _ _ ==> _`
+    (qspec_then `type_rank cenv.ce_struct_fields fty` mp_tac) >>
+  impl_tac
+  >- (once_rewrite_tac[type_rank_nsid] >> irule member_rank_lt_struct >>
+      simp[get_struct_fields_def] >> qexistsl_tac [`sz`,`fname`] >>
+      metis_tac[EL_MEM]) >>
+  disch_then (qspecl_then [`cenv`,`tenv`,`ctx`,`fty`,`EL idx tvs`,
+    `EL idx (MAP SND vals)`] mp_tac) >>
+  impl_tac >- (simp[] >> first_assum MATCH_ACCEPT_TAC) >>
+  simp[EL_MAP]
+QED
+Finalise store_slots_rank_static_outcome_mem_local
+
+Theorem place_store_slots_static_exit_mem:
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  0 < type_slot_size tv /\
+  compile_store_slots cenv src slot ty tr sa = ((),sb) /\
+  (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  val_in_memory tv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+  w2n dw + type_slot_size tv <= dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ s.vs_call_ctx.cc_static ==>
+  ?r. gas_marked_path T ctx func s 0 r /\ exit_result r /\
+      stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  strip_tac >>
+  qspecl_then [`type_rank cenv.ce_struct_fields ty`, `cenv`, `tenv`,
+    `ctx`, `ty`, `tv`, `v`] mp_tac store_slots_rank_static_outcome_mem_local >>
+  (impl_tac >- (simp[] >> first_assum MATCH_ACCEPT_TAC)) >>
+  disch_then (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`func`, `s`, `sw`, `dw`, `RetQ`, `ee`] mp_tac) >>
+  simp[] >>
+  (impl_tac >- first_assum MATCH_ACCEPT_TAC) >>
+  disch_then MATCH_ACCEPT_TAC
 QED

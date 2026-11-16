@@ -3,7 +3,7 @@ Ancestors
   stmtSimCustomErrorMemTypedCopy stmtSimCustomErrorMemZeroFields
   stmtSimCustomErrorMemZeroArray annassignRelayoutPost
   placeTypedCopyRecursivePath placeStoreStorage typedCopyDomain
-  context compileEnv valueEncoding valueEncodingProps vyperTyping
+  context compileEnv valueEncoding valueEncodingProps valueEncodingProofs vyperTyping
   vyperTypeExprSoundness vyperTypeABI exprSimProps loweringPosts
   words list rich_list finite_map arithmetic typedMemoryCopy vyperValue
   valueEncodingDefs vyperTypeSystem vyperTypeArgFits loweringStateRelDefs
@@ -239,9 +239,9 @@ Resume typed_copy_zero_rank_run[fixed_child]:
      goal_assum (drule_at (Pat `compile_copy_sarray_typed _ _ _ _ _ _ _ = _`)) >>
      qexistsl_tac [`tv`, `sw`, `tenv`] >> simp[] >>
      (conj_tac >- suspend "fixed_ih") >>
-     gvs[externalReturnBufferlessNormalizeTheory.return_zero_wf_memory]) >>
+     gvs[valueEncodingProofsTheory.return_zero_wf_memory]) >>
   qexists_tac `t` >> simp[] >>
-  irule externalReturnBufferlessNormalizeTheory.return_zero_wf_memory >>
+  irule valueEncodingProofsTheory.return_zero_wf_memory >>
   simp[type_memory_size_def]
 QED
 

@@ -209,9 +209,11 @@ Resume rest_word_mixed_outcome_mem[right_exit]:
     (qspec_then `H` mp_tac o
      SIMP_RULE (srw_ss()) []) >>
   simp[] >> strip_tac >>
+  qpat_x_assum `expr_exit _ _` mp_tac >>
+  qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >> rpt (pop_assum kall_tac) >>
   Cases_on `exc` >> Cases_on `r` >>
-  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[exprSimDefsTheory.expr_exit_def]
+  simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume rest_word_mixed_outcome_mem[right_exempt]:
