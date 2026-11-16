@@ -893,6 +893,41 @@ Proof
 QED
 
 (* Frame simulations away from revert-forward pairs compose. *)
+Definition frame_sim_rf_observation_def:
+  frame_sim_rf_observation P L C C' fn fn' <=>
+    !s0 inst' s'.
+      fn_entry_state fn s0 /\ s0.vs_labels = L /\
+      frame_reach C' fn' s0 inst' s' /\
+      inst_mem_ranges inst' s' <> [] /\ ~in_revert_forward fn' s' ==>
+      ?inst s. frame_reach C fn s0 inst s /\ ~in_revert_forward fn s /\
+               mem_corr inst s inst' s' /\ (P fn s ==> P fn' s')
+End
+
+
+Theorem frame_sim_rf_observation_forget:
+  frame_sim_rf_observation P L C C' fn fn' ==> frame_sim_rf L C C' fn fn'
+Proof
+  rw[frame_sim_rf_observation_def, frame_sim_rf_def] >> metis_tac[]
+QED
+
+
+Theorem frame_sim_rf_observation_trans:
+  frame_sim_rf_observation P L C1 C2 f g /\
+  frame_sim_rf_observation P L C2 C3 g h /\
+  fn_entry_label f = fn_entry_label g ==>
+  frame_sim_rf_observation P L C1 C3 f h
+Proof
+  simp[frame_sim_rf_observation_def] >> rpt strip_tac >>
+  `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
+  `?inst s. frame_reach C2 g s0 inst s /\ ~in_revert_forward g s /\
+     mem_corr inst s inst' s' /\ (P g s ==> P h s')` by metis_tac[] >>
+  `inst_mem_ranges inst s <> []` by gvs[mem_corr_def] >>
+  `?inst0 s1. frame_reach C1 f s0 inst0 s1 /\ ~in_revert_forward f s1 /\
+     mem_corr inst0 s1 inst s /\ (P f s1 ==> P g s)` by metis_tac[] >>
+  metis_tac[mem_corr_trans]
+QED
+
+
 Theorem frame_sim_rf_trans:
   frame_sim_rf L C1 C2 f g /\ frame_sim_rf L C2 C3 g h /\
   fn_entry_label f = fn_entry_label g ==> frame_sim_rf L C1 C3 f h
