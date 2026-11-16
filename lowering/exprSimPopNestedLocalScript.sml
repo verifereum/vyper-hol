@@ -191,7 +191,7 @@ Resume pop_nested_local_sim[empty]:
   conj_tac
   >- (once_rewrite_tac[GSYM APPEND_NIL] >>
       irule gas_marked_exec_bind_normal >> goal_assum drule >> simp[]) >>
-  simp[expr_exit_def, exit_result_def]
+  simp[expr_exit_def, exit_result_def, halt_exit_def]
 QED
 
 Resume pop_nested_local_sim[nonempty]:
