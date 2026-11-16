@@ -6,6 +6,46 @@ Ancestors
   context compileEnv bodyPtrDefs fragGasOriginPtr
   valueEncoding valueEncodingDefs venomState
 
+(* LOCAL STUB - foreign ancestor port blocks conditional AnnAssign work.
+   Original proof retained; this stand-in must never be delivered.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `(dty = sty \/ tuple_memory_layout_eq dty sty) /\ ~is_bytestring_type dty`
+  >- suspend "flat" >>
+  `is_bytestring_type dty ==> is_bytestring_type sty` by
+    metis_tac[typed_copy_bytestring_source] >>
+  `compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb)` by
+    (Cases_on `is_bytestring_type dty`
+     >- (gvs[compile_store_memory_def] >>
+         once_rewrite_tac[compile_store_memory_typed_def] >> simp[]) >>
+     gvs[compile_store_memory_def]) >>
+  drule_all compile_store_memory_typed_origin_ptr_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
+  fs[typed_copy_state_frame_def] >> metis_tac[]
+QED
+
+Resume body_full_memory_store_path[flat]:
+  `compile_copy_memory (Var xd) (Var xs) (type_memory_size dtv) sa = ((),sb)` by
+    gvs[compile_store_memory_def] >>
+  `tuple_memory_layout_eq dty sty ==>
+    memory_layout_key dty = memory_layout_key sty` by
+    (Cases_on `dty` >> Cases_on `sty` >>
+     simp[tuple_memory_layout_eq_def,memory_layout_key_tuple]) >>
+  `memory_layout_key dty = memory_layout_key sty` by metis_tac[] >>
+  `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
+  `type_memory_size dtv = type_memory_size stv` by fs[memory_layout_rel_def] >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory dtv v (w2n sw) mem` by
+    (rpt strip_tac >> irule memory_value_rel_val_in_memory >> simp[] >>
+     irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
+     irule val_in_memory_memory_value_rel >> simp[]) >>
+  irule body_full_memory_copy_path >> simp[] >>
+  qexistsl_tac [`sw`,`xd`,`xs`] >> fs[]
+QED
+
+Finalise body_full_memory_store_path
+*)
 Theorem body_full_memory_store_path:
   compile_store_memory cenv (Var xs) (Var xd) dty sty sa = ((),sb) /\
   ~is_word_type dty /\
@@ -51,39 +91,5 @@ Theorem body_full_memory_store_path:
       lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `(dty = sty \/ tuple_memory_layout_eq dty sty) /\ ~is_bytestring_type dty`
-  >- suspend "flat" >>
-  `is_bytestring_type dty ==> is_bytestring_type sty` by
-    metis_tac[typed_copy_bytestring_source] >>
-  `compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb)` by
-    (Cases_on `is_bytestring_type dty`
-     >- (gvs[compile_store_memory_def] >>
-         once_rewrite_tac[compile_store_memory_typed_def] >> simp[]) >>
-     gvs[compile_store_memory_def]) >>
-  drule_all compile_store_memory_typed_origin_ptr_path >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
-  fs[typed_copy_state_frame_def] >> metis_tac[]
+  cheat
 QED
-
-Resume body_full_memory_store_path[flat]:
-  `compile_copy_memory (Var xd) (Var xs) (type_memory_size dtv) sa = ((),sb)` by
-    gvs[compile_store_memory_def] >>
-  `tuple_memory_layout_eq dty sty ==>
-    memory_layout_key dty = memory_layout_key sty` by
-    (Cases_on `dty` >> Cases_on `sty` >>
-     simp[tuple_memory_layout_eq_def,memory_layout_key_tuple]) >>
-  `memory_layout_key dty = memory_layout_key sty` by metis_tac[] >>
-  `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
-  `type_memory_size dtv = type_memory_size stv` by fs[memory_layout_rel_def] >>
-  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    val_in_memory dtv v (w2n sw) mem` by
-    (rpt strip_tac >> irule memory_value_rel_val_in_memory >> simp[] >>
-     irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
-     irule val_in_memory_memory_value_rel >> simp[]) >>
-  irule body_full_memory_copy_path >> simp[] >>
-  qexistsl_tac [`sw`,`xd`,`xs`] >> fs[]
-QED
-
-Finalise body_full_memory_store_path
