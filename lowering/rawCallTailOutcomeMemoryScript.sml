@@ -71,7 +71,7 @@ Theorem raw_call_tail_outcome_mem:
          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u) /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   rename1 `valid_horizon cx st0 H0 esK.storage_trace` >>
@@ -215,7 +215,7 @@ Resume raw_call_tail_outcome_mem[outcome]:
   qexists_tac `es2` >> qexists_tac `r` >>
   conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
   qpat_x_assum `gas_path_mem _ _ _ _ _ /\ _` strip_assume_tac >>
-  gvs[expr_exit_def, fragExecTheory.exit_result_def] >>
+  gvs[expr_exit_def, halt_exit_def, fragExecTheory.exit_result_def] >>
   `es2 with gas_obs := [] = es2` by
     (qpat_x_assum `es2.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   `t.vs_alloca_next <= u.vs_alloca_next` by
@@ -358,7 +358,7 @@ Resume raw_call_tail_outcome_mem[static_outcome]:
     type_check_def, lift_option_type_def, dest_BytesV_def,
     vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
     vyperStateTheory.return_def, vyperStateTheory.assert_def,
-    expr_exit_def, fragExecTheory.exit_result_def]
+    expr_exit_def, halt_exit_def, fragExecTheory.exit_result_def]
 QED
 
 Finalise raw_call_tail_outcome_mem

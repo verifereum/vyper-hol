@@ -41,7 +41,8 @@ Theorem raw_call_addr_data_sim_mem[local]:
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+    halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
   (!av dv. storage_trace_frame (k av dv)) /\
   (!gsA av esA tA gsD bs esD tD.
     bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
@@ -269,7 +270,8 @@ Theorem raw_call_prefix_sim_mem:
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+    halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
   (!av dv kvs. storage_trace_frame (k av dv kvs)) /\
   (!gsA av esA tA gsD bs esD tD gsK kvs esK tm tk t xs b gw.
     bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) =
@@ -452,7 +454,7 @@ Resume raw_call_prefix_sim_mem[keyword_setup]:
   qpat_assum `typed_args_ready_mem _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_ext_call_kwargs _ _ _ _ _ _ = _` (irule_at Any) >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> fs[wb_args_exit_def] >> metis_tac[]) >>
+  >- (rpt strip_tac >> fs[wb_args_exit_def, halt_exit_def] >> metis_tac[]) >>
   rpt strip_tac >> suspend "keyword_endpoint"
 QED
 

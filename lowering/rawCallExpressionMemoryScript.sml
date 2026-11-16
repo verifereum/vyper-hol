@@ -67,10 +67,7 @@ Resume raw_call_expr_vv_sim_mem[prefix]:
   first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
   qpat_assum `lower_value _ _ _ a sa = _` (irule_at Any) >>
-  simp[] >> conj_tac >-
-    (rpt gen_tac >> Cases_on `r` >> Cases_on `exc` >>
-     simp[expr_exit_def] >> rename1 `Error err` >>
-     Cases_on `err` >> simp[expr_exit_def]) >>
+  simp[] >>
   rpt strip_tac >> suspend "tail"
 QED
 
