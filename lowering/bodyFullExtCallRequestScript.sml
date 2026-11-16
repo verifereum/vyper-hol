@@ -1014,7 +1014,48 @@ Theorem extcall_request_kwarg_scalar_outcome:
       (es with <|gas_obs := []; outcomes := NONE; storage_trace := []|>))
     (\H res ee gt r. expr_exit res r)
 Proof
-  cheat
+  strip_tac >>
+  `lower_value compile_expr cenv
+     (if k = EKDefault then rt else BaseT (UintT 256)) e sa = (op,sb) /\
+   lower_value compile_expr cenv
+     (if k = EKDefault then rt else BaseT (UintT 256)) (gas_shadow_expr e)
+       shadow_sa = (op,shadow_sb) /\ dt = rt` by
+    (Cases_on `k = EKDefault` >>
+     gvs[compile_ext_call_kwarg_def] >>
+     gvs[comp_bind_def, comp_return_def] >>
+     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_not_int_call >> rpt strip_tac >>
+     gvs[supportedExprTraverseTheory.expr_has_effect_def, supportedExprTraverseTheory.supported_expr_exists_def,
+         supportedExprTraverseTheory.expr_effect_root_def]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (if k = EKDefault then rt else BaseT (UintT 256)) e es` by
+    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+  `!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+     dalloca_no_wrap inst s` by
+    (rpt strip_tac >> drule_all contextRawReachableTheory.frag_reachable_members >>
+     gvs[ctx_has_dalloca_def, unitMemInvTheory.dalloca_no_wrap_def,
+         listTheory.EXISTS_MEM] >> metis_tac[]) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >> disch_then drule_all >> strip_tac >>
+  irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+      qexistsl [`cenv`,`s0`,`sa`] >>
+      simp[] >> reverse conj_tac
+      >- (mp_tac (Q.SPECL [`cenv`, `if k = EKDefault then dt else BaseT (UintT 256)`, `e`, `sa`]
+              ci_mono_lower_value_compile_expr) >>
+          gvs[ci_mono_def]) >>
+      gvs[expr_post_def]) >>
+  qpat_x_assum `!tail. _ = (INL v,_)` (qspec_then `[]` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.eval_expr_read_INL) >>
+  strip_tac >> drule vyperStateTheory.read_result_state >> strip_tac >> gvs[] >>
+  drule_all bodyIntCallJointPureSourceTheory.effect_free_eval_expr_frame >>
+  simp[]
 QED
 
 Theorem extcall_materialize_alloc_uniform:
