@@ -2,6 +2,9 @@
 Theory bodyFullMakeArrayArray
 Ancestors
   bodyFullMakeArrayResultDefs bodyFullMakeArrayInit bodyFullMakeArrayLoop
+  bodyFullMakeArrayHeader bodyFullMakeArrayElements exprOperandVar gasShadowState
+  gasShadow exprSimCopy exprSimAggregateLoops
+  exprSimDefs[qualified,ignore_grammar]
   bodyInvNoDalloca bodyMemArrayLayout
   exprSimAggregateEncoding exprSimAggregateSource exprSimAggregateLayout
   gasOutcomeFullGuarded gasOutcomeFullStmts gasOutcomeFullCompose
@@ -41,8 +44,62 @@ Proof
       irule gasStorageTheory.gas_bad_storage_at_initial >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   drule_all array_body_allocation_layout >> strip_tac >> gvs[] >>
-  drule_all (SRULE [] (Q.INST
-    [`cap` |-> `type_memory_bytes cenv ann`] make_array_init_full)) >>
-  disch_then (qspec_then `gas_explicit_sites ctx shadow_ctx` strip_assume_tac) >>
+  `?sba ssm su.
+    compile_alloc_buffer (type_memory_bytes cenv (ArrayT et n)) shadow_sa = (sba,ssm) /\
+    compile_make_array compile_expr cenv (MAP gas_shadow_expr args) et
+      (type_memory_bytes cenv et) (case n of Dynamic _ => T | _ => F)
+      sba.buf_operand ssm = (su,shadow_sb)` by
+    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+     simp[gas_shadow_expr_def,gas_shadow_builtin_def,compile_array_literal] >>
+     Cases_on `compile_alloc_buffer (type_memory_bytes cenv (ArrayT et n)) shadow_sa` >>
+     simp[] >>
+     Cases_on `compile_make_array compile_expr cenv (MAP gas_shadow_expr args) et
+       (type_memory_size tv) (case n of Dynamic _ => T | _ => F)
+       q.buf_operand r` >>
+     gvs[exprLoweringTheory.as_ptr_val_def]) >>
+  `sba = ba /\ gas_shadow_state sm ssm` by
+    (mp_tac (Q.INST [`nbytes` |-> `type_memory_bytes cenv (ArrayT et n)`]
+      gas_shadow_compiles_alloc_buffer) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >> gvs[] >>
+  mp_tac (Q.INST [`cap` |-> `type_memory_bytes cenv (ArrayT et n)`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`,
+    `ann` |-> `ArrayT et n`, `elem_opt` |-> `SOME et`, `bnd` |-> `n`]
+    make_array_init_full) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`q`,`w`,`si`,`Gi`,`tni`] strip_assume_tac) >>
+  `u = Var q /\ su = Var q` by metis_tac[compiler_make_array_result] >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `compile_make_array compile_expr cenv args et _ header _ _` >>
+  `?sh. (if header then emit_void MSTORE [Var q; Lit (n2w (LENGTH args))]
+         else return ()) sm = ((),sh) /\
+     compile_make_array_elems compile_expr cenv args et (type_memory_size tv)
+       header (Var q) 0 sh = (Var q,sb)` by
+    (qpat_x_assum `compile_make_array _ _ args _ _ _ _ _ = _` mp_tac >>
+     simp[exprLoweringTheory.compile_make_array_def,compileEnvTheory.comp_ignore_bind_def,
+          compileEnvTheory.comp_bind_def] >>
+     pairarg_tac >>
+     rename1 `(if header then _ else _) sm = (uh,hcs)` >>
+     Cases_on `uh` >> gvs[] >> metis_tac[]) >>
+  `?ssh. (if header then emit_void MSTORE [Var q; Lit (n2w (LENGTH args))]
+         else return ()) ssm = ((),ssh) /\ gas_shadow_state sh ssh` by
+    (reverse (Cases_on `header`)
+     >- gvs[compileEnvTheory.comp_return_def] >>
+     mp_tac (Q.INST [`opc` |-> `MSTORE`,
+       `ops` |-> `[Var q; Lit (n2w (LENGTH (args:expr list)))]`] gas_shadow_compiles_emit_void) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sm`,`ssm`] mp_tac) >> simp[] >>
+     Cases_on `emit_void MSTORE [Var q; Lit (n2w (LENGTH args))] ssm` >>
+     Cases_on `q'` >> gvs[]) >>
+  `compile_make_array_elems compile_expr cenv (MAP gas_shadow_expr args) et
+     (type_memory_size tv) header (Var q) 0 ssh = (Var q,shadow_sb)` by
+    (qpat_x_assum `compile_make_array _ _ (MAP _ args) _ _ _ _ _ = _` mp_tac >>
+     simp[exprLoweringTheory.compile_make_array_def,compileEnvTheory.comp_ignore_bind_def,
+          compileEnvTheory.comp_bind_def]) >>
+  suspend "header"
+QED
+
+Resume make_array_vv_sim_full_conditional[header]:
   cheat
 QED
+
+Finalise make_array_vv_sim_full_conditional
