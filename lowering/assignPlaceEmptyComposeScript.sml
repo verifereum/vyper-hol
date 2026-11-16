@@ -58,6 +58,7 @@ Theorem assign_place_empty_stmt_frag:
       (eval_stmt cx (Assign (BaseTarget bt) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `lowered_value_type _ _ = _ \/ _` kall_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
