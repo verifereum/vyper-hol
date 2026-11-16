@@ -619,58 +619,10 @@ Resume annassign_copy_runtime_outcome[direct_resources]:
        (strip_assume_tac o REWRITE_RULE
          [venomMemDefsTheory.alloca_inv_def,venomMemDefsTheory.alloca_next_valid_def]) >>
      first_x_assum drule >> simp[]) >>
-  Cases_on `is_bytestring_type typ` >- suspend "direct_bytes" >>
-  `lowered_value_type cenv e = typ` by metis_tac[] >>
-  `ltv = tyv` by
-    ((qpat_assum `lowered_value_type cenv e = typ` (fn eq =>
-       qpat_assum `evaluate_type _ (lowered_value_type cenv e) = SOME ltv`
-         (mp_tac o PURE_REWRITE_RULE [eq])) >> asm_rewrite_tac[] >> (simp[]))) >>
-  `type_memory_bytes ce typ = type_memory_size ltv` by
-    (qpat_x_assum `type_memory_bytes cenv (lowered_value_type cenv e) = _` mp_tac >>
-     simp[]) >>
-  `compile_copy_memory (Var p) (Var xs) (type_memory_size ltv) c = ((),sf)` by
-    (qpat_assum `lowered_value_type cenv e = typ` (fn eq =>
-       qpat_assum `compile_store_memory _ _ _ _ _ c = _`
-         (mp_tac o PURE_REWRITE_RULE [eq,contextTheory.compile_store_memory_def])) >>
-     asm_rewrite_tac[]) >>
-  `val_wf ltv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
-  `allocas_from lo t /\ lo <= t.vs_alloca_next` by
-    (qpat_assum `ghost_inv_at _ _ _ _ _ mid _ _ t`
-       (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >> simp[]) >>
-  `~t.vs_halted` by
-    (qpat_assum `gas_origin_ptr_path _ (rawt,rawG,rawtn) [] (OK t,G1',tn1')`
-       (mp_then Any mp_tac fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec) >>
-     simp[exit_result_def]) >>
-  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func ce cx mid t` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
-  `t.vs_alloca_next < dimword (:256)` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ mid t`
-       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
-     drule exprLoweringPropsTheory.alloca_room_next_lt >> simp[]) >>
-  `w2n sw + type_memory_size ltv < dimword (:256)` by decide_tac >>
-  `w2n (n2w b' : 256 word) = b'` by simp[] >>
-  `ptr_covers G1' tn1' p t (type_memory_size ltv)` by
-    (qpat_assum `type_memory_bytes cenv typ = type_memory_size tyv` (fn eq =>
-       qpat_assum `ptr_covers G1' tn1' p t (type_memory_bytes cenv typ)`
-         (mp_tac o PURE_REWRITE_RULE [eq])) >> simp[]) >>
-  `b' + type_memory_size ltv <= t.vs_alloca_next` by
-    (qpat_assum `b' + type_memory_bytes cenv typ <= t.vs_alloca_next` mp_tac >> simp[]) >>
-  qpat_assum `compile_copy_memory _ _ _ c = _`
-    (mp_then Any (fn th =>
-      qpat_assum `!mem. mem_agree_outside tn1'.t_mem t.vs_memory mem ==> val_in_memory ltv v (w2n sw) mem`
-        (mp_then Any mp_tac th)) bodyFullMemoryCopyTheory.body_full_memory_copy_path) >>
-  disch_then (fn th => qpat_assum `lookup_var p t = SOME (n2w b')`
-    (mp_then Any mp_tac th)) >>
-  disch_then (fn th => qpat_assum `allocas_from lo t`
-    (mp_then Any mp_tac th)) >>
-  disch_then (fn th => qpat_assum `fn_has_code c sf func`
-    (mp_then Any mp_tac th)) >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`ctx`,`PG`,`G1'`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >> suspend "flat_assembly"
-QED
-
-Resume annassign_copy_runtime_outcome[direct_bytes]:
+  (* Both direct branches defer the same post assembly from this resumption,
+     so Resume sees both obligations together. *)
+  Cases_on `is_bytestring_type typ`
+  >- (
   `compile_store_bytestring (Var xs) (Var p) c = ((),sf)` by
     (qpat_x_assum `compile_store_memory _ _ _ _ _ c = _` mp_tac >>
      asm_rewrite_tac[contextTheory.compile_store_memory_def]) >>
@@ -758,10 +710,115 @@ Resume annassign_copy_runtime_outcome[direct_bytes]:
   disch_then (fn th => qpat_assum `lookup_block t.vs_current_bb func.fn_blocks = SOME bb`
     (mp_then Any mp_tac th)) >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`ctx`,`PG`,`len`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >> suspend "bytes_assembly"
-QED
-
-Resume annassign_copy_runtime_outcome[flat_assembly]:
+  (impl_tac >- simp[]) >> strip_tac >>
+  `(sf' with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) = t /\
+   LENGTH t.vs_memory <= LENGTH sf'.vs_memory` by
+    (irule abiDecodePtrBytesRuntimeFrameTheory.abi_decode_memory_run_frame >>
+     qexists_tac `emitted_insts c sf` >> simp[] >>
+     qpat_assum `compile_store_bytestring _ _ c = _`
+       (mp_then Any mp_tac bytesCopyCodeTheory.compile_store_bytestring_code) >>
+     strip_tac >> simp[bytesCopyCodeTheory.bytes_copy_insts_def,
+       venomInstTheory.mk_inst_def,freshWritesTheory.fresh_write_op_def]) >>
+  qmatch_asmsub_abbrev_tac `(OK (sf' with vs_inst_idx := lastidx),Gf,tnf)` >>
+  qabbrev_tac `t' = sf' with vs_inst_idx := lastidx` >>
+  `typed_copy_state_frame c b' (type_memory_size tyv) t t'` by
+    (simp[NoAsms,typedMemoryCopyTheory.typed_copy_state_frame_def,Abbr `t'`] >>
+     conj_tac >- (qpat_assum `(sf' with <|vs_vars := _; vs_memory := _|>) = t` mp_tac >>
+       simp[venomStateTheory.venom_state_component_equality]) >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_assum `!p. not_fresh_at c p ==> lookup_var p sf' = _ /\ _` (qspec_then `x` mp_tac) >>
+       disch_then drule >> strip_tac >>
+       qpat_assum `lookup_var x sf' = lookup_var x t` mp_tac >>
+       simp[NoAsms,venomStateTheory.lookup_var_def]) >>
+     pure_rewrite_tac[typedMemoryCopyTheory.typed_copy_frame_def] >>
+     reverse conj_tac >- (qpat_assum `LENGTH t.vs_memory <= LENGTH sf'.vs_memory` ACCEPT_TAC) >>
+     rpt strip_tac >> simp[] >>
+     irule valueCopyTheory.mem_bytes_at_mcopy_disjoint >> simp[]) >>
+  `!mem. mem_agree_outside tn1'.t_mem t.vs_memory mem ==> val_in_memory tyv v (w2n sw) mem` by
+    (rpt strip_tac >> irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`lowered_value_type cenv e`,`typ`,`get_tenv cx`,`ltv`] >>
+     simp[]) >>
+  `!mem. mem_agree_outside tnf.t_mem t'.vs_memory mem ==> val_in_memory tyv v b' mem` by
+    (simp[NoAsms,Abbr `t'`] >>
+     qpat_assum `sf'.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `w2n (n2w b' : 256 word) = b'` (fn th => pure_rewrite_tac[th]) >>
+     match_mp_tac (Q.INST [`tn` |-> `tn1'.t_mem`] forPtrBulkTheory.for_bulk_copy_robust) >>
+     simp[] >>
+     irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `val_store_size tyv v` >>
+     simp[exprSimPropsTheory.val_footprint_le_store_size]) >>
+  rename1 `!mem. mem_agree_outside tf.t_mem t'.vs_memory mem ==> val_in_memory tyv v b' mem` >>
+  `~t'.vs_halted /\ t'.vs_current_bb = sf.cs_current_bb /\
+   t'.vs_inst_idx = LENGTH sf.cs_current_insts` by
+    (qpat_assum `(sf' with <|vs_vars := _; vs_memory := _|>) = t` mp_tac >>
+     simp[Abbr `t'`,Abbr `lastidx`,venomStateTheory.venom_state_component_equality]) >>
+  `val_in_memory tyv v b' t'.vs_memory` by
+    (qpat_assum `!mem. mem_agree_outside tf.t_mem t'.vs_memory mem ==> _` irule >>
+     simp[mem_agree_outside_def]) >>
+  `!x. not_fresh_at c x ==> lookup_var x t' = lookup_var x t /\
+    FLOOKUP Gf x = FLOOKUP G1' x /\ op_taint tf (Var x) = op_taint tn1' (Var x)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!p. not_fresh_at c p ==> lookup_var p sf' = _ /\ _`
+       (qspec_then `x` (drule_then strip_assume_tac)) >>
+     fs[Abbr `t'`,venomStateTheory.lookup_var_def]) >>
+  `!i. ~(b' <= i /\ i < b' + type_memory_size tyv) ==>
+    (i IN tf.t_mem <=> i IN tn1'.t_mem)` by
+    (qpat_x_assum `tf.t_mem = _` (fn th => rewrite_tac[th]) >>
+     simp[] >> rpt strip_tac >> eq_tac >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `c.cs_next_var <= sf.cs_next_var` by
+    (qspecl_then [`Var xs`,`Var p`,`c`] mp_tac
+      ci_mono_compile_store_bytestring >> simp[ci_mono_def]) >>
+  `typed_copy_state_frame c (w2n (n2w b' : 256 word)) (type_memory_size tyv) t t'`
+    by simp[] >>
+  suspend "copy_assembly") >>
+  `lowered_value_type cenv e = typ` by metis_tac[] >>
+  `ltv = tyv` by
+    ((qpat_assum `lowered_value_type cenv e = typ` (fn eq =>
+       qpat_assum `evaluate_type _ (lowered_value_type cenv e) = SOME ltv`
+         (mp_tac o PURE_REWRITE_RULE [eq])) >> asm_rewrite_tac[] >> (simp[]))) >>
+  `type_memory_bytes ce typ = type_memory_size ltv` by
+    (qpat_x_assum `type_memory_bytes cenv (lowered_value_type cenv e) = _` mp_tac >>
+     simp[]) >>
+  `compile_copy_memory (Var p) (Var xs) (type_memory_size ltv) c = ((),sf)` by
+    (qpat_assum `lowered_value_type cenv e = typ` (fn eq =>
+       qpat_assum `compile_store_memory _ _ _ _ _ c = _`
+         (mp_tac o PURE_REWRITE_RULE [eq,contextTheory.compile_store_memory_def])) >>
+     asm_rewrite_tac[]) >>
+  `val_wf ltv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `allocas_from lo t /\ lo <= t.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at _ _ _ _ _ mid _ _ t`
+       (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >> simp[]) >>
+  `~t.vs_halted` by
+    (qpat_assum `gas_origin_ptr_path _ (rawt,rawG,rawtn) [] (OK t,G1',tn1')`
+       (mp_then Any mp_tac fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec) >>
+     simp[exit_result_def]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func ce cx mid t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+  `t.vs_alloca_next < dimword (:256)` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ mid t`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     drule exprLoweringPropsTheory.alloca_room_next_lt >> simp[]) >>
+  `w2n sw + type_memory_size ltv < dimword (:256)` by decide_tac >>
+  `w2n (n2w b' : 256 word) = b'` by simp[] >>
+  `ptr_covers G1' tn1' p t (type_memory_size ltv)` by
+    (qpat_assum `type_memory_bytes cenv typ = type_memory_size tyv` (fn eq =>
+       qpat_assum `ptr_covers G1' tn1' p t (type_memory_bytes cenv typ)`
+         (mp_tac o PURE_REWRITE_RULE [eq])) >> simp[]) >>
+  `b' + type_memory_size ltv <= t.vs_alloca_next` by
+    (qpat_assum `b' + type_memory_bytes cenv typ <= t.vs_alloca_next` mp_tac >> simp[]) >>
+  qpat_assum `compile_copy_memory _ _ _ c = _`
+    (mp_then Any (fn th =>
+      qpat_assum `!mem. mem_agree_outside tn1'.t_mem t.vs_memory mem ==> val_in_memory ltv v (w2n sw) mem`
+        (mp_then Any mp_tac th)) bodyFullMemoryCopyTheory.body_full_memory_copy_path) >>
+  disch_then (fn th => qpat_assum `lookup_var p t = SOME (n2w b')`
+    (mp_then Any mp_tac th)) >>
+  disch_then (fn th => qpat_assum `allocas_from lo t`
+    (mp_then Any mp_tac th)) >>
+  disch_then (fn th => qpat_assum `fn_has_code c sf func`
+    (mp_then Any mp_tac th)) >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`ctx`,`PG`,`G1'`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `ltv = tyv` SUBST_ALL_TAC >>
   `c.cs_next_var <= sf.cs_next_var` by
     (qspecl_then [`Var p`,`Var xs`,`type_memory_size tyv`,`c`] mp_tac
@@ -770,6 +827,7 @@ Resume annassign_copy_runtime_outcome[flat_assembly]:
 QED
 
 Resume annassign_copy_runtime_outcome[copy_assembly]:
+  markerLib.RESUME_TAC >> (
   drule_all annassign_continuation_all_tails >> strip_tac >>
   `local_ptrs_reserved ce c` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `a` >>
@@ -878,9 +936,7 @@ Resume annassign_copy_runtime_outcome[copy_assembly]:
       (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >> simp[]) >>
   simp[] >>
   conj_tac >- (qpat_x_assum `ghost_inv_at (DF H) lo d ce cx (mid with scopes := _) Gf tf t'` mp_tac >>
-    pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >> simp[] >>
-    qpat_assum `!name entry p sz. lookup_scopes name _ = SOME entry /\ _ ==> _`
-      (ACCEPT_TAC o SRULE [])) >>
+    simp[ghost_inv_at_def] >> strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- (rpt strip_tac >> simp[] >>
     qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
       (mp_tac o REWRITE_RULE [expr_post_def]) >> strip_tac >>
@@ -893,68 +949,7 @@ Resume annassign_copy_runtime_outcome[copy_assembly]:
   qpat_assum `ghost_kept_at lo ce es a G1 tn1 u G1' tn1'`
     (mp_tac o REWRITE_RULE [ghost_kept_at_def]) >> strip_tac >>
   qpat_assum `!x. not_fresh_at a x ==> _` (qspec_then `x` mp_tac) >> simp[] >>
-  qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[]
-QED
-
-Resume annassign_copy_runtime_outcome[bytes_assembly]:
-  `(sf' with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) = t /\
-   LENGTH t.vs_memory <= LENGTH sf'.vs_memory` by
-    (irule abiDecodePtrBytesRuntimeFrameTheory.abi_decode_memory_run_frame >>
-     qexists_tac `emitted_insts c sf` >> simp[] >>
-     qpat_assum `compile_store_bytestring _ _ c = _`
-       (mp_then Any mp_tac bytesCopyCodeTheory.compile_store_bytestring_code) >>
-     strip_tac >> simp[bytesCopyCodeTheory.bytes_copy_insts_def,
-       venomInstTheory.mk_inst_def,freshWritesTheory.fresh_write_op_def]) >>
-  qmatch_asmsub_abbrev_tac `(OK (sf' with vs_inst_idx := lastidx),Gf,tnf)` >>
-  qabbrev_tac `t' = sf' with vs_inst_idx := lastidx` >>
-  `typed_copy_state_frame c b' (type_memory_size tyv) t t'` by
-    (simp[NoAsms,typedMemoryCopyTheory.typed_copy_state_frame_def,Abbr `t'`] >>
-     conj_tac >- (qpat_assum `(sf' with <|vs_vars := _; vs_memory := _|>) = t` mp_tac >>
-       simp[venomStateTheory.venom_state_component_equality]) >>
-     conj_tac >- (rpt strip_tac >>
-       qpat_assum `!p. not_fresh_at c p ==> lookup_var p sf' = _ /\ _` (qspec_then `x` mp_tac) >>
-       disch_then drule >> strip_tac >>
-       qpat_assum `lookup_var x sf' = lookup_var x t` mp_tac >>
-       simp[NoAsms,venomStateTheory.lookup_var_def]) >>
-     pure_rewrite_tac[typedMemoryCopyTheory.typed_copy_frame_def] >>
-     reverse conj_tac >- (qpat_assum `LENGTH t.vs_memory <= LENGTH sf'.vs_memory` ACCEPT_TAC) >>
-     rpt strip_tac >> simp[] >>
-     irule valueCopyTheory.mem_bytes_at_mcopy_disjoint >> simp[]) >>
-  `!mem. mem_agree_outside tn1'.t_mem t.vs_memory mem ==> val_in_memory tyv v (w2n sw) mem` by
-    (rpt strip_tac >> irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
-     conj_tac >- simp[] >>
-     qexistsl_tac [`lowered_value_type cenv e`,`typ`,`get_tenv cx`,`ltv`] >>
-     simp[]) >>
-  `!mem. mem_agree_outside tnf.t_mem t'.vs_memory mem ==> val_in_memory tyv v b' mem` by
-    (simp[NoAsms,Abbr `t'`] >>
-     qpat_assum `sf'.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
-     qpat_assum `w2n (n2w b' : 256 word) = b'` (fn th => pure_rewrite_tac[th]) >>
-     match_mp_tac (Q.INST [`tn` |-> `tn1'.t_mem`] forPtrBulkTheory.for_bulk_copy_robust) >>
-     simp[] >>
-     irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `val_store_size tyv v` >>
-     simp[exprSimPropsTheory.val_footprint_le_store_size]) >>
-  rename1 `!mem. mem_agree_outside tf.t_mem t'.vs_memory mem ==> val_in_memory tyv v b' mem` >>
-  `~t'.vs_halted /\ t'.vs_current_bb = sf.cs_current_bb /\
-   t'.vs_inst_idx = LENGTH sf.cs_current_insts` by
-    (qpat_assum `(sf' with <|vs_vars := _; vs_memory := _|>) = t` mp_tac >>
-     simp[Abbr `t'`,Abbr `lastidx`,venomStateTheory.venom_state_component_equality]) >>
-  `val_in_memory tyv v b' t'.vs_memory` by
-    (qpat_assum `!mem. mem_agree_outside tf.t_mem t'.vs_memory mem ==> _` irule >>
-     simp[mem_agree_outside_def]) >>
-  `!x. not_fresh_at c x ==> lookup_var x t' = lookup_var x t /\
-    FLOOKUP Gf x = FLOOKUP G1' x /\ op_taint tf (Var x) = op_taint tn1' (Var x)` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!p. not_fresh_at c p ==> lookup_var p sf' = _ /\ _`
-       (qspec_then `x` (drule_then strip_assume_tac)) >>
-     fs[Abbr `t'`,venomStateTheory.lookup_var_def]) >>
-  `!i. ~(b' <= i /\ i < b' + type_memory_size tyv) ==>
-    (i IN tf.t_mem <=> i IN tn1'.t_mem)` by
-    (qpat_x_assum `tf.t_mem = _` (fn th => rewrite_tac[th]) >>
-     simp[] >> rpt strip_tac >> eq_tac >> simp[] >> rpt strip_tac >> decide_tac) >>
-  `c.cs_next_var <= sf.cs_next_var` by
-    (qspecl_then [`Var xs`,`Var p`,`c`] mp_tac
-      ci_mono_compile_store_bytestring >> simp[ci_mono_def]) >>
-  suspend "copy_assembly"
+  qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[])
 QED
 
 Resume annassign_copy_runtime_outcome[staged_assembly]:
@@ -1121,9 +1116,95 @@ Resume annassign_copy_runtime_outcome[staged_assembly]:
     (mp_then Any mp_tac th)) >>
   disch_then (qspecl_then [`v`,`sf`,
     `mk_inst r.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv typ))] [p]`,`T`] mp_tac) >>
-  (impl_tac >- (simp[mk_inst_def] >>
-    qpat_assum `!q. q = p \/ ~not_local_ptr ce mid.scopes q ==> _` mp_tac >> simp[])) >>
-  strip_tac >> FAIL_TAC "staged_post_installed"
+  (impl_tac >-
+    (`val_wf tyv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+     simp[mk_inst_def] >>
+     qpat_assum `!q. q = p \/ ~not_local_ptr ce mid.scopes q ==> _` mp_tac >> simp[])) >>
+  strip_tac >>
+  (conj_tac >-
+    (qpat_assum `!D. gas_origin_ptr_path _ (t,G1',tn1') [] (OK t',Gf,tf)`
+       (qspec_then `DF H` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+     disch_then (qspecl_then [`t'`,`Gf`,`tf`,`[]`,`OK t''`,`Gf'`,`tf'`] mp_tac) >>
+     simp[])) >>
+  (conj_tac >- simp[stmt_lands_def]) >>
+  (conj_tac >-
+    (`lowered_value_type cenv e = typ \/ is_bytestring_type typ` by
+       (qpat_assum `lowered_value_type cenv e = typ \/ _` mp_tac >>
+        qpat_assum `~(has_length_word typ /\ is_empty_value_expr e)` mp_tac >>
+        rpt (pop_assum kall_tac) >> metis_tac[]) >>
+     irule stmtSimDeclMemTheory.compile_assign_value_memory_widen_open >>
+     goal_assum (drule_at Any) >> simp[])) >>
+  (conj_tac >- (irule stmtSimDeclComposeTheory.cenv_top_ext_declare_local >>
+    simp[] >> qexistsl_tac [`id`,`sa`,`r`,`typ`] >> simp[] >>
+    qpat_assum `lookup_scopes id mid.scopes = NONE` mp_tac >>
+    qpat_assum `mid.scopes = sc' :: rest` (fn th => rewrite_tac[th]) >>
+    Cases_on `FLOOKUP sc' id` >> simp[vyperStateTheory.lookup_scopes_def])) >>
+  simp[] >>
+  (conj_tac >- (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_post_def]) >> strip_tac >>
+    irule (iffRL vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
+    simp[] >> qexists_tac `mid` >> simp[])) >>
+  `gas_marked_path T ctx func t 0 (OK t')` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (t,G1',tn1') [] (OK t',Gf,tf)`
+      (qspec_then `DF H` (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections)) >>
+     drule gas_origin_path_erase >> simp[]) >>
+  `alloca_inv t` by
+    (qpat_assum `stmt_state_rel H ctx func ce cx mid t`
+      (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >> simp[]) >>
+  `alloca_history func t' /\ t.vs_alloca_next <= t'.vs_alloca_next` by
+    (irule rest_word_marked_allocation_posts >> simp[] >>
+     qexistsl_tac [`ctx`,`T`,`0`] >> simp[]) >>
+  `t''.vs_alloca_next = t'.vs_alloca_next /\ t''.vs_allocas = t'.vs_allocas` by
+    (qpat_assum `typed_copy_state_frame sc _ _ t' t''`
+      (strip_assume_tac o REWRITE_RULE [typedMemoryCopyTheory.typed_copy_state_frame_def]) >>
+     qpat_x_assum `(t'' with <|vs_vars := _; vs_memory := _; vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = t'`
+       mp_tac >> simp[venomStateTheory.venom_state_component_equality]) >>
+  `a.cs_next_var <= c.cs_next_var` by
+    (qspec_then `a` mp_tac
+       (Q.SPECL [`ce`,`expr_type e`,`e`] ci_mono_lower_value_compile_expr) >>
+     simp[ci_mono_def]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t'' = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at a x /\ not_fresh_at c x /\ not_fresh_at sc x` by
+       (rpt conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+        qexists_tac `sa` >> simp[] >>
+        qpat_assum `c.cs_next_var <= sm.cs_next_var` mp_tac >>
+        qpat_assum `sm.cs_next_var <= sc.cs_next_var` mp_tac >> simp[]) >>
+     qpat_assum `!x. not_fresh_at sc x ==> _` (qspec_then `x` mp_tac) >> simp[] >>
+     qpat_assum `!x. not_fresh_at c x ==> not_fresh_at sc x /\ _`
+       (qspec_then `x` mp_tac) >> simp[] >>
+     qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >> strip_tac >>
+     first_x_assum irule >> simp[] >>
+     qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
+  `s0.vs_alloca_next <= t''.vs_alloca_next` by simp[] >>
+  `sc.cs_next_var <= sf.cs_next_var` by
+    (qspecl_then [`ce`,`Var root`,`Var p`,`typ`,`lowered_value_type cenv e`,`sc`]
+       mp_tac ci_mono_compile_store_memory >> simp[ci_mono_def]) >>
+  (conj_tac >- (irule return_buf_frame_frame >>
+    qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[])) >>
+  (conj_tac >- (qpat_assum `!D. gas_origin_ptr_path _ (t',Gf,tf) [] (OK t'',Gf',tf')`
+    (qspec_then `DF H` (mp_then Any mp_tac body_full_path_alloca_history)) >> simp[])) >>
+  simp[] >>
+  (conj_tac >- (qpat_x_assum `ghost_inv_at (DF H) lo d ce cx (mid with scopes := _) Gf' tf' t''` mp_tac >>
+    pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >> simp[] >>
+    qpat_assum `!name entry p sz. lookup_scopes name _ = SOME entry /\ _ ==> _`
+      (ACCEPT_TAC o SRULE []))) >>
+  (conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[] >>
+    qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [expr_post_def]) >> strip_tac >>
+    first_x_assum irule >> simp[] >> first_x_assum irule >> simp[])) >>
+  rpt strip_tac >>
+  `not_fresh_at a x /\ not_fresh_at c x /\ not_fresh_at sc x` by
+    (rpt conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
+  qpat_assum `!x. not_fresh_at sc x ==> _` (qspec_then `x` mp_tac) >> simp[] >>
+  qpat_assum `!x. not_fresh_at c x ==> not_fresh_at sc x /\ _`
+    (qspec_then `x` mp_tac) >> simp[] >>
+  qpat_assum `ghost_kept_at lo ce es a G1 tn1 u G1' tn1'`
+    (mp_tac o REWRITE_RULE [ghost_kept_at_def]) >> strip_tac >>
+  qpat_assum `!x. not_fresh_at a x ==> _` (qspec_then `x` mp_tac) >> simp[] >>
+  qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[]
 QED
 
 Finalise annassign_copy_runtime_outcome
