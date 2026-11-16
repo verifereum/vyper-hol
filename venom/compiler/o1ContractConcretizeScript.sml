@@ -20,7 +20,7 @@ Theorem o1_static_stage_concretize_mem_loc_headroom:
     o1_pre 2 C C' /\ dead_wf D /\ o1_ctx_shape C /\
     o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
     code_layout_valid vs /\ o1_inv D 2 C vs /\
-    fmp_variant_room NONE C' vs ==>
+    (ctx_has_dalloca C ==> fmp_variant_room NONE C' vs) ==>
     ctx_sim_fuel (pass_fuel (EL 2 o1_fn_passes) C') D C C' vs vs /\
     ctx_abort_rq D C C' vs vs /\
     o1_inv D (SUC 2) C' vs

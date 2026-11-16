@@ -29,7 +29,8 @@ Theorem ptr_dalloca_paired_frame_ptr_static:
   EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
   callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\
   a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst ==>
@@ -38,7 +39,6 @@ Theorem ptr_dalloca_paired_frame_ptr_static:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `(ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp)` by simp[] >>
-  `eom < dimword(:256)` by metis_tac[w2n_lt, LESS_EQ_LESS_TRANS] >>
   `lo <= eom` by (drule_all ptr_stage_fixed_region_bound >> simp[]) >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_memory >> strip_tac >>
@@ -210,7 +210,8 @@ Resume ptr_dalloca_paired_frame_ptr_static[ordinary]:
      p+sz <= eom /\ p+sz < dimword(:256)` by
     (rpt strip_tac >>
      `p+sz <= eom` by (drule_all ptr_stage_placements_endpoint_bound >> simp[]) >>
-     decide_tac) >>
+     drule_all concretizePtrPlacementBoundsTheory.ptr_stage_placements_strict_bound >>
+     simp[]) >>
   mp_tac (Q.INST [`fn` |-> `a.po_fn`, `ft` |-> `at.po_fn`,
     `inst` |-> `a.po_inst`, `G` |-> `a.po_prov`, `Gout` |-> `at.po_prov`,
     `tn` |-> `a.po_taint`, `tnt` |-> `at.po_taint`,
@@ -385,7 +386,8 @@ Theorem ptr_dalloca_paired_frame_ptr:
   EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
   callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\
   a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst ==>
