@@ -2,7 +2,7 @@
 Theory dftGasPrefixProvider
 Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftGasOracleKeyReplay dftGasToListReplay dftGasOracleDefs
-  dftGasSimSwap dftGasSimLocalBoundary
+  dftGasSimSwap dftGasSimLocalBoundary dftGasSimSchedule
   dftGasFromListRestore dftGasFromListReplay dftGasFromListReadings
   dftGasFromListReplayBoundary dftGasFromListTraceDefs dftGasFromListTraceNames
   dftGasToListTrace dftGasToListAgreement gasOracleReplay
@@ -4067,6 +4067,77 @@ Resume native_successful_cut_frontier_step[crossings]:
   metis_tac[dft_gas_swap_pair_sym]
 QED
 Finalise native_successful_cut_frontier_step
+
+Theorem native_lookup_fill_schedule_result:
+  !body K g.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\ ~t.vs_call_ctx.cc_static /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\ t.vs_inst_idx = j /\
+  ctx_inst_ids_distinct C' /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (DROP t.vs_inst_idx bt.bb_instructions)) ==>
+  let obs = trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t);
+      orc = (\key. case ALOOKUP (obs ++ ZIP (K,g)) key of
+        NONE => 0w | SOME w => w)
+  in dft_res_rel
+    (ev_suffix orc p d b C' todo (t with vs_gas_readings := []))
+    (restore_result [] (exec_block b C' bt t))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp_tac pure_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `ev_suffix orc` >>
+  `ALL_DISTINCT (MAP FST (trace_gas
+     (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))` by
+    (irule trace_gas_names_distinct >> irule native_inventory_suffix_distinct >> simp[] >>
+     qpat_x_assum `ctx_inst_ids_distinct C'` mp_tac >>
+     simp_tac bool_ss [ctx_inst_ids_distinct_def] >> strip_tac >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >> BETA_TAC >> strip_tac >>
+     drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
+  `trace_agrees orc (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)` by
+    (simp_tac pure_ss [Abbr `orc`] >>
+     irule (cj 1 native_lookup_fill_subtrace_agreement) >> simp[EVERY_MEM]) >>
+  `restore_rel [] (exec_block b C' bt t)
+     (ev_block orc p d b C' bt (t with vs_gas_readings := []))` by
+    (irule (cj 2 dftGasFromListReplayTheory.trace_replay) >> qexists_tac `fn'` >> simp[]) >>
+  `dft_remaining_inv fn bb todo (t with vs_gas_readings := [])` by
+    (qpat_x_assum `dft_remaining_inv fn bb todo t` mp_tac >>
+     simp[dft_remaining_inv_def, venomWfPropsTheory.strict_dom_vars_defined_def] >>
+     metis_tac[]) >>
+  `dft_res_rel
+     (ev_suffix orc p d b C' todo (t with vs_gas_readings := []))
+     (ev_suffix orc p d b C' scheduled (t with vs_gas_readings := []))` by
+    (drule dftGasSimScheduleTheory.ev_head_bubbles >>
+     disch_then irule >> simp[] >> qexists_tac `fn` >> simp[]) >>
+  `EVERY (\i. MEM i bb.bb_instructions) scheduled` by
+    (drule native_bubbles_perm >>
+     disch_then (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+     fs[dft_remaining_inv_def, EVERY_MEM] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  rename1 `EVERY (from_block bb.bb_instructions) actual_body` >>
+  `ev_suffix orc p d b C' scheduled (t with vs_gas_readings := []) =
+   ev_suffix orc p d b C' actual_body (t with vs_gas_readings := [])` by
+    (irule dftGasSimScheduleTheory.ev_normalized_suffix_eq >> metis_tac[]) >>
+  `ev_suffix orc p d b C' actual_body (t with vs_gas_readings := []) =
+   ev_block orc p d b C' bt (t with vs_gas_readings := [])` by
+    (irule dftGasSimBoundaryTheory.ev_suffix_block >> simp[DROP_APPEND]) >>
+  qpat_x_assum `dft_res_rel _ _` mp_tac >>
+  qpat_x_assum `restore_rel [] _ _` mp_tac >>
+  simp[] >>
+  Cases_on `exec_block b C' bt t` >>
+  simp[restore_result_def, dft_res_rel_def, restore_rel_cases] >>
+  rpt strip_tac >> gvs[dft_res_rel_def]
+QED
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
