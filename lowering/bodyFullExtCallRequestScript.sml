@@ -320,7 +320,55 @@ Theorem extcall_slot_store_origin:
     (!x. not_fresh_at sa x ==>
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
-  cheat
+  strip_tac >> Cases_on `is_word_type ty`
+  >- (gvs[] >> drule_all extcall_slot_mstore_origin >>
+      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      `sw = typed_val_to_w256 tv v` by gvs[expr_val_rel_def] >>
+      `val_in_memory tv v (w2n dw) (mstore (w2n dw) sw s).vs_memory` by
+        (drule_all exprSimPropsTheory.val_in_memory_word >>
+         disch_then (qspecl_then [`w2n dw`, `(mstore (w2n dw) sw s).vs_memory`] mp_tac) >>
+         simp[valueEncodingPropsTheory.mstore_mem_word_at_same]) >>
+      qexistsl_tac [`t`,`G`,`tn'`] >>
+      simp[typed_copy_mstore_state_frame, op_taint_def] >>
+      rpt strip_tac >> irule assignBasePtrLocalStoreTheory.assign_base_ptr_clean_window_robust_value >>
+      conj_tac >- simp[] >>
+      qexistsl_tac [`(mstore (w2n dw) sw s).vs_memory`,`32`,`tn.t_mem`] >>
+      gvs[] >> metis_tac[exprSimPropsTheory.val_footprint_le_store_size,
+        exprSimPropsTheory.val_store_size_le, arithmeticTheory.LESS_EQ_TRANS]) >>
+  gvs[] >> (Cases_on `is_bytestring_type ty`
+  >- (fs[] >>
+      `compile_store_memory_typed cenv (Var dst) ty (Var xs) ty sa = ((),sb)` by
+        simp[compile_store_memory_typed_bytes] >>
+      `lookup_var xs s = SOME sw` by gvs[eval_operand_def] >>
+      `w2n sw + type_memory_size tv < dimword (:256) /\
+       w2n sw + type_memory_size tv <= s.vs_alloca_next` by decide_tac >>
+      drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)
+        compile_store_memory_typed_origin_ptr_path >>
+      disch_then (drule_at (Pat `sfields_tenv_consistent _ _`)) >>
+      disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
+      `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
+      simp[] >> disch_then drule_all >>
+      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >> metis_tac[]) >>
+  fs[eval_operand_def] >>
+  `type_memory_size tv < dimword (:256) /\
+   w2n sw + type_memory_size tv <= s.vs_alloca_next` by decide_tac >>
+  `w2n dw + type_memory_size tv <= s.vs_alloca_next` by decide_tac >>
+  drule_all extcall_slot_mcopy_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G`,`tn'`] >>
+  simp[typed_copy_mcopy_state_frame, op_taint_def] >>
+  conj_tac >- (rpt strip_tac >> simp[] >> eq_tac >> rpt strip_tac >> gvs[] >> decide_tac) >>
+  rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`s.vs_memory`,
+    `(mcopy (w2n dw) (w2n sw) (type_memory_size tv) s).vs_memory`,
+    `type_memory_size tv`, `w2n sw`, `tn.t_mem`,
+    `tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + type_memory_size tv}
+      UNION {w2n dw + i | i < type_memory_size tv /\ w2n sw + i IN tn.t_mem}`] >>
+  simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_same] >>
+  metis_tac[exprSimPropsTheory.val_footprint_le_store_size,
+    exprSimPropsTheory.val_store_size_le, arithmeticTheory.LESS_EQ_TRANS])
 QED
 
 Theorem extcall_slot_protected_resources:

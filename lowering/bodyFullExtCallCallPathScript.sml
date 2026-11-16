@@ -67,7 +67,7 @@ Theorem extcall_checked_oracle_call:
      else [gas; addr; value; ao; az; ro; rz]) [out] /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~s.vs_halted /\
-  ~s.vs_call_ctx.cc_static /\
+  (~stat /\ s.vs_call_ctx.cc_static ==> vw = 0w) /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME dw /\
   eval_operand value s = SOME vw /\ eval_operand ao s = SOME aw /\
   eval_operand az s = SOME an /\ eval_operand ro s = SOME rw /\
@@ -87,9 +87,10 @@ Proof
   `~u.vs_halted` by
     metis_tac[venomStepPropsTheory.exec_ext_call_ok_halted] >> simp[] >>
   `step_inst_base inst s = OK u` by
-    (mp_tac (Q.INST [`inst` |-> `inst`, `s` |-> `s`, `stat` |-> `stat`]
-       (SPEC_ALL oracleCallStepPtrTheory.call_step_exec_ext_call)) >>
-     Cases_on `stat` >> gvs[mk_inst_def] >> metis_tac[]) >>
+    (Cases_on `stat` >> Cases_on `s.vs_call_ctx.cc_static` >>
+     gvs[step_inst_base_opcode_eqs, mk_inst_def,
+         exec_ext_call_def,
+         venomCallOracleDefsTheory.venom_call_request_def]) >>
   Cases_on `stat` >> fs[] >> metis_tac[extcall_checked_call_path]
 QED
 
