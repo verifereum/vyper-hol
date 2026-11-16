@@ -315,7 +315,7 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[convert_operand_admissible,
       exprSimStackTheory.eval_expr_force_admissible, eval_expr_type_builtin_value] >>
-  mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_buffer)) >>
+  mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_post_buffer)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
