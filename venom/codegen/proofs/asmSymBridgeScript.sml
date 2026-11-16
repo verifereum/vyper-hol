@@ -1090,6 +1090,65 @@ Proof
   EVAL_TAC
 QED
 
+Theorem asm_step_op_context_load_equations:
+  asm_step_op otp "CALLDATALOAD" s = asm_state_unop (\off s.
+    word_of_bytes F (0w:bytes32)
+      (REVERSE (take_pad_0 32 (DROP (w2n off) s.as_call_ctx.cc_calldata)))) s /\
+  asm_step_op otp "BLOCKHASH" s = asm_state_unop (\v s.
+    s.as_block_ctx.bc_blockhash (w2n v)) s /\
+  asm_step_op otp "BLOBHASH" s = asm_state_unop (\v s.
+    let idx = w2n v in let hashes = s.as_tx_ctx.tc_blobhashes in
+    if idx < LENGTH hashes then EL idx hashes else 0w) s /\
+  asm_step_op otp "BALANCE" s = asm_state_unop (\addr s.
+    n2w (lookup_account (w2w addr) s.as_accounts).balance) s /\
+  asm_step_op otp "EXTCODESIZE" s = asm_state_unop (\addr s.
+    n2w (LENGTH (lookup_account (w2w addr) s.as_accounts).code)) s /\
+  asm_step_op otp "EXTCODEHASH" s = asm_state_unop (\addr s.
+    let acct = lookup_account (w2w addr) s.as_accounts in
+    if account_empty acct then 0w
+    else word_of_bytes T (0w:bytes32) (Keccak_256_w64 acct.code)) s /\
+  asm_step_op otp "SLOAD" s = asm_sload s /\
+  asm_step_op otp "TLOAD" s = asm_tload s
+Proof
+  rpt conj_tac >>
+  simp[asm_step_op_def, asm_step_arith_def] >>
+  simp[asm_step_compare_def, asm_step_bitwise_def] >>
+  simp[asm_step_memory_def, asm_step_control_def] >>
+  simp[asm_step_extcall_def, asm_step_copy_def] >>
+  simp[asm_step_context_def]
+QED
+
+Theorem sym_step_context_load_sim_core:
+  !lo code_ok.
+  bridge_core lo code_ok cs ss /\
+  MEM name ["CALLDATALOAD"; "BLOCKHASH"; "BLOBHASH"; "BALANCE";
+     "EXTCODESIZE"; "EXTCODEHASH"; "SLOAD"; "TLOAD"] ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete name ss)
+    (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_op_arity name = 1` by
+    (mp_tac context_load_arities >> rewrite_tac[EVERY_MEM] >>
+     disch_then drule >> simp[]) >>
+  `ss.sym_base.as_call_ctx = cs.as_call_ctx /\
+   ss.sym_base.as_tx_ctx = cs.as_tx_ctx /\
+   ss.sym_base.as_block_ctx = cs.as_block_ctx /\
+   ss.sym_base.as_accounts = cs.as_accounts /\
+   ss.sym_base.as_transient = cs.as_transient` by gvs[] >>
+  qpat_x_assum `ss.sym_base = _` (mk_asm "base") >>
+  irule sym_step_concrete_good_core >> simp[concrete_underflow] >>
+  reverse conj_tac >- (simp[markerLib.L "base"] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
+  gvs[MEM] >>
+  simp[asm_step_op_context_load_equations, asm_state_unop_def,
+       asm_sload_def, asm_tload_def,
+       asm_op_mem_writes_def, mem_labels_clear_def,
+       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV] >>
+  irule (SRULE [GSYM pred_setTheory.UNIV_DEF]
+    (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
+      related_stack_next_core)) >> simp[markerLib.L "base"] >> metis_tac[]
+QED
+
 Theorem sym_step_context_load_sim[local]:
   asm_sym_rel p env cs ss /\
   MEM name ["CALLDATALOAD"; "BLOCKHASH"; "BLOBHASH"; "BALANCE";
@@ -1097,27 +1156,9 @@ Theorem sym_step_context_load_sim[local]:
   asm_sym_step_rel p env (sym_step_concrete name ss)
     (asm_step_op otp name cs)
 Proof
-  strip_tac >>
-  `asm_op_arity name = 1` by
-    (mp_tac context_load_arities >> rewrite_tac[EVERY_MEM] >>
-     disch_then drule >> simp[]) >>
-  irule sym_step_concrete_good >> simp[concrete_underflow] >>
-  rpt strip_tac >> Cases_on `cs.as_stack` >> gvs[] >>
-  `ss.sym_base.as_call_ctx = cs.as_call_ctx /\
-   ss.sym_base.as_tx_ctx = cs.as_tx_ctx /\
-   ss.sym_base.as_block_ctx = cs.as_block_ctx /\
-   ss.sym_base.as_accounts = cs.as_accounts /\
-   ss.sym_base.as_transient = cs.as_transient` by
-    gvs[asm_sym_rel_def] >>
-  gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def] >>
-  simp[asm_step_compare_def, asm_step_bitwise_def] >>
-  simp[asm_step_memory_def, asm_step_control_def] >>
-  simp[asm_step_extcall_def, asm_step_copy_def] >>
-  simp[asm_step_context_def, asm_state_unop_def, asm_sload_def, asm_tload_def,
-       asm_op_mem_writes_def, mem_labels_clear_def,
-       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV] >>
-  irule (SRULE [] (Q.INST [`vals` |-> `[w:bytes32]`, `events` |-> `[]`]
-    related_stack_next)) >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_step_context_load_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem remaining_plain_arities[local]:
