@@ -1649,25 +1649,42 @@ Proof
        arithmeticTheory.ADD_ASSOC, wordsTheory.WORD_ADD_ASSOC]
 QED
 
+Theorem sym_add_sim_core_from_concrete:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete "ADD" ss)
+    (asm_step_op (build_offset_to_pc p) "ADD" cs) ==>
+  bridge_result (bridge_core lo code_ok) (sym_add p env ss)
+    (asm_step_op (build_offset_to_pc p) "ADD" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (λsv w. sval_conc lo sv = SOME w)
+     ss.sym_stack cs.as_stack` by fs[] >>
+  Cases_on `ss.sym_stack` >- gvs[sym_add_def] >>
+  Cases_on `t` >- (Cases_on `h` >> gvs[sym_add_def]) >>
+  Cases_on `h` >> Cases_on `h'` >> gvs[sym_add_def] >>
+  rw[sym_push_lab_def] >>
+  gvs[LIST_REL_CONS1, CONJUNCT1 sval_conc_def] >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_binop_def] >>
+  qspecl_then [`lo`, `code_ok`] (irule o SRULE []) asm_sym_rel_core_next >>
+  simp[sval_conc_def] >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- (qexists_tac `m` >> simp[]) >>
+  drule sval_conc_add >> simp[sval_conc_def, wordsTheory.WORD_ADD_COMM]
+  >> (metis_tac[])
+QED
+
 Theorem sym_add_sim:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_add p env ss)
     (asm_step_op (build_offset_to_pc p) "ADD" cs)
 Proof
   strip_tac >>
-  `asm_sym_step_rel p env (sym_step_concrete "ADD" ss)
-     (asm_step_op (build_offset_to_pc p) "ADD" cs)` by
-    (irule sym_step_concrete_sim >> simp[dup_table_def, swap_table_def]) >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  Cases_on `ss.sym_stack` >- gvs[sym_add_def] >>
-  Cases_on `t` >- (Cases_on `h` >> gvs[sym_add_def]) >>
-  Cases_on `h` >> Cases_on `h'` >> gvs[sym_add_def] >>
-  rw[sym_push_lab_def, asm_sym_step_rel_def] >>
-  gvs[LIST_REL_CONS1, CONJUNCT1 sval_conc_def] >>
-  simp[asm_step_op_def, asm_step_arith_def, asm_binop_def] >>
-  irule asm_sym_rel_next >> simp[] >>
-  metis_tac[sval_conc_add, wordsTheory.WORD_ADD_COMM]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_add_sim_core_from_concrete >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> irule sym_step_concrete_sim >>
+  simp[dup_table_def, swap_table_def]
 QED
 
 Theorem mstore_labels_lookup:
@@ -1727,27 +1744,27 @@ Proof
   Cases_on `i < LENGTH n` >> gvs[EL_APPEND_EQN, rich_listTheory.EL_REPLICATE]
 QED
 
-Theorem mstore_label_sim[local]:
-  asm_sym_rel p env cs ss /\ ss.sym_stack = Val off :: Lab l d :: stk ==>
-  asm_sym_step_rel p env
+Theorem mstore_label_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\ ss.sym_stack = Val off :: Lab l d :: stk ==>
+  bridge_result (bridge_core lo code_ok)
     (sym_lift 2 (ss.sym_mem_labels |++
        GENLIST (\i. (w2n off+i,(l,d,i))) 32) ss
        (asm_mstore (ss.sym_base with as_stack := [off;0w])))
     (asm_mstore cs)
 Proof
-  strip_tac >>
-  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-      ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
+  rpt gen_tac >> strip_tac >>
+  `LIST_REL (\sv w. sval_conc lo sv = SOME w)
+      ss.sym_stack cs.as_stack` by fs[] >>
   gvs[LIST_REL_CONS1, sval_conc_def] >>
   qmatch_goalsub_abbrev_tac `sym_lift 2 labs` >>
   `!i. FLOOKUP labs i = if w2n off <= i /\ i < w2n off+32
        then SOME (l,d,i-w2n off) else FLOOKUP ss.sym_mem_labels i`
     by (qspec_then `32` (qspecl_then [`ss.sym_mem_labels`, `w2n off`, `l`, `d`] mp_tac)
           mstore_labels_lookup >> simp[Abbr `labs`]) >>
-  simp[asm_mstore_def, sym_lift_def, asm_next_def, asm_sym_step_rel_def,
+  simp[asm_mstore_def, sym_lift_def, asm_next_def,
        Excl "GENLIST", Excl "LENGTH_APPEND"] >>
-  fs[asm_sym_rel_def, Excl "GENLIST", Excl "LENGTH_APPEND"] >>
-  simp[asm_sym_rel_def, Excl "GENLIST", Excl "LENGTH_APPEND"] >>
+  fs[Excl "GENLIST", Excl "LENGTH_APPEND"] >>
+  simp[Excl "GENLIST", Excl "LENGTH_APPEND"] >>
   conj_tac
   >- (qexists `TAKE (w2n off) (asm_expand_memory (w2n off+32) m) ++
         word_to_bytes (0w:bytes32) T ++
@@ -1783,19 +1800,47 @@ Proof
   simp[asm_expand_memory_def] >> IF_CASES_TAC >> simp[EL_APPEND_EQN]
 QED
 
+Theorem mstore_label_sim[local]:
+  asm_sym_rel p env cs ss /\ ss.sym_stack = Val off :: Lab l d :: stk ==>
+  asm_sym_step_rel p env
+    (sym_lift 2 (ss.sym_mem_labels |++
+       GENLIST (\i. (w2n off+i,(l,d,i))) 32) ss
+       (asm_mstore (ss.sym_base with as_stack := [off;0w])))
+    (asm_mstore cs)
+Proof
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac mstore_label_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
+QED
+
+Theorem sym_mstore_sim_core_from_concrete:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete "MSTORE" ss)
+    (asm_step_op (build_offset_to_pc p) "MSTORE" cs) ==>
+  bridge_result (bridge_core lo code_ok) (sym_mstore ss)
+    (asm_step_op (build_offset_to_pc p) "MSTORE" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ss.sym_stack` >- gvs[sym_mstore_def] >>
+  Cases_on `t` >- gvs[sym_mstore_def] >>
+  Cases_on `h` >> Cases_on `h'` >> gvs[sym_mstore_def] >>
+  qspecl_then [`lo`, `code_ok`]
+    (mp_tac o Q.GENL [`off`, `l`, `d`, `stk`]) mstore_label_sim_core >>
+  simp[asm_step_op_mstore, Excl "GENLIST"] >>
+  disch_then (irule o SPEC_ALL) >> simp[] >> metis_tac[]
+QED
+
 Theorem sym_mstore_sim:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_mstore ss)
     (asm_step_op (build_offset_to_pc p) "MSTORE" cs)
 Proof
   strip_tac >>
-  `asm_sym_step_rel p env (sym_step_concrete "MSTORE" ss)
-     (asm_step_op (build_offset_to_pc p) "MSTORE" cs)`
-    by (irule sym_step_concrete_sim >> simp[dup_table_def, swap_table_def]) >>
-  Cases_on `ss.sym_stack` >- simp[sym_mstore_def] >>
-  Cases_on `t` >- simp[sym_mstore_def] >>
-  Cases_on `h` >> Cases_on `h'` >> simp[sym_mstore_def] >>
-  drule_all mstore_label_sim >> simp[asm_step_op_mstore]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_mstore_sim_core_from_concrete >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> irule sym_step_concrete_sim >>
+  simp[dup_table_def, swap_table_def]
 QED
 
 Theorem mem_label_at_bytes[local]:
@@ -1806,6 +1851,37 @@ Proof
   gvs[EVERY_MEM, rich_listTheory.MEM_COUNT_LIST] >> metis_tac[]
 QED
 
+Theorem mload_label_value_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  mem_label_at ss.sym_mem_labels off = SOME (l,d) ==>
+  ?w. sval_conc lo (Lab l d) = SOME w /\
+      word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP off (asm_expand_memory (off+32) cs.as_memory))) = w
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule mem_label_at_bytes >> strip_tac >>
+  `!i. i < 32 ==> off+i < LENGTH cs.as_memory /\
+       ?w. sval_conc lo (Lab l d) = SOME w /\
+           EL (off+i) cs.as_memory = EL i (word_to_bytes w T)`
+    by (rpt strip_tac >> fs[] >> metis_tac[]) >>
+  `off+32 <= LENGTH cs.as_memory`
+    by (qpat_assum `!i. i < 32 ==> off+i < LENGTH cs.as_memory /\ _`
+          (qspec_then `31` assume_tac) >> fs[] >> decide_tac) >>
+  qpat_assum `!i. i < 32 ==> off+i < LENGTH cs.as_memory /\ _`
+    (qspec_then `0` assume_tac) >>
+  gvs[Excl "word_of_bytes_def"] >>
+  `TAKE 32 (DROP off (asm_expand_memory (off+32) cs.as_memory)) =
+     word_to_bytes w T` suffices_by
+       simp[byteTheory.word_of_bytes_word_to_bytes] >>
+  simp[asm_expand_memory_def] >> IF_CASES_TAC >> simp[] >>
+  irule LIST_EQ >>
+  simp[LENGTH_TAKE, LENGTH_DROP, EL_TAKE, EL_DROP, EL_APPEND_EQN] >>
+  rpt strip_tac >>
+  `FLOOKUP ss.sym_mem_labels (off+x) = SOME (l,d,x)` by metis_tac[arithmeticTheory.ADD_COMM] >>
+  qpat_x_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = _ ==> _` drule >>
+  strip_tac >> gvs[]
+QED
+
 Theorem mload_label_value[local]:
   asm_sym_rel p env cs ss /\
   mem_label_at ss.sym_mem_labels off = SOME (l,d) ==>
@@ -1813,32 +1889,17 @@ Theorem mload_label_value[local]:
       word_of_bytes T (0w:bytes32)
         (TAKE 32 (DROP off (asm_expand_memory (off+32) cs.as_memory))) = w
 Proof
-  strip_tac >>
-  drule mem_label_at_bytes >> strip_tac >>
-  `!i. i < 32 ==> off+i < LENGTH cs.as_memory /\
-       ?w. sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w /\
-           EL (off+i) cs.as_memory = EL i (word_to_bytes w T)`
-    by (rpt strip_tac >> fs[asm_sym_rel_def] >> metis_tac[]) >>
-  first_assum (qspec_then `0` assume_tac) >>
-  gvs[Excl "word_of_bytes_def"] >>
-  `off+32 <= LENGTH cs.as_memory`
-    by (first_x_assum (qspec_then `31` mp_tac) >> simp[]) >>
-  `TAKE 32 (DROP off (asm_expand_memory (off+32) cs.as_memory)) =
-     word_to_bytes w T` suffices_by
-       simp[byteTheory.word_of_bytes_word_to_bytes] >>
-  simp[asm_expand_memory_def] >> IF_CASES_TAC >> simp[] >>
-  irule LIST_EQ >>
-  simp[LENGTH_TAKE, LENGTH_DROP, EL_TAKE, EL_DROP, EL_APPEND_EQN] >>
-  rpt strip_tac >> res_tac >> fs[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac mload_label_value_core >> simp[asm_sym_rel_core_canonical]
 QED
 
-Theorem asm_sym_rel_expand[local]:
-  asm_sym_rel p env cs ss ==>
-  asm_sym_rel p env (cs with as_memory := asm_expand_memory n cs.as_memory)
+Theorem asm_sym_rel_expand_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_core lo code_ok (cs with as_memory := asm_expand_memory n cs.as_memory)
     (ss with sym_base := ss.sym_base with as_memory :=
        asm_expand_memory n ss.sym_base.as_memory)
 Proof
-  rw[asm_sym_rel_def] >> gvs[]
+  rw[] >> gvs[]
   >- (qexists_tac `asm_expand_memory n m` >>
       simp[asm_expand_memory_def] >> IF_CASES_TAC >> simp[] >>
       rpt strip_tac >> simp[EL_APPEND_EQN] >>
@@ -1849,39 +1910,60 @@ Proof
   simp[EL_APPEND_EQN] >> metis_tac[]
 QED
 
+Theorem asm_sym_rel_expand[local]:
+  asm_sym_rel p env cs ss ==>
+  asm_sym_rel p env (cs with as_memory := asm_expand_memory n cs.as_memory)
+    (ss with sym_base := ss.sym_base with as_memory :=
+       asm_expand_memory n ss.sym_base.as_memory)
+Proof
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac asm_sym_rel_expand_core >> simp[asm_sym_rel_core_canonical]
+QED
+
+Theorem sym_mload_sim_core_from_concrete:
+  !lo code_ok. bridge_core lo code_ok cs ss /\
+  bridge_result (bridge_core lo code_ok) (sym_step_concrete "MLOAD" ss)
+    (asm_step_op (build_offset_to_pc p) "MLOAD" cs) ==>
+  bridge_result (bridge_core lo code_ok) (sym_mload ss)
+    (asm_step_op (build_offset_to_pc p) "MLOAD" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ss.sym_stack` >- gvs[sym_mload_def] >>
+  Cases_on `h` >> gvs[sym_mload_def] >>
+  Cases_on `mem_label_at ss.sym_mem_labels (w2n c)` >- gvs[] >>
+  PairCases_on `x` >> simp[] >>
+  `?w. sval_conc lo (Lab x0 x1) = SOME w /\
+    word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP (w2n c) (asm_expand_memory (w2n c+32) cs.as_memory))) = w`
+    by (irule (Q.SPECL [`lo`, `code_ok`] mload_label_value_core) >>
+        conj_tac >- (qexists `code_ok` >> simp[]) >>
+        qexists `ss` >> simp[] >> metis_tac[]) >>
+  gvs[LIST_REL_CONS1, sval_conc_def] >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def, asm_mload_def] >>
+  qspecl_then [`lo`, `code_ok`]
+    (mp_tac o Q.INST [`n` |-> `w2n (c:bytes32) + 32`]) asm_sym_rel_expand_core >>
+  impl_tac >- (simp[sval_conc_def] >> metis_tac[]) >>
+  simp[asm_next_def] >> strip_tac >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i l d j. _ ==> i < LENGTH (asm_expand_memory _ _) /\ _` drule >>
+      simp[sval_conc_def] >> metis_tac[]) >>
+  qexists `m'` >> simp[] >>
+  gvs[asm_state_component_equality]
+QED
+
 Theorem sym_mload_sim:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_mload ss)
     (asm_step_op (build_offset_to_pc p) "MLOAD" cs)
 Proof
   strip_tac >>
-  `asm_sym_step_rel p env (sym_step_concrete "MLOAD" ss)
-     (asm_step_op (build_offset_to_pc p) "MLOAD" cs)`
-    by (irule sym_step_concrete_sim >>
-        simp[dup_table_def, swap_table_def]) >>
-  Cases_on `ss.sym_stack` >> simp[sym_mload_def] >>
-  Cases_on `h` >> simp[sym_mload_def] >>
-  Cases_on `mem_label_at ss.sym_mem_labels (w2n c)` >>
-  simp[] >> PairCases_on `x` >> simp[] >>
-  drule_all mload_label_value >> strip_tac >>
-  `LIST_REL (\sv cw. sval_conc (SND (compute_label_offsets p)) sv = SOME cw)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  gvs[LIST_REL_CONS1, sval_conc_def] >>
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def, asm_mload_def,
-       asm_sym_step_rel_def] >>
-  drule asm_sym_rel_expand >>
-  disch_then (qspec_then `w2n c + 32` assume_tac) >>
-  `ss.sym_base.as_pc = cs.as_pc` by (fs[asm_sym_rel_def] >> gvs[]) >>
-  qpat_x_assum `asm_sym_rel _ _ (_ with as_memory := _) _` mp_tac >>
-  simp[asm_next_def] >>
-  strip_tac >>
-  `LIST_REL (\sv cw. sval_conc (SND (compute_label_offsets p)) sv = SOME cw)
-      (Lab x0 x1 :: t) (n2w (off+x1) :: t')` by simp[sval_conc_def] >>
-  qpat_x_assum `LIST_REL _ t t'` kall_tac >>
-  qpat_x_assum `asm_sym_rel p env cs ss` kall_tac >>
-  drule_all asm_sym_rel_stack_pc >>
-  disch_then (qspec_then `cs.as_pc+1` mp_tac) >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_mload_sim_core_from_concrete >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical] >>
+  disch_then irule >> irule sym_step_concrete_sim >>
+  simp[dup_table_def, swap_table_def]
 QED
 
 (* asm_static_wf bounds label offsets (asm_encoding_wf), so a data label's
@@ -2268,32 +2350,51 @@ Proof
   simp[dup_table_def, swap_table_def]
 QED
 
+Theorem sym_pop_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss ==>
+  bridge_result (bridge_core lo code_ok) (sym_step_op p env "POP" ss)
+    (asm_step_op otp "POP" cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[sym_step_op_def, asm_step_op_pop, asm_pop_def] >>
+  Cases_on `ss.sym_stack` >> gvs[LIST_REL_CONS1] >>
+  irule (Q.SPECL [`lo`, `code_ok`] asm_sym_rel_core_next |> SRULE []) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem sym_pop_sim[local]:
   asm_sym_rel p env cs ss ⇒
   asm_sym_step_rel p env (sym_step_op p env "POP" ss)
     (asm_step_op otp "POP" cs)
 Proof
-  strip_tac >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  simp[sym_step_op_def, asm_step_op_pop, asm_pop_def] >>
-  Cases_on `ss.sym_stack` >> gvs[asm_sym_step_rel_def, LIST_REL_CONS1] >>
-  irule asm_sym_rel_next >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_pop_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
+QED
+
+Theorem sym_dup_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\ ALOOKUP dup_table name = SOME n ==>
+  bridge_result (bridge_core lo code_ok) (sym_dup n ss) (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_then (fn th => simp[th]) asm_step_op_dup >>
+  `LENGTH ss.sym_stack = LENGTH cs.as_stack` by metis_tac[LIST_REL_LENGTH] >>
+  `ss.sym_base.as_pc = cs.as_pc` by gvs[] >>
+  simp[sym_dup_def, asm_dup_def] >>
+  IF_CASES_TAC >> simp[] >>
+  `sval_conc lo (EL n ss.sym_stack) = SOME (EL n cs.as_stack)`
+    by fs[LIST_REL_EL_EQN] >>
+  irule (Q.SPECL [`lo`, `code_ok`] asm_sym_rel_core_next |> SRULE []) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem sym_dup_sim[local]:
   asm_sym_rel p env cs ss ∧ ALOOKUP dup_table name = SOME n ⇒
   asm_sym_step_rel p env (sym_dup n ss) (asm_step_op otp name cs)
 Proof
-  strip_tac >> drule_then (fn th => simp[th]) asm_step_op_dup >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  drule asm_sym_rel_pc >> strip_tac >>
-  simp[sym_dup_def, asm_dup_def] >>
-  IF_CASES_TAC >> simp[asm_sym_step_rel_def] >>
-  `sval_conc (SND (compute_label_offsets p)) (EL n ss.sym_stack) =
-   SOME (EL n cs.as_stack)` by fs[LIST_REL_EL_EQN] >>
-  irule asm_sym_rel_next >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_dup_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 Theorem LIST_REL_swap:
@@ -2306,18 +2407,30 @@ Proof
   irule EVERY2_LUPDATE_same >> fs[LIST_REL_EL_EQN]
 QED
 
+Theorem sym_swap_sim_core:
+  !lo code_ok. bridge_core lo code_ok cs ss /\ ALOOKUP swap_table name = SOME n ==>
+  bridge_result (bridge_core lo code_ok) (sym_swap n ss) (asm_step_op otp name cs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_then (fn th => simp[th]) asm_step_op_swap >>
+  `LENGTH ss.sym_stack = LENGTH cs.as_stack` by metis_tac[LIST_REL_LENGTH] >>
+  `ss.sym_base.as_pc = cs.as_pc` by gvs[] >>
+  simp[sym_swap_def, asm_swap_def] >>
+  IF_CASES_TAC >> simp[] >>
+  irule (Q.SPECL [`lo`, `code_ok`] asm_sym_rel_core_next |> SRULE []) >>
+  simp[] >> conj_tac
+  >- metis_tac[] >>
+  conj_tac >- (qexists `m` >> simp[]) >>
+  irule LIST_REL_swap >> simp[]
+QED
+
 Theorem sym_swap_sim[local]:
   asm_sym_rel p env cs ss ∧ ALOOKUP swap_table name = SOME n ⇒
   asm_sym_step_rel p env (sym_swap n ss) (asm_step_op otp name cs)
 Proof
-  strip_tac >> drule_then (fn th => simp[th]) asm_step_op_swap >>
-  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     ss.sym_stack cs.as_stack` by fs[asm_sym_rel_def] >>
-  drule asm_sym_rel_pc >> strip_tac >>
-  simp[sym_swap_def, asm_swap_def] >>
-  IF_CASES_TAC >> simp[asm_sym_step_rel_def] >>
-  irule asm_sym_rel_next >> simp[] >>
-  irule LIST_REL_swap >> simp[]
+  qspecl_then [`SND (compute_label_offsets p)`, `asm_data_env_ok p env`]
+    mp_tac sym_swap_sim_core >>
+  simp[asm_sym_rel_core_canonical, asm_sym_step_rel_core_canonical]
 QED
 
 (* ===== One step ===== *)
