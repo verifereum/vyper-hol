@@ -348,8 +348,9 @@ Resume literal_bytelike_full_run[restore_payload]:
   simp_tac bool_ss [Once inst_seq_ptr_def] >> conj_tac
   >- (simp[ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def, step_inst_non_invoke] >>
       (bossLib.gvs [ptrSafeRunTheory.ptr_inst_ok_def , venomInstTheory.mk_inst_def , venomExecSemanticsTheory.step_inst_non_invoke])) >>
+  qpat_x_assum `case step_inst_base _ _ of OK _ => _ | _ => _` mp_tac >>
   Cases_on `step_inst_base (mk_inst sm.cs_next_id MSTORE
-    [Var p; Lit (n2w (LENGTH bs))] []) uh` >> gvs[] >>
+    [Var p; Lit (n2w (LENGTH bs))] []) uh` >> simp[] >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp
     (v with vs_inst_idx := SUC uh.vs_inst_idx)` by
     (qpat_x_assum `step_inst_base _ uh = OK v` mp_tac >>
@@ -384,7 +385,8 @@ Resume literal_bytelike_full_run[alloca]:
   simp[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ s = OK u` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs()] >>
   strip_tac >> gvs[update_var_def]
 QED
 
