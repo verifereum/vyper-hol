@@ -394,12 +394,190 @@ Proof
    (!l. start_op <> Label l)` by
     (qpat_assum `lower_value _ _ _ start _ = _`
        (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_lower_value_word_shape) >>
-     disch_then (qspecl_then [`es`,`cx`,`env`] mp_tac) >>
+     disch_then (qspecl_then [`cx`,`env`,`es`] mp_tac) >>
      simp[compileEnvTheory.is_word_type_def]) >>
   `(!x. len_op = Var x ==> not_fresh_at st2 x) /\ (!l. len_op <> Label l)` by
     (qpat_assum `lower_value _ _ _ len _ = _`
        (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_lower_value_word_shape) >>
-     disch_then (qspecl_then [`mid`,`cx`,`env`] mp_tac) >>
+     disch_then (qspecl_then [`cx`,`env`,`mid`] mp_tac) >>
      simp[compileEnvTheory.is_word_type_def]) >>
-  cheat
+  `!x. start_op = Var x ==> not_fresh_at st2 x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `st1` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `eval_operand start_op u = SOME (n2w i)` by
+    (qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==> expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _`
+       (qspec_then `storage_trace_horizon len_mid.storage_trace` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (mp_then Any (qspecl_then [`start_op`,`n2w i`] mp_tac) slice_post_operands) >>
+     simp[]) >>
+  `op_taint tn1 start_op = {} /\ op_prov G1 start_op = NONE /\
+   op_taint tn2 len_op = {} /\ op_prov G2 len_op = NONE` by
+    (qpat_assum `ptr_val_ok _ _ _ start_op G1 tn1 t` mp_tac >>
+     qpat_assum `ptr_val_ok _ _ _ len_op G2 tn2 u` mp_tac >>
+     qpat_assum `expr_type start = _` mp_tac >>
+     qpat_assum `expr_type len = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     fs[bodyPtrDefsTheory.ptr_val_ok_def,post_value_type_word,
+        compileEnvTheory.is_word_type_def]) >>
+  qpat_assum `ghost_kept_at lo cenv mid st1 G1 tn1 t G2 tn2`
+    (assume_tac o CONJUNCT1 o REWRITE_RULE[bodyPtrDefsTheory.ghost_kept_at_def]) >>
+  `op_taint tn2 start_op = {} /\ op_prov G2 start_op = NONE` by
+    (qpat_assum `!x. not_fresh_at st1 x ==> _` mp_tac >>
+     qpat_assum `!x. start_op = Var x ==> not_fresh_at st1 x` mp_tac >>
+     qpat_assum `op_taint tn1 start_op = {}` mp_tac >>
+     qpat_assum `op_prov G1 start_op = NONE` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >> Cases_on `start_op` >>
+     gvs[ptrDisciplineTheory.op_prov_def,ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H len_mid.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx len_mid u /\
+     storage_well_formed_on cx len_mid (FST H) /\
+     ghost_inv_at (DF H) lo d cenv cx len_mid G2 tn2 u` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==>
+        ghost_inv_at _ _ _ _ _ _ G2 tn2 u`
+       (qspec_then `H` mp_tac) >>
+     qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==>
+        expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _`
+       (qspec_then `H` (mp_tac o REWRITE_RULE[loweringPostsTheory.expr_post_def])) >> simp[]) >>
+  `u.vs_code = cx.txn.code` by
+    (qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==>
+        stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon len_mid.storage_trace` mp_tac) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def,loweringStateRelDefsTheory.accounts_rel_def]) >>
+  `LENGTH cx.txn.code < dimword (:256)` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def,
+        vyperTypeInvariantsTheory.context_well_typed_def,wordsTheory.dimword_def]) >>
+  `step_inst_base (mk_inst st2.cs_next_id CODESIZE []
+      [STRING #"%" (toString st2.cs_next_var)]) u =
+    OK (update_var (STRING #"%" (toString st2.cs_next_var))
+      (n2w (LENGTH cx.txn.code)) u)` by
+    simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+         venomInstTheory.mk_inst_def,venomExecSemanticsTheory.exec_read0_def] >>
+  `!v wd. i+k <= LENGTH cx.txn.code /\
+    v.vs_accounts = u.vs_accounts /\ v.vs_call_ctx = u.vs_call_ctx /\
+    v.vs_code = u.vs_code /\
+    eval_operand dst v = SOME wd /\ eval_operand start_op v = SOME (n2w i) /\
+    eval_operand len_op v = SOME (n2w k) /\
+    (CODECOPY = EXTCODECOPY ==> eval_operand start_op v = eval_operand start_op u) ==>
+    step_inst_base (mk_inst se.cs_next_id CODECOPY [dst;start_op;len_op] []) v =
+      OK (write_memory_with_expansion (w2n wd)
+        (TAKE k (DROP i cx.txn.code)) v)` by
+    (rpt strip_tac >>
+     `TAKE k (DROP i cx.txn.code ++ REPLICATE k 0w) = TAKE k (DROP i cx.txn.code)` by
+       (irule rich_listTheory.TAKE_APPEND1 >> simp[]) >>
+     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomInstTheory.mk_inst_def,venomExecSemanticsTheory.exec_write2_def,
+       wordsTheory.w2n_n2w]) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+      not_fresh_at st2 x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+      not_fresh_at st2 x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  rpt (qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac) >>
+  irule gas_outcome_full_post_source >>
+  asm "tail_run" (irule_at Any) >>
+  qpat_assum `emit_op CODESIZE [] st2 = _` (irule_at Any) >>
+  qpat_assum `compile_assert_slice_bounds start_op len_op src_len sc = _` (irule_at Any) >>
+  qpat_assum `compile_slice_out_buf _ sd = ((out,dst),se)` (irule_at Any) >>
+  qpat_assum `emit_void CODECOPY _ se = _` (irule_at Any) >>
+  qpat_assum `emit_void MSTORE _ sf = _` (irule_at Any) >>
+  qpat_assum `eval_operand start_op u = SOME (n2w i)` (irule_at Any) >>
+  qpat_assum `eval_operand len_op u = SOME (n2w k)` (irule_at Any) >>
+  qpat_assum `local_ptrs_reserved cenv st2` (irule_at Any) >>
+  qrefinel [`n`,`_`,`d`,`cx.txn.code`] >>
+  simp[MEM,NoAsms] >>
+  qexists_tac `[Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+     [Builtin (BaseT AddressT) (Env SelfAddr) []];start;len]` >>
+  simp[] >>
+  conj_tac
+  >- (qpat_assum `!x. start_op = Var x ==> not_fresh_at st2 x` mp_tac >>
+      qpat_assum `!x. len_op = Var x ==> not_fresh_at st2 x` mp_tac >>
+      rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  conj_tac
+  >- (simp[vyperStateTheory.get_accounts_def,vyperStateTheory.bind_def,
+        vyperStateTheory.lift_sum_def,vyperStateTheory.return_def,
+        vyperStateTheory.raise_def,exprSimSliceSourceTheory.slice_bytes_nat] >>
+      Cases_on `i+k <= LENGTH cx.txn.code` >>
+      simp[vyperStateTheory.return_def,vyperStateTheory.raise_def]) >>
+  qx_genl_tac [`H`,`ee`,`G'`,`tn'`,`target`] >> strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    (qpat_assum `ee.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
+  `ee = len_mid` by
+    (qpat_assum `!tail. bind get_accounts _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `ee with gas_obs := [] = ee` mp_tac >>
+     qpat_assum `len_mid with gas_obs := [] = len_mid` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `evaluate_slice (BytesV cx.txn.code) (IntV (&i)) (IntV (&k)) n` >>
+     simp[vyperStateTheory.get_accounts_def,vyperStateTheory.bind_def,
+          vyperStateTheory.lift_sum_def,vyperStateTheory.return_def,
+          vyperStateTheory.raise_def] >> rpt strip_tac >>
+     qpat_x_assum `len_mid with gas_obs := _ = ee`
+       (mp_tac o Q.AP_TERM `\st:evaluation_state. st with gas_obs := []`) >> simp[]) >>
+  qpat_assum `ee = len_mid` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H len_mid.storage_trace ==>
+       valid_horizon cx st0 H mid.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `!tail. bind (eval_expr cx len) _ _ = _`
+       (qspec_then `[]`
+         (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame)) >>
+     simp[exprSimSliceOrdinaryContinueTheory.slice_read_frame]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]`
+         (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame)) >>
+     simp[exprSimSliceOrdinaryContinueTheory.slice_read_frame]) >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    (qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==>
+       valid_horizon _ _ H mid.storage_trace` irule >> simp[]) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       valid_horizon _ _ H es.storage_trace` irule >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+      expr_post H _ _ _ _ start _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H len_mid.storage_trace ==>
+      expr_post H _ _ _ _ len _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  `sa.cs_next_var <= st1.cs_next_var /\ st1.cs_next_var <= st2.cs_next_var /\
+   sa.cs_next_id <= st1.cs_next_id /\ st1.cs_next_id <= st2.cs_next_id` by
+    (qpat_assum `ci_mono sa st1` mp_tac >>
+     qpat_assum `ci_mono st1 st2` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  conj_tac
+  >- (irule exprSimSliceOrdinaryContinueTheory.slice_two_operand_post_rebase >>
+      qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
+      simp[loweringPostsTheory.expr_has_effect_thm]) >>
+  `wb_frame cenv es mid sa s0 t` by
+    (qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _ _`
+       (mp_then Any ACCEPT_TAC exprSimWordArgsTheory.expr_post_frame)) >>
+  `wb_frame cenv mid len_mid st1 t u` by
+    (qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _ _`
+       (mp_then Any ACCEPT_TAC exprSimWordArgsTheory.expr_post_frame)) >>
+  `wb_frame cenv es len_mid sa s0 u` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s0`
+       (mp_then Any irule exprSimWordArgsTheory.wb_frame_trans) >>
+     qpat_assum `wb_frame cenv mid len_mid st1 t u` (irule_at Any) >> simp[]) >>
+  `sa.cs_next_var <= st2.cs_next_var /\ sa.cs_next_id <= st2.cs_next_id` by decide_tac >>
+  `ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s0`
+       (mp_then Any irule wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
+     qpat_assum `ghost_kept_at lo cenv mid st1 G1 tn1 t G2 tn2` (irule_at Any) >>
+     qexists_tac `mid` >> simp[]) >>
+  `ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s0`
+       (mp_then Any irule wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
+     qpat_assum `ghost_kept_at lo cenv len_mid st2 G2 tn2 u G' tn'` (irule_at Any) >>
+     qexists_tac `len_mid` >> simp[]) >>
+  fs[vyperASTTheory.expr_type_def,exprLoweringTheory.lowered_value_type_def,
+     contextTheory.mk_ptr_def,contextTheory.vv_location_def]
 QED
