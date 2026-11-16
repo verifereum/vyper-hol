@@ -268,30 +268,6 @@ Proof
     (irule dalloca_operand_clean >> metis_tac[]) >> simp[]
 QED
 
-Theorem ptr_dalloca_access_transport_positive:
-  access_ok lo G fn inst s /\ lo <= eom /\
-  ptr_dalloca_ghost_vars G tn.t_var s Gout tnt.t_var t /\
-  (in_revert_forward fn s ==> in_revert_forward ft t) /\
-  (!v b sz. FLOOKUP Gout v = SOME (b,sz) ==> dyn <= b) /\
-  (!v b sz. FLOOKUP G v = SOME (b,sz) /\ dyn <= b /\ 0 < sz ==>
-    FLOOKUP Gout v = SOME (b,sz)) /\
-  (!off len. MEM (off,len) (source_memory_read_ranges inst t) /\ len <> 0 ==>
-    ?off_s. MEM (off_s,len) (source_memory_read_ranges inst s) /\
-    ((off = off_s /\ (!ops. mem_read_ops inst = SOME ops ==>
-        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
-     (off + len <= eom /\ (!ops. mem_read_ops inst = SOME ops ==>
-        op_prov Gout ops.iao_ofst = NONE)))) /\
-  (!off len. MEM (off,len) (source_memory_write_ranges inst t) /\ len <> 0 ==>
-    ?off_s. MEM (off_s,len) (source_memory_write_ranges inst s) /\
-    ((off = off_s /\ (!ops. mem_write_ops inst = SOME ops ==>
-        op_prov G ops.iao_ofst = op_prov Gout ops.iao_ofst)) \/
-     (off + len <= eom /\ (!ops. mem_write_ops inst = SOME ops ==>
-        op_prov Gout ops.iao_ofst = NONE)))) ==>
-  access_ok eom Gout ft inst t
-Proof
-  ACCEPT_TAC concretizePtrDallocaDisciplineTransportTheory.ptr_dalloca_access_transport_positive
-QED
-
 Theorem ptr_dalloca_untagged_op_prov[local]:
   ptr_dalloca_ghost_vars G V s Gout Vt t /\
   (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>

@@ -46,12 +46,6 @@ Proof
   metis_tac[ptr_owner_erases_tagged, optionTheory.NOT_NONE_SOME]
 QED
 
-Theorem ptr_first_prov_untagged[local]:
-  !ops. EVERY (\op. op_prov G op = NONE) ops ==> first_prov G ops = NONE
-Proof
-  Induct >> simp[first_prov_def]
-QED
-
 (* An operand with a site and a tagged operand are the same variable, as
    affine_pointer_ops gives for ADD/SUB: otherwise an untagged dynamic
    operand ahead of a tagged one would make the two first_prov choices
@@ -77,7 +71,13 @@ Proof
     (simp[EVERY_MEM] >> Cases >> simp[op_prov_def] >> strip_tac >>
      spose_not_then assume_tac >>
      `u = s` by (first_x_assum irule >> simp[]) >> gvs[]) >>
-  `first_prov tagged ops = NONE` by metis_tac[ptr_first_prov_untagged] >>
+  `first_prov tagged ops = NONE` by
+    (Cases_on `first_prov tagged ops` >> simp[] >>
+     drule first_prov_origin >>
+     disch_then (qx_choose_then `v` strip_assume_tac) >>
+     qpat_x_assum `EVERY _ ops` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `Var v` mp_tac) >>
+     simp[op_prov_def]) >>
   simp[]
 QED
 
