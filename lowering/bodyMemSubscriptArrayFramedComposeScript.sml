@@ -11,7 +11,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom exprSimSubscriptArrayFramed fragExec exprSimDefs
 
 Theorem compile_subscript_array_framed_base_mem_case_from_suffix:
-  (!H P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb.
+  (!(H : (bool # bytes32 # type_value) list # num list) P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb.
   ((?ty. vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode) \/
    (?n. bd = Fixed n)) /\
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
@@ -250,9 +250,14 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[index_normal]:
   `?p. bvv = LocatedValue (ArrayT et bd) p` by
     (`vv_location bvv = SOME LocCode \/ vv_location bvv = SOME LocMemory` by
        metis_tac[pairTheory.FST] >>
-     Cases_on `bvv` >> fs[vv_location_def] >>
-     qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, vv_holds_def, is_bytestring_type_def] >> rpt strip_tac >> gvs[]) >>
+     `vv_holds cenv cx (ArrayT et bd) v bvv (mid with gas_obs := []) t` by
+       (qpat_assum `vv_post H _ _ _ _ obj _ _ _ _ _ _ _ _`
+          (mp_tac o cj 3 o PURE_REWRITE_RULE [vv_post_def]) >> simp[]) >>
+     qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `vv_location bvv = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `bvv` >> simp[vv_location_def, vv_holds_def, is_bytestring_type_def] >>
+     rpt strip_tac >> gvs[]) >>
   qpat_x_assum `bvv = _` SUBST_ALL_TAC >>
   suspend "pointer_setup"
 QED
@@ -318,7 +323,14 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[endpoint]:
      vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa st2 s0
        (mid' with gas_obs := []) v (LocatedValue (ArrayT et bd) p) t' /\
      stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) t'` by
-    (rpt strip_tac >> conj_tac
+    (qx_gen_tac `HH` >> disch_tac >>
+     `expr_post HH ctx func cenv cx idx (mid with gas_obs := []) sm st2 t
+        (mid' with gas_obs := []) v' iop t'` by
+       (qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+          (qspec_then `HH` mp_tac) >> simp[]) >>
+     `stmt_state_rel HH ctx func cenv cx (mid' with gas_obs := []) t'` by
+       fs[expr_post_def] >>
+     conj_tac
      >- (qpat_x_assum `!H P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb. _` kall_tac >>
      irule framed_array_base_endpoint >> simp[] >>
      (conj_tac >- metis_tac[]) >>
@@ -328,7 +340,7 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[endpoint]:
         (mid' with gas_obs := []) v' iop t'` by metis_tac[] >>
      fs[expr_post_def]) >>
   `vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa st2 s0
-     (mid' with gas_obs := []) v (LocatedValue (ArrayT et bd) p) t'` by metis_tac[] >>
+     (mid' with gas_obs := []) v (LocatedValue (ArrayT et bd) p) t'` by (simp[]) >>
   suspend "represented_view"
 QED
 Resume compile_subscript_array_framed_base_mem_case_from_suffix[represented_view]:
@@ -381,6 +393,7 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_preparati
     (irule exprBopSimPropsTheory.eval_operand_frame >> simp[] >>
      qexistsl_tac [`sm`,`t`] >> simp[] >>
      qpat_x_assum `expr_post H _ _ _ _ idx _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
      simp[expr_post_def, wb_frame_def] >> metis_tac[]) >>
   `w0 = w` by
     (qpat_assum `eval_operand p.ptr_operand t' = SOME w0` mp_tac >>
@@ -404,7 +417,9 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_applicati
        read_result cx v eb = (INL (ArrayV av),eb) /\
        val_wf (ArrayTV etv bd) (ArrayV av) /\ value_has_type (ArrayTV etv bd) (ArrayV av) /\
        vv_store_bound cx (ArrayT et bd) lt eb v (LocatedValue (ArrayT et bd) p) tb`` (mk_asm "suffix_old")
-  >- (qexistsl_tac [`mid with gas_obs := []`,`lowered_value_type cenv obj`,`t`] >> simp[]) >>
+  >- (qexistsl_tac [`mid with gas_obs := []`,`lowered_value_type cenv obj`,`t`] >> simp[] >>
+      qpat_x_assum `!H P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb. _` kall_tac >>
+      metis_tac[]) >>
   suspend "suffix_ready")
 QED
 Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_ready]:
@@ -433,7 +448,10 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_ready]:
           vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) e0 sa sc s0
             (mid' with gas_obs := []) v (LocatedValue (ArrayT et bd) p) t')`` (mk_asm "suffix_comp")
   >- (qpat_x_assum `!H P cenv ty obj sa bd cx env ann idx es et r t ee p sc iop dst sd func s ctx s0 etv av w iw i lt eb tb. _` kall_tac >>
-      qexistsl_tac [`iop`,`iw`,`st2`] >> gvs[vv_operand_def]) >>
+      qexistsl_tac [`iop`,`iw`,`st2`] >>
+      simp[vv_operand_def, Abbr `e0`, exprSimPropsTheory.vv_post_initial_gas] >>
+      qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _`
+        (mp_tac o PURE_REWRITE_RULE [vv_operand_def]) >> simp[]) >>
   suspend "suffix_summary")
 QED
 Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_summary]:
