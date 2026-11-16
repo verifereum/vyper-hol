@@ -1,0 +1,30 @@
+Theory bodyFullForArrayDynamicCaptureGenerator
+Ancestors arithmetic
+
+fun holbuild_extra_deps (_ : string list) = ();
+val () = holbuild_extra_deps ["bodyFullForArrayLocalCaptureContext/Consumer.reconstructed.txt"];
+fun holbuild_extra_outputs (_ : string list) = ();
+val () = holbuild_extra_outputs ["bodyFullForArrayDynamicCaptureReplayScript.sml"];
+
+fun readBytes p = let val i = BinIO.openIn p
+  val s = Byte.bytesToString (BinIO.inputAll i)
+  val () = BinIO.closeIn i in s end;
+fun replaceOne old new s =
+  let val n = size old
+      fun find k = if k+n > size s then raise Fail ("absent: " ^ old)
+        else if String.substring(s,k,n) = old then k else find (k+1)
+      val k = find 0
+  in String.substring(s,0,k) ^ new ^ String.extract(s,k+n,NONE) end;
+val original = readBytes "bodyFullForArrayLocalCaptureContext/Consumer.reconstructed.txt";
+val replay = replaceOne "Theory bodyFullForArrayLocalConsumer"
+  "Theory bodyFullForArrayDynamicCaptureReplay" original;
+val replay = replaceOne
+  "(qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>\n     simp[emitHelperTheory.emit_op_def,comp_bind_def,comp_ignore_bind_def,\n       comp_return_def,fresh_id_def,fresh_var_def,emit_def] >>\n     disch_then (fn th => simp[GSYM th]))"
+  "suspend \"capture_load_equations\"" replay;
+val replay = replaceOne
+  "print (\"CONCLUSION\\n\" ^ Parse.term_to_string w ^"
+  "List.app (fn a => print (\"ASSUMPTION\\n\" ^ Parse.term_to_string a ^ \"\\n\")) (rev asl);\n   print (\"CONCLUSION\\n\" ^ Parse.term_to_string w ^" replay;
+val oStream = BinIO.openOut "bodyFullForArrayDynamicCaptureReplayScript.sml";
+val () = BinIO.output(oStream,Byte.stringToBytes replay);
+val () = BinIO.closeOut oStream;
+val () = print "ISOLATED-DIAGNOSTIC-REPLAY-GENERATED: renamed theory, one explicit pending stage-equation suspension; no admissions\n";

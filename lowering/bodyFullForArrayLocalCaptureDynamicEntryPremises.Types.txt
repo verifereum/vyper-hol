@@ -1,0 +1,139 @@
+DYNAMIC-CONTRACT-BOUND-TYPES
+explicit : :string # num -> bool
+tn2 : :taint
+G2 : :string |-> num # num
+tn1 : :taint
+G1 : :string |-> num # num
+tn : :taint
+G : :string |-> num # num
+PG : :(num # num) option list
+DF : :β -> dead
+sA : :venom_state
+lo : :num
+st : :compile_state
+vs : :α list
+array_base : :256 word
+id : :string
+P : :evaluation_state -> bool
+cenv : :compile_env
+ctx : :venom_context
+es : :evaluation_state
+st0 : :evaluation_state
+cx : :evaluation_context
+cond : :string
+e5 : :num
+e4 : :num
+vld : :string
+e3 : :num
+g : :string
+c : :num
+e2 : :num
+idx : :string
+e1 : :num
+entry : :string
+j : :num
+lv : :string
+saved_base : :operand
+mi : :num
+pre : :instruction list
+lbl : :string
+s0 : :venom_state
+sz : :num
+func : :ir_function
+p : :string
+ainst : :instruction
+
+CAPTURE-BEGIN dynamic-entry-pre-match
+Gf : :string |-> num # num
+tf : :taint
+sA : :venom_state
+base' : :256 word
+dst : :256 word
+tp : :taint
+Gp : :string |-> num # num
+t : :venom_state
+H : :(bool # 256 word # type_value) list # num list
+buf : :buffer
+salloc : :compile_state
+shadow_sb0 : :compile_state
+shadow_sb1 : :compile_state
+bc_out : :compile_env
+nv : :string
+exit : :string
+incr : :string
+bod : :string
+cond : :string
+entry' : :string
+epo : :operand
+toto : :operand
+offo : :operand
+lvo : :operand
+ep : :string
+tot : :string
+ov : :string
+dv : :string
+vld : :string
+g : :string
+idx : :string
+p : :string
+lv : :string
+sj : :compile_state
+sb0 : :compile_state
+sb1 : :compile_state
+bc : :compile_env
+sa : :compile_state
+load_result : :operand
+load_cs : :compile_state
+st1 : :compile_state
+Head : :string ->
+string ->
+operand ->
+string ->
+instruction ->
+256 word ->
+256 word ->
+(bool # 256 word # type_value) list # num list ->
+eval_result list ->
+evaluation_state -> (string |-> num # num) -> taint -> venom_state -> bool
+cenv' : :compile_env
+st0 : :evaluation_state
+G0 : :string |-> num # num
+tn0 : :taint
+s0 : :venom_state
+shadow_start : :compile_state
+shadow_finish : :compile_state
+lctx : :loop_ctx
+start : :compile_state
+finish : :compile_state
+ap : :string
+az : :num
+vs : :value list
+av : :array_value
+ent : :scope_entry
+env_b : :typing_env
+DF : :(bool # 256 word # type_value) list # num list -> dead
+lo : :num
+d : :(256 word # num) option
+shadow_ctx : :venom_context
+PG : :(num # num) option list
+func : :ir_function
+shadow_func : :ir_function
+RetQ : :(bool # 256 word # type_value) list # num list ->
+value ->
+evaluation_state -> (string |-> num # num) # taint -> exec_result -> bool
+ret_ty : :type
+env : :typing_env
+es : :evaluation_state
+bindings : :(string # type) list
+tops : :toplevel list
+ctx : :venom_context
+cenv : :compile_env
+cx : :evaluation_context
+typ : :type
+n' : :num
+name : :string
+n : :num
+tv : :type_value
+id : :string
+stmts : :stmt list
+dynamic_entry : :ind
