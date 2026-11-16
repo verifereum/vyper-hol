@@ -8,7 +8,7 @@ Ancestors
   stmtSimDeclMem stmtSimProps loweringSlice stmtLoweringMono
   compileEnv exprLowering stmtLowering loweringPosts
   vyperTypeSystem vyperTypeInvariants vyperInterpreter vyperState vyperAST
-  list finite_map exprSimAbiEncodePrefixWindow annassignRelayoutPost stmtSimDeclSource bodyFullMemoryValue bodyFullAnnAssignMemoryPost bodyFullMemoryFrames gasOutcomeFull fragGasOriginPtr freshWrites bodySim exprOperandVar exprSimTypedAlloc stmtSimDeclSourceSeparation bodyPtrDefs venomState bodyFullAnnAssignReserve contextRawReachable ptrDiscipline unitMemInv decoderGhostFramePtr bodyMemBopRestWordPath fragGasOrigin bodyMemoryDefs stmtSimDecl
+  list finite_map exprSimAbiEncodePrefixWindow annassignRelayoutPost stmtSimDeclSource bodyFullMemoryValue bodyFullAnnAssignMemoryPost bodyFullMemoryFrames gasOutcomeFull fragGasOriginPtr freshWrites bodySim exprOperandVar exprSimTypedAlloc stmtSimDeclSourceSeparation bodyPtrDefs venomState bodyFullAnnAssignReserve contextRawReachable ptrDiscipline unitMemInv decoderGhostFramePtr bodyMemBopRestWordPath fragGasOrigin bodyMemoryDefs stmtSimDecl bodySimDeclCases fragExec
 
 Theorem annassign_other_full_code_parts:
   compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sf) /\
@@ -761,4 +761,147 @@ Proof
     metis_tac[stmtSimDeclSourceTheory.annassign_admissible_rhs] >>
   `FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n (n2w dest_start : bytes32),n)` by simp[] >>
   drule_all annassign_other_full_rhs >> simp[]
+QED
+
+Theorem annassign_other_full_runtime_preparation:
+  declare_local old id typ sa = (ce,r) /\
+  declare_local old id typ shadow_sa = (ce,shadow_r) /\
+  old.ce_alloca_locals /\ FLOOKUP old.ce_vars id = NONE /\
+  lookup_scopes id es.scopes = NONE /\ local_ptrs_reserved old sa /\
+  gas_shadow_state sa shadow_sa /\
+  compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sf) /\
+  compile_stmt ce lctx ret_ty (AnnAssign id typ (gas_shadow_expr e)) shadow_r = ((),shadow_sf) /\
+  fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
+  ~is_word_type typ /\ ~is_bytestring_type typ /\
+  ~(has_length_word typ /\ is_empty_value_expr e) /\
+  type_memory_bytes old typ < dimword (:256) /\
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx (expr_type e) e es /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (!x sz. old.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. old.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
+  return_buf_frame d old sa s0 /\ alloca_history func s0 /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func old cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d old cx es G0 tn0 s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  expr_body_pre ce cx env e es /\
+  type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv ==>
+  ?p a b op shadow_a shadow_b w entry Ga tna.
+    emit_inst ALLOCA [Lit (n2w (type_memory_bytes old typ))] [p] r = ((),a) /\
+    FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes old typ)) /\
+    (!n. n <> id ==> FLOOKUP ce.ce_vars n = FLOOKUP old.ce_vars n) /\
+    ce with <|ce_vars := old.ce_vars; ce_var_type := old.ce_var_type;
+      ce_dynarray_capacity := old.ce_dynarray_capacity|> = old /\
+    ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
+    same_frame old ce /\
+    lower_value compile_expr ce (expr_type e) e a = (op,b) /\
+    lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a = (op,shadow_b) /\
+    gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
+    compile_assign_value ce (Var p) LocMemory op F
+      (vv_location (FST (compile_expr ce (expr_type e) e a)))
+      typ (lowered_value_type ce e) (type_memory_bytes ce typ) b = ((),sf) /\
+    ci_mono b sf /\ local_ptrs_reserved ce a /\ local_ptrs_reserved ce b /\
+    not_fresh_at a p /\ fn_has_code a b func /\ fn_has_code b sf func /\
+    fn_has_code shadow_a shadow_b shadow_func /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes old typ))] [p]) (fn_insts func) /\
+    cs_extends sa a /\ sa.cs_next_var <= a.cs_next_var /\
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
+    lookup_var p entry = SOME w /\ ptr_covers Ga tna p entry (type_memory_bytes old typ) /\
+    FLOOKUP entry.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_bytes old typ) /\
+    w2n w + type_memory_bytes old typ < dimword (:256) /\
+    w2n w + type_memory_bytes old typ <= entry.vs_alloca_next /\
+    s0.vs_alloca_next <= entry.vs_alloca_next /\
+    (!aid z. FLOOKUP s0.vs_allocas aid = SOME z ==> FLOOKUP entry.vs_allocas aid = SOME z) /\
+    (!x. not_fresh_at sa x ==> lookup_var x entry = lookup_var x s0 /\
+      FLOOKUP Ga x = FLOOKUP G0 x /\ op_taint tna (Var x) = op_taint tn0 (Var x)) /\
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,entry,Ga,tna)
+      (\H res ee Gf tnf u. ?v. res = INL v /\
+        expr_post H ctx func ce cx e es a b entry ee v op u /\
+        expr_val_at ce cx (lowered_value_type ce e) a b ee v op u /\
+        (!src. eval_operand op u = SOME src ==> type_memory_size stv = 0 \/
+          w2n src + type_memory_size stv <= u.vs_alloca_next) /\
+        u.vs_current_bb = b.cs_current_bb /\ u.vs_inst_idx = LENGTH b.cs_current_insts /\
+        alloca_history func u /\ entry.vs_alloca_next <= u.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d ce cx ee Gf tnf u /\
+        ptr_val_ok cx (post_value_type ce e) v op Gf tnf u /\
+        ptr_buf_ok ce e op Gf u /\ ghost_kept_at lo ce es a Ga tna entry Gf tnf /\
+        lookup_var p u = SOME w /\ ptr_covers Gf tnf p u (type_memory_bytes old typ) /\
+        FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_bytes old typ))
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  strip_tac >> drule_all annassign_other_full_declared_layout >> strip_tac >>
+  `ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc` by
+    (qpat_x_assum `ce with <|ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _|> = old`
+       mp_tac >> simp[compile_env_component_equality]) >>
+  `same_frame old ce` by
+    (irule declare_local_same_frame >> simp[] >>
+     qexistsl_tac [`id`,`sa`,`r`,`typ`] >> simp[]) >>
+  drule_all annassign_other_full_alloc_rhs >> strip_tac >>
+  qexistsl_tac [`p`,`a`,`b`,`op`,`shadow_a`,`shadow_b`,`w`,`t`,`G`,`tn`] >>
+  simp[]
+QED
+
+Theorem annassign_other_full_final_post:
+  declare_local old id typ sa = (ce,r) /\ old.ce_alloca_locals /\
+  FLOOKUP old.ce_vars id = NONE /\ ce.ce_return_buf = old.ce_return_buf /\
+  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,mid) /\
+  new_variable id tyv v mid = (INL (),out) /\
+  expr_post H ctx func ce cx e es a b entry mid v op u /\
+  ghost_kept_at lo ce es a Ga tna entry G1 tn1 /\
+  stmt_state_rel H ctx func ce cx out t /\ ghost_inv_at D lo d ce cx out Gf tnf t /\
+  return_buf_frame d old sa s0 /\
+  sa.cs_next_var <= a.cs_next_var /\ a.cs_next_var <= b.cs_next_var /\
+  sa.cs_next_var <= sf.cs_next_var /\
+  s0.vs_alloca_next <= entry.vs_alloca_next /\ entry.vs_alloca_next <= u.vs_alloca_next /\
+  (!x. not_fresh_at sa x ==> lookup_var x entry = lookup_var x s0 /\
+    FLOOKUP Ga x = FLOOKUP G0 x /\ op_taint tna (Var x) = op_taint tn0 (Var x)) /\
+  (!aid z. FLOOKUP s0.vs_allocas aid = SOME z ==> FLOOKUP entry.vs_allocas aid = SOME z) /\
+  u.vs_alloca_next <= t.vs_alloca_next /\
+  (!aid z. FLOOKUP u.vs_allocas aid = SOME z ==> FLOOKUP t.vs_allocas aid = SOME z) /\
+  (!x. not_fresh_at b x ==> lookup_var x t = lookup_var x u /\
+    FLOOKUP Gf x = FLOOKUP G1 x /\ op_taint tnf (Var x) = op_taint tn1 (Var x)) /\
+  alloca_history func t /\ ~t.vs_halted /\ ~block_is_terminated sf /\
+  t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
+  ?c. stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
+    (INL () = INL () ==> ~block_is_terminated sf /\ c = ce) /\
+    cenv_top_ext old c out.scopes /\ stmt_state_rel H ctx func c cx out t /\
+    storage_well_formed_on cx out (FST H) /\ return_buf_frame d c sf t /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    ghost_inv_at D lo d c cx out Gf tnf t /\
+    (!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x t = SOME z) /\
+    (!aid z. FLOOKUP s0.vs_allocas aid = SOME z ==> FLOOKUP t.vs_allocas aid = SOME z) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
+      op_taint tnf (Var x) = op_taint tn0 (Var x))
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[] >> metis_tac[cs_extends_trans]) >>
+  `!x z. not_fresh_at sa x /\ lookup_var x s0 = SOME z ==> lookup_var x t = SOME z` by
+    (fs[expr_post_def] >> metis_tac[]) >>
+  `s0.vs_alloca_next <= t.vs_alloca_next` by decide_tac >>
+  `return_buf_frame d ce sf t` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`old`,`s0`,`sa`] >> simp[]) >>
+  `cenv_top_ext old ce out.scopes /\ storage_well_formed_on cx out (FST H)` by
+    (drule_all annassign_continuation_success >> strip_tac >> gvs[] >> conj_tac
+     >- (irule stmtSimDeclComposeTheory.cenv_top_ext_declare_local >>
+         simp[] >> qexistsl_tac [`id`,`sa`,`r`,`typ`] >>
+         fs[vyperStateTheory.lookup_scopes_def, CaseEq "option"]) >>
+     irule (iffRL vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
+     qexists_tac `mid` >> fs[expr_post_def]) >>
+  qexists_tac `ce` >> simp[loweringPostsTheory.stmt_lands_def] >>
+  fs[expr_post_def, bodyPtrDefsTheory.ghost_kept_at_def] >> metis_tac[]
 QED
