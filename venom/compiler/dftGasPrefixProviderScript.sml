@@ -14,6 +14,7 @@ Ancestors alist[qualified,ignore_grammar] dftHelpers[qualified,ignore_grammar]
   dftBlockSim stateFrame venomEffects dftScheduleOrder
   dftGasInvSSAProbe unitShapeDefs venomWf option
   dftPermSim dftShape dftStructural dftCorrectness passSharedDefs
+  dftSsaPreserve[qualified,ignore_grammar]
 
 Definition dft_blocks_gas_prefix_def:
   dft_blocks_gas_prefix <=>
@@ -6718,6 +6719,110 @@ Resume native_block_entry_residual_boundary[bridge]:
   drule_all native_pseudo_entry_bridge >> simp[]
 QED
 Finalise native_block_entry_residual_boundary
+
+Theorem native_dft_strict_dom_transport:
+  fn' = dft_fn fn /\ dft_fn_rel fn fn' ==>
+  (strict_dom_vars_defined fn' x <=> strict_dom_vars_defined fn x)
+Proof
+  strip_tac >>
+  `fn' = fn with fn_blocks := fn'.fn_blocks` by
+    (gvs[dft_fn_def] >> pairarg_tac >> simp[]) >>
+  qpat_x_assum `fn' = dft_fn fn` kall_tac >>
+  `wf_function fn /\ LIST_REL dftScheduleOrder$dft_block_rel fn.fn_blocks fn'.fn_blocks` by
+    gvs[dft_fn_rel_def] >>
+  `!d n. fn_dominates fn' d n <=> fn_dominates fn d n` by
+    metis_tac[dftSsaPreserveTheory.dft_block_rel_dominates] >>
+  simp[venomWfPropsTheory.strict_dom_vars_defined_def] >>
+  eq_tac >> rpt strip_tac
+  >- (drule_all dftSsaPreserveTheory.dft_blocks_member_left >> strip_tac >>
+      `ALL_DISTINCT (MAP (\i. i.inst_id) d_bb.bb_instructions)` by
+        metis_tac[dftCorrectnessTheory.bb_inst_ids_distinct] >>
+      drule_all dftSsaPreserveTheory.dft_block_rel_member >> strip_tac >>
+      metis_tac[dftSsaPreserveTheory.dft_block_rel_label,
+                dftStructuralTheory.flip_operands_inst_outputs]) >>
+  drule_all dftSsaPreserveTheory.dft_blocks_member_right >> strip_tac >>
+  drule_all dftSsaPreserveTheory.dft_block_rel_origin >> strip_tac >>
+  metis_tac[dftSsaPreserveTheory.dft_block_rel_label,
+            dftStructuralTheory.flip_operands_inst_outputs]
+QED
+
+Theorem native_blocks_successor_admissible:
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\ MEM fn C.ctx_functions /\
+  fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+  strict_dom_vars_defined fn s /\ fn_reachable fn s.vs_current_bb /\
+  ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+  ~s.vs_call_ctx.cc_static /\ terminates (run_blocks (SUC b) C' fn' s) /\
+  gas_count_blocks (SUC b) C' fn' s <= LENGTH s.vs_gas_readings /\
+  lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  run_block b C' bb' s = OK u /\ ~u.vs_halted ==>
+  strict_dom_vars_defined fn u /\ fn_reachable fn u.vs_current_bb /\
+  ctx_labels_bound C u.vs_labels /\ ctx_labels_bound C' u.vs_labels /\
+  ~u.vs_call_ctx.cc_static /\ terminates (run_blocks b C' fn' u) /\
+  gas_count_blocks b C' fn' u <= LENGTH u.vs_gas_readings
+Proof
+  strip_tac >>
+  `MEM fn' C'.ctx_functions` by
+    (rev_drule_all LIST_REL_MEM_IMP >> simp[]) >>
+  `wf_function fn' /\ fn_inst_wf fn'` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def]) >>
+  `MEM bb' fn'.fn_blocks /\ bb'.bb_label = s.vs_current_bb` by
+    (fs[lookup_block_def] >> drule FIND_P >>
+     drule venomInstTheory.FIND_MEM >> simp[]) >>
+  `strict_dom_vars_defined fn' s` by
+    metis_tac[native_dft_strict_dom_transport] >>
+  `fn' = fn with fn_blocks := fn'.fn_blocks` by
+    (gvs[dft_fn_def] >> pairarg_tac >> simp[]) >>
+  `!lbl. fn_reachable fn' lbl <=> fn_reachable fn lbl` by
+    (fs[dft_fn_rel_def] >>
+     metis_tac[dftSsaPreserveTheory.dft_block_rel_reachable]) >>
+  `EVERY inst_wf bb'.bb_instructions` by
+    metis_tac[fn_inst_wf_def, EVERY_MEM] >>
+  `strict_dom_vars_defined fn' u` by
+    metis_tac[venomWfPropsTheory.strict_dom_vars_defined_run_block_entry] >>
+  `bb_well_formed bb'` by metis_tac[wf_function_def] >>
+  `?q. eval_phis s bb'.bb_instructions = OK q /\
+       exec_block b C' bb'
+         (q with vs_inst_idx := phi_prefix_length bb'.bb_instructions) = OK u` by
+    (mp_tac (Q.SPECL [`s`, `bb'.bb_instructions`] eval_phis_ok_or_error_defs) >>
+     strip_tac >> fs[run_block_def] >> metis_tac[]) >>
+  `MEM u.vs_current_bb (bb_succs bb')` by
+    (irule venomExecProofsTheory.exec_block_current_bb_in_succs >>
+     reverse conj_tac
+     >- (conj_tac >- metis_tac[bb_well_formed_def] >>
+         qexistsl_tac [`C'`, `b`,
+           `q with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
+         simp[venomExecProofsTheory.phi_prefix_length_le]) >>
+     fs[bb_well_formed_def] >> rpt strip_tac >>
+     `i < LENGTH bb'.bb_instructions` by decide_tac >>
+     qpat_x_assum `!j. _ /\ is_terminator _ ==> _` drule >>
+     simp[] >> decide_tac) >>
+  `fn_reachable fn' u.vs_current_bb` by
+    (irule venomExecProofsTheory.fn_reachable_step >>
+     qexists_tac `s.vs_current_bb` >>
+     simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  `u.vs_call_ctx = s.vs_call_ctx` by
+    (drule venomExecProofsTheory.exec_block_preserves_call_ctx >>
+     drule dft_eval_phis_call_ctx >> simp[]) >>
+  `gas_count_blocks (SUC b) C' fn' s =
+     gas_count_block b C' bb'
+       (q with vs_inst_idx := phi_prefix_length bb'.bb_instructions) +
+     gas_count_blocks b C' fn' u` by
+    simp[Once gas_count_blocks_def] >>
+  `u.vs_gas_readings = DROP
+     (gas_count_block b C' bb'
+       (q with vs_inst_idx := phi_prefix_length bb'.bb_instructions))
+     s.vs_gas_readings` by
+    (mp_tac (cj 2 gas_count_suffix) >>
+     disch_then (qspecl_then [`b`, `C'`, `bb'`,
+       `q with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] mp_tac) >>
+     drule gas_count_phis_ok >> simp[gas_count_suffix_def]) >>
+  gvs[Once run_blocks_unfold] >>
+  metis_tac[native_dft_strict_dom_transport, ctx_labels_bound_run_block,
+            LENGTH_DROP, arithmeticTheory.LESS_EQ_ADD_SUB]
+QED
 
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
