@@ -37,15 +37,18 @@ Proof
   metis_tac[arithmeticTheory.LESS_TRANS]
 QED
 
-Theorem labelled_asm_slice_placed:
-  !prog pre body post lbl.
-    prog = pre ++ (AsmLabel lbl :: body) ++ post /\ asm_symbols_ok prog ==>
-    ?off. FLOOKUP (SND (compute_label_offsets prog)) lbl = SOME off /\
+Theorem labelled_asm_slice_placed_reloc:
+  !prog lo pre body post lbl.
+    prog = pre ++ (AsmLabel lbl :: body) ++ post /\ asm_symbols_ok prog /\
+    code_labels_agree prog lo ==>
+    ?off. FLOOKUP lo lbl = SOME off /\
       off < dimword (:256) /\
       FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre) /\
       asm_block_at prog (LENGTH pre) (AsmLabel lbl :: body)
 Proof
   rpt gen_tac >> strip_tac >>
+  `FLOOKUP lo lbl = FLOOKUP (SND (compute_label_offsets prog)) lbl`
+    by (gvs[code_labels_agree_def] >> metis_tac[MEM_APPEND, MEM]) >>
   `LENGTH pre < LENGTH prog /\ EL (LENGTH pre) prog = AsmLabel lbl`
     by simp[EL_APPEND_EQN] >>
   drule asm_symbols_ok_distinct >> strip_tac >>
@@ -54,7 +57,7 @@ Proof
     by (irule label_offset_consistent_proof >>
         metis_tac[distinct_symbols_no_later_write]) >>
   qexists `asm_pc_to_offset prog (LENGTH pre)` >>
-  conj_tac >- first_assum ACCEPT_TAC >> conj_tac
+  conj_tac >- metis_tac[] >> conj_tac
   >- (drule (cj 2 compute_label_offsets_bound) >> strip_tac >>
       qpat_x_assum `prog = _` kall_tac >>
       gvs[asm_symbols_ok_def, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
@@ -62,6 +65,17 @@ Proof
   >- (irule offset_to_pc_inverse_proof >>
       simp[symbolResolveTheory.asm_inst_size_def]) >>
   simp[asm_block_at_def, EL_APPEND_EQN]
+QED
+
+Theorem labelled_asm_slice_placed:
+  !prog pre body post lbl.
+    prog = pre ++ (AsmLabel lbl :: body) ++ post /\ asm_symbols_ok prog ==>
+    ?off. FLOOKUP (SND (compute_label_offsets prog)) lbl = SOME off /\
+      off < dimword (:256) /\
+      FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre) /\
+      asm_block_at prog (LENGTH pre) (AsmLabel lbl :: body)
+Proof
+  metis_tac[labelled_asm_slice_placed_reloc, code_labels_agree_refl]
 QED
 
 Theorem codegen_revert_slice:

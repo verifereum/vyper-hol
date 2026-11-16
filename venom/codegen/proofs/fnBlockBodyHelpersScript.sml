@@ -579,6 +579,20 @@ Proof
   simp[execute_plan_append, asm_block_at_append]
 QED
 
+Theorem asm_block_labels_reloc:
+  !prog lo o2pc pc ops.
+    asm_symbols_ok prog /\ asm_block_at prog pc ops /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog ==>
+    !lbl i. i < LENGTH ops /\ EL i ops = AsmLabel lbl ==>
+      ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+            FLOOKUP o2pc off = SOME (pc + i)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[asm_block_at_def] >>
+  irule asm_symbols_ok_label_index_reloc >> simp[]
+QED
+
 Theorem asm_block_labels:
   !prog lo o2pc pc ops.
     asm_symbols_ok prog /\ asm_block_at prog pc ops /\
@@ -588,9 +602,7 @@ Theorem asm_block_labels:
       ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
             FLOOKUP o2pc off = SOME (pc + i)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[asm_block_at_def] >>
-  irule asm_symbols_ok_label_index >> simp[]
+  metis_tac[asm_block_labels_reloc, fnPlanPlaceRevertPostambleTheory.code_labels_agree_refl]
 QED
 
 Theorem reachable_fn_mem_inst:
