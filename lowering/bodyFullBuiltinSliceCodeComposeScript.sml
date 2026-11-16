@@ -2,18 +2,7 @@
    The final Slice join discharges both universally quantified contracts. *)
 Theory bodyFullBuiltinSliceCodeCompose
 Ancestors
-  bodyFullPreds bodySimFull bodyFullOfVV gasOutcomeFullCompose
-  exprSimSliceExtcodeTyped bodyFullUnwrapRun exprSimProps exprSimWordArgs exprSimHash
-  exprSimSliceExtcodeEntry bodyInvNoDalloca
-  bodyFullBuiltinBytestringQuery bodyFullBuiltinBytestringBuffer
-  bodyFullBuiltinBytestringBounds bodyFullBuiltinBytestringCopy
-  bodyFullBuiltinBytestringAbort exprSimSliceSelfCode
-  bodyPtrBytestringBuiltinsWindowGhost wordArgsPtr
-  exprSimSliceSource exprSimSliceOrdinaryFrame exprSimHypsDefs
-  exprLowering vyperInterpreter vyperAST list
-  fragExec emitHelperProps bodyPtrBytestringBuiltinsSlice
-  bodyPtrBytestringBuiltinsBuffer loweringPosts loweringStateRelDefs
-  reasonCodeResourcesPtr bodyPtrAttributeFields
+  bodyFullBuiltinSliceCodeSelfCompose bodyFullBuiltinSliceCodeExternalCompose
 
 Theorem slice_builtin_some_vv_full_from_tail:
   (!query_op query_ops sa limit sc start cnt sd N out data se copy_op copy_ops sf sb
@@ -103,76 +92,12 @@ Theorem slice_builtin_some_vv_full_from_tail:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a (Slice n) args) es
 Proof
-  disch_then (CONJUNCTS_THEN2 (mk_asm "tail_run") (mk_asm "child_run")) >>
-  rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
-  qpat_assum `code_slice_source _ _ = SOME _`
-    (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
-  gvs[] >> fs[vyperContextTheory.builtin_args_length_ok_def] >>
-  rw[expr_vv_sim_full_def] >>
-  `body_expr_full_ok cx start` by fs[body_exprs_full_ok_def] >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
-    (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-     asm "child_run" (irule o cj 1) >>
-     simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+  disch_then strip_assume_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `is_self_code (Builtin code_ty (Acc Code) [addr])`
-  >- suspend "self_operands" >>
-  `!bt xs. names_builtin bt xs ==> bt <> Slice n` by
-    (ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
-  `!xs. ~names_builtin (Slice n) xs` by
-    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  qpat_x_assum `!bt xs. _` kall_tac >>
-  qpat_x_assum `compile_expr _ _ (Builtin _ _ _) _ = _` mp_tac >>
-  simp[compile_expr_builtin_dispatch,compile_builtin_dispatch_component_eq,
-    exprBopLoweringTheory.lower_value_child_call,is_self_code_def,is_extcode_def,extcode_addr_expr_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  drule_all exprSimSliceExtcodeContextTheory.slice_extcode_pipeline_context >> strip_tac >>
-  qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
-  simp[gasShadowTheory.gas_shadow_expr_def,gasShadowTheory.gas_shadow_builtin_def,
-    compile_expr_builtin_dispatch,compile_builtin_dispatch_component_eq,
-    exprBopLoweringTheory.lower_value_child_call,is_extcode_def,extcode_addr_expr_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  `~is_self_code (Builtin code_ty (Acc Code) [gas_shadow_expr addr])` by
-    (qspec_then `Builtin code_ty (Acc Code) [addr]` mp_tac
-       (GEN_ALL gasShadowCompilePureTheory.gas_shadow_is_self_code) >>
-     pure_rewrite_tac[gasShadowTheory.gas_shadow_expr_def,gasShadowTheory.gas_shadow_builtin_def,MAP] >> simp[]) >>
-  gvs[] >>
-  `local_ptrs_reserved cenv shadow_sa` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
-  qpat_assum `as_ptr_val _ _ (compile_slice_extcode _ _ _ _ _) = (_,shadow_sb)`
-    (mp_then Any mp_tac exprSimSliceExtcodeContextTheory.slice_extcode_pipeline_context) >>
-  disch_then drule_all >> strip_tac >>
-  `start_op' = start_op /\ gas_shadow_state st1 st1'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
-  gvs[] >>
-  rev_drule slice_extcode_actions >> disch_then (fn th => rewrite_tac[th]) >>
-  `expr_body_pre cenv cx env start es` by
-    (`well_typed_expr env (Builtin a (Slice n) [Builtin code_ty (Acc Code) [addr];start;len])` by
-       fs[expr_body_pre_def] >>
-     drule slice_typed_args >> strip_tac >> gvs[] >>
-     `expr_type start <> BaseT (BytesT (Dynamic 24576))` by simp[] >>
-     `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-     drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
-     disch_then (qspecl_then [`start`,`es`] mp_tac) >> simp[]) >>
-  `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok es` by
-    (drule exprSimSourceTheory.expr_body_pre_gas_admissible >> simp[]) >>
-  qpat_x_assum `expr_sim_full _ _ _ _ start _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  disch_then drule >> simp[] >> disch_then drule_all >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ child_post _` >>
-  suspend "external_start"
+  >- (drule_all slice_builtin_self_vv_full_from_tail >>
+      disch_then irule >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  drule_all slice_builtin_external_vv_full_from_tail >>
+  disch_then irule >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
-
-Resume slice_builtin_some_vv_full_from_tail[self_operands]:
-  cheat
-QED
-
-Resume slice_builtin_some_vv_full_from_tail[external_start]:
-  cheat
-QED
-
-Finalise slice_builtin_some_vv_full_from_tail
