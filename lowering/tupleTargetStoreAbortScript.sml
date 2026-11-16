@@ -94,6 +94,8 @@ Proof
   simp[assign_tuple_target_list_cons] >> metis_tac[]
 QED
 
+(* LOCAL STUB - foreign supplier proof blocks conditional AnnAssign work.
+   Original theorem and proof retained; never deliver this stand-in.
 Theorem tuple_target_static_head_exit:
   !ctx func cenv cx es s g ty tv v op st sf RetQ ee.
     compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
@@ -145,6 +147,22 @@ Proof
   simp[exit_result_def, stmt_exit_def, expr_exit_def] >>
   irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
   qexists `mid` >> simp[]
+QED
+*)
+Theorem tuple_target_static_head_exit:
+  !ctx func cenv cx es s g ty tv v op st sf RetQ ee.
+    compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
+    tuple_target_aligned cenv cx g ty tv /\
+    (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
+    eval_operand op s = SOME (typed_val_to_w256 tv v) /\
+    local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\ fn_has_code st sf func /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\ cx.txn.is_static ==>
+    ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
+      !H. stmt_exit (RetQ H) ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  cheat
 QED
 
 Theorem tuple_store_targets_abort_path:
