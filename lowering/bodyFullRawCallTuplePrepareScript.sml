@@ -223,15 +223,175 @@ Resume raw_call_tuple_suffix_prepared[assemble]:
   `u with vs_fmp := s.vs_fmp = u` by
     (qpat_assum `u.vs_fmp = _` (SUBST1_TAC o SYM) >> simp[]) >> fs[] >>
   `w2n w + (32 + ((n+31) DIV 32)*32) < dimword (:256)` by
-    (gvs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+    (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def,
+        alloca_room_def] >> res_tac >> decide_tac) >>
   `ptr_covers G tn ovx s (32 + ((n+31) DIV 32)*32)` by
     (gvs[ptr_covers_def, eval_operand_def]) >>
-  asm "length" drule_all >> strip_tac >>
+  gvs[eval_operand_def] >>
+  asm "length" (drule_at (Pat `emit_op RETURNDATASIZE _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op LT _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_select _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  disch_then (qspecl_then [`s`,`w2n w`] mp_tac) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
   suspend "length_frame"
 QED
 
 Resume raw_call_tuple_suffix_prepared[length_frame]:
-  cheat
+  qpat_x_assum `!func' PG. ?Gf tnf. _`
+    (qspecl_then [`func`,`PG`] (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
+  asm "separation" (fn sep =>
+    qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+      (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac sep)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
+  disch_then (qspecl_then [`sf`,`es`,`s`,`lo`] mp_tac) >>
+  simp[] >> strip_tac >>
+  suspend "length_transport"
+QED
+
+Resume raw_call_tuple_suffix_prepared[length_transport]:
+  `!x. not_fresh_at sf x ==>
+     lookup_var x u = lookup_var x s /\ FLOOKUP G1 x = FLOOKUP G x /\
+     op_taint tn1 (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!v. not_fresh_at sa v ==> _` irule >>
+     irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists_tac `sf` >> simp[]) >>
+  qpat_assum `u with vs_vars := _ = _`
+    (strip_assume_tac o SRULE [venom_state_component_equality, mstore_def, LET_THM]) >>
+  qpat_x_assum `u.vs_memory = _` kall_tac >>
+  `u.vs_memory = (mstore (w2n w) (n2w (LENGTH (TAKE n s.vs_returndata))) s).vs_memory` by
+    (qpat_assum `u with vs_vars := _ = _`
+      (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
+  asm "frame" (fn frame =>
+    qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+      (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac frame)) >>
+  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`u`,`G1`,`tn1`] mp_tac) >>
+  disch_then (qspecl_then [`{i | w2n w <= i /\ i < w2n w + (32*((n+31) DIV 32)+32)}`,`dep`] mp_tac) >>
+  simp[] >>
+  impl_tac >-
+    (conj_tac >-
+       (rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+        decide_tac) >>
+     conj_tac >-
+       (rpt gen_tac >> disch_tac >>
+        qpat_x_assum `!name a m i. local_region cenv es.scopes s name a m /\ _ ==> _`
+          (qspecl_then [`name`,`a`,`m`,`i`] mp_tac) >>
+        simp[]) >>
+     conj_tac >-
+       (rpt strip_tac >>
+        qpat_assum `wb_frame cenv es0 es sf s0 s`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+        qpat_x_assum `!aid a m i. FLOOKUP s.vs_allocas _ = _ /\ _ ==> _`
+          (qspecl_then [`aid`,`a`,`m`,`i`] mp_tac) >>
+        simp[]) >>
+     rpt strip_tac >>
+     `local_region cenv es.scopes s name a m` by
+       (irule exprSimPropsTheory.local_region_frame_fwd >>
+        qexistsl_tac [`s0`,`sf`,`es0.scopes`] >>
+        fs[loweringPostsTheory.wb_frame_def]) >>
+     metis_tac[]) >>
+  strip_tac >> suspend "allocation"
+QED
+
+Resume raw_call_tuple_suffix_prepared[allocation]:
+  `cs_extends s4 s5` by metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
+  `cs_extends s5 s6 /\ cs_extends s6 s7 /\ cs_extends s7 sb` by
+    (mp_tac (Q.SPECL [`MSTORE`,`[buf.buf_operand;ok]`,`s5`] exprLoweringPropsTheory.ci_mono_emit_void) >>
+     mp_tac (Q.SPECL [`MCOPY`,`[dst;Var ovx;Lit (n2w (32*((n+31) DIV 32)+32))]`,`s7`] exprLoweringPropsTheory.ci_mono_emit_void) >>
+     simp[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprSimAccountsTheory.emit_op_extends_next_var]) >>
+  `cs_extends s5 sb` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `fn_has_code s4 s5 func` by metis_tac[fragExecTheory.fn_has_code_mid] >>
+  qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
+      bodyPtrIfExpAllocCompilerTheory.compile_alloc_buffer_raw_step) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then drule_all >> strip_tac >>
+  rename1 `step_inst_base (mk_inst s4.cs_next_id ALLOCA _ [out]) u = OK u2` >>
+  drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+  `emitted_insts s4 s5 =
+     [mk_inst s4.cs_next_id ALLOCA [Lit (n2w (32*((n+31) DIV 32)+64))] [out]]` by
+    (gvs[exprLoweringPropsTheory.emitted_insts_def, exprLoweringPropsTheory.DROP_PREFIX]) >>
+  `inst_extends s5 sb` by
+    (imp_res_tac emitHelperPropsTheory.inst_extends_emit_void >>
+     imp_res_tac emitHelperPropsTheory.inst_extends_emit_op >>
+     metis_tac[emitHelperPropsTheory.inst_extends_trans]) >>
+  `inst_extends s4 s5` by gvs[emitHelperPropsTheory.inst_extends_def] >>
+  `emitted_insts sa sb = emitted_insts sa s4 ++
+      (emitted_insts s4 s5 ++ emitted_insts s5 sb)` by
+    (qpat_assum `inst_extends sa s4` mp_tac >>
+     qpat_assum `inst_extends s4 sb` mp_tac >>
+     qpat_assum `inst_extends s4 s5` mp_tac >>
+     qpat_assum `inst_extends s5 sb` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     pure_rewrite_tac [emitHelperPropsTheory.inst_extends_def] >>
+     metis_tac[exprLoweringPropsTheory.emitted_insts_append]) >>
+  `run_inst_seq (emitted_insts s5 sb) u2 = OK t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK t` mp_tac >>
+     qpat_assum `emitted_insts sa sb = _` (fn th => pure_once_rewrite_tac[th]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa s4) s = OK u`
+       (mp_then Any (fn th => pure_once_rewrite_tac[th]) run_inst_seq_append) >>
+     qpat_assum `emitted_insts s4 s5 = _` (fn th => pure_once_rewrite_tac[th]) >>
+     simp[run_inst_seq_def]) >>
+  suspend "allocation_frames"
+QED
+
+Resume raw_call_tuple_suffix_prepared[allocation_frames]:
+  `sf.cs_next_var <= s4.cs_next_var` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `STRING #"%" (toString s4.cs_next_var) = out` by
+    (qpat_assum `buf.buf_operand = Var out` mp_tac >> simp[]) >>
+  qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac raw_call_tuple_alloc_kept_at) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (qspec_then `PG` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `ghost_kept_at lo cenv es0 sf G0 tn0 s0 G2 tn2` >>
+  `!D. ghost_inv_at D lo dep cenv cx es G1 tn1 u ==>
+       ghost_inv_at D lo dep cenv cx es G2 tn2 u2` by
+    (rpt strip_tac >> unabbrev_all_tac >>
+     irule bodyFullAllocGenericTheory.compile_alloc_buffer_ghost_frame_at >>
+     simp[] >> conj_tac >- (qexists_tac `sf` >> simp[]) >>
+     qexistsl_tac [`H0`,`ctx`,`func`] >> simp[]) >>
+  suspend "allocation_resources"
+QED
+
+Resume raw_call_tuple_suffix_prepared[allocation_resources]:
+  `local_ptrs_reserved cenv s4` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+  qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac
+      bodyPtrIfExpAllocSourceTheory.compile_alloc_buffer_raw_resources) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  suspend "allocation_covers"
+QED
+
+Resume raw_call_tuple_suffix_prepared[allocation_covers]:
+  `ovx <> out` by
+    (`not_fresh_at sa ovx` by fs[exprSafeOperandTheory.safe_operand_def] >>
+     `not_fresh_at s4 ovx` by
+       (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+        fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL]) >>
+  `ptr_covers G2 tn2 out u2 (32*((n+31) DIV 32)+64)` by
+    (unabbrev_all_tac >> irule allocationPtrTheory.alloca_step_ptr_covers >>
+     simp[] >> qexistsl_tac [`H0`,`cenv`,`ctx`,`cx`,`es`,`func`] >> simp[]) >>
+  `ptr_covers G2 tn2 ovx u2 (32*((n+31) DIV 32)+32)` by
+    (unabbrev_all_tac >> irule allocationPtrTheory.alloca_step_old_ptr_covers >>
+     simp[] >> qexistsl_tac [`H0`,`cenv`,`ctx`,`cx`,`es`,`func`] >> simp[]) >>
+  qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+    (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac allocationPtrTheory.alloca_step_site) >>
+  disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+  simp[] >> strip_tac >> rename1 `eval_operand (Var out) u2 = SOME (n2w b)` >>
+  FAIL_TAC "covers"
 QED
 
 Finalise raw_call_tuple_suffix_prepared
