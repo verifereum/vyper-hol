@@ -4,7 +4,7 @@ Theory sourceCallCountEntryReplay
 Ancestors vyperState[qualified,ignore_grammar]
   sourceCallCount vyperInterpreter vyperEvalOutcomeReplace
   vyperEvalOutcomeSuffix vyperStorageTrace vyperRuntimeAccounts vyperCallOutcome
-  finite_map list option pair
+  finite_map list option pair ctorDeployLoweringSource
 Libs BasicProvers
 
 (* Reuse the supplier's expanded contract without adding a logical constant. *)
@@ -12,45 +12,6 @@ val _ = let
   val ([f,g,s,os], rule) = strip_forall (concl source_replay_cut_bind_reachable)
   val cut = fst (dest_conj (fst (dest_imp rule)))
 in overload_on ("source_wrapper_cut_at", list_mk_abs ([f,s,os], cut)) end;
-
-Theorem outcomes_replace_entry_prefix[local]:
-  (!mut cx s oc.
-    send_call_value mut cx (s with outcomes := oc) =
-      (FST (send_call_value mut cx s),
-       SND (send_call_value mut cx s) with outcomes := oc)) /\
-  (!cx nr view s oc.
-    lock_if_nr cx nr view (s with outcomes := oc) =
-      (FST (lock_if_nr cx nr view s),
-       SND (lock_if_nr cx nr view s) with outcomes := oc))
-Proof
-  conj_tac
-  >- (ntac 2 gen_tac >>
-      simp_tac bool_ss [send_call_value_def, LET_THM] >>
-      IF_CASES_TAC >- simp[vyperStateTheory.return_def] >>
-      irule outcomes_replace_ignore_bind >> simp[outcomes_replace_basic] >>
-      simp_tac bool_ss [transfer_value_def] >>
-      IF_CASES_TAC >- simp[vyperStateTheory.return_def] >>
-      irule outcomes_replace_bind >> simp[outcomes_replace_basic] >>
-      gen_tac >> simp_tac bool_ss [LET_THM] >>
-      irule outcomes_replace_ignore_bind >> simp[outcomes_replace_basic] >>
-      irule outcomes_replace_ignore_bind >>
-      simp[outcomes_replace_basic]) >>
-  ntac 3 gen_tac >> Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
-  asm_simp_tac (srw_ss()) [lock_if_nr_def, option_CLAUSES,
-    vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  irule outcomes_replace_ignore_bind >> conj_tac
-  >- (simp_tac bool_ss [acquire_nonreentrant_lock_def] >>
-      irule outcomes_replace_ignore_bind >>
-      simp[vyperStateTheory.record_storage_event_def,
-        vyperStateTheory.return_def] >>
-      irule outcomes_replace_bind >> simp[outcomes_replace_basic] >>
-      gen_tac >> simp_tac bool_ss [LET_THM] >>
-      IF_CASES_TAC >- simp[vyperStateTheory.raise_def] >>
-      IF_CASES_TAC >> simp[outcomes_replace_basic,
-        vyperStateTheory.return_def]) >>
-  Cases_on `view` >> simp[vyperStateTheory.return_def,
-    vyperStateTheory.check_not_static_def, outcomes_replace_basic]
-QED
 
 Theorem source_entry_body_probe_cut[local]:
   !cx nr mut tenv args vals dvs fbody s os.
@@ -80,8 +41,17 @@ Proof
        ((s with scopes := [env]) with outcomes := SOME xs)` by
        simp[vyperStateTheory.evaluation_state_component_equality] >>
      pop_assum SUBST1_TAC >>
-     simp[outcomes_replace_entry_prefix,
-       Excl "lock_if_nr_def", Excl "is_view_mut_def"]) >>
+     mp_tac (Q.INST
+       [`s` |-> `s with scopes := [env]`, `scs` |-> `[env]`,
+        `gobs` |-> `s.gas_obs`, `view` |-> `is_view_mut mut`,
+        `oc` |-> `s.outcomes`] lock_if_nr_transport) >>
+     mp_tac (Q.INST
+       [`s` |-> `s with scopes := [env]`, `scs` |-> `[env]`,
+        `gobs` |-> `s.gas_obs`, `view` |-> `is_view_mut mut`,
+        `oc` |-> `SOME xs`] lock_if_nr_transport) >>
+     asm_simp_tac (srw_ss())
+       [vyperStateTheory.evaluation_state_component_equality,
+        Excl "lock_if_nr_def", Excl "is_view_mut_def"]) >>
   reverse (Cases_on `rl`)
   >- (asm_simp_tac (srw_ss()) [vyperStateTheory.ignore_bind_def,
         vyperStateTheory.bind_def, vyperStateTheory.set_scopes_def,
@@ -200,7 +170,23 @@ Proof
   rename1 `send_call_value mut cx s = (rs,ss)` >>
   `!xs. send_call_value mut cx (s with outcomes := SOME xs) =
           (rs,ss with outcomes := SOME xs)` by
-    simp[outcomes_replace_entry_prefix] >>
+    (gen_tac >>
+     `s with <|scopes := s.scopes; outcomes := SOME xs;
+               gas_obs := s.gas_obs|> = s with outcomes := SOME xs` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     mp_tac (Q.INST
+       [`scs` |-> `s.scopes`, `gobs` |-> `s.gas_obs`,
+        `oc` |-> `s.outcomes`] send_call_value_transport) >>
+     mp_tac (Q.INST
+       [`scs` |-> `s.scopes`, `gobs` |-> `s.gas_obs`,
+        `oc` |-> `SOME xs`] send_call_value_transport) >>
+     asm_simp_tac (srw_ss())
+       [vyperStateTheory.evaluation_state_component_equality] >>
+     rpt strip_tac >>
+     `ss with <|scopes := s.scopes; outcomes := SOME xs;
+                gas_obs := s.gas_obs|> = ss with outcomes := SOME xs` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     gvs[]) >>
   reverse (Cases_on `rs`)
   >- (asm_simp_tac (srw_ss()) [vyperStateTheory.ignore_bind_def,
         vyperStateTheory.bind_def,

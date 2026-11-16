@@ -290,7 +290,7 @@ Theorem raw_log_topics_sim[local]:
        typed_args_post H ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >> drule_all raw_log_topics_ready >> strip_tac >>
   irule lower_typed_args_sim >> simp[] >>
@@ -454,7 +454,8 @@ Theorem raw_log_dynamic_tail_summary:
       expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit rr r)
+    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   `expr_post H0 ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) ptr_op s` by
@@ -577,7 +578,13 @@ Resume raw_log_dynamic_tail_summary[static]:
   simp[dest_BytesV_def, gas_summary_at_def] >>
   disch_then (qx_choose_then `rr` (qx_choose_then `ee`
     (qx_choose_then `r` strip_assume_tac))) >>
-  qexistsl_tac [`rr`, `ee`, `r`] >> simp[]
+  `rr <> INR HaltException` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
+          assert_def, return_def, raise_def] >> metis_tac[]) >>
+  qexistsl_tac [`rr`, `ee`, `r`] >> simp[halt_exit_def]
 QED
 Finalise raw_log_dynamic_tail_summary
 
@@ -616,7 +623,8 @@ Theorem raw_log_fixed_tail_summary:
       expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==> expr_exit rr r)
+    (\rr ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_exit rr r /\ halt_exit H cx ee rr r)
 Proof
   strip_tac >>
   `expr_post H0 ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) val_op s` by
@@ -765,7 +773,13 @@ Resume raw_log_fixed_tail_summary[static]:
   simp[dest_BytesV_def, gas_summary_at_def] >>
   disch_then (qx_choose_then `rr` (qx_choose_then `ee`
     (qx_choose_then `r` strip_assume_tac))) >>
-  qexistsl_tac [`rr`, `ee`, `r`] >> simp[]
+  `rr <> INR HaltException` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
+          assert_def, return_def, raise_def] >> metis_tac[]) >>
+  qexistsl_tac [`rr`, `ee`, `r`] >> simp[halt_exit_def]
 QED
 Finalise raw_log_fixed_tail_summary
 
@@ -890,11 +904,12 @@ Proof
   reverse conj_tac
   >- (`(\(H:(bool # bytes32 # type_value) list # num list)
            (rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit H cx ee (INR exc : value + exception) r) =
        (\(H:(bool # bytes32 # type_value) list # num list) rr ee r.
-          wb_args_exit rr r)` by
+          wb_args_exit rr r /\ halt_exit H cx ee rr r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `rr` >>
-         simp[wb_args_exit_def]) >>
+         simp[wb_args_exit_def, halt_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
   rpt gen_tac >> strip_tac >> suspend "data"
@@ -960,6 +975,7 @@ Resume raw_log_dynamic_sim[data]:
        storage_trace_frame_ignore_bind, storage_trace_frame_checks,
        storage_trace_frame_check_not_static, storage_trace_frame_state_updates,
        storage_trace_frame_return] >>
+  conj_tac >- (rpt strip_tac >> gvs[halt_exit_def]) >>
   qexistsl [`cenv`, `v`, `st1`, `st2`, `expr_type data`] >>
   simp[] >> reverse conj_tac
   >- metis_tac[local_ptrs_reserved_next_var] >>
@@ -1108,11 +1124,12 @@ Proof
   reverse conj_tac
   >- (`(\(H:(bool # bytes32 # type_value) list # num list)
            (rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit H cx ee (INR exc : value + exception) r) =
        (\(H:(bool # bytes32 # type_value) list # num list) rr ee r.
-          wb_args_exit rr r)` by
+          wb_args_exit rr r /\ halt_exit H cx ee rr r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `rr` >>
-         simp[wb_args_exit_def]) >>
+         simp[wb_args_exit_def, halt_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
   rpt gen_tac >> strip_tac >> suspend "data"
@@ -1199,6 +1216,7 @@ Resume raw_log_fixed_sim[data]:
        storage_trace_frame_ignore_bind, storage_trace_frame_checks,
        storage_trace_frame_check_not_static, storage_trace_frame_state_updates,
        storage_trace_frame_return] >>
+  conj_tac >- (rpt strip_tac >> gvs[halt_exit_def]) >>
   qexistsl [`cenv`, `v`, `st2`, `st3`, `expr_type data`] >>
   simp[] >> reverse conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists `st1` >> simp[] >>

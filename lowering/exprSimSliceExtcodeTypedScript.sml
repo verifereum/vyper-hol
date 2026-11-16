@@ -278,7 +278,7 @@ Resume slice_extcode_typed_entry[finish]:
         (mid' with gas_obs := []) st2 r t' ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
-    `\H res ee rr. expr_exit res rr`] >>
+    `\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr`] >>
   simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- suspend "entry" >>
   rpt strip_tac >> gvs[] >>

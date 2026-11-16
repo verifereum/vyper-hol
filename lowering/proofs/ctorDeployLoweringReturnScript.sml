@@ -913,32 +913,6 @@ Proof
   metis_tac[TAKE_LENGTH_APPEND, LENGTH_DROP]
 QED
 
-(* Encoding diagnostic: oversized symbolic offsets are not truncated. *)
-Theorem deploy_symbolic_encoding_probe[local]:
-  encode_inst (FEMPTY |+ ("far",65536)) (AsmPushLabel "far") =
-    [0x61w; 1w; 0w; 0w] /\
-  asm_inst_size (AsmPushLabel "far") = 3
-Proof
-  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
-QED
-
-
-Theorem deploy_assembly_offset_probe[local]:
-  let p = [AsmPushLabel "runtime_begin";
-           AsmDataItem (REPLICATE 65533 (0w:word8));
-           AsmDataHeader "runtime_begin"; AsmDataItem [42w]] in
-  FLOOKUP (SND (compute_label_offsets p)) "runtime_begin" = SOME 65536 /\
-  TAKE 1 (DROP 65536 (assemble p)) = [0w]
-Proof
-  simp[compute_label_offsets_def, symbolResolveTheory.asm_inst_size_def, symbol_size_def,
-       assemble_def, encode_inst_def, finite_mapTheory.FLOOKUP_UPDATE,
-       pad_bytes_def] >>
-  `encode_num_bytes 65536 = [1w; 0w; 0w]` by
-    (EVAL_TAC >> wordsLib.WORD_DECIDE_TAC) >>
-  simp[listTheory.DROP_APPEND, rich_listTheory.DROP_REPLICATE,
-       rich_listTheory.EL_APPEND1, rich_listTheory.EL_REPLICATE]
-QED
-
 Theorem deploy_ctor_start_static[local]:
   !tops am tx mut nr body am_c es0.
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
