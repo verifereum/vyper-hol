@@ -3,11 +3,11 @@ Ancestors
   o1ContractFmpLowering fmpStepBridge o1LabelFlowRetention
   codegenSymRel unitShapeDefs fmpStepContract o1PassContract venomInst
 
-(* The row supplies FMP-freedom; callees may already be sealed.  The
+(* The input is FMP-free; callees may already be sealed.  The
    no-parameter boundary handles both sealed and unsealed functions. *)
 Theorem fmp_row_blocks_unchanged:
   fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s f out /\
-  o1_fn_row 3 f /\
+  o1_fn_row 3 f /\ no_raw_fmp_ops f /\
   EVERY fmp_sig_no_param observed.cu_context.ctx_functions ==>
   out.fpo_function.fn_blocks = f.fn_blocks
 Proof
@@ -38,7 +38,7 @@ QED
 
 Theorem fmp_row_label_flow_ok:
   fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s f out /\
-  o1_fn_row 3 f /\
+  o1_fn_row 3 f /\ no_raw_fmp_ops f /\
   EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   label_flow_ok (ctx with ctx_functions := [f]) ==>
   label_flow_ok (ctx with ctx_functions := [out.fpo_function])
@@ -49,7 +49,7 @@ QED
 
 Theorem fmp_row_code_end_lifetime:
   fn_pass_step rpolicy (CFP_Simple VP_FmpLowering) observed s f out /\
-  o1_fn_row 3 f /\
+  o1_fn_row 3 f /\ no_raw_fmp_ops f /\
   EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   (!x. code_end_var f x ==>
     ?d op. MEM d (fn_insts f) /\ d.inst_opcode = ADD /\
