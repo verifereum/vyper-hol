@@ -9,7 +9,7 @@ Ancestors
   stmtForArrayMemoryBodyEntry entrySinkExtraction exprSimAlloc
   stmtSimDefs exprSimSend loweringStateRelDefs
 
-Theorem raw_log_dynamic_suffix_shape[local]:
+Theorem raw_log_dynamic_suffix_shape:
   emit_op MLOAD [x] sm = (len,s1) /\
   emit_op ADD [x; Lit 32w] s1 = (payload_op,s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len;payload_op]) [] s2 = (u,sb) ==>
@@ -165,7 +165,7 @@ Proof
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]
 QED
 
-Theorem raw_log_fixed_suffix_shape[local]:
+Theorem raw_log_fixed_suffix_shape:
   emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) ==>
   sb.cs_current_bb = sm.cs_current_bb /\
