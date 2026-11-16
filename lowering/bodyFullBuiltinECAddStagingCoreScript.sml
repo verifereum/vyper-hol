@@ -870,7 +870,11 @@ Resume ecadd_staging_full_from_transfers[before_copy_ghost]:
    (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
      not_fresh_at sp z)` by
     (rpt strip_tac >> `not_fresh_at s2 z` by metis_tac[] >>
-     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+     qpat_assum `not_fresh_at s2 z` mp_tac >>
+     qpat_assum `s2.cs_next_var <= ca.cs_next_var` mp_tac >>
+     qpat_assum `ca.cs_next_var <= sp.cs_next_var` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[stmtFragPtrTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
      ghost_inv_at (DF H) lo d cenv cx es2 Gu tnu u` by
     (gen_tac >> strip_tac >>
