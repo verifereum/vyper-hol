@@ -55,7 +55,7 @@ Theorem assign_base_clean_mstore_counted:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id MSTORE [Var dst; value] []) /\
     ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
-    ~ctx_has_dalloca ctx /\ lookup_var dst s = SOME a /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ lookup_var dst s = SOME a /\
     eval_operand value s = SOME w /\ val_wf tv v /\
     val_footprint tv v <= 32 /\
     val_in_memory tv v (w2n a) (mstore (w2n a) w s).vs_memory /\
