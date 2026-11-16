@@ -10,6 +10,7 @@
  *)
 Theory symFrameInvoke
 Ancestors
+  symInvokeEntryFacts
   symPostfixSim
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
@@ -17,14 +18,14 @@ Ancestors
   dfgDefs list symPlannerSim prefixExec mixedPrefixSim symShuffleSim gasFrameSim
   fnFrameStepsRevertForward
 
-(* INVOKE cannot consume the opaque code-end pointer. *)
+(* Canonical entry APIs are corollaries of the shared entry facts. *)
 Theorem sym_invoke_argument_not_code_end:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
   MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
 Proof
-  rw[label_flow_ok_def] >>
-  first_x_assum drule_all >> simp[] >> metis_tac[]
+  metis_tac[sym_invoke_argument_not_code_end_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_argument_shape:
@@ -32,10 +33,7 @@ Theorem sym_invoke_argument_shape:
   inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args ==>
   opaque_use_ok fn /\ EVERY (\op. ~is_label_operand op) args
 Proof
-  strip_tac >>
-  `opaque_use_ok fn /\ label_positions_ok inst` by
-    (gvs[fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >> metis_tac[]) >>
-  gvs[label_positions_ok_def]
+  ACCEPT_TAC sym_invoke_argument_shape_core
 QED
 
 Theorem sym_invoke_argument_word_kind:
@@ -45,12 +43,8 @@ Theorem sym_invoke_argument_word_kind:
   op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
   ?w. sv = Val w
 Proof
-  strip_tac >>
-  drule_all sym_invoke_argument_shape >> strip_tac >>
-  `~is_label_operand op` by gvs[EVERY_MEM] >>
-  Cases_on `op` >> gvs[is_label_operand_def, op_kind_ok_def] >>
-  metis_tac[fnFrameBoundaryInvokeTheory.invoke_arguments_not_retpc,
-            sym_invoke_argument_not_code_end, MEM]
+  metis_tac[sym_invoke_argument_word_kind_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_output_not_code_end:
@@ -130,11 +124,7 @@ Theorem sym_invoke_selected_prefix_sim_marked:
         (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
              FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  `emit_input_plan ADD operands nl ps = (iops,prepared)` by
-    metis_tac[fnFrameBoundaryInvokeTheory.invoke_label_free_input] >>
-  `ADD <> INVOKE /\ PERM operands operands` by simp[] >>
-  drule_all sym_selected_prefix_sim_marked >> simp[]
+  ACCEPT_TAC sym_invoke_selected_prefix_sim_marked_core
 QED
 
 Theorem sym_invoke_call_packet:
@@ -146,10 +136,7 @@ Theorem sym_invoke_call_packet:
     SymOK (ss with <| sym_base := ss.sym_base with as_pc := pc;
                      sym_stack := Lab ret_lbl 0 :: ss.sym_stack |> )
 Proof
-  rpt strip_tac >>
-  gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[asmSpliceTheory.sym_steps_compute, sym_step_def, sym_set_stack_def,
-       sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
+  ACCEPT_TAC sym_invoke_call_packet_core
 QED
 
 Theorem sym_invoke_prefix_pair:
@@ -222,8 +209,7 @@ Theorem sval_conc_words:
   LIST_REL (\sv w. sval_conc lo sv = SOME w) svs ws ==>
   svs = MAP Val ws
 Proof
-  Induct >> Cases_on `ws` >> simp[] >>
-  rpt strip_tac >> gvs[sval_conc_def] >> metis_tac[]
+  ACCEPT_TAC sval_conc_words_core
 QED
 
 Theorem sym_invoke_argument_list_words:
@@ -234,11 +220,8 @@ Theorem sym_invoke_argument_list_words:
   LIST_REL (op_kind_ok fn ret) (REVERSE args) svs ==>
   EVERY (\sv. ?w. sv = Val w) svs
 Proof
-  rw[EVERY_MEM] >>
-  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
-  gvs[MEM_REVERSE] >>
-  `x <> dead_stack_marker` by metis_tac[] >>
-  drule_all sym_invoke_argument_word_kind >> simp[]
+  metis_tac[sym_invoke_argument_list_words_own,
+    codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_arranged_stack:
@@ -254,17 +237,9 @@ Theorem sym_invoke_arranged_stack:
     ss.sym_stack = MAP Val values ++ saved_sym ++ srest /\
     LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym
 Proof
-  rpt strip_tac >>
-  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1] >>
-  rename1 `LIST_REL (op_kind_ok fn ret) (REVERSE args) arg_syms` >>
-  `EVERY (\sv. ?w. sv = Val w) arg_syms` by
-    (drule_all sym_invoke_argument_list_words >> simp[]) >>
-  `LENGTH arg_syms = LENGTH values` by
-    metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
-  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-     arg_syms values` by
-    metis_tac[asm_sym_rel_def, GSYM APPEND_ASSOC, LIST_REL_APPEND_EQ] >>
-  drule_all sval_conc_words >> strip_tac >> gvs[]
+  rpt strip_tac >> irule sym_invoke_arranged_stack_core >>
+  gvs[asm_sym_rel_def] >>
+  metis_tac[codegenSymOwnRelTheory.label_flow_ok_imp_label_flow_own_ok]
 QED
 
 Theorem sym_invoke_callee_code_label:
@@ -313,8 +288,7 @@ Theorem sym_invoke_return_code_label:
     ([SOPushLabel ret; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret] ++ post)) ==>
   MEM (AsmLabel ret) p
 Proof
-  rpt strip_tac >> irule spillWordBoundsTheory.asm_block_at_member >>
-  goal_assum (drule_at Any) >> simp[execute_plan_def, exec_stack_op_def]
+  ACCEPT_TAC sym_invoke_return_code_label_core
 QED
 
 Theorem sym_invoke_entry_symbolic_boundary:
@@ -1539,6 +1513,70 @@ Proof
   rw[sym_frame_inv_def] >> metis_tac[]
 QED
 
+(* Shared symbolic execution of the return label and numeric cleanup. *)
+Theorem sym_invoke_return_suffix_kinds_mode:
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) (pops ++ opts) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest called ssr /\
+  asm_block_at p ssr.sym_base.as_pc
+    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) ==>
+  ?sfin.
+    sym_steps_mode allow_own p env own
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin /\
+    sym_kinds_ok cplan fn ret srest final sfin /\
+    sfin.sym_base.as_pc = ssr.sym_base.as_pc +
+      LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) /\
+    (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      FLOOKUP sfin.sym_mem_labels b = FLOOKUP ssr.sym_mem_labels b)
+Proof
+  strip_tac >>
+  `execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)) =
+   AsmLabel ret_lbl :: execute_plan cplan.cp_initial_fmp (pops ++ opts)` by
+    (pure_rewrite_tac[execute_plan_def, MAP, FLAT] >>
+     simp[Once exec_stack_op_def]) >>
+  `asm_block_at p ssr.sym_base.as_pc [AsmLabel ret_lbl] /\
+   asm_block_at p (ssr.sym_base.as_pc + 1) (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
+    gvs[stackOpSimTheory.asm_block_at_cons] >>
+  drule sym_invoke_return_label_step >>
+  disch_then (qspec_then `env` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `sym_steps p env 1 ssr = SymOK sl` >>
+  `sym_kinds_ok cplan fn ret srest called sl /\
+   asm_block_at p sl.sym_base.as_pc (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
+    gvs[Abbr `sl`, sym_kinds_ok_def] >>
+  `!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan fn.fn_name b /\ context_spill_byte cplan b` by
+    (rpt gen_tac >> disch_tac >> metis_tac[sym_invoke_cleanup_footprint]) >>
+  drule_all sym_invoke_cleanup_kinds_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_steps p env _ sl = SymOK sfin` >>
+  `sym_steps p env (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin` by
+    simp[Once sym_steps_add] >>
+  qexists_tac `sfin` >> conj_tac
+  >- metis_tac[sym_steps_mode_ok] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- ((qpat_x_assum `sfin.sym_base.as_pc = _` mp_tac >>
+      qpat_x_assum `execute_plan _ (SOLabel _ :: _) = _`
+        (fn th => rewrite_tac[th]) >>
+      unabbrev_all_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+      simp_tac std_ss [sym_state_accfupds, asm_state_accfupds, LENGTH,
+        arithmeticTheory.ADD_ASSOC] >> (simp[]))) >>
+  qpat_x_assum `!b. ~closure_spill_byte _ _ _ b ==> _` mp_tac >>
+  unabbrev_all_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac std_ss [sym_state_accfupds]
+QED
+
 Theorem sym_invoke_return_suffix_frame:
   (if outs = [] then ([],called)
    else if ~halting \/ LENGTH outs > 1 then
@@ -1565,27 +1603,16 @@ Theorem sym_invoke_return_suffix_frame:
     sym_frame_inv p env ctx cplan fn ret srest labs0 final fin sfin
 Proof
   strip_tac >>
-  `asm_block_at p asr.as_pc [AsmLabel ret_lbl] /\
-   asm_block_at p (asr.as_pc + 1) (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
-    (qpat_x_assum `asm_block_at p _ (execute_plan _ (SOLabel _ :: _))` mp_tac >>
-     simp[execute_plan_def, Once exec_stack_op_def,
-       stackOpSimTheory.asm_block_at_cons, arithmeticTheory.ADD_COMM]) >>
-  drule_all sym_invoke_return_label_pair >> strip_tac >>
-  `!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
-    closure_spill_byte ctx cplan fn.fn_name b /\ context_spill_byte cplan b` by
-    (rpt gen_tac >> disch_tac >> metis_tac[sym_invoke_cleanup_footprint]) >>
-  `sym_kinds_ok cplan fn ret srest called ss /\
-   asm_block_at p ss.sym_base.as_pc (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
-    gvs[sym_frame_inv_def, asm_sym_rel_def] >>
-  drule_all sym_invoke_cleanup_kinds_numeric >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  rename1 `sym_steps p env _ ss = SymOK sfin` >>
-  `sym_steps p env (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin` by
-    simp[Once sym_steps_add] >>
-  `asm_sym_rel p env asr ssr` by gvs[sym_frame_inv_def] >>
+  `sym_kinds_ok cplan fn ret srest called ssr /\
+   asm_sym_rel p env asr ssr /\
+   asm_block_at p ssr.sym_base.as_pc
+     (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))` by
+    (gvs[sym_frame_inv_def, asm_sym_rel_def] >> (metis_tac[sym_frame_inv_def, asm_sym_rel_def])) >>
+  drule_all sym_invoke_return_suffix_kinds_mode >>
+  disch_then (qspecl_then [`[]`, `env`, `ctx`, `F`] strip_assume_tac) >>
+  gvs[sym_steps_mode_def] >>
   drule_all asm_sym_steps_lockstep >> strip_tac >>
-  rename1 `asm_sym_rel p env fin sfin` >>
-  qexistsl [`fin`, `sfin`] >> simp[] >>
+  qexists_tac `cs'` >> simp[] >>
   irule sym_invoke_cleanup_frame_rebuild >> metis_tac[]
 QED
 
@@ -2024,6 +2051,43 @@ Proof
   gvs[codegen_ready_fn_def]
 QED
 
+(* The spill/stack argument is independent of the concrete relation. *)
+Theorem sym_invoke_return_kinds_from_callee_core:
+  !cp r fn ctx callee arranged ret srest sms scas ssr
+   inst vals saved_ops saved_sym ret_lbl called.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\ fn_directly_calls ctx fn.fn_name callee /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cp fn ret srest arranged sms /\
+  scas.sym_mem_labels = sms.sym_mem_labels /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b) /\
+  (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cp b) /\
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  LENGTH vals = LENGTH inst.inst_outputs /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym /\
+  ssr.sym_stack = MAP Val (REVERSE vals) ++ (saved_sym ++ srest) /\
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := saved_ops) inst.inst_outputs) = (ret_lbl,called) ==>
+  sym_kinds_ok cp fn ret srest called ssr
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `ordered_spill_regions cplan.cp_regions` >>
+  `!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
+    r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end` by
+    (gvs[doSwapSimTheory.spill_alloc_layout_wf_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP sms.sym_mem_labels b` by metis_tac[] >>
+  `!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
+    ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ssr.sym_mem_labels off sv` by
+    metis_tac[sym_invoke_return_spill_kinds] >>
+  `ssr.sym_stack = MAP Val (REVERSE vals) ++ saved_sym ++ srest` by simp[APPEND_ASSOC] >>
+  drule_all sym_invoke_return_called_kinds >> simp[]
+QED
+
 (* Rebuild the caller's symbolic frame at the callee's internal return. *)
 Theorem sym_invoke_return_frame_from_callee:
   !cp r fn ctx callee arranged p env ret srest labs0 mid sms scas ssr asr
@@ -2051,16 +2115,7 @@ Theorem sym_invoke_return_frame_from_callee:
 Proof
   rpt gen_tac >> strip_tac >> rename1 `ordered_spill_regions cplan.cp_regions` >>
   `sym_kinds_ok cplan fn ret srest arranged sms` by gvs[sym_frame_inv_def] >>
-  `!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
-    r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end` by
-    (gvs[doSwapSimTheory.spill_alloc_layout_wf_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  `!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan callee b ==>
-    FLOOKUP ssr.sym_mem_labels b = FLOOKUP sms.sym_mem_labels b` by metis_tac[] >>
-  `!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
-    ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ssr.sym_mem_labels off sv` by
-    metis_tac[sym_invoke_return_spill_kinds] >>
-  `ssr.sym_stack = MAP Val (REVERSE vals) ++ saved_sym ++ srest` by simp[APPEND_ASSOC] >>
-  drule_all sym_invoke_return_called_kinds >> strip_tac >>
+  drule_all sym_invoke_return_kinds_from_callee_core >> strip_tac >>
   irule sym_invoke_return_frame_transport >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
@@ -2602,4 +2657,170 @@ Proof
   conj_tac
   >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_halt >> simp[]) >>
   rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_abort >> simp[]
+QED
+
+(* Return restoration at supplied label offsets and fixed own-code bytes. *)
+Theorem sym_invoke_return_frame_transport_own:
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 arranged mid sms /\
+  fn_directly_calls ctx fn.fn_name callee /\
+  (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP sms.sym_mem_labels b) /\
+  asm_sym_rel_own lo p env own asr ssr /\ sym_kinds_ok cplan fn ret srest called ssr ==>
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 called asr ssr
+Proof
+  rw[sym_frame_inv_own_def] >>
+  metis_tac[fnFrameBoundaryInvokeTheory.invoke_closure_subset]
+QED
+
+Theorem sym_invoke_cleanup_frame_rebuild_own:
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 old cs ss /\
+  asm_sym_rel_own lo p env own fin sfin /\ sym_kinds_ok cplan fn ret srest final sfin /\
+  (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP sfin.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 final fin sfin
+Proof
+  rw[sym_frame_inv_own_def] >> metis_tac[]
+QED
+
+Theorem sym_invoke_return_frame_from_callee_own:
+  !lo own cp r fn ctx callee arranged p env ret srest labs0 mid sms scas ssr asr
+   inst vals saved_ops saved_sym ret_lbl called.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\ fn_directly_calls ctx fn.fn_name callee /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 arranged mid sms /\
+  scas.sym_mem_labels = sms.sym_mem_labels /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b) /\
+  (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_sym_rel_own lo p env own asr ssr /\
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  LENGTH vals = LENGTH inst.inst_outputs /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym /\
+  ssr.sym_stack = MAP Val (REVERSE vals) ++ (saved_sym ++ srest) /\
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := saved_ops) inst.inst_outputs) = (ret_lbl,called) ==>
+  sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 called asr ssr
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `ordered_spill_regions cplan.cp_regions` >>
+  `sym_kinds_ok cplan fn ret srest arranged sms` by gvs[sym_frame_inv_own_def] >>
+  drule_all sym_invoke_return_kinds_from_callee_core >> strip_tac >>
+  irule sym_invoke_return_frame_transport_own >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem sym_invoke_return_label_pair_own:
+  (!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+     sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+     ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+       asm_sym_rel_own lo p env own cs' ss') /\
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 called asr ssr /\
+  asm_block_at p asr.as_pc [AsmLabel lbl] ==>
+  ?cs ss.
+    asm_steps lo (build_offset_to_pc p) p 1 asr = AsmOK cs /\
+    sym_steps_mode allow_own p env own 1 ssr = SymOK ss /\
+    sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 called cs ss /\
+    cs.as_pc = asr.as_pc + 1 /\ ss.sym_mem_labels = ssr.sym_mem_labels
+Proof
+  strip_tac >>
+  `asm_sym_rel_own lo p env own asr ssr` by gvs[sym_frame_inv_own_def] >>
+  `ssr.sym_base.as_pc = asr.as_pc` by gvs[asm_sym_rel_own_def] >>
+  `asm_block_at p ssr.sym_base.as_pc [AsmLabel lbl]` by simp[] >>
+  drule sym_invoke_return_label_step >>
+  disch_then (qspec_then `env` assume_tac) >>
+  drule sym_steps_mode_ok >>
+  disch_then (qspecl_then [`own`, `allow_own`] assume_tac) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `cs'.as_pc = asr.as_pc + 1` by
+    (fs[asm_sym_rel_own_def] >>
+     qpat_x_assum `_ = cs' with <|as_stack := []; as_memory := _; as_code := []|>`
+       (mp_tac o AP_TERM ``asm_state_as_pc``) >>
+     simp[]) >>
+  qexistsl [`cs'`, `ssr with sym_base := ssr.sym_base with
+    <|as_stack := []; as_pc := ssr.sym_base.as_pc + 1|>`] >>
+  gvs[sym_frame_inv_own_def, sym_kinds_ok_def]
+QED
+
+Theorem sym_invoke_return_suffix_frame_own:
+  (!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+     sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+     ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+       asm_sym_rel_own lo p env own cs' ss') /\
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) (pops ++ opts) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 called asr ssr /\
+  asm_block_at p asr.as_pc
+    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) ==>
+  ?fin sfin.
+    asm_steps lo (build_offset_to_pc p) p
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) asr = AsmOK fin /\
+    sym_steps_mode allow_own p env own
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin /\
+    sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 final fin sfin
+Proof
+  strip_tac >>
+  `sym_kinds_ok cplan fn ret srest called ssr` by gvs[sym_frame_inv_own_def] >>
+  `asm_sym_rel_own lo p env own asr ssr` by gvs[sym_frame_inv_own_def] >>
+  `ssr.sym_base.as_pc = asr.as_pc` by gvs[asm_sym_rel_own_def] >>
+  `asm_block_at p ssr.sym_base.as_pc
+     (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))` by simp[] >>
+  drule_all sym_invoke_return_suffix_kinds_mode >>
+  disch_then (qspecl_then [`own`, `env`, `ctx`, `allow_own`] strip_assume_tac) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl [`cs'`, `sfin`] >> simp[] >>
+  irule sym_invoke_cleanup_frame_rebuild_own >> metis_tac[]
+QED
+
+(* The numeric supplier selects fin; the symbolic suffix reconstructs its
+   matching frame without reproving the concrete return theorem. *)
+Theorem sym_invoke_return_frame_numeric_own:
+  (!n cs ss ss'. asm_sym_rel_own lo p env own cs ss /\
+     sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+     ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+       asm_sym_rel_own lo p env own cs' ss') /\
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) (pops ++ opts) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 called asr ssr /\
+  asm_block_at p asr.as_pc
+    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) /\
+  asm_steps lo (build_offset_to_pc p) p
+    (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) asr = AsmOK fin /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' fin /\
+  fin.as_pc = asr.as_pc +
+    LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) ==>
+  ?sfin.
+    sym_steps_mode allow_own p env own
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin /\
+    sym_frame_inv_own lo p env own ctx cplan fn ret srest labs0 final fin sfin /\
+    fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' fin /\
+    fin.as_pc = asr.as_pc +
+      LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))
+Proof
+  strip_tac >> drule_all sym_invoke_return_suffix_frame_own >>
+  strip_tac >> gvs[] >> metis_tac[]
 QED
