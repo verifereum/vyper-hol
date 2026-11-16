@@ -873,7 +873,12 @@ Resume compile_subscript_array_live_base_case[storage_suffix]:
 QED
 Finalise compile_subscript_array_live_base_case
 
-(* The remaining place-base obligation retains its original contract. *)
+(* An untouched captured local retains its complete memory region through
+   locals_kept, including a subvalue read from popped history. Source
+   MemoryPlace read provenance and eval_expr_unwritten_local can establish
+   that lookup equality without assuming initial whole-owner snapshot_in.
+   The original contract also covers source/compiler overlap mismatches;
+   no-call overlap equality alone does not dispose of those cases. *)
 Theorem compile_subscript_array_place_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
