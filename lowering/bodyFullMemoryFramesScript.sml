@@ -1,6 +1,7 @@
 (* Constructor-compatible frames for local overwrites and buffer allocation. *)
 Theory bodyFullMemoryFrames
 Ancestors
+  bodyFullHashKeccakFixed
   bodySim exprSimHyps structFieldsProps bodyStorageMetadata compileVyper immutableLocationProps
   vyperTypeInvariants vyperTypeSystem vyperTypeContract vyperTypeContractStaticMaps
   exprSimHypsDefs gasContext immSectionDead
@@ -237,7 +238,7 @@ Theorem body_full_alloc_buffer_path:
   stmt_state_rel H ctx func cenv cx es s /\
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
-  n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  n < dimword (:256) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -383,8 +384,16 @@ Resume body_full_alloc_buffer_path[path]:
   gen_tac >>
   `inst_seq_ptr D lo ctx func PG G tn [inst] s G1 tn1` by
     (simp[inst_seq_ptr_def,Abbr `G1`,Abbr `tn1`,Abbr `inst`] >>
-     irule ptr_inst_ok_lower_bound_transport >> simp[] >> qexists_tac `0` >>
-     simp[ptr_inst_ok_alloca]) >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> strip_tac >>
+     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+       combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+     rpt strip_tac >> gvs[]) >>
   qspecl_then [`[inst]`,`sa`,`sb`,`s`,`t`,`G`,`tn`,`G1`,`tn1`]
     mp_tac emitted_origin_ptr_path >>
   simp[Abbr `inst`,mk_inst_def,is_terminator_def,run_inst_seq_def,
