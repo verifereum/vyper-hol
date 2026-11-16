@@ -2867,6 +2867,135 @@ Proof
   qexistsl_tac [`done`, `z`, `later`, `before`, `after`, `tz`] >> metis_tac[]
 QED
 
+Theorem native_step_root_calls_nil[local]:
+  FILTER (\(e,f,i,a). e = (p,d,i.inst_id) /\ i.inst_opcode = INVOKE)
+    (dftGasFromListTraceDefs$trace_step p d b C fn inst s) = []
+Proof
+  simp[FILTER_EQ_NIL, EVERY_MEM, pairTheory.FORALL_PROD] >>
+  rpt strip_tac >> rename1 `MEM ((p,d,call.inst_id),owner,call,a) _` >>
+  `MEM (p,d,call.inst_id) (MAP FST
+    (dftGasFromListTraceDefs$trace_step p d b C fn inst s))` by
+    (simp[MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+  metis_tac[trace_step_not_root]
+QED
+
+Theorem native_from_block_calls[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ MEM h bi /\
+  from_block bi i /\ h.inst_id = i.inst_id ==>
+  FILTER (\i. i.inst_opcode = INVOKE) [h] =
+    FILTER (\i. i.inst_opcode = INVOKE) [i]
+Proof
+  strip_tac >> fs[from_block_def]
+  >- (`h = i` by metis_tac[all_distinct_map_mem_inj] >> simp[]) >>
+  rename1 `i = flip_operands original` >>
+  `h = original` by
+    metis_tac[all_distinct_map_mem_inj, flip_operands_inst_id] >>
+  `original.inst_opcode <> INVOKE` by
+    (Cases_on `original.inst_opcode` >>
+     gvs[is_flippable_def, is_commutative_def, is_comparator_def]) >>
+  `(flip_operands original).inst_opcode <> INVOKE` by
+    metis_tac[flip_operands_special_opcode, MEM] >>
+  simp[]
+QED
+
+Theorem native_frontier_suffix_root_calls[local]:
+  !done t body tz.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  EVERY (\i. MEM i bi) (done ++ z::later) /\
+  EVERY (from_block bi) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) (done ++ z::later) body /\
+  DROP t.vs_inst_idx bt.bb_instructions = body /\
+  EVERY (\i. ~is_terminator i.inst_opcode) done /\
+  FOLDR (dft_exec_cons b C') OK done t = OK tz /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C' z tz = OK u)) ==>
+  MAP FST (MAP (\(e,f,i,a). (i,a))
+    (FILTER (\(e,f,i,a). e = (p,d,i.inst_id) /\ i.inst_opcode = INVOKE)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) =
+    FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z])
+Proof
+  Induct >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
+  >- suspend "stop"
+  >> suspend "next"
+QED
+
+Resume native_frontier_suffix_root_calls[stop]:
+  rename1 `LIST_REL _ _ actual_body` >>
+  Cases_on `actual_body` >> gvs[] >>
+  rename1 `from_block bi actual` >>
+  rename1 `DROP a.vs_inst_idx bt.bb_instructions = _` >>
+  `a.vs_inst_idx < LENGTH bt.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL a.vs_inst_idx bt.bb_instructions = actual` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  drule_all native_from_block_observations >>
+  disch_then (qspecl_then [`p`, `b`, `fn'`, `d`, `a`, `C'`] strip_assume_tac) >>
+  drule_all native_from_block_calls >> disch_tac >>
+  once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst b C' actual a` >> gs[] >>
+  Cases_on `actual.inst_opcode = INVOKE` >>
+  gs[native_step_root_calls_nil]
+QED
+
+Resume native_frontier_suffix_root_calls[next]:
+  rename1 `LIST_REL _ _ actual_body` >>
+  Cases_on `actual_body` >> fs[] >>
+  rename1 `~is_terminator source.inst_opcode` >>
+  rename1 `from_block bi actual` >>
+  `t.vs_inst_idx < LENGTH bt.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL t.vs_inst_idx bt.bb_instructions = actual /\
+   DROP (SUC t.vs_inst_idx) bt.bb_instructions = t'` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  drule_all native_from_block_observations >>
+  disch_then (qspecl_then [`p`, `b`, `fn'`, `d`, `t`, `C'`] strip_assume_tac) >>
+  drule_all native_from_block_calls >> disch_tac >>
+  qpat_x_assum `dft_exec_cons _ _ _ _ _ = _` mp_tac >>
+  Cases_on `step_inst b C' actual t` >>
+  gs[dftIndexedExecTheory.dft_exec_cons_def] >> strip_tac >>
+  rename1 `step_inst b C' actual t = OK mid` >>
+  first_x_assum (qspecl_then
+    [`mid with vs_inst_idx := SUC t.vs_inst_idx`, `tz`] mp_tac) >>
+  (impl_tac >-
+    (simp[] >> qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[])) >> disch_tac >>
+  once_rewrite_tac[cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+  simp[get_instruction_def] >>
+  Cases_on `actual.inst_opcode = INVOKE` >>
+  gs[FILTER_APPEND_DISTRIB, native_step_root_calls_nil] >>
+  Cases_on `source.inst_opcode = INVOKE` >> gs[]
+QED
+
+Finalise native_frontier_suffix_root_calls
+
+Theorem native_frontier_root_calls:
+  !body.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+  EVERY (\i. MEM i bi) (done ++ z::later) /\
+  EVERY (from_block bi) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) (done ++ z::later) body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\
+  t.vs_inst_idx = j /\
+  EVERY (\i. ~is_terminator i.inst_opcode) done /\
+  FOLDR (dft_exec_cons b C') OK done t = OK tz /\
+  (is_terminator z.inst_opcode \/ ~(?u. step_inst b C' z tz = OK u)) /\
+  FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z]) =
+    FILTER (\i. i.inst_opcode = INVOKE) (done ++ [z]) ==>
+  MAP FST (MAP (\(e,f,i,a). (i,a))
+    (FILTER (\(e,f,i,a). e = (p,d,i.inst_id) /\ i.inst_opcode = INVOKE)
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t))) =
+    FILTER (\i. i.inst_opcode = INVOKE) (before ++ [z])
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `LIST_REL _ _ actual_body` >>
+  `DROP t.vs_inst_idx bt.bb_instructions = actual_body` by simp[DROP_APPEND] >>
+  drule_all native_frontier_suffix_root_calls >> simp[]
+QED
+
 Theorem native_bubbles_terminator_last[local]:
   (!x y. A x y ==> ~is_terminator y.inst_opcode) ==>
   !src dst. dft_head_bubbles A src dst ==>
