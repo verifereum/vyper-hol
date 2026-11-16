@@ -33,6 +33,19 @@ Ancestors
 
 val _ = Parse.hide "cp";
 
+(* Entry states with labels interpreted by the supplied offset map. *)
+Definition codegen_asm_entry_rel_reloc_def:
+  codegen_asm_entry_rel_reloc lo cp prog vs as <=>
+    as.as_pc = 0 /\ as.as_stack = [] /\
+    ~vs.vs_halted /\
+    vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\
+    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
+    (!l. FLOOKUP vs.vs_labels l =
+         OPTION_MAP n2w (FLOOKUP lo l)) /\
+    context_memory_rel cp vs.vs_memory as.as_memory /\
+    shared_state_rel vs as
+End
+
 Theorem codegen_asm_entry_sym_init:
   !cp prog vs as env.
     codegen_asm_entry_rel cp prog vs as /\ asm_data_env_ok prog env vs.vs_code ==>

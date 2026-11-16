@@ -29,6 +29,7 @@
 
 Theory codegenSymRel
 Ancestors
+  asmSpliceOwn
   asmDataEnv asmSymBridge asmSplice asmSymSem asmSem frameRel contextCodegenRel codegenRel
   unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
   venomInst allocaRemapSSA dfgAnalysisProps dfgDefs list finite_map arithmetic
@@ -245,7 +246,23 @@ Definition sym_frame_inv_def:
     (fn_has_retpc fn ==> MEM (AsmLabel ret) p)
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition sym_frame_inv_own_def:
+  sym_frame_inv_own lo p env own ctx cp fn ret srest labs0 ps cs ss <=>
+    asm_sym_rel_own lo p env own cs ss /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+         FLOOKUP ss.sym_mem_labels b = FLOOKUP labs0 b) /\
+    (fn_has_retpc fn ==> MEM (AsmLabel ret) p)
+End
+
 (* ===== Runs ===== *)
+
+(* The false mode recovers the original symbolic execution. *)
+Definition sym_steps_mode_def:
+  sym_steps_mode allow_own p env own n ss =
+    if allow_own then sym_steps_own p env own n ss else sym_steps p env n ss
+End
 
 
 

@@ -51,6 +51,37 @@ Definition sym_body_result_def:
                (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition sym_body_result_own_def:
+  sym_body_result_own allow_own lo o2pc prog env own cpl ctx fn mem0 pc_ret rest srest labs0
+      as ss res <=>
+    (!vs'. res = Halt vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as' /\
+               sym_terminal (sym_steps_mode allow_own prog env own n ss)) /\
+    (!a vs'. res = Abort a vs' ==>
+       ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as' /\
+               sym_terminal (sym_steps_mode allow_own prog env own n ss)) /\
+    (!rv vs'. res = IntRet rv vs' ==>
+       ?n as' ss'. asm_steps lo o2pc prog n as = AsmOK as' /\
+               as'.as_pc = pc_ret /\
+               as'.as_stack = REVERSE rv.iret_values ++ rest /\
+               context_memory_rel cpl vs'.vs_memory as'.as_memory /\
+               (!b. context_spill_byte cpl b /\
+                    ~closure_spill_byte ctx cpl fn.fn_name b ==>
+                    read_byte b as'.as_memory = read_byte b mem0) /\
+               shared_state_rel vs' as' /\
+               sym_steps_mode allow_own prog env own n ss = SymOK ss' /\
+               asm_sym_rel_own lo prog env own as' ss' /\
+               ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+               (!b. context_spill_byte cpl b /\
+                    ~closure_spill_byte ctx cpl fn.fn_name b ==>
+                    FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
+               (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cpl b))
+End
+
 Theorem sym_body_result_error:
   !lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0 as ss e.
   sym_body_result lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0

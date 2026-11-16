@@ -27,6 +27,20 @@ Definition active_frame_symbolic_plan_def:
       sym_frame_inv prog env unit.cu_context cpl fn ret srest labs0 ps a ss
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition active_frame_symbolic_plan_own_def:
+  active_frame_symbolic_plan_own lo env own rpolicy unit cpl prog fn s a ra rest mem0 ret srest labs0 ss <=>
+    ?i r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+     bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+     rest_ops k ps pc0 pc_ret.
+      body_plan_inv_reloc rpolicy unit cpl prog unit.cu_context
+        lo (build_offset_to_pc prog)
+        i fn r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+        bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+        rest_ops k ps pc0 s a ra pc_ret rest mem0 /\
+      sym_frame_inv_own lo prog env own unit.cu_context cpl fn ret srest labs0 ps a ss
+End
+
 Inductive frame_stack_symbolic_plan:
 [~entry:]
   (!env rpolicy unit cpl prog vs0 es0 root others lbl.
@@ -114,11 +128,113 @@ Inductive frame_stack_symbolic_plan:
       scas ret_lbl (saved_sym ++ srest) scas.sym_mem_labels)
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Inductive frame_stack_symbolic_plan_own:
+[~entry:]
+  (!allow_own lo env own rpolicy unit cpl prog vs0 es0 root others lbl.
+    codegen_asm_entry_rel_reloc lo cpl prog vs0 (entry_asm_state vs0 es0) /\
+    (entry_asm_state vs0 es0).as_code = own /\
+    unit.cu_context.ctx_functions = root :: others /\
+    unit.cu_context.ctx_entry = SOME root.fn_name /\
+    fn_entry_label root = SOME lbl /\
+    fn_entry_state_rel cpl root
+      (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+      (entry_asm_state vs0 es0) 0w [] ==>
+    frame_stack_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0 [] root
+      (entry_asm_state vs0 es0) 0w [] (entry_asm_state vs0 es0).as_memory
+      (sym_init (entry_asm_state vs0 es0)) "" [] FEMPTY)
+[~call:]
+  (!allow_own lo env own rpolicy unit cpl prog vs0 es0 stk fn caller_entry
+    i r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+    bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+    rest_ops k ps pc0 vs ast ra pc_ret rest mem0
+    f inst nm arg_ops callee args cvs ops ps' rest'
+    iops prepared rops arranged ret_lbl ret_off call_post mid saved cas pc
+    sentry ret srest labs0 ss sms scas saved_sym.
+    frame_stack_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0 stk fn caller_entry
+      ra rest mem0 sentry ret srest labs0 /\
+    body_plan_inv_reloc rpolicy unit cpl prog unit.cu_context
+      lo (build_offset_to_pc prog)
+      i fn r liveness dfg cfg ch growth spill_base lbl_ctr fn_ops ps_end
+      bb ps_l h promised ps_dfs block_ops ps_dfs_after ps_after prefix_ops
+      rest_ops k ps pc0 vs ast ra pc_ret rest mem0 /\
+    f.cf_fn = fn /\ f.cf_inst = inst /\ f.cf_state = vs /\
+    k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+    lookup_function nm unit.cu_context.ctx_functions = SOME callee /\
+    eval_operands arg_ops vs = SOME args /\ setup_callee callee args vs = SOME cvs /\
+    (vs.vs_call_ctx, vs.vs_tx_ctx, vs.vs_block_ctx, vs.vs_code, vs.vs_prev_hashes) =
+      (vs0.vs_call_ctx, vs0.vs_tx_ctx, vs0.vs_block_ctx,
+       vs0.vs_code, vs0.vs_prev_hashes) /\
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (SUC k - LENGTH (get_params bb.bb_instructions))
+      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps' = SOME (rest', ps_after) /\ rest_ops = ops ++ rest' /\
+    emit_input_plan INVOKE (compute_operands inst)
+      (live_vars_at liveness bb.bb_label (k + 1)) ps = (iops, prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops, arranged) /\
+    ops = iops ++ rops ++
+      [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ call_post /\
+    fn_frame_inv unit.cu_context cpl lo
+      fn ra rest mem0 arranged vs mid /\
+    plan_state_residual_wf_marked spill_base (compute_operands inst)
+      (LENGTH (compute_operands inst)) arranged /\
+    arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+      compute_operands inst /\
+    mid.as_stack = REVERSE args ++ saved ++ rest /\
+    LENGTH args = LENGTH (compute_operands inst) /\
+    r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    asm_steps lo (build_offset_to_pc prog)
+      prog (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops))) ast = AsmOK mid /\
+    asm_block_at prog mid.as_pc (execute_plan cpl.cp_initial_fmp
+      ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ call_post)) /\
+    asm_steps lo (build_offset_to_pc prog)
+      prog 3 mid = AsmOK cas /\
+    cas = mid with <| as_stack := n2w ret_off :: mid.as_stack; as_pc := pc |> /\
+    fn_entry_state_rel cpl callee cvs cas (n2w ret_off) (saved ++ rest) /\
+    FLOOKUP (build_offset_to_pc prog) (w2n ((n2w ret_off):bytes32)) =
+      SOME (ast.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops)) + 3) /\
+    sym_frame_inv_own lo prog env own unit.cu_context cpl fn ret srest labs0 ps ast ss /\
+    sym_frame_inv_own lo prog env own unit.cu_context cpl fn ret srest labs0 arranged mid sms /\
+    sym_steps_mode allow_own prog env own (LENGTH (execute_plan cpl.cp_initial_fmp (iops ++ rops))) ss = SymOK sms /\
+    sym_steps_mode allow_own prog env own 3 sms = SymOK scas /\
+    asm_sym_rel_own lo prog env own cas scas /\
+    scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ saved_sym ++ srest /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)) saved_sym /\
+    scas.sym_mem_labels = sms.sym_mem_labels /\
+    (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cpl b) /\
+    MEM (AsmLabel ret_lbl) prog ==>
+    frame_stack_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0 (f::stk) callee cas
+      (n2w ret_off) (saved ++ rest) cas.as_memory
+      scas ret_lbl (saved_sym ++ srest) scas.sym_mem_labels)
+End
+
 Definition entry_frame_symbolic_plan_def:
   entry_frame_symbolic_plan env rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0
     ret srest labs0 ss <=>
   entry_frame_plan rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
   asm_sym_rel prog env ast ss /\
+  ss.sym_stack = (if fn_has_retpc fn then [Lab ret 0] else []) ++
+    MAP Val (REVERSE entry.vs_params) ++ srest /\
+  labs0 = ss.sym_mem_labels /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cpl b) /\
+  (fn_has_retpc fn ==> MEM (AsmLabel ret) prog)
+End
+
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition entry_frame_symbolic_plan_own_def:
+  entry_frame_symbolic_plan_own lo env own rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0
+    ret srest labs0 ss <=>
+  entry_frame_plan_reloc lo rpolicy unit cpl prog fn entry s ast ra pc_ret rest mem0 /\
+  asm_sym_rel_own lo prog env own ast ss /\
   ss.sym_stack = (if fn_has_retpc fn then [Lab ret 0] else []) ++
     MAP Val (REVERSE entry.vs_params) ++ srest /\
   labs0 = ss.sym_mem_labels /\
@@ -139,6 +255,20 @@ Definition normal_frame_symbolic_plan_def:
          ra pc_ret rest mem0 ret srest labs0 ss)
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition normal_frame_symbolic_plan_own_def:
+  normal_frame_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast ss <=>
+  ?saved ra rest mem0 sentry ret srest labs0.
+    frame_stack_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0 stk fn saved
+      ra rest mem0 sentry ret srest labs0 /\
+    (active_frame_symbolic_plan_own lo env own rpolicy unit cpl prog fn s ast ra rest mem0
+       ret srest labs0 ss \/
+     ?entry pc_ret.
+       entry_frame_symbolic_plan_own lo env own rpolicy unit cpl prog fn entry s ast
+         ra pc_ret rest mem0 ret srest labs0 ss)
+End
+
 Definition focus_s7_symbolic_guard_def:
   focus_s7_symbolic_guard prog cpl fn inst s <=>
   (inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
@@ -151,9 +281,30 @@ Definition focus_s7_symbolic_guard_def:
       w2n (src - n2w off) < dimword (:256) DIV 2)
 End
 
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition focus_s7_symbolic_guard_own_def:
+  focus_s7_symbolic_guard_own lo cpl fn inst s <=>
+  (inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+    source_memory_reads_disjoint cpl inst s /\
+    context_source_memory_writes_disjoint cpl inst s) /\
+  (!dst x sz src off.
+    inst.inst_opcode = CODECOPY /\ inst.inst_operands = [dst; Var x; sz] /\
+    code_end_var fn x /\ eval_operand (Var x) s = SOME src /\
+    FLOOKUP lo "code_end" = SOME off ==>
+      w2n (src - n2w off) < dimword (:256) DIV 2)
+End
+
 Definition focus_s7_symbolic_context_def:
   focus_s7_symbolic_context unit prog <=>
     label_flow_ok unit.cu_context /\ sym_unit_static_ok unit /\
+    asm_static_wf prog
+End
+
+(* Symbolic execution at supplied label offsets and own-code bytes. *)
+Definition focus_s7_symbolic_context_own_def:
+  focus_s7_symbolic_context_own allow_own unit prog <=>
+    (if allow_own then label_flow_own_ok unit.cu_context
+     else label_flow_ok unit.cu_context) /\ sym_unit_static_ok unit /\
     asm_static_wf prog
 End
 
