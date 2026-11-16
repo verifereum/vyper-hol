@@ -235,6 +235,10 @@ Proof
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
   rename1 `lookup_var q u = SOME w` >>
   rename1 `ptr_covers Ga ta q u _` >>
+  (* The exact allocator projections are additive.  Keep the resource
+     transport in terms of u and its restoration/old-row interface. *)
+  qpat_x_assum `u.vs_allocas = _` kall_tac >>
+  qpat_x_assum `u.vs_alloca_next = _` kall_tac >>
   `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[not_fresh_at_mono] >>
@@ -262,9 +266,10 @@ Proof
      irule abi_encode_capture_alloc_resources >>
      simp[] >> conj_tac >- metis_tac[] >>
      qexistsl_tac [`G`,`w2n w + type_memory_size tv`,`s`,`tn`] >>
-     simp[] >> conj_tac >- (qpat_x_assum `u with <| vs_vars := _; vs_allocas := _;
-       vs_alloca_next := _; vs_inst_idx := _ |> = s` mp_tac >>
-       simp[venomStateTheory.venom_state_component_equality]) >>
+     simp[] >> conj_tac
+     >- (qpat_x_assum `u with <| vs_vars := _; vs_allocas := _;
+           vs_alloca_next := _; vs_inst_idx := _ |> = s` mp_tac >>
+         simp[venomStateTheory.venom_state_component_equality]) >>
      strip_tac >>
      qpat_x_assum `ce.ce_is_ctor /\ _ ==> _` mp_tac >>
      simp[] >> metis_tac[]) >>
