@@ -55,6 +55,7 @@ Theorem prefix_complete_array_index_pair:
   ip = Var iv ==>
   ?t p H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
+    (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') s H qt) /\
     (^Ok) k ctx func site ids D N d outsz
       st.cs_next_var limit_st tv vs st.cs_next_id p s 0 0 t /\
     FLOOKUP H iv = SOME (p,32) /\

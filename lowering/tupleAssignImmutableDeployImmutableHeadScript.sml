@@ -46,7 +46,7 @@ Theorem tuple_immutable_head_outcome:
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame cenv es sp s0 cenv ff t)
-    (\H res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r /\ halt_exit H cx ff res r)
 Proof
   strip_tac >>
   `!p. ignore_bind (write_place cx p (EL i vs)) (return ()) =

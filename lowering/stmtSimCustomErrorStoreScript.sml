@@ -63,7 +63,8 @@ Theorem custom_error_store_args_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\H res ee exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit H cx ee res exit)
 Proof
   match_mp_tac custom_error_store_args_sim_using_head >>
   MATCH_ACCEPT_TAC custom_error_store_head_path

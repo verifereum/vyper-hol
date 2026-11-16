@@ -61,6 +61,7 @@ Theorem aug_place_loaded_storage_suffix:
     (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?offset tv0 path delta. _` strip_assume_tac >>
   `!gs. read_place cx (StoragePlace tr slot tv) (mid with gas_obs := gs) =
     (INL old,mid with gas_obs := gs)` by simp[exprSimLenTheory.len_rp_obs] >>
   `!gs. place_type_value cx (StoragePlace tr slot tv) (mid with gas_obs := gs) =
@@ -72,29 +73,39 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
     metis_tac[expr_body_pre_gas_admissible] >>
   rule_assum_tac (REWRITE_RULE [bind_assoc]) >>
-  Cases_on `tr` >> fs[loweringPostsTheory.slot_loc_def] >>
-  irule aug_place_rhs_operator_write_mem >>
-  simp[typed_val_to_w256_word_value] >> conj_tac
-  >- (rpt strip_tac >>
-      irule aug_place_storage_rooted_observed >>
-      goal_assum (drule_at (Pat `valid_horizon`)) >>
-      goal_assum (drule_at (Pat `MEM`)) >> goal_assum (drule_at Any) >> simp[]) >>
-  goal_assum (drule_at (Pat `lower_value`)) >>
-  goal_assum (drule_at (Pat `compile_binop`)) >>
-  goal_assum (drule_at (Pat `place_ptr_rel`)) >>
-  qexistsl_tac [`dst`, `env`] >>
-  simp[typed_val_to_w256_word_value] >> rpt gen_tac >> strip_tac >>
+  `emit_void (case slot_loc tr of LocStorage => SSTORE | LocTransient => TSTORE
+                               | _ => MSTORE) [dst;result] s3 = ((),sf)` by
+    (Cases_on `tr` >> fs[loweringPostsTheory.slot_loc_def]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       storage_place_observed H (StoragePlace tr slot tv)` by
+    (gen_tac >> strip_tac >>
+     irule aug_place_storage_rooted_observed >>
+     goal_assum (drule_at (Pat `valid_horizon`)) >>
+     qexistsl_tac [`delta`, `offset`, `path`, `tv0`] >> simp[]) >>
+  mp_tac (Q.INST
+    [`p` |-> `StoragePlace tr slot tv`, `ptv` |-> `tv`, `dtv` |-> `tv`,
+     `es` |-> `mid`, `s0` |-> `u`, `s_entry` |-> `s0`, `s1` |-> `sl`,
+     `x` |-> `cur`, `y` |-> `rhs`, `op` |-> `result`, `w` |-> `slot`,
+     `loc` |-> `slot_loc tr`,
+     `el` |-> `if bop = Exp then expr_int_literal e else NONE`]
+    (Q.INST [`cur` |-> `old`] (SPEC_ALL aug_place_rhs_operator_write_mem))) >>
+  impl_tac >- (
+  simp[typed_val_to_w256_word_value, loweringPostsTheory.slot_loc_def] >>
+  conj_tac >- (Cases_on `tr` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
   `?xs. ee.storage_trace = mid.storage_trace ++ xs` by
     (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
        simp[stmtSimAugAssignTheory.augassign_rhs_trace_frame] >>
-     first_assum (fn frame =>
+     qpat_assum `storage_trace_frame (bind (eval_expr cx e) (read_result cx))`
+       (fn frame =>
        qpat_assum `bind (eval_expr cx e) (read_result cx) (mid with gas_obs := _) =
-                   (INL rhs,ee)`
+                   (INL _,ee)`
          (fn eq => mp_tac (MATCH_MP vyperStorageTraceTheory.storage_trace_frame_prefix
                              (CONJ frame eq)))) >>
      simp[]) >>
-  `MEM (StorageRoot tr offset tv0) ee.storage_trace` by simp[MEM_APPEND] >>
-  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >> strip_tac >>
+  `MEM (StorageRoot tr offset tv0) ee.storage_trace` by simp[listTheory.MEM_APPEND] >>
+  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >>
+  disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
@@ -106,11 +117,14 @@ Proof
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `ff` >>
+  qpat_x_assum `slot = _` SUBST_ALL_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  gen_tac >> strip_tac >>
-  irule aug_place_storage_store_wf >>
-  qexistsl_tac [`ee`, `offset`, `tv0`, `path`, `delta`, `tv`, `slot`, `tr`, `v`, `cx`, `st0`] >>
-  simp[] >>
-  metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]
+  qx_gen_tac `HH` >> strip_tac >>
+  mp_tac (Q.INST [`H` |-> `HH`, `slot` |-> `n2w offset + n2w delta`]
+    (SPEC_ALL aug_place_storage_store_wf)) >>
+  impl_tac >- (simp[] >>
+    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]) >>
+  simp[]) >>
+  simp[]
 QED

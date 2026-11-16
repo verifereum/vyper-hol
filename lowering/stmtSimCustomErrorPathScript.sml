@@ -122,7 +122,9 @@ Proof
   disch_then (drule_at (Pat `type_stmt _ _ _ = _`)) >>
   disch_then (drule_at (Pat `valid_horizon cx st0 H0 es.storage_trace`)) >>
   disch_then (drule_at (Pat `compile_custom_error_store_args _ _ _ _ _ _ = _`)) >>
-  simp[] >> strip_tac >>
+  simp[] >>
+  disch_then (qspecl_then [`s0`, `func`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
   irule gas_outcome_zero_prefix >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
   drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)
@@ -139,11 +141,10 @@ QED
 
 Resume compile_raise_custom_error_ready_frag[stored_tuple_tail]:
   rpt strip_tac >>
-  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
-    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `H0` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> gvs[] >>
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  strip_tac >> gvs[] >>
     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
     qpat_assum `!tail. eval_exprs _ _ _ = _`
@@ -168,19 +169,22 @@ Resume compile_raise_custom_error_ready_frag[stored_tuple_tail]:
          `MAP SND params`,`Var x`,`0`,`sa'`] mp_tac) >>
        simp[ci_mono_def]) >>
     drule_at (Pat `custom_error_revert_tail _ _ _ _ _ _ = _`)
-      custom_error_stored_tuple_revert_path >>
+      (INST_TYPE [gamma |-> ``:256``] custom_error_stored_tuple_revert_path) >>
     disch_then (drule_at (Pat `tuple_in_memory _ _ _ _`)) >>
+    disch_then (qspecl_then [`tops`, `func`, `env`, `mid`, `cx`, `ctx`,
+      `av`, `type_memory_bytes cenv (TupleT (MAP SND params))`, `sa.cs_next_id`,
+      `storage_trace_horizon mid.storage_trace`] mp_tac) >>
     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ mid r`)) >>
     disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
     disch_then (drule_at (Pat `expr_sim_inv _ _ _ mid`)) >>
-    disch_then (qspecl_then [`av`,`type_memory_bytes cenv (TupleT (MAP SND params))`,
-      `sa.cs_next_id`] mp_tac) >>
     simp[] >>
     (impl_tac >- (
       mp_tac (cj 1 stmtLoweringMonoTheory.ci_mono_custom_error) >>
       disch_then (qspecl_then [`cenv`,`custom_error_exprs (CustomError p l l0)`,
         `MAP SND params`,`Var x`,`0`,`sa'`] mp_tac) >>
-      simp[ci_mono_def])) >> metis_tac[]
+      simp[ci_mono_def])) >>
+    disch_then (qx_choose_then `tail_state` strip_assume_tac) >>
+    qexists_tac `tail_state` >> first_assum ACCEPT_TAC
 QED
 
 Finalise compile_raise_custom_error_ready_frag
