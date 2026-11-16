@@ -2,7 +2,7 @@ Theory bodyFullTypeBuiltinExtract32
 Ancestors
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
-  bodyFullExtract32Prepare bodyFullExtract32Suffix bodyMemTbExtract32Cuts
+  bodyFullExtract32Prepare bodyFullExtract32Suffix bodyFullExtract32SuffixExit bodyMemTbExtract32Cuts
   bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimExtract32Source
@@ -90,7 +90,12 @@ Proof
   conj_tac >- suspend "source_continuation" >>
   irule gas_outcome_full_post_source >>
   qexistsl_tac [`srcQ`,`srcR`] >>
-  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `srcR`] >> metis_tac[]
+  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `srcR`]
+  >- (rpt gen_tac >> Cases_on `res` >>
+      simp[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.expr_exit_INL,
+           exprSimDefsTheory.halt_exit_def]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` mp_tac >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
 
 Resume extract32_vv_full[source_continuation]:
@@ -236,7 +241,9 @@ Resume extract32_vv_full[offset_inputs]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
-  simp[fragExecTheory.exit_result_def]
+  simp[fragExecTheory.exit_result_def] >> rpt strip_tac >>
+  irule bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap >>
+  metis_tac[]
 QED
 
 Resume extract32_vv_full[offset_continuation]:
@@ -257,7 +264,12 @@ Resume extract32_vv_full[offset_continuation]:
   conj_tac >- suspend "suffix_entry" >>
   irule gas_outcome_full_post_source >>
   qexistsl_tac [`offQ`,`offR`] >>
-  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `offR`] >> metis_tac[]
+  asm_rewrite_tac[] >> rpt conj_tac >> simp[Abbr `offR`]
+  >- (rpt gen_tac >> Cases_on `res` >>
+      simp[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.expr_exit_INL,
+           exprSimDefsTheory.halt_exit_def]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ offQ _` mp_tac >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
 
 Resume extract32_vv_full[suffix_entry]:
@@ -364,6 +376,7 @@ Resume extract32_vv_full[suffix_entry]:
   qpat_assum `expr_type src = _` (fn th => once_rewrite_tac[GSYM th]) >>
   qpat_assum `expr_type off = _` (fn th => once_rewrite_tac[GSYM th]) >>
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  irule_at Any extract32_lift_sum_value_exit_full >>
   irule_at Any (Q.INST [`srcop` |-> `Var sv`] extract32_suffix_full) >>
   qpat_assum `compile_clamp_basetype _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_extract32_load _ _ _ _ = _` (irule_at Any) >>
