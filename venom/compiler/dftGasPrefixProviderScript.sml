@@ -2390,6 +2390,123 @@ Proof
   qexistsl_tac [`done`, `z`, `later`, `before`, `after`, `tz`] >> metis_tac[]
 QED
 
+Theorem native_bubbles_terminator_last[local]:
+  (!x y. A x y ==> ~is_terminator y.inst_opcode) ==>
+  !src dst. dft_head_bubbles A src dst ==>
+    (!x y. id_before src x y ==> ~is_terminator x.inst_opcode) ==>
+    !x y. id_before dst x y ==> ~is_terminator x.inst_opcode
+Proof
+  strip_tac >> ho_match_mp_tac dft_head_bubbles_strongind >>
+  simp[id_before_cons] >> rpt gen_tac >> strip_tac >> strip_tac >>
+  rename1 `dft_head_bubbles A (pre ++ post) rest` >>
+  `!x z. id_before (pre ++ post) x z ==> ~is_terminator x.inst_opcode` by
+    (gvs[dftSsaPreserveTheory.id_before_append, id_before_cons] >> metis_tac[]) >>
+  `!x z. id_before rest x z ==> ~is_terminator x.inst_opcode` by metis_tac[] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `pre` >> gvs[EVERY_MEM]
+  >- (drule native_bubbles_perm >>
+      disch_then (assume_tac o MATCH_MP sortingTheory.PERM_MEM_EQ) >>
+      metis_tac[id_before_cons]) >>
+  metis_tac[]
+QED
+
+Theorem native_success_suffix_gas_coverage[local]:
+  !xs s bt.
+    DROP s.vs_inst_idx bt.bb_instructions = xs /\
+    (!x y. id_before xs x y ==> ~is_terminator x.inst_opcode) /\
+    ((?u. exec_block b C bt s = OK u) \/
+     (?v u. exec_block b C bt s = IntRet v u)) ==>
+    !i. MEM i xs /\ i.inst_opcode = GAS ==>
+      MEM (p,d,i.inst_id) (MAP FST (trace_gas
+        (dftGasFromListTraceDefs$trace_block p d b C fn bt s)))
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `s.vs_inst_idx < LENGTH bt.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
+  `EL s.vs_inst_idx bt.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bt.bb_instructions = xs` by
+    metis_tac[rich_listTheory.DROP_CONS_EL, CONS_11] >>
+  `get_instruction bt s.vs_inst_idx = SOME h` by simp[get_instruction_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[trace_gas_def, MAP_FLAT, MAP_APPEND] >>
+  Cases_on `i = h`
+  >- gvs[visit_gas_def] >>
+  `MEM i xs /\ ~is_terminator h.inst_opcode` by
+    metis_tac[MEM, id_before_cons] >>
+  `?u. step_inst b C h s = OK u /\
+    ((?t. exec_block b C bt (u with vs_inst_idx := SUC s.vs_inst_idx) = OK t) \/
+     (?v t. exec_block b C bt (u with vs_inst_idx := SUC s.vs_inst_idx) = IntRet v t))` by
+    (qpat_x_assum `(?u. exec_block _ _ _ _ = OK u) \/ _`
+       (mp_tac o PURE_ONCE_REWRITE_RULE [exec_block_def]) >> simp[] >>
+     Cases_on `step_inst b C h s` >> simp[] >>
+     metis_tac[dft_swap_nonterminator_no_intret]) >>
+  simp[] >>
+  `MEM (p,d,i.inst_id) (MAP FST (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C fn bt
+        (u with vs_inst_idx := SUC s.vs_inst_idx))))` by
+    (first_x_assum irule >> simp[] >> metis_tac[id_before_cons]) >>
+  gvs[trace_gas_def, MAP_FLAT]
+QED
+
+Theorem native_inventory_success_gas_coverage:
+  !body.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  EVERY inst_shape_ok bb.bb_instructions /\
+  dft_remaining_inv fn bb todo t /\
+  dft_head_bubbles (\x y.
+    MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled /\
+  EVERY (from_block bb.bb_instructions) body /\
+  LIST_REL (\h i. h.inst_id = i.inst_id) scheduled body /\
+  bt = bb with bb_instructions := REPLICATE j pad ++ body /\
+  t.vs_inst_idx = j /\
+  ((?u. exec_block b C' bt t = OK u) \/
+   (?v u. exec_block b C' bt t = IntRet v u)) ==>
+  !i. MEM i todo /\ i.inst_opcode = GAS ==>
+    MEM (p,d,i.inst_id) (MAP FST (trace_gas
+      (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)))
+Proof
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `LIST_REL _ scheduled actual_body` >>
+  `PERM todo scheduled` by metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `EVERY (\i. MEM i bb.bb_instructions) scheduled` by
+    (fs[dft_remaining_inv_def, EVERY_MEM] >>
+     metis_tac[sortingTheory.PERM_MEM_EQ]) >>
+  `!x y. id_before todo x y ==> ~is_terminator x.inst_opcode` by
+    (rpt strip_tac >>
+     `MEM x bb.bb_instructions /\
+      id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id` by
+       (fs[dft_remaining_inv_def, EVERY_MEM] >> metis_tac[id_before_mem]) >>
+     metis_tac[dft_wf_order_nonterminator]) >>
+  `!x y. id_before scheduled x y ==> ~is_terminator x.inst_opcode` by
+    (drule_at (Pat `dft_head_bubbles _ _ _`) native_bubbles_terminator_last >>
+     simp[dft_must_order_def] >> metis_tac[]) >>
+  `exec_block b C' (bb with bb_instructions := REPLICATE j pad ++ scheduled) t =
+     exec_block b C' bt t /\
+   trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn'
+     (bb with bb_instructions := REPLICATE j pad ++ scheduled) t) =
+     trace_gas (dftGasFromListTraceDefs$trace_block p d b C' fn' bt t)` by
+    (qpat_x_assum `bt = _` SUBST_ALL_TAC >>
+     mp_tac (Q.INST [`bi` |-> `bb.bb_instructions`]
+       (SIMP_RULE pure_ss [LET_THM] native_normalized_block_observations)) >>
+     disch_then (qspecl_then [`scheduled`, `actual_body`, `t`] mp_tac) >>
+     simp[] >> disch_then (qspecl_then [`b`, `C'`, `fn'`, `p`, `d`] mp_tac) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM i scheduled` by metis_tac[sortingTheory.PERM_MEM_EQ] >>
+  qpat_x_assum `trace_gas _ = trace_gas _` (fn th => rewrite_tac[GSYM th]) >>
+  irule native_success_suffix_gas_coverage >> simp[DROP_APPEND] >> metis_tac[]
+QED
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
