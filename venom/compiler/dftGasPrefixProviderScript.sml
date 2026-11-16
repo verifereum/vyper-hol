@@ -7484,6 +7484,6 @@ Finalise dft_prefix_witnesses
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
-  cheat
+  simp[dft_blocks_gas_prefix_def, dft_prefix_witnesses]
 QED
 
