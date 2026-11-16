@@ -357,23 +357,103 @@ Proof
     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `(!x sz. cenv.ce_return_buf=SOME(PtrVar(Var x) sz) ==> not_fresh_at s7 x) /\
    (!x sz. cenv.ce_return_pc=SOME(PtrVar(Var x) sz) ==> not_fresh_at s7 x)` by
-    (fs[exprLoweringPropsTheory.ci_mono_def, fragExecTheory.not_fresh_at_def] >>
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ci_mono sa s7`,
+        `!x sz. cenv.ce_return_buf=SOME(PtrVar(Var x) sz) ==> not_fresh_at sa x`,
+        `!x sz. cenv.ce_return_pc=SOME(PtrVar(Var x) sz) ==> not_fresh_at sa x`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
-  qpat_abbrev_tac `inst = mk_inst s7.cs_next_id
+  qabbrev_tac `inst = mk_inst s7.cs_next_id
     (if flags.rcf_is_static then STATICCALL else CALL)
     (if flags.rcf_is_static then [gas;addr;dp;len;op;Lit(n2w flags.rcf_max_outsize)]
      else [gas;addr;(case vo of NONE=>Lit 0w | SOME v=>v);dp;len;op;Lit(n2w flags.rcf_max_outsize)])
     [STRING #"%" (toString s7.cs_next_var)]` >>
+  qabbrev_tac `HG = step_prov PG G7 inst u` >>
+  qabbrev_tac `un = step_taint inst t7 u tn7` >>
   `!H. valid_horizon cx st0 H esK.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (t7,G7,tn7) [] (OK(u with vs_inst_idx:=LENGTH sc.cs_current_insts),
-        step_prov PG G7 inst u,step_taint inst t7 u tn7)` by
+      (t7,G7,tn7) [] (OK(u with vs_inst_idx:=LENGTH sc.cs_current_insts),HG,un) /\
+    ghost_inv_at (DF H) lo dframe cenv cx es2 HG un
+      (u with vs_inst_idx:=LENGTH sc.cs_current_insts) /\
+    ghost_kept_at lo cenv esK s7 G7 tn7 t7 HG un /\
+    eval_operand ok (u with vs_inst_idx:=LENGTH sc.cs_current_insts) =
+      SOME(bool_to_word outcome.co_success) /\
+    op_taint un ok = {} /\ op_prov HG ok = NONE /\
+    un.t_mem = tn7.t_mem DIFF
+      {j | (if flags.rcf_max_outsize=0 then ob else ob+32) <= j /\
+           j < (if flags.rcf_max_outsize=0 then ob else ob+32) +
+             LENGTH(TAKE flags.rcf_max_outsize outcome.co_returnData)} /\
+    (!j. (if flags.rcf_max_outsize=0 then ob else ob+32) <= j /\
+           j < (if flags.rcf_max_outsize=0 then ob else ob+32) +
+             LENGTH(TAKE flags.rcf_max_outsize outcome.co_returnData) ==> j NOTIN un.t_mem) /\
+    (!p. safe_operand s7 p ==> eval_operand p u = eval_operand p t7)` by
     (gen_tac >> strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> _` drule >> strip_tac >>
+     map_every (fn q => qpat_assum q mp_tac)
+       [`emit_op _ _ s7 = (ok,sc)`, `run_inst_seq _ t7 = OK u`,
+        `fn_has_code s7 sc func`, `~t7.vs_halted`,
+        `t7.vs_current_bb=s7.cs_current_bb`, `t7.vs_inst_idx=LENGTH s7.cs_current_insts`,
+        `local_ptrs_rel func cenv esK.scopes t7`, `local_ptrs_reserved cenv s7`,
+        `!x sz. cenv.ce_return_buf=SOME(PtrVar(Var x) sz) ==> not_fresh_at s7 x`,
+        `!x sz. cenv.ce_return_pc=SOME(PtrVar(Var x) sz) ==> not_fresh_at s7 x`,
+        `~ctx_has_dalloca ctx`,
+        `eval_operand gas t7 = SOME gw`, `eval_operand addr t7 = SOME (w2w target)`,
+        `eval_operand dp t7 = SOME _`, `eval_operand len t7 = SOME _`,
+        `eval_operand op t7 = SOME _`,
+        `eval_operand (case ext_call_kwarg EKValue _ _ of NONE=>Lit 0w | SOME x=>x) t7 = SOME _`,
+        `vo=ext_call_kwarg EKValue _ _`,
+        `amount < dimword(:256)`, `flags.rcf_is_static ==> amount=0`,
+        `cx.txn.is_static ==> amount=0`, `stmt_state_rel _ ctx func cenv cx esK t7`,
+        `take_call_outcome _ _ _ esK = _`, `adopt_call_outcome rq outcome es1 = _`,
+        `read_memory _ _ t7 = bs`, `flags.rcf_max_outsize < dimword(:256)`,
+        `u=update_var _ _ t`, `t=t7 with <| vs_outcomes := _; vs_requests := _;
+           vs_accounts := _; vs_transient := _; vs_logs := _; vs_pending_deletions := _;
+           vs_returndata := _; vs_memory := _ |>`,
+        `t.vs_memory = _`, `t.vs_returndata = _`,
+        `EVERY (\x. op_taint tn7 x={}) _`, `op_taint tn7 op={}`,
+        `!j. b+32<=j /\ j<b+32+LENGTH bs ==> j NOTIN tn7.t_mem`,
+        `LENGTH bs<>0 ==> ?p. dp=Var p /\ _`,
+        `flags.rcf_max_outsize<>0 ==> ?p. op=Var p /\ _`,
+        `b+32<dimword(:256)`, `LENGTH bs<dimword(:256)`,
+        `b+32+LENGTH bs<=t7.vs_alloca_next`,
+        `ob+(if _ then _ else _) < dimword(:256)`, `lo<=ob`,
+        `flags.rcf_max_outsize <= _`, `allocas_from lo t7`,
+        `FLOOKUP t7.vs_allocas s6.cs_next_id = _`,
+        `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==> lb+sz <= _ \/ _ <= lb`,
+        `ghost_inv_at (DF H) lo dframe cenv cx esK G7 tn7 t7`,
+        `Abbrev(inst=_)`, `Abbrev(HG=_)`, `Abbrev(un=_)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     `t7.vs_call_ctx.cc_static = cx.txn.is_static` by
+       fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+          loweringStateRelDefsTheory.call_ctx_rel_def] >>
+     `(if flags.rcf_max_outsize=0 then ob else ob+32) < dimword(:256)` by
+       (Cases_on `flags.rcf_max_outsize=0` >> fs[]) >>
+     `ob+(if flags.rcf_max_outsize=0 then 0
+          else ((flags.rcf_max_outsize+31) DIV 32)*32+32) <= t7.vs_alloca_next` by
+       (qpat_assum `stmt_state_rel _ _ _ _ _ _ t7` mp_tac >>
+        qpat_assum `FLOOKUP t7.vs_allocas s6.cs_next_id = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[exprLoweringPropsTheory.stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+             venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+     `w2w (w2w target : bytes32) = target` by wordsLib.WORD_DECIDE_TAC >>
+     qpat_assum `read_memory _ _ t7 = bs` (fn th =>
+       qpat_assum `take_call_outcome _ _ _ esK = _`
+         (assume_tac o ONCE_REWRITE_RULE [GSYM th])) >>
      drule_at (Pat `emit_op _ _ _ = _`) raw_call_actual_call_full >>
      disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand gas _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand addr _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand dp _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand len _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand op _ = _`)) >>
      disch_then (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-     FAIL_TAC "actual full residual") >>
+     asm_simp_tac bool_ss [] >>
+     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+     unabbrev_all_tac >>
+     asm_simp_tac bool_ss [LET_THM, pairTheory.SND, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+     disch_then irule >>
+     FAIL_TAC "matched call antecedent") >>
   POP_ASSUM_LIST (K all_tac) >> FAIL_TAC "actual ghost continuation"
 QED
 
