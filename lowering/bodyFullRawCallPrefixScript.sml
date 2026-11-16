@@ -981,8 +981,6 @@ Proof
      Cases_on `flags.rcf_max_outsize = 0` >> fs[]
      >- (drule_all raw_call_outbuf_zero_run >> metis_tac[]) >>
      `0 < flags.rcf_max_outsize` by decide_tac >>
-     drule_at (Pat `compile_raw_call_outbuf _ _ = _`) raw_call_outbuf_positive_run >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-     simp[] >> metis_tac[]) >>
+     metis_tac[raw_call_outbuf_positive_run,arithmeticTheory.MULT_COMM]) >>
   FAIL_TAC "outbuf frames"
 QED
