@@ -7,7 +7,7 @@ Ancestors
   abiBuiltinEncodeCode abiBuiltinEncodeWord abiTupleEncodeMemory compileEnv abiEncodeArgsSim
   exprSimAbiEncodeTupleResources abiBuiltinAllocation allocationPtr
   bodyFullUnwrapRun ptrSafetyTransport fragGasSeqPtr fragExecPtr
-  instMemFrontier memSafeRun literalAllocPathPtr exprLoweringProps
+  instMemFrontier memSafeRun literalAllocPathPtr exprLoweringProps localPtrsProps
   loweringHalt fragExec fragExecMem emitHelperProps rich_list words
   venomMemDefs bodyPtrDefs
   venomExecSemantics venomState venomInst ptrDiscipline finite_map pred_set
@@ -227,7 +227,30 @@ Proof
   drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     abi_encode_args_registered_phase_rows >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
-  (impl_tac >- (simp[] >> qexists `func` >> simp[])) >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
-  FAIL_TAC "tuple tail registered rows"
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_store_abi_tuple _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
+  disch_then (qspec_then `prepared` mp_tac) >>
+  disch_then (qspec_then `func` mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (qx_choose_then `sb` (qx_choose_then `p`
+    (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    abi_encode_args_tuple_allocation_resources >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (qx_choose_then `sb0` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `alloca_inv prepared /\ alloca_room ctx func prepared` by
+    (conj_tac
+     >- (irule alloca_inv_fields >> goal_assum (drule_at Any) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     irule alloca_room_fields >> goal_assum (drule_at Any) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule abi_builtin_encode_setup_trace >> strip_tac >>
+  rename1 `compile_alloc_buffer _ staged = (output_buf,output_allocated)` >>
+  FAIL_TAC "tuple tail output allocation"
 QED
