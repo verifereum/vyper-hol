@@ -140,7 +140,9 @@ Proof
        venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_write2_def,
        venomStateTheory.eval_operand_def, AllCaseEqs(), venomStateTheory.mstore_def] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >>
+     gvs[Abbr `u`, venomStateTheory.update_var_def,
+         ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
   `run_inst_seq_mem_ok [ld;st] s` by
     (qpat_x_assum `_ \/ _` kall_tac >>
      `tmp <> xd` by metis_tac[] >>
