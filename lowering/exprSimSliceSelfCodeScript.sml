@@ -649,7 +649,7 @@ Theorem slice_code_continue_entry_seq[local]:
       vv_post H ctx func cenv cx result es sa sb s ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
   ho_match_mp_tac exprSimSliceTerminalTheory.slice_terminal_domain_intro >>
@@ -729,7 +729,7 @@ Proof
        vyperStateTheory.get_accounts_def, vyperStateTheory.bind_def,
        vyperStateTheory.lift_sum_def, vyperStateTheory.return_def,
        exprSimSliceSourceTheory.slice_bytes_nat,
-       vyperStateTheory.raise_def, exit_result_def, exprSimDefsTheory.expr_exit_def]
+       vyperStateTheory.raise_def, exit_result_def, exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem slice_self_code_pipeline_context[local]:
@@ -924,7 +924,7 @@ Proof
         (mid' with gas_obs := []) st2 r t' ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
-    `\H res ee rr. expr_exit res rr`] >>
+    `\H res ee rr. expr_exit res rr /\ halt_exit H cx ee res rr`] >>
   simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- suspend "entry" >>
   rpt strip_tac >> gvs[] >>
