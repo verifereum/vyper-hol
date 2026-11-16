@@ -155,7 +155,8 @@ Proof
           (qx_choose_then `child_cap` strip_assume_tac)) >>
         `child_types = ats` by
           metis_tac[abiEncoderBufferFrameTheory.abi_encoder_tuple_type_unique] >>
-        gvs[]) >>
+        qpat_assum `child_types = ats` (SUBST1_TAC o SYM) >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
      asm_rewrite_tac[] >> rpt strip_tac >>
      `abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb cap mem` by
        metis_tac[] >>
