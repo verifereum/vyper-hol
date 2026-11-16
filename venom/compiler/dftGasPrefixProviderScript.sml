@@ -4010,6 +4010,64 @@ Resume native_successful_cut_call_inputs[partners]:
 QED
 Finalise native_successful_cut_call_inputs
 
+Theorem native_successful_cut_frontier_step:
+  ALL_DISTINCT (before ++ z::after) /\
+  dft_head_bubbles R (before ++ z::after) (done ++ z::later) /\
+  (!x y. R x y ==> dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) /\
+  inv_ev_trace orc p d b C' (before ++ [z]) s0 u /\
+  inv_ev_trace orc p d b C' done s0 v
+  ==> ?w. ev_step orc p d b C' z v = OK w
+Proof
+  strip_tac >>
+  `PERM (before ++ z::after) (done ++ z::later)` by
+    metis_tac[native_bubbles_perm] >>
+  `ALL_DISTINCT (done ++ z::later)` by metis_tac[ALL_DISTINCT_PERM] >>
+  `~MEM z done` by (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  `?w.
+    inv_ev_trace orc p d b C'
+      ((before ++ [z]) ++ FILTER (\i. ~MEM i (before ++ [z])) done) s0 w /\
+    inv_ev_trace orc p d b C'
+      (done ++ FILTER (\i. ~MEM i done) (before ++ [z])) s0 w /\
+    inv_ev_trace orc p d b C'
+      (FILTER (\i. ~MEM i (before ++ [z])) done) u w /\
+    inv_ev_trace orc p d b C'
+      (FILTER (\i. ~MEM i done) (before ++ [z])) v w` by
+    (irule native_successful_prefix_union >> simp[] >>
+     qexistsl_tac [`after`, `z::later`,
+       `\x y. dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y`] >>
+     simp[] >> rpt conj_tac
+     >- (rpt strip_tac >> irule native_coenabled_indexed_square >> simp[])
+     >- metis_tac[dft_gas_swap_pair_sym]
+     >- (rpt strip_tac >>
+         `R x y` by
+           (qpat_x_assum `id_before (before ++ [z] ++ after) _ _` mp_tac >>
+            pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> strip_tac >>
+            drule_all native_bubbles_inversion >> simp[]) >> metis_tac[])
+     >- (rpt strip_tac >> gvs[]) >>
+     pure_asm_rewrite_tac[GSYM APPEND_ASSOC, APPEND]) >>
+  `EVERY (\x. dft_gas_swap_pair z x /\ inst_wf z /\ inst_wf x)
+    (FILTER (\i. ~MEM i done) before)` by suspend "crossings" >>
+  `inv_ev_trace orc p d b C'
+    (z::FILTER (\i. ~MEM i done) before) v w` by
+    (drule inv_trace_pull >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     simp[] >> disch_then irule >>
+     qpat_x_assum `inv_ev_trace _ _ _ _ _ (FILTER _ (before ++ [z])) _ _` mp_tac >>
+     gvs[ALL_DISTINCT_APPEND, FILTER_APPEND_DISTRIB]) >>
+  gvs[Once inv_ev_trace_def] >> metis_tac[]
+QED
+Resume native_successful_cut_frontier_step[crossings]:
+  simp[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+  `R x z` by
+    (drule native_bubbles_inversion >> disch_then drule >>
+     disch_then irule >>
+     simp[dftSsaPreserveTheory.id_before_append, id_before_cons] >>
+     drule PERM_MEM_EQ >> disch_then (qspec_then `x` mp_tac) >>
+     gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  metis_tac[dft_gas_swap_pair_sym]
+QED
+Finalise native_successful_cut_frontier_step
+
 Theorem dft_blocks_gas_prefix_sound:
   dft_blocks_gas_prefix
 Proof
