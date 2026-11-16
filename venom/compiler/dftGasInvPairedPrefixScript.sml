@@ -76,7 +76,7 @@ Proof
   strip_tac >>
   `MEM bb fn.fn_blocks` by
     metis_tac[venomExecPropsTheory.FIND_MEM, lookup_block_def] >>
-  `dft_block_rel bb bb'` by metis_tac[dft_fn_rel_lookup_order] >>
+  drule_all dft_fn_rel_lookup_order >> strip_tac >>
   `pseudos_prefix bb /\ bb_well_formed bb` by
     (gvs[dft_fn_rel_def, fn_pseudos_prefix_def, wf_function_def, EVERY_MEM]) >>
   drule_all pseudos_prefix_front_decomposition >> strip_tac >>

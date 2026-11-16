@@ -3,6 +3,9 @@ Theory loweringCallBudgetBounds
 Ancestors
   loweringCallBudgetHistory dallocaBounds calleeTransport venomExecProofs
   words arithmetic list rich_list pred_set combinatorics
+  ptrDisciplineEmptyTaint ctxLookupAgreeHelpers frameAllocationEffects
+  ptrSafeRun opcodeClass venomExecSemantics venomState
+
 
 Theorem lower_budget_history_charge_from_bounds:
   lower_history_pairs h pair /\ lower_history_current h pair q /\
@@ -252,5 +255,299 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >>
   drule_all dalloca_split_budget >> decide_tac
+QED
+
+(* Successful non-call instructions either retain, reclaim, or charge FMP. *)
+Theorem lower_budget_step_fmp_interval:
+  step_inst fuel ctx i s = OK t /\ i.inst_opcode <> INVOKE /\
+  s.vs_initial_fmp = init /\
+  L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U /\
+  U + c < dimword (:256) /\
+  (i.inst_opcode = SETFMP ==>
+    L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= w2n s.vs_fmp) /\
+  (i.inst_opcode <> DALLOCA ==> c = 0) /\
+  (i.inst_opcode = DALLOCA ==> ?op sz.
+    i.inst_operands = [op] /\ eval_operand op s = SOME sz /\
+    c = ceil32 (w2n sz)) ==>
+  t.vs_initial_fmp = init /\
+  L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U + c
+Proof
+  strip_tac >>
+  `t.vs_initial_fmp = init` by metis_tac[step_inst_initial_fmp] >>
+  simp[] >>
+  Cases_on `i.inst_opcode = SETFMP` >- (gvs[] >> decide_tac) >>
+  Cases_on `i.inst_opcode = DALLOCA`
+  >- (gvs[step_inst_non_invoke] >>
+      qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
+      simp[step_inst_base_opcode_eqs] >>
+      strip_tac >> gvs[AllCaseEqs(), update_var_def] >>
+      gvs[contractABITheory.ceil32_def,
+          fmpAlignmentTheory.ceil32_div_mul, MULT_COMM] >>
+      qmatch_goalsub_abbrev_tac `s.vs_fmp + n2w charge` >>
+      `w2n s.vs_fmp + charge < dimword (:256)` by
+        (simp[Abbr `charge`] >> decide_tac) >>
+      drule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >>
+      disch_then SUBST1_TAC >> simp[Abbr `charge`]) >>
+  `c = 0` by simp[] >> gvs[] >>
+  Cases_on `allocation_free_opcode i.inst_opcode`
+  >- (drule_all allocation_free_step_fmp_ok >> simp[]) >>
+  `i.inst_opcode = ALLOCA \/ i.inst_opcode = RETFMP \/
+   i.inst_opcode = DRET` by gvs[allocation_free_opcode_def] >>
+  gvs[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
+  simp[step_inst_base_opcode_eqs] >>
+  strip_tac >> gvs[AllCaseEqs()]
+  >- (drule exec_alloca_preserves_fmp >> simp[]) >>
+  pairarg_tac >> gvs[]
+QED
+
+(* RET restores the saved frontier; RETFMP adopts the live callee frontier. *)
+Theorem lower_budget_return_fmp_interval:
+  step_inst fuel ctx i s = IntRet ret se /\ i.inst_opcode <> DRET /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller se)) = SOME t /\
+  caller.vs_initial_fmp = init /\
+  L <= w2n caller.vs_fmp /\ w2n caller.vs_fmp <= U /\
+  L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U ==>
+  t.vs_initial_fmp = init /\
+  L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U
+Proof
+  strip_tac >>
+  `t.vs_initial_fmp = init` by
+    (drule bind_outputs_initial_fmp >> simp[]) >> simp[] >>
+  drule bind_outputs_allocation_frame >> strip_tac >>
+  `i.inst_opcode <> INVOKE` by metis_tac[step_inst_intret_not_invoke] >>
+  `step_inst_base i s = IntRet ret se` by gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base i s = IntRet ret se` mp_tac >>
+  simp[step_inst_base_opcode_eqs] >>
+  strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem lower_budget_charge_snoc[local]:
+  SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a (h ++ [e])))
+    (GENLIST I (LENGTH (h ++ [e]))))) =
+  SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
+    (GENLIST I (LENGTH h)))) +
+  (if lower_event_allocates e then charge (LENGTH h) else 0)
+Proof
+  `FILTER (\a. lower_event_allocates (EL a (h ++ [e])))
+     (GENLIST I (LENGTH h)) =
+   FILTER (\a. lower_event_allocates (EL a h))
+     (GENLIST I (LENGTH h))` by
+    (simp[FILTER_EQ, MEM_GENLIST, EL_APPEND_EQN]) >>
+  simp[LENGTH_APPEND, GSYM ADD1, GENLIST, SNOC_APPEND, FILTER_APPEND,
+       MAP_APPEND, SUM_APPEND] >>
+  Cases_on `lower_event_allocates e` >> simp[EL_APPEND_EQN]
+QED
+
+Theorem lower_budget_path_fmp_envelope:
+  !checked cfg root h marks q.
+    lower_budget_path checked cfg root h marks q ==>
+    !charge.
+      root.bp_stack = [] /\
+      root.bp_state.vs_fmp = root.bp_state.vs_initial_fmp /\
+      (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+        ?fn ai pre op sz post.
+          lower_alloc_record h a fn ai pre op sz post /\
+          charge a = ceil32 (w2n sz)) /\
+      (!n p i fuel t r.
+        n < LENGTH h /\ EL n h = BudgetStep n p i fuel (OK t) r /\
+        i.inst_opcode = SETFMP ==>
+        w2n root.bp_state.vs_initial_fmp <= w2n t.vs_fmp /\
+        w2n t.vs_fmp <= w2n p.bp_state.vs_fmp) /\
+      (!n p i fuel ret se t r.
+        n < LENGTH h /\ EL n h = BudgetReturn n p i fuel ret se t r ==>
+        i.inst_opcode <> DRET) /\
+      w2n root.bp_state.vs_initial_fmp +
+        SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
+          (GENLIST I (LENGTH h)))) < dimword (:256) ==>
+      q.bp_state.vs_initial_fmp = root.bp_state.vs_initial_fmp /\
+      w2n root.bp_state.vs_initial_fmp <= w2n q.bp_state.vs_fmp /\
+      w2n q.bp_state.vs_fmp <= w2n root.bp_state.vs_initial_fmp +
+        SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
+          (GENLIST I (LENGTH h)))) /\
+      (!f. MEM f q.bp_stack ==>
+        f.cf_state.vs_initial_fmp = root.bp_state.vs_initial_fmp /\
+        w2n root.bp_state.vs_initial_fmp <= w2n f.cf_state.vs_fmp /\
+        w2n f.cf_state.vs_fmp <= w2n root.bp_state.vs_initial_fmp +
+          SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
+            (GENLIST I (LENGTH h)))))
+Proof
+  `!fuel ctx i s t I L U c.
+    step_inst fuel ctx i s = OK t /\ i.inst_opcode <> INVOKE /\
+    s.vs_initial_fmp = I /\ L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U /\
+    U + c < dimword (:256) /\
+    (i.inst_opcode = SETFMP ==>
+      L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= w2n s.vs_fmp) /\
+    (i.inst_opcode <> DALLOCA ==> c = 0) /\
+    (i.inst_opcode = DALLOCA ==>
+      ?op sz. i.inst_operands = [op] /\ eval_operand op s = SOME sz /\
+        c = ceil32 (w2n sz)) ==>
+    t.vs_initial_fmp = I /\ L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U + c` by
+    MATCH_ACCEPT_TAC lower_budget_step_fmp_interval >>
+  `!fuel ctx i s ret se caller t I L U.
+    step_inst fuel ctx i s = IntRet ret se /\ i.inst_opcode <> DRET /\
+    bind_outputs caller.cf_inst.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state caller.cf_state se)) = SOME t /\
+    caller.cf_state.vs_initial_fmp = I /\
+    L <= w2n caller.cf_state.vs_fmp /\ w2n caller.cf_state.vs_fmp <= U /\
+    L <= w2n s.vs_fmp /\ w2n s.vs_fmp <= U ==>
+    t.vs_initial_fmp = I /\ L <= w2n t.vs_fmp /\ w2n t.vs_fmp <= U` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all lower_budget_return_fmp_interval >> simp[]) >>
+  qpat_x_assum `!fuel ctx i s t I L U c.
+    step_inst fuel ctx i s = OK t /\ _ ==> _` (mk_asm "step") >>
+  qpat_x_assum `!fuel ctx i s ret se caller t I L U.
+    step_inst fuel ctx i s = IntRet ret se /\ _ ==> _` (mk_asm "ret") >>
+  ho_match_mp_tac lower_budget_path_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac
+  >- simp[]
+  >> qpat_x_assum `!charge. root.bp_stack = [] /\ _ ==> _` (mk_asm "ih")
+  >> gvs[lower_budget_charge_snoc, lower_event_allocates_def]
+  >> asm_x "ih" (qspec_then `charge` mp_tac)
+  >> (impl_tac >-
+    (simp[] >> rpt conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _`
+           (qspec_then `a` mp_tac) >>
+         simp[lower_alloc_record_def, EL_APPEND_EQN])
+     >- (rpt strip_tac >>
+         qpat_x_assum `!n p i fuel t r.
+           n < _ /\ _ = BudgetStep n p i fuel (OK t) r /\ _ ==> _`
+           (qspec_then `n` mp_tac) >>
+         simp[EL_APPEND_EQN] >> metis_tac[])
+     >- (rpt strip_tac >>
+         qpat_x_assum `!n p i fuel ret se t r.
+           n < _ /\ _ = BudgetReturn n p i fuel ret se t r ==> _`
+           (qspec_then `n` mp_tac) >>
+         simp[EL_APPEND_EQN] >> metis_tac[])
+     >> qpat_x_assum `_ < dimword (:256)` mp_tac >>
+        rpt IF_CASES_TAC >> decide_tac))
+  >> strip_tac
+  >> qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _` (mk_asm "alloc")
+  >> qpat_x_assum `!n p i fuel t r.
+       n < _ /\ _ = BudgetStep n p i fuel (OK t) r /\ _ ==> _` (mk_asm "reclaim")
+  >> qpat_x_assum `!n p i fuel ret se t r.
+       n < _ /\ _ = BudgetReturn n p i fuel ret se t r ==> _` (mk_asm "noDRET")
+  >> qabbrev_tac `spent = SUM (MAP charge
+       (FILTER (\a. lower_event_allocates (EL a h)) (GENLIST I (LENGTH h))))`
+  >- (asm "step" drule >>
+      disch_then (qspecl_then
+        [`root.bp_state.vs_initial_fmp`, `w2n root.bp_state.vs_initial_fmp`,
+         `w2n root.bp_state.vs_initial_fmp + spent`,
+         `if i.inst_opcode = DALLOCA then charge (LENGTH h) else 0`] mp_tac) >>
+      (impl_tac >-
+        (simp[] >> conj_tac
+         >- (asm "reclaim" (qspec_then `LENGTH h` mp_tac) >>
+             simp[EL_APPEND_EQN])
+         >> strip_tac >>
+         asm "alloc" (qspec_then `LENGTH h` mp_tac) >>
+         simp[EL_APPEND_EQN, lower_event_allocates_def, lower_alloc_record_def] >>
+         metis_tac[])) >>
+      strip_tac >> simp[] >> conj_tac >- gvs[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!f. MEM f q.bp_stack ==> _` drule >>
+      strip_tac >> simp[] >> IF_CASES_TAC >> decide_tac)
+  >- (`i.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_invoke] >>
+      asm "step" drule >>
+      disch_then (qspecl_then
+        [`root.bp_state.vs_initial_fmp`, `w2n root.bp_state.vs_initial_fmp`,
+         `w2n root.bp_state.vs_initial_fmp + spent`,
+         `if i.inst_opcode = DALLOCA then charge (LENGTH h) else 0`] mp_tac) >>
+      (impl_tac >-
+        (simp[] >> conj_tac
+         >- (asm "reclaim" (qspec_then `LENGTH h` mp_tac) >>
+             simp[EL_APPEND_EQN]) >> strip_tac >>
+         asm "alloc" (qspec_then `LENGTH h` mp_tac) >>
+         simp[EL_APPEND_EQN, lower_event_allocates_def, lower_alloc_record_def] >>
+         metis_tac[])) >> strip_tac >>
+      qpat_x_assum `enters_block _ _ _` mp_tac >>
+      simp[contextCodegenRelTheory.enters_block_def] >> strip_tac >>
+      qpat_x_assum `_ = _ with vs_inst_idx := _` SUBST_ALL_TAC >>
+      drule eval_phis_only_updates_vs_vars >>
+      disch_then (fn th => pure_once_rewrite_tac[th]) >>
+      simp[] >> conj_tac >- gvs[] >> rpt strip_tac >>
+      qpat_x_assum `!f. MEM f q.bp_stack ==> _` drule >>
+      strip_tac >> simp[] >> IF_CASES_TAC >> decide_tac)
+  >- (drule setup_callee_shared_fields >> strip_tac >>
+      drule setup_callee_frame >> strip_tac >>
+      qpat_x_assum `enters_block _ _ _` mp_tac >>
+      simp[contextCodegenRelTheory.enters_block_def] >> strip_tac >>
+      qpat_x_assum `_ = _ with vs_inst_idx := _` SUBST_ALL_TAC >>
+      drule eval_phis_only_updates_vs_vars >>
+      disch_then (fn th => pure_once_rewrite_tac[th]) >>
+      simp[ADD_COMM] >> rpt strip_tac >> gvs[])
+  >> `i.inst_opcode <> DRET` by
+       (asm "noDRET" (qspec_then `LENGTH h` mp_tac) >> simp[EL_APPEND_EQN])
+  >> `f.cf_state.vs_initial_fmp = root.bp_state.vs_initial_fmp /\
+      w2n root.bp_state.vs_initial_fmp <= w2n f.cf_state.vs_fmp /\
+      w2n f.cf_state.vs_fmp <= w2n root.bp_state.vs_initial_fmp + spent` by
+       (qpat_x_assum `!f. MEM f q.bp_stack ==> _` (qspec_then `f` mp_tac) >> simp[])
+  >> asm "ret" drule
+  >> disch_then (qspecl_then
+       [`f`, `s'`, `root.bp_state.vs_initial_fmp`,
+        `w2n root.bp_state.vs_initial_fmp`,
+        `w2n root.bp_state.vs_initial_fmp + spent`] mp_tac)
+  >> simp[] >> strip_tac >> simp[ADD_COMM] >> rpt strip_tac >>
+     qpat_x_assum `!f. MEM f q.bp_stack ==> _` (qspec_then `f'` mp_tac) >>
+     simp[ADD_COMM]
+QED
+
+Theorem lower_budget_history_fmp_nowrap:
+  !checked D lo explicit ctx root h marks q pair.
+    lower_budget_path checked (D,lo,explicit,ctx) root h marks q /\
+    root.bp_stack = [] /\
+    root.bp_state.vs_fmp = root.bp_state.vs_initial_fmp /\
+    w2n root.bp_state.vs_initial_fmp < 2 ** 254 /\
+    LENGTH root.bp_state.vs_call_ctx.cc_calldata < 2 ** 64 /\
+    lower_history_count h <= 2 ** 64 /\
+    lower_history_pairs h pair /\ lower_history_current h pair q /\
+    (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+      ?fn ai pre op sz post.
+        lower_alloc_record h a fn ai pre op sz post) /\
+    (!n p i fuel t r.
+      n < LENGTH h /\ EL n h = BudgetStep n p i fuel (OK t) r /\
+      i.inst_opcode = SETFMP ==>
+      w2n root.bp_state.vs_initial_fmp <= w2n t.vs_fmp /\
+      w2n t.vs_fmp <= w2n p.bp_state.vs_fmp) /\
+    (!n p i fuel ret s_end s' r.
+      n < LENGTH h /\ EL n h = BudgetReturn n p i fuel ret s_end s' r ==>
+      i.inst_opcode <> DRET) ==>
+    q.bp_state.vs_initial_fmp = root.bp_state.vs_initial_fmp /\
+    w2n q.bp_state.vs_initial_fmp <= w2n q.bp_state.vs_fmp /\
+    (!i sz_op sz.
+      active_inst q.bp_fn i q.bp_state /\
+      i.inst_opcode = DALLOCA /\
+      i.inst_operands = [sz_op] /\
+      eval_operand sz_op q.bp_state = SOME sz ==>
+      w2n q.bp_state.vs_fmp + ceil32 (w2n sz) < dimword (:256))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?charge. !a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    ?fn ai pre op sz post.
+      lower_alloc_record h a fn ai pre op sz post /\
+      charge a = ceil32 (w2n sz)` by
+    (simp[GSYM SKOLEM_THM, RIGHT_EXISTS_IMP_THM] >> metis_tac[]) >>
+  drule_all lower_budget_history_allocation_charge_bound >> strip_tac >>
+  `w2n root.bp_state.vs_initial_fmp +
+    SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
+      (GENLIST I (LENGTH h)))) < dimword (:256)` by metis_tac[] >>
+  mp_tac lower_budget_path_fmp_envelope >>
+  disch_then drule >> disch_then (qspec_then `charge` mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  `SUM (MAP charge (FILTER (\a. lower_event_allocates (EL a h))
+    (GENLIST I (LENGTH h)))) <= lower_history_count h * 2 ** 64` by
+    (qpat_x_assum `!i. active_inst q.bp_fn i q.bp_state /\ _ ==> _`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  `w2n sz <= 32 * (2 ** 250 + 2 ** 59)` by
+    (fs[lower_history_current_def] >> metis_tac[]) >>
+  drule ceil32_le_multiple >>
+  simp[contractABITheory.ceil32_def,
+       fmpAlignmentTheory.ceil32_div_mul, MULT_COMM] >>
+  strip_tac >>
+  qspecl_then [`w2n root.bp_state.vs_initial_fmp`, `lower_history_count h`]
+    mp_tac dalloca_split_budget >> simp[] >> strip_tac >> fs[] >> decide_tac
 QED
 

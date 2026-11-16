@@ -29,7 +29,7 @@ Theorem compile_struct_lit_body_value_owned:
         (!v. rv = Value v ==> vv_own cenv cx (expr_type (StructLit ann nsid fields)) sa sb ee rv vv s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\H res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> simp[LET_THM] >> strip_tac >>
   rename1 `compile_expr ce ty (StructLit ann nsid fields) sa = (vv,sb)` >>
@@ -115,7 +115,7 @@ Resume compile_struct_lit_body_value_owned[outcome]:
   qpat_assum `(\H res ee r. ?vs. res = INL vs /\ Q H (INL vs) ee r) = Q`
     (fn eqth => qspecl_then
       [`\H vs ee r. Q H (INL vs) ee r`,
-       `\H res ee r. expr_exit res r`,
+       `\H res ee r. expr_exit res r /\ halt_exit H cx ee res r`,
        `\vs. Value (StructV (ZIP (MAP FST fields,vs)))`]
       (drule o REWRITE_RULE [GSYM AND_IMP_INTRO, eqth] o BETA_RULE)
       (Q.GENL [`P`, `R`, `f`] counted_outcome_map_values)) >>
@@ -195,8 +195,11 @@ Resume compile_struct_lit_body_value_owned[owned]:
     (`well_typed_expr env (StructLit ann nsid fields)` by fs[expr_body_pre_def] >>
      drule structFieldsPropsTheory.struct_literal_decl_types >> simp[]) >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
-       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+    (qpat_assum `expr_sim_inv _ _ env _` (strip_assume_tac o
+       SIMP_RULE std_ss [expr_sim_inv_def,
+         vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+     asm_simp_tac std_ss []) >>
   `lookup_var x t' = SOME (n2w b)` by metis_tac[] >>
   simp[vv_own_def, read_result_def, return_def,
        contextTheory.base_ptr_def, venomStateTheory.eval_operand_def] >>
@@ -250,8 +253,12 @@ QED
 
 Finalise compile_struct_lit_body_value_owned
 
-(* LOCAL STUB - foreign ancestor port blocks conditional AnnAssign work.
-   Original proof retained; this stand-in must never be delivered.
+Theorem compile_struct_lit_body_case:
+  !ctx func ce cx ann nsid fields.
+    exprs_case F ctx func ce cx (MAP SND fields) /\
+    acyclic_struct_metadata ce.ce_struct_fields ==>
+    expr_sim_case F ctx func ce cx (StructLit ann nsid fields) /\
+    expr_vv_case F ctx func ce cx (StructLit ann nsid fields)
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func ce cx (StructLit ann nsid fields)` by
@@ -269,13 +276,3 @@ Resume compile_struct_lit_body_case[vv]:
 QED
 
 Finalise compile_struct_lit_body_case
-*)
-Theorem compile_struct_lit_body_case:
-  !ctx func ce cx ann nsid fields.
-    exprs_case F ctx func ce cx (MAP SND fields) /\
-    acyclic_struct_metadata ce.ce_struct_fields ==>
-    expr_sim_case F ctx func ce cx (StructLit ann nsid fields) /\
-    expr_vv_case F ctx func ce cx (StructLit ann nsid fields)
-Proof
-  cheat
-QED

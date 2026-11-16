@@ -1572,13 +1572,14 @@ Theorem assign_toplevel_bad_slot_outcome:
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (eval_expr cx e) (read_result cx)) (es,s0)
       (\H res ee t. ?v. res = INL v /\ P H v ee t)
-      (\H res ee r. expr_exit res r) ==>
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r) ==>
     gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
           (write_storage_slot cx tr (n2w slot) tvt v))) (es,s0) Q
-      (\H res ee r. !tail.
-        stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+      (\H res ee r. (!tail.
+        stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
+        halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `!v. storage_trace_frame
@@ -1632,14 +1633,13 @@ Resume assign_toplevel_bad_slot_outcome[exception]:
   disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+  fs[halt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
 Finalise assign_toplevel_bad_slot_outcome
 
-(* LOCAL STUB - foreign supplier proof blocks conditional AnnAssign work.
-   Original theorem and proof retained; never deliver this stand-in.
 Theorem assign_storage_empty_stmt_frag[local]:
   !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
@@ -1712,7 +1712,7 @@ Proof
                     (fn th => rewrite_tac[GSYM th]) >>
                   simp[gas_explicit_def]) >>
               simp[]) >>
-          simp[exit_result_def, stmt_exit_def, expr_exit_def]) >>
+          simp[exit_result_def, stmt_exit_def, expr_exit_def, halt_exit_def]) >>
       `~s0.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
         (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
          fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
@@ -1816,26 +1816,6 @@ Proof
   qpat_x_assum `!tail. _ = (INR _, _)` (qspec_then `[]` mp_tac) >>
   simp[bind_def] >> strip_tac >>
   gvs[AllCaseEqs(), stmt_res_ok_def]
-QED
-*)
-Theorem assign_storage_empty_stmt_frag[local]:
-  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot tvt.
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    has_length_word (expr_type e) /\ is_empty_value_expr e /\
-    expr_type e = typ /\ (!elem n. typ <> ArrayT elem (Dynamic n)) /\
-    (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
-    cenv.ce_hashmap_info (src,id) = NONE /\
-    (!gs v st. (do result <- eval_expr cx e; read_result cx result od)
-       (es with gas_obs := gs) = (INL v,st) ==> value_has_type tvt v) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty
-        (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) es
-Proof
-  cheat
 QED
 
 Theorem storage_copy_success_run[local]:
@@ -2062,7 +2042,7 @@ Proof
         `ee with storage_trace := ee.storage_trace ++ [StorageRoot tr slot tvt]`,
         `r`] >>
       fs[ignore_bind_def, bind_def, record_storage_event_def, return_def,
-         write_storage_slot_eq, stmt_exit_def]) >>
+         write_storage_slot_eq, stmt_exit_def, halt_exit_def]) >>
   drule typed_storage_copy_write >>
   disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `ee`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>

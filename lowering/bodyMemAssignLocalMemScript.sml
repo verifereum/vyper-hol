@@ -25,6 +25,9 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
 Theorem body_assign_local_rhs_pre[local]:
   !cx id e tops bindings ctx cenv env env' ret_ty es ty.
     body_inv tops ctx cenv cx /\
@@ -69,7 +72,7 @@ Proof
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
@@ -167,7 +170,7 @@ Theorem assign_local_rhs_located_mem[local]:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\H res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
@@ -820,8 +823,8 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      rpt strip_tac >> simp[stmt_exit_def] >>
-      metis_tac[expr_exit_INR_type]) >>
+      disj2_tac >> rpt strip_tac >> fs[halt_exit_def] >>
+      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   irule assign_local_exempt >> simp[] >>
