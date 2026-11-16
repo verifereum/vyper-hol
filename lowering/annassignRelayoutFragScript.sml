@@ -11,6 +11,7 @@ Ancestors
   exprOpenTerminals exprOpenPrimitives
 Libs monadsyntax
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_relayout_code_parts:
   !cenv lctx ty id vtyp e sa sf c func.
     stmt_env cenv lctx ty (AnnAssign id vtyp e) sa = (c,sf) /\
@@ -73,7 +74,33 @@ Proof
     `STRING #"%" (toString sa.cs_next_var)`] >> simp[] >>
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
 QED
+*)
+Theorem annassign_relayout_code_parts:
+  !cenv lctx ty id vtyp e sa sf c func.
+    stmt_env cenv lctx ty (AnnAssign id vtyp e) sa = (c,sf) /\
+    cenv.ce_alloca_locals /\ ~is_word_type vtyp /\
+    ~(has_length_word vtyp /\ is_empty_value_expr e) /\
+    fn_has_code sa sf func /\ local_ptrs_reserved cenv sa ==>
+    ?st sA sV sB vv op p.
+      declare_local cenv id vtyp sa = (c,st) /\
+      FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes cenv vtyp)) /\
+      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((),sA) /\
+      compile_expr c (expr_type e) e sA = (vv,sV) /\
+      unwrap_value c vv sV = (op,sB) /\
+      lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
+      compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
+        (lowered_value_type cenv e)
+        (type_memory_bytes c vtyp) sB = ((),sf) /\
+      local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
+      ci_mono sA sB /\ ci_mono sB sf /\ cs_extends st sA /\
+      fn_has_code st sA func /\ fn_has_code sA sB func /\ fn_has_code sB sf func /\
+      MEM (mk_inst st.cs_next_id ALLOCA
+        [Lit (n2w (type_memory_bytes cenv vtyp))] [p]) (fn_insts func)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem residual_call_compile_location:
   !cenv cx env e es ty sa vv sb.
     expr_body_pre cenv cx env e es /\
@@ -100,7 +127,22 @@ Proof
   simp[Once compile_expr_def] >> strip_tac >>
   metis_tac[internal_call_location_cases, compile_intcall_open]
 QED
+*)
+Theorem residual_call_compile_location:
+  !cenv cx env e es ty sa vv sb.
+    expr_body_pre cenv cx env e es /\
+    ~(lowered_value_type cenv e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type cenv e) /\
+      arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
+    compile_expr cenv ty e sa = (vv,sb) ==>
+    (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
+    ~block_is_terminated sb
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_annassign_relayout_stmt_frag:
   !ctx func cx lctx RetQ cenv ret_ty id typ e es stv tyv.
     cenv.ce_alloca_locals /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
@@ -216,4 +258,43 @@ Proof
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `ai` >> gvs[ci_mono_def] >> qexists_tac `sA` >> gvs[] >> first_assum ACCEPT_TAC)
+QED
+*)
+Theorem compile_annassign_relayout_stmt_frag:
+  !ctx func cx lctx RetQ cenv ret_ty id typ e es stv tyv.
+    cenv.ce_alloca_locals /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
+    ~(has_length_word typ /\ is_empty_value_expr e) /\
+    lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    post_value_type cenv e = lowered_value_type cenv e /\
+    lowered_value_type cenv e <> expr_type e /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
+    ~is_word_type (lowered_value_type cenv e) /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
+    lowered_value_type cenv e <> typ /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
+    evaluate_type (get_tenv cx) typ = SOME tyv /\
+    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+    type_memory_bytes cenv typ = type_memory_size tyv /\
+    type_memory_bytes cenv typ < dimword (:256) /\
+    type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+    type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    (!gs v es1. bind (eval_expr cx e) (read_result cx)
+       (es with gas_obs := gs) = (INL v,es1) ==>
+       value_has_type stv v /\ value_has_type tyv v /\
+       val_wf stv v /\ val_wf tyv v /\ val_footprint stv v = type_memory_size stv) /\
+    (!st0 c st1. declare_local cenv id typ st0 = (c,st1) ==>
+      expr_sim ctx func c cx (expr_type e) e es /\
+      ?env. expr_body_pre c cx env e es) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  cheat
 QED

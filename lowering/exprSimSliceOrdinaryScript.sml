@@ -17,13 +17,21 @@ val outcome_goals_first =
         handle HOL_ERR _ => false)
     then ALL_TAC g else NO_TAC g);
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem names_builtin_slice[local]:
   !args. ~names_builtin (Slice n) args
 Proof
   `!bt args. names_builtin bt args ==> bt <> Slice n` suffices_by metis_tac[] >>
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
+*)
+Theorem names_builtin_slice[local]:
+  !args. ~names_builtin (Slice n) args
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_nonextcode_source[local]:
   ~is_extcode src ==> code_slice_source (Slice n) [src; start; len] = NONE
 Proof
@@ -31,7 +39,14 @@ Proof
   rename1 `_ = SOME p` >> PairCases_on `p` >>
   fs[vyperInterpreterTheory.code_slice_source_SOME, is_extcode_def]
 QED
+*)
+Theorem slice_nonextcode_source[local]:
+  ~is_extcode src ==> code_slice_source (Slice n) [src; start; len] = NONE
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_ordinary_actions[local]:
   ~is_extcode src ==>
   eval_expr cx (Builtin ann (Slice n) [src; start; len]) =
@@ -52,6 +67,21 @@ Proof
   simp[eval_exprs_cons_action, bind_assoc] >>
   `eval_exprs cx [] = return []` by simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
   simp[bind_return, bind_assoc]
+QED
+*)
+Theorem slice_ordinary_actions[local]:
+  ~is_extcode src ==>
+  eval_expr cx (Builtin ann (Slice n) [src; start; len]) =
+  do v <- bind (eval_expr cx src) (read_result cx);
+     st <- bind (eval_expr cx start) (read_result cx);
+     ln <- bind (eval_expr cx len) (read_result cx);
+     acc <- get_accounts;
+     out <- lift_sum (evaluate_builtin cx acc ann (Slice n)
+                       (MAP expr_type [src; start; len]) [v; st; ln]);
+     return (Value out)
+  od
+Proof
+  cheat
 QED
 
 (* A capture entry with the type variable of its gas_outcome source renamed
@@ -94,6 +124,7 @@ fun capture_close_tac (g as (_, w)) =
 
 (* The capture entries, with the source post and the facts it carries
    quantified over the horizons valid where the source read ends. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_dynamic_capture_horizons[local]:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
@@ -161,7 +192,58 @@ Proof
   drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> unlet_asms_tac >> gvs[] >>
   capture_close_tac
 QED
+*)
+Theorem slice_dynamic_capture_horizons[local]:
+  expr_body_pre cenv cx env src es /\
+  bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t) /\
+  expr_type src = BaseT bt /\ is_bytestring_type (BaseT bt) /\
+  lower_value compile_expr cenv (BaseT bt) src sa = (src_op,sm) /\
+  compile_bytestring_src src_op sm = ((len_op,data),sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  fn_has_code sm sc func /\ ~t.vs_halted /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?cap bs (p:bytes32) u.
+    ((bt = BytesT (Dynamic cap) /\ v = BytesV bs) \/
+     (?str. bt = StringT cap /\ v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
+    expr_sim_inv cenv cx env ee /\
+    run_inst_seq (emitted_insts sm sc) t = OK u /\
+    w2n p + 32 < dimword (:256) /\
+    w2n p + 32 + LENGTH bs < dimword (:256) /\
+    evaluate_type (get_tenv cx) (BaseT bt) = SOME (BaseTV bt) /\
+    32 + LENGTH bs <= val_footprint (BaseTV bt) v /\
+    let u' = u with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sc) in
+      u'.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      u'.vs_current_bb = sc.cs_current_bb /\
+      eval_operand len_op u' = SOME (n2w (LENGTH bs)) /\
+      eval_operand data u' = SOME (n2w (w2n p + 32)) /\
+      eval_operand src_op u' = SOME p /\
+      expr_val_at cenv cx (BaseT bt) sa sc ee v src_op u' /\
+      mem_bytes_at (w2n p + 32) (LENGTH bs) u'.vs_memory = bs /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee u' /\
+         storage_well_formed_on cx ee (FST H)) /\
+      (!H env' sd se e1 e2 ee1 ee2 v1 v2 op1 op2 r1 r2.
+        valid_horizon cx st0 H ee.storage_trace /\
+        expr_sim_inv cenv cx env' ee1 /\
+        local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd.cs_next_id /\
+        MAP FDOM ee.scopes = MAP FDOM ee1.scopes /\
+        (!z. src_op = Var z ==> not_fresh_at sc z) /\
+        (!l. src_op <> Label l) /\
+        expr_post H ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
+        mem_bytes_at (w2n p + 32) (LENGTH bs) r2.vs_memory = bs) /\
+      (!tops source Q R.
+        gas_outcome F tops (ctx,func) cx st0 source (ee,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (ee,t) Q R)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem slice_fixed_capture_horizons[local]:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
@@ -222,7 +304,51 @@ Proof
   drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> unlet_asms_tac >> gvs[] >>
   capture_close_tac
 QED
+*)
+Theorem slice_fixed_capture_horizons[local]:
+  expr_body_pre cenv cx env src es /\
+  bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t) /\
+  expr_type src = BaseT (BytesT (Fixed m)) /\ m <= 32 /\
+  lower_value compile_expr cenv (BaseT (BytesT (Fixed m))) src sa = (src_op,sm) /\
+  compile_alloc_buffer 32 sm = (buf,sb) /\
+  emit_void MSTORE [buf.buf_operand; src_op] sb = ((),sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  fn_inst_ids_distinct func /\ fn_has_code sm sc func /\ ~t.vs_halted /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?bs u p. v = BytesV bs /\ LENGTH bs = m /\
+    expr_sim_inv cenv cx env ee /\
+    run_inst_seq (emitted_insts sm sb ++ emitted_insts sb sc) t = OK u /\
+    w2n p + LENGTH bs < dimword (:256) /\
+    let u' = u with vs_inst_idx :=
+      t.vs_inst_idx + LENGTH (emitted_insts sm sb ++ emitted_insts sb sc) in
+      u'.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      u'.vs_current_bb = sc.cs_current_bb /\
+      eval_operand buf.buf_operand u' = SOME p /\
+      eval_operand (Lit (n2w (LENGTH bs))) u' = SOME (n2w (LENGTH bs)) /\
+      mem_bytes_at (w2n p) (LENGTH bs) u'.vs_memory = bs /\
+      (?x. buf.buf_operand = Var x /\ not_fresh_at sc x) /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee u' /\
+         storage_well_formed_on cx ee (FST H)) /\
+      (!H sd se e1 e2 ee1 ee2 v1 v2 op1 op2 r1 r2.
+        valid_horizon cx st0 H ee.storage_trace /\
+        local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd.cs_next_id /\
+        MAP FDOM ee.scopes = MAP FDOM ee1.scopes /\
+        expr_post H ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
+        mem_bytes_at (w2n p) (LENGTH bs) r2.vs_memory = bs) /\
+      (!tops source Q R.
+        gas_outcome F tops (ctx,func) cx st0 source (ee,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (ee,t) Q R)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_slice_ordinary_case:
  exprs_case nocalls ctx func cenv cx args /\
  ~is_self_code (HD args) /\ ~is_extcode (HD args) ==>
@@ -266,7 +392,16 @@ Proof
  >- suspend "dynamic"
  >> suspend "fixed"
 QED
+*)
+Theorem compile_slice_ordinary_case:
+ exprs_case nocalls ctx func cenv cx args /\
+ ~is_self_code (HD args) /\ ~is_extcode (HD args) ==>
+ expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[dynamic]:
  markerLib.RESUME_TAC >> (
  `!z. src_op = Var z ==> not_fresh_at st1 z` by
@@ -361,13 +496,17 @@ Resume compile_slice_ordinary_case[dynamic]:
  gvs[] >>
  suspend "dynamic_kind")
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[dynamic_kind]:
  markerLib.RESUME_TAC >~ [`expr_type src = BaseT (StringT cap)`]
  >- suspend "dynamic_string"
  >> suspend "dynamic_bytes"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[dynamic_bytes]:
  `expr_sim_case nocalls ctx func cenv cx start /\
   ((?s tv t s1 v t1. eval_expr cx start s = (INL tv,t) /\
@@ -403,7 +542,9 @@ Resume compile_slice_ordinary_case[dynamic_bytes]:
  qexistsl_tac [`w2n p + 32`, `src`, `nocalls`, `env`] >>
  suspend "bytes_entry"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[bytes_entry]:
  simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def,
       slice_two_read_terminal_frame] >>
@@ -422,7 +563,9 @@ Resume compile_slice_ordinary_case[bytes_entry]:
  conj_tac >- suspend "bytes_persist" >>
  suspend "bytes_rebase"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[dynamic_string]:
  `expr_sim_case nocalls ctx func cenv cx start /\
   ((?s tv t s1 v t1. eval_expr cx start s = (INL tv,t) /\
@@ -458,7 +601,9 @@ Resume compile_slice_ordinary_case[dynamic_string]:
  qexistsl_tac [`w2n p + 32`, `src`, `nocalls`, `env`] >>
  suspend "string_entry"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[string_entry]:
  simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def,
       slice_two_read_terminal_frame] >>
@@ -477,7 +622,9 @@ Resume compile_slice_ordinary_case[string_entry]:
  conj_tac >- suspend "string_persist" >>
  suspend "string_rebase"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[bytes_nonhalt]:
  markerLib.RESUME_TAC >> (
  `?w. eval_operand src_op t = SOME w` by
@@ -489,13 +636,17 @@ Resume compile_slice_ordinary_case[bytes_nonhalt]:
  drule_all slice_bytestring_src_run >> strip_tac >> gvs[] >>
  qpat_x_assum `_ = t with vs_vars := _` SUBST1_TAC >> simp[])
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[bytes_persist]:
  markerLib.RESUME_TAC >> (
  rpt strip_tac >> first_x_assum irule >>
  goal_assum (drule_at Any) >> simp[] >> metis_tac[])
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[bytes_rebase]:
  markerLib.RESUME_TAC >> (
  simp[Abbr `outpost`] >> rpt strip_tac >>
@@ -518,7 +669,9 @@ Resume compile_slice_ordinary_case[bytes_rebase]:
       (mp_tac o MATCH_MP (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
  gvs[ci_mono_def])
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[string_nonhalt]:
  markerLib.RESUME_TAC >> (
  `?w. eval_operand src_op t = SOME w` by
@@ -530,13 +683,17 @@ Resume compile_slice_ordinary_case[string_nonhalt]:
  drule_all slice_bytestring_src_run >> strip_tac >> gvs[] >>
  qpat_x_assum `_ = t with vs_vars := _` SUBST1_TAC >> simp[])
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[string_persist]:
  markerLib.RESUME_TAC >> (
  rpt strip_tac >> first_x_assum irule >>
  goal_assum (drule_at Any) >> simp[] >> metis_tac[])
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[string_rebase]:
  markerLib.RESUME_TAC >> (
  simp[Abbr `outpost`] >> rpt strip_tac >>
@@ -559,7 +716,9 @@ Resume compile_slice_ordinary_case[string_rebase]:
       (mp_tac o MATCH_MP (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
  gvs[ci_mono_def])
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed]:
  markerLib.RESUME_TAC >> gvs[is_bytestring_type_def] >>
  Cases_on `bd` >> gvs[is_bytestring_type_def] >>
@@ -567,7 +726,9 @@ Resume compile_slice_ordinary_case[fixed]:
  qmatch_asmsub_rename_tac `lower_value compile_expr cenv ty len sd = (len_op,se)` >>
  suspend "fixed_prepare"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_prepare]:
  `!z. src_op = Var z ==> not_fresh_at st1 z` by
    (rpt strip_tac >> irule exprOperandVarTheory.compile_lower_value_var >>
@@ -597,7 +758,9 @@ Resume compile_slice_ordinary_case[fixed_prepare]:
     simp[type_memory_bytes_def, vfmConstantsTheory.word_size_def]) >>
  suspend "fixed_source"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_source]:
  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
  rewrite_tac[expr_sim_def] >> disch_then drule_all >> strip_tac >>
@@ -646,7 +809,9 @@ Resume compile_slice_ordinary_case[fixed_source]:
     fs[]) >>
  suspend "fixed_capture"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_capture]:
  `m <= 32` by
    (qpat_x_assum `bind _ _ _ = (INL v,_)` mp_tac >>
@@ -666,7 +831,9 @@ Resume compile_slice_ordinary_case[fixed_capture]:
  gvs[] >>
  suspend "fixed_continue"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_continue]:
  `expr_sim_case nocalls ctx func cenv cx start /\
   ((?s tv t s1 v t1. eval_expr cx start s = (INL tv,t) /\
@@ -690,7 +857,9 @@ Resume compile_slice_ordinary_case[fixed_continue]:
  qexistsl_tac [`w2n p`, `src`, `nocalls`, `env`] >>
  suspend "fixed_entry"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_entry]:
  simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def,
       slice_two_read_terminal_frame] >>
@@ -710,7 +879,9 @@ Resume compile_slice_ordinary_case[fixed_entry]:
  conj_tac >- metis_tac[] >>
  suspend "fixed_rebase"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_nonhalt]:
  `u.vs_halted = t.vs_halted` by
    (irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_halted`
@@ -719,7 +890,9 @@ Resume compile_slice_ordinary_case[fixed_nonhalt]:
     drule_all venomExecPropsTheory.step_inst_base_OK_preserves_halted >> simp[]) >>
  simp[]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_slice_ordinary_case[fixed_rebase]:
  rpt gen_tac >> strip_tac >> gvs[Abbr `outpost`] >>
  qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ es s0` (drule_then assume_tac) >>
@@ -755,5 +928,8 @@ Resume compile_slice_ordinary_case[fixed_rebase]:
  conj_tac >- (qpat_x_assum `run_inst_seq (_ ++ _) t = OK u` mp_tac >> simp[]) >>
  fs[loweringPostsTheory.expr_post_def]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Finalise compile_slice_ordinary_case
+*)

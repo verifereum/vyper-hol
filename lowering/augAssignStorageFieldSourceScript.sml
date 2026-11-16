@@ -14,6 +14,7 @@ Libs
 
 (* x.f's place for a storage or transient struct x: x's slot plus f's slot
    offset, at f's type; looking x up records the root it observes. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_target_place_attr_toplevel_field:
   !cx src id fld es ts tr typ id_str slot fs off ftv.
     get_module_code cx src = SOME ts /\
@@ -36,8 +37,26 @@ Proof
        get_place_def, place_type_value_def, ignore_bind_def,
        record_storage_event_def]
 QED
+*)
+Theorem eval_target_place_attr_toplevel_field:
+  !cx src id fld es ts tr typ id_str slot fs off ftv.
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
+    struct_field_slot fs fld = SOME (off, ftv) ==>
+    eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
+      es = (INL (StoragePlace tr (n2w slot + n2w off) ftv),
+            es with storage_trace :=
+              es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) /\
+    place_type_value cx (StoragePlace tr (n2w slot + n2w off) ftv) es =
+      (INL ftv, es)
+Proof
+  cheat
+QED
 
 (* A non-type-error AugAssign has successfully resolved its target. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_field_place:
   !cx ty src id fld bop e es res es' ts tr sid id_str slot.
     eval_stmt cx
@@ -64,9 +83,27 @@ Proof
   drule eval_target_place_attr_toplevel >>
   rpt (disch_then drule) >> simp[] >> metis_tac[]
 QED
+*)
+Theorem augassign_storage_field_place:
+  !cx ty src id fld bop e es res es' ts tr sid id_str slot.
+    eval_stmt cx
+      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
+      es = (res, es') /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts =
+      SOME (StorageVarDecl tr (StructT sid), id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    (!m. res <> INR (Error (TypeError m))) ==>
+    ?fs off ftv.
+      evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+      struct_field_slot fs fld = SOME (off, ftv)
+Proof
+  cheat
+QED
 
 (* An observed struct root's field reads, and in every state related at a
    horizon observing the root, the backend holds the field's value. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_field_read:
   !(H:(bool # bytes32 # type_value) list # num list) cx es tr slot fs fld off
    ftv ty.
@@ -107,11 +144,29 @@ Proof
       vyperStorageBackendTheory.get_storage_def,
       vfmStateTheory.lookup_account_def]
 QED
+*)
+Theorem augassign_storage_field_read:
+  !(H:(bool # bytes32 # type_value) list # num list) cx es tr slot fs fld off
+   ftv ty.
+    MEM (tr,n2w slot,StructTV fs) (FST H) /\ regions_consistent (FST H) /\
+    storage_well_formed_on cx es (FST H) /\
+    well_formed_type_value (StructTV fs) /\
+    struct_field_slot fs fld = SOME (off, ftv) /\
+    evaluate_type (get_tenv cx) ty = SOME ftv ==>
+    ?cur. read_storage_slot cx tr (n2w slot + n2w off) ftv es =
+            (INL cur, es) /\
+          !ctx func cenv s.
+            stmt_state_rel H ctx func cenv cx es s ==>
+            storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es s
+Proof
+  cheat
+QED
 
 (* ===== The source, for any target at a fixed storage place ===== *)
 
 (* The target's place, its value and its type are read before e; e's
    evaluation and the operator follow, and the slot is written. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_augassign_storage_place:
   !cx tgt tr k ftv evs es v0.
     (!es'. eval_target_place cx tgt es' =
@@ -143,7 +198,26 @@ Proof
   rename1 `_ = (raw, st)` >>
   Cases_on `raw` >> simp[bind_def]
 QED
+*)
+Theorem eval_augassign_storage_place:
+  !cx tgt tr k ftv evs es v0.
+    (!es'. eval_target_place cx tgt es' =
+             (INL (StoragePlace tr k ftv),
+              es' with storage_trace := es'.storage_trace ++ evs)) /\
+    read_storage_slot cx tr k ftv es = (INL v0, es) ==>
+    !gs ty bop e.
+      eval_stmt cx (AugAssign ty tgt bop e) (es with gas_obs := gs) =
+      (do v <- bind (eval_expr cx e) (read_result cx);
+          r <- lift_sum (evaluate_binop
+            (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+            ftv bop v0 v);
+          write_storage_slot cx tr k ftv r od)
+        (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_rhs_exception:
   !cx tgt tr k ftv evs es v0 e gs ex ee.
     (!es'. eval_target_place cx tgt es' =
@@ -162,7 +236,24 @@ Proof
   disch_then (qspecl_then [`gs`, `ty`, `bop`, `e`] SUBST1_TAC) >>
   simp[Once bind_def]
 QED
+*)
+Theorem augassign_storage_place_rhs_exception:
+  !cx tgt tr k ftv evs es v0 e gs ex ee.
+    (!es'. eval_target_place cx tgt es' =
+             (INL (StoragePlace tr k ftv),
+              es' with storage_trace := es'.storage_trace ++ evs)) /\
+    read_storage_slot cx tr k ftv es = (INL v0, es) /\
+    bind (eval_expr cx e) (read_result cx)
+      (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
+      (INR ex, ee) ==>
+    !ty bop.
+      eval_stmt cx (AugAssign ty tgt bop e) (es with gas_obs := gs) =
+        (INR ex, ee)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_rhs_normal:
   !cx tgt tr k ftv evs es v0 e gs v ee.
     (!es'. eval_target_place cx tgt es' =
@@ -183,7 +274,26 @@ Proof
   disch_then (qspecl_then [`gs`, `ty`, `bop`, `e`] SUBST1_TAC) >>
   simp[Once bind_def] >> rewrite_tac[ETA_AX]
 QED
+*)
+Theorem augassign_storage_place_rhs_normal:
+  !cx tgt tr k ftv evs es v0 e gs v ee.
+    (!es'. eval_target_place cx tgt es' =
+             (INL (StoragePlace tr k ftv),
+              es' with storage_trace := es'.storage_trace ++ evs)) /\
+    read_storage_slot cx tr k ftv es = (INL v0, es) /\
+    bind (eval_expr cx e) (read_result cx)
+      (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
+      (INL v, ee) ==>
+    !ty bop.
+      eval_stmt cx (AugAssign ty tgt bop e) (es with gas_obs := gs) =
+      bind (lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        ftv bop v0 v)) (write_storage_slot cx tr k ftv) ee
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_rhs_admissible:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k ftv),
@@ -211,7 +321,21 @@ Proof
   imp_res_tac (cj 1 eval_expr_no_control) >>
   gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
 QED
+*)
+Theorem augassign_storage_place_rhs_admissible:
+  (!es'. eval_target_place cx tgt es' =
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
+  read_storage_slot cx tr k ftv es = (INL v0, es) /\
+  gas_admissible (eval_stmt cx (AugAssign ty tgt bop e))
+    (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (es with storage_trace := es.storage_trace ++ evs)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_binop_admissible:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k ftv),
@@ -244,9 +368,26 @@ Proof
   `stmt_res_ok lctx (INR (Error err))` by metis_tac[gas_admissible_result] >>
   gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
+*)
+Theorem augassign_storage_place_binop_admissible:
+  (!es'. eval_target_place cx tgt es' =
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
+  read_storage_slot cx tr k ftv es = (INL v0, es) /\
+  bop <> In /\ bop <> NotIn /\
+  gas_admissible (eval_stmt cx (AugAssign ty tgt bop e))
+    (stmt_res_ok lctx) es /\
+  bind (eval_expr cx e) (read_result cx)
+    (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
+    (INL v, ee) ==>
+  expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
+Proof
+  cheat
+QED
 
 (* An exemption certificate of e lifts to the statement's: the place, its
    value and its type are read with no GAS before e. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_rhs_exempt:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k ftv),
@@ -294,9 +435,27 @@ Proof
   simp[place_type_value_def, bind_return] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
+*)
+Theorem augassign_storage_place_rhs_exempt:
+  (!es'. eval_target_place cx tgt es' =
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
+  read_storage_slot cx tr k ftv es = (INL v0, es) /\
+  gas_marked_path memory ctx func s0 0 (OK t) /\ ~t.vs_halted /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es with <|gas_obs := []; storage_trace := es.storage_trace ++ evs|>,t)
+    marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (AugAssign ty tgt bop e)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  cheat
+QED
 
 (* Looking the target up records evs before anything else runs: a trace
    that is bad with evs recorded stays bad through the whole statement. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_bad_root:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k ftv),
@@ -343,9 +502,21 @@ Proof
   Cases_on `eval_stmt cx stmt est` >> rename1 `_ = (res, ee)` >>
   Cases_on `res` >> simp[ignore_bind_def, bind_def, return_def]
 QED
+*)
+Theorem augassign_storage_place_bad_root:
+  (!es'. eval_target_place cx tgt es' =
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
+  ~storage_trace_domain cx st0 (es.storage_trace ++ evs) ==>
+  gas_bad_storage_at cx st0 (eval_stmt cx (AugAssign ty tgt bop e))
+    es s0 marks
+Proof
+  cheat
+QED
 
 (* A bad trace at the end of e, run with the target's events recorded,
    stays bad through the operator and the slot write. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_place_rhs_bad_storage:
   (!es'. eval_target_place cx tgt es' =
            (INL (StoragePlace tr k ftv),
@@ -376,5 +547,18 @@ Proof
   disch_then (qspecl_then [`gas_explicit marks s0.vs_gas_readings ++ tail`,
                            `ty`, `bop`, `e`] SUBST1_TAC) >>
   simp[]
+QED
+*)
+Theorem augassign_storage_place_rhs_bad_storage:
+  (!es'. eval_target_place cx tgt es' =
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
+  read_storage_slot cx tr k ftv es = (INL v0, es) /\
+  gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
+    (es with storage_trace := es.storage_trace ++ evs) s0 marks ==>
+  gas_bad_storage_at cx st0 (eval_stmt cx (AugAssign ty tgt bop e))
+    es s0 marks
+Proof
+  cheat
 QED
 

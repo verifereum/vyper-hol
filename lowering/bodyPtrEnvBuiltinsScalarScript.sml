@@ -58,6 +58,7 @@ Proof
   strip_tac >>
   `~not_fresh_at sa (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all emit_scalar_builtin_counted_suffix >>
   disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
   drule_all scalar_builtin_update_ghosts >>
@@ -130,6 +131,7 @@ Proof
    stmt_state_rel H ctx fn cenv cx es s` by metis_tac[] >>
   `~not_fresh_at sa (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all emit_scalar_builtin_counted_suffix >>
   disch_then (qspecl_then [`PG`, `G`, `D H`] assume_tac) >>
   drule_all scalar_builtin_update_ghosts >>

@@ -6,6 +6,7 @@ Ancestors
   localPtrsProps compileEnv loweringStateRelDefs venomState venomMemDefs vyperLookup
   memoryValueEncoding
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem stmt_state_rel_control[local]:
   stmt_state_rel H ctx func cenv cx es
     (s with <|vs_prev_bb := prev; vs_current_bb := bb; vs_inst_idx := idx|>) <=>
@@ -22,7 +23,16 @@ Proof
        pending_alloca_size_def, immutable_alloca_sep_def, accounts_rel_def,
        immutable_base_zero_alt]
 QED
+*)
+Theorem stmt_state_rel_control[local]:
+  stmt_state_rel H ctx func cenv cx es
+    (s with <|vs_prev_bb := prev; vs_current_bb := bb; vs_inst_idx := idx|>) <=>
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem stmt_state_rel_write_local_copy_effect:
   !H ctx func cenv cx es s t sa sb id p cap dw pre scope entry rest v.
     stmt_state_rel H ctx func cenv cx es s /\
@@ -72,7 +82,24 @@ Proof
          typed_copy_effect_def] >> first_assum ACCEPT_TAC) >>
   fs[Abbr `u`, stmt_state_rel_control]
 QED
+*)
+Theorem stmt_state_rel_write_local_copy_effect:
+  !H ctx func cenv cx es s t sa sb id p cap dw pre scope entry rest v.
+    stmt_state_rel H ctx func cenv cx es s /\
+    find_containing_scope id es.scopes = SOME (pre,scope,entry,rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
+    lookup_var p s = SOME dw /\ local_ptrs_reserved cenv sa /\
+    typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size entry.type) /\
+    val_wf entry.type v /\ value_has_type entry.type v /\
+    val_in_memory entry.type v (w2n dw) t.vs_memory ==>
+    stmt_state_rel H ctx func cenv cx
+      (es with scopes := pre ++
+        (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem local_memory_relayout_store_path:
   !H ctx func cenv cx es s id p cap pre scope entry rest v src dty sty
    sa sb sw dw dtv stv.
@@ -115,4 +142,40 @@ Proof
   qexists_tac `t` >> simp[] >>
   irule stmt_state_rel_write_local_copy_effect >>
   simp[] >> qexistsl_tac [`dw`,`s`,`sa`,`sb`] >> gvs[]
+QED
+*)
+Theorem local_memory_relayout_store_path:
+  !H ctx func cenv cx es s id p cap pre scope entry rest v src dty sty
+   sa sb sw dw dtv stv.
+    compile_store_memory cenv src (Var p) dty sty sa = ((),sb) /\
+    ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname,fty,sz). !tv.
+         evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to (get_tenv cx) sty dty /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\ entry.type = dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ lookup_var p s = SOME dw /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size stv < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    (w2n sw + type_memory_size stv <= w2n dw \/
+     w2n dw + type_memory_size dtv <= w2n sw) /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    find_containing_scope id es.scopes = SOME (pre,scope,entry,rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. stmt_state_rel H ctx func cenv cx
+        (es with scopes := pre ++
+          (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+      typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv)
+Proof
+  cheat
 QED

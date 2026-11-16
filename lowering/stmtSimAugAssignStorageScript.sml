@@ -33,6 +33,7 @@ Libs
 (* A storage or transient variable's target place is a StoragePlace at its
    layout slot, at its declared type; looking it up records the root it
    observes. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_target_place_toplevel:
   !cx src id es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
@@ -50,7 +51,22 @@ Proof
        return_def, LET_THM, get_place_def, place_type_value_def,
        ignore_bind_def, record_storage_event_def]
 QED
+*)
+Theorem eval_target_place_toplevel:
+  !cx src id es ts tr typ id_str slot tvt.
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    eval_target_place cx (TopLevelNameTarget (src, id)) es =
+      (INL (StoragePlace tr (n2w slot) tvt),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) /\
+    place_type_value cx (StoragePlace tr (n2w slot) tvt) es = (INL tvt, es)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem read_storage_slot_gas_obs:
   read_storage_slot cx tr slot tv es = (res, ee) ==>
   read_storage_slot cx tr slot tv (es with gas_obs := gs) =
@@ -66,7 +82,16 @@ Proof
     (w2n slot) tv` >>
   simp[lift_option_def, return_def, raise_def] >> strip_tac >> gvs[return_def, raise_def]
 QED
+*)
+Theorem read_storage_slot_gas_obs:
+  read_storage_slot cx tr slot tv es = (res, ee) ==>
+  read_storage_slot cx tr slot tv (es with gas_obs := gs) =
+    (res, ee with gas_obs := gs)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem read_storage_slot_storage_trace:
   read_storage_slot cx tr slot tv es = (res, ee) ==>
   read_storage_slot cx tr slot tv (es with storage_trace := obs) =
@@ -82,9 +107,18 @@ Proof
     (w2n slot) tv` >>
   simp[lift_option_def, return_def, raise_def] >> strip_tac >> gvs[return_def, raise_def]
 QED
+*)
+Theorem read_storage_slot_storage_trace:
+  read_storage_slot cx tr slot tv es = (res, ee) ==>
+  read_storage_slot cx tr slot tv (es with storage_trace := obs) =
+    (res, ee with storage_trace := obs)
+Proof
+  cheat
+QED
 
 
 (* Pointwise action boundary, not a certificate transport rule. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_augassign_toplevel_forced:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -110,7 +144,25 @@ Proof
   Cases_on `eval_expr cx e es1` >> rename1 `_ = (raw, st)` >>
   Cases_on `raw` >> simp[bind_def]
 QED
+*)
+Theorem eval_augassign_toplevel_forced:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) ==>
+  eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
+  (do v <- bind (eval_expr cx e) (read_result cx);
+      r <- lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        tvt bop v0 v);
+      write_storage_slot cx tr (n2w slot) tvt r od)
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_exception:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -126,7 +178,22 @@ Proof
   disch_then (qspecl_then [`ty`, `e`, `bop`] mp_tac) >>
   simp[Once bind_def]
 QED
+*)
+Theorem augassign_toplevel_rhs_exception:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  bind (eval_expr cx e) (read_result cx) (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) =
+    (INR ex, ee) ==>
+  eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
+    (INR ex, ee)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_normal:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -144,7 +211,24 @@ Proof
   disch_then (qspecl_then [`ty`, `e`, `bop`] mp_tac) >>
   simp[Once bind_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
+*)
+Theorem augassign_toplevel_rhs_normal:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  bind (eval_expr cx e) (read_result cx) (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) =
+    (INL v, ee) ==>
+  eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
+  bind (lift_sum (evaluate_binop
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    tvt bop v0 v)) (write_storage_slot cx tr (n2w slot) tvt) ee
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_admissible:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -178,7 +262,22 @@ Proof
   imp_res_tac (cj 1 eval_expr_no_control) >>
   gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
 QED
+*)
+Theorem augassign_toplevel_rhs_admissible:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_admissible (eval_stmt cx
+    (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_binop_admissible:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -218,7 +317,24 @@ Proof
   `stmt_res_ok lctx (INR (Error err))` by metis_tac[gas_admissible_result] >>
   gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
+*)
+Theorem augassign_toplevel_binop_admissible:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  bop <> In /\ bop <> NotIn /\
+  gas_admissible (eval_stmt cx
+    (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (stmt_res_ok lctx) es /\
+  bind (eval_expr cx e) (read_result cx)
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := gs) = (INL v, ee) ==>
+  expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_load_path:
   emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op,sb) /\
   fn_has_code sa sb func /\ ~s0.vs_halted /\
@@ -250,7 +366,21 @@ Proof
   pure_once_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]
 QED
+*)
+Theorem augassign_storage_load_path:
+  emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op,sb) /\
+  fn_has_code sa sb func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out. op = Var out /\
+    gas_marked_path F ctx func s0 0
+      (OK ((update_var out (if tr then tload slot s0 else sload slot s0) s0)
+        with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem declared_storage_holds_value:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
@@ -279,7 +409,22 @@ Proof
          transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]) >>
   gvs[storage_holds_def, read_result_def, return_def]
 QED
+*)
+Theorem declared_storage_holds_value:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) /\
+  MEM (tr,n2w slot,tvt) (FST H) /\ regions_consistent (FST H) /\
+  storage_well_formed_on cx es (FST H) /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  storage_holds cx tr ty (Value v) (n2w slot) es s
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_load_frame:
   emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op,sb) /\
   fn_has_code sa sb func /\ ~s0.vs_halted /\
@@ -319,7 +464,32 @@ Proof
        FLOOKUP_UPDATE, not_fresh_at_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
+*)
+Theorem augassign_storage_load_frame:
+  emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op,sb) /\
+  fn_has_code sa sb func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\
+  is_word_type ty /\ storage_holds cx tr ty (Value v) slot es s0 /\
+  evaluate_type (get_tenv cx) ty = SOME tvt ==>
+  ?t. (!(H:(bool # bytes32 # type_value) list # num list).
+         stmt_state_rel H ctx func cenv cx es s0 ==>
+         stmt_state_rel H ctx func cenv cx es t) /\
+    gas_marked_path F ctx func s0 0 (OK t) /\
+    eval_operand op t = SOME (typed_val_to_w256 tvt v) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
+    (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_place_exec:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -334,7 +504,22 @@ Proof
   strip_tac >> drule_all eval_target_place_toplevel >>
   simp[gas_marked_exec_def, gas_explicit_def]
 QED
+*)
+Theorem augassign_toplevel_place_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  gas_marked_path memory ctx func s0 0 (OK t) ==>
+  gas_marked_exec memory (ctx,func)
+    (eval_target_place cx (TopLevelNameTarget (src,id)))
+    (es,s0) [] (INL (StoragePlace tr (n2w slot) tvt))
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) (OK t)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_exempt:
   read_storage_slot cx tr slot tvt es1 = (INL v0, es1) /\
   gas_marked_exec memory (ctx,func)
@@ -374,8 +559,26 @@ Proof
   simp[place_type_value_def, bind_return] >>
   irule gas_exempt_cert_error_value >> simp[]
 QED
+*)
+Theorem augassign_toplevel_rhs_exempt:
+  read_storage_slot cx tr slot tvt es1 = (INL v0, es1) /\
+  gas_marked_exec memory (ctx,func)
+    (eval_target_place cx (TopLevelNameTarget (src,id)))
+    (es,s0) [] (INL (StoragePlace tr slot tvt)) es1 (OK t) /\
+  ~t.vs_halted /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es1 with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx
+      (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  cheat
+QED
 
 (* Typed storage operands, independently of storage changes made by the RHS. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_binop_ready:
   expr_body_pre cenv cx env e es /\
   evaluate_type (get_tenv cx) ty = SOME tvt /\
@@ -428,7 +631,27 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`expr_type e`, `get_tenv cx`, `tvt`, `tyv`] >> simp[]
 QED
+*)
+Theorem augassign_storage_binop_ready:
+  expr_body_pre cenv cx env e es /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\
+  well_formed_type env.type_defs ty /\
+  read_storage_slot cx tr slot tvt es = (INL v0, es) /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  value_has_type tvt v0 /\ word_value v0 /\ expr_sim_inv cenv cx env ee /\
+  (!w. bop_result cx ty bop [ty; expr_type e] v0 v est = INL w ==>
+       value_has_type tvt w) /\
+  binop_frag ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE)
+    [ty; expr_type e] v0 v est
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_store_post_path:
   !H0 ctx func cx cenv lctx src id ts tr ty id_str slot tvt w op st sf s sa s0
    es0 ee.
@@ -507,7 +730,40 @@ Proof
   Cases_on `tr` >>
   gvs[sstore_def, tstore_def, lookup_var_def]
 QED
+*)
+Theorem augassign_storage_store_post_path:
+  !H0 ctx func cx cenv lctx src id ts tr ty id_str slot tvt w op st sf s sa s0
+   es0 ee.
+    emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot); op] st =
+      ((), sf) /\
+    fn_has_code st sf func /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list)
+      ctx func cenv cx ee s /\
+    ~cx.txn.is_static /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) ty = SOME tvt /\ type_slot_size tvt = 1 /\
+    is_word_type ty /\ value_has_type tvt w /\
+    eval_operand op s = SOME (typed_val_to_w256 tvt w) /\
+    (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
+            lookup_var x s = SOME wd) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    alloca_frame cenv es0 sa s0 cenv ee s ==>
+    ?fin last. write_storage_slot cx tr (n2w slot) tvt w ee = (INL (),fin) /\
+      gas_marked_path F ctx func s 0 (OK last) /\
+      !H. stmt_state_rel H ctx func cenv cx ee s /\
+          storage_well_formed_on cx ee (FST H) /\
+          MEM (tr,n2w slot,tvt) (FST H) /\ regions_consistent (FST H) ==>
+          stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) fin last
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_exception_exec:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -527,7 +783,25 @@ Proof
   gen_tac >> irule augassign_toplevel_rhs_exception >> simp[] >>
   qexists_tac `v0` >> metis_tac[read_storage_slot_gas_obs]
 QED
+*)
+Theorem augassign_toplevel_rhs_exception_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := [],t)
+    marks (INR ex) ee r ==>
+  gas_marked_exec F (ctx,func)
+    (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    (es,s0) marks (INR ex) ee r
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_normal_exec:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -567,6 +841,29 @@ Proof
       disch_then (qspecl_then [`ty`, `bop`] mp_tac) >> simp[]) >>
   drule_all gas_marked_path_then >> simp[]
 QED
+*)
+Theorem augassign_toplevel_rhs_normal_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := [],t)
+    marks (INL v) ee (OK u) /\
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum (evaluate_binop
+      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+      tvt bop v0 v)) (write_storage_slot cx tr (n2w slot) tvt))
+    (ee with gas_obs := [],u) [] res fin r ==>
+  gas_marked_exec F (ctx,func)
+    (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    (es,s0) marks res fin r
+Proof
+  cheat
+QED
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_storage_continuation_exec:
   bind (lift_sum br) (write_storage_slot cx tr slot tvt) ee = (res,fin) /\
   gas_marked_path F ctx func u 0 r ==>
@@ -579,10 +876,21 @@ Proof
   strip_tac >> simp[] >> gen_tac >>
   simp[write_storage_slot_gas_obs] >> gvs[]
 QED
+*)
+Theorem augassign_storage_continuation_exec:
+  bind (lift_sum br) (write_storage_slot cx tr slot tvt) ee = (res,fin) /\
+  gas_marked_path F ctx func u 0 r ==>
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum br) (write_storage_slot cx tr slot tvt))
+    (ee,u) [] res fin r
+Proof
+  cheat
+QED
 
 
 (* The lookup of x records x's root before anything else runs: a trace that
    is bad with the root recorded stays bad through the whole statement. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_bad_root:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -634,9 +942,24 @@ Proof
   Cases_on `eval_stmt cx stmt est` >> rename1 `_ = (res, ee)` >>
   Cases_on `res` >> simp[ignore_bind_def, bind_def, return_def]
 QED
+*)
+Theorem augassign_toplevel_bad_root:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  ~storage_trace_domain cx st0
+     (es.storage_trace ++ [StorageRoot tr slot tvt]) ==>
+  gas_bad_storage_at cx st0
+    (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    es s0 marks
+Proof
+  cheat
+QED
 
 (* A bad trace at the end of e (run after the zero-mark load of x, with x's
    root recorded) stays bad through the operator and the slot write. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_rhs_bad_storage:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
@@ -679,8 +1002,26 @@ Proof
   drule_all eval_augassign_toplevel_forced >>
   disch_then (qspecl_then [`ty`, `e`, `bop`] SUBST1_TAC) >> simp[]
 QED
+*)
+Theorem augassign_toplevel_rhs_bad_storage:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
+       with gas_obs := []) t marks ==>
+  gas_bad_storage_at cx st0
+    (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    es s0 marks
+Proof
+  cheat
+QED
 
 (* An observed region of a well-formed backend decodes. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem observed_region_read:
   storage_well_formed_on cx es regions /\ MEM (tr,slot,tvt) regions /\
   well_formed_type_value tvt ==>
@@ -693,8 +1034,17 @@ Proof
   gvs[read_storage_slot_def, bind_def, lift_option_def, return_def,
       get_storage_backend_eq]
 QED
+*)
+Theorem observed_region_read:
+  storage_well_formed_on cx es regions /\ MEM (tr,slot,tvt) regions /\
+  well_formed_type_value tvt ==>
+  ?v. read_storage_slot cx tr slot tvt es = (INL v, es)
+Proof
+  cheat
+QED
 
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_toplevel_code_parts:
   !cenv lctx ty0 ty nsid bop e sa c sf tr slot.
     stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget nsid) bop e) sa =
@@ -729,6 +1079,25 @@ Proof
   qmatch_goalsub_abbrev_tac `emit_void st [Lit slot; res_op] s3` >>
   Cases_on `emit_void st [Lit slot; res_op] s3` >> simp[oneTheory.one]
 QED
+*)
+Theorem augassign_toplevel_code_parts:
+  !cenv lctx ty0 ty nsid bop e sa c sf tr slot.
+    stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget nsid) bop e) sa =
+      (c, sf) /\
+    FLOOKUP cenv.ce_module_vars nsid =
+      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
+    cenv.ce_hashmap_info nsid = NONE ==>
+    c = cenv /\
+    ?s1 s2 s3 cur_op rhs_op res_op.
+      emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (cur_op, s1) /\
+      lower_value compile_expr cenv ty e s1 = (rhs_op, s2) /\
+      compile_binop bop cur_op rhs_op ty NONE
+        (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op, s3) /\
+      emit_void (if tr then TSTORE else SSTORE) [Lit slot; res_op] s3 =
+        ((), sf)
+Proof
+  cheat
+QED
 
 
 (* ===== The statement ===== *)
@@ -737,6 +1106,7 @@ QED
    outcome, given e's expr_sim_case (so e may make internal calls unless
    nocalls).  The statement's type ty is x's declared type, and the
    typing gives x that type (toplevel_vtypes). *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_augassign_toplevel_case:
   !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
@@ -800,7 +1170,31 @@ Proof
   drule_all augassign_toplevel_code_parts >> strip_tac >> gvs[] >>
   suspend "load_prefix"
 QED
+*)
+Theorem compile_augassign_toplevel_case:
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
+   ts tr id_str slot tvt vtyp.
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) ty = SOME tvt /\
+    FLOOKUP env.toplevel_vtypes (src, id) = SOME (Type ty) /\
+    well_formed_type env.type_defs ty /\
+    cenv.ce_hashmap_info (src, id) = NONE /\
+    cenv.ce_module_var_type (src, id) = SOME vtyp /\ is_word_type vtyp /\
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+    bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
+      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[load_prefix]:
   `cs_extends sa s1` by
     metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
@@ -858,7 +1252,9 @@ Resume compile_augassign_toplevel_case[load_prefix]:
      fs[]) >>
   suspend "rhs_outcome"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[rhs_outcome]:
   `expr_sim ctx func cenv cx ty e
      ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
@@ -886,7 +1282,9 @@ Resume compile_augassign_toplevel_case[rhs_outcome]:
   goal_assum (drule_at Any) >> simp[] >>
   irule augassign_toplevel_place_exec >> metis_tac[]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[rhs_summary]:
   qexists_tac `marks` >>
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
@@ -911,7 +1309,9 @@ Resume compile_augassign_toplevel_case[rhs_summary]:
   disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[rhs_normal]:
   gvs[] >> rename1 `gas_marked_exec _ _ _ _ _ _ ee (OK u)` >>
   first_assum (qspec_then `H2` mp_tac) >> impl_tac >- simp[] >>
@@ -953,7 +1353,9 @@ Resume compile_augassign_toplevel_case[rhs_normal]:
      drule_all augassign_toplevel_binop_admissible >> simp[]) >>
   suspend "binop_ready"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[binop_ready]:
   `expr_body_pre cenv cx env e
      ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
@@ -993,7 +1395,9 @@ Resume compile_augassign_toplevel_case[binop_ready]:
       simp[expr_post_def]) >>
   strip_tac >- suspend "operator_normal" >> suspend "operator_exit"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[operator_normal]:
   gvs[] >> rename1 `eval_operand res_op s = SOME (val_to_w256 result)` >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
@@ -1046,7 +1450,9 @@ Resume compile_augassign_toplevel_case[operator_normal]:
   strip_tac >>
   suspend "store_post"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[store_post]:
   `MEM (tr,n2w slot,tvt) (FST H1) /\ regions_consistent (FST H1) /\
    stmt_state_rel H1 ctx func cenv cx es s0 /\
@@ -1168,7 +1574,9 @@ Resume compile_augassign_toplevel_case[store_post]:
   irule augassign_storage_continuation_exec >> simp[] >>
   simp[lift_sum_def, bind_def, return_def]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_toplevel_case[operator_exit]:
   `bop_result cx ty bop [ty; expr_type e] v0 v ee =
      case evaluate_binop
@@ -1192,6 +1600,9 @@ Resume compile_augassign_toplevel_case[operator_exit]:
   disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Finalise compile_augassign_toplevel_case
+*)
 

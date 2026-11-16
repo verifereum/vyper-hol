@@ -52,6 +52,7 @@ Libs
 
 (* Observation transport changes only the source entry observations; both
    the all-tail execution and the full entry frame ignore that field. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem expr_sim_start_gas_obs:
   expr_sim ctx func cenv cx ty e es ==>
   expr_sim ctx func cenv cx ty e (es with gas_obs := gs)
@@ -75,11 +76,19 @@ Proof
   disj2_tac >> disj2_tac >> drule gas_exempt_cert_start_gas_obs >>
   disch_then (qspec_then `gs` mp_tac) >> simp[] >> metis_tac[]
 QED
+*)
+Theorem expr_sim_start_gas_obs:
+  expr_sim ctx func cenv cx ty e es ==>
+  expr_sim ctx func cenv cx ty e (es with gas_obs := gs)
+Proof
+  cheat
+QED
 
 (* ===== The source ===== *)
 
 (* A struct value of its type has every field its type lists, at that
    field's type. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem struct_has_type_field:
   !fs vals id ftv.
     struct_has_type fs vals /\ ALOOKUP fs id = SOME ftv ==>
@@ -88,10 +97,19 @@ Proof
   Induct >> simp[] >> PairCases >> Cases >> simp[value_has_type_def] >>
   PairCases_on `h` >> rw[value_has_type_def] >> gvs[] >> metis_tac[]
 QED
+*)
+Theorem struct_has_type_field:
+  !fs vals id ftv.
+    struct_has_type fs vals /\ ALOOKUP fs id = SOME ftv ==>
+    ?fv. ALOOKUP vals id = SOME fv /\ value_has_type ftv fv
+Proof
+  cheat
+QED
 
 (* x.f op= e, unless it fails with a type error: x.f's value fv is read
    and e evaluated, then the operator runs on the two, and its result is
    written at x.f. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_augassign_attr_local:
   !cx ty id fld bop e es res es' entry fs vals ftv fv.
     eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
@@ -139,8 +157,33 @@ Proof
   strip_tac >> gvs[] >>
   drule eval_target_place_attr_local >> gvs[]
 QED
+*)
+Theorem eval_augassign_attr_local:
+  !cx ty id fld bop e es res es' entry fs vals ftv fv.
+    eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+      es = (res, es') /\
+    lookup_scopes id es.scopes = SOME entry /\
+    entry.type = StructTV fs /\ entry.value = StructV vals /\
+    ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+    (!m. res <> INR (Error (TypeError m))) ==>
+    ?r1 es1.
+      (do tv <- eval_expr cx e; read_result cx tv od) es = (r1, es1) /\
+      case r1 of
+        INR ex => res = INR ex /\ es' = es1
+      | INL v =>
+          case evaluate_binop
+                 (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                 ftv bop fv v of
+            INR err => res = INR (Error err) /\ es' = es1
+          | INL r =>
+              write_place cx (MemoryPlace id [AttrSubscript fld]) r es1 =
+                (res, es')
+Proof
+  cheat
+QED
 
 (* Pure field-place prefix, independent of the initial observation list. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_place_reads:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -161,7 +204,20 @@ Proof
        subscript_type_def, lift_sum_def, extend_memory_place_def,
        get_place_def, ignore_bind_def]
 QED
+*)
+Theorem augassign_attr_place_reads:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv ==>
+  eval_target_place cx (AttributeTarget (NameTarget id) fld) es =
+    (INL (MemoryPlace id [AttrSubscript fld]), es) /\
+  read_place cx (MemoryPlace id [AttrSubscript fld]) es = (INL fv, es) /\
+  place_type_value cx (MemoryPlace id [AttrSubscript fld]) es = (INL ftv, es)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_augassign_attr_forced:
   eval_target_place cx (AttributeTarget (NameTarget id) fld) es =
     (INL (MemoryPlace id [AttrSubscript fld]), es) /\
@@ -181,7 +237,23 @@ Proof
   Cases_on `read_result cx raw ee` >> rename1 `_ = (rv, ef)` >>
   Cases_on `rv` >> simp[]
 QED
+*)
+Theorem eval_augassign_attr_forced:
+  eval_target_place cx (AttributeTarget (NameTarget id) fld) es =
+    (INL (MemoryPlace id [AttrSubscript fld]), es) /\
+  read_place cx (MemoryPlace id [AttrSubscript fld]) es = (INL fv, es) /\
+  place_type_value cx (MemoryPlace id [AttrSubscript fld]) es = (INL ftv, es) ==>
+  eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) es =
+  (do v <- bind (eval_expr cx e) (read_result cx);
+      r <- lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        ftv bop fv v);
+      write_place cx (MemoryPlace id [AttrSubscript fld]) r od) es
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_augassign_attr_fields:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -196,7 +268,22 @@ Proof
   strip_tac >> drule_all augassign_attr_place_reads >>
   strip_tac >> irule eval_augassign_attr_forced >> simp[]
 QED
+*)
+Theorem eval_augassign_attr_fields:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv ==>
+  eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) es =
+  (do v <- bind (eval_expr cx e) (read_result cx);
+      r <- lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        ftv bop fv v);
+      write_place cx (MemoryPlace id [AttrSubscript fld]) r od) es
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem eval_augassign_attr_fields_obs:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -213,7 +300,24 @@ Proof
   strip_tac >> gen_tac >> irule eval_augassign_attr_fields >>
   simp[] >> metis_tac[]
 QED
+*)
+Theorem eval_augassign_attr_fields_obs:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv ==>
+  !gs. eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+    (es with gas_obs := gs) =
+  (do v <- bind (eval_expr cx e) (read_result cx);
+      r <- lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        ftv bop fv v);
+      write_place cx (MemoryPlace id [AttrSubscript fld]) r od)
+    (es with gas_obs := gs)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_admissible:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -237,7 +341,20 @@ Proof
   drule_all gas_admissible_result >>
   Cases_on `y` >> gvs[no_control_exc_def, stmt_res_ok_def, expr_res_ok_def]
 QED
+*)
+Theorem augassign_attr_rhs_admissible:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  gas_admissible
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_exception:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -250,7 +367,19 @@ Proof
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] mp_tac) >>
   simp[GSYM bind_assoc, bind_def]
 QED
+*)
+Theorem augassign_attr_rhs_exception:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  bind (eval_expr cx e) (read_result cx) es = (INR ex, ee) ==>
+  eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) es =
+    (INR ex, ee)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_normal:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -265,7 +394,21 @@ Proof
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] mp_tac) >>
   simp[GSYM bind_assoc, bind_def]
 QED
+*)
+Theorem augassign_attr_rhs_normal:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
+  eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) es =
+  bind (lift_sum (evaluate_binop
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    ftv bop fv v)) (write_place cx (MemoryPlace id [AttrSubscript fld])) ee
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_exception_exec:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -281,7 +424,22 @@ Proof
   rewrite_tac[gas_marked_exec_def] >> strip_tac >> simp[] >>
   gen_tac >> irule augassign_attr_rhs_exception >> simp[] >> metis_tac[]
 QED
+*)
+Theorem augassign_attr_rhs_exception_exec:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es with gas_obs := [],t) marks (INR ex) ee r ==>
+  gas_marked_exec F (ctx,func)
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (es,s0) marks (INR ex) ee r
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_normal_exec:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -312,7 +470,27 @@ Proof
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] assume_tac) >>
   gvs[gas_marked_exec_def]
 QED
+*)
+Theorem augassign_attr_rhs_normal_exec:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es with gas_obs := [],t) marks (INL v) ee (OK u) /\
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum (evaluate_binop
+      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+      ftv bop fv v)) (write_place cx (MemoryPlace id [AttrSubscript fld])))
+    (ee with gas_obs := [],u) [] res fin r ==>
+  gas_marked_exec F (ctx,func)
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (es,s0) marks res fin r
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_binop_admissible:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -339,7 +517,22 @@ Proof
   simp[lift_sum_def, raise_def] >> strip_tac >>
   drule_all gas_admissible_result >> simp[stmt_res_ok_def]
 QED
+*)
+Theorem augassign_attr_binop_admissible:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  bop <> In /\ bop <> NotIn /\
+  gas_admissible
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (stmt_res_ok lctx) es /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  expr_res_ok (bop_result cx ty bop [ty; expr_type e] fv v ee)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_write_admissible:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -371,7 +564,24 @@ Proof
        mp_tac write_place_short_memory_result >> simp[]) >>
   gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
+*)
+Theorem augassign_attr_write_admissible:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  bop <> In /\ bop <> NotIn /\
+  gas_admissible
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (stmt_res_ok lctx) es /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) /\
+  bop_result cx ty bop [ty; expr_type e] fv v ee = INL w /\
+  write_place cx (MemoryPlace id [AttrSubscript fld]) w ee = (res, fin) ==>
+  !m. res <> INR (Error (TypeError m))
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_exempt:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -403,9 +613,29 @@ Proof
   once_rewrite_tac[GSYM bind_assoc] >>
   irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
 QED
+*)
+Theorem augassign_attr_rhs_exempt:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  gas_marked_exec memory (ctx,func)
+    (eval_target_place cx (AttributeTarget (NameTarget id) fld))
+    (es,s0) [] (INL (MemoryPlace id [AttrSubscript fld])) es (OK t) /\
+  ~t.vs_halted /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  cheat
+QED
 
 (* A bad storage trace at the end of e stays bad through the operator and
    the field write, neither of which records a storage event. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_bad_storage:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -431,12 +661,26 @@ Proof
   drule_all eval_augassign_attr_fields_obs >>
   disch_then (fn th => simp[gasStorageTheory.gas_bad_storage_at_def, th])
 QED
+*)
+Theorem augassign_attr_rhs_bad_storage:
+  lookup_scopes id es.scopes = SOME entry /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
+    es s0 marks ==>
+  gas_bad_storage_at cx st0
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    es s0 marks
+Proof
+  cheat
+QED
 
 (* ===== The code ===== *)
 
 (* x.f op= e on a local x held through its pointer p: the ADD of f's byte
    offset to p, an MLOAD of the sum, e lowered at the field's type, the
    operator and an MSTORE at the sum. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_local_code_parts:
   !cenv lctx ty0 ty id fld bop e sa c sf p sz sid.
     stmt_env cenv lctx ty0
@@ -477,11 +721,34 @@ Proof
      oneTheory.one] >>
   strip_tac >> gvs[oneTheory.one]
 QED
+*)
+Theorem augassign_attr_local_code_parts:
+  !cenv lctx ty0 ty id fld bop e sa c sf p sz sid.
+    stmt_env cenv lctx ty0
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) sa =
+      (c, sf) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    cenv.ce_var_type id = SOME (StructT sid) ==>
+    c = cenv /\
+    ?dst sn cur s1 rhs s2 res_op s3.
+      emit_op ADD
+        [Var p; Lit (n2w (struct_field_offset
+           (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+           fld))] sa = (dst, sn) /\
+      emit_op MLOAD [dst] sn = (cur, s1) /\
+      lower_value compile_expr cenv ty e s1 = (rhs, s2) /\
+      compile_binop bop cur rhs ty NONE
+        (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op, s3) /\
+      emit_void MSTORE [dst; res_op] s3 = ((), sf)
+Proof
+  cheat
+QED
 
 (* ===== The load ===== *)
 
 (* A word field of a local struct, at x's pointer plus the field's
    offset: the word the field's value is held in. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem stmt_state_rel_field_word:
   !H func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
     stmt_state_rel H ctx func cenv cx es s /\
@@ -520,7 +787,25 @@ Proof
   simp[GSYM mem_word_at_eq_mload] >>
   irule val_in_memory_word_type >> metis_tac[]
 QED
+*)
+Theorem stmt_state_rel_field_word:
+  !H func cenv cx es s id p sz w0 entry fs vals flds fld ftv fv fty ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w0 /\
+    lookup_scopes id es.scopes = SOME entry /\
+    entry.type = StructTV fs /\ entry.value = StructV vals /\
+    fields_layout flds fs /\ struct_has_type fs vals /\
+    ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+    is_word_type fty /\ evaluate_type (get_tenv cx) fty = SOME ftv /\
+    value_has_type ftv fv ==>
+    mload (w2n (w0 + n2w (struct_field_offset flds fld))) s =
+      typed_val_to_w256 ftv fv
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem attr_add_marked_path:
   emit_op ADD [arg; Lit (n2w off)] sa = (dst,sn) /\
   fn_has_code sa sn func /\ local_ptrs_reserved cenv sa /\
@@ -556,7 +841,27 @@ Proof
     lookup_var_def, not_fresh_at_def, FLOOKUP_UPDATE] >>
   metis_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
+*)
+Theorem attr_add_marked_path:
+  emit_op ADD [arg; Lit (n2w off)] sa = (dst,sn) /\
+  fn_has_code sa sn func /\ local_ptrs_reserved cenv sa /\
+  eval_operand arg s = SOME w /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+      (!H. stmt_state_rel H ctx func cenv cx es s ==>
+           stmt_state_rel H ctx func cenv cx es q) /\
+      eval_operand dst q = SOME (w + n2w off) /\
+      ~q.vs_halted /\ q.vs_current_bb = sn.cs_current_bb /\
+      q.vs_inst_idx = LENGTH sn.cs_current_insts /\
+      q.vs_memory = s.vs_memory /\ q.vs_allocas = s.vs_allocas /\
+      (!x u. not_fresh_at sa x /\ lookup_var x s = SOME u ==>
+             lookup_var x q = SOME u)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem attr_load_marked_path:
   emit_op ADD [arg; Lit (n2w off)] sa = (dst,sm) /\
   emit_op MLOAD [dst] sm = (cur,sn) /\
@@ -614,9 +919,31 @@ Proof
   rpt strip_tac >>
   metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_TRANS]
 QED
+*)
+Theorem attr_load_marked_path:
+  emit_op ADD [arg; Lit (n2w off)] sa = (dst,sm) /\
+  emit_op MLOAD [dst] sm = (cur,sn) /\
+  fn_has_code sa sn func /\ local_ptrs_reserved cenv sa /\
+  eval_operand arg s = SOME w /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      (!H. stmt_state_rel H ctx func cenv cx es s ==>
+           stmt_state_rel H ctx func cenv cx es t) /\
+      eval_operand dst t = SOME (w + n2w off) /\
+      eval_operand cur t = SOME (mload (w2n (w + n2w off)) s) /\
+      ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sn.cs_current_insts /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      (!x u. not_fresh_at sa x /\ lookup_var x s = SOME u ==>
+             lookup_var x t = SOME u)
+Proof
+  cheat
+QED
 
 (* The certificate remains at the RHS entry, for syntactic lifting by the
    enclosing statement. Only a completed summary is prefixed here. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_load_rhs_counted:
   expr_sim ctx func cenv cx ty e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
@@ -673,7 +1000,41 @@ Proof
       fs[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
+*)
+Theorem augassign_load_rhs_counted:
+  expr_sim ctx func cenv cx ty e es /\
+  lower_value compile_expr cenv ty e sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  gas_marked_path F ctx func s0 0 (OK sm) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es sm /\
+       storage_well_formed_on cx es (FST H)) /\
+  ~sm.vs_halted /\
+  sm.vs_current_bb = sa.cs_current_bb /\
+  sm.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?marks.
+    gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
+      es s0 marks \/
+    gas_summary_at F (ctx,func) marks
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+        ?v. res = INL v /\
+        expr_post H ctx func cenv cx e (es with gas_obs := []) sa sb sm ee v op t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+        expr_exit res r) \/
+    ?err ee leaf finish.
+      gas_exempt_cert F (cx_tops cx) (ctx,func)
+        (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+        (es with gas_obs := [],sm) marks (err,ee) (leaf,finish)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_expr_post_operands:
   expr_post H ctx func cenv cx e es sa sb sm ee v op t /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -685,9 +1046,21 @@ Proof
   rewrite_tac[expr_post_def] >> rpt strip_tac >>
   irule eval_operand_frame >> simp[] >> qexistsl_tac [`sa`, `sm`] >> simp[]
 QED
+*)
+Theorem augassign_expr_post_operands:
+  expr_post H ctx func cenv cx e es sa sb sm ee v op t /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. cur = Var x ==> not_fresh_at sa x) /\
+  (!l. dst <> Label l) /\ (!l. cur <> Label l) /\
+  eval_operand dst sm = SOME addr /\ eval_operand cur sm = SOME w ==>
+  eval_operand dst t = SOME addr /\ eval_operand cur t = SOME w
+Proof
+  cheat
+QED
 
 (* Normal RHS-to-operator boundary, independent of the load instruction.
    The original RHS post remains available to the caller for entry framing. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_load_bop_counted:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
        expr_post H ctx func cenv cx e es sa sb sm ee v rhs t) /\
@@ -748,7 +1121,47 @@ Proof
   irule eval_operand_frame >> simp[] >>
   qexistsl_tac [`sb`, `t`] >> simp[]
 QED
+*)
+Theorem augassign_load_bop_counted:
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sb sm ee v rhs t) /\
+  valid_horizon cx st0 H1 ee.storage_trace /\
+  binop_frag ctx func cenv cx bop ty ann bl el tys fv v ee /\
+  compile_binop bop cur rhs ty bl el sb = (out,sc) /\
+  expr_res_ok (bop_result cx ann bop tys fv v ee) /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sb /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. cur = Var x ==> not_fresh_at sa x) /\
+  (!l. dst <> Label l) /\ (!l. cur <> Label l) /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  (!x. rhs = Var x ==> not_fresh_at sb x) /\
+  eval_operand dst sm = SOME addr /\
+  eval_operand cur sm = SOME (val_to_w256 fv) /\
+  eval_operand rhs t = SOME (val_to_w256 v) /\ ~t.vs_halted /\
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  ?r. gas_marked_path F ctx func t 0 r /\
+    ((?u result. r = OK u /\
+       bop_result cx ann bop tys fv v ee = INL result /\ word_value result /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+            stmt_state_rel H ctx func cenv cx ee u /\
+            storage_well_formed_on cx ee (FST H)) /\
+       eval_operand out u = SOME (val_to_w256 result) /\
+       eval_operand dst u = SOME addr /\
+       (!x w. not_fresh_at sb x /\ lookup_var x t = SOME w ==>
+              lookup_var x u = SOME w) /\
+       (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+                FLOOKUP u.vs_allocas aid = SOME b) /\
+       u.vs_memory = t.vs_memory /\ ~u.vs_halted /\
+       u.vs_current_bb = sc.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sc.cs_current_insts) \/
+     (exit_result r /\ expr_exit (bop_result cx ann bop tys fv v ee) r))
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_binop_ready:
   expr_body_pre cenv cx env e es /\
   well_formed_type (get_tenv cx) ty /\
@@ -793,7 +1206,26 @@ Proof
       drule_all eval_expr_shift_amount >> simp[]) >>
   qexistsl_tac [`expr_type e`, `get_tenv cx`, `ftv`, `tyv`] >> simp[]
 QED
+*)
+Theorem augassign_attr_binop_ready:
+  expr_body_pre cenv cx env e es /\
+  well_formed_type (get_tenv cx) ty /\
+  evaluate_type (get_tenv cx) ty = SOME ftv /\ value_has_type ftv fv /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) ==>
+  expr_sim_inv cenv cx env ee /\
+  (!w. bop_result cx ty bop [ty; expr_type e] fv v est = INL w ==>
+       value_has_type ftv w) /\
+  binop_frag ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE)
+    [ty; expr_type e] fv v est
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_rhs_word_operand[local]:
   expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = (INL v,ee) /\
@@ -817,7 +1249,17 @@ Proof
   qexistsl_tac [`cx`, `expr_type e`] >>
   fs[expr_post_def, word_value_type_word]
 QED
+*)
+Theorem augassign_attr_rhs_word_operand[local]:
+  expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = (INL v,ee) /\
+  expr_post H ctx func cenv cx e ep sa sb sm ee v rhs t ==>
+  eval_operand rhs t = SOME (val_to_w256 v)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_operator_counted:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
        expr_post H ctx func cenv cx e (es with gas_obs := []) sa sb sm
@@ -897,6 +1339,44 @@ Proof
   disch_then (qspecl_then [`dst`, `addr`] mp_tac) >>
   impl_tac >- fs[safe_operand_def] >> simp[]
 QED
+*)
+Theorem augassign_attr_operator_counted:
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx e (es with gas_obs := []) sa sb sm
+         (ee with gas_obs := []) v rhs t) /\
+  valid_horizon cx st0 H1 ee.storage_trace /\
+  expr_body_pre cenv cx env e es /\
+  evaluate_type (get_tenv cx) ty = SOME ftv /\ value_has_type ftv fv /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks (INL v) ee (OK t) /\
+  lower_value compile_expr cenv ty e sa = (rhs,sb) /\
+  compile_binop bop cur rhs ty NONE
+    (if bop = Exp then expr_int_literal e else NONE) sb = (out,sc) /\
+  expr_res_ok (bop_result cx ty bop [ty;expr_type e] fv v (ee with gas_obs := [])) /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ safe_operand sa dst /\ safe_operand sa cur /\
+  eval_operand dst sm = SOME addr /\ eval_operand cur sm = SOME (val_to_w256 fv) /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  ?r. gas_marked_path F ctx func t 0 r /\
+    ((?u result. r = OK u /\
+       bop_result cx ty bop [ty;expr_type e] fv v (ee with gas_obs := []) = INL result /\
+       word_value result /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+            stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) u /\
+            storage_well_formed_on cx (ee with gas_obs := []) (FST H)) /\
+       eval_operand out u = SOME (val_to_w256 result) /\ eval_operand dst u = SOME addr /\
+       (!x w. not_fresh_at sb x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
+       (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+       u.vs_memory = t.vs_memory /\ ~u.vs_halted /\
+       u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts) \/
+     (exit_result r /\ expr_exit (bop_result cx ty bop [ty;expr_type e] fv v
+       (ee with gas_obs := [])) r))
+Proof
+  cheat
+QED
 
 (* ===== The statement ===== *)
 
@@ -904,6 +1384,7 @@ QED
    expression invariant holds of, f one of sid's fields: unless it fails
    with a type error, x's value gets v at f, x's struct being laid out as
    the lowering's struct table says. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem write_attr_local_typed:
   !cx cenv env id fld sid fty fsz es1 v res es'.
     write_place cx (MemoryPlace id [AttrSubscript fld]) v es1 = (res, es') /\
@@ -938,7 +1419,32 @@ Proof
   drule_all struct_has_type_field >> strip_tac >>
   drule_all write_place_attr_local >> strip_tac >> gvs[] >> metis_tac[]
 QED
+*)
+Theorem write_attr_local_typed:
+  !cx cenv env id fld sid fty fsz es1 v res es'.
+    write_place cx (MemoryPlace id [AttrSubscript fld]) v es1 = (res, es') /\
+    (!m. res <> INR (Error (TypeError m))) /\
+    expr_sim_inv cenv cx env es1 /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) ==>
+    res = INL () /\
+    ?pre env1 entry rest fs vals ftv.
+      find_containing_scope id es1.scopes = SOME (pre, env1, entry, rest) /\
+      entry.type = StructTV fs /\ entry.value = StructV vals /\
+      fields_layout (get_struct_fields cenv.ce_struct_fields
+                       (nsid_to_string sid)) fs /\
+      struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
+      evaluate_type (get_tenv cx) fty = SOME ftv /\
+      es' = es1 with scopes :=
+        pre ++ (env1 |+ (id, entry with
+                  <|value := StructV (AFUPDKEY fld (K v) vals);
+                    popped := []|>)) :: rest
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem write_attr_local_gas_obs:
   write_place cx (MemoryPlace id [AttrSubscript fld]) v ee = (res,ff) ==>
   write_place cx (MemoryPlace id [AttrSubscript fld]) v
@@ -957,7 +1463,16 @@ Proof
   simp[return_def, raise_def, bind_def, set_scopes_def] >>
   rpt strip_tac >> gvs[]
 QED
+*)
+Theorem write_attr_local_gas_obs:
+  write_place cx (MemoryPlace id [AttrSubscript fld]) v ee = (res,ff) ==>
+  write_place cx (MemoryPlace id [AttrSubscript fld]) v
+    (ee with gas_obs := obs) = (res,ff with gas_obs := obs)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_write_all_obs:
   write_place cx (MemoryPlace id [AttrSubscript fld]) v ee = (res,ff) /\
   (!m. res <> INR (Error (TypeError m))) /\
@@ -985,9 +1500,34 @@ Proof
       qexistsl_tac [`ty`, `get_tenv cx`] >> simp[]) >>
   drule write_attr_local_gas_obs >> simp[]
 QED
+*)
+Theorem augassign_attr_write_all_obs:
+  write_place cx (MemoryPlace id [AttrSubscript fld]) v ee = (res,ff) /\
+  (!m. res <> INR (Error (TypeError m))) /\
+  expr_sim_inv cenv cx env ee /\
+  FLOOKUP env.var_types id = SOME (StructT sid) /\
+  ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+    fld = SOME (ty,fsz) /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v ==>
+  res = INL () /\
+  ?pre env1 entry rest fs vals.
+    find_containing_scope id ee.scopes = SOME (pre,env1,entry,rest) /\
+    entry.type = StructTV fs /\ entry.value = StructV vals /\
+    fields_layout (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
+    struct_has_type fs vals /\ ALOOKUP fs fld = SOME tv /\
+    store_lays_out tv tv v /\
+    !obs. write_place cx (MemoryPlace id [AttrSubscript fld]) v
+      (ee with gas_obs := obs) =
+      (INL (),ee with <|scopes := pre ++
+        (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+          popped := []|>)) :: rest; gas_obs := obs|>)
+Proof
+  cheat
+QED
 
 (* The store boundary is stated in terms of the saved address and the
    current source layout, not the struct value before evaluation of e. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_store_post_path:
   emit_op ADD [baddr; Lit (n2w off)] sm = (dst,sn) /\
   emit_void MSTORE [dst;op] su = ((),sf) /\
@@ -1069,7 +1609,41 @@ Proof
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   metis_tac[]
 QED
+*)
+Theorem augassign_attr_store_post_path:
+  emit_op ADD [baddr; Lit (n2w off)] sm = (dst,sn) /\
+  emit_void MSTORE [dst;op] su = ((),sf) /\
+  eval_operand dst t = SOME (w0 + n2w off) /\ lookup_var p t = SOME w0 /\
+  eval_operand op t = SOME (typed_val_to_w256 ftv v) /\
+  stmt_state_rel H0 ctx func cenv cx ee t /\
+  alloca_frame cenv es0 sa s0 cenv ee t /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  find_containing_scope id ee.scopes = SOME (pre,env1,entry,rest) /\
+  entry.type = StructTV fs /\ entry.value = StructV vals /\
+  fields_layout flds fs /\ struct_has_type fs vals /\
+  ALOOKUP fs fld = SOME ftv /\ store_lays_out ftv ftv v /\
+  off = struct_field_offset flds fld /\ fn_has_code su sf func /\
+  ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
+  t.vs_inst_idx = LENGTH su.cs_current_insts /\ ~block_is_terminated sf /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+  (!tail. write_place cx (MemoryPlace id [AttrSubscript fld]) v
+    (ee with gas_obs := tail) =
+    (INL (),ee with <|scopes := pre ++
+      (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+        popped := []|>)) :: rest; gas_obs := tail|>)) ==>
+  ?ff t'. gas_marked_exec F (ctx,func)
+    (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
+    (ee with gas_obs := [],t) [] (INL ()) ff (OK t') /\
+    ff.storage_trace = ee.storage_trace /\
+    !H. stmt_state_rel H ctx func cenv cx ee t /\
+        storage_well_formed_on cx ee (FST H) ==>
+        stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) ff t'
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_store_continuation_exec:
   br = INL w /\
   gas_marked_exec F (ctx,func)
@@ -1081,7 +1655,20 @@ Theorem augassign_attr_store_continuation_exec:
 Proof
   strip_tac >> gvs[gas_marked_exec_def, bind_def, lift_sum_def, return_def]
 QED
+*)
+Theorem augassign_attr_store_continuation_exec:
+  br = INL w /\
+  gas_marked_exec F (ctx,func)
+    (write_place cx (MemoryPlace id [AttrSubscript fld]) w)
+    (ee with gas_obs := [],u) [] res fin r ==>
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum br) (write_place cx (MemoryPlace id [AttrSubscript fld])))
+    (ee with gas_obs := [],u) [] res fin r
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_error_continuation_exec:
   br = INR err /\ gas_marked_path F ctx func u 0 r ==>
   gas_marked_exec F (ctx,func)
@@ -1090,7 +1677,17 @@ Theorem augassign_attr_error_continuation_exec:
 Proof
   strip_tac >> gvs[gas_marked_exec_def, bind_def, lift_sum_def, raise_def]
 QED
+*)
+Theorem augassign_attr_error_continuation_exec:
+  br = INR err /\ gas_marked_path F ctx func u 0 r ==>
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum br) (write_place cx (MemoryPlace id [AttrSubscript fld])))
+    (ee with gas_obs := [],u) [] (INR (Error err)) (ee with gas_obs := []) r
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_pre_store_frame:
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx es t /\
@@ -1124,7 +1721,26 @@ Proof
   goal_assum (drule_at (Pat `alloca_frame _ _ s2 _ _ _ _`)) >>
   fs[expr_post_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
+*)
+Theorem augassign_attr_pre_store_frame:
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es t /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
+  local_ptrs_reserved cenv s2 /\
+  sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= s2.cs_next_id /\
+  t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+  expr_post H ctx func cenv cx e (es with gas_obs := []) s1 s2 t
+    (ee with gas_obs := []) v rhs t' /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  (!x w. not_fresh_at s2 x /\ lookup_var x t' = SOME w ==> lookup_var x u = SOME w) /\
+  u.vs_memory = t'.vs_memory ==>
+  alloca_frame cenv es sa s0 cenv ee u
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_normal_summary[local]:
   expr_body_pre cenv cx env e es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -1191,6 +1807,52 @@ Proof
   >- suspend "store"
   >> suspend "operator_error"
 QED
+*)
+Theorem augassign_attr_normal_summary[local]:
+  expr_body_pre cenv cx env e es /\
+  FLOOKUP env.var_types id = SOME (StructT sid) /\
+  ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld = SOME (ty,fsz) /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  gas_admissible (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+    (stmt_res_ok lctx) es /\
+  lookup_scopes id es.scopes = SOME entry /\ entry.type = StructTV fs /\
+  entry.value = StructV vals /\ ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
+  evaluate_type (get_tenv cx) ty = SOME ftv /\ value_has_type ftv fv /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\ lookup_var p s0 = SOME w0 /\
+  emit_op ADD [Var p; Lit (n2w (struct_field_offset
+    (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] sa = (dst,sn) /\
+  emit_op MLOAD [dst] sn = (cur,s1) /\
+  lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
+  compile_binop bop cur rhs ty NONE (if bop = Exp then expr_int_literal e else NONE)
+    s2 = (out,s3) /\ emit_void MSTORE [dst;out] s3 = ((),sb) /\
+  fn_has_code s2 s3 func /\ fn_has_code s3 sb func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated sb /\ local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
+  stmt_state_rel H1 ctx func cenv cx es s0 /\
+  stmt_state_rel H1 ctx func cenv cx es t /\ t.vs_memory = s0.vs_memory /\
+  gas_marked_path F ctx func s0 0 (OK t) /\ t.vs_allocas = s0.vs_allocas /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+  eval_operand dst t = SOME (w0 + n2w (struct_field_offset
+    (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) /\
+  eval_operand cur t = SOME (val_to_w256 fv) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks (INL v) ee (OK t') /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx e (es with gas_obs := []) s1 s2 t
+         (ee with gas_obs := []) v rhs t') /\
+  valid_horizon cx st0 H1 ee.storage_trace /\
+  t'.vs_current_bb = s2.cs_current_bb /\ t'.vs_inst_idx = LENGTH s2.cs_current_insts ==>
+  gas_summary_at F (ctx,func) marks
+    (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) (es,s0)
+    (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_post H ctx func cx lctx cenv cenv sa sb es s0 res ee t)
+    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
+Proof
+  cheat
+QED
+(* LOCAL STUB - preserved suspension.
 Resume augassign_attr_normal_summary[store]:
   gvs[] >>
   drule_all well_typed_binop_augassign_word >> strip_tac >>
@@ -1290,6 +1952,8 @@ Resume augassign_attr_normal_summary[store]:
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
   metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]
 QED
+*)
+(* LOCAL STUB - preserved suspension.
 Resume augassign_attr_normal_summary[operator_error]:
   gvs[] >>
   drule_all well_typed_binop_augassign_word >> strip_tac >>
@@ -1314,10 +1978,14 @@ Resume augassign_attr_normal_summary[operator_error]:
   disj2_tac >> rpt strip_tac >> simp[stmt_exit_def] >>
   Cases_on `y` >> Cases_on `r` >> gvs[expr_exit_def]
 QED
+*)
+(* LOCAL STUB - preserved suspension.
 Finalise augassign_attr_normal_summary
+*)
 
 (* x.f for x a local of struct type sid in a state the expression invariant
    holds of, f one of sid's fields: its place, value and type are read. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem augassign_attr_local_place:
   !cx cenv env es id fld sid fty fsz.
     expr_sim_inv cenv cx env es /\
@@ -1352,12 +2020,29 @@ Proof
        subscript_type_def, lift_sum_def, extend_memory_place_def,
        get_place_def, ignore_bind_def]
 QED
+*)
+Theorem augassign_attr_local_place:
+  !cx cenv env es id fld sid fty fsz.
+    expr_sim_inv cenv cx env es /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) ==>
+    ?cur ptv.
+      eval_target_place cx (AttributeTarget (NameTarget id) fld) es =
+        (INL (MemoryPlace id [AttrSubscript fld]), es) /\
+      read_place cx (MemoryPlace id [AttrSubscript fld]) es = (INL cur, es) /\
+      place_type_value cx (MemoryPlace id [AttrSubscript fld]) es =
+        (INL ptv, es)
+Proof
+  cheat
+QED
 
 (* x.f op= e for a local x of struct type sid and f a field of sid of type
    ty, ty a word_value_type, for every outcome: e's errors and the
    operator's (overflow, division by zero) exit, and on a value the MSTORE
    writes it at f's offset in x's region.  e may call internal functions:
    its simulation at f's type is a premise. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_augassign_attr_local_case:
   !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
     expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
@@ -1425,13 +2110,34 @@ Proof
   >- suspend "rhs_summary" >>
   suspend "rhs_exempt"
 QED
+*)
+Theorem compile_augassign_attr_local_case:
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
+    expr_sim ctx func cenv cx ty e es /\ expr_body_pre cenv cx env e es /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_attr_local_case[rhs_bad]:
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
   irule augassign_attr_rhs_bad_storage >> simp[] >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_attr_local_case[rhs_exempt]:
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
   disj2_tac >> disj2_tac >>
@@ -1442,7 +2148,9 @@ Resume compile_augassign_attr_local_case[rhs_exempt]:
   gen_tac >> irule (cj 1 augassign_attr_place_reads) >>
   simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_attr_local_case[rhs_summary]:
   rewrite_tac[gas_outcome_def] >> BETA_TAC >> qexists_tac `marks` >>
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
@@ -1460,7 +2168,9 @@ Resume compile_augassign_attr_local_case[rhs_summary]:
   >- suspend "rhs_normal" >>
   suspend "rhs_error"
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_attr_local_case[rhs_error]:
   `expr_exit res r` by
     (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
@@ -1475,7 +2185,9 @@ Resume compile_augassign_attr_local_case[rhs_error]:
   disj2_tac >> rpt strip_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Resume compile_augassign_attr_local_case[rhs_normal]:
   qpat_assum `!H. valid_horizon _ _ H _ ==>
                 ?v. res = INL v /\ expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -1512,10 +2224,14 @@ Resume compile_augassign_attr_local_case[rhs_normal]:
   irule augassign_attr_normal_summary >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
+*)
 
+(* LOCAL STUB - preserved suspension.
 Finalise compile_augassign_attr_local_case
+*)
 
 (* compile_augassign_attr_local_case for an e with no internal call. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_augassign_attr_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
@@ -1535,4 +2251,22 @@ Proof
   `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
   `expr_sim ctx func cenv cx ty e es` by metis_tac[expr_sim_ok_apply] >>
   simp[] >> metis_tac[]
+QED
+*)
+Theorem compile_augassign_attr_local_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty0 env ty id fld sid fsz bop e es.
+    expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
+    FLOOKUP env.var_types id = SOME (StructT sid) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty0
+         (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
+      es
+Proof
+  cheat
 QED

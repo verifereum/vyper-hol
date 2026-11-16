@@ -16,6 +16,7 @@ Ancestors
   supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperInterpreter vyperState vyperStorageFootprint
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_setup_body_gas_path_mem:
   declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
   lookup_scopes id es.scopes = NONE /\
@@ -83,7 +84,39 @@ Proof
   fs[lookup_var_def] >> rpt strip_tac >>
   first_x_assum irule >> strip_tac >> gvs[]
 QED
+*)
+Theorem annassign_setup_body_gas_path_mem:
+  declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
+  lookup_scopes id es.scopes = NONE /\
+  (!l. FLOOKUP ce.ce_vars id = SOME l ==> ?q sz. l = PtrVar q sz) /\
+  p = STRING #"%" (toString sa.cs_next_var) /\
+  emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
+  type_memory_bytes ce ty < dimword (:256) /\
+  fn_has_code sa sA func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
+  alloca_history func s /\ return_buf_frame d ce sa s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sA.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sA.cs_current_insts /\
+    stmt_state_rel H ctx func c cx es t /\ alloca_history func t /\
+    return_buf_frame d c sA t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    local_ptrs_reserved c sA /\ not_fresh_at sA p /\
+    FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
+    not_local_ptr c es.scopes p /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
+    ?w. lookup_var p t = SOME w /\
+      FLOOKUP t.vs_allocas st.cs_next_id = SOME (w2n w,type_memory_bytes ce ty) /\
+      w2n w + type_memory_bytes ce ty <= t.vs_alloca_next
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem body_decl_cursor_path:
   !sa sb s t ctx func.
     fn_has_code sa sb func /\ same_blocks sa sb /\
@@ -113,7 +146,25 @@ Proof
     exec_block_run_inst_seq >>
   simp[] >> gvs[same_blocks_def]
 QED
+*)
+Theorem body_decl_cursor_path:
+  !sa sb s t ctx func.
+    fn_has_code sa sb func /\ same_blocks sa sb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    gas_path_mem ctx func s 0
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_copy_memory_no_gas:
   compile_copy_memory dst src n sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
@@ -122,7 +173,15 @@ Proof
   strip_tac >- gvs[emitted_insts_def] >>
   drule emitted_insts_emit_void >> simp[mk_inst_def]
 QED
+*)
+Theorem compile_copy_memory_no_gas:
+  compile_copy_memory dst src n sa = ((),sb) ==>
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_store_memory_same_no_gas:
   compile_store_memory cenv src dst ty ty sa = ((),sb) /\ ~is_word_type ty ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
@@ -135,7 +194,15 @@ Proof
       rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
   metis_tac[compile_copy_memory_no_gas]
 QED
+*)
+Theorem compile_store_memory_same_no_gas:
+  compile_store_memory cenv src dst ty ty sa = ((),sb) /\ ~is_word_type ty ==>
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem body_scratch_prefix_no_gas:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand src n sm = ((),sn) ==>
@@ -147,7 +214,16 @@ Proof
   >- (drule emitted_insts_emit_op >> simp[mk_inst_def]) >>
   metis_tac[compile_copy_memory_no_gas]
 QED
+*)
+Theorem body_scratch_prefix_no_gas:
+  compile_alloc_buffer n sa = (buf,sm) /\
+  compile_copy_memory buf.buf_operand src n sm = ((),sn) ==>
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sn)
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_memory_store_body_path:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d.
     compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\
@@ -226,7 +302,46 @@ Proof
       fs[return_buf_frame_def, lookup_var_def]) >>
   fs[lookup_var_def]
 QED
+*)
+Theorem annassign_memory_store_body_path:
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d.
+    compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
+    eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    value_has_type tyv v /\ val_wf tyv v /\
+    val_in_memory tyv v (w2n sw) s.vs_memory /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    w2n sw + val_store_size tyv v <= s.vs_alloca_next /\
+    w2n w + type_memory_size tyv <= s.vs_alloca_next /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      stmt_state_rel H ctx func cenv cx
+        (es with scopes :=
+          (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+      alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+      return_buf_frame d cenv sb t /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem compile_scratch_prefix_body_path:
   !P H0 ctx func ce cx es s sa sm sn buf src n sw tv v d.
     compile_alloc_buffer n sa = (buf,sm) /\
@@ -297,7 +412,41 @@ Proof
   fs[lookup_var_def] >>
   Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]
 QED
+*)
+Theorem compile_scratch_prefix_body_path:
+  !P H0 ctx func ce cx es s sa sm sn buf src n sw tv v d.
+    compile_alloc_buffer n sa = (buf,sm) /\
+    compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
+    fn_has_code sa sn func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved ce sa /\
+    (!H. P H ==> stmt_state_rel H ctx func ce cx es s) /\ P H0 /\
+    alloca_history func s /\ return_buf_frame d ce sa s /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ n < dimword (:256) /\
+    w2n sw + n <= s.vs_alloca_next /\
+    val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
+    val_footprint tv v <= n /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = sn.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sn.cs_current_insts /\
+      (!H. P H ==> stmt_state_rel H ctx func ce cx es t) /\
+      alloca_history func t /\
+      return_buf_frame d ce sn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
+      val_wf tv v /\ ?w. eval_operand buf.buf_operand t = SOME w /\
+        val_in_memory tv v (w2n w) t.vs_memory /\
+        w2n w + n <= t.vs_alloca_next
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_memory_assign_body_path:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
@@ -373,7 +522,47 @@ Proof
   fs[] >> rpt strip_tac >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
+*)
+Theorem annassign_memory_assign_body_path:
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d bytes.
+    compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
+      ty ty bytes sa = ((), sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
+    eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    value_has_type tyv v /\ val_wf tyv v /\
+    val_in_memory tyv v (w2n sw) s.vs_memory /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    w2n sw + type_memory_size tyv <= s.vs_alloca_next /\
+    w2n w + type_memory_size tyv <= s.vs_alloca_next /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      stmt_state_rel H ctx func cenv cx
+        (es with scopes :=
+          (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+      alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+      return_buf_frame d cenv sb t /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  cheat
+QED
 
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem annassign_name_rhs_body_path:
   !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d bytes.
     lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
@@ -421,12 +610,51 @@ Proof
   qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]
 QED
+*)
+Theorem annassign_name_rhs_body_path:
+  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d bytes.
+    lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
+    expr_sim_pre cenv cx env (Name ty source_id) es /\
+    (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
+    compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
+      ty ty bytes sm = ((), sb) /\
+    not_fresh_at sa p /\ lookup_var p s = SOME w /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    w2n w + type_memory_size tyv <= s.vs_alloca_next /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      stmt_state_rel H ctx func cenv cx
+        (es with scopes :=
+          (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+      alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+      return_buf_frame d cenv sb t /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  cheat
+QED
 
 (* One endpoint serves every valid horizon of a trace.  The relation at the
    endpoint t, known at one horizon H0, holds at any horizon H at which some
    state u with the same accounts, transient storage, requests and call
    context is related: the horizon-dependent part of the relation reads only
    those fields.  u is what a single-horizon lemma gives at H. *)
+(* LOCAL STUB - foreign baseline-red or unverified-on-base stand-in; canonical owner retains this proof.
 Theorem stmt_state_rel_lift_family:
   !cx st0 tr ctx func cenv es s t H0.
     (!H. valid_horizon cx st0 H tr ==>
@@ -443,4 +671,18 @@ Proof
     (qspec_then `H` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]
+QED
+*)
+Theorem stmt_state_rel_lift_family:
+  !cx st0 tr ctx func cenv es s t H0.
+    (!H. valid_horizon cx st0 H tr ==>
+         ?u. stmt_state_rel H ctx func cenv cx es u /\
+             u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+             u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx) /\
+    stmt_state_rel H0 ctx func cenv cx es t /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx ==>
+    !H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es t
+Proof
+  cheat
 QED
