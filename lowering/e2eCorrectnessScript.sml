@@ -33,6 +33,7 @@ Ancestors
   sourceUnitExecution gasSummary supportedProgram callTrace frameOutcome
   vyperStorageFootprint fragGasPathMem fragExecMem fragGasOrigin fragGasMode
   fragExec memSafeRun venomExecProofs unitShapeDefs
+  staticAbortDefs codegenStaticAbort o1PipelineMemoryLoweredAbort runtimeLabelEntry
   list
 
 (* =====================================================================
@@ -893,7 +894,13 @@ Theorem vyper_call_correct_at_marks:
          mem_inv dload_headroom_ok unit.cu_context vs ==>
          ctx_sim (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
            unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
-         o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es)) /\
+         (o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es) \/
+          ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+             mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                       lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+               out.po_unit.cu_context (entry_venom_state prog cp es)) /\
+           !fuel. terminates (run_context fuel unit.cu_context vs) ==>
+                  ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
     source_unit_execution_correct_at marks tops ret am tx unit vs
     ==>
     ?r es'.
@@ -1021,7 +1028,13 @@ Theorem call_pipeline_gas_link:
                  mem_inv dload_headroom_ok unit.cu_context vs ==>
                  ctx_sim (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
                    unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
-                 o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es)) /\
+                 (o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es) \/
+                  ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+                     mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                               lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+                       out.po_unit.cu_context (entry_venom_state prog cp es)) /\
+                   !fuel. terminates (run_context fuel unit.cu_context vs) ==>
+                          ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
               source_unit_execution_correct_at marks tops ret am tx unit vs) T
 Proof
   cheat
@@ -1057,7 +1070,13 @@ Theorem vyper_call_correct_from_gas_link:
                   mem_inv dload_headroom_ok unit.cu_context vs ==>
                   ctx_sim (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
                     unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
-                  o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es)) /\
+                  (o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es) \/
+                   ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+                      mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                                lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+                        out.po_unit.cu_context (entry_venom_state prog cp es)) /\
+                    !fuel. terminates (run_context fuel unit.cu_context vs) ==>
+                           ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
                source_unit_execution_correct_at marks tops ret am tx unit vs) T)
     ==>
     frame_resource_starved es r es' \/
@@ -1101,7 +1120,7 @@ Proof
     (`wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
        fs[call_state_rel_def] >>
      drule_all call_trace_outcomes_bounded >>
-     simp[outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
+     simp[exprSimHypsDefsTheory.outcomes_accounts_typed_def, listTheory.EVERY_MEM]) >>
   `initial_venom_state_rel tops am tx (entry_venom_state prog cplan es)` by
     (irule entry_venom_state_initial_venom_state_rel >> gvs[]) >>
   `!vs. gas_variant vs (entry_venom_state prog cplan es) ==>

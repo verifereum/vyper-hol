@@ -38,6 +38,7 @@ Ancestors
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
   sourceUnitExecution exprSimHypsDefs
   o1PipelineCorrect o1PassContract contextCodegenRel
+  o1StaticPipelineCorrect runtimeLabelReadiness
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
@@ -106,10 +107,13 @@ QED
    CREATE initcode: the EVM answers that CREATE with OutOfGas at every gas
    limit (EIP-3860), so no gas is enough. *)
 Definition gas_source_exempt_def:
-  gas_source_exempt tops
+  gas_source_exempt tops tx
     (src : (value + exception) # abstract_machine # call_request list) <=>
     source_exempt tops src \/
-    FST src = INR (Error (RuntimeError "create initcode too large"))
+    FST src = INR (Error (RuntimeError "create initcode too large")) \/
+    (tx.is_static /\
+     ((?m. FST src = INR (Error (RuntimeError m))) \/
+      FST src = INR (AssertException "UNREACHABLE")))
 End
 
 Definition deploy_gas_source_exempt_def:
@@ -175,7 +179,7 @@ Theorem vyper_call_gas_sufficient_identity:
           (MAP SND (call_trace (add_frame_gas g' es))) gs /\
         call_outcomes_storage_ok am tx
           (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-      (!obs. ~gas_source_exempt tops
+      (!obs. ~gas_source_exempt tops tx
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
