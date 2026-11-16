@@ -61,7 +61,7 @@ Proof
   irule body_annassign_other_full >> metis_tac[]
 QED
 
-(* Admitted: the joint Append case. *)
+(* The joint Append case, by its storage, local and nested leaves. *)
 Theorem body_append_case_full:
   !cx t e.
     (!s'' p t'.
@@ -71,8 +71,9 @@ Theorem body_append_case_full:
 Proof
   rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
   >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
-  Cases_on `t` >> gvs[] >>
-  rw[body_stmt_full_ok_def, supported_stmt_def, supported_append_target_def]
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_append_local_full >> first_assum ACCEPT_TAC) >>
+  irule body_append_nested_full >> simp[]
 QED
 
 (* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)

@@ -247,8 +247,20 @@ Theorem supported_append_target_storage_syntax:
   EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
 Proof
+  `(!e:expr. T) /\
+   !bt. supported_target_pure tops bt ==>
+     EVERY (\c. FST c = NONE /\
+       IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt)` by
+    (ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+     simp[supported_target_pure_def, int_calls_expr_def, EVERY_APPEND] >>
+     metis_tac[supported_pure_main_calls]) >>
   Cases_on `tgt` >>
-  simp[supported_append_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def]
+  simp[supported_append_target_def, supported_target_pure_def,
+       supported_expr_exists_def,
+       call_operands_effect_root_def, int_calls_expr_def, EVERY_APPEND] >>
+  metis_tac[supported_target_pure_expr_exclusion, supported_expr_no_evm_run,
+            supported_expr_no_call_operand_effects, supported_expr_def,
+            expr_has_evm_run_def, supported_pure_main_calls]
 QED
 
 Theorem supported_aug_target_storage_syntax:
